@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"selectDb/backend/db/generated"
+	fs_provider "selectDb/backend/fs_provider"
 	"selectDb/backend/graph"
-	fs_provider "selectDb/backend/src/fs_provider"
 	"strconv"
 	"strings"
 
@@ -177,7 +177,6 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 
 	return nil
 }
-
 
 // convertIndexesToNodes converts core.IndexInfo to graph nodes
 func convertIndexesToNodes(indexes []core.IndexInfo, dbInstanceID string, schemaPath string) []*graph.DBInstanceItemNode {

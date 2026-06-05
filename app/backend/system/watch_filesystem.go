@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"selectDb/backend/db/generated"
+	"selectDb/backend/db_client"
 	"selectDb/backend/graph"
-	"selectDb/backend/src/db_client"
 	"selectDb/backend/utils"
 
 	"github.com/selectDb/dialect/engine"
@@ -533,4 +533,3 @@ func (s *System) emitMutation(table, op, id string, payload interface{}, workspa
 		_ = s.Graph.Mutate(s.ctx, commit)
 	}
 }
-

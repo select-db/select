@@ -5,9 +5,9 @@ import (
 	"sync"
 
 	"selectDb/backend/db/generated"
+	"selectDb/backend/db_client"
+	"selectDb/backend/fs_provider"
 	"selectDb/backend/graph"
-	"selectDb/backend/src/db_client"
-	"selectDb/backend/src/fs_provider"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )

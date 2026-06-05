@@ -5,12 +5,11 @@ import (
 	"strings"
 
 	"selectDb/backend/graph"
-	"selectDb/backend/src/sqllang"
+	"selectDb/backend/sqllang"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 )
-
 
 func (dbc *DbClient) inspectStatement(
 	statement string,

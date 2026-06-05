@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"selectDb/backend/db/generated"
+	"selectDb/backend/fs_provider"
 	"selectDb/backend/graph"
-	"selectDb/backend/src/fs_provider"
-	"selectDb/backend/src/server"
+	"selectDb/backend/server"
 	"selectDb/backend/utils"
 )
 

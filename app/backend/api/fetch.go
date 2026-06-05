@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"selectDb/backend/src/server"
+	"selectDb/backend/server"
 
 	"github.com/klauspost/compress/zstd"
 )

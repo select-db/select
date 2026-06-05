@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 	"selectDb/backend/db/generated"
+	"selectDb/backend/fs_provider"
 	"selectDb/backend/graph"
-	"selectDb/backend/src/fs_provider"
 )
 
 type SetOrCreateCurrentWorkspaceParams struct {

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"selectDb/backend/src/server"
+	"selectDb/backend/server"
 )
 
 // WorkspaceFS encapsulates common path/URI computations for a single

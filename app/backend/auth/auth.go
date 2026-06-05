@@ -4,7 +4,7 @@ import (
 	"context"
 	"selectDb/backend/db/generated"
 	"selectDb/backend/db/syncer"
-	"selectDb/backend/src/workspace"
+	"selectDb/backend/workspace"
 )
 
 type GithubAuth struct {

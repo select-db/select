@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"selectDb/backend/db_client"
 	"selectDb/backend/graph"
-	"selectDb/backend/src/db_client"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )

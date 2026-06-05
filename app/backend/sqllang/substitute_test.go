@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"selectDb/backend/graph"
-	"selectDb/backend/src/server"
+	"selectDb/backend/server"
 	"selectDb/backend/utils"
 )
 
@@ -111,34 +111,34 @@ func TestTrackCaretThroughReplacements(t *testing.T) {
 			wantLine: 1, wantCol: 3,
 		},
 		{
-			name:     "caret after replacement (expansion)",
-			original: "WITH ($x) AS t SELECT t.",
-			resolved: "WITH (SELECT id, name FROM users) AS t SELECT t.",
-			repls:    []subRepl{{Start: 6, End: 8, New: "SELECT id, name FROM users"}},
+			name:      "caret after replacement (expansion)",
+			original:  "WITH ($x) AS t SELECT t.",
+			resolved:  "WITH (SELECT id, name FROM users) AS t SELECT t.",
+			repls:     []subRepl{{Start: 6, End: 8, New: "SELECT id, name FROM users"}},
 			caretLine: 1, caretCol: 22,
 			wantLine: 1, wantCol: 46,
 		},
 		{
-			name:     "caret before replacement",
-			original: "WITH ($x) AS t",
-			resolved: "WITH (SELECT 1) AS t",
-			repls:    []subRepl{{Start: 6, End: 8, New: "SELECT 1"}},
+			name:      "caret before replacement",
+			original:  "WITH ($x) AS t",
+			resolved:  "WITH (SELECT 1) AS t",
+			repls:     []subRepl{{Start: 6, End: 8, New: "SELECT 1"}},
 			caretLine: 1, caretCol: 2,
 			wantLine: 1, wantCol: 2,
 		},
 		{
-			name:     "caret inside replacement moves to start",
-			original: "WITH ($x) AS t",
-			resolved: "WITH (SELECT 1) AS t",
-			repls:    []subRepl{{Start: 6, End: 8, New: "SELECT 1"}},
+			name:      "caret inside replacement moves to start",
+			original:  "WITH ($x) AS t",
+			resolved:  "WITH (SELECT 1) AS t",
+			repls:     []subRepl{{Start: 6, End: 8, New: "SELECT 1"}},
 			caretLine: 1, caretCol: 7,
 			wantLine: 1, wantCol: 6,
 		},
 		{
-			name:     "two lines caret on second line after first line expansion",
-			original: "WITH ($cte) AS cu\nSELECT cu.",
-			resolved: "WITH (SELECT id FROM t) AS cu\nSELECT cu.",
-			repls:    []subRepl{{Start: 6, End: 11, New: "SELECT id FROM t"}},
+			name:      "two lines caret on second line after first line expansion",
+			original:  "WITH ($cte) AS cu\nSELECT cu.",
+			resolved:  "WITH (SELECT id FROM t) AS cu\nSELECT cu.",
+			repls:     []subRepl{{Start: 6, End: 11, New: "SELECT id FROM t"}},
 			caretLine: 2, caretCol: 9,
 			wantLine: 2, wantCol: 8,
 		},
@@ -270,12 +270,12 @@ func TestSubstituteVariablesSQL_Cases(t *testing.T) {
 			wantCaretCol:  2,
 		},
 		{
-			name:          "caret variable not found",
-			envVars:       map[string]string{},
-			input:         "SELECT $MISSING",
-			wantErr:       true,
-			caretLine:     1,
-			caretCol:      10,
+			name:      "caret variable not found",
+			envVars:   map[string]string{},
+			input:     "SELECT $MISSING",
+			wantErr:   true,
+			caretLine: 1,
+			caretCol:  10,
 		},
 		{
 			name:           "file ref",

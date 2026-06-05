@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"selectDb/backend/db/generated"
-	"selectDb/backend/src/fs_provider"
+	"selectDb/backend/fs_provider"
 )
 
 // ReloadHooks are optional callbacks for app-level workspace actions (switch, create, delete).

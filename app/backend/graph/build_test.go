@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"selectDb/backend/src/server"
+	"selectDb/backend/server"
 	"selectDb/backend/utils"
 )
 

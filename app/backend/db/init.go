@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"selectDb/backend/src/server"
+	"selectDb/backend/server"
 
 	"github.com/pressly/goose/v3"
 )

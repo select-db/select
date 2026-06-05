@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"selectDb/backend/db/generated"
+	"selectDb/backend/fs_provider"
 	"selectDb/backend/graph"
-	"selectDb/backend/src/fs_provider"
 )
 
 // Git encapsulates all Git-related operations for the desktop app.

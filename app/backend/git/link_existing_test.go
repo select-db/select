@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"selectDb/backend/db/generated"
+	"selectDb/backend/fs_provider"
 	"selectDb/backend/graph"
-	"selectDb/backend/src/fs_provider"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )

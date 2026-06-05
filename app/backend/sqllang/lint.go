@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"selectDb/backend/src/role"
+	"selectDb/backend/role"
 	"selectDb/backend/utils"
 
 	core "github.com/selectDb/dialect/core"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"selectDb/backend/graph"
-	"selectDb/backend/src/sqllang"
+	"selectDb/backend/sqllang"
 
 	"github.com/selectDb/dialect/engine"
 )

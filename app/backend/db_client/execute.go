@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"selectDb/backend/graph"
-	"selectDb/backend/src/role"
-	"selectDb/backend/src/sqllang"
+	"selectDb/backend/role"
+	"selectDb/backend/sqllang"
 
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"

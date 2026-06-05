@@ -8,12 +8,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/zalando/go-keyring"
 
-	"selectDb/backend/src/server"
+	"selectDb/backend/server"
 )
 
 const (
-	keyringService   = "selectDb"
-	keyringDeviceID  = "device-id"
+	keyringService  = "selectDb"
+	keyringDeviceID = "device-id"
 )
 
 func tokenKey(kind, domain string) string {

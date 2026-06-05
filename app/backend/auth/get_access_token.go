@@ -9,8 +9,8 @@ import (
 	"selectDb/backend/api"
 	"selectDb/backend/db/db_types"
 	"selectDb/backend/db/generated"
-	"selectDb/backend/src/workspace"
 	"selectDb/backend/utils"
+	"selectDb/backend/workspace"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )

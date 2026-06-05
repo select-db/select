@@ -7,9 +7,9 @@ import (
 	"io"
 	"selectDb/backend/api"
 	"selectDb/backend/db/generated"
+	fs_provider "selectDb/backend/fs_provider"
 	"selectDb/backend/graph"
-	fs_provider "selectDb/backend/src/fs_provider"
-	"selectDb/backend/src/sqllang"
+	"selectDb/backend/sqllang"
 	"time"
 
 	core "github.com/selectDb/dialect/core"
