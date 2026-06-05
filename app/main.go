@@ -14,7 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
-	"selectDb/backend"
+	appcore "selectDb/internal/app"
 
 	"github.com/selectDb/toolkit"
 )
@@ -41,7 +41,7 @@ func main() {
 	toolkit.StartPprofServer("localhost:6061")
 
 	// Create an instance of the app structure
-	app := backend.NewApp()
+	app := appcore.NewApp()
 
 	if len(os.Args) > 1 {
 		var arg string
