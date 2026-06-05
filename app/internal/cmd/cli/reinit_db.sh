@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Clear all data from the app SQLite DB (tables unchanged) for retesting signup flow.
 # APP_ENV is loaded from app/.env if not set (so use dev when app uses dev).
-# Usage: ./cmd/cli/reinit_db.sh   (from app/backend)
+# Usage: ./cmd/cli/reinit_db.sh   (from app/internal)
 # Or:    SELECTDB_DB_PATH=/path/to/db.sqlite ./cmd/cli/reinit_db.sh
 
 set -euo pipefail
