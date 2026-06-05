@@ -1,0 +1,30 @@
+version: "2"
+
+linters:
+  enable:
+    - forbidigo
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: '^toolkit\.Print$'
+          pkg: '^github\.com/selectDb/toolkit$'
+          msg: 'toolkit.Print() calls are not allowed in production code'
+        - pattern: '^fmt\.Print.*$'
+          msg: 'fmt.Print* calls are not allowed - use proper logging'
+      analyze-types: true
+      exclude-godoc-examples: false
+  exclusions:
+    paths:
+      - frontend
+    rules:
+      - path: _test\.go
+        linters:
+          - forbidigo
+
+run:
+  timeout: 5m
+  tests: false

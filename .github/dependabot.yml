@@ -1,0 +1,38 @@
+version: 2
+updates:
+  # Go modules (one entry per module in the monorepo)
+  - package-ecosystem: gomod
+    directory: /app
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /dialect
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /dev
+    schedule:
+      interval: weekly
+
+  # Frontend
+  - package-ecosystem: npm
+    directory: /app/frontend
+    schedule:
+      interval: weekly
+
+  # Python analyzer
+  - package-ecosystem: pip
+    directory: /dialect/core/tokenanalyzer/python
+    schedule:
+      interval: weekly
+
+  # GitHub Actions used by the workflows (keeps them current / flags vulnerable
+  # actions; pair with SHA pinning for full supply-chain hardening)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

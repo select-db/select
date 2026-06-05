@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+{{template "head" .}}
+<body>
+  <doc-search></doc-search>
+  <button class="menu-toggle" onclick="document.body.classList.toggle('sidebar-open')" aria-label="Toggle menu">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div class="sidebar-overlay" onclick="document.body.classList.remove('sidebar-open')"></div>
+  <div class="layout">
+{{template "sidebar" .}}
+    <main class="scrollable">
+      <article class="content selectable">
+{{.Content}}
+      </article>
+{{template "page-nav" .}}
+    </main>
+    <doc-toc class="toc"></doc-toc>
+  </div>
+  {{.Scripts}}
+  {{template "theme-script"}}
+</body>
+</html>

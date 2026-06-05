@@ -1,0 +1,10 @@
+{{- define "page-nav"}}
+      <footer class="page-nav">
+        {{- if .PrevPage}}
+        <a href="{{.PrevPage.Href}}" class="prev">← {{.PrevPage.Label}}</a>
+        {{- end}}
+        {{- if .NextPage}}
+        <a href="{{.NextPage.Href}}" class="next">{{.NextPage.Label}} →</a>
+        {{- end}}
+      </footer>
+{{- end}}

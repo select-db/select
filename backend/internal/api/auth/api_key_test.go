@@ -1,0 +1,59 @@
+package auth
+
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+func init() {
+	// hash uses the shared signing secret; set it before any hash call
+	_ = os.Setenv("REFRESH_TOKEN_SECRET", "test-signing-secret")
+}
+
+func TestGenerateAPIKeyRoundtrip(t *testing.T) {
+	plaintext, prefix, hash := GenerateAPIKey()
+
+	if !IsAPIKey(plaintext) {
+		t.Fatalf("generated key %q lacks scheme", plaintext)
+	}
+	if !strings.Contains(plaintext, prefix) {
+		t.Fatalf("plaintext %q does not contain prefix %q", plaintext, prefix)
+	}
+
+	gotPrefix, ok := ParseAPIKeyPrefix(plaintext)
+	if !ok || gotPrefix != prefix {
+		t.Fatalf("ParseAPIKeyPrefix = (%q, %v), want (%q, true)", gotPrefix, ok, prefix)
+	}
+	if !VerifyAPIKey(plaintext, hash) {
+		t.Fatal("VerifyAPIKey rejected a valid key")
+	}
+	if VerifyAPIKey(plaintext+"x", hash) {
+		t.Fatal("VerifyAPIKey accepted a tampered key")
+	}
+}
+
+func TestGenerateAPIKeyUnique(t *testing.T) {
+	a, _, _ := GenerateAPIKey()
+	b, _, _ := GenerateAPIKey()
+	if a == b {
+		t.Fatal("two generated keys collided")
+	}
+}
+
+func TestParseAPIKeyPrefixRejectsMalformed(t *testing.T) {
+	for _, tok := range []string{"", "nope", "sdb_", "sdb_only", "sdb_pfx_", "Bearer sdb_a_b"} {
+		if _, ok := ParseAPIKeyPrefix(tok); ok {
+			t.Fatalf("ParseAPIKeyPrefix(%q) = true, want false", tok)
+		}
+	}
+}
+
+func TestIsAPIKey(t *testing.T) {
+	if IsAPIKey("eyJhbGciOi...") {
+		t.Fatal("JWT misclassified as API key")
+	}
+	if !IsAPIKey("sdb_abc_def") {
+		t.Fatal("API key not recognised")
+	}
+}

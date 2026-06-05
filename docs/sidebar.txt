@@ -1,0 +1,31 @@
+# SELECT Documentation
+
+Getting Started              : docs/content/introduction.doc.md
+Workspace
+  Git                        : app/backend/git/git-integration.doc.md
+  Users                      : app/backend/src/user/users.doc.md
+  Roles                      : app/backend/src/role/roles.doc.md
+  Permissions                : app/backend/src/role/permissions.doc.md
+  API Keys                   : app/backend/src/apikey/api-keys.doc.md
+  MCP Server                 : backend/internal/mcp/mcp-server.doc.md
+  AI Chat                    : app/frontend/src/lib/components/views/Chat/ai-chat.doc.md
+Databases
+  Connecting                 : app/frontend/src/lib/components/views/Database/connecting.doc.md
+  SSH Tunnels                : dialect/engine/ssh-tunnels.doc.md
+  Proxified Connections      : app/backend/src/datasource/proxified.doc.md
+  Schema Introspection       : dialect/engine/schema-introspection.doc.md
+SQL
+  SQL Files                  : app/frontend/src/lib/components/views/File/sql-files.doc.md
+  Variables                  : app/backend/src/sqllang/variables.doc.md
+  Query Execution            : app/backend/src/db_client/queries.doc.md
+  Query Planner              : dialect/core/query-planner.doc.md
+  Query Analyze              : dialect/core/query-analyze.doc.md
+  Graph View                 : app/frontend/src/lib/components/views/File/Table/Graph/graph-view.doc.md
+  Inline Editing             : app/frontend/src/lib/components/views/File/Table/inline-editing.doc.md
+  Export                     : app/backend/src/db_client/export.doc.md
+Special Files
+  .env                       : app/backend/graph/env-file.doc.md
+  .theme                     : app/backend/graph/theme-file.doc.md
+  .config                    : app/backend/graph/config-file.doc.md
+  .lint                      : app/backend/graph/lint-file.doc.md
+  .gitignore                 : app/backend/git/gitignore.doc.md

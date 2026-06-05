@@ -1,0 +1,4 @@
+# Package Managers
+frontend/package-lock.json
+frontend/pnpm-lock.yaml
+frontend/yarn.lock

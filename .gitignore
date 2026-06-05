@@ -1,0 +1,27 @@
+# IDE/editor files
+.vscode/
+.idea/
+.mcp.json
+*.iml
+*.swp
+*.swo
+*.bak
+
+
+# System files
+.DS_Store
+Thumbs.db
+
+notes.txt
+
+# Compiled binaries
+backend/server
+
+# Generated docs site
+docs/site/
+
+# Local release config: SSH_HOST, MINISIGN_SECRET_KEY path, etc.
+.env.release
+
+# Minisign secret keys. The public key (minisign.pub) is committed;
+*.sec
