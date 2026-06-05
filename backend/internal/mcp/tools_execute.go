@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"backend/internal/api/datasource"
 	"backend/internal/authz"
+	"backend/internal/datasource"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"

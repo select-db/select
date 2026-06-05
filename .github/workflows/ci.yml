@@ -471,7 +471,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform darwin/arm64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-arm64.zip *.app
@@ -538,7 +538,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform darwin/amd64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-amd64.zip *.app
@@ -609,7 +609,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform windows/amd64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer.exe build/bin/analyzer.exe
 
       - name: Package
@@ -690,7 +690,7 @@ jobs:
           wails build ${DEVTOOLS} \
             -platform linux/amd64 \
             -tags webkit2_41 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/analyzer
           cd build/bin
           zip selectDb-linux-amd64.zip select analyzer

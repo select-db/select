@@ -1,0 +1,47 @@
+package user_to_role
+
+import (
+	"context"
+	"time"
+
+	"backend/db"
+	"backend/db/db_types"
+	"backend/db/generated"
+	"backend/internal/syncer/types"
+)
+
+func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]types.UserToRoleRow, error) {
+	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Queries.GetUserToRolesForUserSince(ctx, generated.GetUserToRolesForUserSinceParams{
+		UserID:    userUUID,
+		UpdatedAt: db_types.NewJSONNullTimeFromTime(since),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]types.UserToRoleRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, appUserToRoleToTypesRow(r))
+	}
+	return out, nil
+}
+
+func appUserToRoleToTypesRow(row generated.AppUserToRole) types.UserToRoleRow {
+	r := types.UserToRoleRow{
+		ID:          row.ID.String(),
+		UserID:      row.UserID.String(),
+		RoleID:      row.RoleID.String(),
+		WorkspaceID: row.WorkspaceID.String(),
+		UpdatedAt:   row.UpdatedAt.ValueOrZero(),
+	}
+	if row.DeletedAt.Valid {
+		t := row.DeletedAt.ValueOrZero()
+		r.DeletedAt = &t
+	}
+	return r
+}
