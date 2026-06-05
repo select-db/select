@@ -5,7 +5,7 @@ go 1.25.11
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/aymanbagabas/go-pty v0.2.2
-	github.com/fsnotify/fsnotify v1.8.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/jedisct1/go-minisign v0.0.0-20241212093149-d2f9f49435c7
