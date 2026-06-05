@@ -4,7 +4,7 @@ go 1.25.11
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/aymanbagabas/go-pty v0.2.2
+	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -59,7 +59,7 @@ require (
 	github.com/samber/lo v1.49.1 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/tkrajina/go-reflector v0.5.8 // indirect
-	github.com/u-root/u-root v0.11.0 // indirect
+	github.com/u-root/u-root v0.16.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.19 // indirect
