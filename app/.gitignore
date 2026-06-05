@@ -1,0 +1,51 @@
+build/
+!build/appicon*.png
+tmp/
+
+.env
+.DS_Store
+
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Wails build directory
+/wails-build/
+
+# Wails runtime folder
+/wails-runtime/
+
+# Go workspace and modules
+/go.work
+/go.sum
+/go.mod
+
+# Vendor folder
+/vendor/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*.bak
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+
+# Ignore SQLite database files and in-memory test artifacts
+*.db
+:memory:*

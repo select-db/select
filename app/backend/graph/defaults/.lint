@@ -1,0 +1,24 @@
+[
+  {
+    "custom": [
+      {
+        "id": "no-select-star",
+        "severity": "warning",
+        "message": "Avoid SELECT *, list columns explicitly",
+        "pattern": "(?i)\\bSELECT\\s+(?:DISTINCT\\s+|ALL\\s+)?\\*"
+      },
+      {
+        "id": "no-drop-table",
+        "severity": "error",
+        "message": "DROP TABLE is not allowed in this project",
+        "pattern": "(?i)DROP\\s+TABLE"
+      }
+    ]
+  },
+  {
+    "files": ["migrations/**"],
+    "rules": {
+      "no-drop-table": "off"
+    }
+  }
+]

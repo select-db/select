@@ -1,0 +1,15 @@
+{
+  "id": "e731d451-1285-4a9c-a328-50544a6989e2",
+  "name": "My local Postgres",
+  "db_type": "postgresql",
+  "dsn": "$MY_LOCAL_POSTGRES_DSN",
+  "ssh": {
+    "enabled": false,
+    "host": "",
+    "port": 22,
+    "user": "",
+    "auth_method": "password",
+    "password": "",
+    "private_key": ""
+  }
+}

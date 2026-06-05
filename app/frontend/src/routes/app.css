@@ -1,0 +1,282 @@
+@font-face {
+	font-family: 'JetBrains Mono';
+	src: url('/fonts/JetBrainsMono-ExtraLight.woff2') format('woff2');
+	font-weight: 200;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	src: url('/fonts/JetBrainsMono-Light.woff2') format('woff2');
+	font-weight: 300;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	/**
+	* Typography (font families only)
+	* Note: Spacing, font sizes, weights, colors, and borders
+	* are loaded from theme and applied via themeStore.ts
+	*/
+	--ff: system-ui, sans-serif;
+	--terminal-font-weight: 200;
+
+	/* Spacing */
+	--space-xxs: 0.125rem;
+	--space-xs: 0.25rem;
+	--space-xs-sm: 0.33rem;
+	--space-sm: 0.5rem;
+	--space-sm-md: 0.75rem;
+	--space-md: 1rem;
+	--space-lg: 1.5rem;
+
+	color-scheme: dark light;
+
+	--border: var(--bw) solid var(--border-color);
+	--shadow: rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme='dark']) {
+	--border: var(--bw) var(--border-color) solid;
+	--shadow: rgba(0, 0, 0, 0.4);
+}
+
+:global(*) {
+	cursor: default;
+
+	-webkit-touch-callout: none;
+	/* iOS Safari */
+	-webkit-user-select: none;
+	/* Safari */
+	-khtml-user-select: none;
+	/* Konqueror HTML */
+	-moz-user-select: none;
+	/* Old versions of Firefox */
+	-ms-user-select: none;
+	/* Internet Explorer/Edge */
+	user-select: none;
+	/* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
+
+	padding: 0;
+	margin: 0;
+	outline: none;
+}
+
+/* WebKit / Blink (Wails: WKWebView, WebView2) */
+:global(.scrollable::-webkit-scrollbar) {
+	width: 5px;
+	height: 5px;
+}
+
+:global(.scrollable::-webkit-scrollbar-track) {
+	background: transparent;
+}
+
+:global(.scrollable::-webkit-scrollbar-thumb) {
+	background-color: var(--gray-700);
+	background-clip: content-box;
+	transition: background-color 0.2s ease-in-out;
+}
+
+:global(.scrollable::-webkit-scrollbar-thumb:hover) {
+	background-color: var(--gray-800);
+}
+
+:global(.scrollable::-webkit-scrollbar-track:vertical) {
+	border-left: var(--border);
+}
+
+:global(.scrollable::-webkit-scrollbar-track:horizontal) {
+	border-top: var(--border);
+}
+
+:global(.scrollable::-webkit-scrollbar-corner) {
+	background: transparent;
+}
+
+/** Ellipsis text overflow; use on text nodes or flex children (min-width: 0 for flex). */
+:global(.truncate) {
+	overflow: hidden !important;
+	text-overflow: ellipsis !important;
+	white-space: nowrap !important;
+	min-width: 0 !important;
+}
+
+:global(.break) {
+	white-space: normal;
+	overflow-wrap: break-word;
+	word-break: break-word;
+}
+
+:global(*) {
+	overscroll-behavior: none;
+}
+
+:global(.selectable),
+:global(.selectable *) {
+	-webkit-touch-callout: auto;
+	/* iOS Safari */
+	-webkit-user-select: auto;
+	/* Safari */
+	-khtml-user-select: auto;
+	/* Konqueror HTML */
+	-moz-user-select: auto;
+	/* Old versions of Firefox */
+	-ms-user-select: auto;
+	/* Internet Explorer/Edge */
+	user-select: auto;
+	/* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
+}
+
+:global(.editorContainer *) {
+	-webkit-touch-callout: auto;
+	/* iOS Safari */
+	-webkit-user-select: auto;
+	/* Safari */
+	-khtml-user-select: auto;
+	/* Konqueror HTML */
+	-moz-user-select: auto;
+	/* Old versions of Firefox */
+	-ms-user-select: auto;
+	/* Internet Explorer/Edge */
+	user-select: auto;
+	/* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
+}
+
+:global(p),
+:global(input),
+:global(textarea),
+:global(select),
+:global(span),
+:global(pre),
+:global(code),
+:global(ul),
+:global(ol),
+:global(option) {
+	font-size: var(--fs-sm);
+	font-weight: var(--fw-light);
+	text-wrap: nowrap;
+	letter-spacing: 0.0125em;
+	color: var(--gray-1000);
+}
+:global(p),
+:global(span) {
+	text-rendering: optimizeLegibility;
+}
+:global(strong) {
+	font-weight: 500;
+}
+
+:global(html) {
+	block-size: 100%;
+	inline-size: 100%;
+}
+
+:global(body) {
+	color: var(--gray-1000);
+	background-color: var(--gray-500);
+
+	overflow: hidden;
+
+	min-block-size: 100%;
+	min-inline-size: 100%;
+	margin: 0;
+	box-sizing: border-box;
+	font-family: system-ui, sans-serif;
+	padding: 0;
+}
+
+:global([data-theme='light'] body) {
+	background-color: var(--gray-0);
+}
+
+/* Firefox */
+:global(.no-scrollbar) {
+	scrollbar-width: none;
+}
+
+/* Internet Explorer */
+:global(.no-scrollbar) {
+	-ms-overflow-style: none;
+}
+
+/* Webkit Browsers (Chrome, Safari, Opera) */
+:global(.no-scrollbar::-webkit-scrollbar) {
+	display: none;
+}
+
+/* Monaco Editor */
+
+:global(.suggest-widget) {
+	z-index: 10 !important;
+}
+
+:global(.monaco-menu) {
+	background-color: var(--gray-0) !important;
+	color: var(--gray-1000) !important;
+	border: var(--border) !important;
+}
+
+:global(.context-view) {
+	box-shadow: var(--gray-200) 0px 7px 29px 0px !important;
+}
+
+:global(.monaco-menu .monaco-action-bar .action-item) {
+	color: var(--gray-1000) !important;
+}
+
+:global(.monaco-menu .monaco-action-bar .action-item.focused *) {
+	background-color: var(--gray-550) !important;
+}
+
+:global(.monaco-menu .action-label.separator) {
+	border-bottom-width: var(--bw) !important;
+	border-bottom-color: hsl(var(--hue) 0 16%) !important;
+}
+
+:global(.quick-open-widget),
+:global(.quick-open-widget > .monaco-quick-open-widget) {
+	background-color: rgba(0, 0, 0, 0.4) !important;
+	/* semi-transparent */
+	backdrop-filter: blur(4px) !important;
+	/* blur effect */
+	box-shadow: none !important;
+}
+
+/* JSON syntax highlighting (highlight.js overrides) */
+:global(.chat .tool-pre.tool-json .hljs) {
+	color: var(--gray-900);
+}
+
+:global(.chat .tool-pre.tool-json .hljs-string) {
+	color: var(--gray-1000);
+}
+
+:global(.chat .tool-pre.tool-json .hljs-number) {
+	color: var(--blue);
+}
+
+:global(.chat .tool-pre.tool-json .hljs-literal) {
+	color: var(--purple);
+}
+
+:global(.chat .tool-pre.tool-json .hljs-attr),
+:global(.chat .tool-pre.tool-json .hljs-attribute) {
+	color: var(--purple);
+}
+
+:global(.chat .tool-pre.tool-json .hljs-punctuation) {
+	color: var(--gray-800);
+}
+
+/* Command items */
+:global(.quick-open-widget .monaco-list-row) {
+	color: var(--gray-1000) !important;
+}
+
+/* Focused / selected command item */
+:global(.quick-open-widget .monaco-list-row.focused *),
+:global(.quick-open-widget .monaco-list-row:hover *) {
+	background-color: var(--gray-550) !important;
+}

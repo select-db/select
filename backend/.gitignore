@@ -1,0 +1,40 @@
+# Binaries and build output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.log
+
+# Go build cache and modules
+/tmp/
+/bin/
+/build/
+/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go workspace stuff
+*.tmp
+*.swp
+
+# Dependency directories (in case vendoring is used)
+vendor/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# Go coverage and profiling
+coverage.*
+*.prof
