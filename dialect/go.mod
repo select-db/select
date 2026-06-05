@@ -7,7 +7,7 @@ require (
 	github.com/apache/arrow-go/v18 v18.6.0
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/klauspost/compress v1.18.6
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.12.3
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.52.0
 	modernc.org/sqlite v1.49.1
