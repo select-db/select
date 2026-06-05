@@ -4,8 +4,7 @@ import (
 	"net/http"
 
 	"backend/db/generated"
-	"backend/internal/api/middlewares"
-	"backend/internal/permission"
+	"backend/internal/middlewares"
 
 	core "github.com/selectDb/dialect/core"
 )
@@ -55,7 +54,7 @@ func CompiledFromRequest(r *http.Request) core.CompiledPermissions {
 // rules to a user or LLM. For permission decisions, use
 // CompiledForWorkspace; it bakes the wildcard and deny semantics in.
 func EntriesForWorkspace(roleIDs []string, workspaceID string) []core.PermissionEntry {
-	all := permission.MergeForRoles(roleIDs)
+	all := MergeForRoles(roleIDs)
 	scoped := make([]generated.AppPermission, 0, len(all))
 	for _, p := range all {
 		if p.WorkspaceID.String() == workspaceID {

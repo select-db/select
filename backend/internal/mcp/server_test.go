@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"backend/internal/api/middlewares"
+	"backend/internal/middlewares"
 )
 
 // apiKeyRequest builds an httptest request whose context looks like the
@@ -121,9 +121,9 @@ func TestHandler_ToolsListEmitsAnnotations(t *testing.T) {
 	}
 
 	cases := []struct {
-		name              string
-		wantReadOnly      bool
-		wantDestructive   bool
+		name                string
+		wantReadOnly        bool
+		wantDestructive     bool
 		annotationsExpected bool
 	}{
 		{"list_datasources", true, false, true},

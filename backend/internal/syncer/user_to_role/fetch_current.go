@@ -1,0 +1,43 @@
+package user_to_role
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+
+	"backend/db"
+	"backend/db/db_types"
+	"backend/db/generated"
+	"backend/internal/syncer/types"
+)
+
+func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, error) {
+	idUUID, err := db_types.NewJSONNullUUIDFromString(c.ObjectID)
+	if err != nil {
+		return nil, nil
+	}
+	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(c.WorkspaceID)
+	if err != nil {
+		return nil, nil
+	}
+	row, err := db.Queries.GetUserToRoleByID(ctx, generated.GetUserToRoleByIDParams{
+		ID:          idUUID,
+		WorkspaceID: workspaceUUID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	payload, err := types.ToRestoredPayload(appUserToRoleToTypesRow(row))
+	if err != nil {
+		return nil, err
+	}
+	return &types.RestoredItem{
+		ObjectID:      c.ObjectID,
+		TableName:     "user_to_role",
+		ServerPayload: payload,
+		UpdatedAt:     row.UpdatedAt.ValueOrZero(),
+	}, nil
+}

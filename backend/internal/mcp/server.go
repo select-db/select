@@ -9,7 +9,7 @@ import (
 	"io"
 	"net/http"
 
-	"backend/internal/api/middlewares"
+	"backend/internal/middlewares"
 )
 
 // Bump when tool schemas change incompatibly; clients pin this in `initialize`.
