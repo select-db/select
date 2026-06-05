@@ -10,7 +10,7 @@ Monorepo of Go modules + a Svelte frontend + a Python analyzer:
 
 | Path | What it is |
 |------|------------|
-| `app/` | Wails desktop client: Go backend (`app/backend`) + Svelte frontend (`app/frontend`) |
+| `app/` | Wails desktop client: Go backend (`app/internal`) + Svelte frontend (`app/frontend`) |
 | `backend/` | Hosted proxy and sync server (Go) |
 | `dialect/` | Shared SQL engine: per-dialect parsing/introspection + the Python token analyzer (`dialect/core/tokenanalyzer/python`) |
 | `toolkit/` | Small shared Go utilities |
