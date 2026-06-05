@@ -14,7 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
-	"selectDb/backend"
+	"selectDb/internal"
 
 	"github.com/selectDb/toolkit"
 )
