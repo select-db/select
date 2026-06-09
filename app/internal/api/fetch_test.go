@@ -14,6 +14,131 @@ import (
 	"time"
 )
 
+// rotatingAuthServer models the backend's refresh-token rotation: every refresh
+// (request carrying X-Refresh-Token) consumes the presented token, deletes it,
+// and issues a brand new access+refresh pair via X-New-* headers. A refresh that
+// presents a token other than the current one returns 401 "Failed to refresh token"
+// — exactly the server behaviour in middlewares.Authenticated / auth.TryRefreshToken.
+//
+// To force a refresh on every Fetch (mirroring an already-expired 5-min access
+// token), normal requests (no X-Refresh-Token) always return 401.
+type rotatingAuthServer struct {
+	mu            sync.Mutex
+	currentRefresh string
+	gen           int
+}
+
+func (s *rotatingAuthServer) handler(t *testing.T) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		presented := r.Header.Get("X-Refresh-Token")
+		if presented == "" {
+			// Access token treated as expired -> client must refresh.
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if presented != s.currentRefresh {
+			// Stale/already-rotated token. This is the "Failed to refresh token" path.
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		// Rotate: old token is now dead, issue a fresh pair.
+		s.gen++
+		s.currentRefresh = "refresh-v" + string(rune('0'+s.gen))
+		w.Header().Set("X-New-Access-Token", "access-v"+string(rune('0'+s.gen)))
+		w.Header().Set("X-New-Refresh-Token", s.currentRefresh)
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// TestFetchRefreshRotationDesync pins the fix for the production "Failed to refresh
+// token" lockout: the server rotates the refresh token on every refresh, so a lost
+// persist of the rotated token would strand the client on a dead token and brick the
+// session forever. The client must survive a keyring save failure by keeping the
+// rotated refresh token in-process, so subsequent refresh cycles still present the
+// live token.
+func TestFetchRefreshRotationDesync(t *testing.T) {
+	origLoadAccess := loadAccessTokenFunc
+	origLoadRefresh := loadRefreshTokenFunc
+	origLoadDevice := loadDeviceIDFunc
+	origSaveAccess := saveAccessTokenFunc
+	origSaveRefresh := saveRefreshTokenFunc
+	origClearAccess := clearAccessTokenFunc
+	origClearRefresh := clearRefreshTokenFunc
+	defer func() {
+		loadAccessTokenFunc = origLoadAccess
+		loadRefreshTokenFunc = origLoadRefresh
+		loadDeviceIDFunc = origLoadDevice
+		saveAccessTokenFunc = origSaveAccess
+		saveRefreshTokenFunc = origSaveRefresh
+		clearAccessTokenFunc = origClearAccess
+		clearRefreshTokenFunc = origClearRefresh
+	}()
+
+	// setup wires an in-memory keyring around a rotating server. saveRefreshOK
+	// toggles whether persisting the rotated refresh token succeeds.
+	setup := func(saveRefreshOK bool) (*rotatingAuthServer, func()) {
+		srv := &rotatingAuthServer{currentRefresh: "refresh-v0"}
+		httpSrv := httptest.NewServer(srv.handler(t))
+		os.Setenv("API_URL", httpSrv.URL)
+
+		var clientAccess = "stale-access"
+		var clientRefresh = "refresh-v0"
+		var mu sync.Mutex
+
+		loadAccessTokenFunc = func() (string, error) { mu.Lock(); defer mu.Unlock(); return clientAccess, nil }
+		loadRefreshTokenFunc = func() (string, error) { mu.Lock(); defer mu.Unlock(); return clientRefresh, nil }
+		loadDeviceIDFunc = func() (string, error) { return "deviceX", nil }
+		saveAccessTokenFunc = func(tok string) error { mu.Lock(); defer mu.Unlock(); clientAccess = tok; return nil }
+		saveRefreshTokenFunc = func(tok string) error {
+			if !saveRefreshOK {
+				return errors.New("keyring write denied") // dropped by saveTokensFromResponse
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			clientRefresh = tok
+			return nil
+		}
+		clearAccessTokenFunc = func() error { return nil }
+		clearRefreshTokenFunc = func() error { return nil }
+		refreshedAt = time.Time{}
+		refreshFailed = false
+		resetMemRefreshToken()
+
+		return srv, httpSrv.Close
+	}
+
+	t.Run("refresh save failure does not brick session", func(t *testing.T) {
+		_, cleanup := setup(false) // keyring fails to persist rotated refresh token
+		defer cleanup()
+
+		// Every cycle: access expired -> refresh. The server rotates the refresh token
+		// each time and the keyring write fails, so without an in-process fallback the
+		// client would replay a dead token and 401 forever from cycle 2 on. With the
+		// fix, the rotated token survives in memory and every cycle refreshes cleanly.
+		for cycle := 1; cycle <= 3; cycle++ {
+			if err := Fetch(context.Background(), "GET", "/", nil, nil, nil); err != nil {
+				t.Fatalf("cycle %d should survive keyring save failure, got: %v", cycle, err)
+			}
+		}
+	})
+
+	t.Run("control: refresh save success keeps session alive", func(t *testing.T) {
+		_, cleanup := setup(true) // keyring persists rotated token correctly
+		defer cleanup()
+
+		// Same scenario, but the rotated refresh token is persisted. Every cycle
+		// should refresh cleanly and never brick.
+		for cycle := 1; cycle <= 3; cycle++ {
+			if err := Fetch(context.Background(), "GET", "/", nil, nil, nil); err != nil {
+				t.Fatalf("cycle %d expected success, got: %v", cycle, err)
+			}
+		}
+	})
+}
+
 func TestFetchWithRetry(t *testing.T) {
 	// Backup original funcs
 	origLoadAccess := loadAccessTokenFunc
