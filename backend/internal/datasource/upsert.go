@@ -52,7 +52,7 @@ func UpsertHandler() http.HandlerFunc {
 			return
 		}
 
-		key, err := secretKey()
+		enc, err := getWrapper()
 		if err != nil {
 			http.Error(w, "server misconfigured", http.StatusInternalServerError)
 			return
@@ -70,21 +70,38 @@ func UpsertHandler() http.HandlerFunc {
 			return
 		}
 
+		dsnAAD := fieldAAD(parsedWorkspaceID, id, "dsn")
+		sshAAD := fieldAAD(parsedWorkspaceID, id, "ssh")
+
 		// Secrets are write-only: a blank incoming password/key means "keep the
-		// stored one". Merge against the existing record so the client's
-		// auto-save (which sends back the redacted DSN/SSH) cannot clobber a
-		// stored credential.
+		// stored one". Merge against the existing (decrypted) record so the
+		// client's auto-save (which sends back the redacted DSN/SSH) cannot
+		// clobber a stored credential.
 		dsnToStore := req.DSN
 		sshToStore := req.SSH
 		if existing, gerr := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
 			ID:          db_types.NewJSONNullUUID(id),
-			Key:         key,
 			WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
 		}); gerr == nil {
-			if existing.DbType.String == req.DBType || existing.DbType.String == "" {
-				dsnToStore = mergeDSN(req.DBType, req.DSN, existing.Dsn)
+			existingDSN, derr := decryptField(r.Context(), enc, existing.EncryptedDsn, dsnAAD)
+			existingSSH, serr := decryptField(r.Context(), enc, existing.EncryptedSsh, sshAAD)
+			if derr == nil && serr == nil {
+				if existing.DbType.String == req.DBType || existing.DbType.String == "" {
+					dsnToStore = mergeDSN(req.DBType, req.DSN, existingDSN)
+				}
+				sshToStore = mergeSSH(req.SSH, existingSSH)
 			}
-			sshToStore = mergeSSH(req.SSH, existing.Ssh)
+		}
+
+		encryptedDSN, err := encryptField(r.Context(), enc, dsnToStore, dsnAAD)
+		if err != nil {
+			http.Error(w, "failed to store credentials", http.StatusInternalServerError)
+			return
+		}
+		encryptedSSH, err := encryptField(r.Context(), enc, sshToStore, sshAAD)
+		if err != nil {
+			http.Error(w, "failed to store credentials", http.StatusInternalServerError)
+			return
 		}
 
 		if err := db.Queries.UpsertDatasource(r.Context(), generated.UpsertDatasourceParams{
@@ -92,9 +109,8 @@ func UpsertHandler() http.HandlerFunc {
 			WorkspaceID:     db_types.NewJSONNullUUID(parsedWorkspaceID),
 			DbType:          db_types.NewJSONNullString(req.DBType),
 			Name:            db_types.NewJSONNullString(req.Name),
-			Data:            dsnToStore,
-			Data_2:          sshToStore,
-			Key:             key,
+			EncryptedDsn:    encryptedDSN,
+			EncryptedSsh:    encryptedSSH,
 			MaxOpenConns:    db_types.NewJSONNullInt64(req.MaxOpenConns),
 			MaxIdleConns:    db_types.NewJSONNullInt64(req.MaxIdleConns),
 			ConnMaxLifetime: db_types.NewJSONNullInt64(req.ConnMaxLifetime),

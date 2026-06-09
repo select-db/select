@@ -47,7 +47,7 @@ func GetHandler() http.HandlerFunc {
 			return
 		}
 
-		key, err := secretKey()
+		enc, err := getWrapper()
 		if err != nil {
 			http.Error(w, "server misconfigured", http.StatusInternalServerError)
 			return
@@ -67,7 +67,6 @@ func GetHandler() http.HandlerFunc {
 
 		row, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
 			ID:          db_types.NewJSONNullUUID(parsedID),
-			Key:         key,
 			WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
 		})
 		if err != nil {
@@ -75,11 +74,22 @@ func GetHandler() http.HandlerFunc {
 			return
 		}
 
+		dsn, err := decryptField(r.Context(), enc, row.EncryptedDsn, fieldAAD(parsedWorkspaceID, parsedID, "dsn"))
+		if err != nil {
+			http.Error(w, "failed to read credentials", http.StatusInternalServerError)
+			return
+		}
+		ssh, err := decryptField(r.Context(), enc, row.EncryptedSsh, fieldAAD(parsedWorkspaceID, parsedID, "ssh"))
+		if err != nil {
+			http.Error(w, "failed to read credentials", http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(getDatasourceResponse{
 			Name:            row.Name.String,
-			DSN:             maskDSN(row.DbType.String, row.Dsn),
-			SSH:             maskSSH(row.Ssh),
+			DSN:             maskDSN(row.DbType.String, dsn),
+			SSH:             maskSSH(ssh),
 			MaxOpenConns:    row.MaxOpenConns.Int64,
 			MaxIdleConns:    row.MaxIdleConns.Int64,
 			ConnMaxLifetime: row.ConnMaxLifetime.Int64,

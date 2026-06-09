@@ -4,7 +4,6 @@ sql:
     queries: "db/generated/all_queries.sql"
     schema:
       - "db/schema.sql"
-      - "db/extensions.sql"
     gen:
       go:
         out: "db/generated"

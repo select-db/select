@@ -44,7 +44,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 		return v.(*ResolvedDatasource), nil
 	}
 
-	secretKey, err := secretKey()
+	enc, err := getWrapper()
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +59,17 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 
 	row, err := db.Queries.GetDatasource(ctx, generated.GetDatasourceParams{
 		ID:          db_types.NewJSONNullUUID(parsedID),
-		Key:         secretKey,
 		WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	dsn, err := decryptField(ctx, enc, row.EncryptedDsn, fieldAAD(parsedWorkspaceID, parsedID, "dsn"))
+	if err != nil {
+		return nil, err
+	}
+	ssh, err := decryptField(ctx, enc, row.EncryptedSsh, fieldAAD(parsedWorkspaceID, parsedID, "ssh"))
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +77,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	ds := &ResolvedDatasource{
 		DBType: row.DbType.String,
 		Name:   row.Name.String,
-		DSN:    row.Dsn,
+		DSN:    dsn,
 		Pool: engine.PoolConfig{
 			MaxOpenConns:    int(row.MaxOpenConns.Int64),
 			MaxIdleConns:    int(row.MaxIdleConns.Int64),
@@ -78,7 +86,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 		},
 	}
 
-	if row.Ssh != "" {
+	if ssh != "" {
 		var sshCfg struct {
 			Enabled    bool   `json:"enabled"`
 			Host       string `json:"host"`
@@ -89,7 +97,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 			PrivateKey string `json:"private_key"`
 			HostKey    string `json:"host_key"`
 		}
-		if err := json.Unmarshal([]byte(row.Ssh), &sshCfg); err == nil && sshCfg.Enabled {
+		if err := json.Unmarshal([]byte(ssh), &sshCfg); err == nil && sshCfg.Enabled {
 			ds.SSH = &engine.ResolvedSSHConfig{
 				Host:       sshCfg.Host,
 				Port:       sshCfg.Port,

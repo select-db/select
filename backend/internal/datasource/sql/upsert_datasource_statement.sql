@@ -19,12 +19,12 @@ VALUES
     $2,
     $3,
     $4,
-    pgp_sym_encrypt ($5, $7),
-    pgp_sym_encrypt ($6, $7),
+    $5,
+    $6,
+    $7,
     $8,
     $9,
     $10,
-    $11,
     now()
   )
 ON CONFLICT (id) DO UPDATE
