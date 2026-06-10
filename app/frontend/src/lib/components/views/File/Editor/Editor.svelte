@@ -499,7 +499,9 @@
 <div class="editorRoot">
 	{#if displayPath}
 		<div class="uri-wrapper">
-			<Path uri={displayPath} />
+			{#if !displayPath.startsWith('temp:')}
+				<Path uri={displayPath} />
+			{/if}
 		</div>
 	{/if}
 	<div class="editorContainer" bind:this={container}></div>

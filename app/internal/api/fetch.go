@@ -41,7 +41,48 @@ var (
 	refreshMu     sync.Mutex
 	refreshedAt   time.Time
 	refreshFailed bool
+
+	// In-process fallback for the rotated refresh token. The backend rotates and
+	// deletes the old refresh token on every refresh, so if the keyring write of the
+	// new token fails the session would be stranded on a dead token and 401 forever.
+	// Holding the latest token here keeps the running session alive across keyring
+	// flakiness; it is cleared once a keyring write succeeds.
+	memTokenMu      sync.RWMutex
+	memRefreshToken string
 )
+
+// rememberRefreshToken persists the rotated refresh token to the keyring, falling
+// back to in-process memory when the keyring write fails so the session survives.
+func rememberRefreshToken(token string) {
+	if err := saveRefreshTokenFunc(token); err != nil {
+		memTokenMu.Lock()
+		memRefreshToken = token
+		memTokenMu.Unlock()
+		return
+	}
+	memTokenMu.Lock()
+	memRefreshToken = ""
+	memTokenMu.Unlock()
+}
+
+// currentRefreshToken returns the freshest refresh token: the in-process value when a
+// prior keyring write failed, otherwise the keyring value.
+func currentRefreshToken() (string, error) {
+	memTokenMu.RLock()
+	mem := memRefreshToken
+	memTokenMu.RUnlock()
+	if mem != "" {
+		return mem, nil
+	}
+	return loadRefreshTokenFunc()
+}
+
+// resetMemRefreshToken clears the in-process fallback. Used by tests.
+func resetMemRefreshToken() {
+	memTokenMu.Lock()
+	memRefreshToken = ""
+	memTokenMu.Unlock()
+}
 
 func Fetch(
 	ctx context.Context,
@@ -158,11 +199,12 @@ func doWithRetry(
 	saveTokensFromResponse(resp)
 
 	if resp.StatusCode != http.StatusUnauthorized {
-		if refreshFailed {
-			refreshMu.Lock()
-			refreshFailed = false
-			refreshMu.Unlock()
-		}
+		// Request succeeded with the current access token; clear any prior
+		// refresh-failure latch. Done under the lock since refreshFailed is also
+		// written by the refresh path below.
+		refreshMu.Lock()
+		refreshFailed = false
+		refreshMu.Unlock()
 		return resp, nil
 	}
 	_ = resp.Body.Close()
@@ -171,9 +213,11 @@ func doWithRetry(
 
 	refreshMu.Lock()
 	if refreshedAt.After(beforeRefresh) {
-		// Another goroutine already refreshed while we waited
+		// Another goroutine already refreshed while we waited. Capture the latch
+		// before unlocking so the read stays synchronized with the refresh path.
+		failed := refreshFailed
 		refreshMu.Unlock()
-		if refreshFailed {
+		if failed {
 			return nil, fmt.Errorf("session expired, please log in again")
 		}
 		return doRequest(ctx, client, method, endpoint, payload, headers, false)
@@ -244,7 +288,7 @@ func doRequest(
 	}
 
 	if includeRefresh {
-		if refreshToken, err := loadRefreshTokenFunc(); err == nil {
+		if refreshToken, err := currentRefreshToken(); err == nil {
 			req.Header.Set("X-Refresh-Token", refreshToken)
 		}
 		if deviceID, err := loadDeviceIDFunc(); err == nil {
@@ -268,6 +312,6 @@ func saveTokensFromResponse(resp *http.Response) {
 		_ = saveAccessTokenFunc(newAccess)
 	}
 	if newRefresh := resp.Header.Get("X-New-Refresh-Token"); newRefresh != "" {
-		_ = saveRefreshTokenFunc(newRefresh)
+		rememberRefreshToken(newRefresh)
 	}
 }
