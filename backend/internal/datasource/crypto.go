@@ -18,12 +18,12 @@ var (
 // getWrapper lazily builds and caches the Wrapper from the configured KEK provider.
 func getWrapper() (*kms.Wrapper, error) {
 	wrapperOnce.Do(func() {
-		p, err := kms.NewProvider()
+		p, err := kms.NewKEKProvider()
 		if err != nil {
 			wrapperErr = err
 			return
 		}
-		wrapperInst = kms.New(p)
+		wrapperInst = kms.NewWrapper(p)
 	})
 	return wrapperInst, wrapperErr
 }

@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// kmsJWTKeyIDEnv names the OVH asymmetric key used to sign JWTs.
+const kmsJWTKeyIDEnv = "OVH_KMS_JWT_KEY_ID"
+
 // NewJWTSigner returns the JWT signing key as a crypto.Signer. Dev loads an RSA
 // key from pemPath and holds it in process; prod uses the OVH KMS asymmetric
 // key named by OVH_KMS_JWT_KEY_ID, whose private half never leaves the KMS.
