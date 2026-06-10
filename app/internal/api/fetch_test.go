@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+// resetMemRefreshToken clears the in-process fallback between tests.
+func resetMemRefreshToken() {
+	memTokenMu.Lock()
+	memRefreshToken = ""
+	memTokenMu.Unlock()
+}
+
 // rotatingAuthServer models the backend's refresh-token rotation: every refresh
 // (request carrying X-Refresh-Token) consumes the presented token, deletes it,
 // and issues a brand new access+refresh pair via X-New-* headers. A refresh that
