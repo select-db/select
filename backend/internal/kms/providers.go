@@ -18,20 +18,20 @@ const KEKEnv = "SELECTDB_KEK"
 // Shared OVH KMS connection env vars: endpoint, mTLS access cert/key, and the
 // KMS instance ID. Per-key IDs live with their respective providers.
 const (
-	kmsEndpointEnv = "OVH_KMS_ENDPOINT"
-	kmsCertFileEnv = "OVH_KMS_CERT_FILE"
-	kmsKeyFileEnv  = "OVH_KMS_KEY_FILE"
-	kmsOkmsIDEnv   = "OVH_KMS_OKMS_ID"
+	kmsEndpointEnv   = "OVH_KMS_ENDPOINT"
+	kmsCertFileEnv   = "OVH_KMS_CERT_FILE"
+	kmsKeyFileEnv    = "OVH_KMS_KEY_FILE"
+	kmsInstanceIDEnv = "OVH_KMS_INSTANCE_ID"
 )
 
 // localMode reports whether the in-process dev KEK is configured. When true,
 // providers and signers use local key material instead of OVH KMS.
 func localMode() bool { return os.Getenv(KEKEnv) != "" }
 
-// newOKMSClient builds an mTLS-authenticated OVH KMS client from env. Shared by
+// newKMSClient builds an mTLS-authenticated OVH KMS client from env. Shared by
 // every prod provider and signer. Returns the KMS instance ID alongside the
 // client (all keys are scoped to it).
-func newOKMSClient() (*okms.Client, uuid.UUID, error) {
+func newKMSClient() (*okms.Client, uuid.UUID, error) {
 	endpoint := os.Getenv(kmsEndpointEnv)
 	certFile := os.Getenv(kmsCertFileEnv)
 	keyFile := os.Getenv(kmsKeyFileEnv)
@@ -39,9 +39,9 @@ func newOKMSClient() (*okms.Client, uuid.UUID, error) {
 		return nil, uuid.Nil, fmt.Errorf("kms: no provider configured: set %s (dev) or %s/%s/%s (prod)",
 			KEKEnv, kmsEndpointEnv, kmsCertFileEnv, kmsKeyFileEnv)
 	}
-	okmsID, err := uuid.Parse(os.Getenv(kmsOkmsIDEnv))
+	kmsID, err := uuid.Parse(os.Getenv(kmsInstanceIDEnv))
 	if err != nil {
-		return nil, uuid.Nil, fmt.Errorf("kms: %s invalid: %w", kmsOkmsIDEnv, err)
+		return nil, uuid.Nil, fmt.Errorf("kms: %s invalid: %w", kmsInstanceIDEnv, err)
 	}
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -59,5 +59,5 @@ func newOKMSClient() (*okms.Client, uuid.UUID, error) {
 	if err != nil {
 		return nil, uuid.Nil, fmt.Errorf("kms: kms client: %w", err)
 	}
-	return client, okmsID, nil
+	return client, kmsID, nil
 }

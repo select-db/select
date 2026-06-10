@@ -38,7 +38,7 @@ func NewKEKProvider() (KEKProvider, error) {
 	if localMode() {
 		return newLocalProvider(KEKEnv)
 	}
-	return newOKMSProvider()
+	return newKMSProvider()
 }
 
 // localProvider holds the KEK in process. Dev/local only; prod uses OVH KMS.
@@ -104,17 +104,17 @@ const dataKeyBits = 256
 // dataKeyName labels generated data keys in the KMS audit log.
 const dataKeyName = "datasource-dek"
 
-// okmsProvider delegates DEK generation/unwrapping to OVH KMS. The KEK never
+// kmsProvider delegates DEK generation/unwrapping to OVH KMS. The KEK never
 // leaves the KMS. Auth is mTLS via an access certificate.
-type okmsProvider struct {
+type kmsProvider struct {
 	dk    *okms.DataKeyProvider
 	keyID string
 }
 
-// newOKMSProvider builds the envelope provider. kekID is the OVH service key
+// newKMSProvider builds the envelope provider. kekID is the OVH service key
 // (symmetric) used as the KEK protecting the data keys.
-func newOKMSProvider() (*okmsProvider, error) {
-	client, okmsID, err := newOKMSClient()
+func newKMSProvider() (*kmsProvider, error) {
+	client, kmsID, err := newKMSClient()
 	if err != nil {
 		return nil, err
 	}
@@ -122,18 +122,18 @@ func newOKMSProvider() (*okmsProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kms: %s invalid: %w", kmsKEKIDEnv, err)
 	}
-	return &okmsProvider{
-		dk:    client.DataKeys(okmsID, kekID),
+	return &kmsProvider{
+		dk:    client.DataKeys(kmsID, kekID),
 		keyID: "ovh:" + kekID.String(),
 	}, nil
 }
 
-func (p *okmsProvider) KeyID() string { return p.keyID }
+func (p *kmsProvider) KeyID() string { return p.keyID }
 
-func (p *okmsProvider) NewDEK(ctx context.Context) (plain, wrapped []byte, err error) {
+func (p *kmsProvider) NewDEK(ctx context.Context) (plain, wrapped []byte, err error) {
 	return p.dk.GenerateDataKey(ctx, dataKeyName, dataKeyBits)
 }
 
-func (p *okmsProvider) UnwrapDEK(ctx context.Context, wrapped []byte) ([]byte, error) {
+func (p *kmsProvider) UnwrapDEK(ctx context.Context, wrapped []byte) ([]byte, error) {
 	return p.dk.DecryptDataKey(ctx, wrapped)
 }

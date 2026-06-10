@@ -22,7 +22,7 @@ func NewJWTSigner(pemPath string) (crypto.Signer, error) {
 	if localMode() {
 		return loadLocalSigner(pemPath)
 	}
-	client, okmsID, err := newOKMSClient()
+	client, kmsID, err := newKMSClient()
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func NewJWTSigner(pemPath string) (crypto.Signer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kms: %s invalid: %w", kmsJWTKeyIDEnv, err)
 	}
-	return client.NewSigner(context.Background(), okmsID, keyID)
+	return client.NewSigner(context.Background(), kmsID, keyID)
 }
 
 // loadLocalSigner parses an RSA private key (PKCS#1 or PKCS#8) from a PEM file.

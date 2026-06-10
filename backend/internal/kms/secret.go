@@ -26,12 +26,12 @@ func Secret(name string) (string, error) {
 
 // fetchSecret reads a single field from a secret in the OVH KMS secret store.
 func fetchSecret(path, key string) (string, error) {
-	client, okmsID, err := newOKMSClient()
+	client, kmsID, err := newKMSClient()
 	if err != nil {
 		return "", err
 	}
 	includeData := true
-	resp, err := client.GetSecretV2(context.Background(), okmsID, path, nil, &includeData)
+	resp, err := client.GetSecretV2(context.Background(), kmsID, path, nil, &includeData)
 	if err != nil {
 		return "", fmt.Errorf("kms: fetch secret %q: %w", path, err)
 	}
