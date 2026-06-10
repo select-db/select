@@ -37,12 +37,13 @@ const KEKEnv = "SELECTDB_KEK"
 
 // KMS provider env vars, read when SELECTDB_KEK is absent (i.e. prod).
 const (
-	kmsEndpointEnv     = "OVH_KMS_ENDPOINT"
-	kmsCertFileEnv     = "OVH_KMS_CERT_FILE"
-	kmsKeyFileEnv      = "OVH_KMS_KEY_FILE"
-	kmsOkmsIDEnv       = "OVH_KMS_OKMS_ID"
-	kmsServiceKeyIDEnv = "OVH_KMS_SERVICE_KEY_ID"
-	kmsJWTKeyIDEnv     = "OVH_KMS_JWT_KEY_ID"
+	kmsEndpointEnv = "OVH_KMS_ENDPOINT"
+	kmsCertFileEnv = "OVH_KMS_CERT_FILE"
+	kmsKeyFileEnv  = "OVH_KMS_KEY_FILE"
+	kmsOkmsIDEnv   = "OVH_KMS_OKMS_ID"
+	
+	kmsKEKIDEnv    = "OVH_KMS_KEK_ID"
+	kmsJWTKeyIDEnv = "OVH_KMS_JWT_KEY_ID"
 )
 
 // localMode reports whether the in-process dev KEK is configured. When true,
@@ -162,20 +163,20 @@ func newOKMSClient() (*okms.Client, uuid.UUID, error) {
 	return client, okmsID, nil
 }
 
-// newKMSProvider builds the envelope provider. The service key ID is the
-// symmetric KEK protecting the data keys.
+// newKMSProvider builds the envelope provider. kekID is the OVH service key
+// (symmetric) used as the KEK protecting the data keys.
 func newKMSProvider() (*kmsProvider, error) {
 	client, okmsID, err := newOKMSClient()
 	if err != nil {
 		return nil, err
 	}
-	serviceKeyID, err := uuid.Parse(os.Getenv(kmsServiceKeyIDEnv))
+	kekID, err := uuid.Parse(os.Getenv(kmsKEKIDEnv))
 	if err != nil {
-		return nil, fmt.Errorf("kms: %s invalid: %w", kmsServiceKeyIDEnv, err)
+		return nil, fmt.Errorf("kms: %s invalid: %w", kmsKEKIDEnv, err)
 	}
 	return &kmsProvider{
-		dk:    client.DataKeys(okmsID, serviceKeyID),
-		keyID: "ovh:" + serviceKeyID.String(),
+		dk:    client.DataKeys(okmsID, kekID),
+		keyID: "ovh:" + kekID.String(),
 	}, nil
 }
 
