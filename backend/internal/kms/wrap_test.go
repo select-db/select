@@ -20,7 +20,7 @@ func newTestWrapper(t *testing.T) *Wrapper {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(p)
+	return NewWrapper(p)
 }
 
 func TestWrapUnwrapRoundTrip(t *testing.T) {

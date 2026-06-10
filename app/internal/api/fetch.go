@@ -77,13 +77,6 @@ func currentRefreshToken() (string, error) {
 	return loadRefreshTokenFunc()
 }
 
-// resetMemRefreshToken clears the in-process fallback. Used by tests.
-func resetMemRefreshToken() {
-	memTokenMu.Lock()
-	memRefreshToken = ""
-	memTokenMu.Unlock()
-}
-
 func Fetch(
 	ctx context.Context,
 	method,

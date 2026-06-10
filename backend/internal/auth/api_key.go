@@ -4,30 +4,20 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"os"
 	"strings"
 )
 
 // API keys authenticate automated clients to the same principal pipeline as a
-// user JWT. Only an HMAC of the plaintext is stored. No dedicated secret: keys
-// reuse the signing secret under a domain tag, disjoint from refresh-token
-// hashing, so they cannot be cross-replayed
+// user JWT. Only a SHA-256 of the plaintext is stored: the secret tail is 40
+// chars of CSPRNG, so a plain hash is as strong as a keyed MAC and a DB leak
+// yields no usable keys. A domain tag separates these hashes from refresh-token
+// hashes so neither can be replayed as the other.
 const (
 	APIKeyScheme   = "sdb_"           // bearer prefix; branches the auth path before any DB hit
 	apiKeyPrefixLn = 12               // stored in auth.api_key.prefix, used for lookup
 	apiKeySecretLn = 40               // unguessable tail
-	apiKeyHMACTag  = "sdb-api-key-v1" // HMAC domain separation from refresh tokens
+	apiKeyHashTag  = "sdb-api-key-v1" // domain separation from refresh tokens
 )
-
-// ValidateSigningSecret fails at boot if the shared signing secret is unset,
-// so CI catches it instead of a first-request panic
-func ValidateSigningSecret() error {
-	if os.Getenv("REFRESH_TOKEN_SECRET") == "" {
-		return errors.New("REFRESH_TOKEN_SECRET is not set")
-	}
-	return nil
-}
 
 func IsAPIKey(token string) bool {
 	return strings.HasPrefix(token, APIKeyScheme)
@@ -43,8 +33,8 @@ func GenerateAPIKey() (plaintext, prefix, hash string) {
 }
 
 func HashAPIKey(plaintext string) string {
-	h := hmac.New(sha256.New, GetRefreshTokenSecret())
-	h.Write([]byte(apiKeyHMACTag))
+	h := sha256.New()
+	h.Write([]byte(apiKeyHashTag))
 	h.Write([]byte{0})
 	h.Write([]byte(plaintext))
 	return hex.EncodeToString(h.Sum(nil))

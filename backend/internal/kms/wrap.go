@@ -33,7 +33,7 @@ type Wrapper struct {
 	provider KEKProvider
 }
 
-func New(provider KEKProvider) *Wrapper { return &Wrapper{provider: provider} }
+func NewWrapper(provider KEKProvider) *Wrapper { return &Wrapper{provider: provider} }
 
 // Wrap returns a storable blob. aad (e.g. workspaceID||datasourceID) is bound to
 // the ciphertext and must be passed identically to Unwrap.
