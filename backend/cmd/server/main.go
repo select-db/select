@@ -64,11 +64,6 @@ func main() {
 	// so enforce the SSRF guard. The desktop app must never set this.
 	engine.EnforceOutboundGuard = true
 
-	// fail at boot, not first request, so CI catches a missing secret
-	if err := auth.ValidateSigningSecret(); err != nil {
-		log.Fatalf("config error: %v", err)
-	}
-
 	if err := db.Init(); err != nil {
 		log.Fatalf("DB init failed: %v", err)
 	}

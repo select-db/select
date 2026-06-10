@@ -2,7 +2,6 @@ package auth
 
 import (
 	"backend/db/db_types"
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,24 +15,10 @@ import (
 )
 
 var (
-	refreshTokenSecret []byte
-	once               sync.Once
-
 	trustedProxyNets []*net.IPNet
 	trustedOnce      sync.Once
 	trustedOverride  []*net.IPNet // test-only: when set, used instead of env
 )
-
-func GetRefreshTokenSecret() []byte {
-	once.Do(func() {
-		secret := os.Getenv("REFRESH_TOKEN_SECRET")
-		if secret == "" {
-			panic("Missing REFRESH_TOKEN_SECRET env variable")
-		}
-		refreshTokenSecret = []byte(secret)
-	})
-	return refreshTokenSecret
-}
 
 // extractBearerToken extracts the token from Authorization header "Bearer <token>"
 func ExtractBearerToken(header string) string {
@@ -47,10 +32,20 @@ func ExtractBearerToken(header string) string {
 	return parts[1]
 }
 
-// hashRefreshToken generates an HMAC-SHA256 hash of token + deviceID using a secret key
+// refreshTokenHashTag domain-separates refresh-token hashes from API-key hashes.
+const refreshTokenHashTag = "sdb-refresh-token-v1"
+
+// HashRefreshToken returns SHA-256 of the token bound to deviceID. The token is
+// 64 chars of CSPRNG, so a plain hash is as strong as a keyed MAC here: a DB
+// leak yields no usable tokens, and the deviceID binding stops a token stolen
+// without its device from validating.
 func HashRefreshToken(token, deviceID string) string {
-	h := hmac.New(sha256.New, refreshTokenSecret)
-	h.Write([]byte(token + deviceID))
+	h := sha256.New()
+	h.Write([]byte(refreshTokenHashTag))
+	h.Write([]byte{0})
+	h.Write([]byte(token))
+	h.Write([]byte{0})
+	h.Write([]byte(deviceID))
 	return hex.EncodeToString(h.Sum(nil))
 }
 

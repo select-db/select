@@ -4,23 +4,9 @@ import (
 	"backend/db/db_types"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 )
-
-func TestMain(m *testing.M) {
-	// set environment variable for GetRefreshTokenSecret
-	_ = os.Setenv("REFRESH_TOKEN_SECRET", "testsecret")
-	os.Exit(m.Run())
-}
-
-func TestGetRefreshTokenSecret(t *testing.T) {
-	secret := GetRefreshTokenSecret()
-	if string(secret) != "testsecret" {
-		t.Errorf("expected 'testsecret', got %s", secret)
-	}
-}
 
 func TestExtractBearerToken(t *testing.T) {
 	tests := []struct {
@@ -45,11 +31,9 @@ func TestHashRefreshToken(t *testing.T) {
 	token := "token123"
 	deviceID := "device456"
 
-	// manually set secret
-	_ = GetRefreshTokenSecret() // ensure secret is set
 	hash := HashRefreshToken(token, deviceID)
 
-	if len(hash) != 64 { // HMAC-SHA256 hex length
+	if len(hash) != 64 { // SHA-256 hex length
 		t.Errorf("expected hash length 64, got %d", len(hash))
 	}
 }

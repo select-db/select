@@ -1,15 +1,9 @@
 package auth
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
-
-func init() {
-	// hash uses the shared signing secret; set it before any hash call
-	_ = os.Setenv("REFRESH_TOKEN_SECRET", "test-signing-secret")
-}
 
 func TestGenerateAPIKeyRoundtrip(t *testing.T) {
 	plaintext, prefix, hash := GenerateAPIKey()
@@ -30,6 +24,16 @@ func TestGenerateAPIKeyRoundtrip(t *testing.T) {
 	}
 	if VerifyAPIKey(plaintext+"x", hash) {
 		t.Fatal("VerifyAPIKey accepted a tampered key")
+	}
+}
+
+// TestHashDomainSeparation ensures an API-key hash and a refresh-token hash of
+// the same input differ, so a hash captured in one context cannot be replayed
+// as the other.
+func TestHashDomainSeparation(t *testing.T) {
+	const in = "same-input"
+	if HashAPIKey(in) == HashRefreshToken(in, "") {
+		t.Fatal("API-key and refresh-token hashes collide; domain tags not applied")
 	}
 }
 
