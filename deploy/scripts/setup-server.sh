@@ -72,8 +72,9 @@ fi
 echo "--> [4/7] RSA key reminder ..."
 if [[ ! -f "/opt/selectdb/keys/private.pem" ]]; then
     echo "    WARNING: /opt/selectdb/keys/private.pem not found."
-    echo "    Copy your private.pem and public.pem from the repo's backend/secrets/ to /opt/selectdb/keys/"
-    echo "    Then set PRIVATE_KEY_PATH and PUBLIC_KEY_PATH in /opt/selectdb/env.${ENV}"
+    echo "    Copy your private.pem from the repo's backend/secrets/ to /opt/selectdb/keys/"
+    echo "    Then set PRIVATE_KEY_PATH in /opt/selectdb/env.${ENV} (dev/local signing)."
+    echo "    For prod, use an OVH KMS asymmetric key instead (set OVH_KMS_JWT_KEY_ID + OVH_KMS_*)."
 fi
 
 # ── 5. Systemd unit ────────────────────────────────────────────────────────────

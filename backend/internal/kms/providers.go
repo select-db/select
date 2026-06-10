@@ -42,12 +42,17 @@ const (
 	kmsKeyFileEnv      = "OVH_KMS_KEY_FILE"
 	kmsOkmsIDEnv       = "OVH_KMS_OKMS_ID"
 	kmsServiceKeyIDEnv = "OVH_KMS_SERVICE_KEY_ID"
+	kmsJWTKeyIDEnv     = "OVH_KMS_JWT_KEY_ID"
 )
+
+// localMode reports whether the in-process dev KEK is configured. When true,
+// providers and signers use local key material instead of OVH KMS.
+func localMode() bool { return os.Getenv(KEKEnv) != "" }
 
 // NewProvider selects the KEK provider: the in-process KEK if SELECTDB_KEK is
 // set (dev), otherwise OVH KMS (prod).
 func NewProvider() (KEKProvider, error) {
-	if os.Getenv(KEKEnv) != "" {
+	if localMode() {
 		return newLocalProvider(KEKEnv)
 	}
 	return newKMSProvider()
@@ -123,28 +128,24 @@ type kmsProvider struct {
 	keyID string
 }
 
-// newKMSProvider reads the OVH KMS config from env and builds an mTLS client.
-// The service key ID is the symmetric KEK protecting the data keys.
-func newKMSProvider() (*kmsProvider, error) {
+// newOKMSClient reads the OVH KMS endpoint + mTLS cert from env and builds an
+// authenticated client. Shared by every prod provider/signer. Returns the
+// okms domain ID alongside the client (keys are scoped to it).
+func newOKMSClient() (*okms.Client, uuid.UUID, error) {
 	endpoint := os.Getenv(kmsEndpointEnv)
 	certFile := os.Getenv(kmsCertFileEnv)
 	keyFile := os.Getenv(kmsKeyFileEnv)
 	if endpoint == "" || certFile == "" || keyFile == "" {
-		return nil, fmt.Errorf("kms: no KEK provider configured: set %s (dev) or %s/%s/%s (prod)",
+		return nil, uuid.Nil, fmt.Errorf("kms: no provider configured: set %s (dev) or %s/%s/%s (prod)",
 			KEKEnv, kmsEndpointEnv, kmsCertFileEnv, kmsKeyFileEnv)
 	}
 	okmsID, err := uuid.Parse(os.Getenv(kmsOkmsIDEnv))
 	if err != nil {
-		return nil, fmt.Errorf("kms: %s invalid: %w", kmsOkmsIDEnv, err)
+		return nil, uuid.Nil, fmt.Errorf("kms: %s invalid: %w", kmsOkmsIDEnv, err)
 	}
-	serviceKeyID, err := uuid.Parse(os.Getenv(kmsServiceKeyIDEnv))
-	if err != nil {
-		return nil, fmt.Errorf("kms: %s invalid: %w", kmsServiceKeyIDEnv, err)
-	}
-
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("kms: load kms cert: %w", err)
+		return nil, uuid.Nil, fmt.Errorf("kms: load kms cert: %w", err)
 	}
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -156,7 +157,21 @@ func newKMSProvider() (*kmsProvider, error) {
 	}
 	client, err := okms.NewRestAPIClientWithHttp(endpoint, httpClient)
 	if err != nil {
-		return nil, fmt.Errorf("kms: kms client: %w", err)
+		return nil, uuid.Nil, fmt.Errorf("kms: kms client: %w", err)
+	}
+	return client, okmsID, nil
+}
+
+// newKMSProvider builds the envelope provider. The service key ID is the
+// symmetric KEK protecting the data keys.
+func newKMSProvider() (*kmsProvider, error) {
+	client, okmsID, err := newOKMSClient()
+	if err != nil {
+		return nil, err
+	}
+	serviceKeyID, err := uuid.Parse(os.Getenv(kmsServiceKeyIDEnv))
+	if err != nil {
+		return nil, fmt.Errorf("kms: %s invalid: %w", kmsServiceKeyIDEnv, err)
 	}
 	return &kmsProvider{
 		dk:    client.DataKeys(okmsID, serviceKeyID),
