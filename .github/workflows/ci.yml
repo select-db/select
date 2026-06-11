@@ -67,7 +67,7 @@ jobs:
             frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
           else
             FILES="$(git diff --name-only HEAD~1 HEAD || true)"
-            if grep -qE '^(\.github/|deploy/|\.gitleaks\.toml)' <<<"$FILES"; then
+            if grep -qE '^(\.github/|\.gitleaks\.toml)' <<<"$FILES"; then
               # Shared infra changed -> run everything to be safe.
               frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
             else
@@ -463,7 +463,7 @@ jobs:
             V="${STAGING_VERSION}"
             API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -530,7 +530,7 @@ jobs:
             V="${STAGING_VERSION}"
             API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -600,7 +600,7 @@ jobs:
             V="${STAGING_VERSION}"
             API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -680,7 +680,7 @@ jobs:
             V="${STAGING_VERSION}"
             API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -760,7 +760,7 @@ jobs:
         run: find . -maxdepth 1 -type f ! -name checksums.sha256 -exec sha256sum {} + > checksums.sha256 && cat checksums.sha256
 
       # Draft: signatures and the publish step happen on a maintainer's laptop
-      # via deploy/sign-and-deploy.sh. Users never see this release until then.
+      # via the select-ops repo's sign-and-deploy.sh. Users never see this release until then.
       - name: Upload to draft release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
