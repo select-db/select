@@ -17,8 +17,8 @@ var (
 )
 
 func Init() error {
-	// Dev: DB_DSN env. Prod: same name as a path in the OVH KMS secret store.
-	dsn, err := kms.Secret("DB_DSN")
+	// Dev: POSTGRES_DSN env. Prod: same name as a path in the OVH KMS secret store.
+	dsn, err := kms.Secret("POSTGRES_DSN")
 	if err != nil {
 		return err
 	}
