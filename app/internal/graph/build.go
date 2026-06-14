@@ -164,24 +164,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 
 				dbURI := fsCtx.URI(relSlash)
 
-				var sshConfig *DBInstanceSSHConfig
-				if cfg.SSH != nil {
-					sshCfg := &DBInstanceSSHConfig{
-						Enabled:    cfg.SSH.Enabled,
-						Host:       cfg.SSH.Host,
-						Port:       cfg.SSH.Port,
-						User:       cfg.SSH.User,
-						AuthMethod: cfg.SSH.AuthMethod,
-						Password:   cfg.SSH.Password,
-						PrivateKey: cfg.SSH.PrivateKey,
-						HostKey:    cfg.SSH.HostKey,
-					}
-					// Default port when enabled but unspecified.
-					if sshCfg.Enabled && sshCfg.Port == 0 {
-						sshCfg.Port = 22
-					}
-					sshConfig = sshCfg
-				}
+				sshConfig := SSHConfigFromFS(cfg.SSH)
 
 				node := &DBInstanceNode{
 					ID:   cfg.ID,

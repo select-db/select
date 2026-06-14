@@ -6,6 +6,10 @@ export function CancelQuery(arg1) {
   return window['go']['db_client']['DbClient']['CancelQuery'](arg1);
 }
 
+export function ChooseSSHKeyFile() {
+  return window['go']['db_client']['DbClient']['ChooseSSHKeyFile']();
+}
+
 export function Explain(arg1) {
   return window['go']['db_client']['DbClient']['Explain'](arg1);
 }
@@ -56,6 +60,10 @@ export function QuerySchema(arg1) {
 
 export function SetContext(arg1) {
   return window['go']['db_client']['DbClient']['SetContext'](arg1);
+}
+
+export function SetSSHKeyPassphrase(arg1, arg2) {
+  return window['go']['db_client']['DbClient']['SetSSHKeyPassphrase'](arg1, arg2);
 }
 
 export function StartQuery(arg1) {

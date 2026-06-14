@@ -74,13 +74,24 @@ export const databaseFieldHelpContent: Record<DatabaseFieldKey, DatabaseFieldHel
 	},
 	ssh_auth_method: {
 		title: 'SSH authentication method',
-		what: 'How we authenticate to the SSH tunnel host: with a password or with a private key.',
+		what: 'How we authenticate to the SSH tunnel host. In local mode prefer the SSH agent or a key file so no secret is stored on disk.',
 		where: 'Match how you normally SSH into this host from your terminal.',
 		table: {
 			headers: ['Method', 'When to use'],
 			rows: [
-				['Password', 'You type a password when connecting (e.g. ssh user@host).'],
-				['Private key', 'You use a key file (e.g. .pem, id_ed25519) without typing a password.']
+				[
+					'SSH agent',
+					'Recommended (local). Uses your running agent (SSH_AUTH_SOCK). Nothing stored; encrypted keys work transparently.'
+				],
+				[
+					'Key file',
+					'Local. Pick a key file on disk; only the path is saved, contents are read at connect time. Prompts for a passphrase if encrypted.'
+				],
+				[
+					'Password',
+					'You type a password when connecting (e.g. ssh user@host). Prefer an .env $variable over a raw value.'
+				],
+				['Private key', 'Paste the raw key (proxified) or reference an .env $variable (local).']
 			]
 		}
 	},
@@ -91,15 +102,14 @@ export const databaseFieldHelpContent: Record<DatabaseFieldKey, DatabaseFieldHel
 	},
 	ssh_private_key: {
 		title: 'SSH private key',
-		what: 'The private SSH key used to log into the tunnel host when "Private key" auth is selected.',
+		what: 'The key used to log into the tunnel host.',
 		where:
-			'Paste the full PEM key from your key file, or reference an .env variable that contains it.'
+			'Local: choose a key file (e.g. ~/.ssh/id_ed25519) or reference an .env variable. Proxified: paste the full PEM key.'
 	},
 	ssh_host_key: {
 		title: 'SSH host key',
 		what: 'The public key of your SSH tunnel host. SELECT checks it on every connection to make sure you are reaching the right server.',
-		where:
-			'Run the command below, then paste any output line (ignore lines starting with #). Required for proxified connections.',
+		where: 'Paste ssh-keyscan output (required); the server has no access to your machine.',
 		command: 'ssh-keyscan your-bastion-host',
 		table: {
 			headers: ['Example output', 'Key type'],

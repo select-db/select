@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Ping } from '$lib/wailsjs/go/db_client/DbClient';
+	import { Ping, ChooseSSHKeyFile } from '$lib/wailsjs/go/db_client/DbClient';
 	import { db_client } from '$lib/wailsjs/go/models';
 	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
 	import {
@@ -25,6 +25,7 @@
 
 	import VariablePicker from '$lib/components/views/File/Header/VariablePicker.svelte';
 	import DatabaseFieldHelpModal from './help/DatabaseFieldHelpModal.svelte';
+	import { ensureSSHPassphrase } from '$lib/utils/ssh/passphrase';
 	import type { DatabaseFieldKey } from './help/fieldHelpContent';
 	import type { Component } from 'svelte';
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
@@ -33,14 +34,17 @@
 
 	export type AvailableDatabases = 'sqlite' | 'mysql' | 'postgresql';
 
+	type SSHAuthMethod = 'password' | 'private_key' | 'agent' | 'key_file';
+
 	type SSHConfig = {
 		enabled: boolean;
 		host: string;
 		port: number;
 		user: string;
-		auth_method: 'password' | 'private_key';
+		auth_method: SSHAuthMethod;
 		password: string;
 		private_key: string;
+		key_path: string;
 		host_key: string;
 	};
 
@@ -93,6 +97,7 @@
 			auth_method: 'password',
 			password: '',
 			private_key: '',
+			key_path: '',
 			host_key: ''
 		}),
 		proxified = $bindable(false),
@@ -109,8 +114,14 @@
 	let sshUser = $state(ssh.user);
 	let sshPassword = $state(ssh.password);
 	let sshPrivateKey = $state(ssh.private_key);
+	let sshKeyPath = $state(ssh.key_path ?? '');
 	let sshHostKey = $state(ssh.host_key);
-	let sshAuthMethod = $state<'password' | 'private_key'>(ssh.auth_method);
+	// Fresh non-proxified tunnels default to the SSH agent: no secrets to enter or store.
+	let sshAuthMethod = $state<SSHAuthMethod>(
+		!proxified && ssh.auth_method === 'password' && !ssh.password && !ssh.host && !ssh.user
+			? 'agent'
+			: ssh.auth_method
+	);
 	let sshPortText = $state(ssh.port ? String(ssh.port) : '22');
 
 	let maxOpenConns = $state(25);
@@ -165,6 +176,7 @@
 				sshUser = parsed.user ?? '';
 				sshPassword = parsed.password ?? '';
 				sshPrivateKey = parsed.private_key ?? '';
+				sshKeyPath = parsed.key_path ?? '';
 				sshHostKey = parsed.host_key ?? '';
 				sshAuthMethod = parsed.auth_method ?? 'password';
 				sshPortText = String(parsed.port || 22);
@@ -189,6 +201,7 @@
 			sshAuthMethod,
 			sshPassword,
 			sshPrivateKey,
+			sshKeyPath,
 			sshHostKey,
 			proxified,
 			maxOpenConns,
@@ -265,11 +278,27 @@
 		return null;
 	};
 
+	const validateKeyPath = (v: string) => {
+		if (!v && sshAuthMethod === 'key_file') return 'Choose a private key file';
+		return null;
+	};
+
 	const validateHostKey = (v: string) => {
 		if (!v) return proxified ? 'Host key is required for proxified connections' : null;
 		if (isVariable(v)) return null;
 		if (!RE_HOST_KEY.test(v.trim())) return 'Expected ssh-keyscan output: hostname key-type base64';
 		return null;
+	};
+
+	const chooseKeyFile = async () => {
+		const [path, err] = await tryCatch(ChooseSSHKeyFile);
+		if (err) {
+			notifyError(err.message);
+			return;
+		}
+		if (!path) return; // user cancelled
+		sshKeyPath = path;
+		await save();
 	};
 
 	const openFieldHelp = (field: DatabaseFieldKey) => {
@@ -299,6 +328,7 @@
 		ssh.user = sshUser;
 		ssh.password = sshPassword;
 		ssh.private_key = sshPrivateKey;
+		ssh.key_path = sshKeyPath;
 		ssh.host_key = sshHostKey;
 		ssh.auth_method = sshAuthMethod;
 
@@ -311,8 +341,9 @@
 			port: ssh.port,
 			user: sshUser,
 			auth_method: sshAuthMethod,
-			password: sshPassword,
-			private_key: sshPrivateKey,
+			password: sshAuthMethod === 'password' ? sshPassword : '',
+			private_key: sshAuthMethod === 'private_key' ? sshPrivateKey : '',
+			key_path: sshAuthMethod === 'key_file' ? sshKeyPath : '',
 			host_key: sshHostKey
 		};
 
@@ -355,12 +386,9 @@
 		});
 	};
 
-	const ping = async () => {
-		if (!id) return;
-
+	const attemptPing = async (): Promise<string> => {
 		await save();
-
-		const error = await Ping(
+		return await Ping(
 			db_client.PingParams.createFrom({
 				DbInstanceID: id,
 				db_type,
@@ -371,6 +399,17 @@
 				no_cache: true
 			})
 		);
+	};
+
+	const ping = async () => {
+		if (!id) return;
+
+		let error = await attemptPing();
+
+		// Encrypted key file: prompt for the passphrase (stored in memory) and retry.
+		if (error && (await ensureSSHPassphrase(sshKeyPath, error, sshHost))) {
+			error = await attemptPing();
+		}
 
 		if (error) return notifyError(error);
 
@@ -508,43 +547,6 @@
 						<div class="input-group">
 							<div class="standalone-input" style="flex: 1">
 								<p class="label with-help">
-									<span>SSH tunnel host</span>
-									<button type="button" class="help" onclick={() => openFieldHelp('ssh_host')}>
-										<Icon icon="info" size={12} />
-									</button>
-								</p>
-								<div class="action-wrapper">
-									<Input
-										bind:value={sshHost}
-										placeholder="ec2-203-0-113-42.eu-west-1.compute.amazonaws.com"
-										style="flex-grow: 1;"
-										validator={validateHost}
-									/>
-									{#if uri && !proxified}
-										<VariablePicker
-											{uri}
-											iconSize={14}
-											style="height: 32px"
-											onchange={(v) => (sshHost = v)}
-										/>
-									{/if}
-								</div>
-							</div>
-
-							<div class="standalone-input">
-								<p class="label with-help">
-									<span>SSH port</span>
-									<button type="button" class="help" onclick={() => openFieldHelp('ssh_port')}>
-										<Icon icon="info" size={12} />
-									</button>
-								</p>
-								<Input bind:value={sshPortText} placeholder="22" validator={validatePort} />
-							</div>
-						</div>
-
-						<div class="input-group">
-							<div class="standalone-input">
-								<p class="label with-help">
 									<span>SSH user</span>
 									<button type="button" class="help" onclick={() => openFieldHelp('ssh_user')}>
 										<Icon icon="info" size={12} />
@@ -567,31 +569,69 @@
 									{/if}
 								</div>
 							</div>
-							<div class="standalone-input" style="flex: 1;">
+							<div class="standalone-input" style="flex: 1">
 								<p class="label with-help">
-									<span>SSH host key{proxified ? ' (required)' : ' (recommended)'}</span>
-									<button type="button" class="help" onclick={() => openFieldHelp('ssh_host_key')}>
+									<span>SSH tunnel host</span>
+									<button type="button" class="help" onclick={() => openFieldHelp('ssh_host')}>
 										<Icon icon="info" size={12} />
 									</button>
 								</p>
 								<div class="action-wrapper">
 									<Input
-										bind:value={sshHostKey}
-										placeholder="ssh-ed25519 AAAA…"
+										bind:value={sshHost}
+										placeholder="ec2-203-0-113-42.eu-west-1.compute.amazonaws.com"
 										style="flex-grow: 1;"
-										validator={validateHostKey}
+										validator={validateHost}
 									/>
 									{#if uri && !proxified}
 										<VariablePicker
 											{uri}
 											iconSize={14}
 											style="height: 32px"
-											onchange={(v) => (sshHostKey = v)}
+											onchange={(v) => (sshHost = v)}
 										/>
 									{/if}
 								</div>
 							</div>
+							<div class="standalone-input">
+								<p class="label with-help">
+									<span>SSH port</span>
+									<button type="button" class="help" onclick={() => openFieldHelp('ssh_port')}>
+										<Icon icon="info" size={12} />
+									</button>
+								</p>
+								<Input
+									bind:value={sshPortText}
+									placeholder="22"
+									validator={validatePort}
+									style="width: 45px;"
+								/>
+							</div>
 						</div>
+						{#if proxified}
+							<div class="input-group">
+								<div class="standalone-input" style="flex: 1;">
+									<p class="label with-help">
+										<span>SSH host key (required)</span>
+										<button
+											type="button"
+											class="help"
+											onclick={() => openFieldHelp('ssh_host_key')}
+										>
+											<Icon icon="info" size={12} />
+										</button>
+									</p>
+									<div class="action-wrapper">
+										<Input
+											bind:value={sshHostKey}
+											placeholder="ssh-ed25519 AAAA…"
+											style="flex-grow: 1;"
+											validator={validateHostKey}
+										/>
+									</div>
+								</div>
+							</div>
+						{/if}
 
 						<div class="input-group">
 							<div class="standalone-input">
@@ -608,10 +648,17 @@
 								<Select
 									bind:value={sshAuthMethod}
 									width={180}
-									options={[
-										{ value: 'password', label: 'Password' },
-										{ value: 'private_key', label: 'Private key' }
-									]}
+									options={proxified
+										? [
+												{ value: 'password', label: 'Password' },
+												{ value: 'private_key', label: 'Private key' }
+											]
+										: [
+												{ value: 'agent', label: 'SSH agent' },
+												{ value: 'key_file', label: 'Key file' },
+												{ value: 'password', label: 'Password' },
+												{ value: 'private_key', label: 'Private key' }
+											]}
 								/>
 							</div>
 							{#if sshAuthMethod === 'password'}
@@ -680,6 +727,33 @@
 										/>
 									{/if}
 								</div>
+							</div>
+						{/if}
+						{#if !proxified && sshAuthMethod === 'key_file'}
+							<div class="standalone-input" style="flex: 1;">
+								<p class="label with-help">
+									<span>Private key file</span>
+									<button
+										type="button"
+										class="help"
+										onclick={() => openFieldHelp('ssh_private_key')}
+									>
+										<Icon icon="info" size={12} />
+									</button>
+								</p>
+								<div class="action-wrapper">
+									<div class="host-key-readonly" class:empty={!sshKeyPath}>
+										{sshKeyPath || 'No key file chosen'}
+									</div>
+									<Button content="Choose key file" emphasis="low" onclick={chooseKeyFile} />
+								</div>
+								{#if validateKeyPath(sshKeyPath)}
+									<p class="host-key-msg error">{validateKeyPath(sshKeyPath)}</p>
+								{:else}
+									<p class="host-key-msg">
+										If the key is encrypted, you'll be asked for the passphrase when you connect.
+									</p>
+								{/if}
 							</div>
 						{/if}
 					</div>
@@ -818,5 +892,34 @@
 
 	:global(button.help:hover svg) {
 		stroke: var(--gray-1000);
+	}
+
+	.host-key-readonly {
+		flex-grow: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		height: 32px;
+		padding: 0 var(--space-sm);
+		border: var(--border);
+		border-radius: var(--br-xs);
+		background-color: var(--gray-0);
+		color: var(--gray-900);
+		font-size: var(--fs-sm);
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.host-key-readonly.empty {
+		color: var(--gray-800);
+	}
+
+	.host-key-msg {
+		margin-top: var(--space-xs);
+		font-size: 12px;
+		color: var(--gray-700);
+	}
+	.host-key-msg.error {
+		color: var(--red);
 	}
 </style>
