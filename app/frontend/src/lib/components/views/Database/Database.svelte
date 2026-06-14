@@ -20,8 +20,12 @@
 	const sshConfig = $derived.by(() => {
 		const ssh = database?.ssh;
 		if (!ssh) return undefined;
-		const authMethod: 'password' | 'private_key' =
-			ssh.auth_method === 'private_key' ? 'private_key' : 'password';
+		const authMethod: 'password' | 'private_key' | 'agent' | 'key_file' =
+			ssh.auth_method === 'private_key' ||
+			ssh.auth_method === 'agent' ||
+			ssh.auth_method === 'key_file'
+				? ssh.auth_method
+				: 'password';
 		return {
 			enabled: ssh.enabled,
 			host: ssh.host,
@@ -30,6 +34,7 @@
 			auth_method: authMethod,
 			password: ssh.password,
 			private_key: ssh.private_key,
+			key_path: ssh.key_path ?? '',
 			host_key: ssh.host_key ?? ''
 		};
 	});
