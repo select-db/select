@@ -53,9 +53,10 @@ type DBInstanceSSHConfig struct {
 	Host       string `json:"host"`
 	Port       int    `json:"port"`
 	User       string `json:"user"`
-	AuthMethod string `json:"auth_method"` // "password" | "private_key"
+	AuthMethod string `json:"auth_method"` // "password" | "private_key" | "agent" | "key_file"
 	Password   string `json:"password"`
 	PrivateKey string `json:"private_key"`
+	KeyPath    string `json:"key_path"` // path to a private key file (desktop key_file auth)
 	HostKey    string `json:"host_key"` // pinned bastion public key
 }
 

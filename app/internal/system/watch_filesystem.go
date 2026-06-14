@@ -207,22 +207,7 @@ func (s *System) handleDBConfigEvent(event fsnotify.Event, userID string, ctx *g
 	// Invalidate cached metadata so the next schema load uses the new config.
 	engine.InvalidateMetadata(ctx.WorkspaceID, cfg.DSN)
 
-	var sshConfig *graph.DBInstanceSSHConfig
-	if cfg.SSH != nil {
-		ssh := &graph.DBInstanceSSHConfig{
-			Enabled:    cfg.SSH.Enabled,
-			Host:       cfg.SSH.Host,
-			Port:       cfg.SSH.Port,
-			User:       cfg.SSH.User,
-			AuthMethod: cfg.SSH.AuthMethod,
-			Password:   cfg.SSH.Password,
-			PrivateKey: cfg.SSH.PrivateKey,
-		}
-		if ssh.Enabled && ssh.Port == 0 {
-			ssh.Port = 22
-		}
-		sshConfig = ssh
-	}
+	sshConfig := graph.SSHConfigFromFS(cfg.SSH)
 
 	payload := graph.DBInstanceDTO{
 		ID:          &cfg.ID,
