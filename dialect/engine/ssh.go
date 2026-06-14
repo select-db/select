@@ -233,21 +233,18 @@ func buildSSHAuth(config ResolvedSSHConfig) (sshAuth, error) {
 	}
 }
 
-// agentAuth authenticates via the running SSH agent (SSH_AUTH_SOCK). Desktop
-// only: nothing is stored and encrypted keys are handled by the agent. Rejected
-// when the outbound guard is on. The agent socket is only queried during the
-// handshake, so cleanup closes it once StartSSHTunnel returns.
+// agentAuth authenticates via the running SSH agent. Desktop only: nothing is
+// stored and encrypted/hardware keys are handled by the agent. Rejected when the
+// outbound guard is on. The agent connection is only queried during the
+// handshake, so cleanup closes it once StartSSHTunnel returns. The platform
+// transport (unix socket vs Windows named pipe) is resolved by dialAgent.
 func agentAuth() (sshAuth, error) {
 	if EnforceOutboundGuard {
 		return sshAuth{}, newConfigError("ssh agent auth is not available for proxified connections")
 	}
-	sock := os.Getenv("SSH_AUTH_SOCK")
-	if sock == "" {
-		return sshAuth{}, newConfigError("ssh agent auth selected but SSH_AUTH_SOCK is not set (no agent running)")
-	}
-	conn, err := net.Dial("unix", sock)
+	conn, err := dialAgent()
 	if err != nil {
-		return sshAuth{}, newConfigErrorf("ssh agent dial: %v", err)
+		return sshAuth{}, newConfigErrorf("ssh agent: %v", err)
 	}
 	return sshAuth{
 		method:  ssh.PublicKeysCallback(agent.NewClient(conn).Signers),

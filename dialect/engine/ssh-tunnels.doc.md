@@ -25,7 +25,7 @@ Local (non-proxified) connections run on the user's own machine, so SELECT can a
 
 | Method        | Mode  | Stored | Notes                                                                 |
 |---------------|-------|--------|----------------------------------------------------------------------|
-| `agent`       | local | nothing | Default. Uses `SSH_AUTH_SOCK`; encrypted keys handled by the agent.  |
+| `agent`       | local | nothing | Default. Talks to the running agent (unix `SSH_AUTH_SOCK`; the OpenSSH named pipe on Windows). Encrypted and hardware-backed keys (e.g. YubiKey) work, since the agent does the signing. |
 | `key_file`    | local | path only | Reads the key at connect time; prompts for a passphrase if encrypted (held in memory only). |
 | `password`    | both  | value/`$var` | Prefer an `.env` `$variable` over a raw value.                  |
 | `private_key` | both  | value/`$var` | Raw PEM (proxified) or an `.env` `$variable` (local).           |
