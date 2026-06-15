@@ -187,7 +187,7 @@
 <style>
 	.item {
 		padding-right: var(--space-sm);
-		padding-left: var(--space-sm);
+		padding-left: var(--space-sm-md);
 
 		width: 100%;
 		height: 30px;

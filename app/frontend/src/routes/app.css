@@ -289,9 +289,9 @@
 	bottom: 0;
 	height: 40px;
 	transition: opacity 0.15s ease;
-	background: linear-gradient(to top, var(--gray-100), rgba(0, 0, 0, 0));
+	background: linear-gradient(to top, var(--gray-100) 0%, rgba(0, 0, 0, 0));
 }
 
 :global([data-theme='dark'] .scroll-shadow-band) {
-	background: linear-gradient(to top, var(--gray-200), rgba(0, 0, 0, 0));
+	background: linear-gradient(to top, var(--gray-500) 0%, rgba(0, 0, 0, 0));
 }

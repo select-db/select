@@ -16,10 +16,11 @@
 		<Button
 			content={action.label}
 			leftIcon={iconByActionId[action.id]}
-			iconSize={18}
+			iconSize={17}
 			emphasis="low"
 			size="md"
 			onclick={() => executeQuickAction(action)}
+			style="gap: var(--space-xs-sm)"
 		/>
 	{/each}
 </div>
