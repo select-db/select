@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
+	import { scrollShadow } from '$lib/actions/scrollShadow';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { rootOptions } from './Files/options/rootOptions';
 	import FileItems from './Files/FileItems.svelte';
@@ -262,6 +263,7 @@
 	<div
 		class="scrollable no-scrollbar"
 		bind:this={scrollContainer}
+		use:scrollShadow
 		onscroll={handleScroll}
 		onkeydown={handleKeydown}
 		ondragover={(e) => {

@@ -2,6 +2,7 @@
 	import Button from '$lib/system/Button/Button.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';
+	import { scrollShadow } from '$lib/actions/scrollShadow';
 	import { AlertType } from '$lib/system/Alert/types';
 
 	import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';
@@ -44,6 +45,7 @@
 	const search = async () => {
 		const workspaceId = get(workspaceGraphStore)?.id;
 		if (!workspaceId || !searchPattern) return;
+		if (searchPattern.length < 2) return;
 
 		isSearching = true;
 		try {
@@ -243,6 +245,7 @@
 			class="section no-scrollbar overflow-x-only"
 			style="border-top: var(--border); flex-grow: 1"
 			bind:this={scrollContainer}
+			use:scrollShadow
 			onscroll={handleScroll}
 		>
 			<div>

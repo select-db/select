@@ -188,7 +188,7 @@
 }
 
 :global([data-theme='light'] body) {
-	background-color: var(--gray-0);
+	background-color: var(--gray-100);
 }
 
 /* Firefox */
@@ -279,4 +279,19 @@
 :global(.quick-open-widget .monaco-list-row.focused *),
 :global(.quick-open-widget .monaco-list-row:hover *) {
 	background-color: var(--gray-550) !important;
+}
+
+/* Bottom inner shadow for scrollable panels (scrollShadow action). */
+:global(.scroll-shadow-band) {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 40px;
+	transition: opacity 0.15s ease;
+	background: linear-gradient(to top, var(--gray-100), rgba(0, 0, 0, 0));
+}
+
+:global([data-theme='dark'] .scroll-shadow-band) {
+	background: linear-gradient(to top, var(--gray-200), rgba(0, 0, 0, 0));
 }
