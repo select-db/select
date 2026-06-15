@@ -41,7 +41,7 @@
   --gray-1050: hsl(var(--hue), 20%, 28%);
 
   /* Border */
-  --border-color: hsl(var(--hue), 10%, 80%);
+  --border-color: hsl(var(--hue), 10%, 84%);
 
   /* Accent colors */
   --red:         rgb(220, 53, 53);
@@ -81,7 +81,7 @@
   --gray-1050: hsl(var(--hue), 14%, 32%);
 
   /* Border */
-  --border-color: hsl(var(--hue), 14%, 30%);
+  --border-color: hsl(var(--hue), 14%, 24%);
 
   /* Accent colors,  punchy enough to pop on saturated dark surfaces */
   --red:         rgb(240, 85,  85);

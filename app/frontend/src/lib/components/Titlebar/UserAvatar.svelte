@@ -60,6 +60,7 @@
 		display: flex;
 		align-items: center;
 		padding: var(--space-xs-sm) var(--space-sm);
+		border-radius: var(--br-xs);
 	}
 	.wrapper:hover {
 		background-color: var(--gray-600);

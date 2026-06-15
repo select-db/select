@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+	import WorkspaceButton from '$lib/components/Titlebar/WorkspaceButton.svelte';
+	import GitBranch from '$lib/components/Titlebar/GitBranch.svelte';
 	import FilesButton from './FilesButton.svelte';
 	import GitButton from './GitButton.svelte';
 	import NetworkQuality from './NetworkQuality.svelte';
@@ -9,14 +11,16 @@
 
 <div id="bottom-bar" class="wrapper">
 	<NetworkQuality />
-	<div class="divider"></div>
 	{#if $workspaceGraphStore}
 		<FilesButton />
 		<div class="divider"></div>
 		<GitButton />
 		<div class="divider"></div>
+		<WorkspaceButton />
+		<div class="divider"></div>
+		<GitBranch />
 
-		<div class="divider" style="margin-left: auto"></div>
+		<div style="margin-left: auto"></div>
 		<SearchButton />
 		<div class="divider"></div>
 		<ThemeButton />
@@ -27,13 +31,17 @@
 	.wrapper {
 		display: flex;
 		flex-wrap: nowrap;
-		align-items: stretch;
+		align-items: center;
 		overflow: hidden;
-		border-top: var(--border);
-		background-color: var(--gray-0);
-		height: 30px;
+		padding-right: var(--space-sm);
+
+		height: 42px;
 
 		z-index: 2;
+	}
+
+	.divider {
+		width: var(--space-xs-sm);
 	}
 
 	:global(#bottom-bar.wrapper .wrapper) {
@@ -41,7 +49,7 @@
 		padding-right: var(--space-sm);
 	}
 
-	.divider {
-		border-left: var(--border);
+	:global(#bottom-bar button) {
+		height: 24px;
 	}
 </style>

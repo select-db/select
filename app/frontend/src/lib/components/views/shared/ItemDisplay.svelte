@@ -187,7 +187,7 @@
 <style>
 	.item {
 		padding-right: var(--space-sm);
-		padding-left: var(--space-sm);
+		padding-left: var(--space-sm-md);
 
 		width: 100%;
 		height: 30px;
@@ -210,10 +210,10 @@
 		border-top-color: var(--border-color);
 	}
 	.item.selected {
-		background: var(--gray-550) !important;
+		background: var(--gray-400) !important;
 	}
 	.item:not(.selected):hover {
-		background: var(--gray-400) !important;
+		background: var(--gray-550) !important;
 	}
 	.item.selected.has-border-top {
 		border-top-color: var(--border-color);

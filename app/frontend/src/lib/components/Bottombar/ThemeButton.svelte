@@ -44,5 +44,5 @@
 	iconSize={19}
 	onclick={toggleTheme}
 	leftIcon={theme === 'dark' ? 'light-mode' : 'dark-mode'}
-	noRadius
+	size="sm"
 />
