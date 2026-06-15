@@ -41,9 +41,9 @@
 <style>
 	#resizer {
 		position: absolute;
-		top: 0;
+		top: var(--space-sm-md);
 		left: 1px;
-		bottom: 0;
+		bottom: var(--space-sm-md);
 
 		width: 10px;
 		border-left: var(--bw) transparent solid;

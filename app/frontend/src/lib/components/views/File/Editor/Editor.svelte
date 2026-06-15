@@ -518,6 +518,10 @@
 		color: var(--blue);
 	}
 
+	:global(.editorContainer .monaco-editor .sticky-widget) {
+		border-bottom: var(--border);
+	}
+
 	:global(.editorContainer .monaco-editor) {
 		--vscode-editorStickyScroll-background: var(--gray-0);
 		--vscode-editor-background: var(--gray-0);

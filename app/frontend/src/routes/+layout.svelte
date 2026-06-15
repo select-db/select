@@ -136,9 +136,8 @@
 
 	main {
 		background-color: var(--gray-0);
-		border-top: var(--border);
-		border-left: var(--border);
-		border-right: var(--border);
+		border: var(--border);
+		border-radius: var(--br-sm);
 		flex-grow: 1;
 		overflow: hidden;
 
@@ -146,10 +145,14 @@
 	}
 
 	main.no-left-border {
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
 		border-left: none;
 	}
 
 	main.no-right-border {
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
 		border-right: none;
 	}
 

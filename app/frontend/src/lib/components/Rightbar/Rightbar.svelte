@@ -39,7 +39,6 @@
 <style>
 	#rightbarContainer {
 		position: relative;
-		border-top: var(--border);
 	}
 
 	#rightbar {

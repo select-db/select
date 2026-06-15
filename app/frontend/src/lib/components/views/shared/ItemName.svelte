@@ -133,7 +133,7 @@
 		min-width: 0;
 		height: 100%;
 		padding: 0 var(--space-sm) 0 var(--space-xs-sm);
-		background: var(--gray-600);
+		background: var(--gray-400);
 		border: none;
 
 		color: var(--gray-1000);

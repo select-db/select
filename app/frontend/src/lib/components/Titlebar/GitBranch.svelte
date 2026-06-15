@@ -17,11 +17,4 @@
 
 {#if branchName}
 	<Button content={branchName} onclick={openBranchSwitcher} noRadius noBounce truncate />
-	<div class="divider"></div>
 {/if}
-
-<style>
-	.divider {
-		border-left: var(--border);
-	}
-</style>

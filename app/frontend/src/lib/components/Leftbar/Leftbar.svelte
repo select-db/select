@@ -37,7 +37,6 @@
 	.wrapper {
 		position: relative;
 		overflow: hidden;
-		border-top: var(--border);
 	}
 
 	.leftbar {
