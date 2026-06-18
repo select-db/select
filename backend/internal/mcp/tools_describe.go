@@ -9,8 +9,8 @@ import (
 
 	"backend/db"
 	"backend/db/db_types"
-	"backend/internal/api/datasource"
 	"backend/internal/authz"
+	"backend/internal/datasource"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/core"

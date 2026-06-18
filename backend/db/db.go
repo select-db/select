@@ -3,10 +3,10 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"os"
 	"time"
 
 	"backend/db/generated"
+	"backend/internal/kms"
 
 	_ "github.com/lib/pq"
 )
@@ -17,9 +17,10 @@ var (
 )
 
 func Init() error {
-	dsn := os.Getenv("DB_DSN")
-	if dsn == "" {
-		return fmt.Errorf("DB_DSN is not set")
+	// Dev: POSTGRES_DSN env. Prod: same name as a path in the OVH KMS secret store.
+	dsn, err := kms.Secret("POSTGRES_DSN")
+	if err != nil {
+		return err
 	}
 
 	c, err := sql.Open("postgres", dsn)

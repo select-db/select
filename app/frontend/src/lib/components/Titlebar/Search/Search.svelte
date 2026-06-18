@@ -18,7 +18,6 @@
 				content: () => SearchModalContent as unknown as Component,
 				width: 650
 			})}
-		style="height: 28px"
-		noRadius
+		size="sm"
 	/>
 </div>

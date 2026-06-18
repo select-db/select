@@ -14,7 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
-	"selectDb/backend"
+	appcore "selectDb/internal/app"
 
 	"github.com/selectDb/toolkit"
 )
@@ -24,9 +24,8 @@ var assets embed.FS
 
 // Build-time vars, overridden via:
 //
-//	wails build -ldflags "-X main.apiURL=https://api.select-db.com -X main.appVersion=1.2.3 -X main.appEnv=production"
+//	wails build -ldflags "-X main.appVersion=1.2.3 -X main.appEnv=production"
 var (
-	apiURL     = "http://localhost:8080"
 	appVersion = "dev"
 	appEnv     = "dev"
 )
@@ -34,14 +33,13 @@ var (
 func main() {
 	// Expose build-time vars to all packages that read them from env.
 	// In a packaged desktop app there is no shell environment.
-	_ = os.Setenv("API_URL", apiURL)
 	_ = os.Setenv("APP_VERSION", appVersion)
 	_ = os.Setenv("APP_ENV", appEnv)
 
 	toolkit.StartPprofServer("localhost:6061")
 
 	// Create an instance of the app structure
-	app := backend.NewApp()
+	app := appcore.NewApp()
 
 	if len(os.Args) > 1 {
 		var arg string

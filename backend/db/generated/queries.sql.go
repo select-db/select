@@ -334,8 +334,8 @@ const getDatasource = `-- name: GetDatasource :one
 SELECT
   db_type,
   name,
-  pgp_sym_decrypt (encrypted_dsn, $2)::text AS dsn,
-  pgp_sym_decrypt (encrypted_ssh, $2)::text AS ssh,
+  encrypted_dsn,
+  encrypted_ssh,
   max_open_conns,
   max_idle_conns,
   conn_max_lifetime,
@@ -344,20 +344,19 @@ FROM
   app.datasource
 WHERE
   id = $1
-  AND workspace_id = $3
+  AND workspace_id = $2
 `
 
 type GetDatasourceParams struct {
 	ID          db_types.JSONNullUUID
-	Key         string
 	WorkspaceID db_types.JSONNullUUID
 }
 
 type GetDatasourceRow struct {
 	DbType          db_types.JSONNullString
 	Name            db_types.JSONNullString
-	Dsn             string
-	Ssh             string
+	EncryptedDsn    []byte
+	EncryptedSsh    []byte
 	MaxOpenConns    db_types.JSONNullInt64
 	MaxIdleConns    db_types.JSONNullInt64
 	ConnMaxLifetime db_types.JSONNullInt64
@@ -365,13 +364,13 @@ type GetDatasourceRow struct {
 }
 
 func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (GetDatasourceRow, error) {
-	row := q.db.QueryRowContext(ctx, getDatasource, arg.ID, arg.Key, arg.WorkspaceID)
+	row := q.db.QueryRowContext(ctx, getDatasource, arg.ID, arg.WorkspaceID)
 	var i GetDatasourceRow
 	err := row.Scan(
 		&i.DbType,
 		&i.Name,
-		&i.Dsn,
-		&i.Ssh,
+		&i.EncryptedDsn,
+		&i.EncryptedSsh,
 		&i.MaxOpenConns,
 		&i.MaxIdleConns,
 		&i.ConnMaxLifetime,
@@ -1453,12 +1452,12 @@ VALUES
     $2,
     $3,
     $4,
-    pgp_sym_encrypt ($5, $7),
-    pgp_sym_encrypt ($6, $7),
+    $5,
+    $6,
+    $7,
     $8,
     $9,
     $10,
-    $11,
     now()
   )
 ON CONFLICT (id) DO UPDATE
@@ -1479,9 +1478,8 @@ type UpsertDatasourceParams struct {
 	WorkspaceID     db_types.JSONNullUUID
 	DbType          db_types.JSONNullString
 	Name            db_types.JSONNullString
-	Data            string
-	Data_2          string
-	Key             string
+	EncryptedDsn    []byte
+	EncryptedSsh    []byte
 	MaxOpenConns    db_types.JSONNullInt64
 	MaxIdleConns    db_types.JSONNullInt64
 	ConnMaxLifetime db_types.JSONNullInt64
@@ -1494,9 +1492,8 @@ func (q *Queries) UpsertDatasource(ctx context.Context, arg UpsertDatasourcePara
 		arg.WorkspaceID,
 		arg.DbType,
 		arg.Name,
-		arg.Data,
-		arg.Data_2,
-		arg.Key,
+		arg.EncryptedDsn,
+		arg.EncryptedSsh,
 		arg.MaxOpenConns,
 		arg.MaxIdleConns,
 		arg.ConnMaxLifetime,

@@ -82,15 +82,13 @@
 
 <style>
 	.wrapper {
-		min-height: 35px;
 		background-color: var(--gray-0);
 
 		display: flex;
 		gap: var(--space-sm);
 		align-items: start;
 		padding: var(--space-xs-sm) var(--space-sm) 0 var(--space-sm);
-
-		border-bottom: var(--border);
+		margin-bottom: -2px;
 	}
 
 	.divider {

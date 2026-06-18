@@ -23,10 +23,10 @@
 <Button
 	leftIcon="github-branch"
 	iconSize={17}
-	noRadius
-	noBounce
+	size="sm"
 	emphasis={$isLeftbarOpened && $leftPanelTab === 'github-branch' ? 'high' : 'low'}
 	active={$isLeftbarOpened && $leftPanelTab === 'github-branch'}
 	onclick={() => toggleLeftPanelTab('github-branch')}
+	noBounce
 	{badge}
 />

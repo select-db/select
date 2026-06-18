@@ -15,16 +15,16 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/selectDb/dialect/engine"
 
-	commands "backend/cmd/cli"
 	"backend/db"
-	"backend/internal/api/auth"
-	"backend/internal/api/middlewares"
+	"backend/internal/auth"
+	"backend/internal/cli"
+	"backend/internal/middlewares"
 
-	apikeyhandler "backend/internal/api/apikey"
-	datasourcehandler "backend/internal/api/datasource"
-	synchandler "backend/internal/api/syncer"
-	workspacehandler "backend/internal/api/workspace"
+	apikeyhandler "backend/internal/apikey"
+	datasourcehandler "backend/internal/datasource"
 	mcphandler "backend/internal/mcp"
+	synchandler "backend/internal/syncer"
+	workspacehandler "backend/internal/workspace"
 )
 
 // Version info, overridden at build time via:
@@ -64,17 +64,12 @@ func main() {
 	// so enforce the SSRF guard. The desktop app must never set this.
 	engine.EnforceOutboundGuard = true
 
-	// fail at boot, not first request, so CI catches a missing secret
-	if err := auth.ValidateSigningSecret(); err != nil {
-		log.Fatalf("config error: %v", err)
-	}
-
 	if err := db.Init(); err != nil {
 		log.Fatalf("DB init failed: %v", err)
 	}
 
 	if len(os.Args) > 1 {
-		cmd := &commands.Command{}
+		cmd := &cli.Command{}
 		var arg string
 		if len(os.Args) > 2 {
 			arg = os.Args[2]

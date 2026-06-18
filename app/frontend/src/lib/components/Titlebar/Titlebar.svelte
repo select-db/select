@@ -1,9 +1,7 @@
 <script lang="ts">
 	import Icon from '$lib/system/Icon/Icon.svelte';
-	import GitBranch from './GitBranch.svelte';
 	import Search from './Search/Search.svelte';
 	import UserAvatar from './UserAvatar.svelte';
-	import WorkspaceButton from './WorkspaceButton.svelte';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { useNativeWindowControls } from '$lib/utils/platform';
 	import {
@@ -46,12 +44,6 @@
 				</button>
 			</div>
 		{/if}
-		{#if $workspaceGraphStore}
-			<div class="divider"></div>
-			<WorkspaceButton />
-			<div class="divider"></div>
-			<GitBranch />
-		{/if}
 	</div>
 
 	<div class="wrapper center">
@@ -62,7 +54,6 @@
 
 	<div class="wrapper end">
 		{#if $workspaceGraphStore}
-			<div class="divider"></div>
 			<UserAvatar />
 		{/if}
 	</div>
@@ -74,8 +65,9 @@
 		display: flex;
 		align-items: stretch;
 		justify-content: space-between;
-		height: 28px;
+		height: 36px;
 		overflow: hidden;
+		padding-right: var(--space-xs-sm);
 	}
 
 	.window-actions {
@@ -97,6 +89,7 @@
 		flex: 1;
 		display: flex;
 		overflow: hidden;
+		align-items: center;
 	}
 
 	.wrapper.start {
@@ -109,10 +102,6 @@
 
 	.wrapper.end {
 		justify-content: end;
-	}
-
-	.divider {
-		border-left: var(--border);
 	}
 
 	.window-action {
@@ -157,6 +146,9 @@
 		opacity: 0.8;
 	}
 
+	:global(.titlebar button) {
+		height: 24px;
+	}
 	:global(.titlebar button svg),
 	:global(.titlebar button p) {
 		stroke: var(--gray-700) !important;

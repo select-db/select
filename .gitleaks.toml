@@ -8,8 +8,8 @@ useDefault = true
 
 [[allowlists]]
 description = "Embedded default editor config: JSON \"key\" fields (keybindings/snippets) trip the generic-api-key heuristic but contain no secrets."
-paths = ['''app/backend/graph/defaults/\.config$''']
+paths = ['''app/internal/graph/defaults/\.config$''']
 
 [[allowlists]]
 description = "Redaction unit test uses an obviously-fake private key fixture (\"NOTAREALKEY\")."
-paths = ['''backend/internal/api/datasource/secret_redact_test\.go$''']
+paths = ['''backend/internal/datasource/secret_redact_test\.go$''']

@@ -32,8 +32,6 @@ concurrency:
 
 env:
   WAILS_VERSION: v2.10.1
-  PROD_API_URL: https://api.select-db.com
-  STAGING_API_URL: https://staging-api.select-db.com
   # Minimum app version, bump when a release contains a breaking change.
   MIN_APP_VERSION: 0.0.0
 
@@ -67,7 +65,7 @@ jobs:
             frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
           else
             FILES="$(git diff --name-only HEAD~1 HEAD || true)"
-            if grep -qE '^(\.github/|deploy/|\.gitleaks\.toml)' <<<"$FILES"; then
+            if grep -qE '^(\.github/|\.gitleaks\.toml)' <<<"$FILES"; then
               # Shared infra changed -> run everything to be safe.
               frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
             else
@@ -283,7 +281,7 @@ jobs:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
       - run: sudo apt-get update && sudo apt-get install -y gcc
-      - run: go test ./backend/...
+      - run: go test ./internal/...
         working-directory: app
 
   test-backend:
@@ -458,12 +456,12 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -471,7 +469,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform darwin/arm64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-arm64.zip *.app
@@ -525,12 +523,12 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -538,7 +536,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform darwin/amd64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-amd64.zip *.app
@@ -595,12 +593,12 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -609,7 +607,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform windows/amd64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer.exe build/bin/analyzer.exe
 
       - name: Package
@@ -675,12 +673,12 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
-          source ../deploy/resolve-pubkeys.sh ../minisign.pub
+          source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
@@ -690,7 +688,7 @@ jobs:
           wails build ${DEVTOOLS} \
             -platform linux/amd64 \
             -tags webkit2_41 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/backend/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/analyzer
           cd build/bin
           zip selectDb-linux-amd64.zip select analyzer
@@ -760,7 +758,7 @@ jobs:
         run: find . -maxdepth 1 -type f ! -name checksums.sha256 -exec sha256sum {} + > checksums.sha256 && cat checksums.sha256
 
       # Draft: signatures and the publish step happen on a maintainer's laptop
-      # via deploy/sign-and-deploy.sh. Users never see this release until then.
+      # via the select-ops repo's sign-and-deploy.sh. Users never see this release until then.
       - name: Upload to draft release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:

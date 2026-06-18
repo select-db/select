@@ -15,6 +15,7 @@
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { syncCurrentFileFromEditor } from '$lib/components/views/Chat/utils/currentFile';
 	import { setContext } from '$lib/stores/keybindingsContextStore';
+	import { zoomStore } from '$lib/stores/zoomStore';
 	import { registerCommand, unregisterCommand } from '$lib/stores/commandRegistry';
 	import { debounce } from '$lib/utils/debounce';
 	import { format as formatSQL } from './utils/format';
@@ -405,6 +406,28 @@
 		}
 	});
 
+	// Monaco's mouse->text hit math ignores ancestor CSS `zoom`.
+	const BASE_FONT_SIZE = 12;
+	const BASE_LINE_HEIGHT = 18;
+	$effect(() => {
+		const z = $zoomStore;
+		container?.style.setProperty('--editor-zoom', String(z));
+		const opts: monaco.editor.IEditorOptions = {
+			fontSize: BASE_FONT_SIZE * z,
+			lineHeight: Math.round(BASE_LINE_HEIGHT * z)
+		};
+		editor?.updateOptions(opts);
+		if (diffEditor) {
+			diffEditor.getOriginalEditor().updateOptions(opts);
+			diffEditor.getModifiedEditor().updateOptions(opts);
+		}
+		const raf = requestAnimationFrame(() => {
+			editor?.layout();
+			diffEditor?.layout();
+		});
+		return () => cancelAnimationFrame(raf);
+	});
+
 	const isFocused = $derived($activeGroupStore?.activeTabId === tab.id);
 	$effect(() => {
 		const ed = editor;
@@ -499,10 +522,14 @@
 <div class="editorRoot">
 	{#if displayPath}
 		<div class="uri-wrapper">
-			<Path uri={displayPath} />
+			{#if !displayPath.startsWith('temp:')}
+				<Path uri={displayPath} />
+			{/if}
 		</div>
 	{/if}
-	<div class="editorContainer" bind:this={container}></div>
+	<div class="editorContainer">
+		<div class="editorScale" bind:this={container}></div>
+	</div>
 </div>
 
 <style>
@@ -514,6 +541,10 @@
 
 	:global(.editorContainer .monaco-editor .sql-db-function) {
 		color: var(--blue);
+	}
+
+	:global(.editorContainer .monaco-editor .sticky-widget) {
+		border-bottom: var(--border);
 	}
 
 	:global(.editorContainer .monaco-editor) {
@@ -621,5 +652,12 @@
 	.editorContainer {
 		flex: 1;
 		width: 100%;
+		overflow: hidden;
+	}
+
+	.editorScale {
+		width: calc(100% * var(--editor-zoom, 1));
+		height: calc(100% * var(--editor-zoom, 1));
+		zoom: calc(1 / var(--editor-zoom, 1));
 	}
 </style>
