@@ -10,6 +10,10 @@ export function CheckForLogout() {
   return window['go']['system']['System']['CheckForLogout']();
 }
 
+export function GetAppEnv() {
+  return window['go']['system']['System']['GetAppEnv']();
+}
+
 export function GetConfig() {
   return window['go']['system']['System']['GetConfig']();
 }

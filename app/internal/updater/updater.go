@@ -41,6 +41,8 @@ import (
 
 	"github.com/jedisct1/go-minisign"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"selectDb/internal/server"
 )
 
 // UpdateEvent is emitted as the "update" Wails event payload.
@@ -139,10 +141,11 @@ func (u *Updater) CheckVersion() {
 
 	cleanupBak()
 
-	apiURL := os.Getenv("API_URL")
-	if apiURL == "" {
+	domain, err := server.ReadCurrentDomain()
+	if err != nil || domain == "" {
 		return
 	}
+	apiURL := server.DomainToBaseURL(domain)
 	if err := requireHTTPS(apiURL); err != nil {
 		return
 	}

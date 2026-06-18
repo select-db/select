@@ -431,6 +431,7 @@
 		display: flex;
 		align-items: center;
 		background: var(--gray-0);
+		height: 36px;
 		transition:
 			background-color 0.1s ease-out,
 			color 0.1s ease-out;

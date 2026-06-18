@@ -157,7 +157,7 @@
 		gap: var(--space-sm);
 		width: 100%;
 		overflow: hidden;
-		height: 26px;
+		height: 30px;
 	}
 
 	.option-label {
