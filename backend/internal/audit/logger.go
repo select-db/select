@@ -88,7 +88,7 @@ func (l *Logger) Log(e *Event) {
 	select {
 	case l.ch <- e:
 	default:
-		log.Printf("audit: buffer full, dropping %s event", e.Type)
+		log.Printf("audit: buffer full, dropping %s.%s event", e.Domain, e.Action)
 	}
 }
 
@@ -172,7 +172,7 @@ func (l *Logger) writeLoop() {
 }
 
 // writeBatch upserts the distinct principal snapshots, then inserts the events,
-// all in one transaction so the actor_hash FK is always satisfied.
+// all in one transaction so the principal_hash FK is always satisfied.
 func (l *Logger) writeBatch(events []*Event) error {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
@@ -291,7 +291,7 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 }
 
 func upsertSnapshot(ctx context.Context, tx *sql.Tx, e *Event, seen map[string]struct{}) error {
-	h := e.Actor.Hash()
+	h := e.Principal.Hash()
 	key := string(h)
 	if _, ok := seen[key]; ok {
 		return nil
@@ -300,7 +300,7 @@ func upsertSnapshot(ctx context.Context, tx *sql.Tx, e *Event, seen map[string]s
 	_, err := tx.ExecContext(ctx,
 		`INSERT INTO audit.principal_snapshot (snapshot_hash, workspace_id, snapshot)
 		 VALUES ($1, $2, $3) ON CONFLICT (snapshot_hash) DO NOTHING`,
-		h, e.Actor.WorkspaceID, e.Actor.JSON())
+		h, e.Principal.WorkspaceID, e.Principal.JSON())
 	return err
 }
 
@@ -321,13 +321,13 @@ func insertEvent(ctx context.Context, tx *sql.Tx, e *Event) error {
 
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO audit.event
-		  (workspace_id, occurred_at, category, event_type, actor_hash,
+		  (workspace_id, occurred_at, domain, action, principal_hash,
 		   target_type, target_id, target_label, status, payload,
-		   sql_fingerprint, duration_ms, row_count, client_ip)
+		   sql_fingerprint, duration_ms, returned_row_count, client_ip)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-		e.WorkspaceID, e.OccurredAt, e.Category, e.Type, e.Actor.Hash(),
+		e.WorkspaceID, e.OccurredAt, e.Domain, e.Action, e.Principal.Hash(),
 		targetType, targetID, targetLabel, e.Status, payload,
-		nilIfEmptyBytes(e.SQLFingerprint), nilIfZero(e.DurationMs), nilIfZero(e.RowCount),
+		nilIfEmptyBytes(e.SQLFingerprint), nilIfZero(e.DurationMs), nilIfZero(e.ReturnedRowCount),
 		nilIfEmpty(e.ClientIP))
 	return err
 }

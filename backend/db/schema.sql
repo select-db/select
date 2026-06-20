@@ -135,9 +135,9 @@ CREATE TABLE audit.event (
   id uuid,
   workspace_id uuid,
   occurred_at timestamp with time zone,
-  category text,
-  event_type text,
-  actor_hash bytea,
+  domain text,
+  action text,
+  principal_hash bytea,
   target_type text,
   target_id uuid,
   target_label text,
@@ -145,7 +145,7 @@ CREATE TABLE audit.event (
   payload jsonb,
   sql_fingerprint bytea,
   duration_ms bigint,
-  row_count bigint,
+  returned_row_count bigint,
   client_ip inet
 );
 

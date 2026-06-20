@@ -138,15 +138,15 @@ func emitPermissionAudit(
 
 	ev := &audit.Event{
 		WorkspaceID: workspaceID,
-		Category:    audit.CategoryIAM,
-		Type:        audit.TypePermissionUpserted,
-		Actor: audit.Principal{
+		Domain:      audit.DomainIAM,
+		Action:      audit.ActionPermissionUpserted,
+		Principal: audit.Principal{
 			Kind:        audit.PrincipalUser,
 			ID:          userID,
 			WorkspaceID: workspaceID,
 		},
 		Target:  &audit.Target{Type: "permission", ID: id},
-		Status:  audit.StatusOK,
+		Status:  audit.StatusSuccess,
 		Payload: payload,
 	}
 	if err := audit.LogOutbox(ctx, ev); err != nil {

@@ -37,14 +37,14 @@ func (s *loggingSink) OnExecuted(durationMs int64) {
 
 func (s *loggingSink) OnDone(rowCount, affected, durationMs int64) error {
 	err := s.Sink.OnDone(rowCount, affected, durationMs)
-	s.ev.RowCount = rowCount
+	s.ev.ReturnedRowCount = rowCount
 	if affected > 0 {
 		s.ev.Payload["affected_rows"] = affected
 	}
 	if s.ev.DurationMs == 0 {
 		s.ev.DurationMs = durationMs
 	}
-	s.ev.Status = audit.StatusOK
+	s.ev.Status = audit.StatusSuccess
 	s.emit()
 	return err
 }
@@ -74,9 +74,9 @@ func buildQueryEvent(r *http.Request, req executeRequest, dbType string) *audit.
 
 	return &audit.Event{
 		WorkspaceID: workspaceID,
-		Category:    audit.CategoryQuery,
-		Type:        audit.TypeQueryExecuted,
-		Actor: audit.Principal{
+		Domain:      audit.DomainQuery,
+		Action:      audit.ActionExecuted,
+		Principal: audit.Principal{
 			Kind:        kind,
 			ID:          middlewares.GetUserID(r),
 			WorkspaceID: workspaceID,
@@ -87,7 +87,7 @@ func buildQueryEvent(r *http.Request, req executeRequest, dbType string) *audit.
 			Type: "datasource",
 			ID:   req.ID,
 		},
-		Status: audit.StatusOK,
+		Status: audit.StatusSuccess,
 		Payload: map[string]any{
 			"sql_text": req.SQL,
 			"db_type":  dbType,

@@ -20,19 +20,19 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// Categories partition the log physically.
+// Domains are the coarse subsystem buckets and the LIST partition key.
 const (
-	CategoryQuery      = "query"
-	CategoryAuth       = "auth"
-	CategoryIAM        = "iam"
-	CategoryDatasource = "datasource"
+	DomainQuery      = "query"
+	DomainAuth       = "auth"
+	DomainIAM        = "iam"
+	DomainDatasource = "datasource"
 )
 
 // Statuses.
 const (
-	StatusOK     = "ok"
-	StatusError  = "error"
-	StatusDenied = "denied"
+	StatusSuccess = "success"
+	StatusError   = "error"
+	StatusDenied  = "denied"
 )
 
 // Principal kinds.
@@ -41,11 +41,13 @@ const (
 	PrincipalAPIKey = "api_key"
 )
 
-// Event types (extend freely; a new type is just a string + an emit call).
+// Actions are the specific events within a domain. The full event identity is
+// domain + "." + action (e.g. query + executed). Extend freely; a new action is
+// just a string + an emit call.
 const (
-	TypeQueryExecuted      = "query.executed"
-	TypeQueryDenied        = "query.denied"
-	TypePermissionUpserted = "iam.permission.upserted"
+	ActionExecuted           = "executed"            // domain=query
+	ActionDenied             = "denied"              // domain=query
+	ActionPermissionUpserted = "permission.upserted" // domain=iam
 )
 
 // Principal is the snapshot of who acted and what they were allowed to do, as
@@ -107,20 +109,20 @@ type Target struct {
 	Label string `json:"label"`
 }
 
-// Event is the unified log envelope. Payload holds category-specific fields.
+// Event is the unified log envelope. Payload holds domain-specific fields.
 type Event struct {
-	WorkspaceID    string         `json:"workspace_id"`
-	OccurredAt     time.Time      `json:"occurred_at"`
-	Category       string         `json:"category"`
-	Type           string         `json:"type"`
-	Actor          Principal      `json:"actor"`
-	Target         *Target        `json:"target,omitempty"`
-	Status         string         `json:"status"`
-	Payload        map[string]any `json:"payload,omitempty"`
-	SQLFingerprint []byte         `json:"sql_fingerprint,omitempty"`
-	DurationMs     int64          `json:"duration_ms,omitempty"`
-	RowCount       int64          `json:"row_count,omitempty"`
-	ClientIP       string         `json:"client_ip,omitempty"`
+	WorkspaceID      string         `json:"workspace_id"`
+	OccurredAt       time.Time      `json:"occurred_at"`
+	Domain           string         `json:"domain"`
+	Action           string         `json:"action"`
+	Principal        Principal      `json:"principal"`
+	Target           *Target        `json:"target,omitempty"`
+	Status           string         `json:"status"`
+	Payload          map[string]any `json:"payload,omitempty"`
+	SQLFingerprint   []byte         `json:"sql_fingerprint,omitempty"`
+	DurationMs       int64          `json:"duration_ms,omitempty"`
+	ReturnedRowCount int64          `json:"returned_row_count,omitempty"`
+	ClientIP         string         `json:"client_ip,omitempty"`
 }
 
 // Fingerprint hashes SQL for grouping/dedup without exposing the text in an

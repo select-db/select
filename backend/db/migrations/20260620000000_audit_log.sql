@@ -23,29 +23,30 @@ CREATE INDEX IF NOT EXISTS idx_principal_snapshot_ws ON audit.principal_snapshot
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Unified, append-only activity log. category is the first partition key so a
--- high-volume query stream never shares indexes or retention with the
--- security-critical iam/auth streams. Each category is sub-partitioned by month
--- (a DEFAULT range partition catches rows until a partition-management job
--- pre-creates monthly partitions).
+-- Unified, append-only activity log. domain is the coarse subsystem bucket and
+-- the first partition key, so a high-volume query stream never shares indexes
+-- or retention with the security-critical iam/auth streams. action is the
+-- specific event within a domain (full identity = domain.action). Each domain
+-- is sub-partitioned by month (a DEFAULT range partition catches rows until a
+-- partition-management job pre-creates monthly partitions).
 CREATE TABLE IF NOT EXISTS audit.event (
-    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
-    workspace_id    UUID        NOT NULL,         -- tenancy boundary; leads every index
-    occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    category        TEXT        NOT NULL,         -- 'query' | 'auth' | 'iam' | 'datasource'
-    event_type      TEXT        NOT NULL,         -- 'query.executed', 'iam.permission.upserted', ...
-    actor_hash      BYTEA       NOT NULL REFERENCES audit.principal_snapshot(snapshot_hash),
-    target_type     TEXT,                         -- 'permission' | 'role' | 'user' | 'datasource'
-    target_id       UUID,
-    target_label    TEXT,                         -- denormalized name at event time
-    status          TEXT        NOT NULL,         -- 'ok' | 'error' | 'denied'
-    payload         JSONB       NOT NULL DEFAULT '{}'::jsonb,  -- category-specific (plaintext, Tier 0)
-    sql_fingerprint BYTEA,                        -- query only; sha256 of normalized SQL (grouping)
-    duration_ms     BIGINT,                       -- query only
-    row_count       BIGINT,                       -- query only
-    client_ip       INET,
-    PRIMARY KEY (id, category, occurred_at)       -- partition key must be in the PK
-) PARTITION BY LIST (category);
+    id                 UUID        NOT NULL DEFAULT gen_random_uuid(),
+    workspace_id       UUID        NOT NULL,      -- tenancy boundary; leads every index
+    occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    domain             TEXT        NOT NULL,      -- 'query' | 'auth' | 'iam' | 'datasource'
+    action             TEXT        NOT NULL,      -- 'executed', 'permission.upserted', 'login', ...
+    principal_hash     BYTEA       NOT NULL REFERENCES audit.principal_snapshot(snapshot_hash),
+    target_type        TEXT,                      -- 'permission' | 'role' | 'user' | 'datasource'
+    target_id          UUID,
+    target_label       TEXT,                      -- denormalized name at event time
+    status             TEXT        NOT NULL,      -- 'success' | 'error' | 'denied'
+    payload            JSONB       NOT NULL DEFAULT '{}'::jsonb,  -- domain-specific (plaintext, Tier 0)
+    sql_fingerprint    BYTEA,                     -- query only; sha256 of normalized SQL (grouping)
+    duration_ms        BIGINT,                    -- query only
+    returned_row_count BIGINT,                    -- query only
+    client_ip          INET,
+    PRIMARY KEY (id, domain, occurred_at)         -- partition key must be in the PK
+) PARTITION BY LIST (domain);
 -- +goose StatementEnd
 
 -- +goose StatementBegin
@@ -70,8 +71,8 @@ CREATE TABLE IF NOT EXISTS audit.event_datasource_default PARTITION OF audit.eve
 -- Every read is workspace-scoped, so every index leads with workspace_id.
 CREATE INDEX IF NOT EXISTS idx_event_ws_time
     ON audit.event (workspace_id, occurred_at DESC);
-CREATE INDEX IF NOT EXISTS idx_event_actor
-    ON audit.event (workspace_id, actor_hash, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_event_principal
+    ON audit.event (workspace_id, principal_hash, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_event_target
     ON audit.event (workspace_id, target_type, target_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_event_errors
