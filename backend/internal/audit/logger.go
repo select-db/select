@@ -111,7 +111,7 @@ func (l *Logger) LogOutbox(ctx context.Context, e *Event) error {
 	if err != nil {
 		return err
 	}
-	_, err = l.db.ExecContext(ctx, `INSERT INTO app.audit_outbox (event_json) VALUES ($1)`, body)
+	_, err = l.db.ExecContext(ctx, `INSERT INTO audit.outbox (event_json) VALUES ($1)`, body)
 	return err
 }
 
@@ -215,7 +215,7 @@ func (l *Logger) outboxLoop() {
 	}
 }
 
-// drainOutbox moves queued events into audit_event in batches. Select + insert
+// drainOutbox moves queued events into audit.event in batches. Select + insert
 // + delete share one transaction (FOR UPDATE SKIP LOCKED), so each row is moved
 // exactly once and concurrent drainers don't collide.
 func (l *Logger) drainOutbox(ctx context.Context) error {
@@ -238,7 +238,7 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id, event_json FROM app.audit_outbox ORDER BY id FOR UPDATE SKIP LOCKED LIMIT $1`,
+		`SELECT id, event_json FROM audit.outbox ORDER BY id FOR UPDATE SKIP LOCKED LIMIT $1`,
 		outboxBatch)
 	if err != nil {
 		return 0, err
@@ -281,7 +281,7 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM app.audit_outbox WHERE id = ANY($1)`, pq.Array(ids)); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM audit.outbox WHERE id = ANY($1)`, pq.Array(ids)); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -298,7 +298,7 @@ func upsertSnapshot(ctx context.Context, tx *sql.Tx, e *Event, seen map[string]s
 	}
 	seen[key] = struct{}{}
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO app.audit_principal_snapshot (snapshot_hash, workspace_id, snapshot)
+		`INSERT INTO audit.principal_snapshot (snapshot_hash, workspace_id, snapshot)
 		 VALUES ($1, $2, $3) ON CONFLICT (snapshot_hash) DO NOTHING`,
 		h, e.Actor.WorkspaceID, e.Actor.JSON())
 	return err
@@ -320,7 +320,7 @@ func insertEvent(ctx context.Context, tx *sql.Tx, e *Event) error {
 	}
 
 	_, err := tx.ExecContext(ctx, `
-		INSERT INTO app.audit_event
+		INSERT INTO audit.event
 		  (workspace_id, occurred_at, category, event_type, actor_hash,
 		   target_type, target_id, target_label, status, payload,
 		   sql_fingerprint, duration_ms, row_count, client_ip)

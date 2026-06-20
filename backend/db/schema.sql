@@ -1,5 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS "app";
 
+CREATE SCHEMA IF NOT EXISTS "audit";
+
 CREATE SCHEMA IF NOT EXISTS "auth";
 
 CREATE SCHEMA IF NOT EXISTS "public";
@@ -122,14 +124,14 @@ CREATE TABLE public.goose_db_version (
   tstamp timestamp without time zone
 );
 
-CREATE TABLE app.audit_principal_snapshot (
+CREATE TABLE audit.principal_snapshot (
   snapshot_hash bytea,
   workspace_id uuid,
   snapshot jsonb,
   created_at timestamp with time zone
 );
 
-CREATE TABLE app.audit_event (
+CREATE TABLE audit.event (
   id uuid,
   workspace_id uuid,
   occurred_at timestamp with time zone,
@@ -147,7 +149,7 @@ CREATE TABLE app.audit_event (
   client_ip inet
 );
 
-CREATE TABLE app.audit_outbox (
+CREATE TABLE audit.outbox (
   id bigint,
   event_json jsonb,
   enqueued_at timestamp with time zone

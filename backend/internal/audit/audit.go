@@ -50,7 +50,7 @@ const (
 
 // Principal is the snapshot of who acted and what they were allowed to do, as
 // of the event. It is content-addressed: identical authz state hashes to the
-// same value and is stored once in app.audit_principal_snapshot.
+// same value and is stored once in audit.principal_snapshot.
 type Principal struct {
 	Kind        string                 `json:"kind"`         // PrincipalUser | PrincipalAPIKey
 	ID          string                 `json:"id"`           // user id or api-key id
@@ -77,7 +77,7 @@ func (p Principal) canonical() Principal {
 	}
 }
 
-// JSON is the canonical snapshot body stored in audit_principal_snapshot.snapshot.
+// JSON is the canonical snapshot body stored in principal_snapshot.snapshot.
 func (p Principal) JSON() []byte {
 	b, _ := json.Marshal(p.canonical())
 	return b
