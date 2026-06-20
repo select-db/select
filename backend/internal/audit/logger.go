@@ -298,7 +298,7 @@ func upsertSnapshot(ctx context.Context, tx *sql.Tx, e *Event, seen map[string]s
 	}
 	seen[key] = struct{}{}
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO app.principal_snapshot (snapshot_hash, workspace_id, snapshot)
+		`INSERT INTO app.audit_principal_snapshot (snapshot_hash, workspace_id, snapshot)
 		 VALUES ($1, $2, $3) ON CONFLICT (snapshot_hash) DO NOTHING`,
 		h, e.Actor.WorkspaceID, e.Actor.JSON())
 	return err

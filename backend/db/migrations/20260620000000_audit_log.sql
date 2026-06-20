@@ -4,13 +4,13 @@
 -- time. Deduped by hash so a principal that performs thousands of actions with
 -- an unchanged permission set is stored once. Keeps the audit trail truthful
 -- even after roles/permissions/users later change.
-CREATE TABLE IF NOT EXISTS app.principal_snapshot (
+CREATE TABLE IF NOT EXISTS app.audit_principal_snapshot (
     snapshot_hash BYTEA       PRIMARY KEY,        -- sha256 of canonical snapshot JSON
     workspace_id  UUID        NOT NULL REFERENCES app.workspace(id) ON DELETE CASCADE,
     snapshot      JSONB       NOT NULL,           -- principal kind/id, role_ids, permission set
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_principal_snapshot_ws ON app.principal_snapshot(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_audit_principal_snapshot_ws ON app.audit_principal_snapshot(workspace_id);
 -- +goose StatementEnd
 
 -- +goose StatementBegin
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS app.audit_event (
     occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     category        TEXT        NOT NULL,         -- 'query' | 'auth' | 'iam' | 'datasource'
     event_type      TEXT        NOT NULL,         -- 'query.executed', 'iam.permission.upserted', ...
-    actor_hash      BYTEA       NOT NULL REFERENCES app.principal_snapshot(snapshot_hash),
+    actor_hash      BYTEA       NOT NULL REFERENCES app.audit_principal_snapshot(snapshot_hash),
     target_type     TEXT,                         -- 'permission' | 'role' | 'user' | 'datasource'
     target_id       UUID,
     target_label    TEXT,                         -- denormalized name at event time
@@ -86,5 +86,5 @@ CREATE TABLE IF NOT EXISTS app.audit_outbox (
 -- +goose StatementBegin
 DROP TABLE IF EXISTS app.audit_outbox;
 DROP TABLE IF EXISTS app.audit_event CASCADE;
-DROP TABLE IF EXISTS app.principal_snapshot CASCADE;
+DROP TABLE IF EXISTS app.audit_principal_snapshot CASCADE;
 -- +goose StatementEnd

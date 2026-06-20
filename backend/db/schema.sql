@@ -122,7 +122,7 @@ CREATE TABLE public.goose_db_version (
   tstamp timestamp without time zone
 );
 
-CREATE TABLE app.principal_snapshot (
+CREATE TABLE app.audit_principal_snapshot (
   snapshot_hash bytea,
   workspace_id uuid,
   snapshot jsonb,
