@@ -31,6 +31,13 @@ func IsAPIKeyPrincipal(r *http.Request) bool {
 	return v
 }
 
+// GetUserID returns the principal id (user id, or api-key id for API-key
+// principals) without writing to the response. Empty when no auth context.
+func GetUserID(r *http.Request) string {
+	id, _ := r.Context().Value(userIDKey).(string)
+	return id
+}
+
 func MustGetUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	userID, ok := r.Context().Value(userIDKey).(string)
 	if !ok || userID == "" {

@@ -16,6 +16,7 @@ import (
 	"github.com/selectDb/dialect/engine"
 
 	"backend/db"
+	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/cli"
 	"backend/internal/middlewares"
@@ -83,6 +84,12 @@ func main() {
 	}
 
 	startPprofServer()
+
+	// Unified audit/activity log. Async writer + outbox drainer run until Stop
+	// is called during graceful shutdown (after the HTTP server has drained).
+	auditLogger := audit.New(db.GetDB(), audit.Options{})
+	auditLogger.Start()
+	audit.SetDefault(auditLogger)
 
 	mux := http.NewServeMux()
 
@@ -169,6 +176,14 @@ func main() {
 	// Shutdown the server gracefully
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	// Drain buffered audit events after the HTTP server has stopped accepting
+	// requests, so no Log call races the channel close.
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer drainCancel()
+	if err := auditLogger.Stop(drainCtx); err != nil {
+		log.Printf("audit: shutdown drain: %v", err)
 	}
 
 	log.Println("Server stopped gracefully")

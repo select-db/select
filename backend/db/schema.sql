@@ -121,3 +121,34 @@ CREATE TABLE public.goose_db_version (
   is_applied boolean,
   tstamp timestamp without time zone
 );
+
+CREATE TABLE app.principal_snapshot (
+  snapshot_hash bytea,
+  workspace_id uuid,
+  snapshot jsonb,
+  created_at timestamp with time zone
+);
+
+CREATE TABLE app.audit_event (
+  id uuid,
+  workspace_id uuid,
+  occurred_at timestamp with time zone,
+  category text,
+  event_type text,
+  actor_hash bytea,
+  target_type text,
+  target_id uuid,
+  target_label text,
+  status text,
+  payload jsonb,
+  sql_fingerprint bytea,
+  duration_ms bigint,
+  row_count bigint,
+  client_ip inet
+);
+
+CREATE TABLE app.audit_outbox (
+  id bigint,
+  event_json jsonb,
+  enqueued_at timestamp with time zone
+);
