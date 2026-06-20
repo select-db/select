@@ -6,6 +6,7 @@ import type { db_client, graph } from '$lib/wailsjs/go/models';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
 import { tryCatch } from '../tryCatch';
+import { ensureSSHPassphraseForInstance } from '../ssh/passphrase';
 import { loadingStore, pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
 import { executions, markCancelled, waitForStarted } from './queryStream.svelte';
 
@@ -18,7 +19,8 @@ const runOperation = async <T extends RunOperationParams, R>(
 	params: T,
 	executor: (params: T) => Promise<R>,
 	busyMessage: string,
-	failureMessage: string
+	failureMessage: string,
+	retried = false
 ): Promise<R | null> => {
 	const { DbInstanceID, FileID } = params;
 
@@ -35,6 +37,10 @@ const runOperation = async <T extends RunOperationParams, R>(
 	removeFromLoadingStore(DbInstanceID, FileID);
 
 	if (err) {
+		// Encrypted SSH key: prompt once for the passphrase, then retry.
+		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, err.message))) {
+			return runOperation(params, executor, busyMessage, failureMessage, true);
+		}
 		notifyError(failureMessage);
 		return null;
 	}
@@ -48,7 +54,10 @@ const runOperation = async <T extends RunOperationParams, R>(
 // 'query:done'. Loading-store cleanup happens in the queryStream event handlers.
 //
 // ForExport bypasses streaming and returns a fully buffered result.
-export const runQuery = async (params: RunQueryParams): Promise<graph.QueryResult | null> => {
+export const runQuery = async (
+	params: RunQueryParams,
+	retried = false
+): Promise<graph.QueryResult | null> => {
 	if (params.ForExport) {
 		return runOperation(
 			params,
@@ -87,14 +96,24 @@ export const runQuery = async (params: RunQueryParams): Promise<graph.QueryResul
 		// are async; remove from the loading store here so the UI doesn't
 		// briefly show a stuck spinner.
 		removeFromLoadingStore(DbInstanceID, FileID);
+		// Encrypted SSH key: prompt once for the passphrase, then retry.
+		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, start.errors[0]))) {
+			return runQuery(params, true);
+		}
 		notifyError(start.errors[0]);
 		return null;
 	}
 
 	const [exec, waitErr] = await tryCatch(waitForStarted, start.executionId);
 	if (waitErr || !exec) {
+		const msg = waitErr?.message ?? 'Failed to run query';
+		// Encrypted SSH key: prompt once for the passphrase, then retry.
+		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, msg))) {
+			removeFromLoadingStore(DbInstanceID, FileID);
+			return runQuery(params, true);
+		}
 		// loading-store removal handled by the 'query:error' event listener
-		notifyError(waitErr?.message ?? 'Failed to run query');
+		notifyError(msg);
 		return null;
 	}
 

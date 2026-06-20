@@ -1,12 +1,33 @@
 package engine
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/selectDb/toolkit/cache"
 )
+
+// authFingerprint reduces the SSH credential material to a SHA-256 digest so the
+// tunnel cache key changes when credentials change, without any raw secret
+// entering the key (hashWorkspaceDSN is a non-cryptographic hash).
+func authFingerprint(config ResolvedSSHConfig) string {
+	h := sha256.New()
+	for _, s := range []string{
+		config.KeyPath,
+		config.Passphrase,
+		config.HostKey,
+		config.Password,
+		config.PrivateKey,
+	} {
+		h.Write([]byte(s))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
 
 // Tunnel is implemented by sshTunnel. Cache and locking live in the engine
 // so neither DbClient nor the remote backend hold tunnel state.
@@ -24,11 +45,20 @@ var (
 )
 
 // GetOrCreateTunnel returns a live cached tunnel, dialling via StartSSHTunnel on miss.
-// Key is hash(workspaceID, ssh+remote address), scoped per workspace, secrets never stored.
+// Key is hash(workspaceID, full SSH identity + remote address) scoped per workspace, 
+// secrets hashed (never stored verbatim). Editing any auth detail changes the key.
 // Dead entries are evicted and their DB connections flushed before redialling.
 // Serialised: only one tunnel per key established under concurrent callers.
 func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost string, remotePort int) (Tunnel, error) {
-	addrStr := config.Host + ":" + strconv.Itoa(config.Port) + ":" + remoteHost + ":" + strconv.Itoa(remotePort)
+	addrStr := strings.Join([]string{
+		config.Host,
+		strconv.Itoa(config.Port),
+		config.User,
+		config.AuthMethod,
+		remoteHost,
+		strconv.Itoa(remotePort),
+		authFingerprint(config),
+	}, "\x00")
 	key := hashWorkspaceDSN(workspaceID, addrStr)
 
 	tunnelCacheMu.Lock()

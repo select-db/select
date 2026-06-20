@@ -2020,6 +2020,7 @@ export namespace graph {
 	    auth_method: string;
 	    password: string;
 	    private_key: string;
+	    key_path: string;
 	    host_key: string;
 	
 	    static createFrom(source: any = {}) {
@@ -2035,6 +2036,7 @@ export namespace graph {
 	        this.auth_method = source["auth_method"];
 	        this.password = source["password"];
 	        this.private_key = source["private_key"];
+	        this.key_path = source["key_path"];
 	        this.host_key = source["host_key"];
 	    }
 	}

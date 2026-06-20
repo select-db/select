@@ -103,7 +103,7 @@
 </script>
 
 {#if visible}
-	<Contextable {options} metadata={item} direction="right" style="height: 30px; display: flex;">
+	<Contextable {options} metadata={item} direction="right" style="height: 32px; display: flex;">
 		{@const showActions = !($renamingItemIdStore === item.id) && actions && actions.length > 0}
 
 		<div
@@ -187,10 +187,10 @@
 <style>
 	.item {
 		padding-right: var(--space-sm);
-		padding-left: var(--space-sm);
+		padding-left: var(--space-sm-md);
 
 		width: 100%;
-		height: 30px;
+		height: 32px;
 		min-width: fit-content;
 		display: inline-flex;
 		align-items: stretch;
@@ -210,10 +210,10 @@
 		border-top-color: var(--border-color);
 	}
 	.item.selected {
-		background: var(--gray-550) !important;
+		background: var(--gray-400) !important;
 	}
 	.item:not(.selected):hover {
-		background: var(--gray-400) !important;
+		background: var(--gray-550) !important;
 	}
 	.item.selected.has-border-top {
 		border-top-color: var(--border-color);
@@ -294,7 +294,7 @@
 		color: var(--gray-800);
 		border-radius: var(--br-xs);
 		height: fit-content;
-		margin-top: 6px;
+		margin-top: 8px;
 		font-size: var(--fs-xs);
 	}
 
@@ -321,7 +321,7 @@
 	}
 
 	.item-placeholder {
-		height: 30px;
+		height: 32px;
 	}
 	.item .indicators-wrapper {
 		position: absolute;

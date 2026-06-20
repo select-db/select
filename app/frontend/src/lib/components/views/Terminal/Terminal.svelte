@@ -84,7 +84,8 @@
 
 		xterm = new XTerm({
 			cursorBlink: true,
-			fontSize: 11,
+			fontSize: 12,
+			lineHeight: 1.3,
 			fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace",
 			fontWeight: 200,
 			theme: getTerminalTheme(),

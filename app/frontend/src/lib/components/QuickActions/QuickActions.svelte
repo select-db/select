@@ -16,10 +16,11 @@
 		<Button
 			content={action.label}
 			leftIcon={iconByActionId[action.id]}
-			iconSize={20}
+			iconSize={17}
 			emphasis="low"
 			size="md"
 			onclick={() => executeQuickAction(action)}
+			style="gap: var(--space-xs-sm)"
 		/>
 	{/each}
 </div>
@@ -27,10 +28,8 @@
 <style>
 	.quick-actions {
 		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-sm);
-		align-items: center;
-		justify-content: center;
-		padding: var(--space-md);
+		flex-direction: column;
+		gap: var(--space-xs);
+		padding-left: var(--space-sm);
 	}
 </style>

@@ -12,6 +12,7 @@ export const editorConfig: monaco.editor.IStandaloneEditorConstructionOptions = 
 	},
 	fontFamily: 'JetBrains Mono',
 	fontSize: 12,
+	lineHeight: 18,
 	fontWeight: '200',
 	scrollbar: {
 		verticalScrollbarSize: 5,

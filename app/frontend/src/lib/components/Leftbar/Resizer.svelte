@@ -42,9 +42,9 @@
 	#resizer {
 		position: absolute;
 		z-index: 3;
-		top: 0;
+		top: var(--space-sm-md);
 		right: 1px;
-		bottom: 0;
+		bottom: var(--space-sm-md);
 
 		width: 10px;
 		border-right: var(--bw) transparent solid;

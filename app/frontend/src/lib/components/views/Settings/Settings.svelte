@@ -101,6 +101,7 @@
 	.settings-nav :global(.nav-item) {
 		justify-content: flex-start;
 		width: 100%;
+		height: 32px;
 		font-size: var(--fs-sm);
 	}
 

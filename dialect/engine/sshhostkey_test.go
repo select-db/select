@@ -3,10 +3,14 @@ package engine
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 func TestSSHHostKeyCallback(t *testing.T) {
@@ -41,5 +45,56 @@ func TestSSHHostKeyCallback(t *testing.T) {
 		t.Fatalf("desktop with no host key: result=%v err=%v, want accept", r, err)
 	} else if r.algorithm != "" {
 		t.Fatalf("desktop should have no algorithm preference, got %q", r.algorithm)
+	}
+}
+
+// newTestHostKey returns a fresh ed25519 ssh public key.
+func newTestHostKey(t *testing.T) ssh.PublicKey {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer.PublicKey()
+}
+
+// TestKnownHostKeyLine: a key recorded in ~/.ssh/known_hosts is returned as a
+// pinnable authorized-key line; an unrecorded host yields "".
+func TestKnownHostKeyLine(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	pub := newTestHostKey(t)
+	const host = "bastion.example.com"
+	addr := knownhosts.Normalize(net.JoinHostPort(host, "22"))
+	line := knownhosts.Line([]string{addr}, pub)
+	if err := os.WriteFile(filepath.Join(sshDir, "known_hosts"), []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Recorded host -> pinnable line that parses back to the same key.
+	got := knownHostKeyLine(host, 22)
+	if got == "" {
+		t.Fatal("recorded host returned empty line")
+	}
+	parsed, _, _, _, perr := ssh.ParseAuthorizedKey([]byte(got))
+	if perr != nil {
+		t.Fatalf("pinned line does not parse: %v", perr)
+	}
+	if ssh.FingerprintSHA256(parsed) != ssh.FingerprintSHA256(pub) {
+		t.Error("pinned key does not match the recorded key")
+	}
+
+	// Unrecorded host -> empty (engine falls back to insecure on desktop).
+	if other := knownHostKeyLine("not-recorded.example.com", 22); other != "" {
+		t.Errorf("unrecorded host returned %q, want empty", other)
 	}
 }

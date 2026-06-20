@@ -79,6 +79,7 @@ func (dbc *DbClient) getEngineConn(node *graph.DBInstanceNode) (engine.Conn, err
 		// Return empty conn, remote will GetOrOpenConn conn
 		return engine.Conn{}, nil
 	}
+
 	db, err := dbc.GetOrOpenConn(
 		node.WorkspaceID,
 		node.DBType,

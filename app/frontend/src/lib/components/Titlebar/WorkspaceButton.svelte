@@ -15,4 +15,4 @@
 	};
 </script>
 
-<Button content={workspaceName} onclick={openWorkspaceMenu} noRadius noBounce truncate />
+<Button content={workspaceName} onclick={openWorkspaceMenu} noBounce truncate size="sm" />
