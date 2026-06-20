@@ -6,13 +6,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"selectDb/internal/utils"
 )
 
-// GetOSPathFromURI resolves a logical workspace URI to an absolute OS path.
-// It enforces that URIs use the "selectdb://" scheme and that the path portion
-// starts with "workspaces/". The path portion after the scheme is joined
-// directly under the provider root, ensuring that URI and filesystem paths
-// have the exact same shape.
+// userURIPrefix is the path portion prefix for per-user config files, which
+// live outside every server/workspace folder under the per-user app data dir.
+// Example: selectdb://user/.theme ↔ <appDataDir>/user-config/.theme
+const userURIPrefix = "user/"
+
+// GetOSPathFromURI resolves a logical URI to an absolute OS path.
+//
+// Two URI namespaces are supported, both under the "selectdb://" scheme:
+//
+//   - selectdb://workspaces/<id>/...  → joined under the provider root (the
+//     current server folder), so URI and filesystem paths share the same shape.
+//   - selectdb://user/...             → joined under the per-user config dir,
+//     for personal files (.theme, .config) that live outside every workspace.
 func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
 	const scheme = "selectdb://"
 
@@ -25,8 +35,12 @@ func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
 		return "", fmt.Errorf("missing path in uri: %s", URI)
 	}
 
+	if strings.HasPrefix(rel, userURIPrefix) {
+		return userOSPathFromURI(URI, rel)
+	}
+
 	if !strings.HasPrefix(rel, "workspaces/") {
-		return "", fmt.Errorf("invalid URI path (expected to start with %q): %s", "workspaces/", URI)
+		return "", fmt.Errorf("invalid URI path (expected to start with %q or %q): %s", "workspaces/", userURIPrefix, URI)
 	}
 
 	// Normalise and guard against path traversal or absolute paths.
@@ -40,6 +54,32 @@ func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
 	full := filepath.Join(fsp.root, rel)
 	if err := ensureWithinRoot(fsp.root, full); err != nil {
 		return "", fmt.Errorf("invalid URI path (escapes workspace root): %s", URI)
+	}
+	return full, nil
+}
+
+// userOSPathFromURI resolves a selectdb://user/... URI to an absolute path under
+// the per-user config directory. rel is the path portion after the scheme
+// (e.g. "user/.theme"). It guards against path traversal so a crafted URI
+// cannot escape the user config dir.
+func userOSPathFromURI(URI, rel string) (string, error) {
+	sub := strings.TrimPrefix(rel, userURIPrefix)
+	if sub == "" {
+		return "", fmt.Errorf("missing path in uri: %s", URI)
+	}
+
+	sub = filepath.Clean(sub)
+	if filepath.IsAbs(sub) || sub == ".." || strings.HasPrefix(sub, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape user config dir): %s", URI)
+	}
+
+	dir, err := utils.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(dir, sub)
+	if err := ensureWithinRoot(dir, full); err != nil {
+		return "", fmt.Errorf("invalid URI path (escapes user config dir): %s", URI)
 	}
 	return full, nil
 }

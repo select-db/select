@@ -32,9 +32,26 @@ A workspace folder contains:
 - `.sql` files and their `.metadata.json` sidecars
 - `db.config.json` files (credentials should use `$VAR` references, not hardcoded values)
 - `.env` files (add to `.gitignore` if they contain secrets)
-- `.theme`, `.config`, and `.lint` files
+- `.config` (execution limits) and `.lint` files
 
-When git is enabled, all of these are tracked. Use a `.gitignore` file to exclude files from version control. See [.gitignore](/special-files/gitignore/) for details.
+When git is enabled, these workspace files are tracked. Use a `.gitignore` file
+to exclude files from version control. See [.gitignore](/special-files/gitignore/)
+for details.
+
+### Personal settings are not tracked
+
+Some settings are **personal to you**, not team policy, so they live in a
+per-user config directory **outside** the workspace and are **never committed**:
+
+- `.theme` — your UI appearance ([Theme file](/special-files/theme/))
+- the `keybindings` and `editor_snippets` parts of `.config`
+  ([Config file](/special-files/config/))
+
+This keeps one teammate's color scheme and keybindings from overwriting
+everyone else's on pull, and lets your personal settings follow you across every
+workspace. Only the execution-limit fields of `.config`
+(`statement_timeout_ms`, `max_result_size_mb`) stay in the workspace and are
+shared with the team.
 
 ## Sync
 

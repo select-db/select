@@ -9,6 +9,7 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { loadSchema } from '$lib/utils/query/loadSchema';
 	import type { ResourceMenuOption, ResourceSearchScope } from '$lib/components/ResourceMenu/types';
+	import { loadUserConfigResourceOptions } from '$lib/components/ResourceMenu/userConfigResources';
 	import type { graph } from '$lib/wailsjs/go/models';
 	import type { Component } from 'svelte';
 	import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
@@ -28,6 +29,10 @@
 	let searchQuery = $state('');
 	let dbOn = $state<Record<string, boolean>>(persisted.dbOn);
 	let schemaOn = $state<Record<string, boolean>>(persisted.schemaOn);
+
+	// Personal config files (.theme, .config) live outside the workspace graph, so
+	// they are surfaced here as extra options that open in the regular editor.
+	let userConfigOptions = $state<ResourceMenuOption[]>([]);
 
 	function syncKeyMap(prev: Record<string, boolean>, keys: string[]): Record<string, boolean> {
 		const next: Record<string, boolean> = {};
@@ -84,6 +89,9 @@
 			if ((db.children?.length ?? 0) !== 0) continue;
 			loadSchema({ database: db, silent: true });
 		}
+		loadUserConfigResourceOptions().then((opts) => {
+			userConfigOptions = opts;
+		});
 	});
 
 	function handleSelect(option: ResourceMenuOption) {
@@ -131,7 +139,7 @@
 			width={470}
 			maxHeight={PANEL_MAX_HEIGHT}
 			noBorder
-			extraOptions={quickActions}
+			extraOptions={[...quickActions, ...userConfigOptions]}
 			{searchScope}
 		/>
 	</div>

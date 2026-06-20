@@ -30,8 +30,16 @@ export function GetDefaultThemeContent() {
   return window['go']['system']['System']['GetDefaultThemeContent']();
 }
 
+export function GetDefaultUserConfigContent() {
+  return window['go']['system']['System']['GetDefaultUserConfigContent']();
+}
+
 export function GetLint() {
   return window['go']['system']['System']['GetLint']();
+}
+
+export function GetUserConfigResources() {
+  return window['go']['system']['System']['GetUserConfigResources']();
 }
 
 export function GetThemeVariables() {
@@ -56,6 +64,10 @@ export function ResetConfig() {
 
 export function ResetLint() {
   return window['go']['system']['System']['ResetLint']();
+}
+
+export function ResetUserConfig() {
+  return window['go']['system']['System']['ResetUserConfig']();
 }
 
 export function ResetTheme() {

@@ -82,6 +82,15 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 
 	addWatches(fsCtx.WorkspaceRoot)
 
+	// Also watch the per-user config dir so edits to the personal .theme /
+	// .config hot-reload exactly like workspace files. These files live outside
+	// the workspace, so their events are routed straight to the theme/config
+	// reload handlers (never to the workspace graph).
+	userConfigDir, _ := graph.UserConfigDir()
+	if userConfigDir != "" {
+		_ = watcher.Add(userConfigDir)
+	}
+
 	for {
 		select {
 		case event, ok := <-watcher.Events:
@@ -275,13 +284,11 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 	utils.DebouncedEventsEmit(s.ctx, "workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
 }
 
-// Emits themeUpdated when the workspace .theme file changes.
+// Emits themeUpdated when the per-user .theme file changes.
 // Always sends the merged state (defaults + user .theme); on remove or error, merged = defaults.
+// The .theme file lives in the per-user config dir, so events come from there
+// rather than the workspace root.
 func (s *System) handleThemeFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS) {
-	if _, ok := ctx.Rel(event.Name); !ok {
-		return
-	}
-
 	themeVars, err := s.Graph.LoadWorkspaceTheme()
 	if err != nil {
 		themeVars = graph.LoadDefaultTheme()
@@ -289,13 +296,11 @@ func (s *System) handleThemeFileEvent(event fsnotify.Event, ctx *graph.Workspace
 	utils.DebouncedEventsEmit(s.ctx, "themeUpdated", 100*time.Millisecond, themeVars)
 }
 
-// Emits configUpdated when the workspace .config file changes.
-// Always sends the merged state (defaults + user .config); on remove or error, merged = defaults.
+// Emits configUpdated when a .config file changes (workspace execution limits or
+// the per-user keybindings/snippets file). Always sends the merged state across
+// defaults -> workspace -> user; on remove or error, merged falls back to lower
+// layers.
 func (s *System) handleConfigFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS) {
-	if _, ok := ctx.Rel(event.Name); !ok {
-		return
-	}
-
 	configResponse, err := s.Graph.LoadWorkspaceConfig()
 	if err != nil {
 		return

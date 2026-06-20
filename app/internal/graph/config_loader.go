@@ -8,14 +8,31 @@ import (
 	"path/filepath"
 )
 
-//go:embed defaults/.config
-var DefaultConfigContent string
+// DefaultWorkspaceConfigContent is the template for the workspace .config file.
+// It owns the team-shared execution limits only.
+//
+//go:embed defaults/workspace/.config
+var DefaultWorkspaceConfigContent string
+
+// DefaultUserConfigContent is the template for the per-user .config file.
+// It owns the personal keybindings and editor snippets.
+//
+//go:embed defaults/user/.config
+var DefaultUserConfigContent string
 
 const ConfigFileName = ".config"
 
-// GetDefaultConfigContent returns the default config file content.
-func GetDefaultConfigContent() string {
-	return DefaultConfigContent
+// GetDefaultWorkspaceConfigContent returns the default workspace .config content
+// (execution limits). Used as the template/reset target for the shared file.
+func GetDefaultWorkspaceConfigContent() string {
+	return DefaultWorkspaceConfigContent
+}
+
+// GetDefaultUserConfigContent returns the default user .config content
+// (keybindings and editor snippets). Used as the template/reset target for the
+// per-user file.
+func GetDefaultUserConfigContent() string {
+	return DefaultUserConfigContent
 }
 
 type Keybinding struct {
@@ -213,7 +230,8 @@ func mergeEditorSnippets(defaults, overrides []EditorSnippet) []EditorSnippet {
 	return out
 }
 
-// Returns the path to the .config file for a workspace.
+// GetConfigFilePath returns the path to the workspace .config file (the shared,
+// git-tracked file that owns execution limits).
 func (g *Graph) GetConfigFilePath() (string, error) {
 	wsGraph, err := g.GetWorkspaceGraph()
 	if err != nil {
@@ -226,35 +244,79 @@ func (g *Graph) GetConfigFilePath() (string, error) {
 	return filepath.Join(wfs.WorkspaceRoot, ConfigFileName), nil
 }
 
-// LoadWorkspaceConfig returns the merged config (defaults + user .config).
+// GetUserConfigFilePath returns the path to the per-user .config file (the
+// personal, never-committed file that owns keybindings and editor snippets).
+func GetUserConfigFilePath() (string, error) {
+	dir, err := UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, ConfigFileName), nil
+}
+
+// defaultConfig builds the baseline config by combining the workspace default
+// (execution limits) with the user default (keybindings/snippets), so the
+// merged result has sensible values for every field group.
+func defaultConfig() (*Config, error) {
+	wsDefaults, err := parseConfig(DefaultWorkspaceConfigContent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse default workspace config: %w", err)
+	}
+	userDefaults, err := parseConfig(DefaultUserConfigContent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse default user config: %w", err)
+	}
+	return &Config{
+		StatementTimeoutMs: wsDefaults.StatementTimeoutMs,
+		MaxResultSizeMB:    wsDefaults.MaxResultSizeMB,
+		Keybindings:        userDefaults.Keybindings,
+		EditorSnippets:     userDefaults.EditorSnippets,
+	}, nil
+}
+
+// LoadWorkspaceConfig returns the merged config across three layers:
+//
+//	defaults -> workspace (execution limits) -> user (keybindings/snippets)
+//
+// Workspace wins for execution limits (project safety policy); the user wins for
+// keybindings/snippets (personal preference). Each layer contributes only the
+// field group it owns.
 func (g *Graph) LoadWorkspaceConfig() (*ConfigResponse, error) {
-	defaults, err := parseConfig(DefaultConfigContent)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse default config: %w", err)
-	}
-
-	configPath, err := g.GetConfigFilePath()
-	if err != nil {
-		// No workspace: merged state = defaults + empty overrides
-		emptyOverrides := &Config{
-			Keybindings:    KeybindingsCategories{},
-			EditorSnippets: []EditorSnippet{},
-		}
-		merged := mergeConfig(defaults, emptyOverrides)
-		return &ConfigResponse{
-			StatementTimeoutMs: merged.StatementTimeoutMs,
-			MaxResultSizeMB:    merged.MaxResultSizeMB,
-			Keybindings:        merged.Keybindings.Flatten(),
-			EditorSnippets:     merged.EditorSnippets,
-		}, nil
-	}
-
-	userOverrides, err := ReadConfigFile(configPath)
+	defaults, err := defaultConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	merged := mergeConfig(defaults, userOverrides)
+	merged := defaults
+
+	// Workspace layer: execution limits only.
+	if configPath, err := g.GetConfigFilePath(); err == nil {
+		wsConfig, err := ReadConfigFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+		workspaceLayer := &Config{
+			StatementTimeoutMs: wsConfig.StatementTimeoutMs,
+			MaxResultSizeMB:    wsConfig.MaxResultSizeMB,
+			Keybindings:        KeybindingsCategories{},
+			EditorSnippets:     nil,
+		}
+		merged = mergeConfig(merged, workspaceLayer)
+	}
+
+	// User layer: keybindings and editor snippets only.
+	if userPath, err := GetUserConfigFilePath(); err == nil {
+		userConfig, err := ReadConfigFile(userPath)
+		if err != nil {
+			return nil, err
+		}
+		userLayer := &Config{
+			Keybindings:    userConfig.Keybindings,
+			EditorSnippets: userConfig.EditorSnippets,
+		}
+		merged = mergeConfig(merged, userLayer)
+	}
+
 	return &ConfigResponse{
 		StatementTimeoutMs: merged.StatementTimeoutMs,
 		MaxResultSizeMB:    merged.MaxResultSizeMB,
@@ -263,11 +325,22 @@ func (g *Graph) LoadWorkspaceConfig() (*ConfigResponse, error) {
 	}, nil
 }
 
-// Writes the default config content to the workspace's .config file.
+// ResetWorkspaceConfig writes the default execution-limit content to the
+// workspace .config file.
 func (g *Graph) ResetWorkspaceConfig() error {
 	configPath, err := g.GetConfigFilePath()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(configPath, []byte(DefaultConfigContent), 0644)
+	return os.WriteFile(configPath, []byte(DefaultWorkspaceConfigContent), 0644)
+}
+
+// ResetUserConfig writes the default keybindings/snippets content to the
+// per-user .config file.
+func ResetUserConfig() error {
+	configPath, err := GetUserConfigFilePath()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, []byte(DefaultUserConfigContent), 0644)
 }
