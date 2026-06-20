@@ -29,7 +29,7 @@
     "prettier": "^3.5.3",
     "prettier-plugin-svelte": "^3.3.3",
     "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
+    "svelte-check": "^4.6.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.60.1",
     "vite": "^6.0.0"
