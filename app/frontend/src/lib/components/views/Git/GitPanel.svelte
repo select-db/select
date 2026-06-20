@@ -2,6 +2,7 @@
 	import Button from '$lib/system/Button/Button.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';
+	import { scrollShadow } from '$lib/actions/scrollShadow';
 	import { AlertType } from '$lib/system/Alert/types';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 
@@ -268,6 +269,7 @@
 				class="section no-scrollbar overflow-x-only"
 				style="border-top: var(--border); flex-grow: 1; min-width: 0"
 				bind:this={scrollContainer}
+				use:scrollShadow
 				onscroll={handleScroll}
 			>
 				<div>

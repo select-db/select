@@ -101,10 +101,36 @@ type FSDBSSHConfig struct {
 	Host       string `json:"host"`
 	Port       int    `json:"port"`
 	User       string `json:"user"`
-	AuthMethod string `json:"auth_method"` // "password" | "private_key"
+	AuthMethod string `json:"auth_method"` // "password" | "private_key" | "agent" | "key_file"
 	Password   string `json:"password"`
 	PrivateKey string `json:"private_key"`
+	KeyPath    string `json:"key_path"` // path to a private key file (desktop key_file auth)
 	HostKey    string `json:"host_key"`
+}
+
+// SSHConfigFromFS maps a persisted FS SSH config to a graph-node SSH config.
+// Single source of truth for both the full graph build and the incremental file
+// watcher, so neither can silently drop a field (e.g. key_path / host_key).
+// Returns nil when fs is nil.
+func SSHConfigFromFS(fs *FSDBSSHConfig) *DBInstanceSSHConfig {
+	if fs == nil {
+		return nil
+	}
+	ssh := &DBInstanceSSHConfig{
+		Enabled:    fs.Enabled,
+		Host:       fs.Host,
+		Port:       fs.Port,
+		User:       fs.User,
+		AuthMethod: fs.AuthMethod,
+		Password:   fs.Password,
+		PrivateKey: fs.PrivateKey,
+		KeyPath:    fs.KeyPath,
+		HostKey:    fs.HostKey,
+	}
+	if ssh.Enabled && ssh.Port == 0 {
+		ssh.Port = 22
+	}
+	return ssh
 }
 
 // ReadFSDBConfig reads and unmarshals an FSDBConfig from the given path.

@@ -32,8 +32,6 @@ concurrency:
 
 env:
   WAILS_VERSION: v2.10.1
-  PROD_API_URL: https://api.select-db.com
-  STAGING_API_URL: https://staging-api.select-db.com
   # Minimum app version, bump when a release contains a breaking change.
   MIN_APP_VERSION: 0.0.0
 
@@ -52,7 +50,7 @@ jobs:
       staging-release: ${{ steps.plan.outputs.staging-release }}
       draft-release:   ${{ steps.plan.outputs.draft-release }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 2
       - id: plan
@@ -127,7 +125,7 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.plan.outputs.go-modules) }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: ${{ matrix.module }}/go.mod
@@ -164,7 +162,7 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install gitleaks (pinned + checksum-verified)
         env:
           GITLEAKS_VERSION: 8.30.1
@@ -184,7 +182,7 @@ jobs:
     if: needs.plan.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '20'
@@ -203,7 +201,7 @@ jobs:
     if: needs.plan.outputs.go-app == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: app/go.mod
@@ -232,7 +230,7 @@ jobs:
     if: needs.plan.outputs.go-backend == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: backend/go.mod
@@ -260,7 +258,7 @@ jobs:
     if: needs.plan.outputs.go-dialect == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: dialect/go.mod
@@ -277,7 +275,7 @@ jobs:
     if: needs.plan.outputs.go-app == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: app/go.mod
@@ -292,7 +290,7 @@ jobs:
     if: needs.plan.outputs.go-backend == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: backend/go.mod
@@ -311,7 +309,7 @@ jobs:
     if: needs.plan.outputs.go-dialect == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: dialect/go.mod
@@ -325,7 +323,7 @@ jobs:
     if: needs.plan.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
       - run: uv sync
         working-directory: dialect/core/tokenanalyzer/python
@@ -373,7 +371,7 @@ jobs:
     outputs:
       staging: ${{ steps.v.outputs.staging }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
       - id: v
@@ -381,11 +379,11 @@ jobs:
 
   build-backend:
     name: Build backend binary
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: backend/go.mod
@@ -416,11 +414,11 @@ jobs:
 
   build-desktop-macos-arm64:
     name: Desktop (darwin/arm64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -458,10 +456,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -471,7 +469,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform darwin/arm64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-arm64.zip *.app
@@ -483,11 +481,11 @@ jobs:
 
   build-desktop-macos-amd64:
     name: Desktop (darwin/amd64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -525,10 +523,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -538,7 +536,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform darwin/amd64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-amd64.zip *.app
@@ -550,11 +548,11 @@ jobs:
 
   build-desktop-windows:
     name: Desktop (windows/amd64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -595,10 +593,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -609,7 +607,7 @@ jobs:
           export PUBLIC_APP_ENV="${APP_ENV}"
           wails build ${DEVTOOLS} \
             -platform windows/amd64 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer.exe build/bin/analyzer.exe
 
       - name: Package
@@ -624,11 +622,11 @@ jobs:
 
   build-desktop-linux:
     name: Desktop (linux/amd64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -675,10 +673,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            API_URL="${PROD_API_URL}" APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production" DEVTOOLS=""
           else
             V="${STAGING_VERSION}"
-            API_URL="${STAGING_API_URL}" APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging" DEVTOOLS="-devtools"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -690,7 +688,7 @@ jobs:
           wails build ${DEVTOOLS} \
             -platform linux/amd64 \
             -tags webkit2_41 \
-            -ldflags "-X main.apiURL=${API_URL} -X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/analyzer
           cd build/bin
           zip selectDb-linux-amd64.zip select analyzer
@@ -714,7 +712,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

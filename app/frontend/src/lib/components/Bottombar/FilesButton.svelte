@@ -6,9 +6,9 @@
 <Button
 	leftIcon="files"
 	iconSize={17}
-	noRadius
-	noBounce
+	size="sm"
 	emphasis={$isLeftbarOpened && $leftPanelTab === 'files' ? 'high' : 'low'}
 	active={$isLeftbarOpened && $leftPanelTab === 'files'}
 	onclick={() => toggleLeftPanelTab('files')}
+	noBounce
 />

@@ -8,6 +8,8 @@ import {context} from '../models';
 
 export function CancelQuery(arg1:db_client.CancelQueryParams):Promise<void>;
 
+export function ChooseSSHKeyFile():Promise<string>;
+
 export function Explain(arg1:db_client.ExplainParams):Promise<graph.ExplainResult>;
 
 export function Export(arg1:db_client.ExportParams):Promise<void>;
@@ -33,5 +35,7 @@ export function Query(arg1:db_client.QueryParams):Promise<graph.QueryResult>;
 export function QuerySchema(arg1:db_client.QuerySchemaParams):Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
+
+export function SetSSHKeyPassphrase(arg1:string,arg2:string):Promise<void>;
 
 export function StartQuery(arg1:db_client.StartQueryParams):Promise<db_client.StartQueryResult>;

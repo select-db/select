@@ -6,9 +6,9 @@
 <Button
 	leftIcon="search"
 	iconSize={16}
-	noRadius
-	noBounce
+	size="sm"
 	emphasis={$isRightbarOpened ? 'high' : 'low'}
 	active={$isRightbarOpened}
 	onclick={toggleSearchPanel}
+	noBounce
 />

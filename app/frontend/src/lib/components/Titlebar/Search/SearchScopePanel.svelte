@@ -84,7 +84,7 @@
 	.scope-row {
 		display: flex;
 		align-items: center;
-		min-height: 28px;
+		min-height: 30px;
 		margin: 0;
 		padding: var(--spapce-xxs) 0 0 0;
 	}

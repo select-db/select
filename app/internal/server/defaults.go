@@ -6,9 +6,9 @@ import "os"
 func DefaultDomainForEnv() string {
 	switch os.Getenv("APP_ENV") {
 	case "staging":
-		return "staging-api.select-db.com"
+		return "api.staging.select-db.com"
 	case "production", "prod":
-		return "api.select-db.com"
+		return "api.us-east.select-db.com"
 	case "dev", "development", "default":
 		return "localhost:8080"
 	default:
