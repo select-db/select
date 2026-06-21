@@ -65,16 +65,15 @@ func New(db *sql.DB, opts Options) *Logger {
 	}
 }
 
-// Start launches the async writer, the outbox drainer, and partition
-// maintenance.
+// Start launches the async writer and the outbox drainer. (Partition lifecycle
+// is handled in-database by pg_partman + pg_cron, not by the app.)
 func (l *Logger) Start() {
 	if l == nil {
 		return
 	}
-	l.wg.Add(3)
+	l.wg.Add(2)
 	go l.writeLoop()
 	go l.outboxLoop()
-	go l.partitionLoop()
 }
 
 // Log enqueues an event on the best-effort async lane. It never blocks the
@@ -213,29 +212,6 @@ func (l *Logger) outboxLoop() {
 			if err := l.drainOutbox(context.Background()); err != nil {
 				log.Printf("audit: outbox drain: %v", err)
 			}
-		}
-	}
-}
-
-// partitionLoop runs ongoing partition maintenance (create-ahead + drop-expired)
-// daily. The initial pass is done synchronously at startup (see main) so
-// partitions exist before the first event is written.
-func (l *Logger) partitionLoop() {
-	defer l.wg.Done()
-
-	ticker := time.NewTicker(partitionInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-l.stop:
-			return
-		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			if err := maintainPartitions(ctx, l.db); err != nil {
-				log.Printf("audit: partition maintenance: %v", err)
-			}
-			cancel()
 		}
 	}
 }
