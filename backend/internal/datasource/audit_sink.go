@@ -67,9 +67,9 @@ func (s *loggingSink) emit() {
 func buildQueryEvent(r *http.Request, req executeRequest, dbType string) *audit.Event {
 	workspaceID := middlewares.MemberWorkspaceID(r)
 
-	kind := audit.PrincipalUser
+	principalType := audit.PrincipalUser
 	if middlewares.IsAPIKeyPrincipal(r) {
-		kind = audit.PrincipalAPIKey
+		principalType = audit.PrincipalAPIKey
 	}
 
 	return &audit.Event{
@@ -77,7 +77,7 @@ func buildQueryEvent(r *http.Request, req executeRequest, dbType string) *audit.
 		Domain:      audit.DomainQuery,
 		Action:      audit.ActionExecuted,
 		Principal: audit.Principal{
-			Kind:        kind,
+			Type:        principalType,
 			ID:          middlewares.GetUserID(r),
 			WorkspaceID: workspaceID,
 			RoleIDs:     middlewares.GetRoleIDs(r),

@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS audit.event (
     domain             TEXT        NOT NULL,      -- 'query' | 'auth' | 'iam' | 'datasource'
     action             TEXT        NOT NULL,      -- 'executed', 'permission.upserted', 'login', ...
     principal_hash     BYTEA       NOT NULL REFERENCES audit.principal_snapshot(snapshot_hash),
+    principal_id       UUID,                      -- denormalized actor id, for filtering events "by user"
+    principal_type     TEXT,                      -- 'user' | 'api_key'
     target_type        TEXT,                      -- 'permission' | 'role' | 'user' | 'datasource'
     target_id          UUID,
     target_label       TEXT,                      -- denormalized name at event time

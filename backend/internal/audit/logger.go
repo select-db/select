@@ -323,12 +323,13 @@ func insertEvent(ctx context.Context, tx *sql.Tx, e *Event) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO audit.event
 		  (workspace_id, occurred_at, domain, action, principal_hash,
-		   target_type, target_id, target_label, status, payload,
-		   duration_ms, returned_row_count, client_ip)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		   principal_id, principal_type, target_type, target_id, target_label,
+		   status, payload, duration_ms, returned_row_count, client_ip)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
 		e.WorkspaceID, e.OccurredAt, e.Domain, e.Action, e.Principal.Hash(),
-		targetType, targetID, targetLabel, e.Status, payload,
-		nilIfZero(e.DurationMs), nilIfZero(e.ReturnedRowCount), nilIfEmpty(e.ClientIP))
+		nilIfEmpty(e.Principal.ID), nilIfEmpty(e.Principal.Type),
+		targetType, targetID, targetLabel,
+		e.Status, payload, nilIfZero(e.DurationMs), nilIfZero(e.ReturnedRowCount), nilIfEmpty(e.ClientIP))
 	return err
 }
 

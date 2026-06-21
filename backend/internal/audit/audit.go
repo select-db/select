@@ -54,7 +54,7 @@ const (
 // of the event. It is content-addressed: identical authz state hashes to the
 // same value and is stored once in audit.principal_snapshot.
 type Principal struct {
-	Kind        string                 `json:"kind"`         // PrincipalUser | PrincipalAPIKey
+	Type        string                 `json:"type"`         // PrincipalUser | PrincipalAPIKey
 	ID          string                 `json:"id"`           // user id or api-key id
 	WorkspaceID string                 `json:"workspace_id"` // workspace in effect
 	RoleIDs     []string               `json:"role_ids"`
@@ -71,7 +71,7 @@ func (p Principal) canonical() Principal {
 	sort.Slice(perms, func(i, j int) bool { return permKey(perms[i]) < permKey(perms[j]) })
 
 	return Principal{
-		Kind:        p.Kind,
+		Type:        p.Type,
 		ID:          p.ID,
 		WorkspaceID: p.WorkspaceID,
 		RoleIDs:     roles,

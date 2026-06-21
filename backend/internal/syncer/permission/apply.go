@@ -141,7 +141,7 @@ func emitPermissionAudit(
 		Domain:      audit.DomainIAM,
 		Action:      audit.ActionPermissionUpserted,
 		Principal: audit.Principal{
-			Kind:        audit.PrincipalUser,
+			Type:        audit.PrincipalUser,
 			ID:          userID,
 			WorkspaceID: workspaceID,
 		},

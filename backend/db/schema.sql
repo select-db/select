@@ -139,6 +139,8 @@ CREATE TABLE audit.event (
   domain text,
   action text,
   principal_hash bytea,
+  principal_id uuid,
+  principal_type text,
   target_type text,
   target_id uuid,
   target_label text,

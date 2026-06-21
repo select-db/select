@@ -13,7 +13,7 @@ func ptr(s string) *string { return &s }
 // roles/permissions arrive in — that is what lets snapshots dedup.
 func TestPrincipalHashIsOrderIndependent(t *testing.T) {
 	a := Principal{
-		Kind:        PrincipalUser,
+		Type:        PrincipalUser,
 		ID:          "u1",
 		WorkspaceID: "w1",
 		RoleIDs:     []string{"r2", "r1"},
@@ -23,7 +23,7 @@ func TestPrincipalHashIsOrderIndependent(t *testing.T) {
 		},
 	}
 	b := Principal{
-		Kind:        PrincipalUser,
+		Type:        PrincipalUser,
 		ID:          "u1",
 		WorkspaceID: "w1",
 		RoleIDs:     []string{"r1", "r2"},
@@ -39,7 +39,7 @@ func TestPrincipalHashIsOrderIndependent(t *testing.T) {
 
 // A different permission set must produce a different hash.
 func TestPrincipalHashChangesWithPermissions(t *testing.T) {
-	base := Principal{Kind: PrincipalUser, ID: "u1", WorkspaceID: "w1", RoleIDs: []string{"r1"}}
+	base := Principal{Type: PrincipalUser, ID: "u1", WorkspaceID: "w1", RoleIDs: []string{"r1"}}
 	changed := base
 	changed.Permissions = []core.PermissionEntry{{TableName: ptr("orders"), Action: "select", Effect: "deny"}}
 
