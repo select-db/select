@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -136,7 +137,9 @@ func (l *Logger) Stop(ctx context.Context) error {
 
 	select {
 	case <-done:
-		return l.drainOutbox(context.WithoutCancel(ctx))
+		// Bounded by the caller's shutdown budget; whatever doesn't flush in
+		// time stays durably in the outbox and drains on the next start.
+		return l.drainOutbox(ctx)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -188,6 +191,9 @@ func (l *Logger) writeBatch(events []*Event) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	qtx := l.q.WithTx(tx)
+	if err := applyStatementTimeout(ctx, tx); err != nil {
+		return err
+	}
 
 	seen := make(map[string]struct{}, len(events))
 	for _, e := range events {
@@ -226,7 +232,11 @@ func (l *Logger) outboxLoop() {
 // exactly once and concurrent drainers don't collide.
 func (l *Logger) drainOutbox(ctx context.Context) error {
 	for {
-		n, err := l.drainOutboxBatch(ctx)
+		// Bound each batch so a stalled drain can't run unbounded (the callers
+		// pass a deadline-less context for the periodic loop).
+		batchCtx, cancel := context.WithTimeout(ctx, writeTimeout)
+		n, err := l.drainOutboxBatch(batchCtx)
+		cancel()
 		if err != nil {
 			return err
 		}
@@ -243,6 +253,9 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 	qtx := l.q.WithTx(tx)
+	if err := applyStatementTimeout(ctx, tx); err != nil {
+		return 0, err
+	}
 
 	rows, err := qtx.GetAuditOutboxBatch(ctx, outboxBatch)
 	if err != nil {
@@ -282,6 +295,19 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return len(ids), nil
+}
+
+// applyStatementTimeout bounds server-side execution of every statement in this
+// transaction. It's a backstop for lib/pq not enforcing the Go context deadline
+// at the socket level: even if a query blocks on the server (lock wait, overload),
+// Postgres aborts it after the timeout. SET LOCAL is scoped to the current
+// transaction, so it never leaks to the shared connection pool. (Note: this does
+// not bound a dead-connection network hang — only TCP keepalive / pgx do.)
+func applyStatementTimeout(ctx context.Context, tx *sql.Tx) error {
+	// statement_timeout is in milliseconds; SET does not accept bind parameters,
+	// so the (internal, integer) value is formatted directly.
+	_, err := tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL statement_timeout = %d", writeTimeout.Milliseconds()))
+	return err
 }
 
 func upsertSnapshot(ctx context.Context, q *generated.Queries, e *Event, seen map[string]struct{}) error {
