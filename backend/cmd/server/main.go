@@ -85,8 +85,17 @@ func main() {
 
 	startPprofServer()
 
-	// Unified audit/activity log. Async writer + outbox drainer run until Stop
-	// is called during graceful shutdown (after the HTTP server has drained).
+	// Unified audit/activity log. Ensure monthly partitions exist up front
+	// (before any event is written, so rows don't fall into DEFAULT), then start
+	// the async writer + outbox drainer + daily partition maintenance. Stop is
+	// called during graceful shutdown (after the HTTP server has drained).
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := audit.EnsurePartitions(ctx, db.GetDB()); err != nil {
+			log.Printf("audit: initial partition setup: %v", err)
+		}
+		cancel()
+	}
 	auditLogger := audit.New(db.GetDB(), audit.Options{})
 	auditLogger.Start()
 	audit.SetDefault(auditLogger)
