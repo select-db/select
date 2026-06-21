@@ -92,6 +92,29 @@ func main() {
 	auditLogger.Start()
 	audit.SetDefault(auditLogger)
 
+	// Self-provision the pg_cron maintenance job on boot when given access to the
+	// cron database (AUDIT_CRON_DSN). pg_cron's scheduler lives in the cluster's
+	// cron DB, not the app DB, so this can't be a migration. No-op if unset —
+	// then the job is provisioned out of band (see the on-prem runbook).
+	if cronDSN := os.Getenv("AUDIT_CRON_DSN"); cronDSN != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := audit.EnsureMaintenanceSchedule(ctx, db.GetDB(), cronDSN, os.Getenv("AUDIT_CRON_SCHEDULE")); err != nil {
+			log.Printf("WARNING: audit: %v", err)
+		}
+		cancel()
+	}
+
+	// Preflight: warn loudly if partition maintenance can't actually run, so a
+	// misconfigured self-hosted database surfaces immediately instead of silently
+	// stopping partition creation/retention months later.
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := audit.Preflight(ctx, db.GetDB()); err != nil {
+			log.Printf("WARNING: %v", err)
+		}
+		cancel()
+	}
+
 	mux := http.NewServeMux()
 
 	authenticated := middlewares.Authenticated()
