@@ -6,6 +6,7 @@ package generated
 
 import (
 	"backend/db/db_types"
+	"github.com/sqlc-dev/pqtype"
 )
 
 type AppDatasource struct {
@@ -87,6 +88,39 @@ type AppWorkspaceToUser struct {
 	UserID      db_types.JSONNullUUID
 	UpdatedAt   db_types.JSONNullTime
 	DeletedAt   db_types.JSONNullTime
+}
+
+type AuditEvent struct {
+	ID               db_types.JSONNullUUID
+	WorkspaceID      db_types.JSONNullUUID
+	OccurredAt       db_types.JSONNullTime
+	RecordedAt       db_types.JSONNullTime
+	Domain           db_types.JSONNullString
+	Action           db_types.JSONNullString
+	PrincipalHash    []byte
+	PrincipalID      db_types.JSONNullUUID
+	PrincipalType    db_types.JSONNullString
+	TargetType       db_types.JSONNullString
+	TargetID         db_types.JSONNullUUID
+	TargetLabel      db_types.JSONNullString
+	Status           db_types.JSONNullString
+	Payload          pqtype.NullRawMessage
+	DurationMs       db_types.JSONNullInt64
+	ReturnedRowCount db_types.JSONNullInt64
+	ClientIp         db_types.JSONNullInet
+}
+
+type AuditOutbox struct {
+	ID         db_types.JSONNullInt64
+	EventJson  pqtype.NullRawMessage
+	EnqueuedAt db_types.JSONNullTime
+}
+
+type AuditPrincipalSnapshot struct {
+	SnapshotHash []byte
+	WorkspaceID  db_types.JSONNullUUID
+	Snapshot     pqtype.NullRawMessage
+	CreatedAt    db_types.JSONNullTime
 }
 
 type AuthApiKey struct {

@@ -17,6 +17,10 @@ import (
 //   - EnsureMaintenanceSchedule: self-provision the pg_cron job on boot (like
 //     running migrations), since cron.schedule_in_database lives only in the
 //     cluster's cron database and can't be created from an app-DB migration.
+//
+// These queries hit catalog/extension objects (pg_extension, partman.part_config,
+// pg_cron, current_database) that aren't in schema.sql, so they use raw SQL —
+// sqlc can't type them against the app schema.
 
 const (
 	maintenanceJobName  = "audit-partman-maintenance"

@@ -10,6 +10,7 @@ import (
 
 	"backend/db/db_types"
 	"github.com/lib/pq"
+	"github.com/sqlc-dev/pqtype"
 )
 
 const addAPIKeyRole = `-- name: AddAPIKeyRole :exec
@@ -162,6 +163,15 @@ DELETE FROM auth.api_key_to_role WHERE api_key_id = $1
 
 func (q *Queries) DeleteAPIKeyRoles(ctx context.Context, apiKeyID db_types.JSONNullUUID) error {
 	_, err := q.db.ExecContext(ctx, deleteAPIKeyRoles, apiKeyID)
+	return err
+}
+
+const deleteAuditOutbox = `-- name: DeleteAuditOutbox :exec
+DELETE FROM audit.outbox WHERE id = ANY($1::bigint[])
+`
+
+func (q *Queries) DeleteAuditOutbox(ctx context.Context, dollar_1 []int64) error {
+	_, err := q.db.ExecContext(ctx, deleteAuditOutbox, pq.Array(dollar_1))
 	return err
 }
 
@@ -320,6 +330,42 @@ func (q *Queries) GetAPIKeyRoleIDs(ctx context.Context, apiKeyID db_types.JSONNu
 			return nil, err
 		}
 		items = append(items, role_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAuditOutboxBatch = `-- name: GetAuditOutboxBatch :many
+SELECT id, event_json
+FROM audit.outbox
+ORDER BY id
+FOR UPDATE SKIP LOCKED
+LIMIT $1
+`
+
+type GetAuditOutboxBatchRow struct {
+	ID        db_types.JSONNullInt64
+	EventJson pqtype.NullRawMessage
+}
+
+func (q *Queries) GetAuditOutboxBatch(ctx context.Context, limit int32) ([]GetAuditOutboxBatchRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAuditOutboxBatch, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAuditOutboxBatchRow
+	for rows.Next() {
+		var i GetAuditOutboxBatchRow
+		if err := rows.Scan(&i.ID, &i.EventJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1035,6 +1081,76 @@ func (q *Queries) GetWorkspacesForUserSince(ctx context.Context, arg GetWorkspac
 	return items, nil
 }
 
+const insertAuditEvent = `-- name: InsertAuditEvent :exec
+INSERT INTO audit.event (
+    workspace_id,
+    occurred_at,
+    domain,
+    action,
+    principal_hash,
+    principal_id,
+    principal_type,
+    target_type,
+    target_id,
+    target_label,
+    status,
+    payload,
+    duration_ms,
+    returned_row_count,
+    client_ip
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+)
+`
+
+type InsertAuditEventParams struct {
+	WorkspaceID      db_types.JSONNullUUID
+	OccurredAt       db_types.JSONNullTime
+	Domain           db_types.JSONNullString
+	Action           db_types.JSONNullString
+	PrincipalHash    []byte
+	PrincipalID      db_types.JSONNullUUID
+	PrincipalType    db_types.JSONNullString
+	TargetType       db_types.JSONNullString
+	TargetID         db_types.JSONNullUUID
+	TargetLabel      db_types.JSONNullString
+	Status           db_types.JSONNullString
+	Payload          pqtype.NullRawMessage
+	DurationMs       db_types.JSONNullInt64
+	ReturnedRowCount db_types.JSONNullInt64
+	ClientIp         db_types.JSONNullInet
+}
+
+func (q *Queries) InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) error {
+	_, err := q.db.ExecContext(ctx, insertAuditEvent,
+		arg.WorkspaceID,
+		arg.OccurredAt,
+		arg.Domain,
+		arg.Action,
+		arg.PrincipalHash,
+		arg.PrincipalID,
+		arg.PrincipalType,
+		arg.TargetType,
+		arg.TargetID,
+		arg.TargetLabel,
+		arg.Status,
+		arg.Payload,
+		arg.DurationMs,
+		arg.ReturnedRowCount,
+		arg.ClientIp,
+	)
+	return err
+}
+
+const insertAuditOutbox = `-- name: InsertAuditOutbox :exec
+INSERT INTO audit.outbox (event_json) VALUES ($1)
+`
+
+func (q *Queries) InsertAuditOutbox(ctx context.Context, eventJson pqtype.NullRawMessage) error {
+	_, err := q.db.ExecContext(ctx, insertAuditOutbox, eventJson)
+	return err
+}
+
 const insertDefaultWorkspace = `-- name: InsertDefaultWorkspace :exec
 INSERT INTO app.workspace (id, name, owner_id, updated_at)
 VALUES ($1, 'My Workspace', $2, now())
@@ -1535,6 +1651,23 @@ func (q *Queries) UpsertPermission(ctx context.Context, arg UpsertPermissionPara
 		arg.Action,
 		arg.Effect,
 	)
+	return err
+}
+
+const upsertPrincipalSnapshot = `-- name: UpsertPrincipalSnapshot :exec
+INSERT INTO audit.principal_snapshot (snapshot_hash, workspace_id, snapshot)
+VALUES ($1, $2, $3)
+ON CONFLICT (snapshot_hash) DO NOTHING
+`
+
+type UpsertPrincipalSnapshotParams struct {
+	SnapshotHash []byte
+	WorkspaceID  db_types.JSONNullUUID
+	Snapshot     pqtype.NullRawMessage
+}
+
+func (q *Queries) UpsertPrincipalSnapshot(ctx context.Context, arg UpsertPrincipalSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, upsertPrincipalSnapshot, arg.SnapshotHash, arg.WorkspaceID, arg.Snapshot)
 	return err
 }
 

@@ -8,7 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib/pq"
+	"backend/db/db_types"
+	"backend/db/generated"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 // Options tunes the writer. Zero values fall back to the defaults below.
@@ -32,6 +35,7 @@ const (
 // Stop after the HTTP server has drained so no Log calls race the channel close.
 type Logger struct {
 	db            *sql.DB
+	q             *generated.Queries
 	ch            chan *Event
 	batchSize     int
 	flushInterval time.Duration
@@ -57,6 +61,7 @@ func New(db *sql.DB, opts Options) *Logger {
 	}
 	return &Logger{
 		db:            db,
+		q:             generated.New(db),
 		ch:            make(chan *Event, opts.BufferSize),
 		batchSize:     opts.BatchSize,
 		flushInterval: opts.FlushInterval,
@@ -112,8 +117,7 @@ func (l *Logger) LogOutbox(ctx context.Context, e *Event) error {
 	if err != nil {
 		return err
 	}
-	_, err = l.db.ExecContext(ctx, `INSERT INTO audit.outbox (event_json) VALUES ($1)`, body)
-	return err
+	return l.q.InsertAuditOutbox(ctx, jsonbRaw(body))
 }
 
 // Stop closes the intake, flushes the remaining batch, and does a final outbox
@@ -183,15 +187,16 @@ func (l *Logger) writeBatch(events []*Event) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	qtx := l.q.WithTx(tx)
 
 	seen := make(map[string]struct{}, len(events))
 	for _, e := range events {
-		if err := upsertSnapshot(ctx, tx, e, seen); err != nil {
+		if err := upsertSnapshot(ctx, qtx, e, seen); err != nil {
 			return err
 		}
 	}
 	for _, e := range events {
-		if err := insertEvent(ctx, tx, e); err != nil {
+		if err := insertEvent(ctx, qtx, e); err != nil {
 			return err
 		}
 	}
@@ -237,36 +242,24 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	qtx := l.q.WithTx(tx)
 
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, event_json FROM audit.outbox ORDER BY id FOR UPDATE SKIP LOCKED LIMIT $1`,
-		outboxBatch)
+	rows, err := qtx.GetAuditOutboxBatch(ctx, outboxBatch)
 	if err != nil {
 		return 0, err
 	}
 
 	var ids []int64
 	var events []*Event
-	for rows.Next() {
-		var id int64
-		var raw []byte
-		if err := rows.Scan(&id, &raw); err != nil {
-			_ = rows.Close()
-			return 0, err
-		}
-		ids = append(ids, id) // delete regardless so a poison row can't wedge the queue
+	for _, row := range rows {
+		ids = append(ids, row.ID.Int64) // delete regardless so a poison row can't wedge the queue
 		var e Event
-		if err := json.Unmarshal(raw, &e); err != nil {
-			log.Printf("audit: dropping unparseable outbox row %d: %v", id, err)
+		if err := json.Unmarshal(row.EventJson.RawMessage, &e); err != nil {
+			log.Printf("audit: dropping unparseable outbox row %d: %v", row.ID.Int64, err)
 			continue
 		}
 		events = append(events, &e)
 	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return 0, err
-	}
-	_ = rows.Close()
 
 	if len(ids) == 0 {
 		return 0, tx.Commit()
@@ -274,15 +267,15 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 
 	seen := make(map[string]struct{}, len(events))
 	for _, e := range events {
-		if err := upsertSnapshot(ctx, tx, e, seen); err != nil {
+		if err := upsertSnapshot(ctx, qtx, e, seen); err != nil {
 			return 0, err
 		}
-		if err := insertEvent(ctx, tx, e); err != nil {
+		if err := insertEvent(ctx, qtx, e); err != nil {
 			return 0, err
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM audit.outbox WHERE id = ANY($1)`, pq.Array(ids)); err != nil {
+	if err := qtx.DeleteAuditOutbox(ctx, ids); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -291,21 +284,21 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 	return len(ids), nil
 }
 
-func upsertSnapshot(ctx context.Context, tx *sql.Tx, e *Event, seen map[string]struct{}) error {
+func upsertSnapshot(ctx context.Context, q *generated.Queries, e *Event, seen map[string]struct{}) error {
 	h := e.Principal.Hash()
 	key := string(h)
 	if _, ok := seen[key]; ok {
 		return nil
 	}
 	seen[key] = struct{}{}
-	_, err := tx.ExecContext(ctx,
-		`INSERT INTO audit.principal_snapshot (snapshot_hash, workspace_id, snapshot)
-		 VALUES ($1, $2, $3) ON CONFLICT (snapshot_hash) DO NOTHING`,
-		h, e.Principal.WorkspaceID, e.Principal.JSON())
-	return err
+	return q.UpsertPrincipalSnapshot(ctx, generated.UpsertPrincipalSnapshotParams{
+		SnapshotHash: h,
+		WorkspaceID:  nullUUID(e.Principal.WorkspaceID),
+		Snapshot:     jsonbRaw(e.Principal.JSON()),
+	})
 }
 
-func insertEvent(ctx context.Context, tx *sql.Tx, e *Event) error {
+func insertEvent(ctx context.Context, q *generated.Queries, e *Event) error {
 	payload := []byte("{}")
 	if e.Payload != nil {
 		if b, err := json.Marshal(e.Payload); err == nil {
@@ -313,36 +306,69 @@ func insertEvent(ctx context.Context, tx *sql.Tx, e *Event) error {
 		}
 	}
 
-	var targetType, targetID, targetLabel any
+	var target Target
 	if e.Target != nil {
-		targetType = nilIfEmpty(e.Target.Type)
-		targetID = nilIfEmpty(e.Target.ID)
-		targetLabel = nilIfEmpty(e.Target.Label)
+		target = *e.Target
 	}
 
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO audit.event
-		  (workspace_id, occurred_at, domain, action, principal_hash,
-		   principal_id, principal_type, target_type, target_id, target_label,
-		   status, payload, duration_ms, returned_row_count, client_ip)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-		e.WorkspaceID, e.OccurredAt, e.Domain, e.Action, e.Principal.Hash(),
-		nilIfEmpty(e.Principal.ID), nilIfEmpty(e.Principal.Type),
-		targetType, targetID, targetLabel,
-		e.Status, payload, nilIfZero(e.DurationMs), nilIfZero(e.ReturnedRowCount), nilIfEmpty(e.ClientIP))
-	return err
+	return q.InsertAuditEvent(ctx, generated.InsertAuditEventParams{
+		WorkspaceID:      nullUUID(e.WorkspaceID),
+		OccurredAt:       db_types.NewJSONNullTimeFromTime(e.OccurredAt),
+		Domain:           nullStr(e.Domain),
+		Action:           nullStr(e.Action),
+		PrincipalHash:    e.Principal.Hash(),
+		PrincipalID:      nullUUID(e.Principal.ID),
+		PrincipalType:    nullStr(e.Principal.Type),
+		TargetType:       nullStr(target.Type),
+		TargetID:         nullUUID(target.ID),
+		TargetLabel:      nullStr(target.Label),
+		Status:           nullStr(e.Status),
+		Payload:          jsonbRaw(payload),
+		DurationMs:       nullInt64(e.DurationMs),
+		ReturnedRowCount: nullInt64(e.ReturnedRowCount),
+		ClientIp:         nullInet(e.ClientIP),
+	})
 }
 
-func nilIfEmpty(s string) any {
+// Converters to the generated params. schema.sql leaves audit columns nullable,
+// so sqlc generates JSONNull* / nullable types; these map empty/zero to NULL.
+
+func nullStr(s string) db_types.JSONNullString {
 	if s == "" {
-		return nil
+		return db_types.JSONNullString{}
 	}
-	return s
+	return db_types.NewJSONNullString(s)
 }
 
-func nilIfZero(n int64) any {
-	if n == 0 {
-		return nil
+func nullUUID(s string) db_types.JSONNullUUID {
+	if s == "" {
+		return db_types.JSONNullUUID{}
 	}
-	return n
+	v, err := db_types.NewJSONNullUUIDFromString(s)
+	if err != nil {
+		return db_types.JSONNullUUID{}
+	}
+	return v
+}
+
+func nullInt64(n int64) db_types.JSONNullInt64 {
+	if n == 0 {
+		return db_types.JSONNullInt64{}
+	}
+	return db_types.NewJSONNullInt64(n)
+}
+
+func nullInet(s string) db_types.JSONNullInet {
+	if s == "" {
+		return db_types.JSONNullInet{}
+	}
+	var inet pqtype.Inet
+	if err := inet.Scan(s); err != nil {
+		return db_types.JSONNullInet{}
+	}
+	return db_types.NewJSONNullInet(inet)
+}
+
+func jsonbRaw(b []byte) pqtype.NullRawMessage {
+	return pqtype.NullRawMessage{RawMessage: b, Valid: len(b) > 0}
 }
