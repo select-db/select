@@ -340,6 +340,41 @@ func (q *Queries) GetAPIKeyRoleIDs(ctx context.Context, apiKeyID db_types.JSONNu
 	return items, nil
 }
 
+const getAPIKeyRolesWithNames = `-- name: GetAPIKeyRolesWithNames :many
+SELECT r.id, r.name
+FROM app.role r
+JOIN auth.api_key_to_role atr ON atr.role_id = r.id
+WHERE atr.api_key_id = $1 AND r.deleted_at IS NULL
+`
+
+type GetAPIKeyRolesWithNamesRow struct {
+	ID   db_types.JSONNullUUID
+	Name db_types.JSONNullString
+}
+
+func (q *Queries) GetAPIKeyRolesWithNames(ctx context.Context, apiKeyID db_types.JSONNullUUID) ([]GetAPIKeyRolesWithNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAPIKeyRolesWithNames, apiKeyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAPIKeyRolesWithNamesRow
+	for rows.Next() {
+		var i GetAPIKeyRolesWithNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAuditOutboxBatch = `-- name: GetAuditOutboxBatch :many
 SELECT id, event_json
 FROM audit.outbox
@@ -780,6 +815,57 @@ func (q *Queries) GetUserByProviderIdentity(ctx context.Context, arg GetUserByPr
 	var i GetUserByProviderIdentityRow
 	err := row.Scan(&i.ID, &i.Email, &i.Name)
 	return i, err
+}
+
+const getUserNameByID = `-- name: GetUserNameByID :one
+SELECT name, email FROM app."user" WHERE id = $1
+`
+
+type GetUserNameByIDRow struct {
+	Name  db_types.JSONNullString
+	Email db_types.JSONNullString
+}
+
+func (q *Queries) GetUserNameByID(ctx context.Context, id db_types.JSONNullUUID) (GetUserNameByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserNameByID, id)
+	var i GetUserNameByIDRow
+	err := row.Scan(&i.Name, &i.Email)
+	return i, err
+}
+
+const getUserRolesWithNames = `-- name: GetUserRolesWithNames :many
+SELECT r.id, r.name
+FROM app.role r
+JOIN app.user_to_role utr ON utr.role_id = r.id
+WHERE utr.user_id = $1 AND utr.deleted_at IS NULL AND r.deleted_at IS NULL
+`
+
+type GetUserRolesWithNamesRow struct {
+	ID   db_types.JSONNullUUID
+	Name db_types.JSONNullString
+}
+
+func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID db_types.JSONNullUUID) ([]GetUserRolesWithNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserRolesWithNames, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserRolesWithNamesRow
+	for rows.Next() {
+		var i GetUserRolesWithNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserToRoleByID = `-- name: GetUserToRoleByID :one

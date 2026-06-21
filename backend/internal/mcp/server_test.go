@@ -17,7 +17,7 @@ func apiKeyRequest(t *testing.T, body string, workspaceID string) *http.Request 
 	t.Helper()
 	r := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
-	ctx := middlewares.ContextWithAPIKeyPrincipal(r.Context(), "principal-1", workspaceID, nil)
+	ctx := middlewares.ContextWithAPIKeyPrincipal(r.Context(), "principal-1", "Principal One", workspaceID, nil, nil)
 	return r.WithContext(ctx)
 }
 

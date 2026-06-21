@@ -56,16 +56,23 @@ const (
 type Principal struct {
 	Type        string                 `json:"type"`         // PrincipalUser | PrincipalAPIKey
 	ID          string                 `json:"id"`           // user id or api-key id
+	Name        string                 `json:"name,omitempty"` // display name (user name/email, or key name)
 	WorkspaceID string                 `json:"workspace_id"` // workspace in effect
-	RoleIDs     []string               `json:"role_ids"`
-	Permissions []core.PermissionEntry `json:"permissions"` // raw entries at event time
+	Roles       []Role                 `json:"roles"`        // roles with names, as of the event
+	Permissions []core.PermissionEntry `json:"permissions"`  // raw entries at event time
+}
+
+// Role is a role id with its human-readable name, captured in the snapshot.
+type Role struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
 }
 
 // canonical returns a deterministically-ordered copy so the hash is stable
 // regardless of the order roles/permissions arrive in.
 func (p Principal) canonical() Principal {
-	roles := append([]string(nil), p.RoleIDs...)
-	sort.Strings(roles)
+	roles := append([]Role(nil), p.Roles...)
+	sort.Slice(roles, func(i, j int) bool { return roles[i].ID < roles[j].ID })
 
 	perms := append([]core.PermissionEntry(nil), p.Permissions...)
 	sort.Slice(perms, func(i, j int) bool { return permKey(perms[i]) < permKey(perms[j]) })
@@ -73,8 +80,9 @@ func (p Principal) canonical() Principal {
 	return Principal{
 		Type:        p.Type,
 		ID:          p.ID,
+		Name:        p.Name,
 		WorkspaceID: p.WorkspaceID,
-		RoleIDs:     roles,
+		Roles:       roles,
 		Permissions: perms,
 	}
 }

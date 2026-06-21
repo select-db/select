@@ -19,8 +19,10 @@ type contextKey string
 
 const (
 	userIDKey            = contextKey("user_id")
+	principalNameKey     = contextKey("principal_name")
 	workspaceIDsKey      = contextKey("workspace_ids")
 	roleIDsKey           = contextKey("role_ids")
+	rolesKey             = contextKey("roles")
 	ownedWorkspaceIDsKey = contextKey("owned_workspace_ids")
 	apiKeyPrincipalKey   = contextKey("api_key_principal")
 )
@@ -68,6 +70,20 @@ func GetRoleIDs(r *http.Request) []string {
 	return ids
 }
 
+// GetPrincipalName returns the caller's human-readable name (user display
+// name/email, or the API key's name). Empty if not resolved.
+func GetPrincipalName(r *http.Request) string {
+	name, _ := r.Context().Value(principalNameKey).(string)
+	return name
+}
+
+// GetRoles returns the caller's roles with names, cached at token issuance /
+// API-key auth. Use GetRoleIDs when only ids are needed.
+func GetRoles(r *http.Request) []auth.RoleRef {
+	roles, _ := r.Context().Value(rolesKey).([]auth.RoleRef)
+	return roles
+}
+
 func GetOwnedWorkspaceIDs(r *http.Request) []string {
 	ids, _ := r.Context().Value(ownedWorkspaceIDsKey).([]string)
 	return ids
@@ -85,9 +101,11 @@ type TokenResponse struct {
 // buildAuthContext attaches userID, workspaceIDs (from DB), and roleIDs to the
 // context. roleIDs come from JWT claims to avoid a DB round-trip. Permissions are
 // resolved on demand by the authz package, not precomputed here.
-func buildAuthContext(ctx context.Context, userID string, roleIDs []string, ownedWorkspaceIDs []string) (context.Context, error) {
+func buildAuthContext(ctx context.Context, userID, name string, roleIDs []string, roles []auth.RoleRef, ownedWorkspaceIDs []string) (context.Context, error) {
 	ctx = context.WithValue(ctx, userIDKey, userID)
+	ctx = context.WithValue(ctx, principalNameKey, name)
 	ctx = context.WithValue(ctx, roleIDsKey, roleIDs)
+	ctx = context.WithValue(ctx, rolesKey, roles)
 	ctx = context.WithValue(ctx, ownedWorkspaceIDsKey, ownedWorkspaceIDs)
 
 	// Tenant isolation depends on this set: fail the request rather than pass a
@@ -137,18 +155,21 @@ func buildAPIKeyContext(ctx context.Context, token string) (context.Context, err
 		return ctx, errors.New("api key has no workspace")
 	}
 
-	roleRows, err := db.Queries.GetAPIKeyRoleIDs(ctx, row.ID)
+	roleRows, err := db.Queries.GetAPIKeyRolesWithNames(ctx, row.ID)
 	if err != nil {
 		return ctx, fmt.Errorf("api key role lookup failed: %w", err)
 	}
 	roleIDs := make([]string, 0, len(roleRows))
-	for _, rid := range roleRows {
-		if rid.Valid {
-			roleIDs = append(roleIDs, rid.UUID.String())
+	roles := make([]auth.RoleRef, 0, len(roleRows))
+	for _, rr := range roleRows {
+		if rr.ID.Valid {
+			id := rr.ID.UUID.String()
+			roleIDs = append(roleIDs, id)
+			roles = append(roles, auth.RoleRef{ID: id, Name: rr.Name.ValueOrEmpty()})
 		}
 	}
 
-	ctx = ContextWithAPIKeyPrincipal(ctx, row.ID.String(), row.WorkspaceID.String(), roleIDs)
+	ctx = ContextWithAPIKeyPrincipal(ctx, row.ID.String(), row.Name.ValueOrEmpty(), row.WorkspaceID.String(), roleIDs, roles)
 
 	// fire-and-forget: never block or fail auth on the last-used touch
 	go func() { _ = db.Queries.TouchAPIKeyLastUsed(context.WithoutCancel(ctx), row.ID) }()
@@ -159,9 +180,11 @@ func buildAPIKeyContext(ctx context.Context, token string) (context.Context, err
 // ContextWithAPIKeyPrincipal sets identity, roles, and the key's single workspace
 // as both the membership set and the member workspace (API-key routes skip
 // Membership()). Permissions are resolved on demand by the authz package.
-func ContextWithAPIKeyPrincipal(ctx context.Context, principalID, workspaceID string, roleIDs []string) context.Context {
+func ContextWithAPIKeyPrincipal(ctx context.Context, principalID, name, workspaceID string, roleIDs []string, roles []auth.RoleRef) context.Context {
 	ctx = context.WithValue(ctx, userIDKey, principalID)
+	ctx = context.WithValue(ctx, principalNameKey, name)
 	ctx = context.WithValue(ctx, roleIDsKey, roleIDs)
+	ctx = context.WithValue(ctx, rolesKey, roles)
 	ctx = context.WithValue(ctx, ownedWorkspaceIDsKey, []string(nil))
 	ctx = context.WithValue(ctx, workspaceIDsKey, []string{workspaceID})
 	ctx = context.WithValue(ctx, ctxWorkspaceID, workspaceID)
@@ -193,7 +216,7 @@ func Authenticated() func(http.Handler) http.Handler {
 			token, claims, err := auth.ValidateJWT(tokenStr)
 			switch {
 			case err == nil && token.Valid:
-				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, claims.RoleIDs, claims.OwnedWorkspaceIDs)
+				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, claims.Name, claims.RoleIDs, claims.Roles, claims.OwnedWorkspaceIDs)
 				if ctxErr != nil {
 					http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 					return
@@ -221,9 +244,9 @@ func Authenticated() func(http.Handler) http.Handler {
 					ctxErr error
 				)
 				if parseErr == nil && newClaims != nil {
-					ctx, ctxErr = buildAuthContext(r.Context(), newClaims.UserID, newClaims.RoleIDs, newClaims.OwnedWorkspaceIDs)
+					ctx, ctxErr = buildAuthContext(r.Context(), newClaims.UserID, newClaims.Name, newClaims.RoleIDs, newClaims.Roles, newClaims.OwnedWorkspaceIDs)
 				} else {
-					ctx, ctxErr = buildAuthContext(r.Context(), userID, nil, nil)
+					ctx, ctxErr = buildAuthContext(r.Context(), userID, "", nil, nil, nil)
 				}
 				if ctxErr != nil {
 					http.Error(w, "Service unavailable", http.StatusServiceUnavailable)

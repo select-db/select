@@ -84,15 +84,25 @@ func (rsaSignerMethod) Verify(signingString string, sig []byte, key any) error {
 
 var jwtSigningMethod = rsaSignerMethod{}
 
+// RoleRef pairs a role's id with its human-readable name. Cached in the token
+// at issuance so the audit log and UI can show names without a per-request DB
+// lookup.
+type RoleRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
 // CustomClaims defines JWT claims for access tokens.
 // WorkspaceIDs and RoleIDs are cached at token issuance to avoid DB lookups on every request.
 // When a user's role assignments change, their refresh token is revoked so the next re-auth
 // produces a fresh JWT with correct RoleIDs.
 type CustomClaims struct {
-	UserID            string   `json:"sub"`
-	WorkspaceIDs      []string `json:"workspace_ids,omitempty"`
-	RoleIDs           []string `json:"role_ids,omitempty"`
-	OwnedWorkspaceIDs []string `json:"owned_workspace_ids,omitempty"`
+	UserID            string    `json:"sub"`
+	Name              string    `json:"name,omitempty"`
+	WorkspaceIDs      []string  `json:"workspace_ids,omitempty"`
+	RoleIDs           []string  `json:"role_ids,omitempty"`
+	Roles             []RoleRef `json:"roles,omitempty"`
+	OwnedWorkspaceIDs []string  `json:"owned_workspace_ids,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -106,7 +116,9 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 
 	workspaceIDs := []string(nil)
 	roleIDs := []string(nil)
+	roles := []RoleRef(nil)
 	ownedWorkspaceIDs := []string(nil)
+	displayName := ""
 	if db.Queries != nil {
 		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
 			workspaceIDs = make([]string, 0, len(ids))
@@ -116,11 +128,15 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 				}
 			}
 		}
-		if ids, err := db.Queries.GetRoleIDsByUserID(ctx, userID); err == nil {
-			roleIDs = make([]string, 0, len(ids))
-			for _, u := range ids {
-				if u.Valid {
-					roleIDs = append(roleIDs, u.UUID.String())
+		// One query yields both the ids (for authz) and names (for display).
+		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
+			roleIDs = make([]string, 0, len(rows))
+			roles = make([]RoleRef, 0, len(rows))
+			for _, r := range rows {
+				if r.ID.Valid {
+					id := r.ID.UUID.String()
+					roleIDs = append(roleIDs, id)
+					roles = append(roles, RoleRef{ID: id, Name: r.Name.ValueOrEmpty()})
 				}
 			}
 		}
@@ -132,12 +148,20 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 				}
 			}
 		}
+		if u, err := db.Queries.GetUserNameByID(ctx, userID); err == nil {
+			displayName = u.Name.ValueOrEmpty()
+			if displayName == "" {
+				displayName = u.Email.ValueOrEmpty()
+			}
+		}
 	}
 
 	claims := CustomClaims{
 		UserID:            userID.UUID.String(),
+		Name:              displayName,
 		WorkspaceIDs:      workspaceIDs,
 		RoleIDs:           roleIDs,
+		Roles:             roles,
 		OwnedWorkspaceIDs: ownedWorkspaceIDs,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,

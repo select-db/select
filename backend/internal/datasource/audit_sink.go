@@ -79,8 +79,9 @@ func buildQueryEvent(r *http.Request, req executeRequest, dbType string) *audit.
 		Principal: audit.Principal{
 			Type:        principalType,
 			ID:          middlewares.GetUserID(r),
+			Name:        middlewares.GetPrincipalName(r),
 			WorkspaceID: workspaceID,
-			RoleIDs:     middlewares.GetRoleIDs(r),
+			Roles:       toAuditRoles(middlewares.GetRoles(r)),
 			Permissions: authz.EntriesFromRequest(r),
 		},
 		Target: &audit.Target{
@@ -94,4 +95,13 @@ func buildQueryEvent(r *http.Request, req executeRequest, dbType string) *audit.
 		},
 		ClientIP: auth.GetIPAddress(r),
 	}
+}
+
+// toAuditRoles maps the middleware's role refs into the audit snapshot type.
+func toAuditRoles(refs []auth.RoleRef) []audit.Role {
+	roles := make([]audit.Role, len(refs))
+	for i, r := range refs {
+		roles[i] = audit.Role{ID: r.ID, Name: r.Name}
+	}
+	return roles
 }
