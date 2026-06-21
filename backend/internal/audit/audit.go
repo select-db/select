@@ -112,7 +112,8 @@ type Target struct {
 // Event is the unified log envelope. Payload holds domain-specific fields.
 type Event struct {
 	WorkspaceID      string         `json:"workspace_id"`
-	OccurredAt       time.Time      `json:"occurred_at"`
+	OccurredAt       time.Time      `json:"occurred_at"`           // when the event happened (set by the app)
+	RecordedAt       time.Time      `json:"recorded_at,omitempty"` // when the row was persisted; assigned by the DB on insert (read-only)
 	Domain           string         `json:"domain"`
 	Action           string         `json:"action"`
 	Principal        Principal      `json:"principal"`

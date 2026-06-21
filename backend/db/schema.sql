@@ -135,6 +135,7 @@ CREATE TABLE audit.event (
   id uuid,
   workspace_id uuid,
   occurred_at timestamp with time zone,
+  recorded_at timestamp with time zone,
   domain text,
   action text,
   principal_hash bytea,

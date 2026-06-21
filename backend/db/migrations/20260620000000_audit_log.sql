@@ -32,7 +32,8 @@ CREATE INDEX IF NOT EXISTS idx_principal_snapshot_ws ON audit.principal_snapshot
 CREATE TABLE IF NOT EXISTS audit.event (
     id                 UUID        NOT NULL DEFAULT gen_random_uuid(),
     workspace_id       UUID        NOT NULL,      -- tenancy boundary; leads every index
-    occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when the event happened (set by the app)
+    recorded_at        TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when the row was persisted (set by the DB); lags occurred_at via the async/outbox lanes
     domain             TEXT        NOT NULL,      -- 'query' | 'auth' | 'iam' | 'datasource'
     action             TEXT        NOT NULL,      -- 'executed', 'permission.upserted', 'login', ...
     principal_hash     BYTEA       NOT NULL REFERENCES audit.principal_snapshot(snapshot_hash),
