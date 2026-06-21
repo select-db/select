@@ -41,7 +41,6 @@ CREATE TABLE IF NOT EXISTS audit.event (
     target_label       TEXT,                      -- denormalized name at event time
     status             TEXT        NOT NULL,      -- 'success' | 'error' | 'denied'
     payload            JSONB       NOT NULL DEFAULT '{}'::jsonb,  -- domain-specific (plaintext, Tier 0)
-    sql_fingerprint    BYTEA,                     -- query only; sha256 of normalized SQL (grouping)
     duration_ms        BIGINT,                    -- query only
     returned_row_count BIGINT,                    -- query only
     client_ip          INET,
@@ -77,8 +76,6 @@ CREATE INDEX IF NOT EXISTS idx_event_target
     ON audit.event (workspace_id, target_type, target_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_event_errors
     ON audit.event (workspace_id, occurred_at DESC) WHERE status IN ('error', 'denied');
-CREATE INDEX IF NOT EXISTS idx_event_fingerprint
-    ON audit.event (workspace_id, sql_fingerprint);
 -- +goose StatementEnd
 
 -- +goose StatementBegin

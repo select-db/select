@@ -92,7 +92,6 @@ func buildQueryEvent(r *http.Request, req executeRequest, dbType string) *audit.
 			"sql_text": req.SQL,
 			"db_type":  dbType,
 		},
-		SQLFingerprint: audit.Fingerprint(req.SQL),
-		ClientIP:       auth.GetIPAddress(r),
+		ClientIP: auth.GetIPAddress(r),
 	}
 }

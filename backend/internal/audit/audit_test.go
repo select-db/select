@@ -47,12 +47,3 @@ func TestPrincipalHashChangesWithPermissions(t *testing.T) {
 		t.Fatalf("expected different hash when permissions differ")
 	}
 }
-
-func TestFingerprintStableAndDistinct(t *testing.T) {
-	if !bytes.Equal(Fingerprint("SELECT 1"), Fingerprint("SELECT 1")) {
-		t.Fatalf("fingerprint should be stable for identical SQL")
-	}
-	if bytes.Equal(Fingerprint("SELECT 1"), Fingerprint("SELECT 2")) {
-		t.Fatalf("fingerprint should differ for different SQL")
-	}
-}

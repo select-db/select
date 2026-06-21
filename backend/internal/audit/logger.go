@@ -323,12 +323,11 @@ func insertEvent(ctx context.Context, tx *sql.Tx, e *Event) error {
 		INSERT INTO audit.event
 		  (workspace_id, occurred_at, domain, action, principal_hash,
 		   target_type, target_id, target_label, status, payload,
-		   sql_fingerprint, duration_ms, returned_row_count, client_ip)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+		   duration_ms, returned_row_count, client_ip)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 		e.WorkspaceID, e.OccurredAt, e.Domain, e.Action, e.Principal.Hash(),
 		targetType, targetID, targetLabel, e.Status, payload,
-		nilIfEmptyBytes(e.SQLFingerprint), nilIfZero(e.DurationMs), nilIfZero(e.ReturnedRowCount),
-		nilIfEmpty(e.ClientIP))
+		nilIfZero(e.DurationMs), nilIfZero(e.ReturnedRowCount), nilIfEmpty(e.ClientIP))
 	return err
 }
 
@@ -337,13 +336,6 @@ func nilIfEmpty(s string) any {
 		return nil
 	}
 	return s
-}
-
-func nilIfEmptyBytes(b []byte) any {
-	if len(b) == 0 {
-		return nil
-	}
-	return b
 }
 
 func nilIfZero(n int64) any {

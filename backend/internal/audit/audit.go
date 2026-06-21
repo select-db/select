@@ -119,16 +119,8 @@ type Event struct {
 	Target           *Target        `json:"target,omitempty"`
 	Status           string         `json:"status"`
 	Payload          map[string]any `json:"payload,omitempty"`
-	SQLFingerprint   []byte         `json:"sql_fingerprint,omitempty"`
 	DurationMs       int64          `json:"duration_ms,omitempty"`
 	ReturnedRowCount int64          `json:"returned_row_count,omitempty"`
 	ClientIP         string         `json:"client_ip,omitempty"`
 }
 
-// Fingerprint hashes SQL for grouping/dedup without exposing the text in an
-// index. Normalization (stripping literals/whitespace) is a follow-up; for now
-// it hashes the raw statement.
-func Fingerprint(sql string) []byte {
-	sum := sha256.Sum256([]byte(sql))
-	return sum[:]
-}

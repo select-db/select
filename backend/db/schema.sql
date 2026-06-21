@@ -143,7 +143,6 @@ CREATE TABLE audit.event (
   target_label text,
   status text,
   payload jsonb,
-  sql_fingerprint bytea,
   duration_ms bigint,
   returned_row_count bigint,
   client_ip inet
