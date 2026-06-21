@@ -66,10 +66,10 @@ export function createChatTools(sessionId: string, queryRegistry: QueryRegistry)
 		readFileClient,
 		editFileClient,
 		executeCommandClient,
-		executeQueryDef.client(wrappedExecuteQuery),
+		executeQueryDef.client(),
 		executeStatementClient,
 		explainQueryClient,
-		planQueryDef.client(wrappedPlanQuery)
+		planQueryDef.client()
 	);
 
 	const toolExecutors: Record<string, (args: unknown, ctx?: unknown) => Promise<unknown>> = {
