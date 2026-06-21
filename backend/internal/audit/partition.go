@@ -19,6 +19,10 @@ import (
 // Indexes and the principal_hash FK are defined on the top-level partitioned
 // table, so Postgres applies them automatically to every monthly partition
 // created here — nothing extra to do per partition.
+//
+// Multi-node: every backend runs maintenance, so the DDL is serialized behind a
+// cluster-wide Postgres advisory lock — exactly one node mutates partitions at a
+// time (concurrent CREATE/DROP would otherwise race even with IF NOT EXISTS).
 
 const (
 	// partitionsAhead is how many future months to pre-create (plus the current
@@ -32,6 +36,10 @@ const (
 	// defaultRetention is how long a domain's partitions are kept before being
 	// dropped. Override per domain via retentionByDomain.
 	defaultRetention = 365 * 24 * time.Hour
+
+	// partitionAdvisoryLockKey scopes the cluster-wide maintenance lock. Value
+	// is arbitrary but must be stable and unique to this job ("audit_pa").
+	partitionAdvisoryLockKey int64 = 0x61756469745f7061
 )
 
 // allDomains is the fixed set of LIST partitions (matches the migration).
@@ -51,14 +59,62 @@ func retentionFor(domain string) time.Duration {
 	return defaultRetention
 }
 
-// EnsurePartitions creates the current + upcoming monthly partitions for every
-// domain and drops any past their retention window. It is idempotent (safe to
-// call at startup and on a schedule) and best-effort: per-domain failures are
-// collected and returned but don't abort the rest.
-//
-// Call this synchronously before the first event is written so partitions exist
-// up front and rows don't fall into DEFAULT.
+// sqlExecQuerier is satisfied by *sql.DB, *sql.Conn, and *sql.Tx, letting the
+// helpers run on the lock-pinned connection.
+type sqlExecQuerier interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// EnsurePartitions runs partition maintenance, waiting for the cluster-wide
+// maintenance lock so that on return the current + upcoming partitions are
+// guaranteed to exist. Call synchronously at startup, before the first event is
+// written, so rows don't fall into DEFAULT.
 func EnsurePartitions(ctx context.Context, db *sql.DB) error {
+	return withMaintenanceLock(ctx, db, true)
+}
+
+// maintainPartitions runs the same maintenance but skips if another node holds
+// the lock (best-effort). Use for periodic background runs so just one node does
+// the DDL per cycle.
+func maintainPartitions(ctx context.Context, db *sql.DB) error {
+	return withMaintenanceLock(ctx, db, false)
+}
+
+func withMaintenanceLock(ctx context.Context, db *sql.DB, wait bool) error {
+	// Advisory locks are session-scoped, so pin one connection for the whole
+	// critical section and release explicitly before returning it to the pool
+	// (Close alone would not release a session-level lock).
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	if wait {
+		if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, partitionAdvisoryLockKey); err != nil {
+			return err
+		}
+	} else {
+		var locked bool
+		if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, partitionAdvisoryLockKey).Scan(&locked); err != nil {
+			return err
+		}
+		if !locked {
+			return nil // another node is handling maintenance this cycle
+		}
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, partitionAdvisoryLockKey)
+	}()
+
+	return runMaintenance(ctx, conn)
+}
+
+// runMaintenance creates the current + upcoming monthly partitions for every
+// domain and drops any past their retention window. Best-effort: per-domain
+// failures are collected and returned but don't abort the rest.
+func runMaintenance(ctx context.Context, db sqlExecQuerier) error {
 	now := time.Now().UTC()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
@@ -84,7 +140,7 @@ func monthlyPartitionName(domain string, monthStart time.Time) string {
 
 func parentName(domain string) string { return "event_" + domain }
 
-func createMonthlyPartition(ctx context.Context, db *sql.DB, domain string, monthStart time.Time) error {
+func createMonthlyPartition(ctx context.Context, db sqlExecQuerier, domain string, monthStart time.Time) error {
 	monthEnd := monthStart.AddDate(0, 1, 0)
 	// Identifiers are built from a fixed domain set + formatted dates, so there
 	// is no untrusted input in this statement.
@@ -97,7 +153,7 @@ func createMonthlyPartition(ctx context.Context, db *sql.DB, domain string, mont
 	return err
 }
 
-func dropExpiredPartitions(ctx context.Context, db *sql.DB, domain string, retention time.Duration, now time.Time) error {
+func dropExpiredPartitions(ctx context.Context, db sqlExecQuerier, domain string, retention time.Duration, now time.Time) error {
 	cutoff := now.Add(-retention)
 	names, err := listMonthlyPartitions(ctx, db, parentName(domain))
 	if err != nil {
@@ -122,7 +178,7 @@ func dropExpiredPartitions(ctx context.Context, db *sql.DB, domain string, reten
 }
 
 // listMonthlyPartitions returns the child partition relnames of a domain parent.
-func listMonthlyPartitions(ctx context.Context, db *sql.DB, parent string) ([]string, error) {
+func listMonthlyPartitions(ctx context.Context, db sqlExecQuerier, parent string) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT c.relname
 		FROM pg_inherits i

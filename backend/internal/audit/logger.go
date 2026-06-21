@@ -232,7 +232,7 @@ func (l *Logger) partitionLoop() {
 			return
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			if err := EnsurePartitions(ctx, l.db); err != nil {
+			if err := maintainPartitions(ctx, l.db); err != nil {
 				log.Printf("audit: partition maintenance: %v", err)
 			}
 			cancel()
