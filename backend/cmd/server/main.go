@@ -85,17 +85,15 @@ func main() {
 
 	startPprofServer()
 
-	// Unified audit/activity log. The async writer + outbox drainer run until
-	// Stop during graceful shutdown (after the HTTP server has drained).
-	// Partition lifecycle is handled in-database by pg_partman + pg_cron.
+	// Async writer + outbox drainer run until Stop on shutdown. Partitions are
+	// managed in-DB by pg_partman + pg_cron.
 	auditLogger := audit.New(db.GetDB(), audit.Options{})
 	auditLogger.Start()
 	audit.SetDefault(auditLogger)
 
-	// Self-provision the pg_cron maintenance job on boot when given access to the
-	// cron database (AUDIT_CRON_DSN). pg_cron's scheduler lives in the cluster's
-	// cron DB, not the app DB, so this can't be a migration. No-op if unset —
-	// then the job is provisioned out of band (see the on-prem runbook).
+	// pg_cron's scheduler lives in the cluster's cron DB, not the app DB, so the
+	// maintenance job can't be a migration. No-op if AUDIT_CRON_DSN is unset —
+	// then it's provisioned out of band (see the on-prem runbook).
 	if cronDSN := os.Getenv("AUDIT_CRON_DSN"); cronDSN != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		if err := audit.EnsureMaintenanceSchedule(ctx, db.GetDB(), cronDSN, os.Getenv("AUDIT_CRON_SCHEDULE")); err != nil {
@@ -104,9 +102,8 @@ func main() {
 		cancel()
 	}
 
-	// Preflight: warn loudly if partition maintenance can't actually run, so a
-	// misconfigured self-hosted database surfaces immediately instead of silently
-	// stopping partition creation/retention months later.
+	// Warn loudly if partition maintenance can't run, so a misconfigured DB
+	// surfaces now instead of silently stopping retention months later.
 	{
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := audit.Preflight(ctx, db.GetDB()); err != nil {
@@ -202,8 +199,7 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	// Drain buffered audit events after the HTTP server has stopped accepting
-	// requests, so no Log call races the channel close.
+	// Drain after the server stops accepting requests, so no Log races the close.
 	drainCtx, drainCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer drainCancel()
 	if err := auditLogger.Stop(drainCtx); err != nil {

@@ -10,12 +10,8 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// RequestPrincipal builds the audit principal for a given workspace: identity
-// (user or api-key, typed), display name, roles with names, and the permission
-// entries in that workspace — all from the request context, so there is no extra
-// DB cost. The workspace is explicit because not every route has a single member
-// workspace (e.g. sync spans workspaces). The single place principals are
-// assembled for the audit log.
+// RequestPrincipal assembles the audit principal from the request context (no
+// extra DB cost). The workspace is explicit because sync spans workspaces.
 func RequestPrincipal(r *http.Request, workspaceID string) audit.Principal {
 	p := middlewares.GetPrincipal(r)
 	wc, _ := p.Workspace(workspaceID) // roles the caller holds in this workspace
@@ -42,7 +38,6 @@ func RequestPrincipal(r *http.Request, workspaceID string) audit.Principal {
 	}
 }
 
-// workspaceRoleIDs is the ids of the roles the caller holds in workspaceID.
 func workspaceRoleIDs(r *http.Request, workspaceID string) []string {
 	wc, _ := middlewares.GetPrincipal(r).Workspace(workspaceID)
 	ids := make([]string, len(wc.Roles))

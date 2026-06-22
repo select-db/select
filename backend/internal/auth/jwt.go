@@ -84,28 +84,22 @@ func (rsaSignerMethod) Verify(signingString string, sig []byte, key any) error {
 
 var jwtSigningMethod = rsaSignerMethod{}
 
-// RoleRef pairs a role's id with its human-readable name. Cached in the token
-// at issuance so the audit log and UI can show names without a per-request DB
-// lookup.
+// Name is cached at issuance so audit/UI need no per-request role lookup.
 type RoleRef struct {
 	ID   string `json:"id"`
 	Name string `json:"name,omitempty"`
 }
 
-// WorkspaceClaim is the user's standing in one workspace: whether they own it
-// and the roles they hold there. Roles are workspace-scoped in the data model,
-// so the token groups them by workspace rather than as flat lists.
+// Roles are workspace-scoped, so the token groups them per workspace.
 type WorkspaceClaim struct {
 	ID      string    `json:"id"`
 	IsOwner bool      `json:"is_owner,omitempty"`
 	Roles   []RoleRef `json:"roles,omitempty"`
 }
 
-// CustomClaims defines JWT claims for access tokens. Identity (user + per-
-// workspace roles/ownership) is cached at issuance to avoid DB lookups on every
-// request; when role assignments change the refresh token is revoked so the next
-// re-auth produces a fresh token. (Workspace membership for tenant isolation is
-// still re-derived from the DB per request, not trusted from the token.)
+// Roles/ownership are cached at issuance (a role change revokes the refresh
+// token, forcing a fresh one). Membership itself is re-derived from the DB per
+// request, not trusted from the token.
 type CustomClaims struct {
 	UserID     string           `json:"sub"`
 	Name       string           `json:"name,omitempty"`
@@ -113,9 +107,7 @@ type CustomClaims struct {
 	jwt.RegisteredClaims
 }
 
-// CreateJWT generates a signed access token for a user, embedding the user's
-// per-workspace roles + ownership so the auth middleware needs no DB call for
-// them on each request.
+// CreateJWT issues a signed access token embedding per-workspace roles/ownership.
 func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error) {
 	signer, err := getSigner()
 	if err != nil {
@@ -125,7 +117,7 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 	displayName := ""
 	var workspaces []WorkspaceClaim
 	if db.Queries != nil {
-		// Membership, ownership, and roles (grouped per workspace below).
+		// Membership, ownership, roles — grouped per workspace below.
 		var workspaceIDs []string
 		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
 			for _, u := range ids {

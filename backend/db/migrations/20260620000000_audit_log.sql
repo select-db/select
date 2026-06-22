@@ -1,28 +1,24 @@
 -- +goose Up
 -- +goose StatementBegin
--- Dedicated schema so the audit tables have their own namespace and can later
--- carry a distinct privilege boundary (e.g. app role INSERT-only on audit.event
--- to enforce an immutable trail; reads restricted to an auditor role). Grants
--- are a follow-up — note audit.outbox needs DELETE for the drainer, so any
--- append-only policy applies to audit.event, not the whole schema.
+-- Dedicated schema so audit tables can later carry a distinct privilege boundary
+-- (e.g. INSERT-only on audit.event for an immutable trail). Grants are a
+-- follow-up; audit.outbox needs DELETE for the drainer, so any append-only
+-- policy applies to audit.event, not the whole schema.
 CREATE SCHEMA IF NOT EXISTS audit;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- pg_partman manages the monthly RANGE partitions and retention (create_parent
--- calls + part_config below). It must be available on the instance (OVH lists it
--- under supported extensions). The app contains NO partition code; maintenance
--- is run by pg_cron in the cluster's default database — see the provisioning
--- note at the bottom of this file.
+-- pg_partman manages the monthly partitions and retention; the app has no
+-- partition code. Maintenance runs via pg_cron in the cluster's default
+-- database — see the provisioning note at the bottom.
 CREATE SCHEMA IF NOT EXISTS partman;
 CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Content-addressed snapshot of a principal's identity + authz state at event
--- time. Deduped by hash so a principal that performs thousands of actions with
--- an unchanged permission set is stored once. Keeps the audit trail truthful
--- even after roles/permissions/users later change.
+-- Snapshot of a principal's identity + authz state at event time, content-
+-- addressed by hash so an unchanged permission set is stored once. Keeps the
+-- trail truthful after roles/permissions/users later change.
 CREATE TABLE IF NOT EXISTS audit.principal_snapshot (
     snapshot_hash BYTEA       PRIMARY KEY,        -- sha256 of canonical snapshot JSON
     workspace_id  UUID        NOT NULL REFERENCES app.workspace(id) ON DELETE CASCADE,
@@ -33,11 +29,9 @@ CREATE INDEX IF NOT EXISTS idx_principal_snapshot_ws ON audit.principal_snapshot
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Unified, append-only activity log. domain is the coarse subsystem bucket and
--- the first partition key, so a high-volume query stream never shares indexes
--- or retention with the security-critical iam/auth streams. action is the
--- specific event within a domain (full identity = domain.action). Each domain is
--- sub-partitioned by month, managed by pg_partman.
+-- Unified, append-only activity log. domain is the first partition key so the
+-- high-volume query stream never shares indexes or retention with the
+-- security-critical iam/auth streams (full event identity = domain.action).
 CREATE TABLE IF NOT EXISTS audit.event (
     id                 UUID        NOT NULL DEFAULT gen_random_uuid(),
     workspace_id       UUID        NOT NULL,      -- tenancy boundary; leads every index
@@ -59,8 +53,8 @@ CREATE TABLE IF NOT EXISTS audit.event (
     PRIMARY KEY (id, domain, occurred_at)         -- partition key must be in the PK
 ) PARTITION BY LIST (domain);
 
--- Fixed per-domain LIST partitions, each RANGE-partitioned by month. pg_partman
--- fills in the monthly child partitions + a default for each (below).
+-- Per-domain LIST partitions, each RANGE-partitioned by month (pg_partman fills
+-- the monthly children below).
 CREATE TABLE IF NOT EXISTS audit.event_query
     PARTITION OF audit.event FOR VALUES IN ('query') PARTITION BY RANGE (occurred_at);
 CREATE TABLE IF NOT EXISTS audit.event_auth
@@ -72,9 +66,8 @@ CREATE TABLE IF NOT EXISTS audit.event_datasource
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Indexes on the top-level partitioned table propagate automatically to every
--- monthly partition pg_partman creates. Every read is workspace-scoped, so every
--- index leads with workspace_id.
+-- Indexes on the parent propagate to every monthly partition pg_partman creates.
+-- Every read is workspace-scoped, so every index leads with workspace_id.
 CREATE INDEX IF NOT EXISTS idx_event_ws_time
     ON audit.event (workspace_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_event_principal
@@ -86,8 +79,8 @@ CREATE INDEX IF NOT EXISTS idx_event_errors
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Hand each domain's monthly RANGE level to pg_partman: it pre-creates upcoming
--- partitions (premake) + a default, and drops expired ones per part_config.
+-- Register each domain's monthly RANGE level with pg_partman (premakes upcoming
+-- partitions + a default, drops expired ones per part_config).
 SELECT partman.create_parent(p_parent_table := 'audit.event_query',      p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
 SELECT partman.create_parent(p_parent_table := 'audit.event_auth',       p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
 SELECT partman.create_parent(p_parent_table := 'audit.event_iam',        p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
@@ -103,9 +96,9 @@ UPDATE partman.part_config
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Transactional outbox for security-critical (iam/datasource) events: the event
--- is enqueued durably and a background worker moves it into audit.event. Lets
--- the write stay off the request hot path while surviving a crash.
+-- Durable outbox for security-critical (iam/datasource) events: enqueued in the
+-- request tx, moved into audit.event by a background worker — off the hot path
+-- yet crash-safe.
 CREATE TABLE IF NOT EXISTS audit.outbox (
     id          BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_json  JSONB       NOT NULL,
@@ -123,8 +116,7 @@ CREATE TABLE IF NOT EXISTS audit.outbox (
 --     '<app_database_name>'   -- OVH default cluster DB is 'defaultdb'
 --   );
 --
--- Until that job exists, premake gives ~4 months of runway before rows would
--- fall into a default partition.
+-- Until it exists, premake gives ~4 months before rows hit a default partition.
 
 -- +goose Down
 -- +goose StatementBegin

@@ -7,10 +7,8 @@ import (
 	"unicode"
 )
 
-// Diff builds a before/after payload for a mutation, generically — any struct
-// (e.g. a sqlc row or upsert-params) is turned into a snake_case map via JSON,
-// so a new domain doesn't need hand-written per-column code. before may be nil
-// (or a nil pointer) for a creation, in which case only "after" is included.
+// Diff builds a before/after payload from any structs (sqlc rows/params) via
+// JSON, so a new domain needs no per-column code. before nil → only "after".
 func Diff(before, after any) map[string]any {
 	out := map[string]any{"after": toMap(after)}
 	if !isNil(before) {
@@ -27,9 +25,8 @@ func isNil(v any) bool {
 	return rv.Kind() == reflect.Ptr && rv.IsNil()
 }
 
-// toMap marshals a value to JSON and back into a map, with top-level keys
-// converted to snake_case. The db_types.JSONNull* wrappers marshal to their
-// value or null, so nullable columns come out clean (not {Value,Valid}).
+// toMap JSON-round-trips into a snake_case map. JSONNull* wrappers marshal to
+// value-or-null, so nullable columns come out clean (not {Value,Valid}).
 func toMap(v any) map[string]any {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -46,9 +43,8 @@ func toMap(v any) map[string]any {
 	return out
 }
 
-// toSnake converts a Go field name (PascalCase, e.g. DbInstanceID) to snake_case
-// (db_instance_id), inserting an underscore at lower→upper and acronym
-// boundaries.
+// toSnake: DbInstanceID -> db_instance_id (underscore at lower→upper and
+// acronym boundaries).
 func toSnake(s string) string {
 	rs := []rune(s)
 	out := make([]rune, 0, len(rs)+4)

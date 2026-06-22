@@ -8,19 +8,11 @@ import (
 	"github.com/lib/pq"
 )
 
-// Partition maintenance is handled in-database by pg_partman; pg_cron triggers
-// it. This file provides two boot-time helpers:
-//
-//   - Preflight: verify the machinery is actually in place (pg_partman present,
-//     our parents registered), so a misconfigured self-hosted database fails
-//     loudly instead of silently never running maintenance.
-//   - EnsureMaintenanceSchedule: self-provision the pg_cron job on boot (like
-//     running migrations), since cron.schedule_in_database lives only in the
-//     cluster's cron database and can't be created from an app-DB migration.
-//
-// These queries hit catalog/extension objects (pg_extension, partman.part_config,
-// pg_cron, current_database) that aren't in schema.sql, so they use raw SQL —
-// sqlc can't type them against the app schema.
+// Partitions are managed in-DB by pg_partman, triggered by pg_cron. These
+// boot-time helpers verify that setup (Preflight) and self-provision the cron
+// job (EnsureMaintenanceSchedule). Raw SQL throughout: they hit catalog/extension
+// objects (pg_extension, partman.part_config, pg_cron) not in schema.sql, so
+// sqlc can't type them.
 
 const (
 	maintenanceJobName  = "audit-partman-maintenance"
@@ -36,10 +28,9 @@ var auditParents = []string{
 	"audit.event_datasource",
 }
 
-// Preflight checks, against the app database, that partition maintenance can
-// actually work: pg_partman installed and all audit parents registered in
-// part_config. Returns a descriptive error listing what's wrong; the caller
-// decides whether to warn or refuse to start.
+// Preflight verifies maintenance can run: pg_partman installed and all audit
+// parents registered. Surfaces a misconfigured self-hosted DB loudly instead of
+// silently never running maintenance.
 func Preflight(ctx context.Context, db *sql.DB) error {
 	var hasPartman bool
 	if err := db.QueryRowContext(ctx,
@@ -61,17 +52,11 @@ func Preflight(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// EnsureMaintenanceSchedule idempotently registers the pg_cron job that runs
-// pg_partman maintenance. It is a no-op (returns nil) when cronDSN is empty.
-//
-// pg_cron's scheduling functions exist only in the cluster's cron database, so
-// this opens a dedicated connection to cronDSN and schedules the job to run in
-// the app's own database (resolved via current_database on appDB). Registering
-// by a fixed job name makes it an upsert, so it is safe to run on every boot.
-//
-// Requires the cronDSN role to have pg_cron privileges. If it doesn't (common on
-// locked-down managed databases), leave cronDSN empty and provision the job out
-// of band — see the on-prem runbook.
+// EnsureMaintenanceSchedule registers the pg_cron maintenance job; no-op when
+// cronDSN is empty. pg_cron's functions live only in the cluster's cron DB, so
+// it can't be a migration: this connects to cronDSN and schedules the job to run
+// in the app DB. Upserts by job name (safe on every boot). Needs the cronDSN role
+// to have pg_cron privileges; otherwise leave cronDSN empty and provision by hand.
 func EnsureMaintenanceSchedule(ctx context.Context, appDB *sql.DB, cronDSN, schedule string) error {
 	if cronDSN == "" {
 		return nil

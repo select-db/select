@@ -15,7 +15,6 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
-// Options tunes the writer. Zero values fall back to the defaults below.
 type Options struct {
 	BufferSize    int           // async channel capacity
 	BatchSize     int           // rows per INSERT batch
@@ -32,8 +31,8 @@ const (
 	outboxBatch          = 100
 )
 
-// Logger owns the async write pipeline. Construct with New, then Start; call
-// Stop after the HTTP server has drained so no Log calls race the channel close.
+// Logger owns the async write pipeline. Call Stop only after the HTTP server has
+// drained, so no Log call races the channel close.
 type Logger struct {
 	db            *sql.DB
 	q             *generated.Queries
@@ -71,8 +70,7 @@ func New(db *sql.DB, opts Options) *Logger {
 	}
 }
 
-// Start launches the async writer and the outbox drainer. (Partition lifecycle
-// is handled in-database by pg_partman + pg_cron, not by the app.)
+// Start launches the async writer and the outbox drainer.
 func (l *Logger) Start() {
 	if l == nil {
 		return
@@ -82,9 +80,8 @@ func (l *Logger) Start() {
 	go l.outboxLoop()
 }
 
-// Log enqueues an event on the best-effort async lane. It never blocks the
-// caller: if the buffer is full the event is dropped (and logged), because a
-// user's query must never wait on audit logging.
+// Log never blocks the caller: a full buffer drops the event (a query must not
+// wait on audit logging).
 func (l *Logger) Log(e *Event) {
 	if l == nil || e == nil {
 		return
@@ -99,14 +96,11 @@ func (l *Logger) Log(e *Event) {
 	}
 }
 
-// LogOutbox durably enqueues an event via the transactional outbox. Use for
-// security-critical events that must survive a crash.
+// LogOutbox durably enqueues an event for crash-safety.
 //
-// NOTE: ideally the outbox INSERT shares the caller's transaction with the
-// audited mutation (true atomicity). Until the syncer threads a *sql.Tx through
-// patch.Apply, this performs a standalone INSERT immediately after the mutation
-// — durable and drained, but not yet atomic with it. Swap to a tx-aware call
-// once that seam exists.
+// TODO: not yet atomic with the audited mutation — it's a standalone INSERT
+// after the mutation, not in its transaction (the syncer doesn't thread a tx
+// through patch.Apply yet).
 func (l *Logger) LogOutbox(ctx context.Context, e *Event) error {
 	if l == nil || e == nil {
 		return nil
@@ -121,8 +115,8 @@ func (l *Logger) LogOutbox(ctx context.Context, e *Event) error {
 	return l.q.InsertAuditOutbox(ctx, jsonbRaw(body))
 }
 
-// Stop closes the intake, flushes the remaining batch, and does a final outbox
-// drain. Must be called after the HTTP server has stopped accepting requests.
+// Stop flushes the remaining batch and drains the outbox. Call only after the
+// HTTP server has stopped accepting requests.
 func (l *Logger) Stop(ctx context.Context) error {
 	if l == nil {
 		return nil
@@ -297,15 +291,12 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 	return len(ids), nil
 }
 
-// applyStatementTimeout bounds server-side execution of every statement in this
-// transaction. It's a backstop for lib/pq not enforcing the Go context deadline
-// at the socket level: even if a query blocks on the server (lock wait, overload),
-// Postgres aborts it after the timeout. SET LOCAL is scoped to the current
-// transaction, so it never leaks to the shared connection pool. (Note: this does
-// not bound a dead-connection network hang — only TCP keepalive / pgx do.)
+// applyStatementTimeout backstops lib/pq not honoring the Go context deadline at
+// the socket level: Postgres aborts a server-blocked statement (lock wait,
+// overload). SET LOCAL is tx-scoped, so it doesn't leak to the pool. Does not
+// cover a dead-connection network hang (only TCP keepalive / pgx do).
 func applyStatementTimeout(ctx context.Context, tx *sql.Tx) error {
-	// statement_timeout is in milliseconds; SET does not accept bind parameters,
-	// so the (internal, integer) value is formatted directly.
+	// ms; SET takes no bind params, so format the (internal int) value directly.
 	_, err := tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL statement_timeout = %d", writeTimeout.Milliseconds()))
 	return err
 }
@@ -356,8 +347,7 @@ func insertEvent(ctx context.Context, q *generated.Queries, e *Event) error {
 	})
 }
 
-// Converters to the generated params. schema.sql leaves audit columns nullable,
-// so sqlc generates JSONNull* / nullable types; these map empty/zero to NULL.
+// Converters to the generated params (sqlc types are nullable); empty/zero → NULL.
 
 func nullStr(s string) db_types.JSONNullString {
 	if s == "" {

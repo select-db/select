@@ -39,8 +39,8 @@ func MustGetUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return userID, true
 }
 
-// GetWorkspaces returns the caller's per-workspace standing (membership +
-// ownership + roles) — the single structure every workspace getter derives from.
+// GetWorkspaces returns the caller's per-workspace standing — the source every
+// other workspace getter derives from.
 func GetWorkspaces(r *http.Request) ([]auth.WorkspaceClaim, bool) {
 	ws, ok := r.Context().Value(workspacesKey).([]auth.WorkspaceClaim)
 	return ws, ok
@@ -84,9 +84,8 @@ func GetOwnedWorkspaceIDs(r *http.Request) []string {
 	return owned
 }
 
-// Principal is the calling principal's request-known identity: who they are and
-// their per-workspace standing, resolved from the JWT or API-key auth.
-// Permissions live in the authz layer; read this with GetPrincipal.
+// Principal is the caller's request-known identity and per-workspace standing.
+// Permissions live in the authz layer.
 type Principal struct {
 	ID         string
 	Name       string
@@ -94,7 +93,6 @@ type Principal struct {
 	Workspaces []auth.WorkspaceClaim
 }
 
-// Workspace returns the caller's standing in workspaceID (roles, ownership).
 func (p Principal) Workspace(workspaceID string) (auth.WorkspaceClaim, bool) {
 	for _, w := range p.Workspaces {
 		if w.ID == workspaceID {
@@ -104,8 +102,7 @@ func (p Principal) Workspace(workspaceID string) (auth.WorkspaceClaim, bool) {
 	return auth.WorkspaceClaim{}, false
 }
 
-// GetPrincipal returns the caller's identity in one read. Callers take the
-// fields they care about instead of calling several small getters.
+// GetPrincipal returns the caller's identity in one read.
 func GetPrincipal(r *http.Request) Principal {
 	ctx := r.Context()
 	id, _ := ctx.Value(userIDKey).(string)
@@ -128,10 +125,9 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// buildAuthContext attaches the userID, name, and the per-workspace standing to
-// the context. Membership is re-derived from the DB for tenant isolation (not
-// trusted from the token); each member workspace's roles/ownership are attached
-// from the token's claim. Permissions are resolved on demand by the authz layer.
+// buildAuthContext attaches identity and per-workspace standing. Membership is
+// re-derived from the DB for tenant isolation (not trusted from the token);
+// roles/ownership for each member workspace come from the token claim.
 func buildAuthContext(ctx context.Context, userID, name string, claimWorkspaces []auth.WorkspaceClaim) (context.Context, error) {
 	ctx = context.WithValue(ctx, userIDKey, userID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
@@ -208,10 +204,9 @@ func buildAPIKeyContext(ctx context.Context, token string) (context.Context, err
 	return ctx, nil
 }
 
-// ContextWithAPIKeyPrincipal sets identity and the key's single workspace (with
-// its roles) as both the membership set and the member workspace — API-key
-// routes skip Membership(). Keys are never workspace owners. Permissions are
-// resolved on demand by the authz package.
+// ContextWithAPIKeyPrincipal sets the key's single workspace as both the
+// membership set and the member workspace, so API-key routes skip Membership().
+// Keys are never owners.
 func ContextWithAPIKeyPrincipal(ctx context.Context, principalID, name, workspaceID string, roles []auth.RoleRef) context.Context {
 	ctx = context.WithValue(ctx, userIDKey, principalID)
 	ctx = context.WithValue(ctx, principalNameKey, name)

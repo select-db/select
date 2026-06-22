@@ -21,8 +21,7 @@ func Handler() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// Flatten role ids across the caller's workspaces for authorizeCommit
-		// (which checks per-commit against the workspace set, as before).
+		// Flatten role ids across workspaces for authorizeCommit's per-commit checks.
 		var roleIDs []string
 		for _, ws := range middlewares.GetPrincipal(r).Workspaces {
 			for _, role := range ws.Roles {
@@ -42,10 +41,9 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
-		// Stash a principal resolver so patch.Apply can attach the actor to events
-		// it emits, without threading it through every entity signature. The
-		// workspace is supplied per commit (a sync can span workspaces); sync has
-		// no single member workspace, so we never call MemberWorkspaceID here.
+		// Stash a principal resolver so patch.Apply can attach the actor without
+		// threading it through every entity signature. Workspace is per-commit: a
+		// sync spans workspaces, so there's no single member workspace here.
 		ctx := audit.ContextWithPrincipalResolver(r.Context(), func(workspaceID string) audit.Principal {
 			return authz.RequestPrincipal(r, workspaceID)
 		})

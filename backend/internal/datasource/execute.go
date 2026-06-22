@@ -82,9 +82,7 @@ func ExecuteHandler() http.HandlerFunc {
 			inner.SetDownstreamFlusher(flusher.Flush)
 		}
 
-		// Wrap the sink so the query's outcome (rows, latency, error) is
-		// captured for the audit log. The wrapper promotes inner's methods and
-		// only intercepts the terminal ones.
+		// Wrap the sink to capture the query's outcome for the audit log.
 		sink := newLoggingSink(inner, buildQueryRecord(r, req, ds.DBType))
 
 		inst := engine.DBInstance{ID: req.ID, DBType: ds.DBType}

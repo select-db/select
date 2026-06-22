@@ -12,10 +12,9 @@ import (
 	"backend/internal/syncer/types"
 )
 
-// AuditConfig, when set on a Handler, makes Apply emit an audit event after a
-// successful upsert. The before/after diff is derived generically from the
-// fetched row and the upsert params, and the principal comes from the context
-// (set by the sync handler), so an entity only declares the event spec + target.
+// AuditConfig makes Apply emit an audit event after a successful upsert: the
+// before/after diff is derived generically and the principal comes from the
+// context, so an entity just declares the spec + target id.
 type AuditConfig struct {
 	Spec     audit.Spec
 	TargetID string

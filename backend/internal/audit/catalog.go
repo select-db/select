@@ -5,37 +5,27 @@ import (
 	"log"
 )
 
-// This file is the single source of truth for what the audit log records: every
-// event is declared once in Catalog, and all emission goes through Emit. To see
-// "what is logged and when", read Catalog. Emit sites never build envelopes or
-// choose lanes themselves — they name a Spec and hand over the data.
+// Catalog is the single source of truth for what's logged; all emission goes
+// through Emit, which takes a Spec + Record. To see what's logged, read Catalog.
 
-// Lane selects the delivery guarantee for an event.
 type Lane int
 
 const (
-	// LaneAsync is best-effort, off the request hot path (high-volume query/auth).
-	LaneAsync Lane = iota
-	// LaneOutbox is durable via the transactional outbox (security-critical
-	// iam/datasource changes).
-	LaneOutbox
+	LaneAsync  Lane = iota // best-effort, off the hot path (query/auth)
+	LaneOutbox             // durable via the transactional outbox (iam/datasource)
 )
 
-// Spec is the fixed definition of an event type: its identity, delivery lane,
-// the kind of target it acts on, and a human description of when it fires.
 type Spec struct {
 	Domain     string
 	Action     string
 	Lane       Lane
 	TargetType string // "" when the event has no target
-	Doc        string // when it fires (human-readable; powers the generated map)
+	Doc        string // when it fires
 }
 
-// Type is the full event identity, domain.action.
 func (s Spec) Type() string { return s.Domain + "." + s.Action }
 
-// The catalog. Adding an event = adding a Spec here + an Emit call at the
-// relevant choke point (query sink, patch.Apply, or the auth middleware).
+// Adding an event = a Spec here + an Emit call at the relevant choke point.
 var (
 	QueryExecuted = Spec{
 		Domain: DomainQuery, Action: ActionExecuted, Lane: LaneAsync, TargetType: "datasource",
@@ -47,13 +37,12 @@ var (
 	}
 )
 
-// Catalog is the complete set of event types the system emits.
 var Catalog = []Spec{
 	QueryExecuted,
 	PermissionUpserted,
 }
 
-// registered indexes the catalog so Emit can flag an unregistered spec in dev.
+// registered lets Emit flag an unregistered spec in dev.
 var registered = func() map[string]bool {
 	m := make(map[string]bool, len(Catalog))
 	for _, s := range Catalog {
@@ -62,14 +51,13 @@ var registered = func() map[string]bool {
 	return m
 }()
 
-// Record is the per-event data an emit site provides. The envelope (domain,
-// action, target type, lane) comes from the Spec, not the caller.
+// Record is the per-event data a caller provides; the envelope comes from Spec.
 type Record struct {
 	WorkspaceID string
 	Principal   Principal
 	TargetID    string // bound to Spec.TargetType
 	TargetLabel string
-	Status      string // StatusSuccess | StatusError | StatusDenied
+	Status      string
 	Payload     map[string]any
 
 	// Query-only metrics; zero for other domains.
@@ -79,9 +67,8 @@ type Record struct {
 	ClientIP string
 }
 
-// Emit records an event: it builds the envelope from spec, attaches the record,
-// and dispatches to the lane the spec declares. This is the only emission entry
-// point — callers never touch Log/LogOutbox or the Event envelope directly.
+// Emit builds the envelope from spec and dispatches to its lane. The only
+// emission entry point — callers never touch Log/LogOutbox directly.
 func Emit(ctx context.Context, spec Spec, r Record) error {
 	if !registered[spec.Type()] {
 		log.Printf("audit: Emit called with unregistered spec %q — add it to Catalog", spec.Type())
