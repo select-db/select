@@ -112,9 +112,11 @@ func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[R
 		if !isNew {
 			before = existing
 		}
-		p := audit.PrincipalFromContext(ctx)
+		// The event's workspace is the resource's (from the commit); the principal
+		// is resolved for that same workspace.
+		p := audit.ResolvePrincipal(ctx, c.WorkspaceID)
 		if err := audit.Emit(ctx, h.Audit.Spec, audit.Record{
-			WorkspaceID: p.WorkspaceID,
+			WorkspaceID: c.WorkspaceID,
 			Principal:   p,
 			TargetID:    h.Audit.TargetID,
 			Status:      audit.StatusSuccess,

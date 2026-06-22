@@ -35,9 +35,13 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
-		// Stash the audit principal so patch.Apply can attach it to events it
-		// emits, without threading it through every entity signature.
-		ctx := audit.ContextWithPrincipal(r.Context(), authz.RequestPrincipal(r))
+		// Stash a principal resolver so patch.Apply can attach the actor to events
+		// it emits, without threading it through every entity signature. The
+		// workspace is supplied per commit (a sync can span workspaces); sync has
+		// no single member workspace, so we never call MemberWorkspaceID here.
+		ctx := audit.ContextWithPrincipalResolver(r.Context(), func(workspaceID string) audit.Principal {
+			return authz.RequestPrincipal(r, workspaceID)
+		})
 
 		resp, needsTokenRefresh, err := Sync(ctx, userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
 		if err != nil {

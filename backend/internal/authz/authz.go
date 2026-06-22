@@ -10,31 +10,32 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// RequestPrincipal builds the audit principal from the request: identity (user
-// or api-key, typed), display name, roles with names, and the permission
-// entries — all already resolved/cached in the request context, so there is no
-// extra DB cost. The single place principals are assembled for the audit log.
-func RequestPrincipal(r *http.Request) audit.Principal {
-	workspaceID := middlewares.MemberWorkspaceID(r)
+// RequestPrincipal builds the audit principal for a given workspace: identity
+// (user or api-key, typed), display name, roles with names, and the permission
+// entries in that workspace — all from the request context, so there is no extra
+// DB cost. The workspace is explicit because not every route has a single member
+// workspace (e.g. sync spans workspaces). The single place principals are
+// assembled for the audit log.
+func RequestPrincipal(r *http.Request, workspaceID string) audit.Principal {
+	c := middlewares.GetPrincipal(r)
 
 	ptype := audit.PrincipalUser
-	if middlewares.IsAPIKeyPrincipal(r) {
+	if c.IsAPIKey {
 		ptype = audit.PrincipalAPIKey
 	}
 
-	refs := middlewares.GetRoles(r)
-	roles := make([]audit.Role, len(refs))
-	for i, ref := range refs {
+	roles := make([]audit.Role, len(c.Roles))
+	for i, ref := range c.Roles {
 		roles[i] = audit.Role{ID: ref.ID, Name: ref.Name}
 	}
 
 	return audit.Principal{
 		Type:        ptype,
-		ID:          middlewares.GetUserID(r),
-		Name:        middlewares.GetPrincipalName(r),
+		ID:          c.ID,
+		Name:        c.Name,
 		WorkspaceID: workspaceID,
 		Roles:       roles,
-		Permissions: EntriesFromRequest(r),
+		Permissions: EntriesForWorkspace(c.RoleIDs, workspaceID),
 	}
 }
 

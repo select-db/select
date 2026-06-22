@@ -8,6 +8,7 @@ import (
 	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/authz"
+	"backend/internal/middlewares"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
@@ -65,7 +66,8 @@ func (s *loggingSink) emit() {
 // (Tier 0 encryption-at-rest). The envelope (domain, action, target type, lane)
 // comes from audit.QueryExecuted.
 func buildQueryRecord(r *http.Request, req executeRequest, dbType string) audit.Record {
-	p := authz.RequestPrincipal(r)
+	// Execute runs behind Membership(), so the member workspace is set.
+	p := authz.RequestPrincipal(r, middlewares.MemberWorkspaceID(r))
 	return audit.Record{
 		WorkspaceID: p.WorkspaceID,
 		Principal:   p,

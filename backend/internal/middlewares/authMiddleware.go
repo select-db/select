@@ -70,18 +70,30 @@ func GetRoleIDs(r *http.Request) []string {
 	return ids
 }
 
-// GetPrincipalName returns the caller's human-readable name (user display
-// name/email, or the API key's name). Empty if not resolved.
-func GetPrincipalName(r *http.Request) string {
-	name, _ := r.Context().Value(principalNameKey).(string)
-	return name
+// Principal is the calling principal's request-known identity: who they are and
+// the roles in effect, resolved from the JWT or API-key auth. It deliberately
+// excludes the workspace (not all routes have a single member workspace) and
+// permissions (those live in the authz layer). Read it with GetPrincipal.
+type Principal struct {
+	ID       string
+	Name     string
+	IsAPIKey bool
+	RoleIDs  []string
+	Roles    []auth.RoleRef
 }
 
-// GetRoles returns the caller's roles with names, cached at token issuance /
-// API-key auth. Use GetRoleIDs when only ids are needed.
-func GetRoles(r *http.Request) []auth.RoleRef {
+// GetPrincipal returns the caller's identity in one read. Callers take the
+// fields they care about instead of calling several small getters.
+func GetPrincipal(r *http.Request) Principal {
+	name, _ := r.Context().Value(principalNameKey).(string)
 	roles, _ := r.Context().Value(rolesKey).([]auth.RoleRef)
-	return roles
+	return Principal{
+		ID:       GetUserID(r),
+		Name:     name,
+		IsAPIKey: IsAPIKeyPrincipal(r),
+		RoleIDs:  GetRoleIDs(r),
+		Roles:    roles,
+	}
 }
 
 func GetOwnedWorkspaceIDs(r *http.Request) []string {
