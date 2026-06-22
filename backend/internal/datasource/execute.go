@@ -85,7 +85,7 @@ func ExecuteHandler() http.HandlerFunc {
 		// Wrap the sink so the query's outcome (rows, latency, error) is
 		// captured for the audit log. The wrapper promotes inner's methods and
 		// only intercepts the terminal ones.
-		sink := newLoggingSink(inner, buildQueryEvent(r, req, ds.DBType))
+		sink := newLoggingSink(inner, buildQueryRecord(r, req, ds.DBType))
 
 		inst := engine.DBInstance{ID: req.ID, DBType: ds.DBType}
 		engine.StreamLocal(ctx, conn, inst, req.SQL, engine.Options{

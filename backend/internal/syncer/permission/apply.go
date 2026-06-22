@@ -136,20 +136,17 @@ func emitPermissionAudit(
 		}
 	}
 
-	ev := &audit.Event{
+	if err := audit.Emit(ctx, audit.PermissionUpserted, audit.Record{
 		WorkspaceID: workspaceID,
-		Domain:      audit.DomainIAM,
-		Action:      audit.ActionPermissionUpserted,
 		Principal: audit.Principal{
 			Type:        audit.PrincipalUser,
 			ID:          userID,
 			WorkspaceID: workspaceID,
 		},
-		Target:  &audit.Target{Type: "permission", ID: id},
-		Status:  audit.StatusSuccess,
-		Payload: payload,
-	}
-	if err := audit.LogOutbox(ctx, ev); err != nil {
+		TargetID: id,
+		Status:   audit.StatusSuccess,
+		Payload:  payload,
+	}); err != nil {
 		log.Printf("audit: enqueue permission event: %v", err)
 	}
 }
