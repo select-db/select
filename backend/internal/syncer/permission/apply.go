@@ -3,7 +3,6 @@ package permission
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"backend/db"
@@ -51,11 +50,9 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("permission: role_id does not belong to workspace")
 	}
 
-	// Captured in Merge so the audit event can record the before/after diff.
-	var before *generated.AppPermission
-
 	return patch.Apply(ctx, c, patch.Handler[generated.AppPermission, generated.UpsertPermissionParams]{
 		TableName: "permission",
+		Audit:     &patch.AuditConfig{Spec: audit.PermissionUpserted, TargetID: id},
 		Fetch: func(ctx context.Context) (generated.AppPermission, error) {
 			return db.Queries.GetPermissionByID(ctx, generated.GetPermissionByIDParams{
 				ID:          idUUID,
@@ -76,10 +73,6 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return types.ToRestoredPayload(appPermissionToTypesRow(row))
 		},
 		Merge: func(existing generated.AppPermission, isNew bool, payload map[string]any) (generated.UpsertPermissionParams, error) {
-			if !isNew {
-				b := existing
-				before = &b
-			}
 			return generated.UpsertPermissionParams{
 				ID:           idUUID,
 				RoleID:       roleUUID,
@@ -97,56 +90,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 				return err
 			}
 			authz.Invalidate(roleID)
-			emitPermissionAudit(ctx, userID, workspaceID, id, roleID, before, params)
 			return nil
 		},
 	})
-}
-
-// emitPermissionAudit records an IAM permission change on the durable outbox
-// lane. Best-effort: a logging failure must not fail the sync. The actor
-// snapshot is minimal here (kind/id/workspace) — enriching it with the actor's
-// own roles/permissions is a follow-up, as is making the outbox INSERT share
-// the upsert's transaction (see audit.Logger.LogOutbox).
-func emitPermissionAudit(
-	ctx context.Context,
-	userID, workspaceID, id, roleID string,
-	before *generated.AppPermission,
-	after generated.UpsertPermissionParams,
-) {
-	payload := map[string]any{
-		"role_id": roleID,
-		"after": map[string]any{
-			"db_instance_id": after.DbInstanceID.Ptr(),
-			"schema_name":    after.SchemaName.Ptr(),
-			"table_name":     after.TableName.Ptr(),
-			"column_name":    after.ColumnName.Ptr(),
-			"action":         after.Action.Ptr(),
-			"effect":         after.Effect.Ptr(),
-		},
-	}
-	if before != nil {
-		payload["before"] = map[string]any{
-			"db_instance_id": before.DbInstanceID.Ptr(),
-			"schema_name":    before.SchemaName.Ptr(),
-			"table_name":     before.TableName.Ptr(),
-			"column_name":    before.ColumnName.Ptr(),
-			"action":         before.Action.Ptr(),
-			"effect":         before.Effect.Ptr(),
-		}
-	}
-
-	if err := audit.Emit(ctx, audit.PermissionUpserted, audit.Record{
-		WorkspaceID: workspaceID,
-		Principal: audit.Principal{
-			Type:        audit.PrincipalUser,
-			ID:          userID,
-			WorkspaceID: workspaceID,
-		},
-		TargetID: id,
-		Status:   audit.StatusSuccess,
-		Payload:  payload,
-	}); err != nil {
-		log.Printf("audit: enqueue permission event: %v", err)
-	}
 }

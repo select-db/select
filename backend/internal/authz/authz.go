@@ -4,10 +4,39 @@ import (
 	"net/http"
 
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/middlewares"
 
 	core "github.com/selectDb/dialect/core"
 )
+
+// RequestPrincipal builds the audit principal from the request: identity (user
+// or api-key, typed), display name, roles with names, and the permission
+// entries — all already resolved/cached in the request context, so there is no
+// extra DB cost. The single place principals are assembled for the audit log.
+func RequestPrincipal(r *http.Request) audit.Principal {
+	workspaceID := middlewares.MemberWorkspaceID(r)
+
+	ptype := audit.PrincipalUser
+	if middlewares.IsAPIKeyPrincipal(r) {
+		ptype = audit.PrincipalAPIKey
+	}
+
+	refs := middlewares.GetRoles(r)
+	roles := make([]audit.Role, len(refs))
+	for i, ref := range refs {
+		roles[i] = audit.Role{ID: ref.ID, Name: ref.Name}
+	}
+
+	return audit.Principal{
+		Type:        ptype,
+		ID:          middlewares.GetUserID(r),
+		Name:        middlewares.GetPrincipalName(r),
+		WorkspaceID: workspaceID,
+		Roles:       roles,
+		Permissions: EntriesFromRequest(r),
+	}
+}
 
 func InSet(ids []string, id string) bool {
 	for _, v := range ids {

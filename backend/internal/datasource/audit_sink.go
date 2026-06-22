@@ -8,7 +8,6 @@ import (
 	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/authz"
-	"backend/internal/middlewares"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
@@ -60,43 +59,21 @@ func (s *loggingSink) emit() {
 	s.once.Do(func() { _ = audit.Emit(context.Background(), audit.QueryExecuted, s.rec) })
 }
 
-// buildQueryRecord assembles the per-event data for a single execute request. It
-// snapshots the principal's identity + authz state as-of-now (cheap: name, roles,
-// and permissions are already resolved/cached in the request) and records the SQL
-// in the plaintext payload (Tier 0 encryption-at-rest). The envelope (domain,
-// action, target type, lane) comes from audit.QueryExecuted.
+// buildQueryRecord assembles the per-event data for a single execute request.
+// The principal (identity + roles + permissions, as-of-now) is built by the
+// shared authz.RequestPrincipal; the SQL is recorded in the plaintext payload
+// (Tier 0 encryption-at-rest). The envelope (domain, action, target type, lane)
+// comes from audit.QueryExecuted.
 func buildQueryRecord(r *http.Request, req executeRequest, dbType string) audit.Record {
-	workspaceID := middlewares.MemberWorkspaceID(r)
-
-	principalType := audit.PrincipalUser
-	if middlewares.IsAPIKeyPrincipal(r) {
-		principalType = audit.PrincipalAPIKey
-	}
-
+	p := authz.RequestPrincipal(r)
 	return audit.Record{
-		WorkspaceID: workspaceID,
-		Principal: audit.Principal{
-			Type:        principalType,
-			ID:          middlewares.GetUserID(r),
-			Name:        middlewares.GetPrincipalName(r),
-			WorkspaceID: workspaceID,
-			Roles:       toAuditRoles(middlewares.GetRoles(r)),
-			Permissions: authz.EntriesFromRequest(r),
-		},
-		TargetID: req.ID,
+		WorkspaceID: p.WorkspaceID,
+		Principal:   p,
+		TargetID:    req.ID,
 		Payload: map[string]any{
 			"sql_text": req.SQL,
 			"db_type":  dbType,
 		},
 		ClientIP: auth.GetIPAddress(r),
 	}
-}
-
-// toAuditRoles maps the middleware's role refs into the audit snapshot type.
-func toAuditRoles(refs []auth.RoleRef) []audit.Role {
-	roles := make([]audit.Role, len(refs))
-	for i, r := range refs {
-		roles[i] = audit.Role{ID: r.ID, Name: r.Name}
-	}
-	return roles
 }

@@ -2,7 +2,9 @@ package syncer
 
 import (
 	"backend/db/db_types"
+	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/authz"
 	"backend/internal/middlewares"
 	"backend/internal/syncer/types"
 	"encoding/json"
@@ -33,7 +35,11 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
-		resp, needsTokenRefresh, err := Sync(r.Context(), userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
+		// Stash the audit principal so patch.Apply can attach it to events it
+		// emits, without threading it through every entity signature.
+		ctx := audit.ContextWithPrincipal(r.Context(), authz.RequestPrincipal(r))
+
+		resp, needsTokenRefresh, err := Sync(ctx, userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
