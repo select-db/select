@@ -16,17 +16,50 @@ const (
 	DomainDatasource = "datasource"
 )
 
+// Status partitions outcomes the way a SOC reads them: a failed login
+// (StatusFailure, brute-force signal) is not an authorization block
+// (StatusDenied, valid identity / missing permission) is not a system fault
+// (StatusError).
 const (
 	StatusSuccess = "success"
-	StatusError   = "error"
+	StatusFailure = "failure"
 	StatusDenied  = "denied"
+	StatusError   = "error"
 )
 
-// Actions pair with a domain; full event id is domain.action.
+// Actions pair with a domain; the full event id is domain.action. This is the
+// closed vocabulary consumers' SOC/SIEM rules key on, so it's an external
+// contract: add actions, never rename or repurpose. Single-subject domains
+// (query, auth, datasource) use a bare verb; iam spans entities, so its actions
+// are entity.verb.
 const (
-	ActionExecuted           = "executed"            // domain=query
-	ActionDenied             = "denied"              // domain=query
-	ActionPermissionUpserted = "permission.upserted" // domain=iam
+	// query
+	ActionExecuted = "executed" // a statement ran via the proxy
+	ActionDenied   = "denied"   // a query blocked by permissions
+	ActionExported = "exported" // a bulk export/dump (exfiltration signal)
+
+	// auth
+	ActionLogin          = "login"
+	ActionLoginFailed    = "login_failed"
+	ActionTokenRefreshed = "token_refreshed"
+	ActionLogout         = "logout"
+
+	// iam
+	ActionPermissionUpserted = "permission.upserted"
+	ActionPermissionDeleted  = "permission.deleted"
+	ActionRoleUpserted       = "role.upserted"
+	ActionRoleDeleted        = "role.deleted"
+	ActionMemberAdded        = "member.added"
+	ActionMemberRemoved      = "member.removed"
+	ActionWorkspaceCreated   = "workspace.created"
+	ActionWorkspaceDeleted   = "workspace.deleted"
+	ActionAPIKeyCreated      = "api_key.created"
+	ActionAPIKeyRotated      = "api_key.rotated"
+	ActionAPIKeyRevoked      = "api_key.revoked"
+
+	// datasource
+	ActionDatasourceUpserted = "upserted" // created or connection config changed
+	ActionDatasourceDeleted  = "deleted"
 )
 
 type Target struct {
