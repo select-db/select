@@ -38,7 +38,7 @@ func Preflight(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("audit preflight: checking pg_partman: %w", err)
 	}
 	if !hasPartman {
-		return fmt.Errorf("audit preflight: pg_partman is not installed — partition creation/retention will not run; install the extension and run migrations (migrate:up)")
+		return fmt.Errorf("audit preflight: pg_partman is not installed. Partition creation/retention will not run; install the extension and run migrations (migrate:up)")
 	}
 
 	var managed int

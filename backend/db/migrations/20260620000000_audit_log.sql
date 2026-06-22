@@ -1,17 +1,13 @@
 -- +goose Up
 -- +goose StatementBegin
--- Dedicated schema so audit tables can later carry a distinct privilege boundary
--- (e.g. INSERT-only on audit.event for an immutable trail). Grants are a
--- follow-up; audit.outbox needs DELETE for the drainer, so any append-only
--- policy applies to audit.event, not the whole schema.
 CREATE SCHEMA IF NOT EXISTS audit;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- pg_partman manages the monthly partitions and retention; the app has no
--- partition code. Maintenance runs via pg_cron in the cluster's default
--- database — see the provisioning note at the bottom. Gated on availability so
--- the schema still applies on a dev/test Postgres that lacks the extension (it
+-- pg_partman manages the monthly partitions and retention;
+-- Maintenance runs via pg_cron in the cluster's default
+-- Gated on availability so the schema still applies on a 
+-- dev/test Postgres that lacks the extension (it
 -- falls back to default partitions below).
 DO $$
 BEGIN
@@ -25,8 +21,7 @@ $$;
 
 -- +goose StatementBegin
 -- Snapshot of a principal's identity + authz state at event time, content-
--- addressed by hash so an unchanged permission set is stored once. Keeps the
--- trail truthful after roles/permissions/users later change.
+-- addressed by hash so an unchanged permission set or user is stored once.
 CREATE TABLE IF NOT EXISTS audit.principal_snapshot (
     snapshot_hash BYTEA       PRIMARY KEY,        -- sha256 of canonical snapshot JSON
     workspace_id  UUID        NOT NULL REFERENCES app.workspace(id) ON DELETE CASCADE,
@@ -47,12 +42,15 @@ CREATE TABLE IF NOT EXISTS audit.event (
     recorded_at        TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when the row was persisted (set by the DB); lags occurred_at via the async/outbox lanes
     domain             TEXT        NOT NULL,      -- 'query' | 'auth' | 'iam' | 'datasource'
     action             TEXT        NOT NULL,      -- 'executed', 'permission.upserted', 'login', ...
+    
     principal_hash     BYTEA       NOT NULL REFERENCES audit.principal_snapshot(snapshot_hash),
     principal_id       UUID,                      -- denormalized actor id, for filtering events "by user"
     principal_type     TEXT,                      -- 'user' | 'api_key'
+    
     target_type        TEXT,                      -- 'permission' | 'role' | 'user' | 'datasource'
     target_id          UUID,
     target_label       TEXT,                      -- denormalized name at event time
+    
     status             TEXT        NOT NULL,      -- 'success' | 'error' | 'denied'
     payload            JSONB       NOT NULL DEFAULT '{}'::jsonb,  -- domain-specific (plaintext, Tier 0)
     duration_ms        BIGINT,                    -- query only
@@ -126,18 +124,6 @@ CREATE TABLE IF NOT EXISTS audit.outbox (
     enqueued_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- +goose StatementEnd
-
--- Provisioning note (one-time, NOT runnable from this app-DB migration):
--- pg_cron's metadata lives in the cluster's default database, so schedule the
--- maintenance job there, targeting this app database:
---
---   SELECT cron.schedule_in_database(
---     'audit-partman-maintenance', '@daily',
---     $$CALL partman.run_maintenance_proc()$$,
---     '<app_database_name>'   -- OVH default cluster DB is 'defaultdb'
---   );
---
--- Until it exists, premake gives ~4 months before rows hit a default partition.
 
 -- +goose Down
 -- +goose StatementBegin
