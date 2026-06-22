@@ -108,25 +108,3 @@ func Emit(ctx context.Context, spec Spec, r Record) error {
 	Log(e)
 	return nil
 }
-
-// PrincipalResolver builds the audit principal for a given workspace. Emit sites
-// deep in a call chain (e.g. syncer apply paths) get it from the context rather
-// than threading it through every signature; the workspace is supplied per event
-// (a sync request can span workspaces), so permissions are resolved correctly.
-type PrincipalResolver func(workspaceID string) Principal
-
-type resolverCtxKey struct{}
-
-// ContextWithPrincipalResolver stashes the resolver for downstream emit sites.
-func ContextWithPrincipalResolver(ctx context.Context, f PrincipalResolver) context.Context {
-	return context.WithValue(ctx, resolverCtxKey{}, f)
-}
-
-// ResolvePrincipal builds the principal for workspaceID using the resolver set
-// by ContextWithPrincipalResolver, or a zero Principal if none is set.
-func ResolvePrincipal(ctx context.Context, workspaceID string) Principal {
-	if f, ok := ctx.Value(resolverCtxKey{}).(PrincipalResolver); ok && f != nil {
-		return f(workspaceID)
-	}
-	return Principal{}
-}
