@@ -92,62 +92,77 @@ type RoleRef struct {
 	Name string `json:"name,omitempty"`
 }
 
-// CustomClaims defines JWT claims for access tokens.
-// WorkspaceIDs and RoleIDs are cached at token issuance to avoid DB lookups on every request.
-// When a user's role assignments change, their refresh token is revoked so the next re-auth
-// produces a fresh JWT with correct RoleIDs.
+// WorkspaceClaim is the user's standing in one workspace: whether they own it
+// and the roles they hold there. Roles are workspace-scoped in the data model,
+// so the token groups them by workspace rather than as flat lists.
+type WorkspaceClaim struct {
+	ID      string    `json:"id"`
+	IsOwner bool      `json:"is_owner,omitempty"`
+	Roles   []RoleRef `json:"roles,omitempty"`
+}
+
+// CustomClaims defines JWT claims for access tokens. Identity (user + per-
+// workspace roles/ownership) is cached at issuance to avoid DB lookups on every
+// request; when role assignments change the refresh token is revoked so the next
+// re-auth produces a fresh token. (Workspace membership for tenant isolation is
+// still re-derived from the DB per request, not trusted from the token.)
 type CustomClaims struct {
-	UserID            string    `json:"sub"`
-	Name              string    `json:"name,omitempty"`
-	WorkspaceIDs      []string  `json:"workspace_ids,omitempty"`
-	RoleIDs           []string  `json:"role_ids,omitempty"`
-	Roles             []RoleRef `json:"roles,omitempty"`
-	OwnedWorkspaceIDs []string  `json:"owned_workspace_ids,omitempty"`
+	UserID     string           `json:"sub"`
+	Name       string           `json:"name,omitempty"`
+	Workspaces []WorkspaceClaim `json:"workspaces,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// CreateJWT generates a signed access token for a user. It loads workspace IDs from the DB once and
-// embeds them in the token so the auth middleware can use them without a DB call on every request.
+// CreateJWT generates a signed access token for a user, embedding the user's
+// per-workspace roles + ownership so the auth middleware needs no DB call for
+// them on each request.
 func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error) {
 	signer, err := getSigner()
 	if err != nil {
 		return "", fmt.Errorf("unable to sign JWT: %w", err)
 	}
 
-	workspaceIDs := []string(nil)
-	roleIDs := []string(nil)
-	roles := []RoleRef(nil)
-	ownedWorkspaceIDs := []string(nil)
 	displayName := ""
+	var workspaces []WorkspaceClaim
 	if db.Queries != nil {
+		// Membership, ownership, and roles (grouped per workspace below).
+		var workspaceIDs []string
 		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
-			workspaceIDs = make([]string, 0, len(ids))
 			for _, u := range ids {
 				if u.Valid {
 					workspaceIDs = append(workspaceIDs, u.UUID.String())
 				}
 			}
 		}
-		// One query yields both the ids (for authz) and names (for display).
-		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
-			roleIDs = make([]string, 0, len(rows))
-			roles = make([]RoleRef, 0, len(rows))
-			for _, r := range rows {
-				if r.ID.Valid {
-					id := r.ID.UUID.String()
-					roleIDs = append(roleIDs, id)
-					roles = append(roles, RoleRef{ID: id, Name: r.Name.ValueOrEmpty()})
-				}
-			}
-		}
+
+		owned := map[string]bool{}
 		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, userID); err == nil {
-			ownedWorkspaceIDs = make([]string, 0, len(ids))
 			for _, u := range ids {
 				if u.Valid {
-					ownedWorkspaceIDs = append(ownedWorkspaceIDs, u.UUID.String())
+					owned[u.UUID.String()] = true
 				}
 			}
 		}
+
+		rolesByWS := map[string][]RoleRef{}
+		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
+			for _, r := range rows {
+				if r.ID.Valid && r.WorkspaceID.Valid {
+					ws := r.WorkspaceID.UUID.String()
+					rolesByWS[ws] = append(rolesByWS[ws], RoleRef{ID: r.ID.UUID.String(), Name: r.Name.ValueOrEmpty()})
+				}
+			}
+		}
+
+		workspaces = make([]WorkspaceClaim, 0, len(workspaceIDs))
+		for _, ws := range workspaceIDs {
+			workspaces = append(workspaces, WorkspaceClaim{
+				ID:      ws,
+				IsOwner: owned[ws],
+				Roles:   rolesByWS[ws],
+			})
+		}
+
 		if u, err := db.Queries.GetUserNameByID(ctx, userID); err == nil {
 			displayName = u.Name.ValueOrEmpty()
 			if displayName == "" {
@@ -157,12 +172,9 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 	}
 
 	claims := CustomClaims{
-		UserID:            userID.UUID.String(),
-		Name:              displayName,
-		WorkspaceIDs:      workspaceIDs,
-		RoleIDs:           roleIDs,
-		Roles:             roles,
-		OwnedWorkspaceIDs: ownedWorkspaceIDs,
+		UserID:     userID.UUID.String(),
+		Name:       displayName,
+		Workspaces: workspaces,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Audience:  jwt.ClaimStrings{audience},

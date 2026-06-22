@@ -21,7 +21,14 @@ func Handler() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		roleIDs := middlewares.GetPrincipal(r).RoleIDs
+		// Flatten role ids across the caller's workspaces for authorizeCommit
+		// (which checks per-commit against the workspace set, as before).
+		var roleIDs []string
+		for _, ws := range middlewares.GetPrincipal(r).Workspaces {
+			for _, role := range ws.Roles {
+				roleIDs = append(roleIDs, role.ID)
+			}
+		}
 		ownedWorkspaceIDs := middlewares.GetOwnedWorkspaceIDs(r)
 
 		if r.Method != http.MethodPost {

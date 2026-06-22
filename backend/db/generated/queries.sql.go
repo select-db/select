@@ -834,15 +834,16 @@ func (q *Queries) GetUserNameByID(ctx context.Context, id db_types.JSONNullUUID)
 }
 
 const getUserRolesWithNames = `-- name: GetUserRolesWithNames :many
-SELECT r.id, r.name
+SELECT r.id, r.name, r.workspace_id
 FROM app.role r
 JOIN app.user_to_role utr ON utr.role_id = r.id
 WHERE utr.user_id = $1 AND utr.deleted_at IS NULL AND r.deleted_at IS NULL
 `
 
 type GetUserRolesWithNamesRow struct {
-	ID   db_types.JSONNullUUID
-	Name db_types.JSONNullString
+	ID          db_types.JSONNullUUID
+	Name        db_types.JSONNullString
+	WorkspaceID db_types.JSONNullUUID
 }
 
 func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID db_types.JSONNullUUID) ([]GetUserRolesWithNamesRow, error) {
@@ -854,7 +855,7 @@ func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID db_types.JSO
 	var items []GetUserRolesWithNamesRow
 	for rows.Next() {
 		var i GetUserRolesWithNamesRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.WorkspaceID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
