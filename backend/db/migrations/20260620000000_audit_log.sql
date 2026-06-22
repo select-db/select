@@ -10,9 +10,17 @@ CREATE SCHEMA IF NOT EXISTS audit;
 -- +goose StatementBegin
 -- pg_partman manages the monthly partitions and retention; the app has no
 -- partition code. Maintenance runs via pg_cron in the cluster's default
--- database — see the provisioning note at the bottom.
-CREATE SCHEMA IF NOT EXISTS partman;
-CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
+-- database — see the provisioning note at the bottom. Gated on availability so
+-- the schema still applies on a dev/test Postgres that lacks the extension (it
+-- falls back to default partitions below).
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_partman') THEN
+        CREATE SCHEMA IF NOT EXISTS partman;
+        CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
+    END IF;
+END
+$$;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
@@ -79,20 +87,33 @@ CREATE INDEX IF NOT EXISTS idx_event_errors
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Register each domain's monthly RANGE level with pg_partman (premakes upcoming
--- partitions + a default, drops expired ones per part_config).
-SELECT partman.create_parent(p_parent_table := 'audit.event_query',      p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
-SELECT partman.create_parent(p_parent_table := 'audit.event_auth',       p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
-SELECT partman.create_parent(p_parent_table := 'audit.event_iam',        p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
-SELECT partman.create_parent(p_parent_table := 'audit.event_datasource', p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
+-- With pg_partman: register each domain's monthly RANGE level (premakes upcoming
+-- partitions + a default, drops expired ones per part_config) and set retention.
+-- Without it (dev/test): attach one DEFAULT partition per domain so inserts route
+-- somewhere — production gets monthly partitions managed by partman instead.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_partman') THEN
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_query',      p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_auth',       p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_iam',        p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_datasource', p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
 
--- Retention: drop partitions (don't just detach) older than the window. Default
--- one year for all; override per domain to keep security streams longer, e.g.:
---   UPDATE partman.part_config SET retention = '3 years'
---    WHERE parent_table IN ('audit.event_iam', 'audit.event_auth');
-UPDATE partman.part_config
-   SET retention = '1 year', retention_keep_table = false
- WHERE parent_table IN ('audit.event_query', 'audit.event_auth', 'audit.event_iam', 'audit.event_datasource');
+        -- Retention: drop partitions (don't just detach) older than the window.
+        -- One year for all; override per domain to keep security streams longer:
+        --   UPDATE partman.part_config SET retention = '3 years'
+        --    WHERE parent_table IN ('audit.event_iam', 'audit.event_auth');
+        UPDATE partman.part_config
+           SET retention = '1 year', retention_keep_table = false
+         WHERE parent_table IN ('audit.event_query', 'audit.event_auth', 'audit.event_iam', 'audit.event_datasource');
+    ELSE
+        CREATE TABLE IF NOT EXISTS audit.event_query_default      PARTITION OF audit.event_query      DEFAULT;
+        CREATE TABLE IF NOT EXISTS audit.event_auth_default       PARTITION OF audit.event_auth       DEFAULT;
+        CREATE TABLE IF NOT EXISTS audit.event_iam_default        PARTITION OF audit.event_iam        DEFAULT;
+        CREATE TABLE IF NOT EXISTS audit.event_datasource_default PARTITION OF audit.event_datasource DEFAULT;
+    END IF;
+END
+$$;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
@@ -120,6 +141,12 @@ CREATE TABLE IF NOT EXISTS audit.outbox (
 
 -- +goose Down
 -- +goose StatementBegin
-DELETE FROM partman.part_config WHERE parent_table LIKE 'audit.%';
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_partman') THEN
+        DELETE FROM partman.part_config WHERE parent_table LIKE 'audit.%';
+    END IF;
+END
+$$;
 DROP SCHEMA IF EXISTS audit CASCADE;
 -- +goose StatementEnd
