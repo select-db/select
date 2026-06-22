@@ -58,8 +58,9 @@ const (
 	ActionAPIKeyRevoked      = "api_key.revoked"
 
 	// datasource
-	ActionDatasourceUpserted = "upserted" // created or connection config changed
-	ActionDatasourceDeleted  = "deleted"
+	ActionDatasourceUpserted      = "upserted" // created or connection config changed
+	ActionDatasourceDeleted       = "deleted"
+	ActionDatasourceCredsRevealed = "creds_revealed" // stored credentials decrypted and returned to a principal
 )
 
 type Target struct {
