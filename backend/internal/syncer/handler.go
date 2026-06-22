@@ -21,7 +21,7 @@ func Handler() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		roleIDs := middlewares.GetRoleIDs(r)
+		roleIDs := middlewares.GetPrincipal(r).RoleIDs
 		ownedWorkspaceIDs := middlewares.GetOwnedWorkspaceIDs(r)
 
 		if r.Method != http.MethodPost {

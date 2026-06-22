@@ -33,13 +33,6 @@ func IsAPIKeyPrincipal(r *http.Request) bool {
 	return v
 }
 
-// GetUserID returns the principal id (user id, or api-key id for API-key
-// principals) without writing to the response. Empty when no auth context.
-func GetUserID(r *http.Request) string {
-	id, _ := r.Context().Value(userIDKey).(string)
-	return id
-}
-
 func MustGetUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	userID, ok := r.Context().Value(userIDKey).(string)
 	if !ok || userID == "" {
@@ -65,11 +58,6 @@ func GetWorkspaceIDs(r *http.Request) ([]string, bool) {
 	return ids, ok
 }
 
-func GetRoleIDs(r *http.Request) []string {
-	ids, _ := r.Context().Value(roleIDsKey).([]string)
-	return ids
-}
-
 // Principal is the calling principal's request-known identity: who they are and
 // the roles in effect, resolved from the JWT or API-key auth. It deliberately
 // excludes the workspace (not all routes have a single member workspace) and
@@ -85,13 +73,16 @@ type Principal struct {
 // GetPrincipal returns the caller's identity in one read. Callers take the
 // fields they care about instead of calling several small getters.
 func GetPrincipal(r *http.Request) Principal {
-	name, _ := r.Context().Value(principalNameKey).(string)
-	roles, _ := r.Context().Value(rolesKey).([]auth.RoleRef)
+	ctx := r.Context()
+	id, _ := ctx.Value(userIDKey).(string)
+	name, _ := ctx.Value(principalNameKey).(string)
+	roleIDs, _ := ctx.Value(roleIDsKey).([]string)
+	roles, _ := ctx.Value(rolesKey).([]auth.RoleRef)
 	return Principal{
-		ID:       GetUserID(r),
+		ID:       id,
 		Name:     name,
 		IsAPIKey: IsAPIKeyPrincipal(r),
-		RoleIDs:  GetRoleIDs(r),
+		RoleIDs:  roleIDs,
 		Roles:    roles,
 	}
 }

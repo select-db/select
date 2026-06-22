@@ -76,7 +76,7 @@ func CompiledForWorkspace(roleIDs []string, workspaceID string) core.CompiledPer
 }
 
 func CompiledFromRequest(r *http.Request) core.CompiledPermissions {
-	return CompiledForWorkspace(middlewares.GetRoleIDs(r), middlewares.MemberWorkspaceID(r))
+	return CompiledForWorkspace(middlewares.GetPrincipal(r).RoleIDs, middlewares.MemberWorkspaceID(r))
 }
 
 // EntriesForWorkspace returns the raw permission entries (not compiled)
@@ -96,5 +96,5 @@ func EntriesForWorkspace(roleIDs []string, workspaceID string) []core.Permission
 
 // EntriesFromRequest is EntriesForWorkspace driven by request context.
 func EntriesFromRequest(r *http.Request) []core.PermissionEntry {
-	return EntriesForWorkspace(middlewares.GetRoleIDs(r), middlewares.MemberWorkspaceID(r))
+	return EntriesForWorkspace(middlewares.GetPrincipal(r).RoleIDs, middlewares.MemberWorkspaceID(r))
 }
