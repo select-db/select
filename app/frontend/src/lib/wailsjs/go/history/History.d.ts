@@ -3,3 +3,5 @@
 import {history} from '../models';
 
 export function CreateHistory(arg1:history.CreateQueryHistoryParams):Promise<void>;
+
+export function ListHistory(arg1:history.ListHistoryParams):Promise<Array<history.HistoryEntry>>;

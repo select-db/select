@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export type RightPanelTab = 'search';
+export type RightPanelTab = 'search' | 'history';
 
 const RIGHT_PANEL_TAB_KEY = 'rightPanelTab';
 
@@ -25,12 +25,27 @@ export const updateRightPanelTab = (tab: RightPanelTab) => {
 	rightPanelTab.update(() => tab);
 };
 
-/** Open right panel with search tab, or close if already open. */
-export function toggleSearchPanel(): void {
+/**
+ * Toggles a right-panel tab: opens the panel on that tab if closed, switches to
+ * it if open on another tab, or closes the panel if already showing that tab.
+ */
+function togglePanelTab(tab: RightPanelTab): void {
 	if (!internalIsRightbarOpened) {
-		updateRightPanelTab('search');
+		updateRightPanelTab(tab);
 		updateIsRightbarOpened(true);
-	} else {
+	} else if (internalRightPanelTab === tab) {
 		updateIsRightbarOpened(false);
+	} else {
+		updateRightPanelTab(tab);
 	}
+}
+
+/** Open right panel with search tab, switch to it, or close if already shown. */
+export function toggleSearchPanel(): void {
+	togglePanelTab('search');
+}
+
+/** Open right panel with history tab, switch to it, or close if already shown. */
+export function toggleHistoryPanel(): void {
+	togglePanelTab('history');
 }

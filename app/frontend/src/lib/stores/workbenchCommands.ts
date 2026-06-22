@@ -8,7 +8,8 @@ import {
 import {
 	isRightbarOpened,
 	updateIsRightbarOpened,
-	toggleSearchPanel
+	toggleSearchPanel,
+	toggleHistoryPanel
 } from '$lib/components/Rightbar/rightbarStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import SearchModalContent from '$lib/components/Titlebar/Search/SearchModalContent.svelte';
@@ -38,6 +39,7 @@ export function registerWorkbenchCommands(): void {
 	registerCommand('workbench.toggleFiles', () => toggleLeftPanelTab('files'));
 	registerCommand('workbench.toggleGit', () => toggleLeftPanelTab('github-branch'));
 	registerCommand('workbench.toggleSearch', toggleSearchPanel);
+	registerCommand('workbench.toggleHistory', toggleHistoryPanel);
 
 	registerCommand('workbench.openSearch', async () => {
 		modalStore.set({
@@ -54,9 +56,7 @@ export function registerWorkbenchCommands(): void {
 		const folderId = get(workspaceGraphStore)?.folders?.[0]?.id ?? '';
 		const activeTab = getActiveTab();
 		const dbInstanceId =
-			activeTab?.database?.node.id ??
-			activeTab?.file?.node.databases?.[0]?.id ??
-			undefined;
+			activeTab?.database?.node.id ?? activeTab?.file?.node.databases?.[0]?.id ?? undefined;
 		addTempFileTab({ content: '', name: '[temp].sql', folderId, dbInstanceId }, false);
 	});
 

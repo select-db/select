@@ -27,6 +27,9 @@ type History struct {
 	Errors       string        `json:"errors"`
 	Uri          interface{}   `json:"uri"`
 	Dsn          interface{}   `json:"dsn"`
+	CreatedAt    time.Time     `json:"created_at"`
+	WorkspaceID  string        `json:"workspace_id"`
+	DbInstanceID string        `json:"db_instance_id"`
 }
 
 type MutationCommit struct {
