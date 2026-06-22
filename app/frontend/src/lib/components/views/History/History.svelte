@@ -8,7 +8,8 @@
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import { formatRelativeTime } from '$lib/utils/formatRelativeTime';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import type { history } from '$lib/wailsjs/go/models';
+	import { findItemById } from '$lib/components/views/FileSystem/Files/helpers/dragHelpers';
+	import type { graph, history } from '$lib/wailsjs/go/models';
 
 	import {
 		historyItems,
@@ -18,10 +19,7 @@
 		resetHistory,
 		loadMoreHistory
 	} from './historyStore';
-	import { buildDbInstanceLookup } from './resolveDbInstance';
 	import HistoryStatementModal from './HistoryStatementModal.svelte';
-
-	const dbLookup = $derived(buildDbInstanceLookup($workspaceGraphStore));
 
 	// Reload whenever the workspace changes or a new statement is recorded.
 	$effect(() => {
@@ -31,7 +29,10 @@
 	});
 
 	function dbNameFor(item: history.HistoryEntry): string {
-		return dbLookup.get(item.dbInstanceId)?.name ?? '';
+		const ws = $workspaceGraphStore;
+		if (!ws) return '';
+		const node = findItemById(item.dbInstanceId, [], ws.folders ?? [], ws.db_instances ?? []);
+		return node && 'db_type' in node ? (node as graph.DBInstanceNode).name : '';
 	}
 
 	function hasError(item: history.HistoryEntry): boolean {
