@@ -2,7 +2,7 @@
 	import {
 		isRightbarOpened,
 		rightPanelTab,
-		toggleSearchPanel
+		togglePanelTab
 	} from '$lib/components/Rightbar/rightbarStore';
 	import Button from '$lib/system/Button/Button.svelte';
 
@@ -15,6 +15,6 @@
 	size="sm"
 	emphasis={active ? 'high' : 'low'}
 	{active}
-	onclick={toggleSearchPanel}
+	onclick={() => togglePanelTab('search')}
 	noBounce
 />

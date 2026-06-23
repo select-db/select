@@ -2,7 +2,7 @@
 	import {
 		isRightbarOpened,
 		rightPanelTab,
-		toggleHistoryPanel
+		togglePanelTab
 	} from '$lib/components/Rightbar/rightbarStore';
 	import Button from '$lib/system/Button/Button.svelte';
 
@@ -15,6 +15,6 @@
 	size="sm"
 	emphasis={active ? 'high' : 'low'}
 	{active}
-	onclick={toggleHistoryPanel}
+	onclick={() => togglePanelTab('history')}
 	noBounce
 />

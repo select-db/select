@@ -8,8 +8,7 @@ import {
 import {
 	isRightbarOpened,
 	updateIsRightbarOpened,
-	toggleSearchPanel,
-	toggleHistoryPanel
+	togglePanelTab
 } from '$lib/components/Rightbar/rightbarStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import SearchModalContent from '$lib/components/Titlebar/Search/SearchModalContent.svelte';
@@ -38,8 +37,8 @@ export function registerWorkbenchCommands(): void {
 
 	registerCommand('workbench.toggleFiles', () => toggleLeftPanelTab('files'));
 	registerCommand('workbench.toggleGit', () => toggleLeftPanelTab('github-branch'));
-	registerCommand('workbench.toggleSearch', toggleSearchPanel);
-	registerCommand('workbench.toggleHistory', toggleHistoryPanel);
+	registerCommand('workbench.toggleSearch', () => togglePanelTab('search'));
+	registerCommand('workbench.toggleHistory', () => togglePanelTab('history'));
 
 	registerCommand('workbench.openSearch', async () => {
 		modalStore.set({
