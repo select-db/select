@@ -111,8 +111,7 @@ var (
 		Doc: "an API key was revoked",
 	}
 
-	// datasource — connection lifecycle + credential access. Sensitive: DSNs can
-	// redirect data, and stored credentials are secrets.
+	// datasource — connection lifecycle. Sensitive: DSNs can redirect data.
 	DatasourceUpserted = Spec{
 		Domain: DomainDatasource, Action: ActionDatasourceUpserted, Lane: LaneOutbox, TargetType: "datasource",
 		Doc: "a datasource was created or its connection config changed",
@@ -120,10 +119,6 @@ var (
 	DatasourceDeleted = Spec{
 		Domain: DomainDatasource, Action: ActionDatasourceDeleted, Lane: LaneOutbox, TargetType: "datasource",
 		Doc: "a datasource was deleted",
-	}
-	DatasourceCredsRevealed = Spec{
-		Domain: DomainDatasource, Action: ActionDatasourceCredsRevealed, Lane: LaneOutbox, TargetType: "datasource",
-		Doc: "stored credentials were decrypted and returned to a principal — secret-access signal",
 	}
 )
 
@@ -138,7 +133,7 @@ var Catalog = []Spec{
 	MemberAdded, MemberRemoved,
 	WorkspaceCreated, WorkspaceDeleted,
 	APIKeyCreated, APIKeyRotated, APIKeyRevoked,
-	DatasourceUpserted, DatasourceDeleted, DatasourceCredsRevealed,
+	DatasourceUpserted, DatasourceDeleted,
 }
 
 // registered lets Emit flag an unregistered spec in dev.
