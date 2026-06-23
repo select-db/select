@@ -1,12 +1,7 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import * as monaco from 'monaco-editor';
-	import '../File/Editor/config/monacoWorkers';
-	import { refreshTheme } from '../File/Editor/config/languageSetup';
-	import { EDITOR_THEME_NAME } from '../File/Editor/config/editorTheme';
-
 	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
+	import SqlViewer from '$lib/system/SqlViewer/SqlViewer.svelte';
 	import { formatRelativeTime } from '$lib/utils/formatRelativeTime';
 
 	type Props = {
@@ -18,35 +13,6 @@
 	};
 
 	let { sql, dbName, hasError, createdAt }: Props = $props();
-
-	let container: HTMLDivElement;
-	let editor: monaco.editor.IStandaloneCodeEditor | null = null;
-	let model: monaco.editor.ITextModel | null = null;
-
-	onMount(() => {
-		refreshTheme();
-		model = monaco.editor.createModel(sql, 'sql-custom');
-		editor = monaco.editor.create(container, {
-			model,
-			theme: EDITOR_THEME_NAME,
-			readOnly: true,
-			automaticLayout: true,
-			minimap: { enabled: false },
-			wordWrap: 'on',
-			fontFamily: 'JetBrains Mono',
-			fontSize: 12,
-			fontWeight: '300',
-			lineNumbersMinChars: 3,
-			scrollBeyondLastLine: false,
-			scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
-			fixedOverflowWidgets: true
-		});
-	});
-
-	onDestroy(() => {
-		editor?.dispose();
-		model?.dispose();
-	});
 </script>
 
 <ModalHeader title="Statement" icon="clock" />
@@ -66,7 +32,9 @@
 		</span>
 	</div>
 
-	<div class="editor" bind:this={container}></div>
+	<div class="editor">
+		<SqlViewer {sql} />
+	</div>
 </div>
 
 <style>
