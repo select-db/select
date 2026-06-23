@@ -39,9 +39,9 @@
 		return (item.errors?.length ?? 0) > 0;
 	}
 
-	function firstLine(statement: string): string {
-		const line = statement.split('\n').find((l) => l.trim().length > 0);
-		return (line ?? statement).trim();
+	function firstLines(statement: string): string {
+		const lines = statement.split('\n').filter((l) => l.trim().length > 0).slice(0, 3);
+		return lines.join('\n');
 	}
 
 	function openStatement(item: history.HistoryEntry): void {
@@ -104,7 +104,7 @@
 							<span class="time">{formatRelativeTime(item.createdAt)}</span>
 						</span>
 					</div>
-					<span class="statement">{firstLine(item.statement)}</span>
+					<span class="statement">{firstLines(item.statement)}</span>
 				</button>
 			{/each}
 

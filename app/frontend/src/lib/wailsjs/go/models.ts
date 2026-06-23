@@ -2243,11 +2243,11 @@ export namespace history {
 	    RowCount?: number;
 	    DurationMs?: number;
 	    Errors: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new CreateQueryHistoryParams(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.Dsn = source["Dsn"];
@@ -2271,11 +2271,11 @@ export namespace history {
 	    workspaceId: string;
 	    dbInstanceId: string;
 	    createdAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new HistoryEntry(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -2293,11 +2293,11 @@ export namespace history {
 	    workspaceId: string;
 	    limit: number;
 	    offset: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ListHistoryParams(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.workspaceId = source["workspaceId"];
