@@ -139,7 +139,7 @@
 	}
 
 	div[contenteditable='true']:not(.noRadius) {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 	}
 
 	div[contenteditable='true'].noBorder {

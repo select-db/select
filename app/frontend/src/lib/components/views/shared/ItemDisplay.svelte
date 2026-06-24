@@ -206,20 +206,11 @@
 	:global([data-depth='0'] > *:not(:first-child) .item[data-depth='0']) {
 		border-top: var(--bw) transparent solid;
 	}
-	:global([data-depth='0'] > *:not(:first-child) .item[data-depth='0'].selected) {
-		border-top-color: var(--border-color);
-	}
 	.item.selected {
 		background: var(--gray-400) !important;
 	}
 	.item:not(.selected):hover {
 		background: var(--gray-550) !important;
-	}
-	.item.selected.has-border-top {
-		border-top-color: var(--border-color);
-	}
-	.item.selected {
-		border-bottom-color: var(--border-color);
 	}
 	.item.hovered-target {
 		background: var(--gray-0) !important;

@@ -95,7 +95,7 @@
 		{:else if $workspaceGraphStore}
 			{#key `${$themeVersionStore}-${$configVersionStore}-${$lintVersionStore}`}
 				<Leftbar />
-				<main class:no-left-border={!$isLeftbarOpened} class:no-right-border={!$isRightbarOpened}>
+				<main class:left-bar-closed={!$isLeftbarOpened} class:right-bar-closed={!$isRightbarOpened}>
 					<EditorLayout node={$layoutStore.root} />
 				</main>
 				<Rightbar />
@@ -135,25 +135,15 @@
 	}
 
 	main {
-		background-color: var(--gray-0);
-		border: var(--border);
-		border-radius: var(--br-sm);
 		flex-grow: 1;
 		overflow: hidden;
-
 		z-index: 2;
 	}
-
-	main.no-left-border {
-		border-top-left-radius: 0;
-		border-bottom-left-radius: 0;
-		border-left: none;
+	main.left-bar-closed {
+		padding-left: var(--space-sm);
 	}
-
-	main.no-right-border {
-		border-top-right-radius: 0;
-		border-bottom-right-radius: 0;
-		border-right: none;
+	main.right-bar-closed {
+		padding-right: var(--space-sm);
 	}
 
 	.session-loader {

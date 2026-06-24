@@ -113,6 +113,8 @@
 		flex: 1;
 		overflow: auto;
 		min-height: 0;
+		border: var(--border);
+		border-radius: var(--br-sm);
 	}
 
 	table {
@@ -178,6 +180,10 @@
 		overflow: hidden;
 	}
 
+	tbody tr:last-child td {
+		border-bottom: none;
+	}
+
 	td.pinned {
 		position: sticky;
 		z-index: 1;
@@ -192,7 +198,7 @@
 	}
 
 	.empty-row td {
-		padding: var(--space-md) var(--space-sm-md);
+		padding: 0 var(--space-sm-md);
 		color: var(--gray-800);
 	}
 

@@ -41,7 +41,7 @@
 <style>
 	#resizer {
 		position: absolute;
-		top: var(--space-sm-md);
+		top: 48px;
 		left: 1px;
 		bottom: var(--space-sm-md);
 
@@ -56,7 +56,7 @@
 
 	#resizer:hover,
 	#resizer.resizing {
-		border-left: var(--bw) var(--gray-700) solid;
+		border-left: var(--bw) var(--white-glow) solid;
 	}
 
 	#resizer:active {
