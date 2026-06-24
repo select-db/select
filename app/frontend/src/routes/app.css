@@ -295,3 +295,13 @@
 :global([data-theme='dark'] .scroll-shadow-band) {
 	background: linear-gradient(to top, var(--gray-500) 0%, rgba(0, 0, 0, 0));
 }
+
+:global(.scroll-shadow-band--top) {
+	top: 0;
+	bottom: auto;
+	background: linear-gradient(to bottom, var(--gray-100) 0%, rgba(0, 0, 0, 0));
+}
+
+:global([data-theme='dark'] .scroll-shadow-band--top) {
+	background: linear-gradient(to bottom, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+}

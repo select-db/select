@@ -2,13 +2,14 @@
 	import { type Component } from 'svelte';
 	import { get } from 'svelte/store';
 
-	import Icon from '$lib/system/Icon/Icon.svelte';
+	import Badge from '$lib/system/Badge/Badge.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import { scrollShadow } from '$lib/actions/scrollShadow';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import { formatRelativeTime } from '$lib/utils/formatRelativeTime';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { findItemById } from '$lib/components/views/FileSystem/Files/helpers/dragHelpers';
+	import { colorizeSql } from '$lib/system/SqlViewer/colorizeSql';
 	import type { graph, history } from '$lib/wailsjs/go/models';
 
 	import {
@@ -39,9 +40,23 @@
 		return (item.errors?.length ?? 0) > 0;
 	}
 
-	function firstLines(statement: string): string {
-		const lines = statement.split('\n').filter((l) => l.trim().length > 0).slice(0, 3);
-		return lines.join('\n');
+	const previewCache = new Map<string, Promise<string>>();
+
+	function previewHtml(statement: string): Promise<string> {
+		let html = previewCache.get(statement);
+		if (!html) {
+			const lines = statement
+				.split('\n')
+				.map((l) => l.trim())
+				.filter((l) => l.length > 0);
+			const snippet = lines
+				.slice(0, 4)
+				.concat(lines.length > 4 ? ['...'] : [])
+				.join(' ');
+			html = colorizeSql(snippet);
+			previewCache.set(statement, html);
+		}
+		return html;
 	}
 
 	function openStatement(item: history.HistoryEntry): void {
@@ -53,6 +68,7 @@
 				sql: item.statement,
 				dbName: dbNameFor(item) || 'unknown database',
 				hasError: hasError(item),
+				errors: item.errors ?? [],
 				createdAt: item.createdAt
 			}
 		});
@@ -83,29 +99,31 @@
 			<p class="muted">No statements run in the last 7 days.</p>
 		</div>
 	{:else}
-		<div class="list no-scrollbar" use:scrollShadow>
+		<div class="list no-scrollbar" use:scrollShadow={{ top: true }}>
 			{#each $historyItems as item (item.id)}
 				{@const dbName = dbNameFor(item)}
 				{@const error = hasError(item)}
-				<button class="row" onclick={() => openStatement(item)}>
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="row" onclick={() => openStatement(item)}>
 					<div class="row-top">
-						<span class="db">
-							<Icon icon="server" size={13} />
+						<div class="row-meta">
+							<p class="time">{formatRelativeTime(item.createdAt)}</p>
+							<Badge status={error ? 'error' : 'success'} />
 							{#if dbName}
-								<span class="db-name">{dbName}</span>
+								<p class="db-name truncate">{dbName}</p>
 							{:else}
-								<span class="db-name placeholder">unknown</span>
+								<p class="db-name placeholder truncate">unknown</p>
 							{/if}
-						</span>
-						<span class="row-meta">
-							<span class="status" class:error>
-								<Icon icon={error ? 'cross' : 'check'} size={12} />
-							</span>
-							<span class="time">{formatRelativeTime(item.createdAt)}</span>
-						</span>
+							<div class="db">
+							</div>
+						</div>
 					</div>
-					<span class="statement">{firstLines(item.statement)}</span>
-				</button>
+					{#await previewHtml(item.statement) then html}
+						<!-- eslint-disable-next-line svelte/no-at-html-tags trusted SQL, escaped by Monaco -->
+						<span class="statement truncate">{@html html}</span>
+					{/await}
+				</div>
 			{/each}
 
 			{#if !$historyDone}
@@ -144,23 +162,39 @@
 		overflow-y: auto;
 		overscroll-behavior-y: none;
 		flex-grow: 1;
+
+		padding: 0 var(--space-sm);
+
 	}
 
 	.row {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-xxs);
-		padding: var(--space-sm) var(--space-sm-md);
-		border: none;
-		border-bottom: var(--border);
+		gap: var(--space-sm);
+		padding: var(--space-sm) var(--space-sm);
+		border: var(--bw) transparent solid;
+		border-radius: var(--br-sm);
 		background: transparent;
 		text-align: left;
-		cursor: pointer;
-		width: 100%;
+		overflow: hidden;
+		min-height: 39px;
+
+		transition: all .2s ease;
 	}
 
 	.row:hover {
+		border: var(--border);
 		background-color: var(--gray-200);
+	}
+
+	.row p {
+		color: var(--gray-800);
+				transition: all .1s ease;
+
+	}
+
+	.row:hover p {
+		color: var(--gray-1000);
 	}
 
 	.row-top {
@@ -177,14 +211,6 @@
 		min-width: 0;
 	}
 
-	.db-name {
-		font-size: var(--fs-sm);
-		color: var(--gray-1000);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
 	.db-name.placeholder {
 		color: var(--gray-700);
 		font-style: italic;
@@ -193,22 +219,11 @@
 	.row-meta {
 		display: flex;
 		align-items: center;
-		gap: var(--space-xs);
+		gap: var(--space-sm);
 		flex-shrink: 0;
 	}
 
-	.status {
-		display: flex;
-		align-items: center;
-		color: var(--green, var(--gray-800));
-	}
-
-	.status.error {
-		color: var(--red, var(--orange, var(--gray-800)));
-	}
-
 	.time {
-		font-size: 11px;
 		color: var(--gray-800);
 		white-space: nowrap;
 	}
@@ -216,10 +231,6 @@
 	.statement {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 11px;
-		color: var(--gray-900);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 
 	.sentinel {

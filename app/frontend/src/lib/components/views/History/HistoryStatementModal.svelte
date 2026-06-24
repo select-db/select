@@ -1,6 +1,5 @@
 <script lang="ts">
-	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
-	import Icon from '$lib/system/Icon/Icon.svelte';
+	import Badge from '$lib/system/Badge/Badge.svelte';
 	import SqlViewer from '$lib/system/SqlViewer/SqlViewer.svelte';
 	import { formatRelativeTime } from '$lib/utils/formatRelativeTime';
 
@@ -8,29 +7,30 @@
 		sql: string;
 		dbName: string;
 		hasError: boolean;
+		errors: string[];
 		createdAt: string;
 		onClose: () => void;
 	};
 
-	let { sql, dbName, hasError, createdAt }: Props = $props();
+	let { sql, dbName, hasError, errors, createdAt }: Props = $props();
 </script>
-
-<ModalHeader title="Statement" icon="clock" />
 
 <div class="history-modal-body">
 	<div class="toolbar">
 		<span class="meta">
-			<Icon icon="server" size={14} />
 			<span class="db-name">{dbName}</span>
 		</span>
 		<span class="toolbar-right">
-			<span class="status" class:error={hasError}>
-				<Icon icon={hasError ? 'cross' : 'check'} size={12} />
-				{hasError ? 'Error' : 'Success'}
-			</span>
-			<span class="time">{formatRelativeTime(createdAt)}</span>
+			<Badge status={hasError ? 'error' : 'success'} label />
+			<p class="time">{formatRelativeTime(createdAt)}</p>
 		</span>
 	</div>
+
+	{#if errors.length > 0}
+		<div class="errors">
+			<Badge status={hasError ? 'error' : 'success'} label={errors.join('\n')} />
+		</div>
+	{/if}
 
 	<div class="editor">
 		<SqlViewer {sql} />
@@ -54,6 +54,11 @@
 		border-bottom: var(--border);
 	}
 
+	.errors {
+		border-bottom: var(--border);
+		padding: var(--space-sm-md) var(--space-sm);
+	}
+
 	.meta {
 		display: flex;
 		gap: var(--space-xs);
@@ -74,18 +79,6 @@
 		gap: var(--space-sm);
 		align-items: center;
 		flex-shrink: 0;
-	}
-
-	.status {
-		display: flex;
-		gap: var(--space-xxs);
-		align-items: center;
-		font-size: 11px;
-		color: var(--green, var(--gray-800));
-	}
-
-	.status.error {
-		color: var(--red, var(--orange, var(--gray-800)));
 	}
 
 	.time {
