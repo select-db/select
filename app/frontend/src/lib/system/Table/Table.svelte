@@ -110,7 +110,7 @@
 
 <style>
 	.table-scroll {
-		flex: 1;
+		display: flex;
 		overflow: auto;
 		min-height: 0;
 		border: var(--border);
@@ -118,7 +118,7 @@
 	}
 
 	table {
-		width: 100%;
+		flex: 1;
 		table-layout: fixed;
 		border-collapse: separate;
 		border-spacing: 0;

@@ -237,6 +237,8 @@
 
 				<div
 					class="tab-container"
+					class:first={index === 0}
+					class:last={index === tabs.length - 1}
 					in:scale={{ duration: 150, start: 0.9, opacity: 0 }}
 					out:scale={{ duration: 150, start: 1, opacity: 0 }}
 					animate:flip={{ duration: 150 }}
@@ -386,6 +388,12 @@
 	.tab-container {
 		display: flex;
 		align-items: stretch;
+	}
+	.tab-container.first {
+		margin-left: var(--space-sm);
+	}
+	.tab-container.last {
+		margin-right: var(--space-sm);
 	}
 	.wrapper .tab {
 		position: relative;
