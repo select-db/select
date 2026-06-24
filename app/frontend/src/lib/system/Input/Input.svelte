@@ -192,7 +192,7 @@
 
 	input:not(.noRadius),
 	textarea:not(.noRadius) {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 	}
 
 	input.noBorder,
@@ -301,7 +301,7 @@
 		padding: 0;
 		background: none;
 		border: none;
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		color: var(--gray-700);
 		opacity: 0;
 		transition:
@@ -331,7 +331,7 @@
 		padding: var(--space-xs);
 		background: none;
 		border: none;
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		color: var(--gray-700);
 	}
 

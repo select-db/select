@@ -4,27 +4,22 @@
 </script>
 
 <div class="wrapper tab-actions">
-	<Button leftIcon="chat" label="Open Chat" onclick={() => addChatTab()} iconSize={18} noRadius />
+	<Button leftIcon="chat" label="Open Chat" onclick={() => addChatTab()} iconSize={18} />
 	<Button
 		leftIcon="terminal"
 		label="Open Terminal"
 		onclick={() => addTerminalTab()}
 		iconSize={18}
-		noRadius
 	/>
 </div>
 
 <style>
 	.wrapper {
-		position: relative;
-		z-index: 1;
-		flex-shrink: 0;
-
 		display: flex;
 		align-items: stretch;
-
-		background-color: var(--gray-100);
-		border-bottom: var(--border);
+		z-index: 10;
+		gap: var(--space-xs-sm);
+		padding-bottom: var(--space-xs-sm);
 	}
 
 	.wrapper.tab-actions :global(button) {

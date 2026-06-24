@@ -287,7 +287,6 @@
 		justify-content: space-between;
 		gap: var(--space-xs);
 		padding: var(--space-sm);
-		border-bottom: var(--border);
 		flex-shrink: 0;
 		height: 24px;
 	}
@@ -315,6 +314,7 @@
 	.keys-table-wrap {
 		flex: 1;
 		overflow: hidden;
+		margin: 0 var(--space-sm);
 	}
 	.actions-inner {
 		display: flex;
