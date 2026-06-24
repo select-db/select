@@ -7,7 +7,7 @@
 
 	export let width: number = parseInt(
 		localStorage.getItem('sidebarWidth') || `${DEFAULT_WIDTH}`,
-		10
+		200
 	);
 	export let resizing: boolean = false;
 

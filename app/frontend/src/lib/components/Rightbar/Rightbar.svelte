@@ -12,7 +12,7 @@
 
 	let closed = $state(false);
 	let rightbarWidth: number = $state(
-		parseInt(localStorage.getItem('rightbarWidth') || `${DEFAULT_WIDTH}`, 10)
+		parseInt(localStorage.getItem('rightbarWidth') || `${DEFAULT_WIDTH}`, 200)
 	);
 	let resizing: boolean = $state(false);
 	let style = $derived(
