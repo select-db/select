@@ -550,6 +550,7 @@
 	:global(.editorContainer .monaco-editor) {
 		--vscode-editorStickyScroll-background: var(--gray-0);
 		--vscode-editor-background: var(--gray-0);
+		--vscode-input-background: var(--gray-100);
 	}
 
 	:global(.editorContainer .monaco-editor .margin) {

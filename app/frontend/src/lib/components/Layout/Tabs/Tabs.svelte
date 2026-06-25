@@ -26,6 +26,7 @@
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import TabActions from './TabActions.svelte';
 	import { executeCommand } from '$lib/stores/commandRegistry';
+	import { scrollShadow } from '$lib/actions/scrollShadow';
 
 	type Props = {
 		tabs: Tab[];
@@ -224,6 +225,7 @@
 		<div
 			class="wrapper no-scrollbar"
 			bind:this={wrapperElement}
+			use:scrollShadow={{ axis: 'x', top: true }}
 			ondragover={handleWrapperDragOver}
 			ondrop={handleWrapperDrop}
 		>
@@ -235,6 +237,8 @@
 
 				<div
 					class="tab-container"
+					class:first={index === 0}
+					class:last={index === tabs.length - 1}
 					in:scale={{ duration: 150, start: 0.9, opacity: 0 }}
 					out:scale={{ duration: 150, start: 1, opacity: 0 }}
 					animate:flip={{ duration: 150 }}
@@ -377,7 +381,6 @@
 		align-items: stretch;
 		overflow-x: auto;
 		gap: var(--space-xs-sm);
-		padding: 0 var(--space-xs-sm);
 	}
 	.placeholder {
 		flex: 1;
@@ -385,6 +388,12 @@
 	.tab-container {
 		display: flex;
 		align-items: stretch;
+	}
+	.tab-container.first {
+		margin-left: var(--space-sm);
+	}
+	.tab-container.last {
+		margin-right: var(--space-sm);
 	}
 	.wrapper .tab {
 		position: relative;

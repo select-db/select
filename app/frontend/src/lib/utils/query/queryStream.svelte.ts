@@ -1,6 +1,7 @@
 import { EventsOn } from '$lib/wailsjs/runtime/runtime';
 import type { graph } from '$lib/wailsjs/go/models';
 import { removeFromLoadingStore } from './loadingStore';
+import { recordHistory } from './historyRecorder';
 
 export type QueryExecutionStatus = 'streaming' | 'done' | 'error' | 'cancelled';
 
@@ -136,6 +137,13 @@ EventsOn('query:done', (e: DonePayload) => {
 	}
 	exec.status = 'done';
 	removeFromLoadingStore(exec.dbInstanceId, exec.fileId);
+
+	recordHistory(e.executionId, {
+		affectedRows: e.affectedRows,
+		rowCount: e.rowCount,
+		durationMs: exec.durationMs,
+		errors: []
+	});
 });
 
 EventsOn('query:error', (e: ErrorPayload) => {
@@ -166,6 +174,8 @@ EventsOn('query:error', (e: ErrorPayload) => {
 	}
 
 	removeFromLoadingStore(e.dbInstanceId, e.fileId);
+
+	recordHistory(e.executionId, { errors: [e.message] });
 });
 
 // waitForStarted resolves with the execution once 'query:started' fires.
@@ -173,7 +183,8 @@ EventsOn('query:error', (e: ErrorPayload) => {
 export function waitForStarted(executionId: string): Promise<QueryExecution> {
 	const existing = executions[executionId];
 	if (existing) {
-		if (existing.status === 'error') return Promise.reject(new Error(existing.error ?? 'query failed'));
+		if (existing.status === 'error')
+			return Promise.reject(new Error(existing.error ?? 'query failed'));
 		return Promise.resolve(existing);
 	}
 	return new Promise((resolve, reject) => {
