@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { type Component } from 'svelte';
+	import { type Component, tick } from 'svelte';
 	import { get } from 'svelte/store';
 
 	import Badge from '$lib/system/Badge/Badge.svelte';
@@ -18,15 +18,27 @@
 		historyDone,
 		historyRefreshNonce,
 		resetHistory,
+		refreshHistory,
 		loadMoreHistory
 	} from './historyStore';
 	import HistoryStatementModal from './HistoryStatementModal.svelte';
 
-	// Reload whenever the workspace changes or a new statement is recorded.
+	let openedEntryId = $state<string | null>(null);
+	let listEl: HTMLElement | undefined = $state();
+
+	// On a real workspace switch, clear and reload (a blank gap is expected). For
+	// in-place refreshes (a new statement recorded), swap the list atomically so
+	// the panel never flashes to the loader/empty state.
+	let lastWorkspaceId: string | undefined;
 	$effect(() => {
-		void $workspaceGraphStore?.id;
+		const workspaceId = $workspaceGraphStore?.id;
 		void $historyRefreshNonce;
-		void resetHistory();
+		if (workspaceId !== lastWorkspaceId) {
+			lastWorkspaceId = workspaceId;
+			void resetHistory();
+		} else {
+			void refreshHistory();
+		}
 	});
 
 	function dbNameFor(item: history.HistoryEntry): string {
@@ -60,18 +72,46 @@
 	}
 
 	function openStatement(item: history.HistoryEntry): void {
+		openedEntryId = item.id;
+		const items = get(historyItems);
+		const index = items.findIndex((i) => i.id === item.id);
 		modalStore.set({
 			content: () => HistoryStatementModal as unknown as Component,
 			width: 'min(80vw, 900px)',
 			height: 'min(70vh, 600px)',
 			props: {
 				sql: item.statement,
+				dbInstanceId: item.dbInstanceId,
 				dbName: dbNameFor(item) || 'unknown database',
 				hasError: hasError(item),
 				errors: item.errors ?? [],
-				createdAt: item.createdAt
+				createdAt: item.createdAt,
+				onPrev: () => navigate(-1),
+				onNext: () => navigate(1),
+				canPrev: index > 0,
+				canNext: index >= 0 && index < items.length - 1
 			}
 		});
+		void scrollOpenedIntoView();
+	}
+
+	function navigate(delta: number): void {
+		const items = get(historyItems);
+		const index = items.findIndex((i) => i.id === openedEntryId);
+		const next = index === -1 ? undefined : items[index + delta];
+		if (next) openStatement(next);
+	}
+
+	async function scrollOpenedIntoView(): Promise<void> {
+		await tick();
+		const list = listEl;
+		const row = list?.querySelector(`[data-id="${openedEntryId}"]`);
+		if (!list || !row) return;
+
+		const listRect = list.getBoundingClientRect();
+		const rowRect = row.getBoundingClientRect();
+		const offset = rowRect.top + rowRect.height / 2 - (listRect.top + listRect.height / 2);
+		list.scrollBy({ top: offset, behavior: 'smooth' });
 	}
 
 	// Infinite scroll: load the next page when the sentinel scrolls into view.
@@ -99,13 +139,18 @@
 			<p class="muted">No statements run in the last 7 days.</p>
 		</div>
 	{:else}
-		<div class="list no-scrollbar" use:scrollShadow={{ top: true }}>
+		<div class="list no-scrollbar" bind:this={listEl} use:scrollShadow={{ top: true }}>
 			{#each $historyItems as item (item.id)}
 				{@const dbName = dbNameFor(item)}
 				{@const error = hasError(item)}
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="row" onclick={() => openStatement(item)}>
+				<div
+					class="row"
+					data-id={item.id}
+					class:selected={item.id === openedEntryId}
+					onclick={() => openStatement(item)}
+				>
 					<div class="row-top">
 						<div class="row-meta">
 							<p class="time">{formatRelativeTime(item.createdAt)}</p>
@@ -194,6 +239,15 @@
 	}
 
 	.row:hover p {
+		color: var(--gray-1000);
+	}
+
+	.row.selected {
+		border: var(--border);
+		background-color: var(--gray-300);
+	}
+
+	.row.selected p {
 		color: var(--gray-1000);
 	}
 

@@ -16,9 +16,7 @@
 	const ICON = { success: 'check', error: 'cross' } as const;
 	const DEFAULT_LABEL = { success: 'Success', error: 'Error' } as const;
 
-	const text = $derived(
-		typeof label === 'string' ? label : label ? DEFAULT_LABEL[status] : ''
-	);
+	const text = $derived(typeof label === 'string' ? label : label ? DEFAULT_LABEL[status] : '');
 </script>
 
 <span class="badge {status} {className}" class:has-label={text}>
@@ -43,7 +41,7 @@
 	}
 
 	.badge.has-label {
-		padding: var(--space-xxs) var(--space-xs);
+		padding: var(--space-xs) var(--space-xs-sm);
 		font-size: var(--fs-sm);
 	}
 

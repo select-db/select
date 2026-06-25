@@ -27,7 +27,6 @@ export const updateLeftPanelTab = (tab: LeftPanelTab) => {
 
 /** Open left panel with tab, close if already on that tab, or switch to tab. */
 export function toggleLeftPanelTab(tab: LeftPanelTab): void {
-	console.log(internalIsLeftbarOpened);
 	if (!internalIsLeftbarOpened) {
 		updateLeftPanelTab(tab);
 		updateIsLeftbarOpened(true);

@@ -1,28 +1,65 @@
 <script lang="ts">
 	import Badge from '$lib/system/Badge/Badge.svelte';
+	import Button from '$lib/system/Button/Button.svelte';
+	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
 	import SqlViewer from '$lib/system/SqlViewer/SqlViewer.svelte';
 	import { formatRelativeTime } from '$lib/utils/formatRelativeTime';
 
 	type Props = {
 		sql: string;
+		dbInstanceId: string;
 		dbName: string;
 		hasError: boolean;
 		errors: string[];
 		createdAt: string;
+		onPrev: () => void;
+		onNext: () => void;
+		canPrev: boolean;
+		canNext: boolean;
 		onClose: () => void;
 	};
 
-	let { sql, dbName, hasError, errors, createdAt }: Props = $props();
+	let {
+		sql,
+		dbInstanceId,
+		dbName,
+		hasError,
+		errors,
+		createdAt,
+		onPrev,
+		onNext,
+		canPrev,
+		canNext
+	}: Props = $props();
 </script>
 
-<div class="history-modal-body">
-	<div class="toolbar">
+<div class="wrapper">
+	<div class="header">
 		<span class="meta">
-			<span class="db-name">{dbName}</span>
+			<DatabaseIndicator size={16} id={dbInstanceId} />
+			<span class="title">{dbName}</span>
 		</span>
-		<span class="toolbar-right">
+		<span class="header-right">
+			<p class="hint">{formatRelativeTime(createdAt)}</p>
 			<Badge status={hasError ? 'error' : 'success'} label />
-			<p class="time">{formatRelativeTime(createdAt)}</p>
+			<span class="nav">
+				<Button
+					leftIcon="chevron-up"
+					iconSize={16}
+					size="sm"
+					disabled={!canPrev}
+					onclick={onPrev}
+					emphasis="high"
+				/>
+				<Button
+					leftIcon="chevron-down"
+					iconSize={16}
+					size="sm"
+					disabled={!canNext}
+					onclick={onNext}
+					emphasis="high"
+				/>
+			</span>
 		</span>
 	</div>
 
@@ -38,7 +75,7 @@
 </div>
 
 <style>
-	.history-modal-body {
+	.wrapper {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
@@ -46,12 +83,13 @@
 		background-color: var(--gray-0);
 	}
 
-	.toolbar {
+	.header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--space-sm);
+		padding: var(--space-xs-sm);
 		border-bottom: var(--border);
+		background-color: var(--gray-400);
 	}
 
 	.errors {
@@ -61,27 +99,32 @@
 
 	.meta {
 		display: flex;
-		gap: var(--space-xs);
+		gap: var(--space-xs-sm);
+		padding-left: var(--space-xs-sm);
 		align-items: center;
 		min-width: 0;
 	}
 
-	.db-name {
-		font-size: var(--fs-sm);
-		color: var(--gray-1000);
+	.title {
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
-	.toolbar-right {
+	.header-right {
 		display: flex;
 		gap: var(--space-sm);
 		align-items: center;
 		flex-shrink: 0;
 	}
 
-	.time {
+	.nav {
+		display: flex;
+		align-items: center;
+		gap: var(--space-xs-sm);
+	}
+
+	.hint {
 		font-size: 11px;
 		color: var(--gray-800);
 	}

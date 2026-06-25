@@ -28,6 +28,35 @@ export async function resetHistory(): Promise<void> {
 	await loadMoreHistory();
 }
 
+/**
+ * Reloads the first page in place, swapping the list only once the data
+ * arrives. Unlike resetHistory it never empties the list, so an open panel
+ * doesn't flash to the loader/empty state when a new statement is recorded.
+ */
+export async function refreshHistory(): Promise<void> {
+	const workspaceId = get(workspaceGraphStore)?.id;
+	if (!workspaceId) {
+		historyItems.set([]);
+		historyDone.set(true);
+		return;
+	}
+	if (inFlight) return;
+
+	inFlight = true;
+	historyLoading.set(true);
+	try {
+		const batch = await ListHistory({ workspaceId, limit: PAGE_SIZE, offset: 0 });
+		offset = batch.length;
+		historyDone.set(batch.length < PAGE_SIZE);
+		historyItems.set(batch);
+	} catch {
+		// Keep the existing list on a transient read error rather than blanking it.
+	} finally {
+		inFlight = false;
+		historyLoading.set(false);
+	}
+}
+
 /** Loads the next page, appending to the list. No-op once exhausted. */
 export async function loadMoreHistory(): Promise<void> {
 	if (inFlight || get(historyDone)) return;
