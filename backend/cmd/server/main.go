@@ -19,6 +19,7 @@ import (
 	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/cli"
+	"backend/internal/kms"
 	"backend/internal/middlewares"
 
 	apikeyhandler "backend/internal/apikey"
@@ -92,9 +93,9 @@ func main() {
 	audit.SetDefault(auditLogger)
 
 	// pg_cron's scheduler lives in the cluster's cron DB, not the app DB, so the
-	// maintenance job can't be a migration. No-op if AUDIT_CRON_DSN is unset,
-	// then it's provisioned out of band (see the on-prem runbook).
-	if cronDSN := os.Getenv("AUDIT_CRON_DSN"); cronDSN != "" {
+	// maintenance job can't be a migration. No-op if POSTGRES_AUDIT_CRON_DSN is
+	// unset, then it's provisioned out of band (see the on-prem runbook).
+	if cronDSN, _ := kms.Secret("POSTGRES_AUDIT_CRON_DSN"); cronDSN != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		if err := audit.EnsureMaintenanceSchedule(ctx, db.GetDB(), cronDSN, os.Getenv("AUDIT_CRON_SCHEDULE")); err != nil {
 			log.Printf("WARNING: audit: %v", err)

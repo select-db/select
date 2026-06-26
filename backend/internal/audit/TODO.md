@@ -18,7 +18,7 @@ lifecycle. Live emit sites: `query.executed`, `iam.permission.upserted`.
       not in its tx — thread a tx through `patch.Apply` (see TODO in logger.go)
 - [ ] MCP execute path logging + `channel` (http|mcp) in payload (agent-access signal)
 - [ ] System/platform events (key rotation, boot): blocked by `workspace_id NOT NULL` — needs a decision
-- [ ] select-ops: enable pg_partman + pg_cron on the cluster, set `AUDIT_CRON_DSN`
+- [ ] select-ops: enable pg_partman + pg_cron on the cluster, set `POSTGRES_AUDIT_CRON_DSN` (KMS secret → cluster's `defaultdb`)
 
 ## Notes
 - `domain.action` is a frozen external contract — add, never rename/repurpose.
