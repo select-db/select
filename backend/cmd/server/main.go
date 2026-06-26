@@ -117,8 +117,8 @@ func main() {
 		cancel()
 	}
 
-	// Warn loudly if partition maintenance can't run, so a misconfigured DB
-	// surfaces now instead of silently stopping retention months later.
+	// Report on partition maintenance: warns only when pg_partman is present but
+	// misconfigured. No partman is a supported mode (in-app retention).
 	{
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := audit.Preflight(ctx, db.GetDB()); err != nil {

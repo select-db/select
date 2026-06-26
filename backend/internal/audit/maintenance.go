@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/lib/pq"
 )
@@ -28,9 +29,10 @@ var auditParents = []string{
 	"audit.event_datasource",
 }
 
-// Preflight verifies maintenance can run: pg_partman installed and all audit
-// parents registered. Surfaces a misconfigured self-hosted DB loudly instead of
-// silently never running maintenance.
+// Preflight reports on partition maintenance. With pg_partman it verifies every
+// audit parent is registered, surfacing a misconfigured DB loudly. Without
+// pg_partman it's a supported mode (the Logger's in-app sweeper handles
+// retention), so it logs an info line and returns nil.
 func Preflight(ctx context.Context, db *sql.DB) error {
 	var hasPartman bool
 	if err := db.QueryRowContext(ctx,
@@ -38,7 +40,8 @@ func Preflight(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("audit preflight: checking pg_partman: %w", err)
 	}
 	if !hasPartman {
-		return fmt.Errorf("audit preflight: pg_partman is not installed. Partition creation/retention will not run; install the extension and run migrations (migrate:up)")
+		log.Printf("audit: pg_partman not installed, using in-app retention (AUDIT_RETENTION_DAYS). Install pg_partman for partition-based retention at scale")
+		return nil
 	}
 
 	var managed int
