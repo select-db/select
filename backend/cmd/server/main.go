@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -58,6 +59,18 @@ func versionHandler() http.HandlerFunc {
 	}
 }
 
+// auditRetentionDays reads AUDIT_RETENTION_DAYS (used only when pg_partman is
+// absent); defaults to one year, matching partman's retention.
+func auditRetentionDays() int {
+	if v := os.Getenv("AUDIT_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+		log.Printf("WARNING: invalid AUDIT_RETENTION_DAYS=%q, using default", v)
+	}
+	return 365
+}
+
 func main() {
 	// Best-effort: load .env if present. In production, vars come from systemd EnvironmentFile.
 	_ = godotenv.Load()
@@ -87,8 +100,9 @@ func main() {
 	startPprofServer()
 
 	// Async writer + outbox drainer run until Stop on shutdown. Partitions are
-	// managed in-DB by pg_partman + pg_cron.
-	auditLogger := audit.New(db.GetDB(), audit.Options{})
+	// managed in-DB by pg_partman + pg_cron; without them, the logger sweeps rows
+	// older than AUDIT_RETENTION_DAYS (default 365; 0 = keep forever) instead.
+	auditLogger := audit.New(db.GetDB(), audit.Options{RetentionDays: auditRetentionDays()})
 	auditLogger.Start()
 	audit.SetDefault(auditLogger)
 

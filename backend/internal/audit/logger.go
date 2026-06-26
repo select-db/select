@@ -20,6 +20,7 @@ type Options struct {
 	BatchSize     int           // rows per INSERT batch
 	FlushInterval time.Duration // max time a buffered row waits before a flush
 	OutboxPoll    time.Duration // how often the outbox is drained
+	RetentionDays int           // fallback sweep when pg_partman is absent; 0 = keep forever
 }
 
 const (
@@ -38,6 +39,7 @@ type Logger struct {
 	batchSize     int
 	flushInterval time.Duration
 	outboxPoll    time.Duration
+	retention     time.Duration
 
 	wg       sync.WaitGroup
 	stop     chan struct{}
@@ -64,11 +66,13 @@ func New(db *sql.DB, opts Options) *Logger {
 		batchSize:     opts.BatchSize,
 		flushInterval: opts.FlushInterval,
 		outboxPoll:    opts.OutboxPoll,
+		retention:     time.Duration(opts.RetentionDays) * 24 * time.Hour,
 		stop:          make(chan struct{}),
 	}
 }
 
-// Start launches the async writer and the outbox drainer.
+// Start launches the async writer and the outbox drainer, plus the fallback
+// retention sweeper when pg_partman isn't managing partitions in-DB.
 func (l *Logger) Start() {
 	if l == nil {
 		return
@@ -76,6 +80,11 @@ func (l *Logger) Start() {
 	l.wg.Add(2)
 	go l.writeLoop()
 	go l.outboxLoop()
+
+	if l.retention > 0 && !l.partmanManaged() {
+		l.wg.Add(1)
+		go l.retentionLoop()
+	}
 }
 
 // Log never blocks the caller: a full buffer drops the event (a query must not

@@ -166,6 +166,18 @@ func (q *Queries) DeleteAPIKeyRoles(ctx context.Context, apiKeyID db_types.JSONN
 	return err
 }
 
+const deleteAuditEventsBefore = `-- name: DeleteAuditEventsBefore :execrows
+DELETE FROM audit.event WHERE occurred_at < $1
+`
+
+func (q *Queries) DeleteAuditEventsBefore(ctx context.Context, occurredAt db_types.JSONNullTime) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAuditEventsBefore, occurredAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteAuditOutbox = `-- name: DeleteAuditOutbox :exec
 DELETE FROM audit.outbox WHERE id = ANY($1::bigint[])
 `
