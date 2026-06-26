@@ -1,6 +1,6 @@
 build/*
 !build/appicon*.png
-# Hand-maintained bundle/signing config (not build artifacts) — keep in VCS so
+# Hand-maintained bundle/signing config (not build artifacts). Keep in VCS so
 # the release/signing flow is reproducible. build/bin/ stays ignored.
 !build/darwin/
 build/darwin/*

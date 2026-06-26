@@ -5,7 +5,7 @@ import (
 	"log"
 )
 
-// Catalog declares the full audit event vocabulary — the external contract a
+// Catalog declares the full audit event vocabulary, the external contract a
 // consumer's SOC/SIEM keys on. All emission goes through Emit(Spec, Record); to
 // see what can be logged, read Catalog. A spec is part of the contract whether
 // or not its emit site is wired yet (see "wired today" below); the rest are
@@ -33,7 +33,7 @@ func (s Spec) Type() string { return s.Domain + "." + s.Action }
 // control-plane mutations (iam, datasource) go through the durable outbox so a
 // crash can't lose a privilege or config change.
 var (
-	// query — Datastore Activity. The data plane: what was read/exported.
+	// query - Datastore Activity. The data plane: what was read/exported.
 	QueryExecuted = Spec{
 		Domain: DomainQuery, Action: ActionExecuted, Lane: LaneAsync, TargetType: "datasource",
 		Doc: "a SQL query finished executing against a datasource via the proxy (status success|error)",
@@ -44,17 +44,17 @@ var (
 	}
 	QueryExported = Spec{
 		Domain: DomainQuery, Action: ActionExported, Lane: LaneAsync, TargetType: "datasource",
-		Doc: "a bulk export/dump of a datasource was run — primary exfiltration signal",
+		Doc: "a bulk export of a datasource was run",
 	}
 
-	// auth — Authentication. Proving identity; no target (the principal is the subject).
+	// auth - Authentication. Proving identity; no target (the principal is the subject).
 	AuthLogin = Spec{
 		Domain: DomainAuth, Action: ActionLogin, Lane: LaneAsync,
 		Doc: "a principal authenticated and a token was issued",
 	}
 	AuthLoginFailed = Spec{
 		Domain: DomainAuth, Action: ActionLoginFailed, Lane: LaneAsync,
-		Doc: "an authentication attempt was rejected (status failure) — brute-force signal",
+		Doc: "an authentication attempt was rejected (status failure)",
 	}
 	AuthTokenRefreshed = Spec{
 		Domain: DomainAuth, Action: ActionTokenRefreshed, Lane: LaneAsync,
@@ -65,7 +65,7 @@ var (
 		Doc: "a session/refresh token was revoked",
 	}
 
-	// iam — Identity & Access Management. Privilege and account changes.
+	// iam - Identity & Access Management. Privilege and account changes.
 	PermissionUpserted = Spec{
 		Domain: DomainIAM, Action: ActionPermissionUpserted, Lane: LaneOutbox, TargetType: "permission",
 		Doc: "a permission rule was created or updated through the syncer",
@@ -111,7 +111,7 @@ var (
 		Doc: "an API key was revoked",
 	}
 
-	// datasource — connection lifecycle. Sensitive: DSNs can redirect data.
+	// datasource - connection lifecycle. Sensitive: DSNs can redirect data.
 	DatasourceUpserted = Spec{
 		Domain: DomainDatasource, Action: ActionDatasourceUpserted, Lane: LaneOutbox, TargetType: "datasource",
 		Doc: "a datasource was created or its connection config changed",
@@ -123,7 +123,7 @@ var (
 )
 
 // Catalog is the full declared vocabulary. Wired today: QueryExecuted,
-// PermissionUpserted. The rest are reserved contract — emit sites land at their
+// PermissionUpserted. The rest are reserved contract, emit sites land at their
 // choke points incrementally.
 var Catalog = []Spec{
 	QueryExecuted, QueryDenied, QueryExported,
@@ -162,10 +162,10 @@ type Record struct {
 }
 
 // Emit builds the envelope from spec and dispatches to its lane. The only
-// emission entry point — callers never touch Log/LogOutbox directly.
+// emission entry point, callers never touch Log/LogOutbox directly.
 func Emit(ctx context.Context, spec Spec, r Record) error {
 	if !registered[spec.Type()] {
-		log.Printf("audit: Emit called with unregistered spec %q — add it to Catalog", spec.Type())
+		log.Printf("audit: Emit called with unregistered spec %q, add it to Catalog", spec.Type())
 	}
 
 	e := &Event{

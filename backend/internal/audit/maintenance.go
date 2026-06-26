@@ -47,7 +47,7 @@ func Preflight(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("audit preflight: reading partman.part_config: %w", err)
 	}
 	if managed < len(auditParents) {
-		return fmt.Errorf("audit preflight: only %d/%d audit partition parents are registered in pg_partman — partitions may stop being created or retained; re-run migrations", managed, len(auditParents))
+		return fmt.Errorf("audit preflight: only %d/%d audit partition parents are registered in pg_partman. Partitions may stop being created or retained; re-run migrations", managed, len(auditParents))
 	}
 	return nil
 }
@@ -85,7 +85,7 @@ func EnsureMaintenanceSchedule(ctx context.Context, appDB *sql.DB, cronDSN, sche
 		return fmt.Errorf("audit cron: checking pg_cron: %w", err)
 	}
 	if !hasCron {
-		return fmt.Errorf("audit cron: pg_cron is not installed in the cron database — enable it (shared_preload_libraries + restart) or schedule maintenance manually")
+		return fmt.Errorf("audit cron: pg_cron is not installed in the cron database. Enable it (shared_preload_libraries + restart) or schedule maintenance manually")
 	}
 
 	// schedule_in_database upserts by job name, so re-running on boot is safe.

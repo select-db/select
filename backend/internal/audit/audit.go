@@ -1,5 +1,5 @@
 // Package audit is the unified, append-only activity log: query, IAM, auth, and
-// datasource events share one Event envelope and one writer with two lanes —
+// datasource events share one Event envelope and one writer with two lanes,
 // Log (best-effort async) and LogOutbox (durable transactional outbox).
 // Encryption at rest is Tier 0 (storage-level), so payloads are plaintext JSONB.
 package audit

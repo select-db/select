@@ -10,7 +10,7 @@ import (
 func ptr(s string) *string { return &s }
 
 // Identical authz state must hash to the same value regardless of the order
-// roles/permissions arrive in — that is what lets snapshots dedup.
+// roles/permissions arrive in, that is what lets snapshots dedup.
 func TestPrincipalHashIsOrderIndependent(t *testing.T) {
 	a := Principal{
 		Type:        PrincipalUser,

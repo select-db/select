@@ -23,7 +23,7 @@ func TestToSnake(t *testing.T) {
 	}
 }
 
-// Diff turns sqlc rows/params into a clean before/after map, generically — no
+// Diff turns sqlc rows/params into a clean before/after map, generically. No
 // per-column code, nullable wrappers come out as values (not {Value,Valid}).
 func TestDiffGeneric(t *testing.T) {
 	after := generated.UpsertPermissionParams{

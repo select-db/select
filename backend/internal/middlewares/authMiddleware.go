@@ -39,7 +39,7 @@ func MustGetUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return userID, true
 }
 
-// GetWorkspaces returns the caller's per-workspace standing — the source every
+// GetWorkspaces returns the caller's per-workspace standing, the source every
 // other workspace getter derives from.
 func GetWorkspaces(r *http.Request) ([]auth.WorkspaceClaim, bool) {
 	ws, ok := r.Context().Value(workspacesKey).([]auth.WorkspaceClaim)

@@ -166,7 +166,7 @@
 					class="advanced-toggle"
 					onclick={() => (showAdvanced = !showAdvanced)}
 				>
-					{showAdvanced ? 'Hide advanced' : 'Advanced — use a custom server'}
+					{showAdvanced ? 'Hide advanced' : 'Advanced, use a custom server'}
 				</button>
 			{/if}
 

@@ -92,7 +92,7 @@ func main() {
 	audit.SetDefault(auditLogger)
 
 	// pg_cron's scheduler lives in the cluster's cron DB, not the app DB, so the
-	// maintenance job can't be a migration. No-op if AUDIT_CRON_DSN is unset —
+	// maintenance job can't be a migration. No-op if AUDIT_CRON_DSN is unset,
 	// then it's provisioned out of band (see the on-prem runbook).
 	if cronDSN := os.Getenv("AUDIT_CRON_DSN"); cronDSN != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

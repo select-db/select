@@ -69,7 +69,7 @@ func (g *Git) LinkExistingRepo(params LinkExistingParams) (LinkStatus, error) {
 			g.pendingLinkBranch = branch
 			return LinkStatus{Scenario: "checkout", Branch: branch}, nil
 		}
-		// Remote is also empty — nothing destructive to do.
+		// Remote is also empty, nothing destructive to do.
 		if err := writeLinkMarker(ctx, root, params.RemoteURL); err != nil {
 			return LinkStatus{}, err
 		}

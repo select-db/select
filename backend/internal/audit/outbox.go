@@ -14,7 +14,7 @@ const (
 
 // LogOutbox durably enqueues an event for crash-safety.
 //
-// TODO: not yet atomic with the audited mutation — it's a standalone INSERT
+// TODO: not yet atomic with the audited mutation. It's a standalone INSERT
 // after the mutation, not in its transaction (the syncer doesn't thread a tx
 // through patch.Apply yet).
 func (l *Logger) LogOutbox(ctx context.Context, e *Event) error {

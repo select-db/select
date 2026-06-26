@@ -117,7 +117,7 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 	displayName := ""
 	var workspaces []WorkspaceClaim
 	if db.Queries != nil {
-		// Membership, ownership, roles — grouped per workspace below.
+		// Membership, ownership, roles. Grouped per workspace below.
 		var workspaceIDs []string
 		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
 			for _, u := range ids {

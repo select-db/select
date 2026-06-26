@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_event_errors
 -- With pg_partman: register each domain's monthly RANGE level (premakes upcoming
 -- partitions + a default, drops expired ones per part_config) and set retention.
 -- Without it (dev/test): attach one DEFAULT partition per domain so inserts route
--- somewhere — production gets monthly partitions managed by partman instead.
+-- somewhere, production gets monthly partitions managed by partman instead.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_partman') THEN
@@ -116,7 +116,7 @@ $$;
 
 -- +goose StatementBegin
 -- Durable outbox for security-critical (iam/datasource) events: enqueued in the
--- request tx, moved into audit.event by a background worker — off the hot path
+-- request tx, moved into audit.event by a background worker, off the hot path
 -- yet crash-safe.
 CREATE TABLE IF NOT EXISTS audit.outbox (
     id          BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
