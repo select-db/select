@@ -160,8 +160,7 @@
 							{:else}
 								<p class="db-name placeholder truncate">unknown</p>
 							{/if}
-							<div class="db">
-							</div>
+							<div class="db"></div>
 						</div>
 					</div>
 					{#await previewHtml(item.statement) then html}
@@ -209,44 +208,35 @@
 		flex-grow: 1;
 
 		padding: 0 var(--space-sm);
-
 	}
 
 	.row {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm);
-		padding: var(--space-sm) var(--space-sm);
+		padding: var(--space-sm) var(--space-sm-md);
 		border: var(--bw) transparent solid;
 		border-radius: var(--br-sm);
 		background: transparent;
 		text-align: left;
 		overflow: hidden;
-		min-height: 39px;
+		min-height: 42px;
 
-		transition: all .2s ease;
+		transition: all 0.2s ease;
 	}
 
-	.row:hover {
+	.row:hover,
+	.row.selected {
 		border: var(--border);
 		background-color: var(--gray-200);
 	}
 
 	.row p {
 		color: var(--gray-800);
-				transition: all .1s ease;
-
+		transition: all 0.1s ease;
 	}
 
-	.row:hover p {
-		color: var(--gray-1000);
-	}
-
-	.row.selected {
-		border: var(--border);
-		background-color: var(--gray-300);
-	}
-
+	.row:hover p,
 	.row.selected p {
 		color: var(--gray-1000);
 	}

@@ -345,7 +345,6 @@
 		display: flex;
 		align-items: stretch;
 
-		gap: var(--space-xs);
 		/* Scope the seam line's z-index so it stays behind the tabs only */
 		isolation: isolate;
 	}
