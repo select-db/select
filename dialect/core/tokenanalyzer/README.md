@@ -20,7 +20,7 @@ Analyzer.Call(req) ──── JSON line ──────▶ server.serve()  
 - `LintRunner` (`runner.go`) wraps an `Analyzer` for lint, plus custom rules and
   inline `-- lint-disable` handling.
 - Completion/reference helpers live in `dialect/core/references` and take a
-  `core.Analyzer`. **If that analyzer is nil, they return `"analyzer is nil"`** —
+  `core.Analyzer`. **If that analyzer is nil, they return `"analyzer is nil"`**,
   see Troubleshooting.
 
 ## How the analyzer is discovered
@@ -33,7 +33,7 @@ The app wires the analyzer in `app/internal/sqllang` via `resolveAnalyzer()`:
 | anything else | a sibling `analyzer` binary next to the app executable (PyInstaller one-file build) | packaged app |
 
 `APP_ENV` defaults to `dev` (build-time var in `app/main.go`, also set in
-`app/.env`). So **for local development you must create the venv** — otherwise
+`app/.env`). So **for local development you must create the venv**. Otherwise
 there is no analyzer and SQL completion/lint fail with `analyzer is nil`.
 
 ## Local setup (dev)
@@ -45,7 +45,7 @@ cd dialect/core/tokenanalyzer/python
 uv sync          # creates ./.venv and installs sqlglot
 ```
 
-That is all the Go side needs — it auto-discovers `./.venv/bin/python3`.
+That is all the Go side needs. It auto-discovers `./.venv/bin/python3`.
 Restart the app (`wails dev`) and completion/lint will work.
 
 Verify the subprocess runs standalone:
@@ -63,7 +63,7 @@ echo '{"action":"lint","sql":"SELECT 1","dialect":"postgres","schema":{}}' | uv 
 cd dialect/core/tokenanalyzer/python
 uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
 
-# Go tests (skip automatically when the venv is absent — see testutil.NewTestAnalyzer)
+# Go tests (skip automatically when the venv is absent. See testutil.NewTestAnalyzer)
 cd dialect && go test ./core/tokenanalyzer/...
 ```
 

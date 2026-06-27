@@ -194,7 +194,7 @@ func StartSSHTunnel(config ResolvedSSHConfig, remoteHost string, remotePort int)
 
 // sshAuth pairs an auth method with a cleanup that releases any resource the
 // method holds (e.g. the SSH-agent socket). cleanup is always non-nil and must
-// be called once the handshake is done — it is a no-op for stateless methods.
+// be called once the handshake is done. It is a no-op for stateless methods.
 type sshAuth struct {
 	method  ssh.AuthMethod
 	cleanup func()

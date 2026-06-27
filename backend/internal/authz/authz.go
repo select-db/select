@@ -4,10 +4,48 @@ import (
 	"net/http"
 
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/middlewares"
 
 	core "github.com/selectDb/dialect/core"
 )
+
+// RequestPrincipal assembles the audit principal from the request context (no
+// extra DB cost). The workspace is explicit because sync spans workspaces.
+func RequestPrincipal(r *http.Request, workspaceID string) audit.Principal {
+	p := middlewares.GetPrincipal(r)
+	wc, _ := p.Workspace(workspaceID) // roles the caller holds in this workspace
+
+	ptype := audit.PrincipalUser
+	if p.IsAPIKey {
+		ptype = audit.PrincipalAPIKey
+	}
+
+	roles := make([]audit.Role, len(wc.Roles))
+	roleIDs := make([]string, len(wc.Roles))
+	for i, ref := range wc.Roles {
+		roles[i] = audit.Role{ID: ref.ID, Name: ref.Name}
+		roleIDs[i] = ref.ID
+	}
+
+	return audit.Principal{
+		Type:        ptype,
+		ID:          p.ID,
+		Name:        p.Name,
+		WorkspaceID: workspaceID,
+		Roles:       roles,
+		Permissions: EntriesForWorkspace(roleIDs, workspaceID),
+	}
+}
+
+func workspaceRoleIDs(r *http.Request, workspaceID string) []string {
+	wc, _ := middlewares.GetPrincipal(r).Workspace(workspaceID)
+	ids := make([]string, len(wc.Roles))
+	for i, role := range wc.Roles {
+		ids[i] = role.ID
+	}
+	return ids
+}
 
 func InSet(ids []string, id string) bool {
 	for _, v := range ids {
@@ -46,7 +84,8 @@ func CompiledForWorkspace(roleIDs []string, workspaceID string) core.CompiledPer
 }
 
 func CompiledFromRequest(r *http.Request) core.CompiledPermissions {
-	return CompiledForWorkspace(middlewares.GetRoleIDs(r), middlewares.MemberWorkspaceID(r))
+	ws := middlewares.MemberWorkspaceID(r)
+	return CompiledForWorkspace(workspaceRoleIDs(r, ws), ws)
 }
 
 // EntriesForWorkspace returns the raw permission entries (not compiled)
@@ -66,5 +105,6 @@ func EntriesForWorkspace(roleIDs []string, workspaceID string) []core.Permission
 
 // EntriesFromRequest is EntriesForWorkspace driven by request context.
 func EntriesFromRequest(r *http.Request) []core.PermissionEntry {
-	return EntriesForWorkspace(middlewares.GetRoleIDs(r), middlewares.MemberWorkspaceID(r))
+	ws := middlewares.MemberWorkspaceID(r)
+	return EntriesForWorkspace(workspaceRoleIDs(r, ws), ws)
 }
