@@ -44,11 +44,16 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 	if oid := utils.MapGetString(payload, "owner_id"); oid != "" {
 		ownerID = db_types.NewJSONNullString(oid)
 	}
+	statementTimeoutMs := utils.MapGetIntOr(payload, "statement_timeout_ms", 30000)
+	maxResultSizeMB := utils.MapGetIntOr(payload, "max_result_size_mb", 100)
+
 	if err := queries.UpsertWorkspaceForSync(ctx, generated.UpsertWorkspaceForSyncParams{
-		ID:           id,
-		Name:         name,
-		GitRemoteUrl: gitRemote,
-		OwnerID:      ownerID,
+		ID:                 id,
+		Name:               name,
+		GitRemoteUrl:       gitRemote,
+		OwnerID:            ownerID,
+		StatementTimeoutMs: int64(statementTimeoutMs),
+		MaxResultSizeMb:    int64(maxResultSizeMB),
 	}); err != nil {
 		return err
 	}

@@ -1,46 +1,23 @@
 # Config File
 
-`.config` controls [query execution](/sql/query-execution/) limits, keybindings,
-and editor snippets. It is **split across two locations** by ownership:
+`.config` is a **personal** file: it holds your keybindings and editor snippets.
+It is **not** part of any workspace and is never committed to git — it lives in
+SELECT's per-user config directory and follows you across every workspace.
 
-| Setting | Owner | Location | Tracked by git |
-|---------|-------|----------|----------------|
-| `statement_timeout_ms`, `max_result_size_mb` | team | workspace root `.config` | yes |
-| `keybindings`, `editor_snippets` | you | per-user config dir `.config` | no |
+> Execution limits (`statement_timeout_ms`, `max_result_size_mb`) are **not** in
+> `.config`. They are workspace-level team policy and are configured in
+> **Settings → Workspace** (see [Execution limits](#execution-limits) below).
 
-Execution limits are a project safety policy the team wants enforced, so they
-stay in the workspace `.config` and are committed. Keybindings and snippets are
-personal, so they live in a per-user `.config` outside every workspace — never
-committed, and shared across all your workspaces.
-
-The two files are merged at load time: the workspace wins for execution limits,
-and you win for keybindings/snippets.
-
-## Where the per-user file lives
-
-The personal `.config` lives in SELECT's per-user config directory, alongside
-your `.theme`:
+## Where the file lives
 
 - **macOS**: `~/Library/Application Support/selectDb/<env>/user-config/.config`
 - **Linux**: `$XDG_CONFIG_HOME/selectDb/<env>/user-config/.config` (defaults to
   `~/.config/...`)
 - **Windows**: `%APPDATA%\selectDb\<env>\user-config\.config`
 
-You don't need to find it on disk: open it from the global resource menu like any
-other file.
+You don't need to find it on disk: open it from **Settings → Config**.
 
 ## Format
-
-The workspace `.config` holds only execution limits:
-
-```json
-{
-  "statement_timeout_ms": 30000,
-  "max_result_size_mb": 100
-}
-```
-
-The per-user `.config` holds keybindings and snippets:
 
 ```json
 {
@@ -51,10 +28,14 @@ The per-user `.config` holds keybindings and snippets:
 
 ## Execution limits
 
+Execution limits are **workspace** settings, shared with everyone in the
+workspace (synced through the SELECT backend, like roles and permissions), and
+edited in **Settings → Workspace**:
+
 | Field                    | Default | Description                                         |
 |--------------------------|---------|-----------------------------------------------------|
 | **statement_timeout_ms** | 30000   | Max query execution time in milliseconds            |
-| **max_result_size_mb**   | 100     | Max result set size in MB before truncation         |
+| **max_result_size_mb**   | 100     | Max result set size in MB before truncation (max 250)|
 
 ## Keybindings
 
@@ -110,4 +91,5 @@ Define custom SQL snippets that appear in autocompletion:
 
 ## Applying changes
 
-After editing the `.config` file, click **Apply** to reload the configuration. To restore the built-in defaults, click **Reset**.
+After editing `.config` (in **Settings → Config**), click **Apply** to reload
+the configuration. To restore the built-in defaults, click **Reset**.

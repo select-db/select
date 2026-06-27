@@ -10,7 +10,8 @@ For **local connections**, results are fetched in a single round-trip.
 
 ## Limits
 
-Two settings in your `.config` file control execution bounds:
+Two **workspace** settings (configured in **Settings → Workspace**, shared with
+your team) control execution bounds:
 
 | Setting                  | Default | Max   | Description                            |
 |--------------------------|---------|-------|----------------------------------------|

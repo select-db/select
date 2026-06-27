@@ -8,7 +8,7 @@
 	import { AlertType } from '$lib/system/Alert/types';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { UpdateName, DeleteWorkspace } from '$lib/wailsjs/go/workspace/Workspace';
-	import { Logout } from '$lib/wailsjs/go/system/System';
+	import { Logout, UpdateWorkspaceExecutionLimits } from '$lib/wailsjs/go/system/System';
 	import { get } from 'svelte/store';
 	import { graph } from '$lib/wailsjs/go/models';
 	import ConfirmDeleteWorkspaceModal from './ConfirmDeleteWorkspaceModal.svelte';
@@ -16,9 +16,17 @@
 	let name = $state('');
 	let saving = $state(false);
 
+	// Execution limits are team policy stored on the workspace (synced via the
+	// backend), shared with everyone in the workspace.
+	let statementTimeoutMs = $state(30000);
+	let maxResultSizeMb = $state(100);
+	let savingLimits = $state(false);
+
 	$effect(() => {
 		const g = get(workspaceGraphStore);
 		if (g?.name != null) name = g.name;
+		if (g?.statement_timeout_ms != null) statementTimeoutMs = g.statement_timeout_ms;
+		if (g?.max_result_size_mb != null) maxResultSizeMb = g.max_result_size_mb;
 	});
 
 	async function save() {
@@ -36,6 +44,34 @@
 		notify({ type: AlertType.Success, message: 'Workspace name updated' });
 
 		workspaceGraphStore.set({ ...g, name: name.trim() } as graph.WorkspaceNode);
+	}
+
+	async function saveLimits() {
+		const g = get(workspaceGraphStore);
+		if (!g?.id) return;
+
+		savingLimits = true;
+		const [res, err] = await tryCatch(
+			UpdateWorkspaceExecutionLimits,
+			Math.trunc(statementTimeoutMs),
+			Math.trunc(maxResultSizeMb)
+		);
+		savingLimits = false;
+		if (err || !res) {
+			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to update limits' });
+			return;
+		}
+
+		// Reflect the normalized values the backend actually stored.
+		statementTimeoutMs = res.statement_timeout_ms;
+		maxResultSizeMb = res.max_result_size_mb;
+		notify({ type: AlertType.Success, message: 'Execution limits updated' });
+
+		workspaceGraphStore.set({
+			...g,
+			statement_timeout_ms: res.statement_timeout_ms,
+			max_result_size_mb: res.max_result_size_mb
+		} as graph.WorkspaceNode);
 	}
 
 	function openDeleteConfirm() {
@@ -76,6 +112,29 @@
 			<Button content="Save" emphasis="high" size="sm" onclick={save} disabled={saving} />
 		</div>
 	</div>
+	<div class="section space x y">
+		<p class="section-title">Execution limits</p>
+		<p class="section-hint">
+			Shared with everyone in this workspace. Applied to all queries, including schema loading.
+		</p>
+		<div class="field">
+			<span class="field-label">Statement timeout (ms)</span>
+			<Input type="number" min={1} bind:value={statementTimeoutMs} placeholder="30000" />
+		</div>
+		<div class="field">
+			<span class="field-label">Max result size (MB)</span>
+			<Input type="number" min={1} max={250} bind:value={maxResultSizeMb} placeholder="100" />
+		</div>
+		<div class="actions">
+			<Button
+				content="Save"
+				emphasis="high"
+				size="sm"
+				onclick={saveLimits}
+				disabled={savingLimits}
+			/>
+		</div>
+	</div>
 	<div class="section space x y danger">
 		<p class="section-title">Danger zone</p>
 		<div class="delete-btn">
@@ -106,10 +165,18 @@
 		letter-spacing: 0.04em;
 		color: var(--gray-800);
 	}
+	.section-hint {
+		font-size: var(--fs-xs);
+		color: var(--gray-800);
+	}
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-sm);
+		gap: var(--space-xs);
+	}
+	.field-label {
+		font-size: var(--fs-xs);
+		color: var(--gray-800);
 	}
 	.actions {
 		margin-top: var(--space-xs);

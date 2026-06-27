@@ -8,29 +8,18 @@ import (
 	"path/filepath"
 )
 
-// DefaultWorkspaceConfigContent is the template for the workspace .config file.
-// It owns the team-shared execution limits only.
-//
-//go:embed defaults/workspace/.config
-var DefaultWorkspaceConfigContent string
-
-// DefaultUserConfigContent is the template for the per-user .config file.
-// It owns the personal keybindings and editor snippets.
+// DefaultUserConfigContent is the template for the per-user .config file. The
+// .config file is personal: it owns keybindings and editor snippets only.
+// Execution limits are workspace policy and live on the workspace row (see
+// execution_limits.go), not in any file.
 //
 //go:embed defaults/user/.config
 var DefaultUserConfigContent string
 
 const ConfigFileName = ".config"
 
-// GetDefaultWorkspaceConfigContent returns the default workspace .config content
-// (execution limits). Used as the template/reset target for the shared file.
-func GetDefaultWorkspaceConfigContent() string {
-	return DefaultWorkspaceConfigContent
-}
-
 // GetDefaultUserConfigContent returns the default user .config content
-// (keybindings and editor snippets). Used as the template/reset target for the
-// per-user file.
+// (keybindings and editor snippets). Used as the template/reset target.
 func GetDefaultUserConfigContent() string {
 	return DefaultUserConfigContent
 }
@@ -50,17 +39,13 @@ type EditorSnippet struct {
 }
 
 type Config struct {
-	StatementTimeoutMs int                   `json:"statement_timeout_ms"`
-	MaxResultSizeMB    int                   `json:"max_result_size_mb"`
-	Keybindings        KeybindingsCategories `json:"keybindings"`
-	EditorSnippets     []EditorSnippet       `json:"editor_snippets"`
+	Keybindings    KeybindingsCategories `json:"keybindings"`
+	EditorSnippets []EditorSnippet       `json:"editor_snippets"`
 }
 
 type ConfigResponse struct {
-	StatementTimeoutMs int             `json:"statement_timeout_ms"`
-	MaxResultSizeMB    int             `json:"max_result_size_mb"`
-	Keybindings        []Keybinding    `json:"keybindings"`
-	EditorSnippets     []EditorSnippet `json:"editor_snippets"`
+	Keybindings    []Keybinding    `json:"keybindings"`
+	EditorSnippets []EditorSnippet `json:"editor_snippets"`
 }
 
 // Category order for flattening: workbench has precedence, then editor, modal, menu.
@@ -89,10 +74,8 @@ func (c KeybindingsCategories) Flatten() []Keybinding {
 func parseConfig(content string) (*Config, error) {
 	if content == "" {
 		return &Config{
-			StatementTimeoutMs: 30000,
-			MaxResultSizeMB:    100,
-			Keybindings:        KeybindingsCategories{},
-			EditorSnippets:     []EditorSnippet{},
+			Keybindings:    KeybindingsCategories{},
+			EditorSnippets: []EditorSnippet{},
 		}, nil
 	}
 
@@ -101,14 +84,6 @@ func parseConfig(content string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	if config.StatementTimeoutMs <= 0 {
-		config.StatementTimeoutMs = 30000
-	}
-	if config.MaxResultSizeMB <= 0 {
-		config.MaxResultSizeMB = 100
-	} else if config.MaxResultSizeMB > 250 {
-		config.MaxResultSizeMB = 250
-	}
 	if config.Keybindings == nil {
 		config.Keybindings = KeybindingsCategories{}
 	}
@@ -140,19 +115,9 @@ func ReadConfigFile(path string) (*Config, error) {
 // New categories from overrides are added entirely.
 // Editor snippets: defaults first, then overrides; same prefix in overrides replaces the default.
 func mergeConfig(defaults, overrides *Config) *Config {
-	timeout := defaults.StatementTimeoutMs
-	if overrides.StatementTimeoutMs > 0 {
-		timeout = overrides.StatementTimeoutMs
-	}
-	maxResultSizeMB := defaults.MaxResultSizeMB
-	if overrides.MaxResultSizeMB > 0 {
-		maxResultSizeMB = overrides.MaxResultSizeMB
-	}
 	result := &Config{
-		StatementTimeoutMs: timeout,
-		MaxResultSizeMB:    maxResultSizeMB,
-		Keybindings:        make(KeybindingsCategories),
-		EditorSnippets:     mergeEditorSnippets(defaults.EditorSnippets, overrides.EditorSnippets),
+		Keybindings:    make(KeybindingsCategories),
+		EditorSnippets: mergeEditorSnippets(defaults.EditorSnippets, overrides.EditorSnippets),
 	}
 
 	// Process all categories from defaults
@@ -230,22 +195,8 @@ func mergeEditorSnippets(defaults, overrides []EditorSnippet) []EditorSnippet {
 	return out
 }
 
-// GetConfigFilePath returns the path to the workspace .config file (the shared,
-// git-tracked file that owns execution limits).
-func (g *Graph) GetConfigFilePath() (string, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
-	if err != nil {
-		return "", fmt.Errorf("workspace graph not initialized: %w", err)
-	}
-	wfs, err := NewWorkspaceFS(wsGraph.ID)
-	if err != nil {
-		return "", fmt.Errorf("failed to create workspace fs: %w", err)
-	}
-	return filepath.Join(wfs.WorkspaceRoot, ConfigFileName), nil
-}
-
-// GetUserConfigFilePath returns the path to the per-user .config file (the
-// personal, never-committed file that owns keybindings and editor snippets).
+// GetUserConfigFilePath returns the path to the per-user .config file (personal
+// keybindings and editor snippets), which lives outside every workspace.
 func GetUserConfigFilePath() (string, error) {
 	dir, err := UserConfigDir()
 	if err != nil {
@@ -254,85 +205,27 @@ func GetUserConfigFilePath() (string, error) {
 	return filepath.Join(dir, ConfigFileName), nil
 }
 
-// defaultConfig builds the baseline config by combining the workspace default
-// (execution limits) with the user default (keybindings/snippets), so the
-// merged result has sensible values for every field group.
-func defaultConfig() (*Config, error) {
-	wsDefaults, err := parseConfig(DefaultWorkspaceConfigContent)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse default workspace config: %w", err)
-	}
-	userDefaults, err := parseConfig(DefaultUserConfigContent)
+// LoadConfig returns the merged personal config: built-in defaults overlaid with
+// the per-user .config (keybindings and editor snippets).
+func (g *Graph) LoadConfig() (*ConfigResponse, error) {
+	defaults, err := parseConfig(DefaultUserConfigContent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse default user config: %w", err)
 	}
-	return &Config{
-		StatementTimeoutMs: wsDefaults.StatementTimeoutMs,
-		MaxResultSizeMB:    wsDefaults.MaxResultSizeMB,
-		Keybindings:        userDefaults.Keybindings,
-		EditorSnippets:     userDefaults.EditorSnippets,
-	}, nil
-}
-
-// LoadWorkspaceConfig returns the merged config across three layers:
-//
-//	defaults -> workspace (execution limits) -> user (keybindings/snippets)
-//
-// Workspace wins for execution limits (project safety policy); the user wins for
-// keybindings/snippets (personal preference). Each layer contributes only the
-// field group it owns.
-func (g *Graph) LoadWorkspaceConfig() (*ConfigResponse, error) {
-	defaults, err := defaultConfig()
-	if err != nil {
-		return nil, err
-	}
 
 	merged := defaults
-
-	// Workspace layer: execution limits only.
-	if configPath, err := g.GetConfigFilePath(); err == nil {
-		wsConfig, err := ReadConfigFile(configPath)
-		if err != nil {
-			return nil, err
-		}
-		workspaceLayer := &Config{
-			StatementTimeoutMs: wsConfig.StatementTimeoutMs,
-			MaxResultSizeMB:    wsConfig.MaxResultSizeMB,
-			Keybindings:        KeybindingsCategories{},
-			EditorSnippets:     nil,
-		}
-		merged = mergeConfig(merged, workspaceLayer)
-	}
-
-	// User layer: keybindings and editor snippets only.
 	if userPath, err := GetUserConfigFilePath(); err == nil {
 		userConfig, err := ReadConfigFile(userPath)
 		if err != nil {
 			return nil, err
 		}
-		userLayer := &Config{
-			Keybindings:    userConfig.Keybindings,
-			EditorSnippets: userConfig.EditorSnippets,
-		}
-		merged = mergeConfig(merged, userLayer)
+		merged = mergeConfig(defaults, userConfig)
 	}
 
 	return &ConfigResponse{
-		StatementTimeoutMs: merged.StatementTimeoutMs,
-		MaxResultSizeMB:    merged.MaxResultSizeMB,
-		Keybindings:        merged.Keybindings.Flatten(),
-		EditorSnippets:     merged.EditorSnippets,
+		Keybindings:    merged.Keybindings.Flatten(),
+		EditorSnippets: merged.EditorSnippets,
 	}, nil
-}
-
-// ResetWorkspaceConfig writes the default execution-limit content to the
-// workspace .config file.
-func (g *Graph) ResetWorkspaceConfig() error {
-	configPath, err := g.GetConfigFilePath()
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath, []byte(DefaultWorkspaceConfigContent), 0644)
 }
 
 // ResetUserConfig writes the default keybindings/snippets content to the

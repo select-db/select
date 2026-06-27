@@ -296,12 +296,11 @@ func (s *System) handleThemeFileEvent(event fsnotify.Event, ctx *graph.Workspace
 	utils.DebouncedEventsEmit(s.ctx, "themeUpdated", 100*time.Millisecond, themeVars)
 }
 
-// Emits configUpdated when a .config file changes (workspace execution limits or
-// the per-user keybindings/snippets file). Always sends the merged state across
-// defaults -> workspace -> user; on remove or error, merged falls back to lower
-// layers.
+// Emits configUpdated when the per-user .config file changes. Always sends the
+// merged state (defaults + user keybindings/snippets); on remove or error,
+// merged = defaults.
 func (s *System) handleConfigFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS) {
-	configResponse, err := s.Graph.LoadWorkspaceConfig()
+	configResponse, err := s.Graph.LoadConfig()
 	if err != nil {
 		return
 	}

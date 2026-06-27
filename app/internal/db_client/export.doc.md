@@ -18,7 +18,7 @@ SELECT can export query results to a file. The query runs in full (ignoring pagi
 4. A native **Save** dialog opens with a suggested filename
 5. The file is written to the selected path
 
-> Export fetches the **full result set** in memory. For very large results, the `max_result_size_mb` limit from `.config` still applies.
+> Export fetches the **full result set** in memory. For very large results, the workspace `max_result_size_mb` limit (Settings → Workspace) still applies.
 
 ## Variable support
 

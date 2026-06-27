@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import { ResetConfig, ResetUserConfig } from '$lib/wailsjs/go/system/System';
+	import { ResetUserConfig } from '$lib/wailsjs/go/system/System';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notifySuccess, notifyError } from '$lib/system/Notifications/notificationsStore';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
@@ -10,11 +10,10 @@
 	type Props = {
 		hasUnsavedChanges: boolean;
 		isModifiedFromDefault: boolean;
-		isUserConfig?: boolean;
 		onSave: () => Promise<void>;
 	};
 
-	let { hasUnsavedChanges, isModifiedFromDefault, isUserConfig = false, onSave }: Props = $props();
+	let { hasUnsavedChanges, isModifiedFromDefault, onSave }: Props = $props();
 
 	async function handleSave() {
 		const [, err] = await tryCatch(onSave);
@@ -29,7 +28,7 @@
 				title: 'Reset config',
 				message: 'Are you sure you want to reset your configuration to default values?',
 				onConfirm: async () => {
-					const [, err] = await tryCatch(isUserConfig ? ResetUserConfig : ResetConfig);
+					const [, err] = await tryCatch(ResetUserConfig);
 					if (err) return notifyError(err);
 					notifySuccess('Config reset to default');
 				}

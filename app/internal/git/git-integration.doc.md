@@ -32,7 +32,7 @@ A workspace folder contains:
 - `.sql` files and their `.metadata.json` sidecars
 - `db.config.json` files (credentials should use `$VAR` references, not hardcoded values)
 - `.env` files (add to `.gitignore` if they contain secrets)
-- `.config` (execution limits) and `.lint` files
+- `.lint` rules
 
 When git is enabled, these workspace files are tracked. Use a `.gitignore` file
 to exclude files from version control. See [.gitignore](/special-files/gitignore/)
@@ -44,17 +44,27 @@ Some settings are **personal to you**, not team policy, so they live in a
 per-user config directory **outside** the workspace and are **never committed**:
 
 - `.theme` — your UI appearance ([Theme file](/special-files/theme/))
-- the `keybindings` and `editor_snippets` parts of `.config`
+- `.config` — your keybindings and editor snippets
   ([Config file](/special-files/config/))
 
 This keeps one teammate's color scheme and keybindings from overwriting
 everyone else's on pull, and lets your personal settings follow you across every
-workspace. Only the execution-limit fields of `.config`
-(`statement_timeout_ms`, `max_result_size_mb`) stay in the workspace and are
-shared with the team.
+workspace.
+
+### Workspace settings are synced through the backend
+
+Some settings are team policy but are **not** stored as files. They live on the
+workspace and sync through the SELECT backend (like roles and permissions):
+
+- **Execution limits** (`statement_timeout_ms`, `max_result_size_mb`) — edited in
+  **Settings → Workspace**.
 
 ## Sync
 
-When a workspace is connected to a remote, changes to users, roles, and permissions are synced through the SELECT backend. These are not stored in git but kept in sync across team members through the server.
+When a workspace is connected to a remote, changes to users, roles, permissions,
+and workspace settings (including execution limits) are synced through the SELECT
+backend. These are not stored in git but kept in sync across team members through
+the server.
 
-> Git syncs your **files**. The SELECT backend syncs your **team settings** (users, roles, permissions).
+> Git syncs your **files**. The SELECT backend syncs your **team settings**
+> (users, roles, permissions, execution limits).

@@ -1723,19 +1723,15 @@ export namespace graph {
 	    }
 	}
 	export class ConfigResponse {
-	    statement_timeout_ms: number;
-	    max_result_size_mb: number;
 	    keybindings: Keybinding[];
 	    editor_snippets: EditorSnippet[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConfigResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.statement_timeout_ms = source["statement_timeout_ms"];
-	        this.max_result_size_mb = source["max_result_size_mb"];
 	        this.keybindings = this.convertValues(source["keybindings"], Keybinding);
 	        this.editor_snippets = this.convertValues(source["editor_snippets"], EditorSnippet);
 	    }
@@ -2191,20 +2187,24 @@ export namespace graph {
 	    type: string;
 	    name: string;
 	    is_owner: boolean;
+	    statement_timeout_ms: number;
+	    max_result_size_mb: number;
 	    user?: UserNode;
 	    folders: FolderNode[];
 	    db_instances: DBInstanceNode[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new WorkspaceNode(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.type = source["type"];
 	        this.name = source["name"];
 	        this.is_owner = source["is_owner"];
+	        this.statement_timeout_ms = source["statement_timeout_ms"];
+	        this.max_result_size_mb = source["max_result_size_mb"];
 	        this.user = this.convertValues(source["user"], UserNode);
 	        this.folders = this.convertValues(source["folders"], FolderNode);
 	        this.db_instances = this.convertValues(source["db_instances"], DBInstanceNode);
@@ -2602,6 +2602,25 @@ export namespace server {
 
 }
 
+export namespace system {
+
+	export class ExecutionLimitsResponse {
+	    statement_timeout_ms: number;
+	    max_result_size_mb: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ExecutionLimitsResponse(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statement_timeout_ms = source["statement_timeout_ms"];
+	        this.max_result_size_mb = source["max_result_size_mb"];
+	    }
+	}
+
+}
+
 export namespace sql {
 	
 	export class DB {
@@ -2834,27 +2853,6 @@ export namespace sqllang {
 		    }
 		    return a;
 		}
-	}
-
-}
-
-export namespace system {
-	
-	export class UserConfigResource {
-	    name: string;
-	    uri: string;
-	    kind: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new UserConfigResource(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.uri = source["uri"];
-	        this.kind = source["kind"];
-	    }
 	}
 
 }
