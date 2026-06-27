@@ -6,6 +6,7 @@
 	import GitButton from './GitButton.svelte';
 	import NetworkQuality from './NetworkQuality.svelte';
 	import SearchButton from './SearchButton.svelte';
+	import HistoryButton from './HistoryButton.svelte';
 	import ThemeButton from './ThemeButton.svelte';
 </script>
 
@@ -21,6 +22,8 @@
 		<GitBranch />
 
 		<div style="margin-left: auto"></div>
+		<HistoryButton />
+		<div class="divider"></div>
 		<SearchButton />
 		<div class="divider"></div>
 		<ThemeButton />

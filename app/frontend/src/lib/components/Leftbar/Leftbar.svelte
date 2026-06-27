@@ -10,7 +10,7 @@
 
 	let closed = $state(false);
 	let leftbarWidth: number = $state(
-		parseInt(localStorage.getItem('leftbarWidth') || `${DEFAULT_WIDTH}`, 10)
+		parseInt(localStorage.getItem('leftbarWidth') || `${DEFAULT_WIDTH}`, 200)
 	);
 	let resizing: boolean = $state(false);
 	let style = $derived(

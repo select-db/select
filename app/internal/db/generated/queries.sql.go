@@ -38,7 +38,10 @@ INSERT INTO history (
     affected_rows,
     row_count,
     duration_ms,
-    errors
+    errors,
+    workspace_id,
+    db_instance_id,
+    created_at
 ) VALUES (
     ?1,
     ?2,
@@ -47,9 +50,12 @@ INSERT INTO history (
     ?5,
     ?6,
     ?7,
-    ?8
+    ?8,
+    ?9,
+    ?10,
+    CURRENT_TIMESTAMP
 )
-RETURNING id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn
+RETURNING id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, db_instance_id
 `
 
 type CreateHistoryParams struct {
@@ -61,6 +67,8 @@ type CreateHistoryParams struct {
 	RowCount     sql.NullInt64 `json:"row_count"`
 	DurationMs   sql.NullInt64 `json:"duration_ms"`
 	Errors       string        `json:"errors"`
+	WorkspaceID  string        `json:"workspace_id"`
+	DbInstanceID string        `json:"db_instance_id"`
 }
 
 func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (History, error) {
@@ -73,6 +81,8 @@ func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (H
 		arg.RowCount,
 		arg.DurationMs,
 		arg.Errors,
+		arg.WorkspaceID,
+		arg.DbInstanceID,
 	)
 	var i History
 	err := row.Scan(
@@ -84,8 +94,108 @@ func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (H
 		&i.Errors,
 		&i.Uri,
 		&i.Dsn,
+		&i.CreatedAt,
+		&i.WorkspaceID,
+		&i.DbInstanceID,
 	)
 	return i, err
+}
+
+const deleteHistoryOlderThan7Days = `-- name: DeleteHistoryOlderThan7Days :exec
+; -- @no-track
+DELETE FROM history
+WHERE created_at < datetime('now', '-7 days')
+`
+
+func (q *Queries) DeleteHistoryOlderThan7Days(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteHistoryOlderThan7Days)
+	return err
+}
+
+const listHistory = `-- name: ListHistory :many
+SELECT id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, db_instance_id
+FROM history
+WHERE workspace_id = ?1
+  AND created_at >= datetime('now', '-7 days')
+ORDER BY created_at DESC, id DESC
+LIMIT ?2 OFFSET ?3
+`
+
+type ListHistoryParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Limit       int64  `json:"limit"`
+	Offset      int64  `json:"offset"`
+}
+
+func (q *Queries) ListHistory(ctx context.Context, arg ListHistoryParams) ([]History, error) {
+	rows, err := q.db.QueryContext(ctx, listHistory, arg.WorkspaceID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []History
+	for rows.Next() {
+		var i History
+		if err := rows.Scan(
+			&i.ID,
+			&i.Statement,
+			&i.AffectedRows,
+			&i.RowCount,
+			&i.DurationMs,
+			&i.Errors,
+			&i.Uri,
+			&i.Dsn,
+			&i.CreatedAt,
+			&i.WorkspaceID,
+			&i.DbInstanceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pruneHistoryAllWorkspaces = `-- name: PruneHistoryAllWorkspaces :exec
+; -- @no-track
+DELETE FROM history
+WHERE id IN (
+    SELECT id FROM (
+        SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY workspace_id
+            ORDER BY created_at DESC, id DESC
+        ) AS rn
+        FROM history
+    ) WHERE rn > 100
+)
+`
+
+func (q *Queries) PruneHistoryAllWorkspaces(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, pruneHistoryAllWorkspaces)
+	return err
+}
+
+const pruneHistoryForWorkspace = `-- name: PruneHistoryForWorkspace :exec
+; -- @no-track
+DELETE FROM history
+WHERE workspace_id = ?1
+  AND id NOT IN (
+    SELECT id FROM history
+    WHERE workspace_id = ?1
+    ORDER BY created_at DESC, id DESC
+    LIMIT 100
+  )
+`
+
+func (q *Queries) PruneHistoryForWorkspace(ctx context.Context, workspaceID string) error {
+	_, err := q.db.ExecContext(ctx, pruneHistoryForWorkspace, workspaceID)
+	return err
 }
 
 const createWorkspace = `-- name: CreateWorkspace :one

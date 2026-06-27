@@ -294,13 +294,13 @@
 		padding: var(--space-xs-sm) var(--space-xs) var(--space-xs-sm) var(--space-sm);
 	}
 	.select-trigger.xs:not(.noRadius) {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 	}
 	.select-trigger.sm {
 		padding: var(--space-sm);
 	}
 	.select-trigger.sm:not(.noRadius) {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 	}
 
 	.select-container:focus-within .select-trigger,

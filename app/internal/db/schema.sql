@@ -28,8 +28,14 @@ CREATE TABLE history (
     errors TEXT NOT NULL DEFAULT '[]',
 
     uri TEXT NOT NULL DEFAULT "",
-    dsn TEXT NOT NULL DEFAULT ""
+    dsn TEXT NOT NULL DEFAULT "",
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    workspace_id TEXT NOT NULL DEFAULT '',
+    db_instance_id TEXT NOT NULL DEFAULT ''
 );
+
+CREATE INDEX idx_history_workspace_created_at ON history(workspace_id, created_at DESC);
 
 CREATE TABLE mutation_commit (
     id TEXT PRIMARY KEY,

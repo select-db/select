@@ -35,6 +35,10 @@ export const icons = {
 		viewBox: '0 0 24 24',
 		svg: `<path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M6 9l6 6l6 -6" />`
 	},
+	'chevron-up': {
+		viewBox: '0 0 24 24',
+		svg: `<path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M6 15l6 -6l6 6" />`
+	},
 	'chevron-left': {
 		viewBox: '0 0 24 24',
 		svg: `<path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M15 6l-6 6l6 6" />`

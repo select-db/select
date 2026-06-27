@@ -6,15 +6,15 @@
 	} from '$lib/components/Rightbar/rightbarStore';
 	import Button from '$lib/system/Button/Button.svelte';
 
-	const active = $derived($isRightbarOpened && $rightPanelTab === 'search');
+	const active = $derived($isRightbarOpened && $rightPanelTab === 'history');
 </script>
 
 <Button
-	leftIcon="search"
+	leftIcon="clock"
 	iconSize={16}
 	size="sm"
 	emphasis={active ? 'high' : 'low'}
 	{active}
-	onclick={() => togglePanelTab('search')}
+	onclick={() => togglePanelTab('history')}
 	noBounce
 />

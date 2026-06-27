@@ -326,11 +326,33 @@
 
 {#if actionsUserId && actionsAnchor}
 	<Portal>
-		<FloatingBox anchor={actionsAnchor} backdrop onBackdropClick={() => { actionsAnchor = null; actionsUserId = null; }}>
+		<FloatingBox
+			anchor={actionsAnchor}
+			backdrop
+			onBackdropClick={() => {
+				actionsAnchor = null;
+				actionsUserId = null;
+			}}
+		>
 			<Menu
-				options={[{ id: 'remove', label: 'Remove', icon: 'cross' as const, action: async () => { const id = actionsUserId!; actionsAnchor = null; actionsUserId = null; await removeUser(id); } }]}
+				options={[
+					{
+						id: 'remove',
+						label: 'Remove',
+						icon: 'cross' as const,
+						action: async () => {
+							const id = actionsUserId!;
+							actionsAnchor = null;
+							actionsUserId = null;
+							await removeUser(id);
+						}
+					}
+				]}
 				width={160}
-				onClose={() => { actionsAnchor = null; actionsUserId = null; }}
+				onClose={() => {
+					actionsAnchor = null;
+					actionsUserId = null;
+				}}
 			/>
 		</FloatingBox>
 	</Portal>
@@ -363,7 +385,6 @@
 		justify-content: space-between;
 		gap: var(--space-xs);
 		padding: var(--space-sm);
-		border-bottom: var(--border);
 		flex-shrink: 0;
 		height: 24px;
 	}
@@ -399,6 +420,7 @@
 	.users-table-wrap {
 		flex: 1;
 		overflow: hidden;
+		margin: 0 var(--space-sm);
 	}
 
 	.actions-inner {

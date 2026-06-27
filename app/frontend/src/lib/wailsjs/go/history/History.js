@@ -5,3 +5,11 @@
 export function CreateHistory(arg1) {
   return window['go']['history']['History']['CreateHistory'](arg1);
 }
+
+export function ListHistory(arg1) {
+  return window['go']['history']['History']['ListHistory'](arg1);
+}
+
+export function PruneOnStartup() {
+  return window['go']['history']['History']['PruneOnStartup']();
+}
