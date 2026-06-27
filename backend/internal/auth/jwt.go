@@ -84,61 +84,89 @@ func (rsaSignerMethod) Verify(signingString string, sig []byte, key any) error {
 
 var jwtSigningMethod = rsaSignerMethod{}
 
-// CustomClaims defines JWT claims for access tokens.
-// WorkspaceIDs and RoleIDs are cached at token issuance to avoid DB lookups on every request.
-// When a user's role assignments change, their refresh token is revoked so the next re-auth
-// produces a fresh JWT with correct RoleIDs.
+// Name is cached at issuance so audit/UI need no per-request role lookup.
+type RoleRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
+// Roles are workspace-scoped, so the token groups them per workspace.
+type WorkspaceClaim struct {
+	ID      string    `json:"id"`
+	IsOwner bool      `json:"is_owner,omitempty"`
+	Roles   []RoleRef `json:"roles,omitempty"`
+}
+
+// Roles/ownership are cached at issuance (a role change revokes the refresh
+// token, forcing a fresh one). Membership itself is re-derived from the DB per
+// request, not trusted from the token.
 type CustomClaims struct {
-	UserID            string   `json:"sub"`
-	WorkspaceIDs      []string `json:"workspace_ids,omitempty"`
-	RoleIDs           []string `json:"role_ids,omitempty"`
-	OwnedWorkspaceIDs []string `json:"owned_workspace_ids,omitempty"`
+	UserID     string           `json:"sub"`
+	Name       string           `json:"name,omitempty"`
+	Workspaces []WorkspaceClaim `json:"workspaces,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// CreateJWT generates a signed access token for a user. It loads workspace IDs from the DB once and
-// embeds them in the token so the auth middleware can use them without a DB call on every request.
+// CreateJWT issues a signed access token embedding per-workspace roles/ownership.
 func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error) {
 	signer, err := getSigner()
 	if err != nil {
 		return "", fmt.Errorf("unable to sign JWT: %w", err)
 	}
 
-	workspaceIDs := []string(nil)
-	roleIDs := []string(nil)
-	ownedWorkspaceIDs := []string(nil)
+	displayName := ""
+	var workspaces []WorkspaceClaim
 	if db.Queries != nil {
+		// Membership, ownership, roles. Grouped per workspace below.
+		var workspaceIDs []string
 		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
-			workspaceIDs = make([]string, 0, len(ids))
 			for _, u := range ids {
 				if u.Valid {
 					workspaceIDs = append(workspaceIDs, u.UUID.String())
 				}
 			}
 		}
-		if ids, err := db.Queries.GetRoleIDsByUserID(ctx, userID); err == nil {
-			roleIDs = make([]string, 0, len(ids))
+
+		owned := map[string]bool{}
+		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, userID); err == nil {
 			for _, u := range ids {
 				if u.Valid {
-					roleIDs = append(roleIDs, u.UUID.String())
+					owned[u.UUID.String()] = true
 				}
 			}
 		}
-		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, userID); err == nil {
-			ownedWorkspaceIDs = make([]string, 0, len(ids))
-			for _, u := range ids {
-				if u.Valid {
-					ownedWorkspaceIDs = append(ownedWorkspaceIDs, u.UUID.String())
+
+		rolesByWS := map[string][]RoleRef{}
+		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
+			for _, r := range rows {
+				if r.ID.Valid && r.WorkspaceID.Valid {
+					ws := r.WorkspaceID.UUID.String()
+					rolesByWS[ws] = append(rolesByWS[ws], RoleRef{ID: r.ID.UUID.String(), Name: r.Name.ValueOrEmpty()})
 				}
+			}
+		}
+
+		workspaces = make([]WorkspaceClaim, 0, len(workspaceIDs))
+		for _, ws := range workspaceIDs {
+			workspaces = append(workspaces, WorkspaceClaim{
+				ID:      ws,
+				IsOwner: owned[ws],
+				Roles:   rolesByWS[ws],
+			})
+		}
+
+		if u, err := db.Queries.GetUserNameByID(ctx, userID); err == nil {
+			displayName = u.Name.ValueOrEmpty()
+			if displayName == "" {
+				displayName = u.Email.ValueOrEmpty()
 			}
 		}
 	}
 
 	claims := CustomClaims{
-		UserID:            userID.UUID.String(),
-		WorkspaceIDs:      workspaceIDs,
-		RoleIDs:           roleIDs,
-		OwnedWorkspaceIDs: ownedWorkspaceIDs,
+		UserID:     userID.UUID.String(),
+		Name:       displayName,
+		Workspaces: workspaces,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Audience:  jwt.ClaimStrings{audience},

@@ -50,7 +50,6 @@
 				active={selectedSection === section.id}
 				onclick={() => selectSection(section.id)}
 				classes="nav-item"
-				noRadius
 				noBounce
 			/>
 		{/each}
@@ -91,17 +90,18 @@
 
 	.settings-nav {
 		display: flex;
+		gap: var(--space-xs);
+		padding: var(--space-sm);
 		flex-direction: column;
-		width: 150px;
-		min-width: 150px;
-		border-right: var(--border);
+		width: 120px;
+		min-width: 120px;
 		background-color: var(--gray-0);
 	}
 
 	.settings-nav :global(.nav-item) {
 		justify-content: flex-start;
 		width: 100%;
-		height: 32px;
+		height: 26px;
 		font-size: var(--fs-sm);
 	}
 

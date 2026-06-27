@@ -32,7 +32,7 @@ func FirstSelectStatement(stmts []core.InspectStatement) (core.InspectStatement,
 // primary key, and every primary-key column appears in the SELECT.
 //
 // Result length matches len(stmt.Fields). The mapping from Field index to
-// driver column position is approximate for non-trivial queries — derived
+// driver column position is approximate for non-trivial queries. Derived
 // expressions, multi-arg functions, and SELECT * with stale metadata can
 // drift. Callers that need exact driver-position alignment should compare
 // names against rows.Columns().

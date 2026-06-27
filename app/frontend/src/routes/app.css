@@ -295,3 +295,43 @@
 :global([data-theme='dark'] .scroll-shadow-band) {
 	background: linear-gradient(to top, var(--gray-500) 0%, rgba(0, 0, 0, 0));
 }
+
+:global(.scroll-shadow-band--top) {
+	top: 0;
+	bottom: auto;
+	background: linear-gradient(to bottom, var(--gray-100) 0%, rgba(0, 0, 0, 0));
+}
+
+:global([data-theme='dark'] .scroll-shadow-band--top) {
+	background: linear-gradient(to bottom, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+}
+
+/* Horizontal variants (scrollShadow with axis: 'x'): vertical bars at the
+   right/left edges instead of the full-width bottom/top band. */
+:global(.scroll-shadow-band--right) {
+	top: 0;
+	bottom: 0;
+	right: -2px;
+	left: auto;
+	width: 40px;
+	height: 97%;
+	background: linear-gradient(to left, var(--gray-100) 0%, rgba(0, 0, 0, 0));
+}
+
+:global([data-theme='dark'] .scroll-shadow-band--right) {
+	background: linear-gradient(to left, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+}
+
+:global(.scroll-shadow-band--left) {
+	top: 0;
+	bottom: 0;
+	left: -2px;
+	right: auto;
+	width: 20px;
+	height: 97%;
+	background: linear-gradient(to right, var(--gray-100) 0%, rgba(0, 0, 0, 0));
+}
+
+:global([data-theme='dark'] .scroll-shadow-band--left) {
+	background: linear-gradient(to right, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+}

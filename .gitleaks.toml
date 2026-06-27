@@ -1,4 +1,4 @@
-# gitleaks configuration — extends the upstream default ruleset and allowlists
+# gitleaks configuration extends the upstream default ruleset and allowlists
 # a few well-understood false positives. Keep this list tight: every entry is a
 # verified non-secret, not a way to silence real findings.
 title = "select gitleaks config"

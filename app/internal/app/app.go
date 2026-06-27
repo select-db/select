@@ -199,5 +199,8 @@ func (a *App) Startup(ctx context.Context) {
 	a.System.SetContext(ctx)
 	go a.System.WatchNetworkQuality()
 
+	// Trim stale local query history (older than 7 days / beyond 100 per workspace).
+	go a.History.PruneOnStartup()
+
 	a.Updater.SetContext(ctx)
 }

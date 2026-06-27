@@ -300,11 +300,10 @@
 	:global(.leftbar .sticky) {
 		position: sticky;
 		z-index: 1;
-		background-color: var(--gray-100);
 	}
 
 	:global(.leftbar .sticky .item) {
-		background-color: var(--gray-100);
+		background-color: var(--gray-500);
 	}
 	:global(.leftbar .sticky .item:hover) {
 		background: var(--gray-550);

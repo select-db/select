@@ -84,6 +84,8 @@ func main() {
 
 	startPprofServer()
 
+	auditLogger := startAuditLogger()
+
 	mux := http.NewServeMux()
 
 	authenticated := middlewares.Authenticated()
@@ -170,6 +172,8 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+
+	stopAuditLogger(auditLogger)
 
 	log.Println("Server stopped gracefully")
 }

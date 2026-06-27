@@ -2,6 +2,7 @@
 	import { onDestroy } from 'svelte';
 
 	import Search from '$lib/components/views/Search/Search.svelte';
+	import History from '$lib/components/views/History/History.svelte';
 
 	import Resizer from './Resizer.svelte';
 	import { isRightbarOpened, rightPanelTab } from './rightbarStore';
@@ -11,7 +12,7 @@
 
 	let closed = $state(false);
 	let rightbarWidth: number = $state(
-		parseInt(localStorage.getItem('rightbarWidth') || `${DEFAULT_WIDTH}`, 10)
+		parseInt(localStorage.getItem('rightbarWidth') || `${DEFAULT_WIDTH}`, 200)
 	);
 	let resizing: boolean = $state(false);
 	let style = $derived(
@@ -32,6 +33,8 @@
 	<aside id="rightbar" {style} class:resizing>
 		{#if $rightPanelTab === 'search'}
 			<Search />
+		{:else if $rightPanelTab === 'history'}
+			<History />
 		{/if}
 	</aside>
 </div>

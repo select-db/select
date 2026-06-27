@@ -2236,6 +2236,8 @@ export namespace history {
 	export class CreateQueryHistoryParams {
 	    Dsn: string;
 	    Uri: string;
+	    WorkspaceID: string;
+	    DbInstanceID: string;
 	    Statement: string;
 	    AffectedRows?: number;
 	    RowCount?: number;
@@ -2250,11 +2252,57 @@ export namespace history {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.Dsn = source["Dsn"];
 	        this.Uri = source["Uri"];
+	        this.WorkspaceID = source["WorkspaceID"];
+	        this.DbInstanceID = source["DbInstanceID"];
 	        this.Statement = source["Statement"];
 	        this.AffectedRows = source["AffectedRows"];
 	        this.RowCount = source["RowCount"];
 	        this.DurationMs = source["DurationMs"];
 	        this.Errors = source["Errors"];
+	    }
+	}
+	export class HistoryEntry {
+	    id: string;
+	    statement: string;
+	    affectedRows?: number;
+	    rowCount?: number;
+	    durationMs?: number;
+	    errors: string[];
+	    workspaceId: string;
+	    dbInstanceId: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.statement = source["statement"];
+	        this.affectedRows = source["affectedRows"];
+	        this.rowCount = source["rowCount"];
+	        this.durationMs = source["durationMs"];
+	        this.errors = source["errors"];
+	        this.workspaceId = source["workspaceId"];
+	        this.dbInstanceId = source["dbInstanceId"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class ListHistoryParams {
+	    workspaceId: string;
+	    limit: number;
+	    offset: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ListHistoryParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceId = source["workspaceId"];
+	        this.limit = source["limit"];
+	        this.offset = source["offset"];
 	    }
 	}
 

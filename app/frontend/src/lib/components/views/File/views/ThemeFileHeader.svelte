@@ -42,10 +42,16 @@
 	<div class="wrapper">
 		<div class="actions">
 			{#if hasUnsavedChanges}
-				<Button leftIcon="check" iconSize={18} content="Apply" onclick={handleSave} emphasis="high" />
+				<Button
+					leftIcon="check"
+					iconSize={16}
+					content="Apply"
+					onclick={handleSave}
+					emphasis="high"
+				/>
 			{/if}
 			{#if isModifiedFromDefault}
-				<Button leftIcon="refresh" iconSize={18} content="Reset" onclick={handleReset} />
+				<Button leftIcon="refresh" iconSize={16} content="Reset" onclick={handleReset} />
 			{/if}
 		</div>
 	</div>
