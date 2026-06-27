@@ -42,6 +42,10 @@ export function GetThemeVariables() {
   return window['go']['system']['System']['GetThemeVariables']();
 }
 
+export function GetUserConfigResources() {
+  return window['go']['system']['System']['GetUserConfigResources']();
+}
+
 export function LoadAllDatabaseSchemas(arg1) {
   return window['go']['system']['System']['LoadAllDatabaseSchemas'](arg1);
 }
@@ -62,12 +66,12 @@ export function ResetLint() {
   return window['go']['system']['System']['ResetLint']();
 }
 
-export function ResetUserConfig() {
-  return window['go']['system']['System']['ResetUserConfig']();
-}
-
 export function ResetTheme() {
   return window['go']['system']['System']['ResetTheme']();
+}
+
+export function ResetUserConfig() {
+  return window['go']['system']['System']['ResetUserConfig']();
 }
 
 export function RevealInExplorer(arg1) {

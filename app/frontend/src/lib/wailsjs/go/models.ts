@@ -2603,10 +2603,10 @@ export namespace server {
 }
 
 export namespace sql {
-
+	
 	export class DB {
-
-
+	
+	
 	    static createFrom(source: any = {}) {
 	        return new DB(source);
 	    }
@@ -2834,6 +2834,27 @@ export namespace sqllang {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace system {
+	
+	export class UserConfigResource {
+	    name: string;
+	    uri: string;
+	    kind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UserConfigResource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.uri = source["uri"];
+	        this.kind = source["kind"];
+	    }
 	}
 
 }
