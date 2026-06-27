@@ -38,10 +38,6 @@ export function GetLint() {
   return window['go']['system']['System']['GetLint']();
 }
 
-export function GetUserConfigResources() {
-  return window['go']['system']['System']['GetUserConfigResources']();
-}
-
 export function GetThemeVariables() {
   return window['go']['system']['System']['GetThemeVariables']();
 }

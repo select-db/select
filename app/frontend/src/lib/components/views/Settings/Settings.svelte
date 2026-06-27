@@ -6,20 +6,25 @@
 	import RolesPanel from '$lib/components/views/Settings/RolesPanel.svelte';
 	import UsersPanel from '$lib/components/views/Settings/UsersPanel.svelte';
 	import APIKeysPanel from '$lib/components/views/Settings/APIKeysPanel.svelte';
+	import UserSettingsEditor from '$lib/components/views/Settings/UserSettingsEditor.svelte';
 	import { getActiveTab, updateSettingsTab } from '$lib/components/Layout/layoutStore';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
 
-	type SectionId = 'workspace' | 'users' | 'roles' | 'git' | 'api_keys';
+	type SectionId = 'workspace' | 'users' | 'roles' | 'git' | 'api_keys' | 'theme' | 'config';
 
 	const sections: { id: SectionId; label: string }[] = [
 		{ id: 'workspace', label: 'Workspace' },
 		{ id: 'git', label: 'Git' },
 		{ id: 'users', label: 'Users' },
 		{ id: 'roles', label: 'Roles' },
-		{ id: 'api_keys', label: 'API keys' }
+		{ id: 'api_keys', label: 'API keys' },
+		{ id: 'theme', label: 'Theme' },
+		{ id: 'config', label: 'Config' }
 	];
 
-	const sectionAction: Record<SectionId, string> = {
+	// Personal sections (theme, config) have no permission gate: they are the
+	// user's own settings and apply across all workspaces.
+	const sectionAction: Partial<Record<SectionId, string>> = {
 		workspace: 'workspace/settings.write',
 		git: 'workspace/settings.write',
 		users: 'workspace/users.manage',
@@ -71,6 +76,10 @@
 			<APIKeysPanel />
 		{:else if selectedSection === 'git'}
 			<GitLinkPanel showUnsync />
+		{:else if selectedSection === 'theme'}
+			<UserSettingsEditor kind="theme" />
+		{:else if selectedSection === 'config'}
+			<UserSettingsEditor kind="config" />
 		{:else}
 			<div class="build-in-progress">
 				<Icon icon="cog" size={32} />
