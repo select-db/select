@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -17,10 +16,8 @@ import (
 	"github.com/selectDb/dialect/engine"
 
 	"backend/db"
-	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/cli"
-	"backend/internal/kms"
 	"backend/internal/middlewares"
 
 	apikeyhandler "backend/internal/apikey"
@@ -59,18 +56,6 @@ func versionHandler() http.HandlerFunc {
 	}
 }
 
-// auditRetentionDays reads AUDIT_RETENTION_DAYS (used only when pg_partman is
-// absent); defaults to one year, matching partman's retention.
-func auditRetentionDays() int {
-	if v := os.Getenv("AUDIT_RETENTION_DAYS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			return n
-		}
-		log.Printf("WARNING: invalid AUDIT_RETENTION_DAYS=%q, using default", v)
-	}
-	return 365
-}
-
 func main() {
 	// Best-effort: load .env if present. In production, vars come from systemd EnvironmentFile.
 	_ = godotenv.Load()
@@ -99,33 +84,7 @@ func main() {
 
 	startPprofServer()
 
-	// Async writer + outbox drainer run until Stop on shutdown. Partitions are
-	// managed in-DB by pg_partman + pg_cron; without them, the logger sweeps rows
-	// older than AUDIT_RETENTION_DAYS (default 365; 0 = keep forever) instead.
-	auditLogger := audit.New(db.GetDB(), audit.Options{RetentionDays: auditRetentionDays()})
-	auditLogger.Start()
-	audit.SetDefault(auditLogger)
-
-	// pg_cron's scheduler lives in the cluster's cron DB, not the app DB, so the
-	// maintenance job can't be a migration. No-op if POSTGRES_AUDIT_CRON_DSN is
-	// unset, then it's provisioned out of band (see the on-prem runbook).
-	if cronDSN, _ := kms.Secret("POSTGRES_AUDIT_CRON_DSN"); cronDSN != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		if err := audit.EnsureMaintenanceSchedule(ctx, db.GetDB(), cronDSN, os.Getenv("AUDIT_CRON_SCHEDULE")); err != nil {
-			log.Printf("WARNING: audit: %v", err)
-		}
-		cancel()
-	}
-
-	// Report on partition maintenance: warns only when pg_partman is present but
-	// misconfigured. No partman is a supported mode (in-app retention).
-	{
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := audit.Preflight(ctx, db.GetDB()); err != nil {
-			log.Printf("WARNING: %v", err)
-		}
-		cancel()
-	}
+	auditLogger := startAuditLogger()
 
 	mux := http.NewServeMux()
 
@@ -214,12 +173,7 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	// Drain after the server stops accepting requests, so no Log races the close.
-	drainCtx, drainCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer drainCancel()
-	if err := auditLogger.Stop(drainCtx); err != nil {
-		log.Printf("audit: shutdown drain: %v", err)
-	}
+	stopAuditLogger(auditLogger)
 
 	log.Println("Server stopped gracefully")
 }
