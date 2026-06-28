@@ -20,7 +20,6 @@
 	// backend), shared with everyone in the workspace.
 	let statementTimeoutMs = $state(30000);
 	let maxResultSizeMb = $state(100);
-	let savingLimits = $state(false);
 
 	$effect(() => {
 		const g = get(workspaceGraphStore);
@@ -29,46 +28,43 @@
 		if (g?.max_result_size_mb != null) maxResultSizeMb = g.max_result_size_mb;
 	});
 
+	// Saves the whole workspace settings form (name + execution limits) at once.
 	async function save() {
-		const g = get(workspaceGraphStore);
-		if (!g?.id || !name.trim()) return;
-
-		saving = true;
-		const [, err] = await tryCatch(UpdateName, g.id, name.trim());
-		saving = false;
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to update name' });
-			return;
-		}
-
-		notify({ type: AlertType.Success, message: 'Workspace name updated' });
-
-		workspaceGraphStore.set({ ...g, name: name.trim() } as graph.WorkspaceNode);
-	}
-
-	async function saveLimits() {
 		const g = get(workspaceGraphStore);
 		if (!g?.id) return;
 
-		savingLimits = true;
+		saving = true;
+		const trimmedName = name.trim();
+
+		// Name is required: only update it when it changed and is non-empty.
+		if (trimmedName && trimmedName !== g.name) {
+			const [, err] = await tryCatch(UpdateName, g.id, trimmedName);
+			if (err) {
+				saving = false;
+				notify({ type: AlertType.Error, message: err?.message ?? 'Failed to save workspace' });
+				return;
+			}
+		}
+
 		const [res, err] = await tryCatch(
 			UpdateWorkspaceExecutionLimits,
 			Math.trunc(statementTimeoutMs),
 			Math.trunc(maxResultSizeMb)
 		);
-		savingLimits = false;
+		saving = false;
 		if (err || !res) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to update limits' });
+			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to save workspace' });
 			return;
 		}
 
 		// Reflect the normalized values the backend actually stored.
 		statementTimeoutMs = res.statement_timeout_ms;
 		maxResultSizeMb = res.max_result_size_mb;
-		notify({ type: AlertType.Success, message: 'Execution limits updated' });
+		notify({ type: AlertType.Success, message: 'Workspace settings saved' });
 
 		workspaceGraphStore.set({
 			...g,
+			name: trimmedName || g.name,
 			statement_timeout_ms: res.statement_timeout_ms,
 			max_result_size_mb: res.max_result_size_mb
 		} as graph.WorkspaceNode);
@@ -108,9 +104,6 @@
 		<div class="field">
 			<Input bind:value={name} placeholder="My Workspace" />
 		</div>
-		<div class="actions">
-			<Button content="Save" emphasis="high" size="sm" onclick={save} disabled={saving} />
-		</div>
 	</div>
 	<div class="section space x y">
 		<p class="section-title">Execution limits</p>
@@ -126,13 +119,7 @@
 			<Input type="number" min={1} max={250} bind:value={maxResultSizeMb} placeholder="100" />
 		</div>
 		<div class="actions">
-			<Button
-				content="Save"
-				emphasis="high"
-				size="sm"
-				onclick={saveLimits}
-				disabled={savingLimits}
-			/>
+			<Button content="Save" emphasis="high" size="sm" onclick={save} disabled={saving} />
 		</div>
 	</div>
 	<div class="section space x y danger">
