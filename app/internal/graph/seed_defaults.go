@@ -11,7 +11,7 @@ import (
 // The folder is split by ownership:
 //
 //   - defaults/workspace — shared, git-tracked files seeded into a workspace root
-//     (.lint, .gitignore, .config execution limits, db.config.json).
+//     (.lint, .gitignore, db.config.json).
 //   - defaults/user — personal files seeded into the per-user config dir
 //     (.theme, .config keybindings/snippets).
 //
