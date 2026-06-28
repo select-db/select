@@ -593,16 +593,18 @@ func (q *Queries) GetRoleWorkspaceID(ctx context.Context, id string) (string, er
 }
 
 const getWorkspaceByID = `-- name: GetWorkspaceByID :one
-SELECT id, name, git_remote_url, last_pulled_at
+SELECT id, name, git_remote_url, last_pulled_at, statement_timeout_ms, max_result_size_mb
 FROM workspace
 WHERE id = ?1
 `
 
 type GetWorkspaceByIDRow struct {
-	ID           string                  `json:"id"`
-	Name         string                  `json:"name"`
-	GitRemoteUrl db_types.JSONNullString `json:"git_remote_url"`
-	LastPulledAt sql.NullTime            `json:"last_pulled_at"`
+	ID                 string                  `json:"id"`
+	Name               string                  `json:"name"`
+	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
+	LastPulledAt       sql.NullTime            `json:"last_pulled_at"`
+	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
+	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
 }
 
 func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspaceByIDRow, error) {
@@ -613,6 +615,8 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspace
 		&i.Name,
 		&i.GitRemoteUrl,
 		&i.LastPulledAt,
+		&i.StatementTimeoutMs,
+		&i.MaxResultSizeMb,
 	)
 	return i, err
 }

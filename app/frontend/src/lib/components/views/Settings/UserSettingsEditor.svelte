@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { Tab } from '$lib/components/Layout/layoutStore';
 	import type { graph } from '$lib/wailsjs/go/models';
+	import { EnsureUserConfigDefaults } from '$lib/wailsjs/go/system/System';
+	import { tryCatch } from '$lib/utils/tryCatch';
 	import ThemeFileView from '$lib/components/views/File/views/ThemeFileView.svelte';
 	import ConfigFileView from '$lib/components/views/File/views/ConfigFileView.svelte';
 
@@ -16,6 +19,15 @@
 
 	const fileName = $derived(kind === 'theme' ? '.theme' : '.config');
 	const uri = $derived(`selectdb://user/${fileName}`);
+
+	// The editor reads the file directly by URI, so make sure it exists on disk
+	// (seeded from defaults) before we render the view; otherwise a missing file
+	// would fail to open.
+	let ready = $state(false);
+	onMount(async () => {
+		await tryCatch(EnsureUserConfigDefaults);
+		ready = true;
+	});
 
 	const tab = $derived({
 		id: `user-${kind}-settings`,
@@ -36,10 +48,12 @@
 </script>
 
 <div class="user-settings-editor">
-	{#if kind === 'theme'}
-		<ThemeFileView {tab} />
-	{:else}
-		<ConfigFileView {tab} />
+	{#if ready}
+		{#if kind === 'theme'}
+			<ThemeFileView {tab} />
+		{:else}
+			<ConfigFileView {tab} />
+		{/if}
 	{/if}
 </div>
 

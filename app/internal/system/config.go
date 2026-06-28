@@ -24,6 +24,19 @@ func (s *System) GetDefaultUserConfigContent() string {
 	return graph.GetDefaultUserConfigContent()
 }
 
+// EnsureUserConfigDefaults makes sure the per-user .theme and .config files
+// exist on disk, seeding the built-in defaults when missing (existing files are
+// preserved). Called before opening the personal Settings editors so they can
+// always read the files, even if seeding at startup failed or a file was
+// deleted.
+func (s *System) EnsureUserConfigDefaults() error {
+	dir, err := graph.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	return graph.SeedUserDefaultFiles(dir)
+}
+
 // ExecutionLimitsResponse is the workspace-level query safety policy returned to
 // the frontend after an update.
 type ExecutionLimitsResponse struct {

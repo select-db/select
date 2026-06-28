@@ -9,6 +9,8 @@ export function CheckForLogin():Promise<void>;
 
 export function CheckForLogout():Promise<void>;
 
+export function EnsureUserConfigDefaults():Promise<void>;
+
 export function GetAppEnv():Promise<string>;
 
 export function GetConfig():Promise<graph.ConfigResponse>;
