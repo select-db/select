@@ -11,18 +11,6 @@ import (
 	"selectDb/internal/utils"
 )
 
-// UserURIScheme is the URI namespace for per-user config files. It mirrors the
-// fs_provider mapping selectdb://user/<name> ↔ <userConfigDir>/<name>, so the
-// existing URI-based editing experience can read/write personal files that live
-// outside the workspace graph.
-const UserURIScheme = "selectdb://user/"
-
-// UserFileURI returns the selectdb:// URI for a per-user config file name
-// (e.g. ".theme" -> "selectdb://user/.theme").
-func UserFileURI(name string) string {
-	return UserURIScheme + name
-}
-
 // UserConfigDir returns the absolute path to the per-user config directory
 // (where personal .theme / .config files live), ensuring it exists. It resolves
 // from the same per-user app data directory used for server/workspace data
