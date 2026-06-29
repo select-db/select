@@ -7,9 +7,10 @@
 
 	type Props = {
 		tab: Tab;
+		standalone?: boolean;
 	};
 
-	let { tab }: Props = $props();
+	let { tab, standalone = false }: Props = $props();
 
 	// .config is a personal file (keybindings/snippets) living in the per-user
 	// config dir, addressed by a selectdb://user/... URI.
@@ -21,7 +22,7 @@
 	});
 </script>
 
-<BaseFileView {tab} language="json" manualSave {defaultContent}>
+<BaseFileView {tab} language="json" manualSave {defaultContent} {standalone}>
 	{#snippet header({ hasUnsavedChanges, isModifiedFromDefault, saveFile })}
 		<ConfigFileHeader {hasUnsavedChanges} {isModifiedFromDefault} onSave={saveFile} />
 	{/snippet}

@@ -15,10 +15,13 @@
 		language: string;
 		manualSave?: boolean;
 		defaultContent?: string;
+
+		/** Forwarded to Editor for synthetic tabs detached from any layout group. */
+		standalone?: boolean;
 		header?: Snippet<[{ hasUnsavedChanges: boolean; isModifiedFromDefault: boolean; saveFile: () => Promise<void> }]>;
 	};
 
-	let { tab, language, manualSave = false, defaultContent, header }: Props = $props();
+	let { tab, language, manualSave = false, defaultContent, standalone = false, header }: Props = $props();
 
 	const file = $derived(tab.file?.node);
 	const isTemp = $derived(tab.file?.isTemp ?? false);
@@ -110,7 +113,7 @@
 
 	<div class="page">
 		{#if contentLoaded}
-			<Editor {tab} {content} {language} onchange={handleContentChange} />
+			<Editor {tab} {content} {language} {standalone} onchange={handleContentChange} />
 		{/if}
 	</div>
 </div>

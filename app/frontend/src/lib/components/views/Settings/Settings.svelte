@@ -9,17 +9,18 @@
 	import UserSettingsEditor from '$lib/components/views/Settings/UserSettingsEditor.svelte';
 	import { getActiveTab, updateSettingsTab } from '$lib/components/Layout/layoutStore';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
+	import type { Icons } from '$lib/system/Icon/types';
 
 	type SectionId = 'workspace' | 'users' | 'roles' | 'git' | 'api_keys' | 'theme' | 'config';
 
-	const sections: { id: SectionId; label: string }[] = [
-		{ id: 'workspace', label: 'Workspace' },
-		{ id: 'git', label: 'Git' },
-		{ id: 'users', label: 'Users' },
-		{ id: 'roles', label: 'Roles' },
-		{ id: 'api_keys', label: 'API keys' },
-		{ id: 'theme', label: 'Theme' },
-		{ id: 'config', label: 'Config' }
+	const sections: { id: SectionId; label: string; icon: Icons }[] = [
+		{ id: 'workspace', label: 'Workspace', icon: 'folder' },
+		{ id: 'git', label: 'Git', icon: 'github-branch' },
+		{ id: 'users', label: 'Users', icon: 'users' },
+		{ id: 'roles', label: 'Roles', icon: 'roles' },
+		{ id: 'api_keys', label: 'API keys', icon: 'key' },
+		{ id: 'theme', label: 'Theme', icon: 'theme' },
+		{ id: 'config', label: 'Config', icon: 'cog' }
 	];
 
 	// Personal sections (theme, config) have no permission gate: they are the
@@ -51,6 +52,8 @@
 		{#each sections as section (section.id)}
 			<Button
 				content={section.label}
+				leftIcon={section.icon}
+				iconSize={16}
 				emphasis={selectedSection === section.id ? 'high' : 'low'}
 				active={selectedSection === section.id}
 				onclick={() => selectSection(section.id)}
@@ -110,8 +113,9 @@
 	.settings-nav :global(.nav-item) {
 		justify-content: flex-start;
 		width: 100%;
-		height: 26px;
+		height: 28px;
 		font-size: var(--fs-sm);
+		gap: var(--space-xs);
 	}
 
 	.settings-content {

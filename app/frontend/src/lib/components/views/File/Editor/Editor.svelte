@@ -103,6 +103,8 @@
 
 		errorPosition?: number | null;
 		errorMessage?: string | null;
+
+		standalone?: boolean;
 	};
 
 	let {
@@ -111,7 +113,8 @@
 		language = 'plaintext',
 		onchange,
 		errorPosition = null,
-		errorMessage = null
+		errorMessage = null,
+		standalone = false
 	}: Props = $props();
 
 	const effectiveDbId = $derived(getEffectiveSelectedDbId(tab.file?.node, tab));
@@ -126,6 +129,7 @@
 	let editorDirty = false;
 	let cursorDisposable: monaco.IDisposable | null = null;
 	let selectionDisposable: monaco.IDisposable | null = null;
+	let editorTextFocused = $state(false);
 
 	const isDiffMode = $derived(!!tab.diff);
 
@@ -393,9 +397,11 @@
 			ed.onDidFocusEditorText(() => {
 				setActiveFileGetter(getFile);
 				setContext('editorFocus', true);
+				editorTextFocused = true;
 			});
 			ed.onDidBlurEditorText(() => {
 				setContext('editorFocus', false);
+				editorTextFocused = false;
 			});
 			syncCurrentFileFromEditor(ed, tab);
 			cursorDisposable = ed.onDidChangeCursorPosition(() => syncCurrentFileFromEditor(ed, tab));
@@ -429,9 +435,12 @@
 	});
 
 	const isFocused = $derived($activeGroupStore?.activeTabId === tab.id);
+	// Detached editors (Settings theme/config) are never the active tab of a
+	// layout group, so fall back to live editor focus to own keybinding commands.
+	const commandsActive = $derived(standalone ? editorTextFocused : isFocused);
 	$effect(() => {
 		const ed = editor;
-		if (!ed || isDiffMode || !isFocused) return;
+		if (!ed || isDiffMode || !commandsActive) return;
 
 		const handlers: Array<[string, () => void]> = [];
 		for (const [command, action] of Object.entries(editorCommandMap)) {

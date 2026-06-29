@@ -63,5 +63,10 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+
+		margin: var(--space-sm);
+		overflow: hidden;
+		border-radius: var(--br-sm);
+		border: var(--border);
 	}
 </style>
