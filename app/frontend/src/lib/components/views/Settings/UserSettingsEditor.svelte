@@ -50,9 +50,9 @@
 <div class="user-settings-editor">
 	{#if ready}
 		{#if kind === 'theme'}
-			<ThemeFileView {tab} />
+			<ThemeFileView {tab} standalone />
 		{:else}
-			<ConfigFileView {tab} />
+			<ConfigFileView {tab} standalone />
 		{/if}
 	{/if}
 </div>

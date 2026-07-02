@@ -130,7 +130,7 @@
 
 <style>
 	.wrapper {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 	.content {
 		flex: 1;
@@ -150,9 +150,9 @@
 		font-size: var(--fs-xl);
 	}
 	.digit {
-		border: var(--border);
+		border: var(--border-contrast);
 		border-radius: var(--br-xs);
-		background: var(--gray-600);
+		background: var(--gray-300);
 		padding: var(--space-xs);
 	}
 	.footer {

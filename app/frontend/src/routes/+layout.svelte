@@ -14,7 +14,6 @@
 	import { StartFileWatcher, StartDatabaseWatcher } from '$lib/wailsjs/go/system/System';
 
 	import Leftbar from '$lib/components/Leftbar/Leftbar.svelte';
-	import Titlebar from '$lib/components/Titlebar/Titlebar.svelte';
 	import PageLogin from '$lib/components/PageLogin/PageLogin.svelte';
 	import Rightbar from '$lib/components/Rightbar/Rightbar.svelte';
 	import Bottombar from '$lib/components/Bottombar/Bottombar.svelte';
@@ -87,8 +86,6 @@
 </script>
 
 <div class="wrapper">
-	<Titlebar />
-
 	<div class="layout">
 		{#if $sessionCheckingStore}
 			<div class="session-loader"><Loader size={24} /></div>
@@ -96,6 +93,7 @@
 			{#key `${$themeVersionStore}-${$configVersionStore}-${$lintVersionStore}`}
 				<Leftbar />
 				<main class:left-bar-closed={!$isLeftbarOpened} class:right-bar-closed={!$isRightbarOpened}>
+					<div class="drag-spacer" style="--wails-draggable:drag"></div>
 					<EditorLayout node={$layoutStore.root} />
 				</main>
 				<Rightbar />
@@ -135,9 +133,18 @@
 	}
 
 	main {
+		display: flex;
+		flex-direction: column;
 		flex-grow: 1;
 		overflow: hidden;
 		z-index: 2;
+
+		box-shadow: var(--shadow-main);
+	}
+
+	.drag-spacer {
+		flex-shrink: 0;
+		height: var(--space-sm-md);
 	}
 	main.left-bar-closed {
 		padding-left: var(--space-sm);

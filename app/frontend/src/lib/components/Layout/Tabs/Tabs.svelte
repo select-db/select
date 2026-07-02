@@ -401,7 +401,7 @@
 		display: flex;
 		align-items: center;
 		border-radius: var(--br-sm);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		border-left: var(--bw) transparent solid;
 		border-right: var(--bw) transparent solid;
 		border-top: var(--bw) transparent solid;
@@ -434,7 +434,7 @@
 	}
 	.wrapper .tab:hover,
 	.wrapper .tab.active {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 	.wrapper .tab.active {
 		/* Concave flare radius. A touch larger than --br-sm since an inverted
@@ -469,7 +469,7 @@
 		top: calc(-1 * var(--flare-r));
 		border-radius: 50%;
 		border: var(--bw) solid var(--border-color);
-		box-shadow: 0 0 0 var(--flare-r) var(--gray-0);
+		box-shadow: 0 0 0 var(--flare-r) var(--gray-200);
 	}
 	.flare-left::after {
 		left: calc(-1 * var(--flare-r));
@@ -479,7 +479,7 @@
 	}
 	:global(.wrapper .tab.active p) {
 		color: var(--gray-1000);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 	.wrapper .tab.dragging {
 		opacity: 0.4;
@@ -515,7 +515,7 @@
 		width: 3em;
 		border-top-right-radius: var(--br-sm);
 		border-bottom-right-radius: var(--br-sm);
-		background: linear-gradient(to left, var(--gray-0) 60%, transparent);
+		background: linear-gradient(to left, var(--gray-200) 60%, transparent);
 		opacity: 0;
 		transition: opacity 0.15s ease-in-out;
 		pointer-events: none;

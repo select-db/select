@@ -14,10 +14,6 @@ export function FindDbItemNodeById(arg1, arg2) {
   return window['go']['graph']['Graph']['FindDbItemNodeById'](arg1, arg2);
 }
 
-export function GetConfigFilePath() {
-  return window['go']['graph']['Graph']['GetConfigFilePath']();
-}
-
 export function GetDBInstanceNodeByID(arg1) {
   return window['go']['graph']['Graph']['GetDBInstanceNodeByID'](arg1);
 }
@@ -54,12 +50,12 @@ export function InvalidateWorkspaceGraph() {
   return window['go']['graph']['Graph']['InvalidateWorkspaceGraph']();
 }
 
-export function LoadFolderEnvFile(arg1, arg2) {
-  return window['go']['graph']['Graph']['LoadFolderEnvFile'](arg1, arg2);
+export function LoadConfig() {
+  return window['go']['graph']['Graph']['LoadConfig']();
 }
 
-export function LoadWorkspaceConfig() {
-  return window['go']['graph']['Graph']['LoadWorkspaceConfig']();
+export function LoadFolderEnvFile(arg1, arg2) {
+  return window['go']['graph']['Graph']['LoadFolderEnvFile'](arg1, arg2);
 }
 
 export function LoadWorkspaceLint() {
@@ -78,10 +74,6 @@ export function RebuildWorkspaceGraph() {
   return window['go']['graph']['Graph']['RebuildWorkspaceGraph']();
 }
 
-export function ResetWorkspaceConfig() {
-  return window['go']['graph']['Graph']['ResetWorkspaceConfig']();
-}
-
 export function ResetWorkspaceLint() {
   return window['go']['graph']['Graph']['ResetWorkspaceLint']();
 }
@@ -92,4 +84,12 @@ export function ResetWorkspaceTheme() {
 
 export function ResolveVariable(arg1, arg2) {
   return window['go']['graph']['Graph']['ResolveVariable'](arg1, arg2);
+}
+
+export function UpdateWorkspaceExecutionLimits(arg1, arg2) {
+  return window['go']['graph']['Graph']['UpdateWorkspaceExecutionLimits'](arg1, arg2);
+}
+
+export function WorkspaceExecutionLimits() {
+  return window['go']['graph']['Graph']['WorkspaceExecutionLimits']();
 }

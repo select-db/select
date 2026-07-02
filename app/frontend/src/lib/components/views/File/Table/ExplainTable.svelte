@@ -81,7 +81,6 @@
 
 		expandedRows = next;
 	};
-
 </script>
 
 {#if explain}
@@ -373,7 +372,6 @@
 		font-size: var(--fs-sm);
 		position: sticky;
 		top: 0;
-		background: var(--gray-0);
 		z-index: 1;
 		padding: var(--space-xs) var(--space-sm);
 		text-align: left;
@@ -468,8 +466,8 @@
 		left: 0;
 		top: 0;
 		z-index: 5 !important;
-		background: var(--gray-0);
-		box-shadow: 0.5px 0 0 0 var(--border-color);
+		background: var(--gray-200);
+		box-shadow: 0.5px 0 0 0 var(--shadow);
 	}
 
 	td.sticky {
@@ -477,7 +475,7 @@
 		left: 0;
 		z-index: 2;
 		background: var(--gray-100);
-		box-shadow: 0.5px 0 0 0 var(--border-color);
+		box-shadow: 0.5px 0 0 0 var(--shadow);
 	}
 
 	.row-wrapper:hover td.sticky {

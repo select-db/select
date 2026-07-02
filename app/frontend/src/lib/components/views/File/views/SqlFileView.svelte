@@ -427,7 +427,7 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.page {

@@ -557,18 +557,18 @@
 	}
 
 	:global(.editorContainer .monaco-editor) {
-		--vscode-editorStickyScroll-background: var(--gray-0);
-		--vscode-editor-background: var(--gray-0);
+		--vscode-editorStickyScroll-background: var(--gray-200);
+		--vscode-editor-background: var(--gray-200);
 		--vscode-input-background: var(--gray-100);
 	}
 
 	:global(.editorContainer .monaco-editor .margin) {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	:global(.editorContainer .monaco-diff-editor) {
-		--vscode-editorStickyScroll-background: var(--gray-0);
-		--vscode-editor-background: var(--gray-0);
+		--vscode-editorStickyScroll-background: var(--gray-200);
+		--vscode-editor-background: var(--gray-200);
 	}
 
 	:global(.editorContainer .monaco-editor) {
@@ -615,7 +615,7 @@
 		vertical-align: top;
 		word-break: break-word;
 		color: var(--gray-1000);
-		background: var(--gray-0);
+		background: var(--gray-200);
 	}
 
 	:global(.monaco-hover table tbody tr:nth-child(even) td) {
@@ -656,7 +656,7 @@
 
 	.uri-wrapper {
 		padding: var(--space-sm) var(--space-sm-md);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.editorContainer {

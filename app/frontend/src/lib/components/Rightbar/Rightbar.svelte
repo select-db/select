@@ -42,6 +42,7 @@
 <style>
 	#rightbarContainer {
 		position: relative;
+		padding-top: var(--space-sm-md);
 	}
 
 	#rightbar {
@@ -50,6 +51,7 @@
 		flex-direction: column;
 		transition: width 0.1s ease-in;
 		overflow: hidden;
+		max-width: 420px;
 	}
 
 	#rightbar.resizing {

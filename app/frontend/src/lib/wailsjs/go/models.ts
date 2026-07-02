@@ -1373,6 +1373,8 @@ export namespace generated {
 	    git_remote_url: db_types.JSONNullString;
 	    last_pulled_at: sql.NullTime;
 	    owner_id: db_types.JSONNullString;
+	    statement_timeout_ms: number;
+	    max_result_size_mb: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Workspace(source);
@@ -1385,6 +1387,8 @@ export namespace generated {
 	        this.git_remote_url = this.convertValues(source["git_remote_url"], db_types.JSONNullString);
 	        this.last_pulled_at = this.convertValues(source["last_pulled_at"], sql.NullTime);
 	        this.owner_id = this.convertValues(source["owner_id"], db_types.JSONNullString);
+	        this.statement_timeout_ms = source["statement_timeout_ms"];
+	        this.max_result_size_mb = source["max_result_size_mb"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1725,11 +1729,11 @@ export namespace graph {
 	export class ConfigResponse {
 	    keybindings: Keybinding[];
 	    editor_snippets: EditorSnippet[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ConfigResponse(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.keybindings = this.convertValues(source["keybindings"], Keybinding);
@@ -2192,11 +2196,11 @@ export namespace graph {
 	    user?: UserNode;
 	    folders: FolderNode[];
 	    db_instances: DBInstanceNode[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new WorkspaceNode(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -2602,25 +2606,6 @@ export namespace server {
 
 }
 
-export namespace system {
-
-	export class ExecutionLimitsResponse {
-	    statement_timeout_ms: number;
-	    max_result_size_mb: number;
-
-	    static createFrom(source: any = {}) {
-	        return new ExecutionLimitsResponse(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.statement_timeout_ms = source["statement_timeout_ms"];
-	        this.max_result_size_mb = source["max_result_size_mb"];
-	    }
-	}
-
-}
-
 export namespace sql {
 	
 	export class DB {
@@ -2853,6 +2838,25 @@ export namespace sqllang {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace system {
+	
+	export class ExecutionLimitsResponse {
+	    statement_timeout_ms: number;
+	    max_result_size_mb: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecutionLimitsResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statement_timeout_ms = source["statement_timeout_ms"];
+	        this.max_result_size_mb = source["max_result_size_mb"];
+	    }
 	}
 
 }

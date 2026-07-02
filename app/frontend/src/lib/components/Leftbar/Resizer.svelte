@@ -42,7 +42,7 @@
 	#resizer {
 		position: absolute;
 		z-index: 3;
-		top: 48px;
+		top: 64px;
 		right: 1px;
 		bottom: var(--space-sm-md);
 

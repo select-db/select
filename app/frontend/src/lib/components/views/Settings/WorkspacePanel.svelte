@@ -104,17 +104,13 @@
 		<div class="field">
 			<Input bind:value={name} placeholder="My Workspace" />
 		</div>
-	</div>
-	<div class="section space x y">
+		<div></div>
 		<p class="section-title">Execution limits</p>
-		<p class="section-hint">
-			Shared with everyone in this workspace. Applied to all queries, including schema loading.
-		</p>
-		<div class="field">
+		<div class="field" style="max-width: 150px;">
 			<span class="field-label">Statement timeout (ms)</span>
 			<Input type="number" min={1} bind:value={statementTimeoutMs} placeholder="30000" />
 		</div>
-		<div class="field">
+		<div class="field" style="max-width: 150px;">
 			<span class="field-label">Max result size (MB)</span>
 			<Input type="number" min={1} max={250} bind:value={maxResultSizeMb} placeholder="100" />
 		</div>
@@ -152,14 +148,11 @@
 		letter-spacing: 0.04em;
 		color: var(--gray-800);
 	}
-	.section-hint {
-		font-size: var(--fs-xs);
-		color: var(--gray-800);
-	}
 	.field {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-xs);
+		max-width: 275px;
 	}
 	.field-label {
 		font-size: var(--fs-xs);

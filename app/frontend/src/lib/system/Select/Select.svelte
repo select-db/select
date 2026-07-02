@@ -266,6 +266,7 @@
 		align-items: center;
 		gap: 8px;
 		min-width: 0;
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.select-trigger {
@@ -279,7 +280,7 @@
 		align-items: center;
 	}
 	.select-trigger:not(.low) {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		border: var(--border);
 	}
 	.select-trigger.low {
@@ -314,7 +315,7 @@
 	}
 	.select-container:focus-within .select-trigger,
 	.select-container.open .select-trigger {
-		border-color: var(--gray-700);
+		border-color: var(--gray-600);
 	}
 
 	/* Low emphasis: ensure active/select state uses contrast-light border color */
@@ -325,16 +326,16 @@
 	}
 
 	/* Low emphasis: dimmed text, brighten on hover/focus (applies to all children) */
-	:global(.select-trigger.low p),
-	:global(.select-trigger.low span) {
+	:global(.select-trigger p),
+	:global(.select-trigger span) {
 		color: var(--gray-800);
 	}
-	:global(.select-container:focus-within .select-trigger.low p),
-	:global(.select-container:focus-within .select-trigger.low span),
-	:global(.select-container.open .select-trigger.low p),
-	:global(.select-container.open .select-trigger.low span),
-	:global(.select-trigger.low:hover p),
-	:global(.select-trigger.low:hover span) {
+	:global(.select-container:focus-within .select-trigger p),
+	:global(.select-container:focus-within .select-trigger span),
+	:global(.select-container.open .select-trigger p),
+	:global(.select-container.open .select-trigger span),
+	:global(.select-trigger:hover p),
+	:global(.select-trigger:hover span) {
 		color: var(--gray-1000);
 	}
 

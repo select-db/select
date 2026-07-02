@@ -757,8 +757,11 @@
 	}
 
 	.table-wrap {
-		overflow: auto;
 		flex: 1;
+		border: var(--border);
+		border-radius: var(--br-sm);
+		overflow: scroll;
+		height: fit-content;
 	}
 
 	table {
@@ -776,7 +779,7 @@
 		font-weight: var(--fw-light);
 		color: var(--gray-800);
 		padding: var(--space-xs) var(--space-sm);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		border-bottom: var(--border);
 		white-space: nowrap;
 	}
@@ -797,7 +800,7 @@
 		padding: var(--space-sm-md) var(--space-sm-md);
 		border-bottom: var(--border);
 		vertical-align: middle;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.col-resource {
@@ -918,7 +921,7 @@
 		visibility: hidden;
 		position: absolute;
 		padding: var(--space-xs-sm) var(--space-xs);
-		box-shadow: var(--gray-100) -15px 0px 10px 0px !important;
+		box-shadow: var(--shadow) -15px 0px 10px 0px !important;
 	}
 
 	tbody tr:hover .row-actions {

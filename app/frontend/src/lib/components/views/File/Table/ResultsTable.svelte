@@ -1019,7 +1019,7 @@
 	.wrapper {
 		height: 100%;
 		overflow: hidden;
-		background-color: var(--gray-100);
+		background-color: var(--gray-200);
 	}
 	.wrapper.resizing {
 		cursor: col-resize;
@@ -1044,8 +1044,7 @@
 	}
 
 	th .cell.clickable:hover {
-		text-decoration: underline;
-		text-underline-offset: 3px;
+		color: var(--gray-1000);
 	}
 
 	table {
@@ -1060,7 +1059,6 @@
 	th {
 		position: sticky;
 		top: 0;
-		background: var(--gray-0);
 		z-index: 1;
 	}
 
@@ -1083,6 +1081,7 @@
 
 	th {
 		overflow: hidden;
+		background-color: var(--gray-200);
 	}
 
 	th span:not(.col-resizer) {
@@ -1141,7 +1140,7 @@
 		background: var(--gray-100);
 	}
 	th.spacer-cell {
-		background: var(--gray-0);
+		background: var(--gray-200);
 	}
 
 	/* Last pinned column: right border to separate from scrollable area (override base border-right: none) */
@@ -1153,10 +1152,11 @@
 	/* Pinned columns behaviors */
 	th.sticky {
 		z-index: 3 !important;
+		background: var(--gray-200);
 	}
 	td.sticky {
 		position: sticky;
-		background: var(--gray-100);
+		background: var(--gray-200);
 		z-index: 2;
 	}
 	th.sticky,
@@ -1239,7 +1239,7 @@
 		width: 100%;
 		height: 100%;
 		box-sizing: border-box;
-		background-color: var(--gray-400);
+		background-color: var(--gray-300);
 		color: var(--gray-1000);
 
 		border-radius: var(--br-sm);

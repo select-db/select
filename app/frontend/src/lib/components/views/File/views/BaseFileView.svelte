@@ -18,10 +18,25 @@
 
 		/** Forwarded to Editor for synthetic tabs detached from any layout group. */
 		standalone?: boolean;
-		header?: Snippet<[{ hasUnsavedChanges: boolean; isModifiedFromDefault: boolean; saveFile: () => Promise<void> }]>;
+		header?: Snippet<
+			[
+				{
+					hasUnsavedChanges: boolean;
+					isModifiedFromDefault: boolean;
+					saveFile: () => Promise<void>;
+				}
+			]
+		>;
 	};
 
-	let { tab, language, manualSave = false, defaultContent, standalone = false, header }: Props = $props();
+	let {
+		tab,
+		language,
+		manualSave = false,
+		defaultContent,
+		standalone = false,
+		header
+	}: Props = $props();
 
 	const file = $derived(tab.file?.node);
 	const isTemp = $derived(tab.file?.isTemp ?? false);
@@ -124,7 +139,6 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--gray-0);
 	}
 
 	.page {

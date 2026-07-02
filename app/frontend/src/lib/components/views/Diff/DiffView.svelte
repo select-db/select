@@ -74,13 +74,7 @@
 
 			<div class="right-wrapper">
 				{#if isAgentDiff}
-					<Button
-						content="Allow"
-						emphasis="warning"
-						size="sm"
-						onclick={handleAllow}
-						active
-					/>
+					<Button content="Allow" emphasis="warning" size="sm" onclick={handleAllow} active />
 					<Button content="Deny" emphasis="low" size="sm" onclick={handleDeny} />
 				{/if}
 			</div>
@@ -107,7 +101,6 @@
 		gap: var(--space-sm);
 		padding: var(--space-xs-sm) var(--space-sm) 0 var(--space-sm);
 		border-bottom: var(--border);
-		background-color: var(--gray-0);
 		min-height: 35px;
 	}
 

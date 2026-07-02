@@ -12,11 +12,12 @@
 		oninput?: (e: Event) => void;
 		onclear?: () => void;
 
-		type?: 'text' | 'number' | 'password';
+		type?: 'text' | 'number' | 'password' | 'date' | 'time' | 'datetime-local';
 		multiline?: boolean;
 		rows?: number;
 		min?: number;
 		max?: number;
+		step?: number | 'any';
 		style?: string;
 		size?: 'md' | 'lg';
 		emphasis?: 'high' | 'low';
@@ -40,6 +41,7 @@
 		rows = 3,
 		min,
 		max,
+		step,
 		style,
 		size = 'md',
 		emphasis = 'high',
@@ -91,6 +93,7 @@
 		type={effectiveType}
 		{min}
 		{max}
+		{step}
 		class={size}
 		class:noRadius
 		class:noBorder
@@ -180,9 +183,11 @@
 <style>
 	input,
 	textarea {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		border: var(--border);
 		transition: all 0.2s;
+		box-shadow: var(--shadow-subtle);
+		color: var(--gray-800);
 	}
 
 	input::placeholder,
@@ -204,18 +209,18 @@
 	input:focus,
 	textarea:hover,
 	textarea:focus {
-		background-color: var(--gray-100);
+		background-color: var(--gray-300);
+		color: var(--gray-1000);
 	}
 	input:focus:not(.noBorder),
 	textarea:focus:not(.noBorder) {
-		border-color: var(--gray-700);
+		border-color: var(--gray-600);
 	}
 
 	input.low,
 	textarea.low {
 		background-color: transparent;
 		border: 0.5px solid transparent;
-		color: var(--gray-800);
 	}
 	input.low::placeholder,
 	textarea.low::placeholder {
@@ -227,7 +232,6 @@
 	textarea.low:focus {
 		background-color: var(--gray-100);
 		border-color: var(--border-color);
-		color: var(--gray-1000);
 	}
 
 	input.md,
@@ -364,5 +368,10 @@
 	.has-error :global(input:focus),
 	.has-error :global(textarea:focus) {
 		background-color: var(--red-100, rgba(255, 0, 0, 0.05));
+	}
+
+	.has-error :global(input:focus::placeholder),
+	.has-error :global(textarea:focus::placeholder) {
+		color: var(--gray-1000);
 	}
 </style>

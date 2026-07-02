@@ -34,12 +34,17 @@
 	color-scheme: dark light;
 
 	--border: var(--bw) solid var(--border-color);
-	--shadow: rgba(0, 0, 0, 0.05);
+	--border-contrast: var(--bw) solid var(--border-color-contrast);
+
+	--shadow: rgba(0, 0, 0, 0.08);
+	--shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / 0.02), 0px 1px 1px 0px lch(80% 0 0 / 0.02);
+	--shadow-main: lch(94% 0 0 / 0.4) 0px 50px 10px -1px, lch(94% 0 0 / 0.8) 0px 1px 1px 0px;
 }
 
 :global([data-theme='dark']) {
-	--border: var(--bw) var(--border-color) solid;
 	--shadow: rgba(0, 0, 0, 0.4);
+	--shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / 0.06), 0px 1px 1px 0px lch(0% 0 0 / 0.06);
+	--shadow-main: lch(0 0 0 / 0.8) 0px 50px 10px -1px, lch(0 0 0 / 0.8) 0px 1px 1px 0px;
 }
 
 :global(*) {
@@ -155,7 +160,7 @@
 :global(ol),
 :global(option) {
 	font-size: var(--fs-sm);
-	font-weight: var(--fw-light);
+	font-weight: var(--fw-normal);
 	text-wrap: nowrap;
 	letter-spacing: 0.0125em;
 	color: var(--gray-1000);
@@ -175,7 +180,7 @@
 
 :global(body) {
 	color: var(--gray-1000);
-	background: var(--gray-500);
+	background: var(--gray-0);
 
 	overflow: hidden;
 
@@ -185,10 +190,6 @@
 	box-sizing: border-box;
 	font-family: system-ui, sans-serif;
 	padding: 0;
-}
-
-:global([data-theme='light'] body) {
-	background-color: var(--gray-100);
 }
 
 /* Firefox */
@@ -219,7 +220,7 @@
 }
 
 :global(.context-view) {
-	box-shadow: var(--gray-200) 0px 7px 29px 0px !important;
+	box-shadow: var(--shadow) 0px 7px 29px 0px !important;
 }
 
 :global(.monaco-menu .monaco-action-bar .action-item) {
@@ -289,21 +290,13 @@
 	bottom: 0;
 	height: 40px;
 	transition: opacity 0.15s ease;
-	background: linear-gradient(to top, var(--gray-100) 0%, rgba(0, 0, 0, 0));
-}
-
-:global([data-theme='dark'] .scroll-shadow-band) {
-	background: linear-gradient(to top, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+	background: linear-gradient(to top, var(--gray-0) 0%, rgba(0, 0, 0, 0));
 }
 
 :global(.scroll-shadow-band--top) {
 	top: 0;
 	bottom: auto;
-	background: linear-gradient(to bottom, var(--gray-100) 0%, rgba(0, 0, 0, 0));
-}
-
-:global([data-theme='dark'] .scroll-shadow-band--top) {
-	background: linear-gradient(to bottom, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+	background: linear-gradient(to bottom, var(--gray-0) 0%, rgba(0, 0, 0, 0));
 }
 
 /* Horizontal variants (scrollShadow with axis: 'x'): vertical bars at the
@@ -315,11 +308,7 @@
 	left: auto;
 	width: 40px;
 	height: 97%;
-	background: linear-gradient(to left, var(--gray-100) 0%, rgba(0, 0, 0, 0));
-}
-
-:global([data-theme='dark'] .scroll-shadow-band--right) {
-	background: linear-gradient(to left, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+	background: linear-gradient(to left, var(--gray-0) 0%, rgba(0, 0, 0, 0));
 }
 
 :global(.scroll-shadow-band--left) {
@@ -329,9 +318,5 @@
 	right: auto;
 	width: 20px;
 	height: 97%;
-	background: linear-gradient(to right, var(--gray-100) 0%, rgba(0, 0, 0, 0));
-}
-
-:global([data-theme='dark'] .scroll-shadow-band--left) {
-	background: linear-gradient(to right, var(--gray-500) 0%, rgba(0, 0, 0, 0));
+	background: linear-gradient(to right, var(--gray-0) 0%, rgba(0, 0, 0, 0));
 }

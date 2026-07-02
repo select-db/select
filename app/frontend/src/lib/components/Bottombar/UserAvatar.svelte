@@ -48,10 +48,10 @@
 	style="display:flex; align-items: stretch"
 >
 	<div class="wrapper avatar">
-		<p>{userName}</p>
 		{#if avatarSrc}
 			<img src={avatarSrc} alt="User Avatar" />
 		{/if}
+		<p>{userName}</p>
 	</div>
 </Contextable>
 
@@ -63,7 +63,7 @@
 		border-radius: var(--br-xs);
 	}
 	.wrapper:hover {
-		background-color: var(--gray-600);
+		background-color: var(--gray-300);
 	}
 	.wrapper p {
 		color: var(--gray-700);
@@ -78,8 +78,8 @@
 		stroke: var(--gray-1000);
 	}
 	img {
-		width: 12px;
+		width: 14px;
 		border-radius: var(--br-sm);
-		margin-left: var(--space-sm);
+		margin-right: var(--space-sm);
 	}
 </style>

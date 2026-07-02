@@ -4,9 +4,10 @@ import {
 	addSchemaTab,
 	addChatTab,
 	addTerminalTab,
-	addSettingsTab
+	openSettingsSection
 } from '$lib/components/Layout/layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+import { settingsSections } from '$lib/components/views/Settings/sections';
 import type { ResourceMenuOption } from '$lib/components/ResourceMenu/types';
 import type { graph } from '$lib/wailsjs/go/models';
 
@@ -22,6 +23,8 @@ function createQuickActionNode(type: string, name: string): graph.FileNode {
 		convertValues: () => ({})
 	} as unknown as graph.FileNode;
 }
+
+const SETTINGS_SECTION_PREFIX = 'quick-action-settings-';
 
 export const quickActions: ResourceMenuOption[] = [
 	{
@@ -58,7 +61,14 @@ export const quickActions: ResourceMenuOption[] = [
 		type: 'quick_action',
 		uri: '',
 		node: createQuickActionNode('quick_action:settings', 'Open settings')
-	}
+	},
+	...settingsSections.map((s) => ({
+		id: `${SETTINGS_SECTION_PREFIX}${s.id}`,
+		label: `Settings: ${s.label}`,
+		type: 'quick_action' as const,
+		uri: '',
+		node: createQuickActionNode('quick_action:settings', `Settings: ${s.label}`)
+	}))
 ];
 
 export function executeQuickAction(option: ResourceMenuOption): void {
@@ -74,6 +84,8 @@ export function executeQuickAction(option: ResourceMenuOption): void {
 	} else if (option.id === 'quick-action-open-terminal') {
 		addTerminalTab();
 	} else if (option.id === 'quick-action-open-settings') {
-		addSettingsTab();
+		openSettingsSection();
+	} else if (option.id.startsWith(SETTINGS_SECTION_PREFIX)) {
+		openSettingsSection(option.id.slice(SETTINGS_SECTION_PREFIX.length));
 	}
 }
