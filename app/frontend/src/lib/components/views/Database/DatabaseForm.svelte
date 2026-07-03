@@ -467,7 +467,9 @@
 					bind:checked={proxified}
 					onchange={async (checked) => {
 						if (checked) {
-							// cleanup local config file
+							// local -> proxified: dsnLocal holds the real plaintext DSN from the
+							// local config, so it's safe to push to the backend as-is. Just drop
+							// the credentials from the local config file.
 							await writeConfigFile({
 								id,
 								name,
@@ -475,6 +477,13 @@
 								proxified: checked
 							});
 						} else {
+							// proxified -> local: the real secret lives only on the backend and is
+							// about to be deleted; the form only holds a masked copy (bullets). Clear
+							// the credential fields so the mask can't be persisted to the local config
+							// and the user knowingly re-enters them.
+							dsnLocal = '';
+							sshPassword = '';
+							sshPrivateKey = '';
 							await must(tryCatch(DeleteDatasource, id));
 						}
 					}}

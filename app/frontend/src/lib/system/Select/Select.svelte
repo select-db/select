@@ -307,7 +307,7 @@
 	.select-container:focus-within .select-trigger,
 	.select-container.open .select-trigger,
 	.select-trigger:hover {
-		background-color: var(--gray-100);
+		background-color: var(--gray-300);
 	}
 	.select-trigger.low:hover,
 	.select-container.open .select-trigger.low {

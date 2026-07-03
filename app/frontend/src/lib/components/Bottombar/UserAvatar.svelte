@@ -66,7 +66,7 @@
 		background-color: var(--gray-300);
 	}
 	.wrapper p {
-		color: var(--gray-700);
+		color: var(--gray-800);
 	}
 	.wrapper:hover p {
 		color: var(--gray-1000);
