@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Tab } from '$lib/components/Layout/layoutStore';
+	import {
+		getActiveTab,
+		updateSettingsTab,
+		type Tab
+	} from '$lib/components/Layout/layoutStore';
 	import type { graph } from '$lib/wailsjs/go/models';
 	import { EnsureUserConfigDefaults } from '$lib/wailsjs/go/system/System';
 	import { tryCatch } from '$lib/utils/tryCatch';
@@ -19,6 +23,15 @@
 
 	const fileName = $derived(kind === 'theme' ? '.theme' : '.config');
 	const uri = $derived(`selectdb://user/${fileName}`);
+
+	// We snapshot the last-saved view state on init (to restore after the remount) 
+	// and push updates back into the settings tab as it moves.
+	const savedViewState = getActiveTab()?.settings?.editors?.[kind]?.viewState;
+
+	function persistViewState(viewState: unknown) {
+		const editors = getActiveTab()?.settings?.editors;
+		updateSettingsTab({ editors: { ...editors, [kind]: { viewState } } });
+	}
 
 	// The editor reads the file directly by URI, so make sure it exists on disk
 	// (seeded from defaults) before we render the view; otherwise a missing file
@@ -42,18 +55,17 @@
 				folder_id: '',
 				badges: [],
 				convertValues: () => ({})
-			} as unknown as graph.FileNode
+			} as unknown as graph.FileNode,
+			editor: { viewState: savedViewState }
 		}
 	} as Tab);
 </script>
 
 <div class="user-settings-editor">
-	{#if ready}
-		{#if kind === 'theme'}
-			<ThemeFileView {tab} standalone />
-		{:else}
-			<ConfigFileView {tab} standalone />
-		{/if}
+	{#if ready && kind === 'theme'}
+		<ThemeFileView {tab} standalone onStateChange={persistViewState} />
+	{:else if ready}
+		<ConfigFileView {tab} standalone onStateChange={persistViewState} />
 	{/if}
 </div>
 

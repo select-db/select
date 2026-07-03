@@ -99,22 +99,24 @@
 		tab: Tab;
 		content?: string;
 		language?: string;
-		onchange?: (content: string, panelIndex?: number) => void;
+		onContentChange?: (content: string, panelIndex?: number) => void;
 
 		errorPosition?: number | null;
 		errorMessage?: string | null;
 
 		standalone?: boolean;
+		onStateChange?: (viewState: unknown) => void;
 	};
 
 	let {
 		tab,
 		content = '',
 		language = 'plaintext',
-		onchange,
+		onContentChange,
 		errorPosition = null,
 		errorMessage = null,
-		standalone = false
+		standalone = false,
+		onStateChange
 	}: Props = $props();
 
 	const effectiveDbId = $derived(getEffectiveSelectedDbId(tab.file?.node, tab));
@@ -129,13 +131,18 @@
 	let editorDirty = false;
 	let cursorDisposable: monaco.IDisposable | null = null;
 	let selectionDisposable: monaco.IDisposable | null = null;
+	let scrollDisposable: monaco.IDisposable | null = null;
 	let editorTextFocused = $state(false);
+
+	const persistViewState = debounce(() => {
+		if (editor && onStateChange) onStateChange(editor.saveViewState() ?? undefined);
+	}, 300);
 
 	const isDiffMode = $derived(!!tab.diff);
 
 	export function format() {
 		if (currentLanguage !== 'sql-custom') return;
-		formatSQL(editor, 'postgresql', (c) => onchange?.(c));
+		formatSQL(editor, 'postgresql', (c) => onContentChange?.(c));
 	}
 
 	export function focus() {
@@ -202,8 +209,8 @@
 
 		editorDirty = false;
 
-		if (!onchange) return;
-		onchange(model.getValue(), isDiffMode ? DIFF_PANEL_MODIFIED : undefined);
+		if (!onContentChange) return;
+		onContentChange(model.getValue(), isDiffMode ? DIFF_PANEL_MODIFIED : undefined);
 	}, 200);
 
 	async function buildModelUri(uri: string, tabId: string): Promise<monaco.Uri> {
@@ -404,8 +411,15 @@
 				editorTextFocused = false;
 			});
 			syncCurrentFileFromEditor(ed, tab);
-			cursorDisposable = ed.onDidChangeCursorPosition(() => syncCurrentFileFromEditor(ed, tab));
-			selectionDisposable = ed.onDidChangeCursorSelection(() => syncCurrentFileFromEditor(ed, tab));
+			cursorDisposable = ed.onDidChangeCursorPosition(() => {
+				syncCurrentFileFromEditor(ed, tab);
+				persistViewState();
+			});
+			selectionDisposable = ed.onDidChangeCursorSelection(() => {
+				syncCurrentFileFromEditor(ed, tab);
+				persistViewState();
+			});
+			scrollDisposable = ed.onDidScrollChange(() => persistViewState());
 
 			scrollToLineUnsubscribe = EventsOn('editor:scrollToLine', scrollToLine);
 			await mountContent(content, language, tab.id);
@@ -513,8 +527,10 @@
 	});
 
 	onDestroy(() => {
+		if (editor && onStateChange) onStateChange(editor.saveViewState() ?? undefined);
 		cursorDisposable?.dispose();
 		selectionDisposable?.dispose();
+		scrollDisposable?.dispose();
 		changeListenerDisposable?.dispose();
 		diffChangeDisposable?.dispose();
 		scrollToLineUnsubscribe?.();

@@ -18,6 +18,8 @@
 
 		/** Forwarded to Editor for synthetic tabs detached from any layout group. */
 		standalone?: boolean;
+		/** Forwarded to Editor; fires with Monaco view state on cursor/scroll change. */
+		onStateChange?: (viewState: unknown) => void;
 		header?: Snippet<
 			[
 				{
@@ -35,6 +37,7 @@
 		manualSave = false,
 		defaultContent,
 		standalone = false,
+		onStateChange,
 		header
 	}: Props = $props();
 
@@ -128,7 +131,14 @@
 
 	<div class="page">
 		{#if contentLoaded}
-			<Editor {tab} {content} {language} {standalone} onchange={handleContentChange} />
+			<Editor
+				{tab}
+				{content}
+				{language}
+				{standalone}
+				{onStateChange}
+				onContentChange={handleContentChange}
+			/>
 		{/if}
 	</div>
 </div>

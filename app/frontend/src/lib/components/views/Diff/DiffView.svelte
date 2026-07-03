@@ -80,7 +80,7 @@
 			</div>
 		</div>
 		<div class="editor-wrapper">
-			<Editor {tab} onchange={handleDiffChange} />
+			<Editor {tab} onContentChange={handleDiffChange} />
 		</div>
 	</div>
 {/if}

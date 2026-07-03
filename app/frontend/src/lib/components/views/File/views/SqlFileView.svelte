@@ -397,7 +397,7 @@
 				{tab}
 				{content}
 				language="sql-custom"
-				onchange={handleContentChange}
+				onContentChange={handleContentChange}
 				errorPosition={currentQueryResult?.errors?.length
 					? (currentQueryResult?.errorPosition ?? undefined)
 					: undefined}

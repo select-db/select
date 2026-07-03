@@ -136,6 +136,14 @@ export type Tab = {
 			scrollTop?: number;
 			search?: string;
 		};
+		// Monaco view state (cursor/scroll/selection/folding) for the personal
+		// .theme / .config editors. Their tabs are synthetic and detached from any
+		// layout group, so they can't ride the regular tab.file.editor path and
+		// persist here instead. Restored on re-render (e.g. after Apply/Reset).
+		editors?: {
+			theme?: { viewState?: unknown };
+			config?: { viewState?: unknown };
+		};
 	};
 };
 
