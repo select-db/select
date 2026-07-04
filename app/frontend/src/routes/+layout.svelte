@@ -144,7 +144,7 @@
 
 	.drag-spacer {
 		flex-shrink: 0;
-		height: var(--space-sm-md);
+		height: var(--space-xs-sm);
 	}
 	main.left-bar-closed {
 		padding-left: var(--space-sm);

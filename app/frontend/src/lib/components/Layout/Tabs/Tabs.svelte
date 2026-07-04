@@ -27,6 +27,7 @@
 	import TabActions from './TabActions.svelte';
 	import { executeCommand } from '$lib/stores/commandRegistry';
 	import { scrollShadow } from '$lib/actions/scrollShadow';
+	import { titlebarSafe } from '$lib/actions/titlebarSafe';
 
 	type Props = {
 		tabs: Tab[];
@@ -198,8 +199,8 @@
 </script>
 
 {#if tabs.length}
-	<div class="tabs-container">
-		<div class="tab-nav-arrows" aria-label="Tab navigation">
+	<div class="tabs-container" style="--wails-draggable:drag">
+		<div class="tab-nav-arrows" use:titlebarSafe aria-label="Tab navigation">
 			<Button
 				size="sm"
 				emphasis="low"
@@ -255,7 +256,7 @@
 							class:active
 							class:dragging={isDragged}
 							draggable="true"
-							onmousedown={() => {
+							onmousedown={(e) => {
 								cancelNextDrag = false;
 							}}
 							ondragstart={(e) => {
@@ -366,6 +367,13 @@
 		border-top-right-radius: var(--br-sm);
 		z-index: -1;
 		pointer-events: none;
+	}
+
+	/* Opt out only the buttons (not the .tab-nav-arrows box), so the safe-space
+	   padding titlebarSafe adds beside the traffic lights stays window-draggable. */
+	.tab-nav-arrows :global(button),
+	.wrapper .tab {
+		--wails-draggable: no-drag;
 	}
 
 	.tab-nav-arrows {
