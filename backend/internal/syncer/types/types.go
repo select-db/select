@@ -61,6 +61,9 @@ type SyncChanges struct {
 	Role            []RoleRow            `json:"role"`
 	UserToRole      []UserToRoleRow      `json:"user_to_role"`
 	Permission      []PermissionRow      `json:"permission"`
+	Group           []GroupRow           `json:"group"`
+	UserToGroup     []UserToGroupRow     `json:"user_to_group"`
+	GroupToRole     []GroupToRoleRow     `json:"group_to_role"`
 }
 
 // UserRow is a minimal user for sync.
@@ -103,6 +106,38 @@ type RoleRow struct {
 type UserToRoleRow struct {
 	ID          string     `json:"id"`
 	UserID      string     `json:"user_id"`
+	RoleID      string     `json:"role_id"`
+	WorkspaceID string     `json:"workspace_id"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+}
+
+// GroupRow is a group row for sync.
+type GroupRow struct {
+	ID          string     `json:"id"`
+	WorkspaceID string     `json:"workspace_id"`
+	Name        string     `json:"name"`
+	Source      string     `json:"source"`
+	ExternalID  *string    `json:"external_id,omitempty"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+}
+
+// UserToGroupRow is a user_to_group row for sync.
+type UserToGroupRow struct {
+	ID          string     `json:"id"`
+	UserID      string     `json:"user_id"`
+	GroupID     string     `json:"group_id"`
+	WorkspaceID string     `json:"workspace_id"`
+	Source      string     `json:"source"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+}
+
+// GroupToRoleRow is a group_to_role row for sync.
+type GroupToRoleRow struct {
+	ID          string     `json:"id"`
+	GroupID     string     `json:"group_id"`
 	RoleID      string     `json:"role_id"`
 	WorkspaceID string     `json:"workspace_id"`
 	UpdatedAt   time.Time  `json:"updated_at"`

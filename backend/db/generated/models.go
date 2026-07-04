@@ -24,6 +24,25 @@ type AppDatasource struct {
 	Name            db_types.JSONNullString
 }
 
+type AppGroup struct {
+	ID          db_types.JSONNullUUID
+	WorkspaceID db_types.JSONNullUUID
+	Name        db_types.JSONNullString
+	Source      db_types.JSONNullString
+	ExternalID  db_types.JSONNullString
+	UpdatedAt   db_types.JSONNullTime
+	DeletedAt   db_types.JSONNullTime
+}
+
+type AppGroupToRole struct {
+	ID          db_types.JSONNullUUID
+	GroupID     db_types.JSONNullUUID
+	RoleID      db_types.JSONNullUUID
+	WorkspaceID db_types.JSONNullUUID
+	UpdatedAt   db_types.JSONNullTime
+	DeletedAt   db_types.JSONNullTime
+}
+
 type AppPermission struct {
 	ID           db_types.JSONNullUUID
 	RoleID       db_types.JSONNullUUID
@@ -62,6 +81,16 @@ type AppUserIdentity struct {
 	ProviderUserID db_types.JSONNullString
 	Email          db_types.JSONNullString
 	CreatedAt      db_types.JSONNullTime
+}
+
+type AppUserToGroup struct {
+	ID          db_types.JSONNullUUID
+	UserID      db_types.JSONNullUUID
+	GroupID     db_types.JSONNullUUID
+	WorkspaceID db_types.JSONNullUUID
+	Source      db_types.JSONNullString
+	UpdatedAt   db_types.JSONNullTime
+	DeletedAt   db_types.JSONNullTime
 }
 
 type AppUserToRole struct {

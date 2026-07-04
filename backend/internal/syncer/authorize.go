@@ -41,6 +41,9 @@ func authorizeCommit(userID string, workspaceIDs []string, roleIDs []string, own
 		"user_to_role":      {},
 		"permission":        {},
 		"workspace_to_user": {},
+		"group":             {},
+		"user_to_group":     {},
+		"group_to_role":     {},
 	}
 	_, isManageOperation := manageTables[c.TableName]
 	if isManageOperation && !compiled.IsAllowed(core.ActionWorkspaceRolesManage) {

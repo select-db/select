@@ -22,3 +22,16 @@ func RoleInWorkspace(ctx context.Context, roleID, workspaceID db_types.JSONNullU
 	}
 	return role.WorkspaceID == workspaceID, nil
 }
+
+// GroupInWorkspace reports whether groupID exists and belongs to workspaceID.
+// Same purpose as RoleInWorkspace for user_to_group / group_to_role writes.
+func GroupInWorkspace(ctx context.Context, groupID, workspaceID db_types.JSONNullUUID) (bool, error) {
+	group, err := db.Queries.GetGroupByID(ctx, groupID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return group.WorkspaceID == workspaceID, nil
+}
