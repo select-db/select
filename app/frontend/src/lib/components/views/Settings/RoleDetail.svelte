@@ -762,6 +762,7 @@
 		border-radius: var(--br-sm);
 		overflow: scroll;
 		height: fit-content;
+		margin: 0 var(--space-sm) var(--space-sm) var(--space-sm);
 	}
 
 	table {

@@ -135,7 +135,11 @@
 	main {
 		display: flex;
 		flex-direction: column;
-		flex-grow: 1;
+		/* flex-basis:0 + min-width:0 → main's width is purely the leftover space
+		   between the side bars, never influenced by (over)wide tab content.
+		   Combined with overflow:hidden, content clips/scrolls inside main. */
+		flex: 1 1 0;
+		min-width: 0;
 		overflow: hidden;
 		z-index: 2;
 
@@ -144,7 +148,7 @@
 
 	.drag-spacer {
 		flex-shrink: 0;
-		height: var(--space-xs-sm);
+		height: var(--space-sm);
 	}
 	main.left-bar-closed {
 		padding-left: var(--space-sm);

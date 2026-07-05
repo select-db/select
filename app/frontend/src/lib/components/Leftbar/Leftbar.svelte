@@ -47,6 +47,8 @@
 		position: relative;
 		overflow: hidden;
 		max-width: 420px;
+		/* Keep the user's width; never let tab content squeeze the bar. */
+		flex-shrink: 0;
 	}
 
 	.leftbar {

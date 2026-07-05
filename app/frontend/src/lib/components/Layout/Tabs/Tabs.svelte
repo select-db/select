@@ -256,9 +256,7 @@
 							class:active
 							class:dragging={isDragged}
 							draggable="true"
-							onmousedown={(e) => {
-								cancelNextDrag = false;
-							}}
+							onmousedown={() => (cancelNextDrag = false)}
 							ondragstart={(e) => {
 								if (cancelNextDrag) {
 									cancelNextDrag = false;
@@ -379,7 +377,6 @@
 	.tab-nav-arrows {
 		display: flex;
 		align-items: stretch;
-		z-index: 10;
 		gap: var(--space-xs-sm);
 		padding-bottom: var(--space-xs-sm);
 	}

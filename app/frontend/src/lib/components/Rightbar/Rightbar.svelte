@@ -43,6 +43,9 @@
 	#rightbarContainer {
 		position: relative;
 		padding-top: var(--space-sm-md);
+		/* Width lives on the inner #rightbar, so pin this flex item too —
+		   otherwise wide tab content can shrink/push the bar. */
+		flex-shrink: 0;
 	}
 
 	#rightbar {

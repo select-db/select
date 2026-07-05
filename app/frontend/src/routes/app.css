@@ -160,7 +160,7 @@
 :global(ol),
 :global(option) {
 	font-size: var(--fs-sm);
-	font-weight: var(--fw-normal);
+	font-weight: var(--fw-light);
 	text-wrap: nowrap;
 	letter-spacing: 0.0125em;
 	color: var(--gray-1000);
