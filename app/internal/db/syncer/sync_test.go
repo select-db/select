@@ -404,6 +404,96 @@ func TestSync_WithNoCurrentWorkspace(t *testing.T) {
 	assert.Equal(t, 1, count, "Sync without current workspace must pull default workspace")
 }
 
+// Applies group, user_to_group and group_to_role in a SINGLE changes payload to
+// prove applyChanges upserts them in FK-safe order (group before user_to_group /
+// group_to_role, which reference it alongside user / role).
+func TestSyncWith_AppliesGroupGraph_InOnePayload(t *testing.T) {
+	db := newTestDB(t)
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedUser(t, db, "u1", "Alice")
+	seedRole(t, db, "role-1", "ws1", "Admins")
+
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			Group: []map[string]any{
+				{"id": "grp-1", "workspace_id": "ws1", "name": "Data Eng", "source": "local"},
+			},
+			UserToGroup: []map[string]any{
+				{"id": "utg-1", "user_id": "u1", "group_id": "grp-1", "workspace_id": "ws1", "source": "local"},
+			},
+			GroupToRole: []map[string]any{
+				{"id": "gtr-1", "group_id": "grp-1", "role_id": "role-1", "workspace_id": "ws1"},
+			},
+		},
+	}))
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+
+	var name string
+	require.NoError(t, db.QueryRow(`SELECT name FROM "group" WHERE id = 'grp-1'`).Scan(&name))
+	assert.Equal(t, "Data Eng", name)
+
+	var n int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM user_to_group WHERE id = 'utg-1'`).Scan(&n))
+	assert.Equal(t, 1, n, "user_to_group must apply after its group")
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM group_to_role WHERE id = 'gtr-1'`).Scan(&n))
+	assert.Equal(t, 1, n, "group_to_role must apply after its group and role")
+}
+
+func TestSyncWith_DeletesGroupToRoleAndUserToGroup(t *testing.T) {
+	db := newTestDB(t)
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedUser(t, db, "u1", "Alice")
+	seedRole(t, db, "role-1", "ws1", "Admins")
+	_, err := db.Exec(`INSERT INTO "group" (id, workspace_id, name) VALUES ('grp-1', 'ws1', 'Data Eng')`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO user_to_group (id, user_id, group_id, workspace_id) VALUES ('utg-1', 'u1', 'grp-1', 'ws1')`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO group_to_role (id, group_id, role_id, workspace_id) VALUES ('gtr-1', 'grp-1', 'role-1', 'ws1')`)
+	require.NoError(t, err)
+
+	deletedAt := time.Now().UTC().Format(time.RFC3339)
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			UserToGroup: []map[string]any{
+				{"id": "utg-1", "user_id": "u1", "group_id": "grp-1", "workspace_id": "ws1", "deleted_at": deletedAt},
+			},
+			GroupToRole: []map[string]any{
+				{"id": "gtr-1", "group_id": "grp-1", "role_id": "role-1", "workspace_id": "ws1", "deleted_at": deletedAt},
+			},
+		},
+	}))
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+
+	var n int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM user_to_group WHERE id = 'utg-1'`).Scan(&n))
+	assert.Equal(t, 0, n, "deleted user_to_group must be removed")
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM group_to_role WHERE id = 'gtr-1'`).Scan(&n))
+	assert.Equal(t, 0, n, "deleted group_to_role must be removed")
+}
+
+func TestSyncWith_EmitsRolesUpdated_OnGroupToRoleChange(t *testing.T) {
+	db := newTestDB(t)
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedRole(t, db, "role-1", "ws1", "Admins")
+	_, err := db.Exec(`INSERT INTO "group" (id, workspace_id, name) VALUES ('grp-1', 'ws1', 'Data Eng')`)
+	require.NoError(t, err)
+
+	called := false
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			GroupToRole: []map[string]any{
+				{"id": "gtr-1", "group_id": "grp-1", "role_id": "role-1", "workspace_id": "ws1"},
+			},
+		},
+	}))
+	s.EmitRolesUpdated = func() { called = true }
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	assert.True(t, called, "group->role change must refresh effective roles in the UI")
+}
+
 func TestPayloadHasDeletedAt(t *testing.T) {
 	assert.False(t, PayloadHasDeletedAt(map[string]any{}))
 	assert.False(t, PayloadHasDeletedAt(map[string]any{"deleted_at": nil}))

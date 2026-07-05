@@ -18,6 +18,25 @@ type GooseDbVersion struct {
 	Tstamp    sql.NullTime `json:"tstamp"`
 }
 
+type Group struct {
+	ID          string                  `json:"id"`
+	WorkspaceID string                  `json:"workspace_id"`
+	Name        string                  `json:"name"`
+	Source      string                  `json:"source"`
+	ExternalID  db_types.JSONNullString `json:"external_id"`
+	UpdatedAt   time.Time               `json:"updated_at"`
+	DeletedAt   sql.NullTime            `json:"deleted_at"`
+}
+
+type GroupToRole struct {
+	ID          string       `json:"id"`
+	GroupID     string       `json:"group_id"`
+	RoleID      string       `json:"role_id"`
+	WorkspaceID string       `json:"workspace_id"`
+	UpdatedAt   time.Time    `json:"updated_at"`
+	DeletedAt   sql.NullTime `json:"deleted_at"`
+}
+
 type History struct {
 	ID           string        `json:"id"`
 	Statement    string        `json:"statement"`
@@ -70,6 +89,16 @@ type User struct {
 	Name      db_types.JSONNullString `json:"name"`
 	Email     db_types.JSONNullString `json:"email"`
 	AvatarUrl db_types.JSONNullString `json:"avatar_url"`
+}
+
+type UserToGroup struct {
+	ID          string       `json:"id"`
+	UserID      string       `json:"user_id"`
+	GroupID     string       `json:"group_id"`
+	WorkspaceID string       `json:"workspace_id"`
+	Source      string       `json:"source"`
+	UpdatedAt   time.Time    `json:"updated_at"`
+	DeletedAt   sql.NullTime `json:"deleted_at"`
 }
 
 type UserToRole struct {

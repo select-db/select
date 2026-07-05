@@ -1575,3 +1575,122 @@ func (q *Queries) UpsertWorkspaceToUserForSync(ctx context.Context, arg UpsertWo
 	_, err := q.db.ExecContext(ctx, upsertWorkspaceToUserForSync, arg.ID, arg.WorkspaceID, arg.UserID)
 	return err
 }
+
+// --- IAM groups ("group", user_to_group, group_to_role) ---
+
+const deleteGroupByID = `-- name: DeleteGroupByID :exec
+; -- @no-track
+DELETE FROM "group" WHERE id = ?1
+`
+
+func (q *Queries) DeleteGroupByID(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteGroupByID, id)
+	return err
+}
+
+const deleteGroupToRoleByID = `-- name: DeleteGroupToRoleByID :exec
+; -- @no-track
+DELETE FROM group_to_role WHERE id = ?1
+`
+
+func (q *Queries) DeleteGroupToRoleByID(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteGroupToRoleByID, id)
+	return err
+}
+
+const deleteUserToGroupByID = `-- name: DeleteUserToGroupByID :exec
+; -- @no-track
+DELETE FROM user_to_group WHERE id = ?1
+`
+
+func (q *Queries) DeleteUserToGroupByID(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserToGroupByID, id)
+	return err
+}
+
+const upsertGroupForSync = `-- name: UpsertGroupForSync :exec
+; -- @no-track
+INSERT INTO "group" (id, workspace_id, name, source, external_id)
+VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT (id) DO UPDATE SET
+    workspace_id = excluded.workspace_id,
+    name = excluded.name,
+    source = excluded.source,
+    external_id = excluded.external_id
+`
+
+type UpsertGroupForSyncParams struct {
+	ID          string                  `json:"id"`
+	WorkspaceID string                  `json:"workspace_id"`
+	Name        string                  `json:"name"`
+	Source      string                  `json:"source"`
+	ExternalID  db_types.JSONNullString `json:"external_id"`
+}
+
+func (q *Queries) UpsertGroupForSync(ctx context.Context, arg UpsertGroupForSyncParams) error {
+	_, err := q.db.ExecContext(ctx, upsertGroupForSync,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Source,
+		arg.ExternalID,
+	)
+	return err
+}
+
+const upsertGroupToRoleForSync = `-- name: UpsertGroupToRoleForSync :exec
+; -- @no-track
+INSERT INTO group_to_role (id, group_id, role_id, workspace_id)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (id) DO UPDATE SET
+    group_id = excluded.group_id,
+    role_id = excluded.role_id,
+    workspace_id = excluded.workspace_id
+`
+
+type UpsertGroupToRoleForSyncParams struct {
+	ID          string `json:"id"`
+	GroupID     string `json:"group_id"`
+	RoleID      string `json:"role_id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+func (q *Queries) UpsertGroupToRoleForSync(ctx context.Context, arg UpsertGroupToRoleForSyncParams) error {
+	_, err := q.db.ExecContext(ctx, upsertGroupToRoleForSync,
+		arg.ID,
+		arg.GroupID,
+		arg.RoleID,
+		arg.WorkspaceID,
+	)
+	return err
+}
+
+const upsertUserToGroupForSync = `-- name: UpsertUserToGroupForSync :exec
+; -- @no-track
+INSERT INTO user_to_group (id, user_id, group_id, workspace_id, source)
+VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT (id) DO UPDATE SET
+    user_id = excluded.user_id,
+    group_id = excluded.group_id,
+    workspace_id = excluded.workspace_id,
+    source = excluded.source
+`
+
+type UpsertUserToGroupForSyncParams struct {
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	GroupID     string `json:"group_id"`
+	WorkspaceID string `json:"workspace_id"`
+	Source      string `json:"source"`
+}
+
+func (q *Queries) UpsertUserToGroupForSync(ctx context.Context, arg UpsertUserToGroupForSyncParams) error {
+	_, err := q.db.ExecContext(ctx, upsertUserToGroupForSync,
+		arg.ID,
+		arg.UserID,
+		arg.GroupID,
+		arg.WorkspaceID,
+		arg.Source,
+	)
+	return err
+}

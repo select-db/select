@@ -36,7 +36,8 @@ type SyncRestoredItem struct {
 	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
-// SyncChanges contains entities in FK order: users → workspaces → workspace_to_user → roles → user_to_role → permissions.
+// SyncChanges contains entities in FK order: users → workspaces → workspace_to_user →
+// roles → user_to_role → permissions → group → user_to_group → group_to_role.
 // Each row is a raw map so it flows directly into applyRow without conversion.
 type SyncChanges struct {
 	Users           []map[string]any `json:"users"`
@@ -45,5 +46,7 @@ type SyncChanges struct {
 	Role            []map[string]any `json:"role"`
 	UserToRole      []map[string]any `json:"user_to_role"`
 	Permission      []map[string]any `json:"permission"`
+	Group           []map[string]any `json:"group"`
+	UserToGroup     []map[string]any `json:"user_to_group"`
+	GroupToRole     []map[string]any `json:"group_to_role"`
 }
-

@@ -11,6 +11,58 @@ CREATE INDEX idx_user_to_role_updated_at ON user_to_role(updated_at);
 
 CREATE INDEX idx_user_to_role_user_workspace ON user_to_role(user_id, workspace_id);
 
+CREATE INDEX idx_group_updated_at ON "group"(updated_at);
+
+CREATE INDEX idx_group_workspace_id ON "group"(workspace_id);
+
+CREATE INDEX idx_user_to_group_updated_at ON user_to_group(updated_at);
+
+CREATE INDEX idx_user_to_group_user_workspace ON user_to_group(user_id, workspace_id);
+
+CREATE INDEX idx_user_to_group_group_id ON user_to_group(group_id);
+
+CREATE INDEX idx_group_to_role_updated_at ON group_to_role(updated_at);
+
+CREATE INDEX idx_group_to_role_group_id ON group_to_role(group_id);
+
+CREATE TABLE "group" (
+    id           TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    source       TEXT NOT NULL DEFAULT 'local',
+    external_id  TEXT,
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at   DATETIME,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
+CREATE TABLE group_to_role (
+    id           TEXT PRIMARY KEY,
+    group_id     TEXT NOT NULL,
+    role_id      TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at   DATETIME,
+    UNIQUE (group_id, role_id),
+    FOREIGN KEY (group_id) REFERENCES "group"(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES role(id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
+CREATE TABLE user_to_group (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    group_id     TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    source       TEXT NOT NULL DEFAULT 'local',
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at   DATETIME,
+    UNIQUE (user_id, group_id),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES "group"(id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
 CREATE TABLE goose_db_version (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		version_id INTEGER NOT NULL,
