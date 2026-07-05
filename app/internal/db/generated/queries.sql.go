@@ -1694,3 +1694,269 @@ func (q *Queries) UpsertUserToGroupForSync(ctx context.Context, arg UpsertUserTo
 	)
 	return err
 }
+
+// --- IAM groups service (create/list/rename/delete, members, role attach) ---
+
+const deleteGroup = `-- name: DeleteGroup :exec
+DELETE FROM "group"
+WHERE id = ?1
+`
+
+func (q *Queries) DeleteGroup(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteGroup, id)
+	return err
+}
+
+const insertGroup = `-- name: InsertGroup :one
+INSERT INTO "group" (id, workspace_id, name)
+VALUES (?1, ?2, ?3)
+RETURNING id, workspace_id, name, source, external_id, updated_at, deleted_at
+`
+
+type InsertGroupParams struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Name        string `json:"name"`
+}
+
+func (q *Queries) InsertGroup(ctx context.Context, arg InsertGroupParams) (Group, error) {
+	row := q.db.QueryRowContext(ctx, insertGroup, arg.ID, arg.WorkspaceID, arg.Name)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Source,
+		&i.ExternalID,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const insertGroupToRole = `-- name: InsertGroupToRole :one
+INSERT INTO group_to_role (id, group_id, role_id, workspace_id)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (group_id, role_id) DO NOTHING
+RETURNING id, group_id, role_id, workspace_id, updated_at, deleted_at
+`
+
+type InsertGroupToRoleParams struct {
+	ID          string `json:"id"`
+	GroupID     string `json:"group_id"`
+	RoleID      string `json:"role_id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+func (q *Queries) InsertGroupToRole(ctx context.Context, arg InsertGroupToRoleParams) (GroupToRole, error) {
+	row := q.db.QueryRowContext(ctx, insertGroupToRole,
+		arg.ID,
+		arg.GroupID,
+		arg.RoleID,
+		arg.WorkspaceID,
+	)
+	var i GroupToRole
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.RoleID,
+		&i.WorkspaceID,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const insertUserToGroup = `-- name: InsertUserToGroup :one
+INSERT INTO user_to_group (id, user_id, group_id, workspace_id)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (user_id, group_id) DO NOTHING
+RETURNING id, user_id, group_id, workspace_id, source, updated_at, deleted_at
+`
+
+type InsertUserToGroupParams struct {
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	GroupID     string `json:"group_id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+func (q *Queries) InsertUserToGroup(ctx context.Context, arg InsertUserToGroupParams) (UserToGroup, error) {
+	row := q.db.QueryRowContext(ctx, insertUserToGroup,
+		arg.ID,
+		arg.UserID,
+		arg.GroupID,
+		arg.WorkspaceID,
+	)
+	var i UserToGroup
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.GroupID,
+		&i.WorkspaceID,
+		&i.Source,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const listRolesByGroup = `-- name: ListRolesByGroup :many
+SELECT r.id, r.name, gr.id AS group_to_role_id
+FROM role r
+JOIN group_to_role gr ON gr.role_id = r.id
+WHERE gr.group_id = ?1
+  AND gr.deleted_at IS NULL
+  AND r.deleted_at IS NULL
+ORDER BY r.name COLLATE NOCASE
+`
+
+type ListRolesByGroupRow struct {
+	ID            string                  `json:"id"`
+	Name          db_types.JSONNullString `json:"name"`
+	GroupToRoleID string                  `json:"group_to_role_id"`
+}
+
+func (q *Queries) ListRolesByGroup(ctx context.Context, groupID string) ([]ListRolesByGroupRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRolesByGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRolesByGroupRow
+	for rows.Next() {
+		var i ListRolesByGroupRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.GroupToRoleID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersByGroup = `-- name: ListUsersByGroup :many
+SELECT u.id, u.name, ug.id AS user_to_group_id
+FROM user u
+JOIN user_to_group ug ON ug.user_id = u.id
+WHERE ug.group_id = ?1
+  AND ug.deleted_at IS NULL
+ORDER BY u.name COLLATE NOCASE
+`
+
+type ListUsersByGroupRow struct {
+	ID            string                  `json:"id"`
+	Name          db_types.JSONNullString `json:"name"`
+	UserToGroupID string                  `json:"user_to_group_id"`
+}
+
+func (q *Queries) ListUsersByGroup(ctx context.Context, groupID string) ([]ListUsersByGroupRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersByGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersByGroupRow
+	for rows.Next() {
+		var i ListUsersByGroupRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.UserToGroupID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeGroupToRole = `-- name: RemoveGroupToRole :exec
+DELETE FROM group_to_role WHERE id = ?1
+`
+
+func (q *Queries) RemoveGroupToRole(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, removeGroupToRole, id)
+	return err
+}
+
+const removeUserFromGroup = `-- name: RemoveUserFromGroup :exec
+DELETE FROM user_to_group WHERE id = ?1
+`
+
+func (q *Queries) RemoveUserFromGroup(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, removeUserFromGroup, id)
+	return err
+}
+
+const updateGroupName = `-- name: UpdateGroupName :exec
+UPDATE "group"
+SET name = ?2
+WHERE id = ?1
+`
+
+type UpdateGroupNameParams struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) UpdateGroupName(ctx context.Context, arg UpdateGroupNameParams) error {
+	_, err := q.db.ExecContext(ctx, updateGroupName, arg.ID, arg.Name)
+	return err
+}
+
+const listGroupsByWorkspace = `-- name: ListGroupsByWorkspace :many
+SELECT
+    g.id,
+    g.workspace_id,
+    g.name,
+    (SELECT COUNT(*) FROM user_to_group ug WHERE ug.group_id = g.id AND ug.deleted_at IS NULL) AS member_count,
+    (SELECT COUNT(*) FROM group_to_role gr WHERE gr.group_id = g.id AND gr.deleted_at IS NULL) AS role_count
+FROM "group" g
+WHERE g.workspace_id = ?1 AND g.deleted_at IS NULL
+ORDER BY g.name COLLATE NOCASE
+`
+
+type ListGroupsByWorkspaceRow struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Name        string `json:"name"`
+	MemberCount int64  `json:"member_count"`
+	RoleCount   int64  `json:"role_count"`
+}
+
+func (q *Queries) ListGroupsByWorkspace(ctx context.Context, workspaceID string) ([]ListGroupsByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listGroupsByWorkspace, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGroupsByWorkspaceRow
+	for rows.Next() {
+		var i ListGroupsByWorkspaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.MemberCount,
+			&i.RoleCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -115,6 +115,7 @@ func main() {
 			app.User,
 			app.Workspace,
 			app.Role,
+			app.Group,
 			app.History,
 			app.Server,
 

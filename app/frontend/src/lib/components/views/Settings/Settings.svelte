@@ -4,26 +4,30 @@
 	import GitLinkPanel from '$lib/components/views/Git/GitLinkPanel.svelte';
 	import WorkspacePanel from '$lib/components/views/Settings/WorkspacePanel.svelte';
 	import RolesPanel from '$lib/components/views/Settings/RolesPanel.svelte';
+	import GroupsPanel from '$lib/components/views/Settings/GroupsPanel.svelte';
 	import UsersPanel from '$lib/components/views/Settings/UsersPanel.svelte';
 	import APIKeysPanel from '$lib/components/views/Settings/APIKeysPanel.svelte';
 	import { getActiveTab, updateSettingsTab } from '$lib/components/Layout/layoutStore';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
 
-	type SectionId = 'workspace' | 'users' | 'roles' | 'git' | 'api_keys';
+	type SectionId = 'workspace' | 'users' | 'roles' | 'groups' | 'git' | 'api_keys';
 
 	const sections: { id: SectionId; label: string }[] = [
 		{ id: 'workspace', label: 'Workspace' },
 		{ id: 'git', label: 'Git' },
 		{ id: 'users', label: 'Users' },
 		{ id: 'roles', label: 'Roles' },
+		{ id: 'groups', label: 'Groups' },
 		{ id: 'api_keys', label: 'API keys' }
 	];
 
+	// Groups are RBAC-managed by the same authority as roles (see backend authorize.go).
 	const sectionAction: Record<SectionId, string> = {
 		workspace: 'workspace/settings.write',
 		git: 'workspace/settings.write',
 		users: 'workspace/users.manage',
 		roles: 'workspace/roles.manage',
+		groups: 'workspace/roles.manage',
 		api_keys: 'workspace/api-keys.manage'
 	};
 
@@ -65,6 +69,8 @@
 			<WorkspacePanel />
 		{:else if selectedSection === 'roles'}
 			<RolesPanel />
+		{:else if selectedSection === 'groups'}
+			<GroupsPanel />
 		{:else if selectedSection === 'users'}
 			<UsersPanel />
 		{:else if selectedSection === 'api_keys'}
