@@ -13,11 +13,16 @@
 	import Menu from '$lib/system/Menu/Menu.svelte';
 	import Portal from '$lib/system/Portal/Portal.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
+	import { myPermissions } from '$lib/stores/myPermissionsStore';
 	import type { group, generated } from '$lib/wailsjs/go/models';
 	import type { MenuOption } from '$lib/system/Menu/Menu.types';
 
 	type Props = { groupId: string };
 	let { groupId }: Props = $props();
+
+	// Attaching a role to a group grants that role, so it requires roles.manage
+	// too — the same authority needed to assign a role directly to a user.
+	let canManageRoles = $derived($myPermissions.isAllowed('workspace/roles.manage'));
 
 	let attached = $state<group.GroupRoleEntry[]>([]);
 	let wsRoles = $state<generated.ListRolesByWorkspaceRow[]>([]);
@@ -102,14 +107,20 @@
 <div class="roles-panel">
 	<div class="roles-head">
 		<span class="roles-title">Roles granted to members</span>
-		<Button
-			content="Attach role"
-			emphasis="low"
-			size="sm"
-			leftIcon="plus"
-			onclick={(e) => openMenu(e.currentTarget as HTMLElement)}
-		/>
+		{#if canManageRoles}
+			<Button
+				content="Attach role"
+				emphasis="low"
+				size="sm"
+				leftIcon="plus"
+				onclick={(e) => openMenu(e.currentTarget as HTMLElement)}
+			/>
+		{/if}
 	</div>
+
+	{#if !canManageRoles}
+		<p class="empty">Attaching roles requires the "Manage roles" permission.</p>
+	{/if}
 
 	{#if attached.length === 0}
 		<p class="empty">No roles attached. Members inherit no roles from this group yet.</p>
@@ -118,15 +129,17 @@
 			{#each attached as r (r.group_to_role_id)}
 				<li class="role-row">
 					<span class="role-name">{r.name ?? r.id}</span>
-					<span class="remove-wrap">
-						<Button
-							leftIcon="cross"
-							iconSize={13}
-							emphasis="low"
-							size="sm"
-							onclick={() => detach(r.group_to_role_id)}
-						/>
-					</span>
+					{#if canManageRoles}
+						<span class="remove-wrap">
+							<Button
+								leftIcon="cross"
+								iconSize={13}
+								emphasis="low"
+								size="sm"
+								onclick={() => detach(r.group_to_role_id)}
+							/>
+						</span>
+					{/if}
 				</li>
 			{/each}
 		</ul>

@@ -58,6 +58,14 @@ func authorizeCommit(userID string, workspaceIDs []string, roleIDs []string, own
 		return false
 	}
 
+	// Attaching a role to a group grants that role to every member, so it also
+	// requires roles.manage — symmetric to assigning a role directly to a user
+	// (user_to_role, gated by roles.manage above). This prevents a groups.manage
+	// holder from handing out roles they couldn't otherwise grant.
+	if c.TableName == "group_to_role" && !compiled.IsAllowed(core.ActionWorkspaceRolesManage) {
+		return false
+	}
+
 	// Workspace delete is owner-only; owners returned true above, so a caller
 	// here is not the owner (mirrors the REST delete handler's 403)
 	if c.TableName == "workspace" && c.Operation == "delete" {

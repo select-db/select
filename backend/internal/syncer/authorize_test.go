@@ -346,6 +346,72 @@ func TestAuthorize_RolesManageDoesNotGrantGroupsManage(t *testing.T) {
 	assert.Equal(t, 0, count, "roles.manage alone must not create a group")
 }
 
+// groupToRoleCommit builds a minimal group_to_role INSERT commit.
+func groupToRoleCommit(userID, wsID, id, groupID, roleID string) types.Commit {
+	return types.Commit{
+		ID:          newID(),
+		Operation:   "INSERT",
+		TableName:   "group_to_role",
+		ObjectID:    id,
+		WorkspaceID: wsID,
+		UserID:      userID,
+		Payload:     map[string]any{"id": id, "group_id": groupID, "role_id": roleID, "workspace_id": wsID},
+	}
+}
+
+// Attaching a role to a group grants that role, so it needs roles.manage too:
+// groups.manage alone must not be enough.
+func TestAuthorize_GroupsManageAloneCannotAttachRole(t *testing.T) {
+	conn := newTestDB(t)
+	ownerID, memberID, wsID := newID(), newID(), newID()
+	adminRoleID, permID := newID(), newID()
+	groupID, grantedRoleID, gtrID := newID(), newID(), newID()
+	seedUser(t, conn, ownerID, "Owner")
+	seedUser(t, conn, memberID, "Member")
+	seedWorkspace(t, conn, wsID, "WS", ownerID)
+	seedRole(t, conn, adminRoleID, wsID, "Group Admins")
+	seedPermission(t, conn, permID, adminRoleID, wsID, "workspace/groups.manage", "allow")
+	seedGroup(t, conn, groupID, wsID, "Data Eng")
+	seedRole(t, conn, grantedRoleID, wsID, "Powerful Role")
+
+	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{adminRoleID}, nil, &types.SyncRequest{
+		PendingCommits: []types.Commit{groupToRoleCommit(memberID, wsID, gtrID, groupID, grantedRoleID)},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Confirmed, 1) // unauthorized + row absent → confirmed so client drops it
+	assert.Empty(t, resp.Restored)
+
+	var count int
+	require.NoError(t, conn.QueryRow(`SELECT count(*) FROM app.group_to_role WHERE id = $1::uuid`, gtrID).Scan(&count))
+	assert.Equal(t, 0, count, "groups.manage without roles.manage must not attach a role to a group")
+}
+
+// With both groups.manage and roles.manage, attaching a role to a group succeeds.
+func TestAuthorize_GroupsAndRolesManageCanAttachRole(t *testing.T) {
+	conn := newTestDB(t)
+	ownerID, memberID, wsID := newID(), newID(), newID()
+	adminRoleID, permGroups, permRoles := newID(), newID(), newID()
+	groupID, grantedRoleID, gtrID := newID(), newID(), newID()
+	seedUser(t, conn, ownerID, "Owner")
+	seedUser(t, conn, memberID, "Member")
+	seedWorkspace(t, conn, wsID, "WS", ownerID)
+	seedRole(t, conn, adminRoleID, wsID, "IAM Admins")
+	seedPermission(t, conn, permGroups, adminRoleID, wsID, "workspace/groups.manage", "allow")
+	seedPermission(t, conn, permRoles, adminRoleID, wsID, "workspace/roles.manage", "allow")
+	seedGroup(t, conn, groupID, wsID, "Data Eng")
+	seedRole(t, conn, grantedRoleID, wsID, "Analyst")
+
+	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{adminRoleID}, nil, &types.SyncRequest{
+		PendingCommits: []types.Commit{groupToRoleCommit(memberID, wsID, gtrID, groupID, grantedRoleID)},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Confirmed, 1)
+
+	var count int
+	require.NoError(t, conn.QueryRow(`SELECT count(*) FROM app.group_to_role WHERE id = $1::uuid`, gtrID).Scan(&count))
+	assert.Equal(t, 1, count, "a member with both groups.manage and roles.manage can attach a role to a group")
+}
+
 func TestAuthorize_MismatchedUserIDRejected(t *testing.T) {
 	conn := newTestDB(t)
 	ownerID, otherID, wsID, roleID := newID(), newID(), newID(), newID()
