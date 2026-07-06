@@ -289,6 +289,63 @@ func TestAuthorize_NonOwnerCannotUpdatePermission(t *testing.T) {
 	assert.Equal(t, "allow", effect)
 }
 
+// groupCommit builds a minimal group INSERT commit.
+func groupCommit(userID, wsID, groupID string) types.Commit {
+	return types.Commit{
+		ID:          newID(),
+		Operation:   "INSERT",
+		TableName:   "group",
+		ObjectID:    groupID,
+		WorkspaceID: wsID,
+		UserID:      userID,
+		Payload:     map[string]any{"id": groupID, "workspace_id": wsID, "name": "Data Eng"},
+	}
+}
+
+// A member holding workspace/groups.manage (but not owner) can create a group.
+func TestAuthorize_MemberWithGroupsManageCanCreateGroup(t *testing.T) {
+	conn := newTestDB(t)
+	ownerID, memberID, wsID, roleID, permID, groupID := newID(), newID(), newID(), newID(), newID(), newID()
+	seedUser(t, conn, ownerID, "Owner")
+	seedUser(t, conn, memberID, "Member")
+	seedWorkspace(t, conn, wsID, "WS", ownerID)
+	seedRole(t, conn, roleID, wsID, "Group Admins")
+	seedPermission(t, conn, permID, roleID, wsID, "workspace/groups.manage", "allow")
+
+	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{roleID}, nil, &types.SyncRequest{
+		PendingCommits: []types.Commit{groupCommit(memberID, wsID, groupID)},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Confirmed, 1)
+
+	var count int
+	require.NoError(t, conn.QueryRow(`SELECT count(*) FROM app."group" WHERE id = $1::uuid`, groupID).Scan(&count))
+	assert.Equal(t, 1, count, "member with groups.manage must be able to create a group")
+}
+
+// roles.manage must NOT grant group management: the two are separate privileges.
+func TestAuthorize_RolesManageDoesNotGrantGroupsManage(t *testing.T) {
+	conn := newTestDB(t)
+	ownerID, memberID, wsID, roleID, permID, groupID := newID(), newID(), newID(), newID(), newID(), newID()
+	seedUser(t, conn, ownerID, "Owner")
+	seedUser(t, conn, memberID, "Member")
+	seedWorkspace(t, conn, wsID, "WS", ownerID)
+	seedRole(t, conn, roleID, wsID, "Role Admins")
+	seedPermission(t, conn, permID, roleID, wsID, "workspace/roles.manage", "allow")
+
+	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{roleID}, nil, &types.SyncRequest{
+		PendingCommits: []types.Commit{groupCommit(memberID, wsID, groupID)},
+	})
+	require.NoError(t, err)
+	// Unauthorized + row doesn't exist → confirmed so the client drops the commit.
+	require.Len(t, resp.Confirmed, 1)
+	assert.Empty(t, resp.Restored)
+
+	var count int
+	require.NoError(t, conn.QueryRow(`SELECT count(*) FROM app."group" WHERE id = $1::uuid`, groupID).Scan(&count))
+	assert.Equal(t, 0, count, "roles.manage alone must not create a group")
+}
+
 func TestAuthorize_MismatchedUserIDRejected(t *testing.T) {
 	conn := newTestDB(t)
 	ownerID, otherID, wsID, roleID := newID(), newID(), newID(), newID()

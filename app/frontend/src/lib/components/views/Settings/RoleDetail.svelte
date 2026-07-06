@@ -49,6 +49,12 @@
 			description: 'Allows creating, editing, and deleting roles and their permission sets.'
 		},
 		{
+			label: 'Workspace groups',
+			action: 'workspace/groups.manage',
+			description:
+				'Allows creating groups, managing their members, and attaching roles to them.'
+		},
+		{
 			label: 'Workspace API keys',
 			action: 'workspace/api-keys.manage',
 			description: 'Allows creating, rotating, and revoking API keys for automated clients.'

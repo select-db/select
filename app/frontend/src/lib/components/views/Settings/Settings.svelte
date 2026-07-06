@@ -21,13 +21,12 @@
 		{ id: 'api_keys', label: 'API keys' }
 	];
 
-	// Groups are RBAC-managed by the same authority as roles (see backend authorize.go).
 	const sectionAction: Record<SectionId, string> = {
 		workspace: 'workspace/settings.write',
 		git: 'workspace/settings.write',
 		users: 'workspace/users.manage',
 		roles: 'workspace/roles.manage',
-		groups: 'workspace/roles.manage',
+		groups: 'workspace/groups.manage',
 		api_keys: 'workspace/api-keys.manage'
 	};
 

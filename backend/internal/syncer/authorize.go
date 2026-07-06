@@ -41,12 +41,20 @@ func authorizeCommit(userID string, workspaceIDs []string, roleIDs []string, own
 		"user_to_role":      {},
 		"permission":        {},
 		"workspace_to_user": {},
-		"group":             {},
-		"user_to_group":     {},
-		"group_to_role":     {},
 	}
 	_, isManageOperation := manageTables[c.TableName]
 	if isManageOperation && !compiled.IsAllowed(core.ActionWorkspaceRolesManage) {
+		return false
+	}
+
+	// Group tables are gated by their own action, symmetric to roles.manage:
+	// managing the identity layer is a distinct privilege from managing roles.
+	groupTables := map[string]struct{}{
+		"group":         {},
+		"user_to_group": {},
+		"group_to_role": {},
+	}
+	if _, ok := groupTables[c.TableName]; ok && !compiled.IsAllowed(core.ActionWorkspaceGroupsManage) {
 		return false
 	}
 
