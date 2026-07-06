@@ -311,7 +311,6 @@
 		height: 24px;
 		gap: var(--space-xs);
 		padding: var(--space-sm);
-		border-bottom: var(--border);
 		flex-shrink: 0;
 	}
 

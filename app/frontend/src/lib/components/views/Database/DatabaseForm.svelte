@@ -467,7 +467,9 @@
 					bind:checked={proxified}
 					onchange={async (checked) => {
 						if (checked) {
-							// cleanup local config file
+							// local -> proxified: dsnLocal holds the real plaintext DSN from the
+							// local config, so it's safe to push to the backend as-is. Just drop
+							// the credentials from the local config file.
 							await writeConfigFile({
 								id,
 								name,
@@ -475,6 +477,13 @@
 								proxified: checked
 							});
 						} else {
+							// proxified -> local: the real secret lives only on the backend and is
+							// about to be deleted; the form only holds a masked copy (bullets). Clear
+							// the credential fields so the mask can't be persisted to the local config
+							// and the user knowingly re-enters them.
+							dsnLocal = '';
+							sshPassword = '';
+							sshPrivateKey = '';
 							await must(tryCatch(DeleteDatasource, id));
 						}
 					}}
@@ -801,7 +810,7 @@
 		flex-direction: column;
 		align-items: stretch;
 		gap: var(--space-lg);
-		padding: var(--space-md) var(--space-sm-md);
+		padding: var(--space-md);
 	}
 	form .group {
 		display: flex;
@@ -816,8 +825,9 @@
 		padding: none;
 		max-width: none;
 		border: var(--border);
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		padding: var(--space-md) var(--space-sm-md);
+		box-shadow: var(--shadow-subtle);
 	}
 	form .input-group {
 		display: flex;
@@ -854,7 +864,6 @@
 		padding: var(--space-sm-md);
 		border-radius: var(--br-md);
 		border: var(--border);
-		border-color: var(--blue);
 	}
 	.proxified .group.ssh {
 		border-color: var(--gray-100);
@@ -903,8 +912,8 @@
 		padding: 0 var(--space-sm);
 		border: var(--border);
 		border-radius: var(--br-xs);
-		background-color: var(--gray-0);
 		color: var(--gray-900);
+		background-color: var(--gray-200);
 		font-size: var(--fs-sm);
 		overflow: hidden;
 		white-space: nowrap;

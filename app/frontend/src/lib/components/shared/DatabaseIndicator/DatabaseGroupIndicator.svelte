@@ -57,7 +57,7 @@
 		width: calc(var(--indicator-size, 16px) * 0.3);
 		height: calc(var(--indicator-size, 16px) * 0.3);
 		border-radius: 999px;
-		border: 2px solid var(--gray-0);
+		border: 2px solid var(--gray-100);
 	}
 
 	.status-dot--online {

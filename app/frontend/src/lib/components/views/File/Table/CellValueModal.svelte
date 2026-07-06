@@ -5,6 +5,7 @@
 	import { refreshTheme } from '../Editor/config/languageSetup';
 	import { EDITOR_THEME_NAME } from '../Editor/config/editorTheme';
 	import Button from '$lib/system/Button/Button.svelte';
+	import ModalFooter from '$lib/system/Modal/ModalFooter.svelte';
 
 	type Props = {
 		value: string;
@@ -53,6 +54,18 @@
 		onClose();
 	}
 
+	async function handleSave() {
+		save();
+	}
+
+	async function handleSetNull() {
+		setNull();
+	}
+
+	async function handleCancel() {
+		onClose();
+	}
+
 	function formatJson() {
 		if (!editor || language !== 'json') return;
 		try {
@@ -91,55 +104,44 @@
 	});
 </script>
 
-<div class="cell-modal-body">
-	<div class="toolbar">
-		<span class="title-wrapper">
-			<span class="type-chip">{dataType || 'text'}</span>
-			<span class="field-chip">{columnName}</span>
-		</span>
-		<div class="toolbar-right">
-			{#if language === 'json'}
-				<Button
-					content="Format"
-					leftIcon="code-bracket"
-					emphasis="low"
-					size="sm"
-					onclick={formatJson}
-				/>
-			{/if}
-		</div>
-	</div>
-
-	<div class="editor" bind:this={container}></div>
-
-	{#if jsonError}
-		<p class="hint">Invalid JSON: {jsonError}, you can still save.</p>
-	{/if}
-</div>
-
-<div class="cell-modal-footer">
-	<Button content="Set NULL" emphasis="low" onclick={setNull} />
-	<div class="footer-main">
-		<Button content="Cancel" emphasis="low" onclick={onClose} />
-		<Button content="Save" emphasis="high" onclick={save} />
+<div class="toolbar">
+	<span class="title-wrapper">
+		<span class="type-chip">{dataType || 'text'}</span>
+		<span class="field-chip">{columnName}</span>
+	</span>
+	<div class="toolbar-right">
+		{#if language === 'json'}
+			<Button
+				content="Format"
+				leftIcon="code-bracket"
+				emphasis="low"
+				size="sm"
+				onclick={formatJson}
+			/>
+		{/if}
 	</div>
 </div>
+
+<div class="editor" bind:this={container}></div>
+
+{#if jsonError}
+	<p class="hint">Invalid JSON: {jsonError}, you can still save.</p>
+{/if}
+
+<ModalFooter
+	leftAction={{ label: 'Set NULL', action: handleSetNull }}
+	secondaryAction={{ label: 'Cancel', action: handleCancel }}
+	mainAction={{ label: 'Save', action: handleSave }}
+/>
 
 <style>
-	.cell-modal-body {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
-		min-height: 0;
-		background-color: var(--gray-0);
-	}
-
 	.toolbar {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: var(--space-sm);
 		border-bottom: var(--border);
+		background-color: var(--gray-200);
 	}
 
 	.title-wrapper {
@@ -176,20 +178,6 @@
 		font-size: 12px;
 		color: var(--orange, var(--gray-800));
 		border-top: var(--border);
-	}
-
-	.cell-modal-footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-sm);
 		background-color: var(--gray-0);
-		padding: var(--space-sm);
-		border-top: var(--border);
-	}
-
-	.footer-main {
-		display: flex;
-		gap: var(--space-sm);
 	}
 </style>

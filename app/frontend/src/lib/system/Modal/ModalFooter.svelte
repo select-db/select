@@ -8,38 +8,60 @@
 	};
 
 	type ModalFooterProps = {
-		mainAction: ActionProps;
+		mainAction?: ActionProps;
 		secondaryAction?: ActionProps;
+		leftAction?: ActionProps;
 	};
 
-	let { mainAction, secondaryAction }: ModalFooterProps = $props();
+	let { mainAction, secondaryAction, leftAction }: ModalFooterProps = $props();
 </script>
 
-<div class="footer">
-	{#if secondaryAction}
+<div class="footer" class:has-left={!!leftAction}>
+	{#if leftAction}
 		<Button
-			content={secondaryAction.label}
-			onclick={secondaryAction.action}
-			disabled={secondaryAction.disabled}
+			content={leftAction.label}
+			onclick={leftAction.action}
+			disabled={leftAction.disabled}
 			emphasis="low"
 		/>
 	{/if}
-	<Button
-		content={mainAction.label}
-		onclick={mainAction.action}
-		disabled={mainAction.disabled}
-		emphasis="high"
-	/>
+	<div class="main-group">
+		{#if secondaryAction}
+			<Button
+				content={secondaryAction.label}
+				onclick={secondaryAction.action}
+				disabled={secondaryAction.disabled}
+				emphasis="low"
+			/>
+		{/if}
+		{#if mainAction}
+			<Button
+				content={mainAction.label}
+				onclick={mainAction.action}
+				disabled={mainAction.disabled}
+				emphasis="high"
+			/>
+		{/if}
+	</div>
 </div>
 
 <style>
 	.footer {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		padding: var(--space-sm);
 		border-top: var(--border);
 
 		display: flex;
 		justify-content: flex-end;
+		gap: var(--space-sm);
+	}
+
+	.footer.has-left {
+		justify-content: space-between;
+	}
+
+	.main-group {
+		display: flex;
 		gap: var(--space-sm);
 	}
 </style>

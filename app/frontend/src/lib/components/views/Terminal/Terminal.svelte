@@ -174,7 +174,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.terminal-container :global(.xterm) {
@@ -185,10 +185,10 @@
 	}
 
 	.terminal-container :global(.xterm .xterm-scrollable-element) {
-		background-color: var(--gray-0) !important;
+		background-color: var(--gray-200) !important;
 	}
 
 	.terminal-container :global(.xterm-viewport) {
-		background-color: var(--gray-0) !important;
+		background-color: var(--gray-200) !important;
 	}
 </style>

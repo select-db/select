@@ -8,7 +8,17 @@ import (
 	"strings"
 
 	"selectDb/internal/server"
+	"selectDb/internal/utils"
 )
+
+// UserConfigDir returns the absolute path to the per-user config directory
+// (where personal .theme / .config files live), ensuring it exists. It resolves
+// from the same per-user app data directory used for server/workspace data
+// (utils handles XDG / %APPDATA% per-OS), so personal config is shared across
+// every server and workspace.
+func UserConfigDir() (string, error) {
+	return utils.UserConfigDir()
+}
 
 // WorkspaceFS encapsulates common path/URI computations for a single
 // workspace so that both the initial graph build and the filesystem watcher

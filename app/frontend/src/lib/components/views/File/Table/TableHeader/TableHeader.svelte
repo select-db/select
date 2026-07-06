@@ -299,23 +299,27 @@
 					{
 						id: 'results',
 						icon: 'column-1',
+						iconSize: 17,
 						label: loading && rowCount === 0 ? `...` : rowCount.toLocaleString(),
 						tooltip: 'Run result'
 					},
 					{
 						id: 'graph',
 						icon: 'chart-line',
+						iconSize: 18,
 						tooltip: 'Graph view'
 					},
 
 					{
 						id: 'plan',
 						icon: 'map',
+						iconSize: 17,
 						tooltip: 'Plan result'
 					},
 					{
 						id: 'explain',
 						icon: 'chart',
+
 						tooltip: 'Analyze result'
 					}
 				]}
@@ -380,34 +384,38 @@
 {/if}
 
 <style>
-	.db-badges {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: var(--space-xs);
-		padding: var(--space-sm) 0 var(--space-xxs) 0;
-		margin-bottom: -2px;
+	.headerWrapper {
+		position: relative;
 	}
 
 	.tableHeader {
-		padding: 0 var(--space-xs-sm) 0 var(--space-sm-md);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+
+		padding: var(--space-sm-md) var(--space-md);
 		border-top: var(--border);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 
 		transition: background-color 0.1s ease-in;
 	}
 
 	:global(.tableHeader button) {
-		height: 26px;
+		height: 30px;
 	}
 
 	.tableHeader:hover {
 		background-color: var(--gray-100);
 	}
 
-	.wrapper {
-		height: 43px;
+	.db-badges {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--space-sm);
+	}
 
+	.wrapper {
 		display: flex;
 		gap: var(--space-xs);
 		align-items: center;
@@ -434,10 +442,6 @@
 	.divider.border-top {
 		height: 0;
 		border-top: var(--border);
-	}
-
-	.headerWrapper {
-		position: relative;
 	}
 
 	.right-wrapper {

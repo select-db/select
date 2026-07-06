@@ -203,7 +203,7 @@ const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspace (id, name, owner_id)
 VALUES (?1, ?2, ?3)
 ON CONFLICT (id) DO NOTHING
-RETURNING id, name, git_remote_url, last_pulled_at, owner_id
+RETURNING id, name, git_remote_url, last_pulled_at, owner_id, statement_timeout_ms, max_result_size_mb
 `
 
 type CreateWorkspaceParams struct {
@@ -221,6 +221,8 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.GitRemoteUrl,
 		&i.LastPulledAt,
 		&i.OwnerID,
+		&i.StatementTimeoutMs,
+		&i.MaxResultSizeMb,
 	)
 	return i, err
 }
@@ -380,16 +382,16 @@ func (q *Queries) GetCurrentUser(ctx context.Context) (User, error) {
 }
 
 const getCurrentWorkspace = `-- name: GetCurrentWorkspace :one
-SELECT 
-    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id 
-FROM 
+SELECT
+    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb
+FROM
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
-WHERE 
+WHERE
     wtu.current = TRUE
     AND wtu.user_id = ?1
-ORDER BY 
-    w.name ASC 
+ORDER BY
+    w.name ASC
 LIMIT 1
 `
 
@@ -402,6 +404,8 @@ func (q *Queries) GetCurrentWorkspace(ctx context.Context, userID string) (Works
 		&i.GitRemoteUrl,
 		&i.LastPulledAt,
 		&i.OwnerID,
+		&i.StatementTimeoutMs,
+		&i.MaxResultSizeMb,
 	)
 	return i, err
 }
@@ -589,16 +593,18 @@ func (q *Queries) GetRoleWorkspaceID(ctx context.Context, id string) (string, er
 }
 
 const getWorkspaceByID = `-- name: GetWorkspaceByID :one
-SELECT id, name, git_remote_url, last_pulled_at
+SELECT id, name, git_remote_url, last_pulled_at, statement_timeout_ms, max_result_size_mb
 FROM workspace
 WHERE id = ?1
 `
 
 type GetWorkspaceByIDRow struct {
-	ID           string                  `json:"id"`
-	Name         string                  `json:"name"`
-	GitRemoteUrl db_types.JSONNullString `json:"git_remote_url"`
-	LastPulledAt sql.NullTime            `json:"last_pulled_at"`
+	ID                 string                  `json:"id"`
+	Name               string                  `json:"name"`
+	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
+	LastPulledAt       sql.NullTime            `json:"last_pulled_at"`
+	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
+	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
 }
 
 func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspaceByIDRow, error) {
@@ -609,6 +615,8 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspace
 		&i.Name,
 		&i.GitRemoteUrl,
 		&i.LastPulledAt,
+		&i.StatementTimeoutMs,
+		&i.MaxResultSizeMb,
 	)
 	return i, err
 }
@@ -655,15 +663,15 @@ func (q *Queries) GetWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg 
 }
 
 const getWorkspaceToUserByUserId = `-- name: GetWorkspaceToUserByUserId :one
-SELECT 
-    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id 
-FROM 
+SELECT
+    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb
+FROM
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
-WHERE 
+WHERE
     wtu.user_id = ?1
-ORDER BY 
-    w.name ASC 
+ORDER BY
+    w.name ASC
 LIMIT 1
 `
 
@@ -676,6 +684,8 @@ func (q *Queries) GetWorkspaceToUserByUserId(ctx context.Context, userID string)
 		&i.GitRemoteUrl,
 		&i.LastPulledAt,
 		&i.OwnerID,
+		&i.StatementTimeoutMs,
+		&i.MaxResultSizeMb,
 	)
 	return i, err
 }
@@ -1359,6 +1369,24 @@ func (q *Queries) UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNa
 	return err
 }
 
+const updateWorkspaceExecutionLimits = `-- name: UpdateWorkspaceExecutionLimits :exec
+UPDATE workspace
+SET statement_timeout_ms = ?1,
+    max_result_size_mb = ?2
+WHERE id = ?3
+`
+
+type UpdateWorkspaceExecutionLimitsParams struct {
+	StatementTimeoutMs int64  `json:"statement_timeout_ms"`
+	MaxResultSizeMb    int64  `json:"max_result_size_mb"`
+	ID                 string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkspaceExecutionLimits(ctx context.Context, arg UpdateWorkspaceExecutionLimitsParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceExecutionLimits, arg.StatementTimeoutMs, arg.MaxResultSizeMb, arg.ID)
+	return err
+}
+
 const updateWorkspacesLastPulledAt = `-- name: UpdateWorkspacesLastPulledAt :exec
 ; -- @no-track
 UPDATE workspace SET last_pulled_at = ?1 WHERE id IN (/*SLICE:workspace_ids*/?)
@@ -1530,19 +1558,23 @@ func (q *Queries) UpsertUserToRoleForSync(ctx context.Context, arg UpsertUserToR
 
 const upsertWorkspaceForSync = `-- name: UpsertWorkspaceForSync :exec
 ; -- @no-track
-INSERT INTO workspace (id, name, git_remote_url, owner_id)
-VALUES (?1, ?2, ?3, ?4)
+INSERT INTO workspace (id, name, git_remote_url, owner_id, statement_timeout_ms, max_result_size_mb)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
     git_remote_url = excluded.git_remote_url,
-    owner_id = excluded.owner_id
+    owner_id = excluded.owner_id,
+    statement_timeout_ms = excluded.statement_timeout_ms,
+    max_result_size_mb = excluded.max_result_size_mb
 `
 
 type UpsertWorkspaceForSyncParams struct {
-	ID           string                  `json:"id"`
-	Name         string                  `json:"name"`
-	GitRemoteUrl db_types.JSONNullString `json:"git_remote_url"`
-	OwnerID      db_types.JSONNullString `json:"owner_id"`
+	ID                 string                  `json:"id"`
+	Name               string                  `json:"name"`
+	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
+	OwnerID            db_types.JSONNullString `json:"owner_id"`
+	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
+	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
 }
 
 func (q *Queries) UpsertWorkspaceForSync(ctx context.Context, arg UpsertWorkspaceForSyncParams) error {
@@ -1551,6 +1583,8 @@ func (q *Queries) UpsertWorkspaceForSync(ctx context.Context, arg UpsertWorkspac
 		arg.Name,
 		arg.GitRemoteUrl,
 		arg.OwnerID,
+		arg.StatementTimeoutMs,
+		arg.MaxResultSizeMb,
 	)
 	return err
 }

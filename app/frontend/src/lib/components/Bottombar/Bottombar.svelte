@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import WorkspaceButton from '$lib/components/Titlebar/WorkspaceButton.svelte';
-	import GitBranch from '$lib/components/Titlebar/GitBranch.svelte';
+	import GitBranch from './GitBranch.svelte';
 	import FilesButton from './FilesButton.svelte';
 	import GitButton from './GitButton.svelte';
 	import NetworkQuality from './NetworkQuality.svelte';
 	import SearchButton from './SearchButton.svelte';
 	import HistoryButton from './HistoryButton.svelte';
 	import ThemeButton from './ThemeButton.svelte';
+	import UserAvatar from './UserAvatar.svelte';
 </script>
 
 <div id="bottom-bar" class="wrapper">
@@ -17,7 +17,7 @@
 		<div class="divider"></div>
 		<GitButton />
 		<div class="divider"></div>
-		<WorkspaceButton />
+		<UserAvatar />
 		<div class="divider"></div>
 		<GitBranch />
 
