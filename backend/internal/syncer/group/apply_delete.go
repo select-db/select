@@ -29,11 +29,23 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if err != nil {
 		return false, nil, fmt.Errorf("group: invalid workspace_id %q: %w", workspaceID, err)
 	}
+	// Snapshot members before the delete: removing the group removes every
+	// member's group-derived roles, so their refresh tokens must be revoked to
+	// force a fresh token that no longer carries those roles.
+	members, membersErr := db.Queries.GetUserIDsByGroupID(ctx, idUUID)
+
 	if err := db.Queries.SetGroupDeletedAt(ctx, generated.SetGroupDeletedAtParams{
 		ID:          idUUID,
 		WorkspaceID: workspaceUUID,
 	}); err != nil {
 		return false, nil, fmt.Errorf("group: set deleted_at: %w", err)
+	}
+
+	// Best-effort: a revocation failure must not fail the sync.
+	if membersErr == nil {
+		for _, m := range members {
+			_ = db.Queries.DeleteUserRefreshTokens(ctx, m)
+		}
 	}
 	return true, nil, nil
 }

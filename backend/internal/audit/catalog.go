@@ -147,7 +147,8 @@ var (
 )
 
 // Catalog is the full declared vocabulary. Wired today: QueryExecuted,
-// PermissionUpserted. The rest are reserved contract, emit sites land at their
+// PermissionUpserted, and the group writes (GroupUpserted, GroupMemberAdded,
+// GroupRoleAttached). The rest are reserved contract, emit sites land at their
 // choke points incrementally.
 var Catalog = []Spec{
 	QueryExecuted, QueryDenied, QueryExported,

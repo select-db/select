@@ -5,7 +5,10 @@ import (
 	"fmt"
 )
 
-// DeleteGroup deletes a group by ID. Cascades to user_to_group and group_to_role.
+// DeleteGroup deletes a group by ID. The delete syncs to the backend, which
+// stops honoring the group's role grants; the membership and role-attachment
+// rows are not explicitly removed (SQLite FKs are not enforced locally, and
+// backend effective-role resolution ignores deleted groups).
 func (g *Group) DeleteGroup(groupID string) error {
 	if err := g.Queries.DeleteGroup(context.Background(), groupID); err != nil {
 		return fmt.Errorf("delete group: %w", err)
