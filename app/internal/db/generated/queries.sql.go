@@ -965,15 +965,19 @@ SELECT
   p.action,
   p.effect,
   r.name role_name
-FROM
-  permission p
-  LEFT JOIN user_to_role utr ON utr.role_id = p.role_id
-  LEFT JOIN role r ON r.id = utr.role_id
-WHERE
-  utr.user_id =?1
-  AND utr.workspace_id =?2
-  AND utr.deleted_at IS NULL
-  AND p.deleted_at IS NULL
+FROM permission p
+  JOIN role r ON r.id = p.role_id AND r.deleted_at IS NULL
+WHERE p.deleted_at IS NULL
+  AND p.workspace_id = ?1
+  AND p.role_id IN (
+    SELECT utr.role_id FROM user_to_role utr
+    WHERE utr.user_id = ?2 AND utr.deleted_at IS NULL
+    UNION
+    SELECT gr.role_id FROM group_to_role gr
+      JOIN user_to_group ug ON ug.group_id = gr.group_id AND ug.deleted_at IS NULL
+      JOIN "group" g ON g.id = gr.group_id AND g.deleted_at IS NULL
+    WHERE ug.user_id = ?2 AND gr.deleted_at IS NULL
+  )
 ORDER BY
   p.db_instance_id,
   p.schema_name,
@@ -1001,7 +1005,7 @@ type ListMyPermissionsRow struct {
 }
 
 func (q *Queries) ListMyPermissions(ctx context.Context, arg ListMyPermissionsParams) ([]ListMyPermissionsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listMyPermissions, arg.UserID, arg.WorkspaceID)
+	rows, err := q.db.QueryContext(ctx, listMyPermissions, arg.WorkspaceID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
