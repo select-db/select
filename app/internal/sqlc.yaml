@@ -18,3 +18,8 @@ sql:
           - db_type: "BOOL"
             nullable: true
             go_type: "selectDb/internal/db/db_types.JSONNullBool"
+
+          # Keep JSON columns as `any` (via alias); the mutation flow reassigns a
+          # decoded DTO into this field. Newer sqlc otherwise defaults to json.RawMessage.
+          - column: "mutation_commit.payload"
+            go_type: "selectDb/internal/db/db_types.JSONPayload"

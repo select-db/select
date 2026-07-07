@@ -24,7 +24,7 @@ func (g *Group) ListGroupRoles(groupID string) ([]GroupRoleEntry, error) {
 	for _, row := range rows {
 		out = append(out, GroupRoleEntry{
 			ID:            row.ID,
-			Name:          row.Name.Ptr(),
+			Name:          utils.Ptr(row.Name),
 			GroupToRoleID: row.GroupToRoleID,
 		})
 	}

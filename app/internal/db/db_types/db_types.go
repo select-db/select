@@ -5,6 +5,12 @@ import (
 	"encoding/json"
 )
 
+// JSONPayload is the generated type for `JSON` columns (e.g. mutation_commit.payload).
+// It is an alias for any so the mutation flow can hold either the raw payload or a
+// decoded DTO in the same field. Pinned via a sqlc column override because newer sqlc
+// defaults `JSON` columns to json.RawMessage, which is not assignment-compatible.
+type JSONPayload = any
+
 /**
 *	String
  */
