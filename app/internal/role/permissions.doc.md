@@ -8,7 +8,7 @@ Permissions are hierarchical. You can grant or deny access at five levels, from 
 
 | Level       | Scope                                           |
 |-------------|--------------------------------------------------|
-| **App**     | Workspace settings, user management, role management |
+| **App**     | Workspace settings, user, role, and group management |
 | **Database**| All schemas, tables, and columns in a database   |
 | **Schema**  | All tables and columns in a schema               |
 | **Table**   | All columns in a table                           |
@@ -35,6 +35,7 @@ App-level actions cover workspace administration:
 | **Workspace settings**    | Edit workspace name, git remote, and settings    |
 | **Workspace users**       | Invite, remove, and manage members               |
 | **Workspace roles**       | Create, edit, and delete roles and permissions   |
+| **Workspace groups**      | Create groups and manage members; attaching a role to a group also requires Workspace roles |
 | **Workspace API keys**    | Create, rotate, and revoke API keys              |
 
 API keys let automated clients authenticate with the roles bound to the key, so every query they run passes through this same permission model.

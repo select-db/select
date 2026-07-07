@@ -6,6 +6,7 @@ Workspace
   Users                      : app/internal/user/users.doc.md
   Roles                      : app/internal/role/roles.doc.md
   Permissions                : app/internal/role/permissions.doc.md
+  Groups                     : app/internal/group/groups.doc.md
   API Keys                   : app/internal/apikey/api-keys.doc.md
   MCP Server                 : backend/internal/mcp/mcp-server.doc.md
   AI Chat                    : app/frontend/src/lib/components/views/Chat/ai-chat.doc.md
