@@ -11,8 +11,6 @@ export function BuildWorkspaceGraphFromFS(arg1:graph.WorkspaceFS):Promise<void>;
 
 export function FindDbItemNodeById(arg1:string,arg2:string):Promise<graph.DBInstanceItemNode>;
 
-export function GetConfigFilePath():Promise<string>;
-
 export function GetDBInstanceNodeByID(arg1:string):Promise<graph.DBInstanceNode>;
 
 export function GetEnvFilePath(arg1:string):Promise<string>;
@@ -31,9 +29,9 @@ export function GetWorkspaceGraph():Promise<graph.WorkspaceNode>;
 
 export function InvalidateWorkspaceGraph():Promise<void>;
 
-export function LoadFolderEnvFile(arg1:graph.FolderNode,arg2:graph.WorkspaceFS):Promise<void>;
+export function LoadConfig():Promise<graph.ConfigResponse>;
 
-export function LoadWorkspaceConfig():Promise<graph.ConfigResponse>;
+export function LoadFolderEnvFile(arg1:graph.FolderNode,arg2:graph.WorkspaceFS):Promise<void>;
 
 export function LoadWorkspaceLint():Promise<Array<tokenanalyzer.LintConfigEntry>>;
 
@@ -43,10 +41,12 @@ export function Mutate(arg1:context.Context,arg2:generated.MutationCommit):Promi
 
 export function RebuildWorkspaceGraph():Promise<void>;
 
-export function ResetWorkspaceConfig():Promise<void>;
-
 export function ResetWorkspaceLint():Promise<void>;
 
 export function ResetWorkspaceTheme():Promise<void>;
 
 export function ResolveVariable(arg1:string,arg2:string):Promise<string>;
+
+export function UpdateWorkspaceExecutionLimits(arg1:number,arg2:number):Promise<number>;
+
+export function WorkspaceExecutionLimits():Promise<number|number>;

@@ -41,7 +41,7 @@
 <style>
 	#resizer {
 		position: absolute;
-		top: 48px;
+		top: 64px;
 		left: 1px;
 		bottom: var(--space-sm-md);
 

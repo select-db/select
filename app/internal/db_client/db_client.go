@@ -98,11 +98,8 @@ func (dbc *DbClient) getStatementTimeout() time.Duration {
 	if dbc.Graph == nil {
 		return 30 * time.Second
 	}
-	cfg, err := dbc.Graph.LoadWorkspaceConfig()
-	if err != nil || cfg.StatementTimeoutMs <= 0 {
-		return 30 * time.Second
-	}
-	return time.Duration(cfg.StatementTimeoutMs) * time.Millisecond
+	timeoutMs, _ := dbc.Graph.WorkspaceExecutionLimits()
+	return time.Duration(timeoutMs) * time.Millisecond
 }
 
 // getMaxResultSizeBytes returns the workspace max_result_size_mb converted to bytes. Falls back to 100MB.
@@ -110,11 +107,8 @@ func (dbc *DbClient) getMaxResultSizeBytes() int64 {
 	if dbc.Graph == nil {
 		return 100 * 1024 * 1024
 	}
-	cfg, err := dbc.Graph.LoadWorkspaceConfig()
-	if err != nil || cfg.MaxResultSizeMB <= 0 {
-		return 100 * 1024 * 1024
-	}
-	return int64(cfg.MaxResultSizeMB) * 1024 * 1024
+	_, maxSizeMB := dbc.Graph.WorkspaceExecutionLimits()
+	return int64(maxSizeMB) * 1024 * 1024
 }
 
 func (dbc *DbClient) getCachedMetadata(node *graph.DBInstanceNode, noCache bool) (*core.Metadata, error) {

@@ -1436,6 +1436,8 @@ export namespace generated {
 	    git_remote_url: db_types.JSONNullString;
 	    last_pulled_at: sql.NullTime;
 	    owner_id: db_types.JSONNullString;
+	    statement_timeout_ms: number;
+	    max_result_size_mb: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Workspace(source);
@@ -1448,6 +1450,8 @@ export namespace generated {
 	        this.git_remote_url = this.convertValues(source["git_remote_url"], db_types.JSONNullString);
 	        this.last_pulled_at = this.convertValues(source["last_pulled_at"], sql.NullTime);
 	        this.owner_id = this.convertValues(source["owner_id"], db_types.JSONNullString);
+	        this.statement_timeout_ms = source["statement_timeout_ms"];
+	        this.max_result_size_mb = source["max_result_size_mb"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1786,8 +1790,6 @@ export namespace graph {
 	    }
 	}
 	export class ConfigResponse {
-	    statement_timeout_ms: number;
-	    max_result_size_mb: number;
 	    keybindings: Keybinding[];
 	    editor_snippets: EditorSnippet[];
 	
@@ -1797,8 +1799,6 @@ export namespace graph {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.statement_timeout_ms = source["statement_timeout_ms"];
-	        this.max_result_size_mb = source["max_result_size_mb"];
 	        this.keybindings = this.convertValues(source["keybindings"], Keybinding);
 	        this.editor_snippets = this.convertValues(source["editor_snippets"], EditorSnippet);
 	    }
@@ -2254,6 +2254,8 @@ export namespace graph {
 	    type: string;
 	    name: string;
 	    is_owner: boolean;
+	    statement_timeout_ms: number;
+	    max_result_size_mb: number;
 	    user?: UserNode;
 	    folders: FolderNode[];
 	    db_instances: DBInstanceNode[];
@@ -2268,6 +2270,8 @@ export namespace graph {
 	        this.type = source["type"];
 	        this.name = source["name"];
 	        this.is_owner = source["is_owner"];
+	        this.statement_timeout_ms = source["statement_timeout_ms"];
+	        this.max_result_size_mb = source["max_result_size_mb"];
 	        this.user = this.convertValues(source["user"], UserNode);
 	        this.folders = this.convertValues(source["folders"], FolderNode);
 	        this.db_instances = this.convertValues(source["db_instances"], DBInstanceNode);
@@ -2934,6 +2938,25 @@ export namespace sqllang {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace system {
+	
+	export class ExecutionLimitsResponse {
+	    statement_timeout_ms: number;
+	    max_result_size_mb: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecutionLimitsResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statement_timeout_ms = source["statement_timeout_ms"];
+	        this.max_result_size_mb = source["max_result_size_mb"];
+	    }
 	}
 
 }

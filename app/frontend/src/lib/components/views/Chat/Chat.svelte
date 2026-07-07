@@ -271,7 +271,6 @@
 		flex-direction: column;
 		height: 100%;
 		overflow: hidden;
-		background-color: var(--gray-0);
 	}
 
 	.messages {

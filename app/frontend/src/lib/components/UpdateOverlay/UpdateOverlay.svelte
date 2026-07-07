@@ -44,7 +44,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: var(--space-md);
-		background: var(--gray-0);
+		background: var(--gray-200);
 		border: var(--border);
 		border-radius: var(--br-md);
 		padding: var(--space-lg) calc(var(--space-lg) * 2);

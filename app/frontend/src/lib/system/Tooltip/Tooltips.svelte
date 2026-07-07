@@ -70,9 +70,10 @@
 
 <style>
 	.tooltip {
-		background-color: var(--gray-600);
+		background-color: var(--gray-300);
 		border-radius: var(--br-xs);
-		padding: var(--space-xs) var(--space-sm) 5px var(--space-sm);
+		border: var(--border-contrast);
+		padding: var(--space-sm);
 		pointer-events: none;
 	}
 

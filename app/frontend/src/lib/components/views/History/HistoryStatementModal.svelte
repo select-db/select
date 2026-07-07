@@ -33,68 +33,59 @@
 	}: Props = $props();
 </script>
 
-<div class="wrapper">
-	<div class="header">
-		<span class="meta">
-			<DatabaseIndicator size={16} id={dbInstanceId} />
-			<span class="title">{dbName}</span>
+<div class="header">
+	<span class="meta">
+		<DatabaseIndicator size={16} id={dbInstanceId} />
+		<span class="title">{dbName}</span>
+	</span>
+	<span class="header-right">
+		<p class="hint">{formatRelativeTime(createdAt)}</p>
+		<Badge status={hasError ? 'error' : 'success'} label />
+		<span class="nav">
+			<Button
+				leftIcon="chevron-up"
+				iconSize={16}
+				size="sm"
+				disabled={!canPrev}
+				onclick={onPrev}
+				emphasis="high"
+			/>
+			<Button
+				leftIcon="chevron-down"
+				iconSize={16}
+				size="sm"
+				disabled={!canNext}
+				onclick={onNext}
+				emphasis="high"
+			/>
 		</span>
-		<span class="header-right">
-			<p class="hint">{formatRelativeTime(createdAt)}</p>
-			<Badge status={hasError ? 'error' : 'success'} label />
-			<span class="nav">
-				<Button
-					leftIcon="chevron-up"
-					iconSize={16}
-					size="sm"
-					disabled={!canPrev}
-					onclick={onPrev}
-					emphasis="high"
-				/>
-				<Button
-					leftIcon="chevron-down"
-					iconSize={16}
-					size="sm"
-					disabled={!canNext}
-					onclick={onNext}
-					emphasis="high"
-				/>
-			</span>
-		</span>
-	</div>
+	</span>
+</div>
 
-	{#if errors.length > 0}
-		<div class="errors">
-			<Badge status={hasError ? 'error' : 'success'} label={errors.join('\n')} />
-		</div>
-	{/if}
-
-	<div class="editor">
-		<SqlViewer {sql} />
+{#if errors.length > 0}
+	<div class="errors">
+		<Badge status={hasError ? 'error' : 'success'} label={errors.join('\n')} />
 	</div>
+{/if}
+
+<div class="editor">
+	<SqlViewer {sql} />
 </div>
 
 <style>
-	.wrapper {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
-		min-height: 0;
-		background-color: var(--gray-0);
-	}
-
 	.header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: var(--space-xs-sm);
 		border-bottom: var(--border);
-		background-color: var(--gray-400);
+		background-color: var(--gray-200);
 	}
 
 	.errors {
 		border-bottom: var(--border);
 		padding: var(--space-sm-md) var(--space-sm);
+		background-color: var(--gray-200);
 	}
 
 	.meta {

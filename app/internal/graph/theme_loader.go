@@ -10,9 +10,11 @@ import (
 	"strings"
 )
 
-// DefaultThemeContent is embedded from defaults/.theme
+// DefaultThemeContent is embedded from defaults/user/.theme.
+// The theme is a personal (per-user) file, so its default lives under the user
+// defaults.
 //
-//go:embed defaults/.theme
+//go:embed defaults/user/.theme
 var DefaultThemeContent string
 
 const ThemeFileName = ".theme"
@@ -156,22 +158,27 @@ func mergeThemeVariables(defaults, overrides *ThemeVariables) *ThemeVariables {
 	return result
 }
 
-// GetThemeFilePath returns the path to the .theme file for a workspace.
+// GetThemeFilePath returns the path to the per-user .theme file. The theme is
+// personal to the user and lives outside every workspace, so a team cannot
+// dictate appearance through the shared repo.
 func (g *Graph) GetThemeFilePath() (string, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
-	if err != nil {
-		return "", fmt.Errorf("workspace graph not initialized: %w", err)
-	}
-	wfs, err := NewWorkspaceFS(wsGraph.ID)
-	if err != nil {
-		return "", fmt.Errorf("failed to create workspace fs: %w", err)
-	}
-	return filepath.Join(wfs.WorkspaceRoot, ThemeFileName), nil
+	return GetUserThemeFilePath()
 }
 
-// LoadWorkspaceTheme loads theme variables by merging defaults with user overrides.
+// GetUserThemeFilePath returns the path to the per-user .theme file.
+func GetUserThemeFilePath() (string, error) {
+	dir, err := UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, ThemeFileName), nil
+}
+
+// LoadWorkspaceTheme loads theme variables by merging the built-in defaults with
+// the per-user .theme overrides. The workspace layer is intentionally dropped:
+// appearance is the user's to own and follows them across every workspace.
 func (g *Graph) LoadWorkspaceTheme() (*ThemeVariables, error) {
-	themePath, err := g.GetThemeFilePath()
+	themePath, err := GetUserThemeFilePath()
 	if err != nil {
 		return nil, err
 	}
@@ -183,9 +190,9 @@ func (g *Graph) LoadWorkspaceTheme() (*ThemeVariables, error) {
 	return mergeThemeVariables(defaults, userOverrides), nil
 }
 
-// ResetWorkspaceTheme writes the default theme content to the workspace's .theme file.
+// ResetWorkspaceTheme writes the default theme content to the per-user .theme file.
 func (g *Graph) ResetWorkspaceTheme() error {
-	themePath, err := g.GetThemeFilePath()
+	themePath, err := GetUserThemeFilePath()
 	if err != nil {
 		return err
 	}

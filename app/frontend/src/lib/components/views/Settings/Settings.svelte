@@ -7,38 +7,30 @@
 	import GroupsPanel from '$lib/components/views/Settings/groups/GroupsPanel.svelte';
 	import UsersPanel from '$lib/components/views/Settings/users/UsersPanel.svelte';
 	import APIKeysPanel from '$lib/components/views/Settings/api-keys/APIKeysPanel.svelte';
-	import { getActiveTab, updateSettingsTab } from '$lib/components/Layout/layoutStore';
+	import UserSettingsEditor from '$lib/components/views/Settings/UserSettingsEditor.svelte';
+	import { activeGroupStore, updateSettingsTab } from '$lib/components/Layout/layoutStore';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
+	import { settingsSections, type SettingsSectionId } from './sections';
 
-	type SectionId = 'workspace' | 'users' | 'roles' | 'groups' | 'git' | 'api_keys';
+	const saved = $activeGroupStore?.tabs.find((t) => t.uri === 'selectdb://settings')?.settings;
+	let selectedSection = $state<SettingsSectionId>(
+		(saved?.section as SettingsSectionId) ?? 'workspace'
+	);
 
-	const sections: { id: SectionId; label: string }[] = [
-		{ id: 'workspace', label: 'Workspace' },
-		{ id: 'git', label: 'Git' },
-		{ id: 'users', label: 'Users' },
-		{ id: 'roles', label: 'Roles' },
-		{ id: 'groups', label: 'Groups' },
-		{ id: 'api_keys', label: 'API keys' }
-	];
+	// React to the settings tab's section so deep-links (e.g. from cmd+p) navigate
+	// an already-open Settings tab, not just newly created ones.
+	$effect(() => {
+		const section = $activeGroupStore?.tabs.find((t) => t.uri === 'selectdb://settings')?.settings
+			?.section as SettingsSectionId | undefined;
+		if (section && section !== selectedSection) selectedSection = section;
+	});
 
-	const sectionAction: Record<SectionId, string> = {
-		workspace: 'workspace/settings.write',
-		git: 'workspace/settings.write',
-		users: 'workspace/users.manage',
-		roles: 'workspace/roles.manage',
-		groups: 'workspace/groups.manage',
-		api_keys: 'workspace/api-keys.manage'
-	};
-
-	const saved = getActiveTab()?.settings;
-	let selectedSection = $state<SectionId>((saved?.section as SectionId) ?? 'workspace');
-
-	function canAccess(id: SectionId): boolean {
-		const action = sectionAction[id];
+	function canAccess(id: SettingsSectionId): boolean {
+		const action = settingsSections.find((s) => s.id === id)?.action;
 		return !action || $myPermissions.isAllowed(action);
 	}
 
-	function selectSection(id: SectionId) {
+	function selectSection(id: SettingsSectionId) {
 		selectedSection = id;
 		updateSettingsTab({ section: id, roles: { selectedRoleId: null, selectedRoleName: null } });
 	}
@@ -46,9 +38,11 @@
 
 <div class="settings-view">
 	<nav class="settings-nav">
-		{#each sections as section (section.id)}
+		{#each settingsSections as section (section.id)}
 			<Button
 				content={section.label}
+				leftIcon={section.icon}
+				iconSize={16}
 				emphasis={selectedSection === section.id ? 'high' : 'low'}
 				active={selectedSection === section.id}
 				onclick={() => selectSection(section.id)}
@@ -76,6 +70,10 @@
 			<APIKeysPanel />
 		{:else if selectedSection === 'git'}
 			<GitLinkPanel showUnsync />
+		{:else if selectedSection === 'theme'}
+			<UserSettingsEditor kind="theme" />
+		{:else if selectedSection === 'config'}
+			<UserSettingsEditor kind="config" />
 		{:else}
 			<div class="build-in-progress">
 				<Icon icon="cog" size={32} />
@@ -100,14 +98,14 @@
 		flex-direction: column;
 		width: 120px;
 		min-width: 120px;
-		background-color: var(--gray-0);
 	}
 
 	.settings-nav :global(.nav-item) {
 		justify-content: flex-start;
 		width: 100%;
-		height: 26px;
+		height: 28px;
 		font-size: var(--fs-sm);
+		gap: var(--space-xs);
 	}
 
 	.settings-content {
@@ -116,7 +114,6 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--gray-0);
 	}
 
 	.settings-content :global(.panel-scroll) {

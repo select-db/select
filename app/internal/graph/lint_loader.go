@@ -9,7 +9,7 @@ import (
 	ta "github.com/selectDb/dialect/core/tokenanalyzer"
 )
 
-//go:embed defaults/.lint
+//go:embed defaults/workspace/.lint
 var DefaultLintContent string
 
 const LintFileName = ".lint"

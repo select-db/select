@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import { ResetConfig } from '$lib/wailsjs/go/system/System';
+	import { ResetUserConfig } from '$lib/wailsjs/go/system/System';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notifySuccess, notifyError } from '$lib/system/Notifications/notificationsStore';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
@@ -28,7 +28,7 @@
 				title: 'Reset config',
 				message: 'Are you sure you want to reset your configuration to default values?',
 				onConfirm: async () => {
-					const [, err] = await tryCatch(ResetConfig);
+					const [, err] = await tryCatch(ResetUserConfig);
 					if (err) return notifyError(err);
 					notifySuccess('Config reset to default');
 				}
@@ -60,7 +60,6 @@
 <style>
 	.wrapper {
 		min-height: 35px;
-		background-color: var(--gray-0);
 		display: flex;
 		gap: var(--space-sm);
 		justify-content: space-between;

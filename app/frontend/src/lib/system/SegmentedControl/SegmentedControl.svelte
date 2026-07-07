@@ -6,6 +6,7 @@
 	type Option = {
 		id: string;
 		icon?: Icons;
+		iconSize?: number;
 		label?: string;
 		tooltip?: string;
 	};
@@ -114,7 +115,7 @@
 			<Icon
 				icon={option.icon}
 				stroke={option.id === value ? 'var(--gray-1000)' : 'var(--gray-700)'}
-				size={16}
+				size={option.iconSize ?? 16}
 			/>
 		{/if}
 		{#if option.label}
@@ -148,7 +149,6 @@
 		align-items: center;
 		gap: var(--space-xs);
 		padding: var(--space-xs-sm) var(--space-sm);
-		color: var(--gray-1000);
 		z-index: 1;
 		transition: all 0.2s;
 	}
@@ -168,6 +168,7 @@
 
 	.segment p {
 		transition: color 0.2s;
+		color: var(--gray-800);
 	}
 	.segment.active p {
 		color: var(--gray-1000);
@@ -183,10 +184,12 @@
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 
 		border: var(--border);
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
+
+		box-shadow: var(--shadow-subtle);
 
 		transition:
 			left 0.15s ease,

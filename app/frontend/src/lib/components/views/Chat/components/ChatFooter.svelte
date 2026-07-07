@@ -176,7 +176,6 @@
 				bind:value={selectedModel}
 				placeholder="Model"
 				emphasis="low"
-				size="xs"
 				menuWidth={275}
 				searchEnabled
 				searchPlaceholder="Search models..."

@@ -13,6 +13,11 @@ type WorkspaceNode struct {
 	Name    string `json:"name"`
 	IsOwner bool   `json:"is_owner"`
 
+	// Execution limits are team policy stored on the workspace row (synced via
+	// the backend), not in a workspace file.
+	StatementTimeoutMs int `json:"statement_timeout_ms"`
+	MaxResultSizeMB    int `json:"max_result_size_mb"`
+
 	User        *UserNode         `json:"user"`
 	Folders     []*FolderNode     `json:"folders"`
 	DBInstances []*DBInstanceNode `json:"db_instances"`

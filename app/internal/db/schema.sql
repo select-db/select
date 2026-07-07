@@ -158,7 +158,7 @@ CREATE TABLE workspace (
     git_remote_url TEXT,
 
     last_pulled_at DATETIME
-, owner_id TEXT REFERENCES user(id) ON DELETE SET NULL);
+, owner_id TEXT REFERENCES user(id) ON DELETE SET NULL, statement_timeout_ms INTEGER NOT NULL DEFAULT 30000, max_result_size_mb INTEGER NOT NULL DEFAULT 100);
 
 CREATE TABLE workspace_to_user (
     id TEXT PRIMARY KEY,

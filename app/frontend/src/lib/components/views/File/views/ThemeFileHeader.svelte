@@ -60,7 +60,6 @@
 <style>
 	.wrapper {
 		min-height: 35px;
-		background-color: var(--gray-0);
 		display: flex;
 		gap: var(--space-sm);
 		justify-content: space-between;

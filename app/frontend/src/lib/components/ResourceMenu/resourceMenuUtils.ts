@@ -25,49 +25,19 @@ export function flattenWorkspaceGraph(
 
 	const options: ResourceMenuOption[] = [];
 
-	const processFolder = (folder: graph.FolderNode) => {
-		if (types.includes('file') && folder.files) {
-			for (const file of folder.files) {
-				options.push({
-					id: file.id,
-					label: file.name,
-					type: 'file',
-					uri: file.uri,
-					node: file,
-					folderId: file.folder_id
-				});
-			}
-		}
-
-		if (types.includes('db_instance') && folder.db_instances) {
-			for (const db of folder.db_instances) {
-				options.push({
-					id: db.id,
-					label: db.name,
-					type: 'db_instance',
-					uri: db.uri,
-					node: db
-				});
-
-				if (types.includes('db_item') && db.children) {
-					collectDbItems(db.children, options);
-				}
-			}
-		}
-
-		if (folder.folders) {
-			for (const subFolder of folder.folders) {
-				processFolder(subFolder);
-			}
-		}
+	const pushFile = (file: graph.FileNode) => {
+		options.push({
+			id: file.id,
+			label: file.name,
+			type: 'file',
+			uri: file.uri,
+			node: file,
+			folderId: file.folder_id
+		});
 	};
 
-	for (const folder of workspace.folders || []) {
-		processFolder(folder);
-	}
-
-	if (types.includes('db_instance') && workspace.db_instances) {
-		for (const db of workspace.db_instances) {
+	const processDbInstance = (db: graph.DBInstanceNode) => {
+		if (types.includes('db_instance')) {
 			options.push({
 				id: db.id,
 				label: db.name,
@@ -75,11 +45,42 @@ export function flattenWorkspaceGraph(
 				uri: db.uri,
 				node: db
 			});
-
-			if (types.includes('db_item') && db.children) {
-				collectDbItems(db.children, options);
-			}
 		}
+
+		if (types.includes('db_item') && db.children) {
+			collectDbItems(db.children, options);
+		}
+
+		// SQL files (and nested folders) can live inside a database, not just in
+		// regular workspace folders — index them too.
+		if (types.includes('file') && db.files) {
+			for (const file of db.files) pushFile(file);
+		}
+		if (db.folders) {
+			for (const subFolder of db.folders) processFolder(subFolder);
+		}
+	};
+
+	const processFolder = (folder: graph.FolderNode) => {
+		if (types.includes('file') && folder.files) {
+			for (const file of folder.files) pushFile(file);
+		}
+
+		if (folder.db_instances) {
+			for (const db of folder.db_instances) processDbInstance(db);
+		}
+
+		if (folder.folders) {
+			for (const subFolder of folder.folders) processFolder(subFolder);
+		}
+	};
+
+	for (const folder of workspace.folders || []) {
+		processFolder(folder);
+	}
+
+	if (workspace.db_instances) {
+		for (const db of workspace.db_instances) processDbInstance(db);
 	}
 
 	return options;

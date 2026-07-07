@@ -94,7 +94,7 @@
 		padding: var(--space-xs);
 		border: 0.5px solid var(--glow-color);
 		border-radius: var(--br-xs);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		transition:
 			border-color 0.3s ease,
 			background-color 0.2s ease;
