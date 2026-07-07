@@ -15,10 +15,10 @@
 		buildPermissionMap,
 		computePermissionChange,
 		permissionKey
-	} from './permissions';
-	import type { Permission, PermissionChange } from './permissions';
+	} from '../shared/permissions';
+	import type { Permission, PermissionChange } from '../shared/permissions';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
-	import PermissionInfoModal from './PermissionInfoModal.svelte';
+	import PermissionInfoModal from '../shared/PermissionInfoModal.svelte';
 	import { permissionActions, type PermissionActions } from '$lib/stores/myPermissionsStore';
 
 	type SavedState = { expandedKeys?: string[]; scrollTop?: number; search?: string };
