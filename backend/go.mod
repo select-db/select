@@ -1,6 +1,6 @@
 module backend
 
-go 1.25.11
+go 1.25.12
 
 require (
 	github.com/fergusstrange/embedded-postgres v1.34.0
