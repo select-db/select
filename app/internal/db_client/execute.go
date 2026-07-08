@@ -3,7 +3,6 @@ package db_client
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"selectDb/internal/graph"
@@ -66,14 +65,8 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 
 	if !dbInstance.Proxified {
 		conn.Meta, _ = dbc.getCachedMetadata(dbInstance, false)
-		perms, permErr := role.GetMyPermissions(dbc.Queries)
-		if permErr != nil {
-			// TEMP groups debug: this path silently fails open (no perms applied). Remove once diagnosed.
-			log.Printf("[grp-debug] GetMyPermissions failed, permissions NOT applied: %v", permErr)
-		} else {
+		if perms, permErr := role.GetMyPermissions(dbc.Queries); permErr == nil {
 			conn.Perms = core.Compile(perms)
-			log.Printf("[grp-debug] local enforce: dbInstance=%s perms=%d managed=%v",
-				dbInstance.ID, len(perms), conn.Perms.IsManaged(dbInstance.ID))
 		}
 	}
 

@@ -3,7 +3,6 @@ package role
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"selectDb/internal/db/db_types"
 	"selectDb/internal/db/generated"
@@ -129,12 +128,6 @@ func GetMyPermissions(queries *generated.Queries) ([]core.PermissionEntry, error
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get my permissions: %w", err)
-	}
-
-	// TEMP groups debug: prints the resolved permission set (direct + group). Remove once diagnosed.
-	log.Printf("[grp-debug] GetMyPermissions user=%s ws=%s resolved=%d permission(s)", user.ID, ws.ID, len(rows))
-	for _, row := range rows {
-		log.Printf("[grp-debug]   role=%q db_instance=%q %s/%s", row.RoleName.String, row.DbInstanceID.String, row.Action, row.Effect)
 	}
 
 	out := make([]core.PermissionEntry, 0, len(rows))
