@@ -1297,11 +1297,11 @@ export namespace generated {
 	    user_count: number;
 	    permission_count: number;
 	    group_count: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ListRolesByWorkspaceRow(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -3105,6 +3105,22 @@ export namespace workspace {
 	        this.UserID = source["UserID"];
 	    }
 	}
+	export class WorkspaceUserGroup {
+	    id: string;
+	    name: string;
+	    user_to_group_id: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceUserGroup(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.user_to_group_id = source["user_to_group_id"];
+	    }
+	}
 	export class WorkspaceUserRole {
 	    id: string;
 	    name: string;
@@ -3119,22 +3135,6 @@ export namespace workspace {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.user_to_role_id = source["user_to_role_id"];
-	    }
-	}
-	export class WorkspaceUserGroup {
-	    id: string;
-	    name: string;
-	    user_to_group_id: string;
-
-	    static createFrom(source: any = {}) {
-	        return new WorkspaceUserGroup(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.user_to_group_id = source["user_to_group_id"];
 	    }
 	}
 	export class WorkspaceUserEntry {
@@ -3177,6 +3177,7 @@ export namespace workspace {
 		    return a;
 		}
 	}
+	
 	
 	export class WorkspaceWithCurrent {
 	    id: string;

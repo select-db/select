@@ -173,6 +173,7 @@
 		overflow: hidden;
 		box-shadow: var(--shadow) 0px 7px 29px 0px !important;
 		width: fit-content;
+		border-radius: var(--br-sm);
 	}
 
 	.floating-box.top-layer {

@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"text/template"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/yuin/goldmark"
@@ -72,7 +72,7 @@ func newBuildConfig(rootDir string) buildConfig {
 		sidebarPath:   filepath.Join(docsDir, "sidebar.txt"),
 		templateDir:   filepath.Join(docsDir, "template"),
 		cssPath:       filepath.Join(docsDir, "docs.css"),
-		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", ".theme"),
+		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", "user", ".theme"),
 		componentsDir: filepath.Join(docsDir, "components"),
 		outDir:        filepath.Join(docsDir, "site"),
 	}
