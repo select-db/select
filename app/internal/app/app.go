@@ -23,6 +23,7 @@ import (
 	db_client "selectDb/internal/db_client"
 	fs_provider "selectDb/internal/fs_provider"
 	git "selectDb/internal/git"
+	group "selectDb/internal/group"
 	history "selectDb/internal/history"
 	role "selectDb/internal/role"
 	search "selectDb/internal/search"
@@ -51,6 +52,7 @@ type App struct {
 	User       *user.User
 	Workspace  *workspace.Workspace
 	Role       *role.Role
+	Group      *group.Group
 	History    *history.History
 	Datasource *datasource.Datasource
 	APIKey     *apikey.APIKey
@@ -115,6 +117,7 @@ func NewApp() *App {
 	)
 
 	Role := role.New(Queries)
+	Group := group.New(Queries)
 	DbClient := db_client.New(Queries, Graph, FSProvider)
 	SqlLang := sqllang.New(Graph, Queries, DbClient.GetMeta, DbClient.InspectStatement)
 	Workspace := workspace.New(Queries, FSProvider)
@@ -141,6 +144,7 @@ func NewApp() *App {
 		User:       user.New(Queries),
 		Workspace:  Workspace,
 		Role:       Role,
+		Group:      Group,
 		History:    history.New(Queries),
 
 		Datasource: datasource.New(Queries),

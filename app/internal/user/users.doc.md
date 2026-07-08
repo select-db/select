@@ -12,6 +12,6 @@ Users are added to a workspace by assigning them through the team management int
 
 ## Roles
 
-Users get permissions through **roles**. A user can have zero or more roles in a workspace. Permissions from all assigned roles are combined. See [Roles](/workspace/roles/) and [Permissions](/workspace/permissions/) for details.
+Users get permissions through **roles**. A user can have zero or more roles in a workspace, assigned directly or inherited from the [groups](/workspace/groups/) they belong to. Permissions from all of those roles are combined. See [Roles](/workspace/roles/), [Groups](/workspace/groups/), and [Permissions](/workspace/permissions/) for details.
 
 > A user with no roles has **no permissions** beyond basic read access to the workspace.

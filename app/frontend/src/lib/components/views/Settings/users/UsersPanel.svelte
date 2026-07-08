@@ -10,6 +10,7 @@
 		RemoveUserFromWorkspace
 	} from '$lib/wailsjs/go/workspace/Workspace';
 	import { ListRoles, AssignUserToRole, RemoveUserFromRole } from '$lib/wailsjs/go/role/Role';
+	import { ListGroups, AddUserToGroup, RemoveUserFromGroup } from '$lib/wailsjs/go/group/Group';
 	import { GetCurrentUserAvatar } from '$lib/wailsjs/go/user/User';
 	import FloatingBox from '$lib/system/FloatingBox/FloatingBox.svelte';
 	import Menu from '$lib/system/Menu/Menu.svelte';
@@ -27,15 +28,20 @@
 		{ key: 'name', label: 'Name', searchable: true, width: '200px', pinned: true },
 		{ key: 'email', label: 'Email', width: '280px' },
 		{ key: 'roles', label: 'Roles', width: '220px' },
+		{ key: 'groups', label: 'Groups', width: '220px' },
 		{ key: 'actions', label: '', width: '52px' }
 	];
 
 	let users = $state<UserEntry[]>([]);
 	let allRoles = $state<generated.ListRolesByWorkspaceRow[]>([]);
+	let allGroups = $state<generated.ListGroupsByWorkspaceRow[]>([]);
 	let avatars = $state<Record<string, string>>({});
 	let menuAnchor = $state<HTMLElement | null>(null);
 	let menuUserId = $state<string | null>(null);
 	let roleSearch = $state('');
+	let groupMenuAnchor = $state<HTMLElement | null>(null);
+	let groupMenuUserId = $state<string | null>(null);
+	let groupSearch = $state('');
 	let actionsAnchor = $state<HTMLElement | null>(null);
 	let actionsUserId = $state<string | null>(null);
 
@@ -145,12 +151,14 @@
 	}
 
 	async function load() {
-		const [u, r] = await Promise.all([
+		const [u, r, g] = await Promise.all([
 			must(tryCatch(ListWorkspaceUsers)),
-			must(tryCatch(ListRoles))
+			must(tryCatch(ListRoles)),
+			must(tryCatch(ListGroups))
 		]);
 		users = (u as UserEntry[]) ?? [];
 		allRoles = (r as generated.ListRolesByWorkspaceRow[]) ?? [];
+		allGroups = (g as generated.ListGroupsByWorkspaceRow[]) ?? [];
 		loadAvatars(users);
 	}
 
@@ -212,6 +220,49 @@
 		const q = roleSearch.trim().toLowerCase();
 		if (!q) return roleMenuOptions;
 		return roleMenuOptions.filter((o) => o.label.toLowerCase().includes(q));
+	});
+
+	function openGroupMenu(anchor: HTMLElement, userId: string) {
+		groupSearch = '';
+		groupMenuAnchor = anchor;
+		groupMenuUserId = userId;
+	}
+
+	function closeGroupMenu() {
+		groupMenuAnchor = null;
+		groupMenuUserId = null;
+	}
+
+	let groupMenuUser = $derived(users.find((u) => u.id === groupMenuUserId) ?? null);
+	let assignedGroupIds = $derived(new Set(groupMenuUser?.groups?.map((g) => g.id) ?? []));
+
+	async function toggleGroup(groupId: string) {
+		if (!groupMenuUser) return;
+		if (assignedGroupIds.has(groupId)) {
+			const match = groupMenuUser.groups?.find((g) => g.id === groupId);
+			if (!match) return;
+			await must(tryCatch(RemoveUserFromGroup, match.user_to_group_id));
+		} else {
+			await must(tryCatch(AddUserToGroup, groupMenuUser.id, groupId));
+		}
+		await load();
+	}
+
+	let groupMenuOptions = $derived(
+		allGroups.map((g) => ({
+			id: g.id,
+			label: g.name,
+			checkbox: true,
+			checked: assignedGroupIds.has(g.id),
+			action: (opt: { id: string }) => toggleGroup(opt.id),
+			onCheckClick: (opt: { id: string }) => toggleGroup(opt.id)
+		}))
+	);
+
+	let filteredGroupOptions = $derived.by(() => {
+		const q = groupSearch.trim().toLowerCase();
+		if (!q) return groupMenuOptions;
+		return groupMenuOptions.filter((o) => o.label.toLowerCase().includes(q));
 	});
 
 	async function removeUser(userId: string) {
@@ -285,6 +336,29 @@
 				/>
 			{/if}
 		</div>
+	{:else if key === 'groups'}
+		<div class="cell-roles">
+			{#if user.groups && user.groups.length > 0}
+				<Button
+					content={user.groups.map((g) => g.name).join(', ')}
+					emphasis="low"
+					size="sm"
+					onclick={(e) => {
+						openGroupMenu(e.currentTarget as HTMLElement, user.id);
+					}}
+					truncate
+				/>
+			{:else}
+				<Button
+					content="Add group"
+					emphasis="low"
+					size="sm"
+					onclick={(e) => {
+						openGroupMenu(e.currentTarget as HTMLElement, user.id);
+					}}
+				/>
+			{/if}
+		</div>
 	{:else if key === 'actions'}
 		{#if !user.is_owner && canManageUsers}
 			<div class="actions-inner">
@@ -319,6 +393,24 @@
 				noResultsMessage="No matching roles"
 				width={220}
 				onClose={closeMenu}
+			/>
+		</FloatingBox>
+	</Portal>
+{/if}
+
+{#if groupMenuUserId && groupMenuAnchor}
+	<Portal>
+		<FloatingBox anchor={groupMenuAnchor} backdrop onBackdropClick={closeGroupMenu}>
+			<Menu
+				options={filteredGroupOptions}
+				searchEnabled={true}
+				searchPlaceholder="Search groups…"
+				bind:searchQuery={groupSearch}
+				externalFilter={true}
+				emptyMessage="No groups"
+				noResultsMessage="No matching groups"
+				width={220}
+				onClose={closeGroupMenu}
 			/>
 		</FloatingBox>
 	</Portal>

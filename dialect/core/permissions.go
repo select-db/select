@@ -11,6 +11,7 @@ const (
 	ActionWorkspaceSettingsWrite = "workspace/settings.write"
 	ActionWorkspaceUsersManage   = "workspace/users.manage"
 	ActionWorkspaceRolesManage   = "workspace/roles.manage"
+	ActionWorkspaceGroupsManage  = "workspace/groups.manage"
 	ActionWorkspaceApiKeysManage = "workspace/api-keys.manage"
 )
 

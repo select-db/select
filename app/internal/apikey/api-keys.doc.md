@@ -11,7 +11,7 @@ Managing API keys requires the **Workspace API keys** permission, or workspace o
 Open **Settings → API keys → New API key**. You choose:
 
 - **Name**,  a label to recognise the key later.
-- **Roles**,  one or more workspace roles. The key can only do what these roles allow; a key with no access to a database cannot query it.
+- **Roles**,  one or more workspace roles assigned directly to the key. The key can only do what these roles allow; a key with no access to a database cannot query it. Keys are not [group](/workspace/groups/) members, so give a key its roles directly.
 - **Expiry**,  `Never`, or a fixed lifetime up to one year.
 
 The secret is shown **once**, immediately after creation. Copy it then; it is stored only as a hash and cannot be retrieved again. If it is lost, rotate or revoke the key.

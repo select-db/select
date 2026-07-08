@@ -6,8 +6,8 @@ import {
 	isAppActionAllowed,
 	buildPermissionMap,
 	resolve
-} from '$lib/components/views/Settings/permissions';
-import type { Permission, PermissionMap } from '$lib/components/views/Settings/permissions';
+} from '$lib/components/views/Settings/shared/permissions';
+import type { Permission, PermissionMap } from '$lib/components/views/Settings/shared/permissions';
 
 export const myPermissionsStore = writable<Permission[]>([]);
 

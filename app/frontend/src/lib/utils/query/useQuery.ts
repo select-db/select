@@ -49,6 +49,22 @@ const runOperation = async <T extends RunOperationParams, R>(
 	return result;
 };
 
+// errorResult builds a QueryResult shell carrying an error, keyed by the
+// executionId. The result table looks up the errored execution by this id
+// (message and position are populated by the 'query:error' event).
+const errorResult = (id: string, message: string): graph.QueryResult =>
+	({
+		id,
+		columns: [],
+		rows: [],
+		rowCount: 0,
+		page: 0,
+		pageSize: 75,
+		available: 0,
+		status: 'error',
+		errors: [message]
+	}) as unknown as graph.QueryResult;
+
 // runQuery starts a streaming query and resolves once the columns are known.
 // The returned QueryResult is a "shell": rows come from GetResultPage as the
 // streaming cache fills, and totalRowCount becomes final when the backend emits
@@ -106,8 +122,9 @@ export const runQuery = async (
 		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, start.errors[0]))) {
 			return runQuery(params, true);
 		}
-		notifyError(start.errors[0]);
-		return null;
+		// Return an error result (not null) so the failure surfaces in the
+		// result table like any other query error.
+		return errorResult(start.executionId, start.errors[0]);
 	}
 
 	const [exec, waitErr] = await tryCatch(waitForStarted, start.executionId);
@@ -118,9 +135,10 @@ export const runQuery = async (
 			removeFromLoadingStore(DbInstanceID, FileID);
 			return runQuery(params, true);
 		}
-		// loading-store removal handled by the 'query:error' event listener
-		notifyError(msg);
-		return null;
+		// loading-store removal handled by the 'query:error' event listener.
+		// Errors before 'query:started' (e.g. permission denial) reject
+		// waitForStarted; surface them in the result table via an error result.
+		return errorResult(start.executionId, msg);
 	}
 
 	const queryResult = {

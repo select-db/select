@@ -9,9 +9,12 @@ import (
 
 	"selectDb/internal/api"
 	"selectDb/internal/db/generated"
+	syncgroup "selectDb/internal/db/syncer/group"
+	syncgtr "selectDb/internal/db/syncer/group_to_role"
 	syncpermission "selectDb/internal/db/syncer/permission"
 	syncrole "selectDb/internal/db/syncer/role"
 	syncuser "selectDb/internal/db/syncer/user"
+	syncutg "selectDb/internal/db/syncer/user_to_group"
 	syncutr "selectDb/internal/db/syncer/user_to_role"
 	syncworkspace "selectDb/internal/db/syncer/workspace"
 	syncwtu "selectDb/internal/db/syncer/workspace_to_user"
@@ -140,11 +143,15 @@ func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generate
 
 	if s.EmitRolesUpdated != nil {
 		c := res.Changes
-		rolesAffected := len(c.Role) > 0 || len(c.UserToRole) > 0 || len(c.Permission) > 0
+		rolesAffected := len(c.Role) > 0 || len(c.UserToRole) > 0 || len(c.Permission) > 0 ||
+			len(c.Group) > 0 || len(c.UserToGroup) > 0 || len(c.GroupToRole) > 0
 		if !rolesAffected {
 			for _, r := range res.Restored {
-				if r.TableName == "role" || r.TableName == "user_to_role" || r.TableName == "permission" {
+				switch r.TableName {
+				case "role", "user_to_role", "permission", "group", "user_to_group", "group_to_role":
 					rolesAffected = true
+				}
+				if rolesAffected {
 					break
 				}
 			}
@@ -242,7 +249,9 @@ func (s *Syncer) applyRestored(ctx context.Context, items []SyncRestoredItem) er
 	return nil
 }
 
-// applyChanges upserts server-pushed rows in FK order: users → workspaces → workspace_to_user → roles → user_to_role → permissions.
+// applyChanges upserts server-pushed rows in FK order: users → workspaces → workspace_to_user →
+// roles → user_to_role → permissions → group → user_to_group → group_to_role.
+// group_to_role and user_to_group come last as they depend on group (plus role / user).
 // Rows with deleted_at set are applied as local deletes (and switch-or-logout if current).
 func (s *Syncer) applyChanges(ctx context.Context, changes SyncChanges) error {
 	for _, u := range changes.Users {
@@ -275,6 +284,21 @@ func (s *Syncer) applyChanges(ctx context.Context, changes SyncChanges) error {
 			return fmt.Errorf("apply permission: %w", err)
 		}
 	}
+	for _, g := range changes.Group {
+		if err := s.applyOneRow(ctx, "group", g); err != nil {
+			return fmt.Errorf("apply group: %w", err)
+		}
+	}
+	for _, utg := range changes.UserToGroup {
+		if err := s.applyOneRow(ctx, "user_to_group", utg); err != nil {
+			return fmt.Errorf("apply user_to_group: %w", err)
+		}
+	}
+	for _, gtr := range changes.GroupToRole {
+		if err := s.applyOneRow(ctx, "group_to_role", gtr); err != nil {
+			return fmt.Errorf("apply group_to_role: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -302,6 +326,12 @@ func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload m
 		err = syncutr.ApplyDelete(ctx, s.Queries, payload)
 	case "permission":
 		err = syncpermission.ApplyDelete(ctx, s.Queries, payload)
+	case "group":
+		err = syncgroup.ApplyDelete(ctx, s.Queries, payload)
+	case "user_to_group":
+		err = syncutg.ApplyDelete(ctx, s.Queries, payload)
+	case "group_to_role":
+		err = syncgtr.ApplyDelete(ctx, s.Queries, payload)
 	default:
 		return nil
 	}
@@ -367,6 +397,12 @@ func (s *Syncer) applyRow(ctx context.Context, tableName string, payload map[str
 		return syncutr.Restore(ctx, s.Queries, payload)
 	case "permission":
 		return syncpermission.Restore(ctx, s.Queries, payload)
+	case "group":
+		return syncgroup.Restore(ctx, s.Queries, payload)
+	case "user_to_group":
+		return syncutg.Restore(ctx, s.Queries, payload)
+	case "group_to_role":
+		return syncgtr.Restore(ctx, s.Queries, payload)
 	default:
 		return nil
 	}

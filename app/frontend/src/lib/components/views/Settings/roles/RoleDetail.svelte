@@ -15,10 +15,10 @@
 		buildPermissionMap,
 		computePermissionChange,
 		permissionKey
-	} from './permissions';
-	import type { Permission, PermissionChange } from './permissions';
+	} from '../shared/permissions';
+	import type { Permission, PermissionChange } from '../shared/permissions';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
-	import PermissionInfoModal from './PermissionInfoModal.svelte';
+	import PermissionInfoModal from '../shared/PermissionInfoModal.svelte';
 	import { permissionActions, type PermissionActions } from '$lib/stores/myPermissionsStore';
 
 	type SavedState = { expandedKeys?: string[]; scrollTop?: number; search?: string };
@@ -47,6 +47,12 @@
 			label: 'Workspace roles',
 			action: 'workspace/roles.manage',
 			description: 'Allows creating, editing, and deleting roles and their permission sets.'
+		},
+		{
+			label: 'Workspace groups',
+			action: 'workspace/groups.manage',
+			description:
+				'Allows creating groups, managing their members, and attaching roles to them.'
 		},
 		{
 			label: 'Workspace API keys',

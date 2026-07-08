@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"backend/db"
+	"backend/internal/syncer/group"
+	"backend/internal/syncer/group_to_role"
 	"backend/internal/syncer/permission"
 	"backend/internal/syncer/role"
 	"backend/internal/syncer/types"
+	"backend/internal/syncer/user_to_group"
 	"backend/internal/syncer/user_to_role"
 	"backend/internal/syncer/workspace"
 	"backend/internal/syncer/workspace_to_user"
@@ -65,6 +68,12 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 				applied, rest, applyErr = user_to_role.ApplyDelete(ctx, userID, c)
 			case "permission":
 				applied, rest, applyErr = permission.ApplyDelete(ctx, userID, c)
+			case "group":
+				applied, rest, applyErr = group.ApplyDelete(ctx, userID, c)
+			case "user_to_group":
+				applied, rest, applyErr = user_to_group.ApplyDelete(ctx, userID, c)
+			case "group_to_role":
+				applied, rest, applyErr = group_to_role.ApplyDelete(ctx, userID, c)
 			default:
 				continue
 			}
@@ -80,6 +89,12 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 				applied, rest, applyErr = user_to_role.Apply(ctx, userID, c, lastPulledAt)
 			case "permission":
 				applied, rest, applyErr = permission.Apply(ctx, userID, c, lastPulledAt)
+			case "group":
+				applied, rest, applyErr = group.Apply(ctx, userID, c, lastPulledAt)
+			case "user_to_group":
+				applied, rest, applyErr = user_to_group.Apply(ctx, userID, c, lastPulledAt)
+			case "group_to_role":
+				applied, rest, applyErr = group_to_role.Apply(ctx, userID, c, lastPulledAt)
 			default:
 				continue
 			}
@@ -89,7 +104,8 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 			return nil, false, fmt.Errorf("apply %s commit %s: %w", c.TableName, c.ID, applyErr)
 		}
 
-		if applied && (c.TableName == "user_to_role" || c.TableName == "permission") {
+		if applied && (c.TableName == "user_to_role" || c.TableName == "permission" ||
+			c.TableName == "user_to_group" || c.TableName == "group_to_role") {
 			needsTokenRefresh = true
 		}
 
@@ -107,6 +123,9 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 		changes.Role = filterByID(changes.Role, appliedIDs, func(r types.RoleRow) string { return r.ID })
 		changes.UserToRole = filterByID(changes.UserToRole, appliedIDs, func(r types.UserToRoleRow) string { return r.ID })
 		changes.Permission = filterByID(changes.Permission, appliedIDs, func(r types.PermissionRow) string { return r.ID })
+		changes.Group = filterByID(changes.Group, appliedIDs, func(r types.GroupRow) string { return r.ID })
+		changes.UserToGroup = filterByID(changes.UserToGroup, appliedIDs, func(r types.UserToGroupRow) string { return r.ID })
+		changes.GroupToRole = filterByID(changes.GroupToRole, appliedIDs, func(r types.GroupToRoleRow) string { return r.ID })
 	}
 
 	// Resolve related users so client can upsert users before workspace_to_user (FK).
@@ -187,6 +206,24 @@ func getChangesSince(ctx context.Context, userID string, since time.Time) (*type
 	}
 	changes.Permission = permissions
 
+	groups, err := group.GetChangesSince(ctx, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	changes.Group = groups
+
+	userToGroups, err := user_to_group.GetChangesSince(ctx, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	changes.UserToGroup = userToGroups
+
+	groupToRoles, err := group_to_role.GetChangesSince(ctx, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	changes.GroupToRole = groupToRoles
+
 	return changes, nil
 }
 
@@ -202,6 +239,12 @@ func fetchCurrentForUnauthorized(ctx context.Context, c types.Commit) (*types.Re
 		return user_to_role.FetchCurrent(ctx, c)
 	case "permission":
 		return permission.FetchCurrent(ctx, c)
+	case "group":
+		return group.FetchCurrent(ctx, c)
+	case "user_to_group":
+		return user_to_group.FetchCurrent(ctx, c)
+	case "group_to_role":
+		return group_to_role.FetchCurrent(ctx, c)
 	}
 	return nil, nil
 }
