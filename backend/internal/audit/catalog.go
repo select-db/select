@@ -90,6 +90,30 @@ var (
 		Domain: DomainIAM, Action: ActionMemberRemoved, Lane: LaneOutbox, TargetType: "user",
 		Doc: "a user was removed from a workspace",
 	}
+	GroupUpserted = Spec{
+		Domain: DomainIAM, Action: ActionGroupUpserted, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a group was created or renamed",
+	}
+	GroupDeleted = Spec{
+		Domain: DomainIAM, Action: ActionGroupDeleted, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a group was deleted",
+	}
+	GroupMemberAdded = Spec{
+		Domain: DomainIAM, Action: ActionGroupMemberAdded, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a user was added to a group",
+	}
+	GroupMemberRemoved = Spec{
+		Domain: DomainIAM, Action: ActionGroupMemberRemoved, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a user was removed from a group",
+	}
+	GroupRoleAttached = Spec{
+		Domain: DomainIAM, Action: ActionGroupRoleAttached, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a role was attached to a group (grants the role to all members)",
+	}
+	GroupRoleDetached = Spec{
+		Domain: DomainIAM, Action: ActionGroupRoleDetached, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a role was detached from a group",
+	}
 	WorkspaceCreated = Spec{
 		Domain: DomainIAM, Action: ActionWorkspaceCreated, Lane: LaneOutbox, TargetType: "workspace",
 		Doc: "a workspace was created",
@@ -123,7 +147,8 @@ var (
 )
 
 // Catalog is the full declared vocabulary. Wired today: QueryExecuted,
-// PermissionUpserted. The rest are reserved contract, emit sites land at their
+// PermissionUpserted, and the group writes (GroupUpserted, GroupMemberAdded,
+// GroupRoleAttached). The rest are reserved contract, emit sites land at their
 // choke points incrementally.
 var Catalog = []Spec{
 	QueryExecuted, QueryDenied, QueryExported,
@@ -131,6 +156,9 @@ var Catalog = []Spec{
 	PermissionUpserted, PermissionDeleted,
 	RoleUpserted, RoleDeleted,
 	MemberAdded, MemberRemoved,
+	GroupUpserted, GroupDeleted,
+	GroupMemberAdded, GroupMemberRemoved,
+	GroupRoleAttached, GroupRoleDetached,
 	WorkspaceCreated, WorkspaceDeleted,
 	APIKeyCreated, APIKeyRotated, APIKeyRevoked,
 	DatasourceUpserted, DatasourceDeleted,

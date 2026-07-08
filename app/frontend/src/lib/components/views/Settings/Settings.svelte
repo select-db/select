@@ -2,10 +2,11 @@
 	import Button from '$lib/system/Button/Button.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import GitLinkPanel from '$lib/components/views/Git/GitLinkPanel.svelte';
-	import WorkspacePanel from '$lib/components/views/Settings/WorkspacePanel.svelte';
-	import RolesPanel from '$lib/components/views/Settings/RolesPanel.svelte';
-	import UsersPanel from '$lib/components/views/Settings/UsersPanel.svelte';
-	import APIKeysPanel from '$lib/components/views/Settings/APIKeysPanel.svelte';
+	import WorkspacePanel from '$lib/components/views/Settings/workspace/WorkspacePanel.svelte';
+	import RolesPanel from '$lib/components/views/Settings/roles/RolesPanel.svelte';
+	import GroupsPanel from '$lib/components/views/Settings/groups/GroupsPanel.svelte';
+	import UsersPanel from '$lib/components/views/Settings/users/UsersPanel.svelte';
+	import APIKeysPanel from '$lib/components/views/Settings/api-keys/APIKeysPanel.svelte';
 	import UserSettingsEditor from '$lib/components/views/Settings/UserSettingsEditor.svelte';
 	import { activeGroupStore, updateSettingsTab } from '$lib/components/Layout/layoutStore';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
@@ -61,6 +62,8 @@
 			<WorkspacePanel />
 		{:else if selectedSection === 'roles'}
 			<RolesPanel />
+		{:else if selectedSection === 'groups'}
+			<GroupsPanel />
 		{:else if selectedSection === 'users'}
 			<UsersPanel />
 		{:else if selectedSection === 'api_keys'}

@@ -6,11 +6,11 @@ WHERE created_at < datetime('now', '-7 days');
 -- name: PruneHistoryForWorkspace :exec
 ; -- @no-track
 DELETE FROM history
-WHERE workspace_id = :workspace_id
-  AND id NOT IN (
-    SELECT id FROM history
-    WHERE workspace_id = :workspace_id
-    ORDER BY created_at DESC, id DESC
+WHERE history.workspace_id = :workspace_id
+  AND history.id NOT IN (
+    SELECT h.id FROM history h
+    WHERE h.workspace_id = :workspace_id
+    ORDER BY h.created_at DESC, h.id DESC
     LIMIT 100
   );
 

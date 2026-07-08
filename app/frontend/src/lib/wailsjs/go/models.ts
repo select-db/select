@@ -1227,15 +1227,18 @@ export namespace fs_provider {
 
 export namespace generated {
 	
-	export class ListRolesByWorkspaceRow {
+	export class Group {
 	    id: string;
 	    workspace_id: string;
 	    name: string;
-	    user_count: number;
-	    permission_count: number;
+	    source: string;
+	    external_id: db_types.JSONNullString;
+	    // Go type: time
+	    updated_at: any;
+	    deleted_at: sql.NullTime;
 	
 	    static createFrom(source: any = {}) {
-	        return new ListRolesByWorkspaceRow(source);
+	        return new Group(source);
 	    }
 	
 	    constructor(source: any = {}) {
@@ -1243,8 +1246,70 @@ export namespace generated {
 	        this.id = source["id"];
 	        this.workspace_id = source["workspace_id"];
 	        this.name = source["name"];
+	        this.source = source["source"];
+	        this.external_id = this.convertValues(source["external_id"], db_types.JSONNullString);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.deleted_at = this.convertValues(source["deleted_at"], sql.NullTime);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ListGroupsByWorkspaceRow {
+	    id: string;
+	    workspace_id: string;
+	    name: string;
+	    member_count: number;
+	    role_count: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ListGroupsByWorkspaceRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.workspace_id = source["workspace_id"];
+	        this.name = source["name"];
+	        this.member_count = source["member_count"];
+	        this.role_count = source["role_count"];
+	    }
+	}
+	export class ListRolesByWorkspaceRow {
+	    id: string;
+	    workspace_id: string;
+	    name: string;
+	    user_count: number;
+	    permission_count: number;
+	    group_count: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ListRolesByWorkspaceRow(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.workspace_id = source["workspace_id"];
+	        this.name = source["name"];
 	        this.user_count = source["user_count"];
 	        this.permission_count = source["permission_count"];
+	        this.group_count = source["group_count"];
 	    }
 	}
 	export class MutationCommit {
@@ -2235,6 +2300,43 @@ export namespace graph {
 
 }
 
+export namespace group {
+	
+	export class GroupRoleEntry {
+	    id: string;
+	    name?: string;
+	    group_to_role_id: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GroupRoleEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.group_to_role_id = source["group_to_role_id"];
+	    }
+	}
+	export class GroupUserEntry {
+	    id: string;
+	    name?: string;
+	    user_to_group_id: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GroupUserEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.user_to_group_id = source["user_to_group_id"];
+	    }
+	}
+
+}
+
 export namespace history {
 	
 	export class CreateQueryHistoryParams {
@@ -3019,11 +3121,28 @@ export namespace workspace {
 	        this.user_to_role_id = source["user_to_role_id"];
 	    }
 	}
+	export class WorkspaceUserGroup {
+	    id: string;
+	    name: string;
+	    user_to_group_id: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceUserGroup(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.user_to_group_id = source["user_to_group_id"];
+	    }
+	}
 	export class WorkspaceUserEntry {
 	    id: string;
 	    name?: string;
 	    email?: string;
 	    roles: WorkspaceUserRole[];
+	    groups: WorkspaceUserGroup[];
 	    is_owner: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -3036,6 +3155,7 @@ export namespace workspace {
 	        this.name = source["name"];
 	        this.email = source["email"];
 	        this.roles = this.convertValues(source["roles"], WorkspaceUserRole);
+	        this.groups = this.convertValues(source["groups"], WorkspaceUserGroup);
 	        this.is_owner = source["is_owner"];
 	    }
 	

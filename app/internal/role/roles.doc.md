@@ -1,6 +1,6 @@
 # Roles
 
-Roles group [permissions](/workspace/permissions/) together and are assigned to [users](/workspace/users/). Each workspace defines its own roles.
+Roles group [permissions](/workspace/permissions/) together and are assigned to [users](/workspace/users/) — directly, or through [groups](/workspace/groups/). Each workspace defines its own roles.
 
 ## Creating roles
 
@@ -10,7 +10,7 @@ You can also **duplicate** an existing role to use it as a starting point, then 
 
 ## Assigning users
 
-A role can have multiple users, and a user can have multiple roles. Permissions from all of a user's roles are combined.
+A role can have multiple users, and a user can have multiple roles. Assign a role to a user directly, or attach it to a [group](/workspace/groups/) so every member inherits it. Permissions from all of a user's roles — direct and group-derived — are combined.
 
 ## Examples
 

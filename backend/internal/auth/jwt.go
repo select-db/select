@@ -136,12 +136,32 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 			}
 		}
 
+		// A user's effective roles are the union of directly-assigned roles
+		// (user_to_role) and roles granted through group membership
+		// (user_to_group -> group_to_role), deduped per workspace.
 		rolesByWS := map[string][]RoleRef{}
+		seenRole := map[string]map[string]bool{}
+		addRole := func(ws, id, name string) {
+			if seenRole[ws] == nil {
+				seenRole[ws] = map[string]bool{}
+			}
+			if seenRole[ws][id] {
+				return
+			}
+			seenRole[ws][id] = true
+			rolesByWS[ws] = append(rolesByWS[ws], RoleRef{ID: id, Name: name})
+		}
 		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
 			for _, r := range rows {
 				if r.ID.Valid && r.WorkspaceID.Valid {
-					ws := r.WorkspaceID.UUID.String()
-					rolesByWS[ws] = append(rolesByWS[ws], RoleRef{ID: r.ID.UUID.String(), Name: r.Name.ValueOrEmpty()})
+					addRole(r.WorkspaceID.UUID.String(), r.ID.UUID.String(), r.Name.ValueOrEmpty())
+				}
+			}
+		}
+		if rows, err := db.Queries.GetUserGroupRolesWithNames(ctx, userID); err == nil {
+			for _, r := range rows {
+				if r.ID.Valid && r.WorkspaceID.Valid {
+					addRole(r.WorkspaceID.UUID.String(), r.ID.UUID.String(), r.Name.ValueOrEmpty())
 				}
 			}
 		}

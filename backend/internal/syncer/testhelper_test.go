@@ -102,6 +102,12 @@ func seedRole(t *testing.T, conn *sql.DB, id, workspaceID, name string) {
 	require.NoError(t, err)
 }
 
+func seedGroup(t *testing.T, conn *sql.DB, id, workspaceID, name string) {
+	t.Helper()
+	_, err := conn.Exec(`INSERT INTO app."group" (id, workspace_id, name) VALUES ($1::uuid, $2::uuid, $3)`, id, workspaceID, name)
+	require.NoError(t, err)
+}
+
 func seedPermission(t *testing.T, conn *sql.DB, id, roleID, workspaceID, action, effect string) {
 	t.Helper()
 	_, err := conn.Exec(

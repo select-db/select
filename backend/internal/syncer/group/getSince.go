@@ -1,0 +1,51 @@
+package group
+
+import (
+	"context"
+	"time"
+
+	"backend/db"
+	"backend/db/db_types"
+	"backend/db/generated"
+	"backend/internal/syncer/types"
+)
+
+func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]types.GroupRow, error) {
+	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Queries.GetGroupsForUserSince(ctx, generated.GetGroupsForUserSinceParams{
+		UserID:    userUUID,
+		UpdatedAt: db_types.NewJSONNullTimeFromTime(since),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]types.GroupRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, appGroupToTypesRow(r))
+	}
+	return out, nil
+}
+
+func appGroupToTypesRow(row generated.AppGroup) types.GroupRow {
+	r := types.GroupRow{
+		ID:          row.ID.String(),
+		WorkspaceID: row.WorkspaceID.String(),
+		Name:        row.Name.ValueOrEmpty(),
+		Source:      row.Source.ValueOrEmpty(),
+		UpdatedAt:   row.UpdatedAt.ValueOrZero(),
+	}
+	if row.ExternalID.Valid {
+		v := row.ExternalID.ValueOrEmpty()
+		r.ExternalID = &v
+	}
+	if row.DeletedAt.Valid {
+		t := row.DeletedAt.ValueOrZero()
+		r.DeletedAt = &t
+	}
+	return r
+}
