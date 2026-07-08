@@ -54,7 +54,7 @@
 		z-index: 1;
 		border-right: var(--border);
 		box-sizing: border-box;
-		background: var(--gray-100);
+		background: var(--gray-200);
 
 		display: flex;
 		flex-direction: column;

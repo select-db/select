@@ -193,7 +193,7 @@ func TestExecuteLocalRejectsAggregateOnSeeDenied(t *testing.T) {
 }
 
 // NOTE: GROUP BY / ORDER BY / HAVING / DISTINCT references are not currently
-// tracked by any dialect inspector — they don't end up in stmt.Fields. As a
+// tracked by any dialect inspector. They don't end up in stmt.Fields. As a
 // result, queries like `SELECT COUNT(*) FROM users GROUP BY email` slip through
 // every permission check today (including the existing select permission, not
 // just see). Fixing this requires per-dialect inspector changes to walk these

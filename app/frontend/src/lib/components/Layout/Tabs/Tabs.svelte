@@ -25,6 +25,9 @@
 	import { dragState } from './tabDragState.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import TabActions from './TabActions.svelte';
+	import { executeCommand } from '$lib/stores/commandRegistry';
+	import { scrollShadow } from '$lib/actions/scrollShadow';
+	import { titlebarSafe } from '$lib/actions/titlebarSafe';
 
 	type Props = {
 		tabs: Tab[];
@@ -196,8 +199,8 @@
 </script>
 
 {#if tabs.length}
-	<div class="tabs-container">
-		<div class="tab-nav-arrows" aria-label="Tab navigation">
+	<div class="tabs-container" style="--wails-draggable:drag">
+		<div class="tab-nav-arrows" use:titlebarSafe aria-label="Tab navigation">
 			<Button
 				size="sm"
 				emphasis="low"
@@ -207,7 +210,6 @@
 				disabled={!canNavigateToPreviousTab(groupId)}
 				style="padding-left: var(--space-sm);"
 				noBounce
-				noRadius
 			/>
 			<Button
 				size="sm"
@@ -218,13 +220,13 @@
 				disabled={!canNavigateToNextTab(groupId)}
 				style="padding-right: var(--space-sm);"
 				noBounce
-				noRadius
 			/>
 		</div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="wrapper no-scrollbar"
 			bind:this={wrapperElement}
+			use:scrollShadow={{ axis: 'x', top: true }}
 			ondragover={handleWrapperDragOver}
 			ondrop={handleWrapperDrop}
 		>
@@ -236,6 +238,8 @@
 
 				<div
 					class="tab-container"
+					class:first={index === 0}
+					class:last={index === tabs.length - 1}
 					in:scale={{ duration: 150, start: 0.9, opacity: 0 }}
 					out:scale={{ duration: 150, start: 1, opacity: 0 }}
 					animate:flip={{ duration: 150 }}
@@ -252,9 +256,7 @@
 							class:active
 							class:dragging={isDragged}
 							draggable="true"
-							onmousedown={() => {
-								cancelNextDrag = false;
-							}}
+							onmousedown={() => (cancelNextDrag = false)}
 							ondragstart={(e) => {
 								if (cancelNextDrag) {
 									cancelNextDrag = false;
@@ -301,6 +303,12 @@
 								classes="closeBtn"
 								noBounce
 							/>
+
+							{#if active}
+								<!-- Concave corners flaring the active tab into the content surface -->
+								<span class="flare flare-left"></span>
+								<span class="flare flare-right"></span>
+							{/if}
 						</div>
 					</Contextable>
 				</div>
@@ -309,6 +317,16 @@
 			{#if insertPosition === tabs.length && draggedTabId !== null && dragState.hoveredGroupId === groupId}
 				<div class="drop-indicator"></div>
 			{/if}
+
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div
+				class="tab new-tab"
+				title="New SQL file"
+				onclick={() => executeCommand('workbench.newSqlFile')}
+			>
+				<Icon icon="plus" size={16} />
+			</div>
 
 			<div class="placeholder"></div>
 		</div>
@@ -322,50 +340,93 @@
 <style>
 	.tabs-container {
 		position: relative;
-		height: 36px;
+		height: 38px;
 		display: flex;
 		align-items: stretch;
-		background-color: var(--gray-100);
+
+		gap: var(--space-xs);
+		/* Scope the seam line's z-index so it stays behind the tabs only */
+		isolation: isolate;
 	}
+
+	.tabs-container::after {
+		content: '';
+		position: absolute;
+		/* content-box: the border-top sits *above* the declared height, which is
+		   what lands the seam line flush on the content edge. */
+		box-sizing: content-box;
+		left: 0;
+		right: 0;
+		bottom: calc(-1 * var(--br-sm));
+		height: var(--br-sm);
+		border: var(--border);
+		border-bottom: none;
+		border-top-left-radius: var(--br-sm);
+		border-top-right-radius: var(--br-sm);
+		z-index: -1;
+		pointer-events: none;
+	}
+
+	/* Opt out only the buttons (not the .tab-nav-arrows box), so the safe-space
+	   padding titlebarSafe adds beside the traffic lights stays window-draggable. */
+	.tab-nav-arrows :global(button),
+	.wrapper .tab {
+		--wails-draggable: no-drag;
+	}
+
 	.tab-nav-arrows {
 		display: flex;
 		align-items: stretch;
-		border-right: var(--border);
-		border-bottom: var(--border);
-		z-index: 10;
+		gap: var(--space-xs-sm);
+		padding-bottom: var(--space-xs-sm);
 	}
 	.wrapper {
 		flex: 1;
 		display: flex;
 		align-items: stretch;
 		overflow-x: auto;
+		gap: var(--space-xs-sm);
 	}
 	.placeholder {
 		flex: 1;
-		border-bottom: var(--border);
 	}
 	.tab-container {
 		display: flex;
 		align-items: stretch;
 	}
+	.tab-container.first {
+		margin-left: var(--space-sm);
+	}
+	.tab-container.last {
+		margin-right: var(--space-sm);
+	}
 	.wrapper .tab {
 		position: relative;
-		padding: var(--space-xs-sm) var(--space-xs-sm) var(--space-xs-sm) var(--space-sm-md);
+		padding: var(--space-xs-sm) var(--space-sm-md) var(--space-xs-sm) var(--space-sm-md);
 		display: flex;
 		align-items: center;
-		/* border-right: var(--border); */
-		background-color: var(--gray-100);
+		border-radius: var(--br-sm);
+		background-color: var(--gray-200);
 		border-left: var(--bw) transparent solid;
 		border-right: var(--bw) transparent solid;
-		border-bottom: var(--border);
+		border-top: var(--bw) transparent solid;
 
+		margin-bottom: var(--space-xs-sm);
 		transition:
 			background-color 0.05s ease-out 0.03s,
 			opacity 0.15s ease-out,
 			border-color 0.15s ease-out;
 	}
-	.wrapper .tab-container:first-child .tab {
-		border-left: none;
+	.wrapper .new-tab {
+		padding: 0 var(--space-sm);
+		justify-content: center;
+	}
+	.wrapper .new-tab {
+		background: transparent;
+	}
+	.wrapper .new-tab:hover :global(svg) {
+		background: inherit;
+		stroke: var(--gray-1000);
 	}
 	.wrapper .tab .name {
 		color: var(--gray-800);
@@ -378,15 +439,52 @@
 	}
 	.wrapper .tab:hover,
 	.wrapper .tab.active {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 	.wrapper .tab.active {
+		/* Concave flare radius. A touch larger than --br-sm since an inverted
+		   corner reads tighter than a convex one of the same radius. */
+		--flare-r: calc(var(--br-sm) + 2px);
 		border-color: var(--border-color);
 		border-bottom-color: transparent;
+		border-bottom-left-radius: 0;
+		border-bottom-right-radius: 0;
+		margin-bottom: 0;
+	}
+	.flare {
+		position: absolute;
+		bottom: 0;
+		width: var(--flare-r);
+		height: var(--flare-r);
+		overflow: hidden;
+		pointer-events: none;
+	}
+	.flare-left {
+		left: calc(-1 * var(--flare-r));
+	}
+	.flare-right {
+		right: calc(-1 * var(--flare-r));
+	}
+	.flare::after {
+		content: '';
+		position: absolute;
+		box-sizing: border-box;
+		width: calc(2 * var(--flare-r));
+		height: calc(2 * var(--flare-r));
+		top: calc(-1 * var(--flare-r));
+		border-radius: 50%;
+		border: var(--bw) solid var(--border-color);
+		box-shadow: 0 0 0 var(--flare-r) var(--gray-200);
+	}
+	.flare-left::after {
+		left: calc(-1 * var(--flare-r));
+	}
+	.flare-right::after {
+		right: calc(-1 * var(--flare-r));
 	}
 	:global(.wrapper .tab.active p) {
 		color: var(--gray-1000);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 	.wrapper .tab.dragging {
 		opacity: 0.4;
@@ -398,14 +496,37 @@
 		align-self: stretch;
 		flex-shrink: 0;
 	}
+	/* Close button: pinned to the right of the tab, revealed only on hover. */
 	:global(.wrapper .tab .closeBtn) {
+		position: absolute;
+		right: var(--space-xs-sm);
+		top: 50%;
+		transform: translateY(-50%);
+		z-index: 2;
 		opacity: 0;
 		transition: opacity 0.15s ease-in-out;
 		pointer-events: none;
 	}
-	:global(.wrapper .tab:hover .closeBtn),
-	:global(.wrapper .tab.active .closeBtn) {
+	:global(.wrapper .tab:hover .closeBtn) {
 		opacity: 1;
 		pointer-events: auto;
+	}
+	.wrapper .tab:not(.new-tab)::after {
+		content: '';
+		position: absolute;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		width: 3em;
+		border-top-right-radius: var(--br-sm);
+		border-bottom-right-radius: var(--br-sm);
+		background: linear-gradient(to left, var(--gray-200) 60%, transparent);
+		opacity: 0;
+		transition: opacity 0.15s ease-in-out;
+		pointer-events: none;
+		z-index: 1;
+	}
+	.wrapper .tab:not(.new-tab):hover::after {
+		opacity: 1;
 	}
 </style>

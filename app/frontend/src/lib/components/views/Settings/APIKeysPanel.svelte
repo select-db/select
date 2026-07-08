@@ -217,7 +217,7 @@
 	{#if key === 'name'}
 		<span class="name selectable truncate">{k.name ?? k.id}</span>
 	{:else if key === 'key'}
-		<code class="prefix selectable">sdb_{k.prefix ? k.prefix + '*****' : '-'}</code>
+		<code class="prefix selectable">slct_{k.prefix ? k.prefix + '*****' : '-'}</code>
 	{:else if key === 'roles'}
 		{#if canManage}
 			<Button
@@ -287,7 +287,6 @@
 		justify-content: space-between;
 		gap: var(--space-xs);
 		padding: var(--space-sm);
-		border-bottom: var(--border);
 		flex-shrink: 0;
 		height: 24px;
 	}
@@ -315,6 +314,7 @@
 	.keys-table-wrap {
 		flex: 1;
 		overflow: hidden;
+		margin: 0 var(--space-sm);
 	}
 	.actions-inner {
 		display: flex;

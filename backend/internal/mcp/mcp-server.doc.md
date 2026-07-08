@@ -21,7 +21,7 @@ Seven tools, no shell access, no file access. The model is bounded to the dataso
 2. **Add the server to your client.** For Claude Code in VS Code, run from a terminal:
    ```
    claude mcp add --transport http selectdb https://your-backend/mcp \
-     --header "Authorization: Bearer sdb_xxxxxxxxxxxxxxxx"
+     --header "Authorization: Bearer slct_xxxxxxxxxxxxxxxx"
    ```
    Or edit `~/.claude.json` directly:
    ```json
@@ -30,7 +30,7 @@ Seven tools, no shell access, no file access. The model is bounded to the dataso
        "selectdb": {
          "type": "http",
          "url": "https://your-backend/mcp",
-         "headers": { "Authorization": "Bearer sdb_xxxxxxxxxxxxxxxx" }
+         "headers": { "Authorization": "Bearer slct_xxxxxxxxxxxxxxxx" }
        }
      }
    }

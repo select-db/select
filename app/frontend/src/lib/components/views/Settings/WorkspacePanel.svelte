@@ -8,7 +8,7 @@
 	import { AlertType } from '$lib/system/Alert/types';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { UpdateName, DeleteWorkspace } from '$lib/wailsjs/go/workspace/Workspace';
-	import { Logout } from '$lib/wailsjs/go/system/System';
+	import { Logout, UpdateWorkspaceExecutionLimits } from '$lib/wailsjs/go/system/System';
 	import { get } from 'svelte/store';
 	import { graph } from '$lib/wailsjs/go/models';
 	import ConfirmDeleteWorkspaceModal from './ConfirmDeleteWorkspaceModal.svelte';
@@ -16,26 +16,58 @@
 	let name = $state('');
 	let saving = $state(false);
 
+	// Execution limits are team policy stored on the workspace (synced via the
+	// backend), shared with everyone in the workspace.
+	let statementTimeoutMs = $state(30000);
+	let maxResultSizeMb = $state(100);
+
 	$effect(() => {
 		const g = get(workspaceGraphStore);
 		if (g?.name != null) name = g.name;
+		if (g?.statement_timeout_ms != null) statementTimeoutMs = g.statement_timeout_ms;
+		if (g?.max_result_size_mb != null) maxResultSizeMb = g.max_result_size_mb;
 	});
 
+	// Saves the whole workspace settings form (name + execution limits) at once.
 	async function save() {
 		const g = get(workspaceGraphStore);
-		if (!g?.id || !name.trim()) return;
+		if (!g?.id) return;
 
 		saving = true;
-		const [, err] = await tryCatch(UpdateName, g.id, name.trim());
+		const trimmedName = name.trim();
+
+		// Name is required: only update it when it changed and is non-empty.
+		if (trimmedName && trimmedName !== g.name) {
+			const [, err] = await tryCatch(UpdateName, g.id, trimmedName);
+			if (err) {
+				saving = false;
+				notify({ type: AlertType.Error, message: err?.message ?? 'Failed to save workspace' });
+				return;
+			}
+		}
+
+		const [res, err] = await tryCatch(
+			UpdateWorkspaceExecutionLimits,
+			Math.trunc(statementTimeoutMs),
+			Math.trunc(maxResultSizeMb)
+		);
 		saving = false;
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to update name' });
+		if (err || !res) {
+			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to save workspace' });
 			return;
 		}
 
-		notify({ type: AlertType.Success, message: 'Workspace name updated' });
+		// Reflect the normalized values the backend actually stored.
+		statementTimeoutMs = res.statement_timeout_ms;
+		maxResultSizeMb = res.max_result_size_mb;
+		notify({ type: AlertType.Success, message: 'Workspace settings saved' });
 
-		workspaceGraphStore.set({ ...g, name: name.trim() } as graph.WorkspaceNode);
+		workspaceGraphStore.set({
+			...g,
+			name: trimmedName || g.name,
+			statement_timeout_ms: res.statement_timeout_ms,
+			max_result_size_mb: res.max_result_size_mb
+		} as graph.WorkspaceNode);
 	}
 
 	function openDeleteConfirm() {
@@ -71,6 +103,16 @@
 		<p class="section-title">Workspace name</p>
 		<div class="field">
 			<Input bind:value={name} placeholder="My Workspace" />
+		</div>
+		<div></div>
+		<p class="section-title">Execution limits</p>
+		<div class="field" style="max-width: 150px;">
+			<span class="field-label">Statement timeout (ms)</span>
+			<Input type="number" min={1} bind:value={statementTimeoutMs} placeholder="30000" />
+		</div>
+		<div class="field" style="max-width: 150px;">
+			<span class="field-label">Max result size (MB)</span>
+			<Input type="number" min={1} max={250} bind:value={maxResultSizeMb} placeholder="100" />
 		</div>
 		<div class="actions">
 			<Button content="Save" emphasis="high" size="sm" onclick={save} disabled={saving} />
@@ -109,7 +151,12 @@
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-sm);
+		gap: var(--space-xs);
+		max-width: 275px;
+	}
+	.field-label {
+		font-size: var(--fs-xs);
+		color: var(--gray-800);
 	}
 	.actions {
 		margin-top: var(--space-xs);

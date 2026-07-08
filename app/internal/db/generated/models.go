@@ -27,6 +27,9 @@ type History struct {
 	Errors       string        `json:"errors"`
 	Uri          interface{}   `json:"uri"`
 	Dsn          interface{}   `json:"dsn"`
+	CreatedAt    time.Time     `json:"created_at"`
+	WorkspaceID  string        `json:"workspace_id"`
+	DbInstanceID string        `json:"db_instance_id"`
 }
 
 type MutationCommit struct {
@@ -79,11 +82,13 @@ type UserToRole struct {
 }
 
 type Workspace struct {
-	ID           string                  `json:"id"`
-	Name         string                  `json:"name"`
-	GitRemoteUrl db_types.JSONNullString `json:"git_remote_url"`
-	LastPulledAt sql.NullTime            `json:"last_pulled_at"`
-	OwnerID      db_types.JSONNullString `json:"owner_id"`
+	ID                 string                  `json:"id"`
+	Name               string                  `json:"name"`
+	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
+	LastPulledAt       sql.NullTime            `json:"last_pulled_at"`
+	OwnerID            db_types.JSONNullString `json:"owner_id"`
+	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
+	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
 }
 
 type WorkspaceToUser struct {

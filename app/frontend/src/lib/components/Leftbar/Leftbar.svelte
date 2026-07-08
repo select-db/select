@@ -4,13 +4,16 @@
 
 	import Resizer from './Resizer.svelte';
 	import Content from './Content/Content.svelte';
+	import Search from './Search/Search.svelte';
+	import NewFileButton from './NewFileButton.svelte';
+	import WorkspaceButton from './WorkspaceButton.svelte';
 
 	const MIN_WIDTH = 0;
 	const DEFAULT_WIDTH = 200;
 
 	let closed = $state(false);
 	let leftbarWidth: number = $state(
-		parseInt(localStorage.getItem('leftbarWidth') || `${DEFAULT_WIDTH}`, 10)
+		parseInt(localStorage.getItem('leftbarWidth') || `${DEFAULT_WIDTH}`, 200)
 	);
 	let resizing: boolean = $state(false);
 	let style = $derived(
@@ -29,6 +32,12 @@
 	<Resizer bind:width={leftbarWidth} bind:resizing />
 
 	<aside class="leftbar" class:resizing>
+		<div class="actions-wrapper" style="--wails-draggable:drag">
+			<WorkspaceButton />
+			<div style="margin-left: auto;"></div>
+			<Search />
+			<NewFileButton />
+		</div>
 		<Content />
 	</aside>
 </div>
@@ -37,6 +46,9 @@
 	.wrapper {
 		position: relative;
 		overflow: hidden;
+		max-width: 420px;
+		/* Keep the user's width; never let tab content squeeze the bar. */
+		flex-shrink: 0;
 	}
 
 	.leftbar {
@@ -47,11 +59,19 @@
 		height: 100%;
 	}
 
+	.actions-wrapper {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		padding: 30px var(--space-sm-md) var(--space-sm) var(--space-sm);
+		border-bottom: var(--border);
+	}
+
 	.leftbar.resizing {
 		transition: none;
 	}
 
 	:global(.leftbar:hover .depth-spacer) {
-		border-left-color: var(--gray-600);
+		border-left-color: var(--gray-400);
 	}
 </style>

@@ -50,7 +50,8 @@ EventsOn('workspaceRepoChanged', async (info: WorkspaceRepoChange) => {
 	} else if (info.action === 'unlinked') {
 		notify({
 			type: AlertType.Default,
-			message: 'This workspace is no longer linked to a git repository. Your files were kept locally.',
+			message:
+				'This workspace is no longer linked to a git repository. Your files were kept locally.',
 			duration: 8000
 		});
 	} else if (info.action === 'linked' && info.changed) {
@@ -102,7 +103,7 @@ EventsOn('login', async () => {
 		notify({
 			type: AlertType.Default,
 			message:
-				'This workspace is linked to a Git repository, but Git is not installed — its files cannot sync until you install Git.',
+				'This workspace is linked to a Git repository, but Git is not installed. Its files cannot sync until you install Git.',
 			duration: 12000,
 			copyable: true
 		});

@@ -187,16 +187,13 @@
 		flex-direction: column;
 
 		height: 100%;
-		background-color: var(--gray-100);
 	}
 
 	.header {
 		display: flex;
 		align-items: start;
 
-		min-height: 35px;
-		background-color: var(--gray-0);
-		padding: var(--space-xs-sm) var(--space-sm) 0 var(--space-sm);
+		padding: var(--space-xs-sm) var(--space-sm) var(--space-sm) var(--space-sm);
 		border-bottom: var(--border);
 	}
 

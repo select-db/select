@@ -28,8 +28,14 @@ CREATE TABLE history (
     errors TEXT NOT NULL DEFAULT '[]',
 
     uri TEXT NOT NULL DEFAULT "",
-    dsn TEXT NOT NULL DEFAULT ""
+    dsn TEXT NOT NULL DEFAULT "",
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    workspace_id TEXT NOT NULL DEFAULT '',
+    db_instance_id TEXT NOT NULL DEFAULT ''
 );
+
+CREATE INDEX idx_history_workspace_created_at ON history(workspace_id, created_at DESC);
 
 CREATE TABLE mutation_commit (
     id TEXT PRIMARY KEY,
@@ -100,7 +106,7 @@ CREATE TABLE workspace (
     git_remote_url TEXT,
 
     last_pulled_at DATETIME
-, owner_id TEXT REFERENCES user(id) ON DELETE SET NULL);
+, owner_id TEXT REFERENCES user(id) ON DELETE SET NULL, statement_timeout_ms INTEGER NOT NULL DEFAULT 30000, max_result_size_mb INTEGER NOT NULL DEFAULT 100);
 
 CREATE TABLE workspace_to_user (
     id TEXT PRIMARY KEY,

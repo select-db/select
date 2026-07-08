@@ -300,18 +300,17 @@
 	:global(.leftbar .sticky) {
 		position: sticky;
 		z-index: 1;
-		background-color: var(--gray-100);
 	}
 
 	:global(.leftbar .sticky .item) {
-		background-color: var(--gray-100);
+		background-color: var(--gray-0);
 	}
 	:global(.leftbar .sticky .item:hover) {
-		background: var(--gray-550);
+		background: var(--gray-300);
 	}
 
 	:global(.leftbar .sticky.last .item) {
 		border-bottom: var(--border) !important;
-		box-shadow: var(--gray-200) 0px 20px 20px -10px;
+		box-shadow: var(--shadow) 0px 20px 20px -10px;
 	}
 </style>

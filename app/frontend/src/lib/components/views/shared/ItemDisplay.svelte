@@ -206,23 +206,14 @@
 	:global([data-depth='0'] > *:not(:first-child) .item[data-depth='0']) {
 		border-top: var(--bw) transparent solid;
 	}
-	:global([data-depth='0'] > *:not(:first-child) .item[data-depth='0'].selected) {
-		border-top-color: var(--border-color);
-	}
 	.item.selected {
-		background: var(--gray-400) !important;
+		background: var(--gray-300) !important;
 	}
 	.item:not(.selected):hover {
-		background: var(--gray-550) !important;
-	}
-	.item.selected.has-border-top {
-		border-top-color: var(--border-color);
-	}
-	.item.selected {
-		border-bottom-color: var(--border-color);
+		background: var(--gray-300) !important;
 	}
 	.item.hovered-target {
-		background: var(--gray-0) !important;
+		background: var(--gray-300) !important;
 	}
 	.item-name-wrapper {
 		display: flex;
@@ -269,10 +260,10 @@
 		transition: border-left-color 0.3s ease-out;
 	}
 	.item.selected .depth-spacer {
-		border-left-color: var(--gray-600) !important;
+		border-left-color: var(--gray-300) !important;
 	}
 	.item:hover .depth-spacer {
-		border-left-color: var(--gray-550) !important;
+		border-left-color: var(--gray-300) !important;
 	}
 
 	.item .content {
@@ -289,13 +280,16 @@
 		position: sticky;
 	}
 	.item .badge-wrapper .badge {
-		background-color: var(--gray-0);
-		padding: var(--space-xxs) var(--space-xs);
+		background-color: var(--gray-200);
+		padding: var(--space-xs) var(--space-xs-sm);
 		color: var(--gray-800);
 		border-radius: var(--br-xs);
 		height: fit-content;
-		margin-top: 8px;
+		margin-top: 4px;
 		font-size: var(--fs-xs);
+		display: flex;
+		align-items: center;
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.item .action-wrapper {

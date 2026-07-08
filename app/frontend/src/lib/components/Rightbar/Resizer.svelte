@@ -7,7 +7,7 @@
 
 	export let width: number = parseInt(
 		localStorage.getItem('rightbarWidth') || `${DEFAULT_WIDTH}`,
-		10
+		200
 	);
 	export let resizing: boolean = false;
 
@@ -41,7 +41,7 @@
 <style>
 	#resizer {
 		position: absolute;
-		top: var(--space-sm-md);
+		top: 64px;
 		left: 1px;
 		bottom: var(--space-sm-md);
 
@@ -56,7 +56,7 @@
 
 	#resizer:hover,
 	#resizer.resizing {
-		border-left: var(--bw) var(--gray-700) solid;
+		border-left: var(--bw) var(--white-glow) solid;
 	}
 
 	#resizer:active {

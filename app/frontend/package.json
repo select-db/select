@@ -21,14 +21,14 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@types/dompurify": "^3.2.0",
     "@typescript-eslint/eslint-plugin": "^8.29.0",
-    "@typescript-eslint/parser": "^8.60.1",
+    "@typescript-eslint/parser": "^8.62.0",
     "eslint": "^9.23.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
     "globals": "^17.6.0",
     "prettier": "^3.5.3",
     "prettier-plugin-svelte": "^4.1.0",
-    "svelte": "^5.0.0",
+    "svelte": "^5.56.4",
     "svelte-check": "^4.6.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.60.1",
@@ -54,7 +54,7 @@
     "marked": "^17.0.3",
     "marked-katex-extension": "^5.1.7",
     "monaco-editor": "^0.52.2",
-    "sql-formatter": "^15.4.11",
+    "sql-formatter": "^15.8.2",
     "zod": "^4.4.3"
   }
 }

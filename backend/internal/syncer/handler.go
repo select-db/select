@@ -2,7 +2,9 @@ package syncer
 
 import (
 	"backend/db/db_types"
+	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/authz"
 	"backend/internal/middlewares"
 	"backend/internal/syncer/types"
 	"encoding/json"
@@ -19,7 +21,13 @@ func Handler() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		roleIDs := middlewares.GetRoleIDs(r)
+		// Flatten role ids across workspaces for authorizeCommit's per-commit checks.
+		var roleIDs []string
+		for _, ws := range middlewares.GetPrincipal(r).Workspaces {
+			for _, role := range ws.Roles {
+				roleIDs = append(roleIDs, role.ID)
+			}
+		}
 		ownedWorkspaceIDs := middlewares.GetOwnedWorkspaceIDs(r)
 
 		if r.Method != http.MethodPost {
@@ -33,7 +41,14 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
-		resp, needsTokenRefresh, err := Sync(r.Context(), userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
+		// Stash a principal resolver so patch.Apply can attach the actor without
+		// threading it through every entity signature. Workspace is per-commit: a
+		// sync spans workspaces, so there's no single member workspace here.
+		ctx := audit.ContextWithPrincipalResolver(r.Context(), func(workspaceID string) audit.Principal {
+			return authz.RequestPrincipal(r, workspaceID)
+		})
+
+		resp, needsTokenRefresh, err := Sync(ctx, userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

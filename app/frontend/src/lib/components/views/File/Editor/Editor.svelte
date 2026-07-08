@@ -99,19 +99,24 @@
 		tab: Tab;
 		content?: string;
 		language?: string;
-		onchange?: (content: string, panelIndex?: number) => void;
+		onContentChange?: (content: string, panelIndex?: number) => void;
 
 		errorPosition?: number | null;
 		errorMessage?: string | null;
+
+		standalone?: boolean;
+		onStateChange?: (viewState: unknown) => void;
 	};
 
 	let {
 		tab,
 		content = '',
 		language = 'plaintext',
-		onchange,
+		onContentChange,
 		errorPosition = null,
-		errorMessage = null
+		errorMessage = null,
+		standalone = false,
+		onStateChange
 	}: Props = $props();
 
 	const effectiveDbId = $derived(getEffectiveSelectedDbId(tab.file?.node, tab));
@@ -126,12 +131,18 @@
 	let editorDirty = false;
 	let cursorDisposable: monaco.IDisposable | null = null;
 	let selectionDisposable: monaco.IDisposable | null = null;
+	let scrollDisposable: monaco.IDisposable | null = null;
+	let editorTextFocused = $state(false);
+
+	const persistViewState = debounce(() => {
+		if (editor && onStateChange) onStateChange(editor.saveViewState() ?? undefined);
+	}, 300);
 
 	const isDiffMode = $derived(!!tab.diff);
 
 	export function format() {
 		if (currentLanguage !== 'sql-custom') return;
-		formatSQL(editor, 'postgresql', (c) => onchange?.(c));
+		formatSQL(editor, 'postgresql', (c) => onContentChange?.(c));
 	}
 
 	export function focus() {
@@ -198,8 +209,8 @@
 
 		editorDirty = false;
 
-		if (!onchange) return;
-		onchange(model.getValue(), isDiffMode ? DIFF_PANEL_MODIFIED : undefined);
+		if (!onContentChange) return;
+		onContentChange(model.getValue(), isDiffMode ? DIFF_PANEL_MODIFIED : undefined);
 	}, 200);
 
 	async function buildModelUri(uri: string, tabId: string): Promise<monaco.Uri> {
@@ -393,13 +404,22 @@
 			ed.onDidFocusEditorText(() => {
 				setActiveFileGetter(getFile);
 				setContext('editorFocus', true);
+				editorTextFocused = true;
 			});
 			ed.onDidBlurEditorText(() => {
 				setContext('editorFocus', false);
+				editorTextFocused = false;
 			});
 			syncCurrentFileFromEditor(ed, tab);
-			cursorDisposable = ed.onDidChangeCursorPosition(() => syncCurrentFileFromEditor(ed, tab));
-			selectionDisposable = ed.onDidChangeCursorSelection(() => syncCurrentFileFromEditor(ed, tab));
+			cursorDisposable = ed.onDidChangeCursorPosition(() => {
+				syncCurrentFileFromEditor(ed, tab);
+				persistViewState();
+			});
+			selectionDisposable = ed.onDidChangeCursorSelection(() => {
+				syncCurrentFileFromEditor(ed, tab);
+				persistViewState();
+			});
+			scrollDisposable = ed.onDidScrollChange(() => persistViewState());
 
 			scrollToLineUnsubscribe = EventsOn('editor:scrollToLine', scrollToLine);
 			await mountContent(content, language, tab.id);
@@ -429,9 +449,12 @@
 	});
 
 	const isFocused = $derived($activeGroupStore?.activeTabId === tab.id);
+	// Detached editors (Settings theme/config) are never the active tab of a
+	// layout group, so fall back to live editor focus to own keybinding commands.
+	const commandsActive = $derived(standalone ? editorTextFocused : isFocused);
 	$effect(() => {
 		const ed = editor;
-		if (!ed || isDiffMode || !isFocused) return;
+		if (!ed || isDiffMode || !commandsActive) return;
 
 		const handlers: Array<[string, () => void]> = [];
 		for (const [command, action] of Object.entries(editorCommandMap)) {
@@ -504,8 +527,10 @@
 	});
 
 	onDestroy(() => {
+		if (editor && onStateChange) onStateChange(editor.saveViewState() ?? undefined);
 		cursorDisposable?.dispose();
 		selectionDisposable?.dispose();
+		scrollDisposable?.dispose();
 		changeListenerDisposable?.dispose();
 		diffChangeDisposable?.dispose();
 		scrollToLineUnsubscribe?.();
@@ -548,17 +573,18 @@
 	}
 
 	:global(.editorContainer .monaco-editor) {
-		--vscode-editorStickyScroll-background: var(--gray-0);
-		--vscode-editor-background: var(--gray-0);
+		--vscode-editorStickyScroll-background: var(--gray-200);
+		--vscode-editor-background: var(--gray-200);
+		--vscode-input-background: var(--gray-100);
 	}
 
 	:global(.editorContainer .monaco-editor .margin) {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	:global(.editorContainer .monaco-diff-editor) {
-		--vscode-editorStickyScroll-background: var(--gray-0);
-		--vscode-editor-background: var(--gray-0);
+		--vscode-editorStickyScroll-background: var(--gray-200);
+		--vscode-editor-background: var(--gray-200);
 	}
 
 	:global(.editorContainer .monaco-editor) {
@@ -605,7 +631,7 @@
 		vertical-align: top;
 		word-break: break-word;
 		color: var(--gray-1000);
-		background: var(--gray-0);
+		background: var(--gray-200);
 	}
 
 	:global(.monaco-hover table tbody tr:nth-child(even) td) {
@@ -646,7 +672,7 @@
 
 	.uri-wrapper {
 		padding: var(--space-sm) var(--space-sm-md);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.editorContainer {

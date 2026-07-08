@@ -13,7 +13,10 @@
 	const isVertical = $derived(split.orientation === 'vertical');
 	const flexDirection = $derived(isVertical ? 'row' : 'column');
 	const childStyles = $derived(
-		children.map((_, i) => `flex: 0 0 ${split.sizes[i] * 100}%; overflow: hidden;`)
+		children.map(
+			(_, i) =>
+				`flex: 0 0 calc((100% - ${children.length - 1} * (2 * var(--space-xs) + var(--bw))) * ${split.sizes[i]}); overflow: hidden;`
+		)
 	);
 
 	let containerElement: HTMLElement | null = $state(null);
@@ -92,6 +95,7 @@
 	.container {
 		display: flex;
 		height: 100%;
+		gap: var(--space-xs);
 	}
 
 	.resizer {
@@ -106,7 +110,7 @@
 		width: 4px;
 		margin-right: -4px;
 		cursor: col-resize;
-		border-left: var(--border);
+		border-left: var(--bw) transparent solid;
 		background-clip: padding-box;
 	}
 
@@ -114,7 +118,7 @@
 		height: 4px;
 		margin-bottom: -4px;
 		cursor: row-resize;
-		border-top: var(--border);
+		border-top: var(--bw) transparent solid;
 		background-clip: padding-box;
 	}
 

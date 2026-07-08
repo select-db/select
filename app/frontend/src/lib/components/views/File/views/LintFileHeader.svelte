@@ -44,14 +44,14 @@
 			{#if hasUnsavedChanges}
 				<Button
 					leftIcon="check"
-					iconSize={18}
+					iconSize={16}
 					content="Apply"
 					onclick={handleSave}
 					emphasis="high"
 				/>
 			{/if}
 			{#if isModifiedFromDefault}
-				<Button leftIcon="refresh" iconSize={18} content="Reset" onclick={handleReset} />
+				<Button leftIcon="refresh" iconSize={16} content="Reset" onclick={handleReset} />
 			{/if}
 		</div>
 	</div>
@@ -60,7 +60,6 @@
 <style>
 	.wrapper {
 		min-height: 35px;
-		background-color: var(--gray-0);
 		display: flex;
 		gap: var(--space-sm);
 		justify-content: space-between;

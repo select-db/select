@@ -1,7 +1,7 @@
 // Prod region catalog. Only `available` regions map to a live server domain;
 // the rest render as "Coming soon". Adding a region later: flip `available`
 // and fill `domain` with its api host. Selecting a region just calls
-// SetCurrentServer(domain) (idempotent — creates + migrates the local DB if
+// SetCurrentServer(domain) (idempotent, creates + migrates the local DB if
 // missing), so no extra wiring is needed when a new region goes live.
 export type FlagCode = 'us' | 'eu';
 

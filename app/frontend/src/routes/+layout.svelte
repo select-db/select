@@ -14,7 +14,6 @@
 	import { StartFileWatcher, StartDatabaseWatcher } from '$lib/wailsjs/go/system/System';
 
 	import Leftbar from '$lib/components/Leftbar/Leftbar.svelte';
-	import Titlebar from '$lib/components/Titlebar/Titlebar.svelte';
 	import PageLogin from '$lib/components/PageLogin/PageLogin.svelte';
 	import Rightbar from '$lib/components/Rightbar/Rightbar.svelte';
 	import Bottombar from '$lib/components/Bottombar/Bottombar.svelte';
@@ -87,15 +86,14 @@
 </script>
 
 <div class="wrapper">
-	<Titlebar />
-
 	<div class="layout">
 		{#if $sessionCheckingStore}
 			<div class="session-loader"><Loader size={24} /></div>
 		{:else if $workspaceGraphStore}
 			{#key `${$themeVersionStore}-${$configVersionStore}-${$lintVersionStore}`}
 				<Leftbar />
-				<main class:no-left-border={!$isLeftbarOpened} class:no-right-border={!$isRightbarOpened}>
+				<main class:left-bar-closed={!$isLeftbarOpened} class:right-bar-closed={!$isRightbarOpened}>
+					<div class="drag-spacer" style="--wails-draggable:drag"></div>
 					<EditorLayout node={$layoutStore.root} />
 				</main>
 				<Rightbar />
@@ -135,25 +133,28 @@
 	}
 
 	main {
-		background-color: var(--gray-0);
-		border: var(--border);
-		border-radius: var(--br-sm);
-		flex-grow: 1;
+		display: flex;
+		flex-direction: column;
+		/* flex-basis:0 + min-width:0 → main's width is purely the leftover space
+		   between the side bars, never influenced by (over)wide tab content.
+		   Combined with overflow:hidden, content clips/scrolls inside main. */
+		flex: 1 1 0;
+		min-width: 0;
 		overflow: hidden;
-
 		z-index: 2;
+
+		box-shadow: var(--shadow-main);
 	}
 
-	main.no-left-border {
-		border-top-left-radius: 0;
-		border-bottom-left-radius: 0;
-		border-left: none;
+	.drag-spacer {
+		flex-shrink: 0;
+		height: var(--space-sm);
 	}
-
-	main.no-right-border {
-		border-top-right-radius: 0;
-		border-bottom-right-radius: 0;
-		border-right: none;
+	main.left-bar-closed {
+		padding-left: var(--space-sm);
+	}
+	main.right-bar-closed {
+		padding-right: var(--space-sm);
 	}
 
 	.session-loader {

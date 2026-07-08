@@ -139,7 +139,7 @@
 </script>
 
 <div class="search-panel">
-	<div class="section space x y">
+	<div class="section space x y" style="padding-top: var(--space-xs);">
 		<div class="options">
 			<Button
 				emphasis={caseSensitive ? 'high' : 'low'}

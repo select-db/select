@@ -40,7 +40,7 @@ If error is returned, surface it to the user and do not proceed.`,
 
 type ImplArgs = z.infer<typeof inputSchema>;
 
-async function readFileImpl(args: unknown) {
+async function readFileImpl(args: unknown): Promise<z.infer<typeof outputSchema>> {
 	const { uri } = args as ImplArgs;
 
 	// Temp files: resolve tab and return in-memory content (no backend).

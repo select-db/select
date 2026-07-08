@@ -9,6 +9,7 @@ import { tryCatch } from '../tryCatch';
 import { ensureSSHPassphraseForInstance } from '../ssh/passphrase';
 import { loadingStore, pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
 import { executions, markCancelled, waitForStarted } from './queryStream.svelte';
+import { registerPendingHistory } from './historyRecorder';
 
 type RunQueryParams = db_client.QueryParams;
 type RunExplainParams = db_client.ExplainParams;
@@ -90,6 +91,11 @@ export const runQuery = async (
 		notifyError('Failed to run query');
 		return null;
 	}
+
+	// Pair this execution with its statement so the terminal done/error event
+	// can record it to local history (interactive runs only — exports use the
+	// synchronous Query() path above and are never registered).
+	registerPendingHistory(start.executionId, params.Statement, params.DbInstanceID);
 
 	if (start.errors && start.errors.length > 0) {
 		// The backend also emits 'query:error' on prepare failure, but events

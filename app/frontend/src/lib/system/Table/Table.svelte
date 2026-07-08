@@ -110,13 +110,15 @@
 
 <style>
 	.table-scroll {
-		flex: 1;
+		display: flex;
 		overflow: auto;
 		min-height: 0;
+		border: var(--border);
+		border-radius: var(--br-sm);
 	}
 
 	table {
-		width: 100%;
+		flex: 1;
 		table-layout: fixed;
 		border-collapse: separate;
 		border-spacing: 0;
@@ -126,7 +128,7 @@
 	thead th {
 		position: sticky;
 		top: 0;
-		background: var(--gray-100);
+		background: var(--gray-200);
 		border-bottom: var(--border);
 		height: 32px;
 		padding: 0 var(--space-sm);
@@ -173,9 +175,13 @@
 		height: 36px;
 		vertical-align: middle;
 		color: var(--gray-900);
-		background: var(--gray-0);
+		background: var(--gray-200);
 		border-bottom: var(--border);
 		overflow: hidden;
+	}
+
+	tbody tr:last-child td {
+		border-bottom: none;
 	}
 
 	td.pinned {
@@ -192,7 +198,7 @@
 	}
 
 	.empty-row td {
-		padding: var(--space-md) var(--space-sm-md);
+		padding: 0 var(--space-sm-md);
 		color: var(--gray-800);
 	}
 

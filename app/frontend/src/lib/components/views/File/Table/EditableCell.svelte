@@ -298,7 +298,7 @@
 	}
 
 	.editable-menu-container :global(.select-trigger) {
-		background-color: var(--gray-400);
+		background-color: var(--gray-300);
 		border-radius: var(--br-sm);
 		outline: 0.5px solid var(--gray-800);
 		outline-offset: -1px;
@@ -326,7 +326,7 @@
 		right: 0;
 		height: 100%;
 		width: 100%;
-		background-color: var(--gray-400);
+		background-color: var(--gray-300);
 		padding: var(--space-sm-md) var(--space-sm);
 		/* always reserve room for the buttons, sized to the real cluster
 		   (1 button when not edited, 2 when edited) */
@@ -334,7 +334,7 @@
 
 		border: none;
 		border-radius: var(--br-sm);
-		outline: 0.5px solid var(--gray-800);
+		outline: 0.5px solid var(--gray-600);
 		outline-offset: -1px;
 
 		box-shadow:

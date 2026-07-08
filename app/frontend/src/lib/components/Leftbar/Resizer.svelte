@@ -7,7 +7,7 @@
 
 	export let width: number = parseInt(
 		localStorage.getItem('sidebarWidth') || `${DEFAULT_WIDTH}`,
-		10
+		200
 	);
 	export let resizing: boolean = false;
 
@@ -42,7 +42,7 @@
 	#resizer {
 		position: absolute;
 		z-index: 3;
-		top: var(--space-sm-md);
+		top: 64px;
 		right: 1px;
 		bottom: var(--space-sm-md);
 
@@ -57,7 +57,7 @@
 
 	#resizer:hover,
 	#resizer.resizing {
-		border-right: var(--bw) var(--gray-700) solid;
+		border-right: var(--bw) var(--white-glow) solid;
 	}
 
 	#resizer:active {

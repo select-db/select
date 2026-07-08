@@ -180,6 +180,11 @@
 	.content {
 		flex: 1;
 		overflow: hidden;
+		border-left: var(--border);
+		border-right: var(--border);
+		border-bottom: var(--border);
+		border-radius: var(--br-sm);
+		background-color: var(--gray-200);
 	}
 
 	.empty {

@@ -18,7 +18,7 @@ import (
 // returns it as an authorized-key line ("host TYPE BASE64"), or "" when the
 // host is not recorded (or known_hosts is unreadable). Desktop only: it lets
 // SELECT reuse the trust decision the user already made with their own ssh
-// client, so no manual paste is needed. The proxy never takes this path —
+// client, so no manual paste is needed. The proxy never takes this path.
 // EnforceOutboundGuard keeps requiring an explicitly configured key.
 func knownHostKeyLine(host string, port int) string {
 	host = strings.TrimSpace(host)

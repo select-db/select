@@ -7,9 +7,11 @@
 
 	type Props = {
 		tab: Tab;
+		standalone?: boolean;
+		onStateChange?: (viewState: unknown) => void;
 	};
 
-	let { tab }: Props = $props();
+	let { tab, standalone = false, onStateChange }: Props = $props();
 
 	let defaultContent = $state<string | undefined>(undefined);
 	$effect(() => {
@@ -19,7 +21,7 @@
 	});
 </script>
 
-<BaseFileView {tab} language="css" manualSave {defaultContent}>
+<BaseFileView {tab} language="css" manualSave {defaultContent} {standalone} {onStateChange}>
 	{#snippet header({ hasUnsavedChanges, isModifiedFromDefault, saveFile })}
 		<ThemeFileHeader {hasUnsavedChanges} {isModifiedFromDefault} onSave={saveFile} />
 	{/snippet}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# resolve-pubkeys.sh — read the minisign public key for build-time embedding.
+# resolve-pubkeys.sh read the minisign public key for build-time embedding.
 # Sourced by CI build jobs and scripts/build.sh. Sets PUBKEY.
 # Fails if the public key file is missing.
 
