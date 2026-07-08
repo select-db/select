@@ -37,7 +37,10 @@
 
 		await tick(); // Wait for content to render
 
-		const box = boxElement.getBoundingClientRect();
+		// Use offsetWidth/offsetHeight (untransformed layout size) rather than
+		// getBoundingClientRect(), whose result reflects the active scale
+		// transition and would under-measure the box, letting it overflow.
+		const box = { width: boxElement.offsetWidth, height: boxElement.offsetHeight };
 		const viewport = {
 			width: window.innerWidth,
 			height: window.innerHeight

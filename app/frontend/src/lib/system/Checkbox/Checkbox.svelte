@@ -64,7 +64,6 @@
 		user-select: none;
 		contain: layout style paint;
 		outline: none;
-		box-shadow: var(--shadow-subtle);
 	}
 
 	.checkbox-wrapper.disabled {

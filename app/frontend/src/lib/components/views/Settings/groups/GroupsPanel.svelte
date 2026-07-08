@@ -5,12 +5,7 @@
 	import Table from '$lib/system/Table/Table.svelte';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
-	import {
-		ListGroups,
-		CreateGroup,
-		DeleteGroup,
-		RenameGroup
-	} from '$lib/wailsjs/go/group/Group';
+	import { ListGroups, CreateGroup, DeleteGroup, RenameGroup } from '$lib/wailsjs/go/group/Group';
 	import type { generated } from '$lib/wailsjs/go/models';
 	import ConfirmDeleteGroupModal from './ConfirmDeleteGroupModal.svelte';
 	import CreateGroupModal from './CreateGroupModal.svelte';
@@ -262,7 +257,6 @@
 		height: 24px;
 		gap: var(--space-xs);
 		padding: var(--space-sm);
-		border-bottom: var(--border);
 		flex-shrink: 0;
 	}
 

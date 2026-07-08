@@ -113,6 +113,7 @@
 				emphasis="low"
 				size="sm"
 				leftIcon="plus"
+				iconSize={16}
 				onclick={(e) => openMenu(e.currentTarget as HTMLElement)}
 			/>
 		{/if}
@@ -169,13 +170,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm);
-		padding: var(--space-md);
+		padding: var(--space-xs-sm) var(--space-sm);
 		overflow: auto;
 	}
 
 	.roles-head {
 		display: flex;
-		align-items: center;
+		flex-direction: column;
 		justify-content: space-between;
 		gap: var(--space-sm);
 	}
@@ -197,7 +198,7 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: var(--space-xs-sm);
 	}
 
 	.role-row {
@@ -206,7 +207,7 @@
 		justify-content: space-between;
 		padding: var(--space-xs) var(--space-sm);
 		border: var(--border);
-		border-radius: var(--radius-sm);
+		border-radius: var(--br-sm);
 	}
 
 	.role-name {
