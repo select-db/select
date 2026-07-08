@@ -1135,7 +1135,8 @@ SELECT
     r.workspace_id,
     r.name,
     (SELECT COUNT(*) FROM user_to_role ur WHERE ur.role_id = r.id) AS user_count,
-    (SELECT COUNT(*) FROM permission p WHERE p.role_id = r.id) AS permission_count
+    (SELECT COUNT(*) FROM permission p WHERE p.role_id = r.id) AS permission_count,
+    (SELECT COUNT(*) FROM group_to_role gr WHERE gr.role_id = r.id AND gr.deleted_at IS NULL) AS group_count
 FROM role r
 WHERE r.workspace_id = ?1
 ORDER BY r.name COLLATE NOCASE
@@ -1147,6 +1148,7 @@ type ListRolesByWorkspaceRow struct {
 	Name            string `json:"name"`
 	UserCount       int64  `json:"user_count"`
 	PermissionCount int64  `json:"permission_count"`
+	GroupCount      int64  `json:"group_count"`
 }
 
 func (q *Queries) ListRolesByWorkspace(ctx context.Context, workspaceID string) ([]ListRolesByWorkspaceRow, error) {
@@ -1164,6 +1166,7 @@ func (q *Queries) ListRolesByWorkspace(ctx context.Context, workspaceID string) 
 			&i.Name,
 			&i.UserCount,
 			&i.PermissionCount,
+			&i.GroupCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1209,6 +1212,51 @@ func (q *Queries) ListUserRolesByWorkspace(ctx context.Context, workspaceID stri
 			&i.UserToRoleID,
 			&i.RoleID,
 			&i.RoleName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserGroupsByWorkspace = `-- name: ListUserGroupsByWorkspace :many
+SELECT ug.user_id, ug.id AS user_to_group_id, g.id AS group_id, g.name AS group_name
+FROM user_to_group ug
+JOIN "group" g ON g.id = ug.group_id
+WHERE ug.workspace_id = ?1
+  AND ug.deleted_at IS NULL
+  AND g.deleted_at IS NULL
+ORDER BY g.name COLLATE NOCASE
+`
+
+type ListUserGroupsByWorkspaceRow struct {
+	UserID        string `json:"user_id"`
+	UserToGroupID string `json:"user_to_group_id"`
+	GroupID       string `json:"group_id"`
+	GroupName     string `json:"group_name"`
+}
+
+func (q *Queries) ListUserGroupsByWorkspace(ctx context.Context, workspaceID string) ([]ListUserGroupsByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserGroupsByWorkspace, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserGroupsByWorkspaceRow
+	for rows.Next() {
+		var i ListUserGroupsByWorkspaceRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.UserToGroupID,
+			&i.GroupID,
+			&i.GroupName,
 		); err != nil {
 			return nil, err
 		}

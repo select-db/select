@@ -87,3 +87,50 @@ func TestGroupRoleFlow_AppliesToLocalPermissions(t *testing.T) {
 		t.Fatalf("expected SELECT on db-1 to be denied by the group-derived role")
 	}
 }
+
+// The Users grid Groups column and Roles grid group count read from these
+// queries; verify they run (the "group" reserved word in SELECT) and count right.
+func TestGroupReadModels_UserGroupsAndRoleGroupCount(t *testing.T) {
+	if !slices.Contains(sql.Drivers(), "sqlite3") {
+		sql.Register("sqlite3", &sqlite.Driver{})
+	}
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	if err := db.RunMigrationsAt(dbPath); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
+	conn, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+	q := generated.New(conn)
+	ctx := context.Background()
+	exec := func(query string, args ...any) {
+		if _, err := conn.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("exec %q: %v", query, err)
+		}
+	}
+
+	exec(`INSERT INTO user (id, name) VALUES ('u1','Alice')`)
+	exec(`INSERT INTO workspace (id, name) VALUES ('ws1','WS')`)
+	exec(`INSERT INTO role (id, workspace_id, name) VALUES ('r1','ws1','Analyst')`)
+	exec(`INSERT INTO "group" (id, workspace_id, name) VALUES ('g1','ws1','Data Eng')`)
+	exec(`INSERT INTO group_to_role (id, group_id, role_id, workspace_id) VALUES ('gtr1','g1','r1','ws1')`)
+	exec(`INSERT INTO user_to_group (id, user_id, group_id, workspace_id) VALUES ('utg1','u1','g1','ws1')`)
+
+	ug, err := q.ListUserGroupsByWorkspace(ctx, "ws1")
+	if err != nil {
+		t.Fatalf("ListUserGroupsByWorkspace: %v", err)
+	}
+	if len(ug) != 1 || ug[0].UserID != "u1" || ug[0].GroupName != "Data Eng" || ug[0].UserToGroupID != "utg1" {
+		t.Fatalf("unexpected user-groups: %+v", ug)
+	}
+
+	roles, err := q.ListRolesByWorkspace(ctx, "ws1")
+	if err != nil {
+		t.Fatalf("ListRolesByWorkspace: %v", err)
+	}
+	if len(roles) != 1 || roles[0].GroupCount != 1 {
+		t.Fatalf("expected role group_count=1, got %+v", roles)
+	}
+}

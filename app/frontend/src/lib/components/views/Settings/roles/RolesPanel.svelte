@@ -177,6 +177,7 @@
 				columns={[
 					{ key: 'name', label: 'Name', searchable: true, width: '200px', pinned: true },
 					{ key: 'users', label: 'Users', width: '160px' },
+					{ key: 'groups', label: 'Groups', align: 'right', width: '90px' },
 					{ key: 'permissions', label: 'Permissions', align: 'right', width: '110px' },
 					{ key: 'actions', width: '52px' }
 				]}
@@ -197,6 +198,8 @@
 		<span role="none" onclick={(e) => e.stopPropagation()}>
 			<RoleMembersPicker roleId={role.id} />
 		</span>
+	{:else if key === 'groups'}
+		<span>{role.group_count}</span>
 	{:else if key === 'permissions'}
 		<span>{role.permission_count}</span>
 	{:else if key === 'actions'}
