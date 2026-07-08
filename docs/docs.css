@@ -24,7 +24,6 @@ html {
   font-family: var(--ff);
   font-size: var(--fs-md);
   color: var(--gray-1000);
-  background: var(--gray-0);
 }
 
 html, body { height: 100vh; overflow: hidden; }

@@ -4,6 +4,7 @@ import { closeTab } from '$lib/components/views/shared/assistant/all';
 import { setItemSelection } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { recentItemsStore } from '$lib/stores/recentItemsStore';
+import { settingsSectionLabels } from '$lib/components/views/Settings/sections';
 
 /** Chat context DB item
  * same shape as get_chat_context databases. */
@@ -134,6 +135,14 @@ export type Tab = {
 			expandedKeys?: string[];
 			scrollTop?: number;
 			search?: string;
+		};
+		// Monaco view state (cursor/scroll/selection/folding) for the personal
+		// .theme / .config editors. Their tabs are synthetic and detached from any
+		// layout group, so they can't ride the regular tab.file.editor path and
+		// persist here instead. Restored on re-render (e.g. after Apply/Reset).
+		editors?: {
+			theme?: { viewState?: unknown };
+			config?: { viewState?: unknown };
 		};
 	};
 };
@@ -450,14 +459,6 @@ export function navigateToNextTab(groupId: string): void {
 }
 
 // focusTab activates an existing tab by URI across all groups. Returns true if found.
-const settingsSectionLabels: Record<string, string> = {
-	workspace: 'Workspace',
-	git: 'Git',
-	users: 'Users',
-	roles: 'Roles',
-	api_keys: 'API keys'
-};
-
 export function getTabLabel(tab: Tab): string {
 	if (tab.file) return tab.file.node.name;
 	if (tab.database) return tab.database.node.name;
@@ -570,15 +571,24 @@ export const updateSettingsTab = (patch: Exclude<Tab['settings'], undefined>) =>
 	}));
 };
 
-export const addSettingsTab = () => {
+/**
+ * Opens the Settings tab at an optional section (theme/config/workspace/...).
+ * Reuses an already-open Settings tab instead of duplicating it, and jumps to
+ * the requested section (Settings reacts to the tab's `settings.section`).
+ */
+export const openSettingsSection = (section?: string) => {
+	if (focusTab('selectdb://settings')) {
+		if (section) updateSettingsTab({ section });
+		return;
+	}
+
 	const group = getActiveGroup();
 	if (!group) return;
 
-	const tabId = crypto.randomUUID();
 	const newTab: Tab = {
-		id: tabId,
+		id: crypto.randomUUID(),
 		uri: 'selectdb://settings',
-		settings: {}
+		settings: section ? { section } : {}
 	};
 
 	layoutStore.update((layout) => ({

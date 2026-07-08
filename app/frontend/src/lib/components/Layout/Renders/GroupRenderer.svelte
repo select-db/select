@@ -184,7 +184,7 @@
 		border-right: var(--border);
 		border-bottom: var(--border);
 		border-radius: var(--br-sm);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.empty {

@@ -27,11 +27,11 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-md);
-		background: var(--gray-0);
+		background: var(--gray-200);
 		border: var(--border);
 		border-radius: var(--br-xs);
 		padding: var(--space-sm) var(--space-md);
-		box-shadow: var(--shadow-lg, 0 4px 12px rgba(0, 0, 0, 0.15));
+		box-shadow: var(--shadow-lg, 0 4px 12px var(--shadow));
 	}
 
 	.content {

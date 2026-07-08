@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import Button from '$lib/system/Button/Button.svelte';
 	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
+	import ModalBody from '$lib/system/Modal/ModalBody.svelte';
+	import ModalFooter from '$lib/system/Modal/ModalFooter.svelte';
+	import Input from '$lib/system/Input/Input.svelte';
 	import Select from '$lib/system/Select/Select.svelte';
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
 
@@ -68,6 +70,14 @@
 		onSubmit({ ...values }, { ...types });
 	}
 
+	async function handleRun() {
+		submit();
+	}
+
+	async function handleCancel() {
+		onCancel();
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && allFilled) {
 			e.preventDefault();
@@ -78,7 +88,7 @@
 		}
 	}
 
-	function inputType(t: VarType): string {
+	function inputType(t: VarType): 'text' | 'number' | 'date' | 'time' | 'datetime-local' {
 		switch (t) {
 			case 'integer':
 			case 'decimal':
@@ -96,13 +106,13 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<form class="modal" bind:this={formEl} onkeydown={handleKeydown}>
+<form bind:this={formEl} onkeydown={handleKeydown}>
 	<ModalHeader title="Set variables" />
 
-	<div class="body">
+	<ModalBody style="display: flex; flex-direction: column; gap: var(--space-sm); max-height: 60vh;">
 		{#each vars as name (name)}
 			<div class="row">
-				<label class="varname" for="var-{name}">${name}</label>
+				<span class="varname">${name}</span>
 				<div class="controls">
 					<Select
 						options={typeOptions}
@@ -125,48 +135,26 @@
 							size="sm"
 						/>
 					{:else}
-						<input
-							id="var-{name}"
-							class="value-input"
+						<Input
 							type={inputType(types[name])}
-							value={values[name]}
+							bind:value={values[name]}
 							placeholder="..."
-							oninput={(e) => (values[name] = e.currentTarget.value)}
 							step={types[name] === 'decimal' ? 'any' : undefined}
-							autocomplete="off"
-							spellcheck={false}
+							style="flex: 1; min-width: 0;"
 						/>
 					{/if}
 				</div>
 			</div>
 		{/each}
-	</div>
+	</ModalBody>
 
-	<div class="footer">
-		<Button content="Cancel" emphasis="low" onclick={onCancel} />
-		<Button content="Run" emphasis="high" disabled={!allFilled} onclick={submit} />
-	</div>
+	<ModalFooter
+		mainAction={{ label: 'Run', action: handleRun, disabled: !allFilled }}
+		secondaryAction={{ label: 'Cancel', action: handleCancel }}
+	/>
 </form>
 
 <style>
-	.modal {
-		display: flex;
-		flex-direction: column;
-		background-color: var(--gray-0);
-		border-radius: var(--br-sm);
-		overflow: hidden;
-	}
-
-	.body {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-sm);
-		padding: var(--space-md);
-		background-color: var(--gray-0);
-		max-height: 60vh;
-		overflow-y: auto;
-	}
-
 	.row {
 		display: flex;
 		align-items: center;
@@ -191,35 +179,5 @@
 
 		height: 28px;
 		align-items: stretch;
-	}
-
-	.value-input {
-		flex: 1;
-		background-color: var(--gray-0);
-		border: var(--border);
-		border-radius: var(--br-xs);
-		padding: var(--space-sm);
-		font-size: var(--fs-sm);
-		color: var(--gray-1000);
-		min-width: 0;
-	}
-
-	.value-input:hover,
-	.value-input:focus {
-		background-color: var(--gray-100);
-		outline: none;
-	}
-
-	.value-input:focus {
-		border-color: var(--gray-700);
-	}
-
-	.footer {
-		display: flex;
-		justify-content: flex-end;
-		gap: var(--space-xs);
-		padding: var(--space-sm);
-		border-top: var(--border);
-		background-color: var(--gray-0);
 	}
 </style>

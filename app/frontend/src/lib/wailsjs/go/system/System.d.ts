@@ -3,20 +3,23 @@
 import {graph} from '../models';
 import {tokenanalyzer} from '../models';
 import {context} from '../models';
+import {system} from '../models';
 
 export function CheckForLogin():Promise<void>;
 
 export function CheckForLogout():Promise<void>;
 
+export function EnsureUserConfigDefaults():Promise<void>;
+
 export function GetAppEnv():Promise<string>;
 
 export function GetConfig():Promise<graph.ConfigResponse>;
 
-export function GetDefaultConfigContent():Promise<string>;
-
 export function GetDefaultLintContent():Promise<string>;
 
 export function GetDefaultThemeContent():Promise<string>;
+
+export function GetDefaultUserConfigContent():Promise<string>;
 
 export function GetLint():Promise<Array<tokenanalyzer.LintConfigEntry>>;
 
@@ -28,11 +31,11 @@ export function Logout():Promise<void>;
 
 export function OpenURL(arg1:string):Promise<void>;
 
-export function ResetConfig():Promise<void>;
-
 export function ResetLint():Promise<void>;
 
 export function ResetTheme():Promise<void>;
+
+export function ResetUserConfig():Promise<void>;
 
 export function RevealInExplorer(arg1:string):Promise<void>;
 
@@ -41,6 +44,8 @@ export function SetContext(arg1:context.Context):Promise<void>;
 export function StartDatabaseWatcher():Promise<void>;
 
 export function StartFileWatcher(arg1:string):Promise<void>;
+
+export function UpdateWorkspaceExecutionLimits(arg1:number,arg2:number):Promise<system.ExecutionLimitsResponse>;
 
 export function WatchNetworkQuality():Promise<void>;
 

@@ -71,7 +71,7 @@
 		align-items: center;
 		gap: var(--space-xxs);
 		padding: 0 var(--space-xs);
-		background-color: var(--gray-0);
+		background-color: var(--gray-300);
 		border-radius: var(--br-md);
 
 		transition: background-color 0.1s ease-out;

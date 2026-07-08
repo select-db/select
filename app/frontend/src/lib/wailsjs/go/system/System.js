@@ -10,6 +10,10 @@ export function CheckForLogout() {
   return window['go']['system']['System']['CheckForLogout']();
 }
 
+export function EnsureUserConfigDefaults() {
+  return window['go']['system']['System']['EnsureUserConfigDefaults']();
+}
+
 export function GetAppEnv() {
   return window['go']['system']['System']['GetAppEnv']();
 }
@@ -18,16 +22,16 @@ export function GetConfig() {
   return window['go']['system']['System']['GetConfig']();
 }
 
-export function GetDefaultConfigContent() {
-  return window['go']['system']['System']['GetDefaultConfigContent']();
-}
-
 export function GetDefaultLintContent() {
   return window['go']['system']['System']['GetDefaultLintContent']();
 }
 
 export function GetDefaultThemeContent() {
   return window['go']['system']['System']['GetDefaultThemeContent']();
+}
+
+export function GetDefaultUserConfigContent() {
+  return window['go']['system']['System']['GetDefaultUserConfigContent']();
 }
 
 export function GetLint() {
@@ -50,16 +54,16 @@ export function OpenURL(arg1) {
   return window['go']['system']['System']['OpenURL'](arg1);
 }
 
-export function ResetConfig() {
-  return window['go']['system']['System']['ResetConfig']();
-}
-
 export function ResetLint() {
   return window['go']['system']['System']['ResetLint']();
 }
 
 export function ResetTheme() {
   return window['go']['system']['System']['ResetTheme']();
+}
+
+export function ResetUserConfig() {
+  return window['go']['system']['System']['ResetUserConfig']();
 }
 
 export function RevealInExplorer(arg1) {
@@ -76,6 +80,10 @@ export function StartDatabaseWatcher() {
 
 export function StartFileWatcher(arg1) {
   return window['go']['system']['System']['StartFileWatcher'](arg1);
+}
+
+export function UpdateWorkspaceExecutionLimits(arg1, arg2) {
+  return window['go']['system']['System']['UpdateWorkspaceExecutionLimits'](arg1, arg2);
 }
 
 export function WatchNetworkQuality() {

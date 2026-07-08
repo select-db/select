@@ -207,7 +207,7 @@ jobs:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.11.4
           working-directory: app
@@ -235,7 +235,7 @@ jobs:
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.11.4
           working-directory: backend
@@ -263,7 +263,7 @@ jobs:
         with:
           go-version-file: dialect/go.mod
           cache-dependency-path: dialect/go.sum
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.11.4
           working-directory: dialect
@@ -295,7 +295,7 @@ jobs:
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
-      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.embedded-postgres-go
           key: embedded-postgres-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
@@ -431,7 +431,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
@@ -498,7 +498,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
@@ -565,7 +565,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
@@ -648,7 +648,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             nsis
 
-      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
