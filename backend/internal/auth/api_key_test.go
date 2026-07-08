@@ -46,7 +46,7 @@ func TestGenerateAPIKeyUnique(t *testing.T) {
 }
 
 func TestParseAPIKeyPrefixRejectsMalformed(t *testing.T) {
-	for _, tok := range []string{"", "nope", "sdb_", "sdb_only", "sdb_pfx_", "Bearer sdb_a_b"} {
+	for _, tok := range []string{"", "nope", "slct_", "slct_only", "slct_pfx_", "Bearer slct_a_b"} {
 		if _, ok := ParseAPIKeyPrefix(tok); ok {
 			t.Fatalf("ParseAPIKeyPrefix(%q) = true, want false", tok)
 		}
@@ -57,7 +57,7 @@ func TestIsAPIKey(t *testing.T) {
 	if IsAPIKey("eyJhbGciOi...") {
 		t.Fatal("JWT misclassified as API key")
 	}
-	if !IsAPIKey("sdb_abc_def") {
+	if !IsAPIKey("slct_abc_def") {
 		t.Fatal("API key not recognised")
 	}
 }

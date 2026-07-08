@@ -38,8 +38,14 @@
 		if (!container) return;
 
 		monaco.languages.register({ id: 'sql' });
-		monaco.languages.setMonarchTokensProvider('sql', sqlLanguage as monaco.languages.IMonarchLanguage);
-		monaco.editor.defineTheme('sql-schema-theme', getEditorTheme() as monaco.editor.IStandaloneThemeData);
+		monaco.languages.setMonarchTokensProvider(
+			'sql',
+			sqlLanguage as monaco.languages.IMonarchLanguage
+		);
+		monaco.editor.defineTheme(
+			'sql-schema-theme',
+			getEditorTheme() as monaco.editor.IStandaloneThemeData
+		);
 
 		model = monaco.editor.createModel(displaySql, 'sql');
 
@@ -87,19 +93,19 @@
 
 	/* surface */
 	:global(.editorContainer.surface .monaco-editor) {
-		--vscode-editorStickyScroll-background: var(--gray-0);
-		--vscode-editor-background: var(--gray-0);
+		--vscode-editorStickyScroll-background: var(--gray-300);
+		--vscode-editor-background: var(--gray-300);
 	}
 	:global(.editorContainer.surface .monaco-editor .margin) {
-		background-color: var(--gray-0);
+		background-color: var(--gray-300);
 	}
 
 	/* surface-light */
 	:global(.editorContainer.surface-light .monaco-editor) {
-		--vscode-editorStickyScroll-background: var(--gray-100);
-		--vscode-editor-background: var(--gray-100);
+		--vscode-editorStickyScroll-background: var(--gray-300);
+		--vscode-editor-background: var(--gray-300);
 	}
 	:global(.editorContainer.surface-light .monaco-editor .margin) {
-		background-color: var(--gray-100);
+		background-color: var(--gray-300);
 	}
 </style>

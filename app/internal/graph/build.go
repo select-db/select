@@ -50,6 +50,9 @@ func (g *Graph) BuildWorkspaceGraph() error {
 		Name:    ws.Name,
 		IsOwner: ws.OwnerID.String == user.ID,
 
+		StatementTimeoutMs: NormalizeStatementTimeoutMs(int(ws.StatementTimeoutMs)),
+		MaxResultSizeMB:    NormalizeMaxResultSizeMB(int(ws.MaxResultSizeMb)),
+
 		User:        BuildUserNode(user),
 		Folders:     []*FolderNode{},
 		DBInstances: []*DBInstanceNode{},

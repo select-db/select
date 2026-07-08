@@ -15,10 +15,31 @@
 		language: string;
 		manualSave?: boolean;
 		defaultContent?: string;
-		header?: Snippet<[{ hasUnsavedChanges: boolean; isModifiedFromDefault: boolean; saveFile: () => Promise<void> }]>;
+
+		/** Forwarded to Editor for synthetic tabs detached from any layout group. */
+		standalone?: boolean;
+		/** Forwarded to Editor; fires with Monaco view state on cursor/scroll change. */
+		onStateChange?: (viewState: unknown) => void;
+		header?: Snippet<
+			[
+				{
+					hasUnsavedChanges: boolean;
+					isModifiedFromDefault: boolean;
+					saveFile: () => Promise<void>;
+				}
+			]
+		>;
 	};
 
-	let { tab, language, manualSave = false, defaultContent, header }: Props = $props();
+	let {
+		tab,
+		language,
+		manualSave = false,
+		defaultContent,
+		standalone = false,
+		onStateChange,
+		header
+	}: Props = $props();
 
 	const file = $derived(tab.file?.node);
 	const isTemp = $derived(tab.file?.isTemp ?? false);
@@ -110,7 +131,14 @@
 
 	<div class="page">
 		{#if contentLoaded}
-			<Editor {tab} {content} {language} onchange={handleContentChange} />
+			<Editor
+				{tab}
+				{content}
+				{language}
+				{standalone}
+				{onStateChange}
+				onContentChange={handleContentChange}
+			/>
 		{/if}
 	</div>
 </div>
@@ -121,7 +149,6 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--gray-0);
 	}
 
 	.page {

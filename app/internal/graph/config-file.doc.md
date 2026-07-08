@@ -1,13 +1,26 @@
 # Config File
 
-The `.config` file lives at the root of your workspace. It controls [query execution](/sql/query-execution/) limits, keybindings, and editor snippets.
+`.config` is a **personal** file: it holds your keybindings and editor snippets.
+It is **not** part of any workspace and is never committed to git — it lives in
+SELECT's per-user config directory and follows you across every workspace.
+
+> Execution limits (`statement_timeout_ms`, `max_result_size_mb`) are **not** in
+> `.config`. They are workspace-level team policy and are configured in
+> **Settings → Workspace** (see [Execution limits](#execution-limits) below).
+
+## Where the file lives
+
+- **macOS**: `~/Library/Application Support/selectDb/<env>/user-config/.config`
+- **Linux**: `$XDG_CONFIG_HOME/selectDb/<env>/user-config/.config` (defaults to
+  `~/.config/...`)
+- **Windows**: `%APPDATA%\selectDb\<env>\user-config\.config`
+
+You don't need to find it on disk: open it from **Settings → Config**.
 
 ## Format
 
 ```json
 {
-  "statement_timeout_ms": 30000,
-  "max_result_size_mb": 100,
   "keybindings": { ... },
   "editor_snippets": [ ... ]
 }
@@ -15,10 +28,14 @@ The `.config` file lives at the root of your workspace. It controls [query execu
 
 ## Execution limits
 
+Execution limits are **workspace** settings, shared with everyone in the
+workspace (synced through the SELECT backend, like roles and permissions), and
+edited in **Settings → Workspace**:
+
 | Field                    | Default | Description                                         |
 |--------------------------|---------|-----------------------------------------------------|
 | **statement_timeout_ms** | 30000   | Max query execution time in milliseconds            |
-| **max_result_size_mb**   | 100     | Max result set size in MB before truncation         |
+| **max_result_size_mb**   | 100     | Max result set size in MB before truncation (max 250)|
 
 ## Keybindings
 
@@ -74,4 +91,5 @@ Define custom SQL snippets that appear in autocompletion:
 
 ## Applying changes
 
-After editing the `.config` file, click **Apply** to reload the configuration. To restore the built-in defaults, click **Reset**.
+After editing `.config` (in **Settings → Config**), click **Apply** to reload
+the configuration. To restore the built-in defaults, click **Reset**.

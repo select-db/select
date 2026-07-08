@@ -168,7 +168,7 @@
 		position: fixed;
 		z-index: 1000;
 		overflow: hidden;
-		box-shadow: var(--gray-200) 0px 7px 29px 0px !important;
+		box-shadow: var(--shadow) 0px 7px 29px 0px !important;
 		width: fit-content;
 	}
 

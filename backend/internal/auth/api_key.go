@@ -13,7 +13,7 @@ import (
 // yields no usable keys. A domain tag separates these hashes from refresh-token
 // hashes so neither can be replayed as the other.
 const (
-	APIKeyScheme   = "sdb_"           // bearer prefix; branches the auth path before any DB hit
+	APIKeyScheme   = "slct_"           // bearer prefix; branches the auth path before any DB hit
 	apiKeyPrefixLn = 12               // stored in auth.api_key.prefix, used for lookup
 	apiKeySecretLn = 40               // unguessable tail
 	apiKeyHashTag  = "sdb-api-key-v1" // domain separation from refresh tokens
@@ -40,7 +40,7 @@ func HashAPIKey(plaintext string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// ParseAPIKeyPrefix returns the lookup handle from an sdb_<prefix>_<secret>
+// ParseAPIKeyPrefix returns the lookup handle from an slct_<prefix>_<secret>
 // token; ok is false for any other shape
 func ParseAPIKeyPrefix(token string) (prefix string, ok bool) {
 	if !IsAPIKey(token) {

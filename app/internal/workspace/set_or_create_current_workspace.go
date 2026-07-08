@@ -66,8 +66,9 @@ func (w *Workspace) EnsureWorkspaceFolderByID(workspaceID, _ string) error {
 //	APP_ROOT/workspaces/<workspace.ID>
 //
 // where APP_ROOT is the directory returned by GetAppDataDir().
-// When the directory is created for the first time, default files (.config,
-// .theme, …) are seeded from the embedded defaults.
+// When the directory is created for the first time, the shared workspace default
+// files (.lint, .gitignore, …) are seeded from the embedded defaults. Personal
+// files (.theme, .config) live in the per-user config dir, not the workspace.
 func (w *Workspace) ensureWorkspaceFolder(workspace generated.Workspace) error {
 	root, err := graph.WorkspaceRootPath(workspace.ID)
 	if err != nil {

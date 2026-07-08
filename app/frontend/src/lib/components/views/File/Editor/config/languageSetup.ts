@@ -166,17 +166,6 @@ export function initializeLanguages() {
 				schema: {
 					type: 'object',
 					properties: {
-						statement_timeout_ms: {
-							type: 'integer',
-							description: 'Timeout in milliseconds for all database queries including schema loading (default: 30000).',
-							minimum: 1
-						},
-						max_result_size_mb: {
-							type: 'integer',
-							description: 'Maximum result size in MB per query (default: 100, max: 500).',
-							minimum: 1,
-							maximum: 500
-						},
 						keybindings: {
 							type: 'object',
 							description: 'Keybindings grouped by category (workbench, editor, modal, menu).',

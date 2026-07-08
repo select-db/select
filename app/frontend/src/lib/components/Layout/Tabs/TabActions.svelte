@@ -1,9 +1,10 @@
 <script lang="ts">
 	import Button from '$lib/system/Button/Button.svelte';
 	import { addTerminalTab, addChatTab } from '$lib/components/Layout/layoutStore';
+	import { titlebarSafe } from '$lib/actions/titlebarSafe';
 </script>
 
-<div class="wrapper tab-actions">
+<div class="wrapper tab-actions" use:titlebarSafe={'right'}>
 	<Button leftIcon="chat" label="Open Chat" onclick={() => addChatTab()} iconSize={18} />
 	<Button
 		leftIcon="terminal"

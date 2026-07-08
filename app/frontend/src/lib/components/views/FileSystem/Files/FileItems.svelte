@@ -11,10 +11,7 @@
 	import { getActions } from './actions/getActions';
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
 	import { createClickHandlers } from './helpers/clickHandlers';
-	import {
-		hiddenChildrenStore,
-		filterVisibleChildren
-	} from './helpers/childVisibilityStore';
+	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
 	import { QuerySchema } from '$lib/wailsjs/go/db_client/DbClient';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
@@ -97,140 +94,136 @@
 </script>
 
 <div data-depth={depth}>
-{#each databases as database (database.id)}
-	<ItemDisplay
-		{depth}
-		{parentIds}
-		{draggable}
-		handleClick={insideDatabase ? handleSimpleClick : handleDatabaseClick}
-		item={database}
-		options={() => getOptions(database)}
-		actions={getActions({ item: database })}
-		onDragStart={handleDragStart}
-		onDragOver={(item, event) => {
-			if (isEventFromExtendedContent(database.id, event)) return;
-			handleDragOver(item, event);
-		}}
-		onDrop={async (item, event) => {
-			if (isEventFromExtendedContent(database.id, event)) return;
-			await handleDrop(item, event);
-		}}
-		onDragEnd={handleDragEnd}
-	/>
+	{#each databases as database (database.id)}
+		<ItemDisplay
+			{depth}
+			{parentIds}
+			{draggable}
+			handleClick={insideDatabase ? handleSimpleClick : handleDatabaseClick}
+			item={database}
+			options={() => getOptions(database)}
+			actions={getActions({ item: database })}
+			onDragStart={handleDragStart}
+			onDragOver={(item, event) => {
+				if (isEventFromExtendedContent(database.id, event)) return;
+				handleDragOver(item, event);
+			}}
+			onDrop={async (item, event) => {
+				if (isEventFromExtendedContent(database.id, event)) return;
+				await handleDrop(item, event);
+			}}
+			onDragEnd={handleDragEnd}
+		/>
 
-	{#if isExpanded(database.id)}
-		<div
-			class="folder-content-drop-zone"
-			class:drop-zone-hovered={$dragStateStore.hoveredTargetId === database.id}
-			data-drop-zone={database.id}
-			ondragover={(e) => handleDragOver(database, e)}
-			ondrop={async (e) => await handleDrop(database, e)}
-			role="region"
-			aria-label={`${database.name} content drop zone`}
-		>
+		{#if isExpanded(database.id)}
+			<div
+				class="folder-content-drop-zone"
+				class:drop-zone-hovered={$dragStateStore.hoveredTargetId === database.id}
+				data-drop-zone={database.id}
+				ondragover={(e) => handleDragOver(database, e)}
+				ondrop={async (e) => await handleDrop(database, e)}
+				role="region"
+				aria-label={`${database.name} content drop zone`}
+			>
+				<FileItems
+					depth={depth + 1}
+					folders={database.folders ?? []}
+					databases={[]}
+					databaseItems={filterVisibleChildren(
+						database.id,
+						database.children ?? [],
+						$hiddenChildrenStore
+					)}
+					files={database.files ?? []}
+					parentIds={[...parentIds, database.id]}
+					{ctx}
+					insideDatabase={true}
+				/>
+			</div>
+		{/if}
+	{/each}
+
+	{#each databaseItems as item (item.id)}
+		<ItemDisplay
+			{depth}
+			{item}
+			{parentIds}
+			handleClick={handleSimpleClick}
+			options={() => getOptions(item)}
+		/>
+
+		{#if isExpanded(item.id)}
 			<FileItems
-				depth={depth + 1}
-				folders={database.folders ?? []}
+				folders={[]}
 				databases={[]}
-				databaseItems={filterVisibleChildren(
-					database.id,
-					database.children ?? [],
-					$hiddenChildrenStore
-				)}
-				files={database.files ?? []}
-				parentIds={[...parentIds, database.id]}
+				files={[]}
+				databaseItems={filterVisibleChildren(item.id, item.children ?? [], $hiddenChildrenStore)}
+				depth={depth + 1}
+				parentIds={[...parentIds, item.id]}
 				{ctx}
 				insideDatabase={true}
 			/>
-		</div>
-	{/if}
-{/each}
+		{/if}
+	{/each}
 
-{#each databaseItems as item (item.id)}
-	<ItemDisplay
-		{depth}
-		{item}
-		{parentIds}
-		handleClick={handleSimpleClick}
-		options={() => getOptions(item)}
-	/>
-
-	{#if isExpanded(item.id)}
-		<FileItems
-			folders={[]}
-			databases={[]}
-			files={[]}
-			databaseItems={filterVisibleChildren(
-				item.id,
-				item.children ?? [],
-				$hiddenChildrenStore
-			)}
-			depth={depth + 1}
-			parentIds={[...parentIds, item.id]}
-			{ctx}
-			insideDatabase={true}
+	{#each folders as folder (folder.id)}
+		<ItemDisplay
+			{depth}
+			{parentIds}
+			{draggable}
+			item={folder}
+			handleClick={insideDatabase ? handleSimpleClick : handleFolderClick}
+			options={() => getOptions(folder, ctx)}
+			actions={getActions({ item: folder, ctx })}
+			onDragStart={handleDragStart}
+			onDragOver={(item, event) => {
+				if (isEventFromExtendedContent(folder.id, event)) return;
+				handleDragOver(item, event);
+			}}
+			onDrop={async (item, event) => {
+				if (isEventFromExtendedContent(folder.id, event)) return;
+				await handleDrop(item, event);
+			}}
+			onDragEnd={handleDragEnd}
 		/>
-	{/if}
-{/each}
 
-{#each folders as folder (folder.id)}
-	<ItemDisplay
-		{depth}
-		{parentIds}
-		{draggable}
-		item={folder}
-		handleClick={insideDatabase ? handleSimpleClick : handleFolderClick}
-		options={() => getOptions(folder, ctx)}
-		actions={getActions({ item: folder, ctx })}
-		onDragStart={handleDragStart}
-		onDragOver={(item, event) => {
-			if (isEventFromExtendedContent(folder.id, event)) return;
-			handleDragOver(item, event);
-		}}
-		onDrop={async (item, event) => {
-			if (isEventFromExtendedContent(folder.id, event)) return;
-			await handleDrop(item, event);
-		}}
-		onDragEnd={handleDragEnd}
-	/>
+		{#if isExpanded(folder.id)}
+			<div
+				class="folder-content-drop-zone"
+				class:drop-zone-hovered={$dragStateStore.hoveredTargetId === folder.id}
+				data-drop-zone={folder.id}
+				ondragover={(e) => handleDragOver(folder, e)}
+				ondrop={async (e) => await handleDrop(folder, e)}
+				role="region"
+				aria-label={`${folder.name} content drop zone`}
+			>
+				<FileItems
+					files={folder.files}
+					folders={folder.folders}
+					databases={folder.db_instances}
+					databaseItems={[]}
+					depth={depth + 1}
+					parentIds={[...parentIds, folder.id]}
+					{ctx}
+					{insideDatabase}
+				/>
+			</div>
+		{/if}
+	{/each}
 
-	{#if isExpanded(folder.id)}
-		<div
-			class="folder-content-drop-zone"
-			class:drop-zone-hovered={$dragStateStore.hoveredTargetId === folder.id}
-			data-drop-zone={folder.id}
-			ondragover={(e) => handleDragOver(folder, e)}
-			ondrop={async (e) => await handleDrop(folder, e)}
-			role="region"
-			aria-label={`${folder.name} content drop zone`}
-		>
-			<FileItems
-				files={folder.files}
-				folders={folder.folders}
-				databases={folder.db_instances}
-				databaseItems={[]}
-				depth={depth + 1}
-				parentIds={[...parentIds, folder.id]}
-				{ctx}
-				{insideDatabase}
-			/>
-		</div>
-	{/if}
-{/each}
-
-{#each files as file (file.id)}
-	<ItemDisplay
-		{depth}
-		{parentIds}
-		{draggable}
-		item={file}
-		handleClick={insideDatabase ? handleSimpleClick : handleFileClick}
-		options={() => getOptions(file, ctx)}
-		actions={getActions({ item: file, ctx })}
-		onDragStart={handleDragStart}
-		onDragEnd={handleDragEnd}
-	/>
-{/each}
+	{#each files as file (file.id)}
+		<ItemDisplay
+			{depth}
+			{parentIds}
+			{draggable}
+			item={file}
+			handleClick={insideDatabase ? handleSimpleClick : handleFileClick}
+			options={() => getOptions(file, ctx)}
+			actions={getActions({ item: file, ctx })}
+			onDragStart={handleDragStart}
+			onDragEnd={handleDragEnd}
+		/>
+	{/each}
 </div>
 
 <style>
@@ -240,7 +233,7 @@
 
 	/* Highlight all items within a hovered drop zone */
 	:global(.drop-zone-hovered .item) {
-		background: var(--gray-0) !important;
+		background: var(--gray-300) !important;
 	}
 
 	:global(.drop-zone-hovered .item .name),

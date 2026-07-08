@@ -24,8 +24,8 @@ func resetMemRefreshToken() {
 // rotatingAuthServer models the backend's refresh-token rotation: every refresh
 // (request carrying X-Refresh-Token) consumes the presented token, deletes it,
 // and issues a brand new access+refresh pair via X-New-* headers. A refresh that
-// presents a token other than the current one returns 401 "Failed to refresh token"
-// — exactly the server behaviour in middlewares.Authenticated / auth.TryRefreshToken.
+// presents a token other than the current one returns 401 "Failed to refresh token",
+// exactly the server behaviour in middlewares.Authenticated / auth.TryRefreshToken.
 //
 // To force a refresh on every Fetch (mirroring an already-expired 5-min access
 // token), normal requests (no X-Refresh-Token) always return 401.

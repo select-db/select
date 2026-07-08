@@ -100,7 +100,7 @@ func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, o
 		applyMask(values, maskPositions)
 
 		if bytesScanned > maxBytes {
-			result.Errors = []string{fmt.Sprintf("result exceeded %dMB limit, refine your query or raise max_result_size_mb in .config", maxBytes/1024/1024)}
+			result.Errors = []string{fmt.Sprintf("result exceeded %dMB limit, refine your query or raise the max result size in the workspace settings", maxBytes/1024/1024)}
 			return result
 		}
 		result.Rows = append(result.Rows, values)
@@ -232,7 +232,7 @@ func StreamLocal(
 		applyMask(values, maskPositions)
 
 		if bytesScanned > maxBytes {
-			sink.OnError(fmt.Errorf("result exceeded %dMB limit, refine your query or raise max_result_size_mb in .config", maxBytes/1024/1024))
+			sink.OnError(fmt.Errorf("result exceeded %dMB limit, refine your query or raise the max result size in the workspace settings", maxBytes/1024/1024))
 			return
 		}
 		if err := sink.OnRow(values); err != nil {
@@ -321,12 +321,12 @@ func parseQueryError(ctx context.Context, err error) (msg string, position *int)
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		if errors.Is(ctxErr, context.DeadlineExceeded) {
-			return "query timed out, raise statement_timeout_ms in .config file", nil
+			return "query timed out, raise the statement timeout in the workspace settings", nil
 		}
 		return "query was cancelled", nil
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return "query timed out, raise statement_timeout_ms in .config file", nil
+		return "query timed out, raise the statement timeout in the workspace settings", nil
 	}
 	if errors.Is(err, context.Canceled) {
 		return "query was cancelled", nil

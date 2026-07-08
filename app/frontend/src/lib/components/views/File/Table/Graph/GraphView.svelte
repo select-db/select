@@ -239,7 +239,6 @@
 		display: flex;
 		flex-direction: row;
 		overflow: hidden;
-		background-color: var(--gray-0);
 	}
 
 	.chart-area {

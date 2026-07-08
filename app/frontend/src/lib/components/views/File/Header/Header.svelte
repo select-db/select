@@ -61,9 +61,11 @@
 
 <div class="wrapper">
 	<div class="left-wrapper">
-		<RunButton {file} {run} {cancel} />
-		<RunButton {file} {run} {cancel} plan />
-		<RunButton {file} {run} {cancel} explain />
+		<div class="actions-wrapper">
+			<RunButton {file} {run} {cancel} />
+			<RunButton {file} {run} {cancel} plan />
+			<RunButton {file} {run} {cancel} explain />
+		</div>
 		<div class="divider"></div>
 		<DatabasePicker
 			multiple={true}
@@ -82,23 +84,28 @@
 
 <style>
 	.wrapper {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 
 		display: flex;
 		gap: var(--space-sm);
 		align-items: start;
-		padding: var(--space-xs-sm) var(--space-sm) 0 var(--space-sm);
-		margin-bottom: -2px;
+		padding: var(--space-sm) var(--space-sm-md) 0 var(--space-sm-md);
 	}
 
 	.divider {
-		width: var(--space-xs);
+		width: var(--space-sm);
 	}
 
 	.wrapper .left-wrapper,
+	.wrapper .actions-wrapper,
 	.wrapper .right-wrapper {
 		display: flex;
 		align-items: center;
+	}
+
+	.actions-wrapper {
+		display: flex;
+		gap: var(--space-xs-sm);
 	}
 
 	.wrapper .right-wrapper {

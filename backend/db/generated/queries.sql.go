@@ -10,6 +10,7 @@ import (
 
 	"backend/db/db_types"
 	"github.com/lib/pq"
+	"github.com/sqlc-dev/pqtype"
 )
 
 const addAPIKeyRole = `-- name: AddAPIKeyRole :exec
@@ -162,6 +163,27 @@ DELETE FROM auth.api_key_to_role WHERE api_key_id = $1
 
 func (q *Queries) DeleteAPIKeyRoles(ctx context.Context, apiKeyID db_types.JSONNullUUID) error {
 	_, err := q.db.ExecContext(ctx, deleteAPIKeyRoles, apiKeyID)
+	return err
+}
+
+const deleteAuditEventsBefore = `-- name: DeleteAuditEventsBefore :execrows
+DELETE FROM audit.event WHERE occurred_at < $1
+`
+
+func (q *Queries) DeleteAuditEventsBefore(ctx context.Context, occurredAt db_types.JSONNullTime) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAuditEventsBefore, occurredAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteAuditOutbox = `-- name: DeleteAuditOutbox :exec
+DELETE FROM audit.outbox WHERE id = ANY($1::bigint[])
+`
+
+func (q *Queries) DeleteAuditOutbox(ctx context.Context, dollar_1 []int64) error {
+	_, err := q.db.ExecContext(ctx, deleteAuditOutbox, pq.Array(dollar_1))
 	return err
 }
 
@@ -320,6 +342,77 @@ func (q *Queries) GetAPIKeyRoleIDs(ctx context.Context, apiKeyID db_types.JSONNu
 			return nil, err
 		}
 		items = append(items, role_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAPIKeyRolesWithNames = `-- name: GetAPIKeyRolesWithNames :many
+SELECT r.id, r.name
+FROM app.role r
+JOIN auth.api_key_to_role atr ON atr.role_id = r.id
+WHERE atr.api_key_id = $1 AND r.deleted_at IS NULL
+`
+
+type GetAPIKeyRolesWithNamesRow struct {
+	ID   db_types.JSONNullUUID
+	Name db_types.JSONNullString
+}
+
+func (q *Queries) GetAPIKeyRolesWithNames(ctx context.Context, apiKeyID db_types.JSONNullUUID) ([]GetAPIKeyRolesWithNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAPIKeyRolesWithNames, apiKeyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAPIKeyRolesWithNamesRow
+	for rows.Next() {
+		var i GetAPIKeyRolesWithNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAuditOutboxBatch = `-- name: GetAuditOutboxBatch :many
+SELECT id, event_json
+FROM audit.outbox
+ORDER BY id
+FOR UPDATE SKIP LOCKED
+LIMIT $1
+`
+
+type GetAuditOutboxBatchRow struct {
+	ID        db_types.JSONNullInt64
+	EventJson pqtype.NullRawMessage
+}
+
+func (q *Queries) GetAuditOutboxBatch(ctx context.Context, limit int32) ([]GetAuditOutboxBatchRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAuditOutboxBatch, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAuditOutboxBatchRow
+	for rows.Next() {
+		var i GetAuditOutboxBatchRow
+		if err := rows.Scan(&i.ID, &i.EventJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -736,6 +829,58 @@ func (q *Queries) GetUserByProviderIdentity(ctx context.Context, arg GetUserByPr
 	return i, err
 }
 
+const getUserNameByID = `-- name: GetUserNameByID :one
+SELECT name, email FROM app."user" WHERE id = $1
+`
+
+type GetUserNameByIDRow struct {
+	Name  db_types.JSONNullString
+	Email db_types.JSONNullString
+}
+
+func (q *Queries) GetUserNameByID(ctx context.Context, id db_types.JSONNullUUID) (GetUserNameByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserNameByID, id)
+	var i GetUserNameByIDRow
+	err := row.Scan(&i.Name, &i.Email)
+	return i, err
+}
+
+const getUserRolesWithNames = `-- name: GetUserRolesWithNames :many
+SELECT r.id, r.name, r.workspace_id
+FROM app.role r
+JOIN app.user_to_role utr ON utr.role_id = r.id
+WHERE utr.user_id = $1 AND utr.deleted_at IS NULL AND r.deleted_at IS NULL
+`
+
+type GetUserRolesWithNamesRow struct {
+	ID          db_types.JSONNullUUID
+	Name        db_types.JSONNullString
+	WorkspaceID db_types.JSONNullUUID
+}
+
+func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID db_types.JSONNullUUID) ([]GetUserRolesWithNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserRolesWithNames, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserRolesWithNamesRow
+	for rows.Next() {
+		var i GetUserRolesWithNamesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.WorkspaceID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserToRoleByID = `-- name: GetUserToRoleByID :one
 SELECT id, user_id, role_id, workspace_id, updated_at, deleted_at
 FROM app.user_to_role
@@ -1033,6 +1178,76 @@ func (q *Queries) GetWorkspacesForUserSince(ctx context.Context, arg GetWorkspac
 		return nil, err
 	}
 	return items, nil
+}
+
+const insertAuditEvent = `-- name: InsertAuditEvent :exec
+INSERT INTO audit.event (
+    workspace_id,
+    occurred_at,
+    domain,
+    action,
+    principal_hash,
+    principal_id,
+    principal_type,
+    target_type,
+    target_id,
+    target_label,
+    status,
+    payload,
+    duration_ms,
+    returned_row_count,
+    client_ip
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+)
+`
+
+type InsertAuditEventParams struct {
+	WorkspaceID      db_types.JSONNullUUID
+	OccurredAt       db_types.JSONNullTime
+	Domain           db_types.JSONNullString
+	Action           db_types.JSONNullString
+	PrincipalHash    []byte
+	PrincipalID      db_types.JSONNullUUID
+	PrincipalType    db_types.JSONNullString
+	TargetType       db_types.JSONNullString
+	TargetID         db_types.JSONNullUUID
+	TargetLabel      db_types.JSONNullString
+	Status           db_types.JSONNullString
+	Payload          pqtype.NullRawMessage
+	DurationMs       db_types.JSONNullInt64
+	ReturnedRowCount db_types.JSONNullInt64
+	ClientIp         db_types.JSONNullInet
+}
+
+func (q *Queries) InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) error {
+	_, err := q.db.ExecContext(ctx, insertAuditEvent,
+		arg.WorkspaceID,
+		arg.OccurredAt,
+		arg.Domain,
+		arg.Action,
+		arg.PrincipalHash,
+		arg.PrincipalID,
+		arg.PrincipalType,
+		arg.TargetType,
+		arg.TargetID,
+		arg.TargetLabel,
+		arg.Status,
+		arg.Payload,
+		arg.DurationMs,
+		arg.ReturnedRowCount,
+		arg.ClientIp,
+	)
+	return err
+}
+
+const insertAuditOutbox = `-- name: InsertAuditOutbox :exec
+INSERT INTO audit.outbox (event_json) VALUES ($1)
+`
+
+func (q *Queries) InsertAuditOutbox(ctx context.Context, eventJson pqtype.NullRawMessage) error {
+	_, err := q.db.ExecContext(ctx, insertAuditOutbox, eventJson)
+	return err
 }
 
 const insertDefaultWorkspace = `-- name: InsertDefaultWorkspace :exec
@@ -1535,6 +1750,23 @@ func (q *Queries) UpsertPermission(ctx context.Context, arg UpsertPermissionPara
 		arg.Action,
 		arg.Effect,
 	)
+	return err
+}
+
+const upsertPrincipalSnapshot = `-- name: UpsertPrincipalSnapshot :exec
+INSERT INTO audit.principal_snapshot (snapshot_hash, workspace_id, snapshot)
+VALUES ($1, $2, $3)
+ON CONFLICT (snapshot_hash) DO NOTHING
+`
+
+type UpsertPrincipalSnapshotParams struct {
+	SnapshotHash []byte
+	WorkspaceID  db_types.JSONNullUUID
+	Snapshot     pqtype.NullRawMessage
+}
+
+func (q *Queries) UpsertPrincipalSnapshot(ctx context.Context, arg UpsertPrincipalSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, upsertPrincipalSnapshot, arg.SnapshotHash, arg.WorkspaceID, arg.Snapshot)
 	return err
 }
 

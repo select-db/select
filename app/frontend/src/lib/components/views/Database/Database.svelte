@@ -84,7 +84,6 @@
 <style>
 	.wrapper {
 		height: 100%;
-		background-color: var(--gray-0);
 		overflow-x: hidden;
 		overflow-y: auto;
 	}

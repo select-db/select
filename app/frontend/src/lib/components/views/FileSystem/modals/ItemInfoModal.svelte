@@ -333,7 +333,7 @@
 		width: 1%;
 		max-width: 200px;
 		color: var(--gray-800);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	td:first-child p {
@@ -421,7 +421,7 @@
 		align-items: center;
 		gap: var(--space-sm);
 		padding: var(--space-sm-md);
-		background-color: var(--gray-500);
+		background-color: var(--gray-200);
 		border-bottom: var(--border);
 	}
 

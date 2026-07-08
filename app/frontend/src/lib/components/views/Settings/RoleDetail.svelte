@@ -439,8 +439,8 @@
 </script>
 
 <div class="role-detail">
-	<div class="table-wrap scrollable" bind:this={tableWrapEl}>
-		<table>
+	<div class="table-wrap" bind:this={tableWrapEl}>
+		<table class="scrollable">
 			<thead>
 				<tr>
 					<th class="col-resource" style="padding: var(--space-xs);">
@@ -757,12 +757,23 @@
 	}
 
 	.table-wrap {
-		overflow: auto;
 		flex: 1;
+		min-height: 0;
+		border: var(--border);
+		border-radius: var(--br-sm);
+		/* Bound the height and clip the table's square corners to the radius. */
+		overflow: hidden;
+		margin: 0 var(--space-sm) var(--space-sm) var(--space-sm);
 	}
 
 	table {
+		/* Scroll container lives on the table itself; display:block is required
+		   for a <table> to actually scroll. height:100% makes it fill the bounded
+		   wrapper so it scrolls instead of overflowing. */
+		display: block;
+		overflow: auto;
 		width: 100%;
+		height: 100%;
 		border-collapse: separate;
 		border-spacing: 0;
 		font-size: var(--fs-sm);
@@ -776,7 +787,7 @@
 		font-weight: var(--fw-light);
 		color: var(--gray-800);
 		padding: var(--space-xs) var(--space-sm);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		border-bottom: var(--border);
 		white-space: nowrap;
 	}
@@ -797,7 +808,7 @@
 		padding: var(--space-sm-md) var(--space-sm-md);
 		border-bottom: var(--border);
 		vertical-align: middle;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.col-resource {
@@ -918,7 +929,7 @@
 		visibility: hidden;
 		position: absolute;
 		padding: var(--space-xs-sm) var(--space-xs);
-		box-shadow: var(--gray-100) -15px 0px 10px 0px !important;
+		box-shadow: var(--shadow) -15px 0px 10px 0px !important;
 	}
 
 	tbody tr:hover .row-actions {

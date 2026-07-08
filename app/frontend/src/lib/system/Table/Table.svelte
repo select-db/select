@@ -128,7 +128,7 @@
 	thead th {
 		position: sticky;
 		top: 0;
-		background: var(--gray-100);
+		background: var(--gray-200);
 		border-bottom: var(--border);
 		height: 32px;
 		padding: 0 var(--space-sm);
@@ -175,7 +175,7 @@
 		height: 36px;
 		vertical-align: middle;
 		color: var(--gray-900);
-		background: var(--gray-0);
+		background: var(--gray-200);
 		border-bottom: var(--border);
 		overflow: hidden;
 	}

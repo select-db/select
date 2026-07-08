@@ -73,6 +73,6 @@
 		gap: var(--space-xs);
 		border-top: var(--border);
 		padding: var(--space-sm);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 </style>
