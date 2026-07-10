@@ -18,6 +18,10 @@
   --fs-xxl: 2rem;
 }
 
+/* Subtle elevation shadow (mirrors the app's --shadow-subtle per theme) */
+:root[data-theme="light"] { --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / 0.02), 0px 1px 1px 0px lch(80% 0 0 / 0.02); }
+:root[data-theme="dark"]  { --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / 0.06), 0px 1px 1px 0px lch(0% 0 0 / 0.06); }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
@@ -39,7 +43,7 @@ a {
   display: grid;
   grid-template-columns: 260px minmax(0, 52rem) 200px;
   min-height: 100vh;
-  background: var(--gray-100);
+  background: var(--gray-0);
 }
 
 /* Sidebar */
@@ -51,7 +55,7 @@ a {
   flex-direction: column;
   border-right: var(--border);
   padding-top: var(--space-md);
-  background: var(--gray-100);
+  background: var(--gray-0);
 }
 
 doc-sidebar {
@@ -90,7 +94,7 @@ doc-sidebar {
   padding: var(--space-xs-sm) var(--space-sm-md);
   border: var(--border);
   border-radius: var(--br-md);
-  background: var(--gray-0);
+  background: var(--gray-100);
   color: var(--gray-900);
   font-size: var(--fs-sm);
   cursor: pointer;
@@ -103,7 +107,7 @@ doc-sidebar {
   width: 2.25rem;
   border: var(--border);
   border-radius: var(--br-md);
-  background: var(--gray-0);
+  background: var(--gray-100);
   cursor: pointer;
 }
 
@@ -117,6 +121,43 @@ doc-sidebar {
   font-size: var(--fs-xs);
   color: var(--gray-800);
 }
+
+/* Interactive affordance: buttons & inputs */
+.search-trigger,
+.theme-toggle,
+.menu-toggle {
+  box-shadow: var(--shadow-subtle);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+}
+
+.search-trigger:hover,
+.theme-toggle:hover,
+.menu-toggle:hover {
+  background: var(--gray-200);
+  border-color: var(--gray-500);
+  color: var(--gray-1000);
+}
+
+.theme-toggle:hover svg,
+.menu-toggle:hover svg { stroke: var(--gray-1000); }
+
+.search-trigger:active,
+.theme-toggle:active,
+.menu-toggle:active {
+  background: var(--gray-300);
+  transform: translateY(1px);
+}
+
+.search-trigger:focus-visible,
+.theme-toggle:focus-visible,
+.menu-toggle:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Search input: highlight the field while typing */
+.search-box { transition: border-color 0.15s ease; }
+.search-box:focus-within { border-bottom-color: var(--blue); }
 
 /* Nav tree */
 doc-sidebar {padding-top: var(--space-sm);}
@@ -153,7 +194,7 @@ main {
   overflow-y: auto;
   height: 100vh;
   border-right: var(--border);
-  background: var(--gray-0);
+  background: var(--gray-200);
 }
 
 .content { line-height: 1.8; color: var(--gray-900); }
@@ -256,9 +297,11 @@ main {
   font-style: italic;
 }
 
-.content table { width: 100%; margin-bottom: var(--space-md); border-collapse: collapse; }
-.content th, .content td { padding: var(--space-sm) var(--space-md); border: var(--border); text-align: left; }
-.content th { background: var(--gray-200); font-weight: var(--fw-bold); font-size: var(--fs-sm); color: var(--gray-1000); }
+.content table { width: 100%; margin-bottom: var(--space-md); border: var(--border); border-radius: var(--br-sm); border-collapse: separate; border-spacing: 0; overflow: hidden; box-shadow: var(--shadow-subtle); }
+.content th, .content td { padding: var(--space-sm) var(--space-md); border-bottom: var(--border); border-right: var(--border); text-align: left; }
+.content th:last-child, .content td:last-child { border-right: none; }
+.content tr:last-child td { border-bottom: none; }
+.content th { background: var(--gray-300); font-weight: var(--fw-bold); font-size: var(--fs-sm); color: var(--gray-1000); }
 .content td { font-size: var(--fs-md); }
 .content td code { font-size: 0.8em; }
 .content tr:nth-child(even) td { background: var(--gray-100); }
@@ -278,7 +321,7 @@ main {
   height: 100vh;
   overflow-y: auto;
   padding: var(--space-xl) var(--space-md);
-  background: var(--gray-100);
+  background: var(--gray-0);
 }
 
 .toc ul { list-style: none; }
@@ -331,6 +374,7 @@ main {
   color: var(--gray-1000);
   outline: none;
   font-family: var(--ff);
+  box-shadow: var(--shadow-subtle);
 }
 
 .search-box kbd { font-size: var(--fs-xs); color: var(--gray-800); }
@@ -378,7 +422,7 @@ main {
   padding: var(--space-xs);
   border: var(--border);
   border-radius: var(--br-md);
-  background: var(--gray-0);
+  background: var(--gray-100);
   cursor: pointer;
 }
 
