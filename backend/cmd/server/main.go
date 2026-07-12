@@ -16,15 +16,9 @@ import (
 	"github.com/selectDb/dialect/engine"
 
 	"backend/db"
-	"backend/internal/auth"
 	"backend/internal/cli"
+	"backend/internal/httpapi"
 	"backend/internal/middlewares"
-
-	apikeyhandler "backend/internal/apikey"
-	datasourcehandler "backend/internal/datasource"
-	mcphandler "backend/internal/mcp"
-	synchandler "backend/internal/syncer"
-	workspacehandler "backend/internal/workspace"
 )
 
 // Version info, overridden at build time via:
@@ -88,14 +82,14 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	authenticated := middlewares.Authenticated()
-	member := middlewares.Membership()
 	// Per-endpoint rate limit (requests/minute, keyed by user else IP).
-	// Applied innermost so authenticated routes key by user.
 	limited := func(perMinute int, h http.HandlerFunc) http.Handler {
 		return middlewares.RateLimit(perMinute)(h)
 	}
 
+	// Infrastructure routes carry build-time vars (version) and process-local
+	// checks (health), so they stay here; the application routes live in httpapi
+	// so the e2e harness builds the identical handler graph.
 	mux.Handle("/health", limited(60, func(w http.ResponseWriter, r *http.Request) {
 		if err := db.Ping(); err != nil {
 			log.Printf("health: db ping: %v", err)
@@ -107,39 +101,10 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}))
-
 	mux.Handle("/version", limited(60, versionHandler()))
 
-	mux.Handle("/auth/get-device-code", limited(15, auth.GetDeviceCodeHandler()))
-	mux.Handle("/auth/get-access-token", limited(30, auth.GetAccessTokenHandler()))
-
-	mux.Handle("/sync/v1/sync", authenticated(limited(600, synchandler.Handler())))
-
-	mux.Handle("/workspace/create", authenticated(limited(60, workspacehandler.CreateHandler())))
-	mux.Handle("/workspace/delete", authenticated(member(limited(30, workspacehandler.DeleteHandler()))))
-
-	mux.Handle("/user/search", authenticated(member(limited(120, workspacehandler.SearchUserHandler()))))
-	mux.Handle("/user/add", authenticated(member(limited(120, workspacehandler.AddUserHandler()))))
-
-	mux.Handle("/apikey/list", authenticated(member(limited(120, apikeyhandler.ListHandler()))))
-	mux.Handle("/apikey/create", authenticated(member(limited(10, apikeyhandler.CreateHandler()))))
-	mux.Handle("/apikey/revoke", authenticated(member(limited(30, apikeyhandler.RevokeHandler()))))
-	mux.Handle("/apikey/rotate", authenticated(member(limited(10, apikeyhandler.RotateHandler()))))
-	mux.Handle("/apikey/set-roles", authenticated(member(limited(30, apikeyhandler.SetRolesHandler()))))
-
-	mux.Handle("/datasource/get", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
-	mux.Handle("/datasource/upsert", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
-	mux.Handle("/datasource/delete", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))
-
-	mux.Handle("/datasource/ping", authenticated(member(limited(60, datasourcehandler.PingHandler()))))
-	mux.Handle("/datasource/schema", authenticated(member(limited(120, datasourcehandler.SchemaHandler()))))
-	mux.Handle("/datasource/execute", authenticated(member(limited(240, datasourcehandler.ExecuteHandler()))))
-	mux.Handle("/datasource/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
-
-	mux.Handle("/mcp", authenticated(limited(600, mcphandler.Handler())))
-
-	handler := middlewares.RequestLogger(mux)
-	handler = middlewares.SecureHeaders(handler)
+	httpapi.Register(mux)
+	handler := httpapi.Wrap(mux)
 
 	srv := &http.Server{
 		Addr:    ":8080",
