@@ -10,11 +10,11 @@ import (
 	"os"
 	"testing"
 
-	"backend/internal/testsupport"
+	"backend/internal/test/support"
 )
 
 func TestMain(m *testing.M) {
-	stop, err := testsupport.StartPostgres()
+	stop, err := support.StartPostgres()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
