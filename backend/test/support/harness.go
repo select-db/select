@@ -37,11 +37,38 @@ const (
 // pgConfig is set by StartPostgres and read by NewDB.
 var pgConfig pgtestdb.Config
 
-// StartPostgres boots a single embedded Postgres for the whole test binary and
-// installs the dev crypto env (JWT signer + KEK) that the auth and datasource
-// paths require. Call it from TestMain and defer the returned stop func. The
-// returned code is passed straight to os.Exit by the caller.
+// StartPostgres makes a Postgres available to the test binary and installs the
+// dev crypto env (JWT signer + KEK) that the auth and datasource paths require.
+// If TEST_PG_HOST is set it connects to that shared server — one boot for the
+// whole `go test ./...` run, and pgtestdb reuses the migrated template across
+// every package. Otherwise it boots an embedded Postgres for this binary alone.
+// Call it from TestMain and pass the returned code straight to os.Exit.
 func StartPostgres() (stop func(code int), err error) {
+	// Keep crypto material in its own dir: embedded-postgres wipes its
+	// RuntimePath on Start, which would delete the signing key.
+	cryptoDir, err := os.MkdirTemp("", "e2e-crypto-*")
+	if err != nil {
+		return nil, fmt.Errorf("create crypto dir: %w", err)
+	}
+	if err := setupCrypto(cryptoDir); err != nil {
+		_ = os.RemoveAll(cryptoDir)
+		return nil, err
+	}
+
+	// Shared external server: no per-binary boot.
+	if host := os.Getenv("TEST_PG_HOST"); host != "" {
+		pgConfig = pgtestdb.Config{
+			DriverName: "postgres",
+			Host:       host,
+			Port:       envOr("TEST_PG_PORT", "5432"),
+			User:       envOr("TEST_PG_USER", testPGUser),
+			Password:   envOr("TEST_PG_PASSWORD", testPGPassword),
+			Database:   envOr("TEST_PG_DATABASE", testPGDatabase),
+			Options:    "sslmode=disable",
+		}
+		return func(code int) { _ = os.RemoveAll(cryptoDir); os.Exit(code) }, nil
+	}
+
 	port := freePort()
 	pgConfig = pgtestdb.Config{
 		DriverName: "postgres",
@@ -55,20 +82,8 @@ func StartPostgres() (stop func(code int), err error) {
 
 	runtimeDir, err := os.MkdirTemp("", "e2e-postgres-*")
 	if err != nil {
-		return nil, fmt.Errorf("create runtime dir: %w", err)
-	}
-	// Keep crypto material outside RuntimePath: embedded-postgres wipes its
-	// runtime dir on Start, which would delete the signing key.
-	cryptoDir, err := os.MkdirTemp("", "e2e-crypto-*")
-	if err != nil {
-		_ = os.RemoveAll(runtimeDir)
-		return nil, fmt.Errorf("create crypto dir: %w", err)
-	}
-
-	if err := setupCrypto(cryptoDir); err != nil {
-		_ = os.RemoveAll(runtimeDir)
 		_ = os.RemoveAll(cryptoDir)
-		return nil, err
+		return nil, fmt.Errorf("create runtime dir: %w", err)
 	}
 
 	pg := embeddedpostgres.NewDatabase(
@@ -130,6 +145,25 @@ func NewDB(t *testing.T) *sql.DB {
 	require.NotNil(t, conn)
 	db.SetDB(conn)
 	return conn
+}
+
+// Run is the one-line TestMain body for a package that uses the harness:
+//
+//	func TestMain(m *testing.M) { support.Run(m) }
+func Run(m *testing.M) {
+	stop, err := StartPostgres()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	stop(m.Run())
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func freePort() uint32 {
