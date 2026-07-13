@@ -1,4 +1,4 @@
-package support
+package e2e
 
 import (
 	"database/sql"

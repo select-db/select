@@ -1,10 +1,10 @@
-// Package support is the shared end-to-end test harness: an embedded
+// Package e2e is the shared end-to-end test harness: an embedded
 // Postgres, per-test isolated databases, a running audit logger, dev crypto
 // (JWT signing key + KEK), and helpers to craft accounts, mint tokens, drive
 // the HTTP API, and assert on emitted audit events. It is imported only by test
 // binaries. Tests using it must not call t.Parallel(): the audit logger and the
 // db package are process-global singletons rebound per test.
-package support
+package e2e
 
 import (
 	"crypto/rand"
