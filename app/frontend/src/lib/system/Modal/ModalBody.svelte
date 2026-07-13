@@ -9,6 +9,6 @@
 <style>
 	.body {
 		padding: var(--space-sm);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 </style>

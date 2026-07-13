@@ -56,7 +56,7 @@
 
 	#resizer:hover,
 	#resizer.resizing {
-		border-left: var(--bw) var(--white-glow) solid;
+		border-left: var(--bw) var(--gray-800) solid;
 	}
 
 	#resizer:active {
