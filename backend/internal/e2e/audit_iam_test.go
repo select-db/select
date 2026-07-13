@@ -16,76 +16,61 @@ import (
 // have no AuditConfig.
 
 func TestAudit_Permission_Upserted_IsWired(t *testing.T) {
-	conn := support.NewDB(t)
-	support.StartAudit(t, conn)
-	actor := support.NewAccount(t, conn)
-	h := support.NewHandler()
+	f := support.Setup(t)
 
 	permID := uuid.NewString()
-	support.SyncCommit(t, h, actor, "create", "permission", permID, map[string]any{
+	support.SyncCommit(t, f.H, f.Actor, "create", "permission", permID, map[string]any{
 		"id":      permID,
-		"role_id": actor.RoleID,
+		"role_id": f.Actor.RoleID,
 		"action":  "select",
 		"effect":  "allow",
 	})
 
-	support.RequireEvent(t, conn, "iam", "permission.upserted")
+	support.RequireEvent(t, f.Conn, "iam", "permission.upserted")
 }
 
 func TestAudit_Group_Upserted_IsWired(t *testing.T) {
-	conn := support.NewDB(t)
-	support.StartAudit(t, conn)
-	actor := support.NewAccount(t, conn)
-	h := support.NewHandler()
+	f := support.Setup(t)
 
 	groupID := uuid.NewString()
-	support.SyncCommit(t, h, actor, "create", "group", groupID, map[string]any{
+	support.SyncCommit(t, f.H, f.Actor, "create", "group", groupID, map[string]any{
 		"id":   groupID,
 		"name": "Engineering",
 	})
 
-	support.RequireEvent(t, conn, "iam", "group.upserted")
+	support.RequireEvent(t, f.Conn, "iam", "group.upserted")
 }
 
 func TestAudit_Role_Upserted_NotWiredYet(t *testing.T) {
-	conn := support.NewDB(t)
-	support.StartAudit(t, conn)
-	actor := support.NewAccount(t, conn)
-	h := support.NewHandler()
+	f := support.Setup(t)
 
 	roleID := uuid.NewString()
-	support.SyncCommit(t, h, actor, "create", "role", roleID, map[string]any{
+	support.SyncCommit(t, f.H, f.Actor, "create", "role", roleID, map[string]any{
 		"id":   roleID,
 		"name": "Analyst",
 	})
 
-	support.RequireEvent(t, conn, "iam", "role.upserted")
+	support.RequireEvent(t, f.Conn, "iam", "role.upserted")
 }
 
 func TestAudit_Permission_Deleted_NotWiredYet(t *testing.T) {
-	conn := support.NewDB(t)
-	support.StartAudit(t, conn)
-	actor := support.NewAccount(t, conn)
-	h := support.NewHandler()
+	f := support.Setup(t)
 
 	permID := uuid.NewString()
-	support.SyncCommit(t, h, actor, "create", "permission", permID, map[string]any{
-		"id": permID, "role_id": actor.RoleID, "action": "select", "effect": "allow",
+	support.SyncCommit(t, f.H, f.Actor, "create", "permission", permID, map[string]any{
+		"id": permID, "role_id": f.Actor.RoleID, "action": "select", "effect": "allow",
 	})
-	support.SyncCommit(t, h, actor, "delete", "permission", permID, map[string]any{"id": permID})
+	support.SyncCommit(t, f.H, f.Actor, "delete", "permission", permID, map[string]any{"id": permID})
 
-	support.RequireEvent(t, conn, "iam", "permission.deleted")
+	support.RequireEvent(t, f.Conn, "iam", "permission.deleted")
 }
 
 func TestAudit_Group_Deleted_NotWiredYet(t *testing.T) {
-	conn := support.NewDB(t)
-	support.StartAudit(t, conn)
-	actor := support.NewAccount(t, conn)
-	h := support.NewHandler()
+	f := support.Setup(t)
 
 	groupID := uuid.NewString()
-	support.SyncCommit(t, h, actor, "create", "group", groupID, map[string]any{"id": groupID, "name": "Temp"})
-	support.SyncCommit(t, h, actor, "delete", "group", groupID, map[string]any{"id": groupID})
+	support.SyncCommit(t, f.H, f.Actor, "create", "group", groupID, map[string]any{"id": groupID, "name": "Temp"})
+	support.SyncCommit(t, f.H, f.Actor, "delete", "group", groupID, map[string]any{"id": groupID})
 
-	support.RequireEvent(t, conn, "iam", "group.deleted")
+	support.RequireEvent(t, f.Conn, "iam", "group.deleted")
 }
