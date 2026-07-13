@@ -1,8 +1,8 @@
-// Package httpapi holds the app's HTTP route table and middleware chain, factored
+// Package api holds the app's HTTP route table and middleware chain, factored
 // out of cmd/server/main.go so both the server binary and end-to-end tests build
 // the exact same handler graph (same auth/membership/rate-limit wrapping). main
 // keeps its build-var routes (/version, /health) and calls Register for the rest.
-package httpapi
+package api
 
 import (
 	"net/http"

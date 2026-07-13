@@ -11,7 +11,7 @@ import (
 	"github.com/selectDb/dialect/engine"
 	"github.com/stretchr/testify/require"
 
-	"backend/internal/httpapi"
+	"backend/internal/api"
 	"backend/internal/syncer/types"
 )
 
@@ -25,8 +25,8 @@ func init() {
 // chain as the server binary) for in-process requests.
 func NewHandler() http.Handler {
 	mux := http.NewServeMux()
-	httpapi.Register(mux)
-	return httpapi.Wrap(mux)
+	api.Register(mux)
+	return api.Wrap(mux)
 }
 
 // Do sends an in-process request with a Bearer token and JSON body and returns

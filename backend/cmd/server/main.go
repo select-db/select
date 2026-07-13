@@ -16,8 +16,8 @@ import (
 	"github.com/selectDb/dialect/engine"
 
 	"backend/db"
+	"backend/internal/api"
 	"backend/internal/cli"
-	"backend/internal/httpapi"
 	"backend/internal/middlewares"
 )
 
@@ -88,8 +88,8 @@ func main() {
 	}
 
 	// Infrastructure routes carry build-time vars (version) and process-local
-	// checks (health), so they stay here; the application routes live in httpapi
-	// so the e2e harness builds the identical handler graph.
+	// checks (health), so they stay here; the application routes live in the api
+	// package so the e2e harness builds the identical handler graph.
 	mux.Handle("/health", limited(60, func(w http.ResponseWriter, r *http.Request) {
 		if err := db.Ping(); err != nil {
 			log.Printf("health: db ping: %v", err)
@@ -103,8 +103,8 @@ func main() {
 	}))
 	mux.Handle("/version", limited(60, versionHandler()))
 
-	httpapi.Register(mux)
-	handler := httpapi.Wrap(mux)
+	api.Register(mux)
+	handler := api.Wrap(mux)
 
 	srv := &http.Server{
 		Addr:    ":8080",

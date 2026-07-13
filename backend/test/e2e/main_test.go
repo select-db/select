@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	"backend/internal/test/support"
+	"backend/test/support"
 )
 
 func TestMain(m *testing.M) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"backend/internal/test/support"
+	"backend/test/support"
 )
 
 // --- IAM via the sync/patch path -------------------------------------------

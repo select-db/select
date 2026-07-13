@@ -18,9 +18,9 @@ declares (`backend/internal/audit/catalog.go`).
 runs non-root, so CI needs no special handling):
 
     sudo -u ubuntu env HOME=/home/ubuntu PATH="/usr/local/go/bin:/usr/bin:/bin" \
-        go test ./internal/e2e/ -count=1 -v
+        go test ./test/e2e/ -count=1 -v
 
-The harness (`backend/internal/testsupport`) boots one embedded Postgres per
+The harness (`backend/test/support`) boots one embedded Postgres per
 `go test` binary, gives each test an isolated migrated database, runs the audit
 logger with test-fast flush intervals, and installs a dev RSA signing key + KEK.
 Tests must not call `t.Parallel()`: the audit logger and the `db` package are
