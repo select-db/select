@@ -7,6 +7,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
 )
@@ -43,8 +44,13 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	}); err != nil {
 		return false, nil, fmt.Errorf("group_to_role: set deleted_at: %w", err)
 	}
+	var before any
+	groupID := ""
 	if fetchErr == nil {
+		before = row
+		groupID = row.GroupID.String()
 		revokeGroupMembers(ctx, row.GroupID)
 	}
+	audit.EmitChange(ctx, audit.GroupRoleDetached, workspaceID, groupID, before, nil)
 	return true, nil, nil
 }
