@@ -19,12 +19,10 @@ Each such file starts with:
 
     func TestMain(m *testing.M) { e2e.Run(m) }
 
-## Convention
-
-- `..._IsWired` asserts a spec that already has an emit site — must stay **green**.
-- `..._NotWiredYet` asserts a spec still to be wired — **red on purpose**, turns
-  green when the site lands. The suite is the executable checklist for deploying
-  the audit log everywhere.
+Every operation that has a catalog spec must emit its event; a test asserts that
+end to end. A test for a spec whose emit site is not wired yet fails until the
+site lands — the suite is the executable checklist for deploying the audit log
+everywhere.
 
 ## Running
 

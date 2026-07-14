@@ -8,6 +8,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
@@ -36,6 +37,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 
 	return patch.Apply(ctx, c, patch.Handler[generated.AppRole, generated.UpsertRoleParams]{
 		TableName: "role",
+		Audit:     &patch.AuditConfig{Spec: audit.RoleUpserted, TargetID: id},
 		Fetch: func(ctx context.Context) (generated.AppRole, error) {
 			return db.Queries.GetRoleByID(ctx, idUUID)
 		},

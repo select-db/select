@@ -8,13 +8,12 @@ import (
 	"backend/e2e"
 )
 
-// Audit coverage for the permission entity's emit sites. A _IsWired test must
-// stay green; a _NotWiredYet test is red until the emit site lands (see
-// backend/internal/audit/catalog.go).
+// Audit coverage for the permission entity: each operation must emit the audit
+// event its catalog spec declares (see backend/internal/audit/catalog.go).
 
 func TestMain(m *testing.M) { e2e.Run(m) }
 
-func TestAudit_PermissionUpserted_IsWired(t *testing.T) {
+func TestAudit_PermissionUpserted(t *testing.T) {
 	f := e2e.Setup(t)
 
 	permID := uuid.NewString()
@@ -28,7 +27,7 @@ func TestAudit_PermissionUpserted_IsWired(t *testing.T) {
 	e2e.RequireEvent(t, f.Conn, "iam", "permission.upserted")
 }
 
-func TestAudit_PermissionDeleted_NotWiredYet(t *testing.T) {
+func TestAudit_PermissionDeleted(t *testing.T) {
 	f := e2e.Setup(t)
 
 	permID := uuid.NewString()

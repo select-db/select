@@ -20,6 +20,23 @@ type AuditConfig struct {
 	TargetID string
 }
 
+// EmitDelete records a soft-delete as an audit event, the counterpart to the
+// upsert path in Apply for the hand-written ApplyDelete functions. before is the
+// row as it was before deletion (nil if unavailable); the principal is resolved
+// from ctx. Best-effort: a logging failure never fails the delete.
+func EmitDelete(ctx context.Context, spec audit.Spec, workspaceID, targetID string, before any) {
+	p := audit.ResolvePrincipal(ctx, workspaceID)
+	if err := audit.Emit(ctx, spec, audit.Record{
+		WorkspaceID: workspaceID,
+		Principal:   p,
+		TargetID:    targetID,
+		Status:      audit.StatusSuccess,
+		Payload:     audit.Diff(before, nil),
+	}); err != nil {
+		log.Printf("audit: emit %s: %v", spec.Type(), err)
+	}
+}
+
 // Handler describes the table-specific operations needed for LWW apply.
 type Handler[Row any, Params any] struct {
 	TableName string
