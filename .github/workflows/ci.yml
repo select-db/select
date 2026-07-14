@@ -300,6 +300,27 @@ jobs:
           path: ~/.embedded-postgres-go
           key: embedded-postgres-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
           restore-keys: embedded-postgres-${{ runner.os }}-
+      # The audit e2e tests run against Postgres 18 + pg_partman so they exercise
+      # the production audit config (real monthly partitions), not the no-partman
+      # DEFAULT-partition fallback. The harness connects via TEST_PG_*; packages
+      # without those env vars fall back to embedded Postgres. Postgres 18 lands
+      # on a non-5432 port (the runner's preinstalled cluster holds 5432), so the
+      # port is derived, not hardcoded.
+      - name: Postgres 18 + pg_partman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-18 postgresql-18-partman
+          sudo pg_createcluster --start 18 main || sudo pg_ctlcluster 18 main start || true
+          PORT=$(pg_lsclusters -h | awk '$1==18 {print $3}')
+          sudo -u postgres psql -p "$PORT" -c "ALTER USER postgres PASSWORD 'postgres';"
+          {
+            echo "TEST_PG_HOST=localhost"
+            echo "TEST_PG_PORT=$PORT"
+            echo "TEST_PG_USER=postgres"
+            echo "TEST_PG_PASSWORD=postgres"
+          } >> "$GITHUB_ENV"
       - run: go test ./...
         working-directory: backend
 
