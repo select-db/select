@@ -8,6 +8,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/scope"
 	"backend/internal/syncer/types"
@@ -98,5 +99,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return nil
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.RoleAssigned, c.WorkspaceID, uid, res.Before, res.After)
+	}
 	return res.Applied, res.Restored, err
 }

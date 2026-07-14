@@ -82,6 +82,14 @@ var (
 		Domain: DomainIAM, Action: ActionRoleDeleted, Lane: LaneOutbox, TargetType: "role",
 		Doc: "a role was deleted",
 	}
+	RoleAssigned = Spec{
+		Domain: DomainIAM, Action: ActionRoleAssigned, Lane: LaneOutbox, TargetType: "user",
+		Doc: "a role was assigned directly to a user (user_to_role)",
+	}
+	RoleUnassigned = Spec{
+		Domain: DomainIAM, Action: ActionRoleUnassigned, Lane: LaneOutbox, TargetType: "user",
+		Doc: "a role assigned directly to a user was removed",
+	}
 	MemberAdded = Spec{
 		Domain: DomainIAM, Action: ActionMemberAdded, Lane: LaneOutbox, TargetType: "user",
 		Doc: "a user was added to a workspace",
@@ -154,7 +162,7 @@ var Catalog = []Spec{
 	QueryExecuted, QueryDenied, QueryExported,
 	AuthLogin, AuthLoginFailed, AuthTokenRefreshed, AuthLogout,
 	PermissionUpserted, PermissionDeleted,
-	RoleUpserted, RoleDeleted,
+	RoleUpserted, RoleDeleted, RoleAssigned, RoleUnassigned,
 	MemberAdded, MemberRemoved,
 	GroupUpserted, GroupDeleted,
 	GroupMemberAdded, GroupMemberRemoved,

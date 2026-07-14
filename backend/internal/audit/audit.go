@@ -49,6 +49,8 @@ const (
 	ActionPermissionDeleted  = "permission.deleted"
 	ActionRoleUpserted       = "role.upserted"
 	ActionRoleDeleted        = "role.deleted"
+	ActionRoleAssigned       = "role.assigned"   // a role granted directly to a user
+	ActionRoleUnassigned     = "role.unassigned" // a direct user-role grant removed
 	ActionMemberAdded        = "member.added"
 	ActionMemberRemoved      = "member.removed"
 	ActionGroupUpserted      = "group.upserted"

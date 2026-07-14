@@ -10,7 +10,9 @@ import (
 	"backend/internal/middlewares"
 
 	apikeyhandler "backend/internal/apikey"
+	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/authz"
 	datasourcehandler "backend/internal/datasource"
 	mcphandler "backend/internal/mcp"
 	synchandler "backend/internal/syncer"
@@ -21,12 +23,21 @@ import (
 // chain. Callers add their own infrastructure routes (health, version) before or
 // after, then wrap the mux with Wrap.
 func Register(mux *http.ServeMux) {
-	authenticated := middlewares.Authenticated()
 	member := middlewares.Membership()
 	// Per-endpoint rate limit (requests/minute, keyed by user else IP).
 	// Applied innermost so authenticated routes key by user.
 	limited := func(perMinute int, h http.HandlerFunc) http.Handler {
 		return middlewares.RateLimit(perMinute)(h)
+	}
+
+	// authenticated validates the token and then stashes an audit principal
+	// resolver on the context, so any handler below can attach the actor to an
+	// audit event via audit.ResolvePrincipal without threading it through
+	// signatures. (The resolver lives here, not in middlewares, because it needs
+	// authz — which imports middlewares.)
+	authMW := middlewares.Authenticated()
+	authenticated := func(h http.Handler) http.Handler {
+		return authMW(withPrincipalResolver(h))
 	}
 
 	mux.Handle("/auth/get-device-code", limited(15, auth.GetDeviceCodeHandler()))
@@ -56,6 +67,20 @@ func Register(mux *http.ServeMux) {
 	mux.Handle("/datasource/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
 
 	mux.Handle("/mcp", authenticated(limited(600, mcphandler.Handler())))
+}
+
+// withPrincipalResolver stashes an audit principal resolver on the request
+// context. It runs inside authenticated, so the principal it reads is already
+// populated; handlers call audit.ResolvePrincipal(ctx, workspaceID) to attach the
+// actor. The workspace is supplied per event because a request can act across
+// workspaces (the sync path).
+func withPrincipalResolver(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := audit.ContextWithPrincipalResolver(r.Context(), func(workspaceID string) audit.Principal {
+			return authz.RequestPrincipal(r, workspaceID)
+		})
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // Wrap applies the outer middleware (request logging, secure headers) shared by
