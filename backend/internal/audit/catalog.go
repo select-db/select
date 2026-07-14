@@ -217,3 +217,19 @@ func Emit(ctx context.Context, spec Spec, r Record) error {
 	Log(e)
 	return nil
 }
+
+// EmitDelete is Emit for the hand-written delete paths that don't run through the
+// generic upsert in patch.Apply: it resolves the principal from ctx and records
+// the before-state (nil if unavailable) as the payload. Best-effort — a logging
+// failure never fails the caller.
+func EmitDelete(ctx context.Context, spec Spec, workspaceID, targetID string, before any) {
+	if err := Emit(ctx, spec, Record{
+		WorkspaceID: workspaceID,
+		Principal:   ResolvePrincipal(ctx, workspaceID),
+		TargetID:    targetID,
+		Status:      StatusSuccess,
+		Payload:     Diff(before, nil),
+	}); err != nil {
+		log.Printf("audit: emit %s: %v", spec.Type(), err)
+	}
+}

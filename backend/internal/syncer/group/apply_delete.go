@@ -8,7 +8,6 @@ import (
 	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
-	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
 )
@@ -54,6 +53,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 			_ = db.Queries.DeleteUserRefreshTokens(ctx, m)
 		}
 	}
-	patch.EmitDelete(ctx, audit.GroupDeleted, workspaceID, id, before)
+	audit.EmitDelete(ctx, audit.GroupDeleted, workspaceID, id, before)
 	return true, nil, nil
 }

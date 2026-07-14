@@ -9,7 +9,6 @@ import (
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/authz"
-	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
 )
@@ -60,6 +59,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if roleID != "" {
 		authz.Invalidate(roleID)
 	}
-	patch.EmitDelete(ctx, audit.PermissionDeleted, workspaceID, id, before)
+	audit.EmitDelete(ctx, audit.PermissionDeleted, workspaceID, id, before)
 	return true, nil, nil
 }
