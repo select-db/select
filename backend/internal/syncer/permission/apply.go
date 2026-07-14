@@ -50,9 +50,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("permission: role_id does not belong to workspace")
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppPermission, generated.UpsertPermissionParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppPermission, generated.UpsertPermissionParams]{
 		TableName: "permission",
-		Audit:     &patch.AuditConfig{Spec: audit.PermissionUpserted, TargetID: id},
 		Fetch: func(ctx context.Context) (generated.AppPermission, error) {
 			return db.Queries.GetPermissionByID(ctx, generated.GetPermissionByIDParams{
 				ID:          idUUID,
@@ -93,4 +92,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return nil
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.PermissionUpserted, c.WorkspaceID, id, res.Before, res.After)
+	}
+	return res.Applied, res.Restored, err
 }

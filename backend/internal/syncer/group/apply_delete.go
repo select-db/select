@@ -53,6 +53,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 			_ = db.Queries.DeleteUserRefreshTokens(ctx, m)
 		}
 	}
-	audit.EmitDelete(ctx, audit.GroupDeleted, workspaceID, id, before)
+	audit.EmitChange(ctx, audit.GroupDeleted, workspaceID, id, before, nil)
 	return true, nil, nil
 }

@@ -54,9 +54,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("user_to_group: group_id does not belong to workspace")
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppUserToGroup, generated.UpsertUserToGroupParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppUserToGroup, generated.UpsertUserToGroupParams]{
 		TableName: "user_to_group",
-		Audit:     &patch.AuditConfig{Spec: audit.GroupMemberAdded, TargetID: groupID},
 		Fetch: func(ctx context.Context) (generated.AppUserToGroup, error) {
 			return db.Queries.GetUserToGroupByID(ctx, generated.GetUserToGroupByIDParams{
 				ID:          idUUID,
@@ -110,4 +109,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return nil
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.GroupMemberAdded, c.WorkspaceID, groupID, res.Before, res.After)
+	}
+	return res.Applied, res.Restored, err
 }

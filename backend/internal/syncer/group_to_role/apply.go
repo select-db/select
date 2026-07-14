@@ -59,9 +59,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("group_to_role: role_id does not belong to workspace")
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppGroupToRole, generated.UpsertGroupToRoleParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppGroupToRole, generated.UpsertGroupToRoleParams]{
 		TableName: "group_to_role",
-		Audit:     &patch.AuditConfig{Spec: audit.GroupRoleAttached, TargetID: groupID},
 		Fetch: func(ctx context.Context) (generated.AppGroupToRole, error) {
 			return db.Queries.GetGroupToRoleByID(ctx, generated.GetGroupToRoleByIDParams{
 				ID:          idUUID,
@@ -107,6 +106,10 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return nil
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.GroupRoleAttached, c.WorkspaceID, groupID, res.Before, res.After)
+	}
+	return res.Applied, res.Restored, err
 }
 
 // revokeGroupMembers forces a token refresh for every active member of a group,

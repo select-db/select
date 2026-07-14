@@ -218,17 +218,17 @@ func Emit(ctx context.Context, spec Spec, r Record) error {
 	return nil
 }
 
-// EmitDelete is Emit for the hand-written delete paths that don't run through the
-// generic upsert in patch.Apply: it resolves the principal from ctx and records
-// the before-state (nil if unavailable) as the payload. Best-effort — a logging
-// failure never fails the caller.
-func EmitDelete(ctx context.Context, spec Spec, workspaceID, targetID string, before any) {
+// EmitChange is Emit for the mutation paths (upsert via patch.Apply, hand-written
+// deletes): it resolves the principal from ctx and records a before/after diff as
+// the payload. Either side may be nil — an insert has no before, a delete has no
+// after. Best-effort — a logging failure never fails the caller.
+func EmitChange(ctx context.Context, spec Spec, workspaceID, targetID string, before, after any) {
 	if err := Emit(ctx, spec, Record{
 		WorkspaceID: workspaceID,
 		Principal:   ResolvePrincipal(ctx, workspaceID),
 		TargetID:    targetID,
 		Status:      StatusSuccess,
-		Payload:     Diff(before, nil),
+		Payload:     Diff(before, after),
 	}); err != nil {
 		log.Printf("audit: emit %s: %v", spec.Type(), err)
 	}

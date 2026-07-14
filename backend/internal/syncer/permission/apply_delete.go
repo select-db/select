@@ -59,6 +59,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if roleID != "" {
 		authz.Invalidate(roleID)
 	}
-	audit.EmitDelete(ctx, audit.PermissionDeleted, workspaceID, id, before)
+	audit.EmitChange(ctx, audit.PermissionDeleted, workspaceID, id, before, nil)
 	return true, nil, nil
 }

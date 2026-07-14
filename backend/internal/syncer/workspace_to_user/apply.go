@@ -44,7 +44,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("workspace_to_user: insert workspace if not exists: %w", err)
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppWorkspaceToUser, generated.UpsertWorkspaceToUserParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppWorkspaceToUser, generated.UpsertWorkspaceToUserParams]{
 		TableName: "workspace_to_user",
 		Fetch: func(ctx context.Context) (generated.AppWorkspaceToUser, error) {
 			return db.Queries.GetWorkspaceToUserByID(ctx, generated.GetWorkspaceToUserByIDParams{
@@ -82,4 +82,5 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.UpsertWorkspaceToUser(ctx, params)
 		},
 	})
+	return res.Applied, res.Restored, err
 }
