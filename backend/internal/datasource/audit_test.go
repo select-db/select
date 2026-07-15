@@ -48,3 +48,42 @@ func TestAudit_DatasourceDeleted(t *testing.T) {
 
 	e2e.RequireEvent(t, f.Conn, "datasource", "deleted")
 }
+
+// nonManagerToken mints a token for a workspace member with no owner rights and
+// no manage permission, so datasource management is forbidden for them.
+func nonManagerToken(t *testing.T, f e2e.Fixture) string {
+	t.Helper()
+	memberID := uuid.NewString()
+	e2e.SeedUser(t, f.Conn, memberID)
+	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
+	return e2e.MintJWT(t, memberID)
+}
+
+func TestAudit_DatasourceUpsertDenied(t *testing.T) {
+	f := e2e.Setup(t)
+	token := nonManagerToken(t, f)
+
+	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/upsert", token, map[string]any{
+		"id":           uuid.NewString(),
+		"workspace_id": f.Actor.WorkspaceID,
+		"db_type":      "postgresql",
+		"name":         "prod",
+		"dsn":          "postgres://u:p@db:5432/app",
+	})
+	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())
+
+	e2e.RequireEventStatus(t, f.Conn, "datasource", "upserted", "denied")
+}
+
+func TestAudit_DatasourceDeleteDenied(t *testing.T) {
+	f := e2e.Setup(t)
+	token := nonManagerToken(t, f)
+
+	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/delete", token, map[string]any{
+		"id":           uuid.NewString(),
+		"workspace_id": f.Actor.WorkspaceID,
+	})
+	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())
+
+	e2e.RequireEventStatus(t, f.Conn, "datasource", "deleted", "denied")
+}

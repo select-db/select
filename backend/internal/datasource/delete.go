@@ -34,6 +34,11 @@ func DeleteHandler() http.HandlerFunc {
 		workspaceID := middlewares.MemberWorkspaceID(r)
 
 		if !authz.IsWorkspaceOwner(r, workspaceID) && !authz.CompiledFromRequest(r).CanManage(req.ID) {
+			audit.EmitAction(r.Context(), audit.DatasourceDeleted, audit.Record{
+				WorkspaceID: workspaceID,
+				TargetID:    req.ID,
+				Status:      audit.StatusDenied,
+			})
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
