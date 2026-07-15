@@ -9,6 +9,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 )
 
 type revokeRequest struct {
@@ -55,6 +56,12 @@ func RevokeHandler() http.HandlerFunc {
 			http.Error(w, "failed to revoke api key", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeyRevoked, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    req.ID,
+			Status:      audit.StatusSuccess,
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

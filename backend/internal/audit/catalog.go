@@ -142,6 +142,10 @@ var (
 		Domain: DomainIAM, Action: ActionAPIKeyRevoked, Lane: LaneOutbox, TargetType: "api_key",
 		Doc: "an API key was revoked",
 	}
+	APIKeySetRoles = Spec{
+		Domain: DomainIAM, Action: ActionAPIKeySetRoles, Lane: LaneOutbox, TargetType: "api_key",
+		Doc: "an API key's bound roles were replaced",
+	}
 
 	// datasource - connection lifecycle. Sensitive: DSNs can redirect data.
 	DatasourceUpserted = Spec{
@@ -168,7 +172,7 @@ var Catalog = []Spec{
 	GroupMemberAdded, GroupMemberRemoved,
 	GroupRoleAttached, GroupRoleDetached,
 	WorkspaceCreated, WorkspaceDeleted,
-	APIKeyCreated, APIKeyRotated, APIKeyRevoked,
+	APIKeyCreated, APIKeyRotated, APIKeyRevoked, APIKeySetRoles,
 	DatasourceUpserted, DatasourceDeleted,
 }
 

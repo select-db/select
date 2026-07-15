@@ -64,6 +64,7 @@ const (
 	ActionAPIKeyCreated      = "api_key.created"
 	ActionAPIKeyRotated      = "api_key.rotated"
 	ActionAPIKeyRevoked      = "api_key.revoked"
+	ActionAPIKeySetRoles     = "api_key.set_roles"
 
 	// datasource
 	ActionDatasourceUpserted = "upserted" // created or connection config changed

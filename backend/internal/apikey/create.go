@@ -8,6 +8,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/syncer/scope"
 )
@@ -117,6 +118,14 @@ func CreateHandler() http.HandlerFunc {
 			http.Error(w, "failed to create api key", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeyCreated, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    created.ID.String(),
+			TargetLabel: name,
+			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"prefix": created.Prefix.ValueOrEmpty(), "role_count": len(roleUUIDs)},
+		})
 
 		writeJSON(w, createResponse{
 			ID:     created.ID.String(),

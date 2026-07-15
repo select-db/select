@@ -10,6 +10,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/auth"
 )
 
@@ -114,6 +115,14 @@ func RotateHandler() http.HandlerFunc {
 			http.Error(w, "failed to rotate api key", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeyRotated, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    req.ID,
+			TargetLabel: old.Name.ValueOrEmpty(),
+			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"new_api_key_id": created.ID.String()},
+		})
 
 		writeJSON(w, createResponse{
 			ID:     created.ID.String(),

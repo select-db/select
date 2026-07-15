@@ -9,6 +9,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/scope"
 )
 
@@ -100,6 +101,13 @@ func SetRolesHandler() http.HandlerFunc {
 			http.Error(w, "failed to set roles", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeySetRoles, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    req.ID,
+			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"role_ids": req.RoleIDs},
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
