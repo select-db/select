@@ -29,15 +29,6 @@ func jwtRequest(t *testing.T, body string) *http.Request {
 	return r
 }
 
-func TestHandler_RejectsNonPost(t *testing.T) {
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-	Handler()(w, r)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("want 405, got %d", w.Code)
-	}
-}
-
 func TestHandler_RejectsNonAPIKeyPrincipal(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := jwtRequest(t, `{"jsonrpc":"2.0","id":1,"method":"initialize"}`)

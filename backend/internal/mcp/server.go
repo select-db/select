@@ -52,10 +52,6 @@ const (
 func Handler() http.HandlerFunc {
 	registry := defaultTools()
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
 		if !middlewares.IsAPIKeyPrincipal(r) {
 			http.Error(w, "MCP requires an API key", http.StatusForbidden)
 			return

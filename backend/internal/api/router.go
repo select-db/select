@@ -40,33 +40,33 @@ func Register(mux *http.ServeMux) {
 		return authMW(withPrincipalResolver(h))
 	}
 
-	mux.Handle("/auth/get-device-code", limited(15, auth.GetDeviceCodeHandler()))
-	mux.Handle("/auth/get-access-token", limited(30, auth.GetAccessTokenHandler()))
+	mux.Handle("POST /auth/get-device-code", limited(15, auth.GetDeviceCodeHandler()))
+	mux.Handle("POST /auth/get-access-token", limited(30, auth.GetAccessTokenHandler()))
 
-	mux.Handle("/sync/v1/sync", authenticated(limited(600, synchandler.Handler())))
+	mux.Handle("POST /sync/v1/sync", authenticated(limited(600, synchandler.Handler())))
 
-	mux.Handle("/workspace/create", authenticated(limited(60, workspacehandler.CreateHandler())))
-	mux.Handle("/workspace/delete", authenticated(member(limited(30, workspacehandler.DeleteHandler()))))
+	mux.Handle("POST /workspace/create", authenticated(limited(60, workspacehandler.CreateHandler())))
+	mux.Handle("POST /workspace/delete", authenticated(member(limited(30, workspacehandler.DeleteHandler()))))
 
-	mux.Handle("/user/search", authenticated(member(limited(120, workspacehandler.SearchUserHandler()))))
-	mux.Handle("/user/add", authenticated(member(limited(120, workspacehandler.AddUserHandler()))))
+	mux.Handle("POST /user/search", authenticated(member(limited(120, workspacehandler.SearchUserHandler()))))
+	mux.Handle("POST /user/add", authenticated(member(limited(120, workspacehandler.AddUserHandler()))))
 
-	mux.Handle("/apikey/list", authenticated(member(limited(120, apikeyhandler.ListHandler()))))
-	mux.Handle("/apikey/create", authenticated(member(limited(10, apikeyhandler.CreateHandler()))))
-	mux.Handle("/apikey/revoke", authenticated(member(limited(30, apikeyhandler.RevokeHandler()))))
-	mux.Handle("/apikey/rotate", authenticated(member(limited(10, apikeyhandler.RotateHandler()))))
-	mux.Handle("/apikey/set-roles", authenticated(member(limited(30, apikeyhandler.SetRolesHandler()))))
+	mux.Handle("POST /apikey/list", authenticated(member(limited(120, apikeyhandler.ListHandler()))))
+	mux.Handle("POST /apikey/create", authenticated(member(limited(10, apikeyhandler.CreateHandler()))))
+	mux.Handle("POST /apikey/revoke", authenticated(member(limited(30, apikeyhandler.RevokeHandler()))))
+	mux.Handle("POST /apikey/rotate", authenticated(member(limited(10, apikeyhandler.RotateHandler()))))
+	mux.Handle("POST /apikey/set-roles", authenticated(member(limited(30, apikeyhandler.SetRolesHandler()))))
 
-	mux.Handle("/datasource/get", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
-	mux.Handle("/datasource/upsert", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
-	mux.Handle("/datasource/delete", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))
+	mux.Handle("POST /datasource/get", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
+	mux.Handle("POST /datasource/upsert", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
+	mux.Handle("POST /datasource/delete", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))
 
-	mux.Handle("/datasource/ping", authenticated(member(limited(60, datasourcehandler.PingHandler()))))
-	mux.Handle("/datasource/schema", authenticated(member(limited(120, datasourcehandler.SchemaHandler()))))
-	mux.Handle("/datasource/execute", authenticated(member(limited(240, datasourcehandler.ExecuteHandler()))))
-	mux.Handle("/datasource/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
+	mux.Handle("POST /datasource/ping", authenticated(member(limited(60, datasourcehandler.PingHandler()))))
+	mux.Handle("POST /datasource/schema", authenticated(member(limited(120, datasourcehandler.SchemaHandler()))))
+	mux.Handle("POST /datasource/execute", authenticated(member(limited(240, datasourcehandler.ExecuteHandler()))))
+	mux.Handle("POST /datasource/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
 
-	mux.Handle("/mcp", authenticated(limited(600, mcphandler.Handler())))
+	mux.Handle("POST /mcp", authenticated(limited(600, mcphandler.Handler())))
 }
 
 // withPrincipalResolver stashes an audit principal resolver on the request

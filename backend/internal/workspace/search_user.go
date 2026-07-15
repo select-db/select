@@ -31,10 +31,6 @@ type searchUserResponse struct {
 
 func SearchUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
 
 		var req searchUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

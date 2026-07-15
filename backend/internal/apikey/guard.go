@@ -15,10 +15,6 @@ import (
 // permission denial it emits deniedSpec with StatusDenied; pass a zero Spec (the
 // list/read path) to skip denial auditing.
 func guard(w http.ResponseWriter, r *http.Request, deniedSpec audit.Spec) (workspaceID, userID string, ok bool) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return "", "", false
-	}
 	workspaceID = middlewares.MemberWorkspaceID(r)
 	// An API-key principal attempting key management is a privilege-escalation
 	// signal, worth auditing as a denial.
