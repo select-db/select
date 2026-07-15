@@ -242,6 +242,16 @@ func EmitAction(ctx context.Context, spec Spec, r Record) {
 	}
 }
 
+// EmitDenied records a permission denial from a handler's authz gate. A zero
+// spec (a read path with no action to attribute) is skipped; targetID may be ""
+// when the denied resource isn't known at gate time.
+func EmitDenied(ctx context.Context, spec Spec, workspaceID, targetID string) {
+	if spec.Action == "" {
+		return
+	}
+	EmitAction(ctx, spec, Record{WorkspaceID: workspaceID, TargetID: targetID, Status: StatusDenied})
+}
+
 // EmitChange is EmitAction for the mutation paths (upsert via patch.Apply,
 // hand-written deletes): the payload is a before/after diff. Either side may be
 // nil — an insert has no before, a delete has no after.

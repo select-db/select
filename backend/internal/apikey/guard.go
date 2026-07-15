@@ -23,7 +23,7 @@ func guard(w http.ResponseWriter, r *http.Request, deniedSpec audit.Spec) (works
 	// An API-key principal attempting key management is a privilege-escalation
 	// signal, worth auditing as a denial.
 	if middlewares.IsAPIKeyPrincipal(r) {
-		emitDenied(r, deniedSpec, workspaceID)
+		audit.EmitDenied(r.Context(), deniedSpec, workspaceID, "")
 		http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 		return "", "", false
 	}
@@ -33,19 +33,10 @@ func guard(w http.ResponseWriter, r *http.Request, deniedSpec audit.Spec) (works
 	}
 	if !authz.IsWorkspaceOwner(r, workspaceID) {
 		if !authz.CompiledFromRequest(r).IsAllowed(core.ActionWorkspaceApiKeysManage) {
-			emitDenied(r, deniedSpec, workspaceID)
+			audit.EmitDenied(r.Context(), deniedSpec, workspaceID, "")
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return "", "", false
 		}
 	}
 	return workspaceID, userID, true
-}
-
-// emitDenied records a denied key-management attempt. A zero spec (the list/read
-// path) is skipped — denied reads aren't audited.
-func emitDenied(r *http.Request, spec audit.Spec, workspaceID string) {
-	if spec.Action == "" {
-		return
-	}
-	audit.EmitAction(r.Context(), spec, audit.Record{WorkspaceID: workspaceID, Status: audit.StatusDenied})
 }

@@ -16,13 +16,7 @@ func manageGuard(w http.ResponseWriter, r *http.Request, workspaceID, datasource
 	if authz.IsWorkspaceOwner(r, workspaceID) || authz.CompiledFromRequest(r).CanManage(datasourceID) {
 		return true
 	}
-	if deniedSpec.Action != "" {
-		audit.EmitAction(r.Context(), deniedSpec, audit.Record{
-			WorkspaceID: workspaceID,
-			TargetID:    datasourceID,
-			Status:      audit.StatusDenied,
-		})
-	}
+	audit.EmitDenied(r.Context(), deniedSpec, workspaceID, datasourceID)
 	http.Error(w, "forbidden", http.StatusForbidden)
 	return false
 }
