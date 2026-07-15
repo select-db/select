@@ -10,6 +10,7 @@ import (
 	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
+	"backend/internal/authz"
 	"backend/internal/syncer/scope"
 )
 
@@ -23,10 +24,18 @@ type setRolesRequest struct {
 // allowed (the key then has no access) to match the user toggle UX.
 func SetRolesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r, audit.APIKeySetRoles)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			audit.EmitDenied(r.Context(), audit.APIKeySetRoles, a.WorkspaceID, "")
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			audit.EmitDenied(r.Context(), audit.APIKeySetRoles, a.WorkspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
 
 		var req setRolesRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

@@ -5,7 +5,7 @@ import (
 
 	"backend/db"
 	"backend/db/db_types"
-	"backend/internal/audit"
+	"backend/internal/authz"
 )
 
 type roleRef struct {
@@ -26,10 +26,16 @@ type keyEntry struct {
 
 func ListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r, audit.Spec{})
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
 		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)

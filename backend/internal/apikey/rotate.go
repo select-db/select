@@ -12,6 +12,7 @@ import (
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/authz"
 )
 
 type rotateRequest struct {
@@ -23,10 +24,19 @@ type rotateRequest struct {
 // without an outage.
 func RotateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, userID, ok := guard(w, r, audit.APIKeyRotated)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			audit.EmitDenied(r.Context(), audit.APIKeyRotated, a.WorkspaceID, "")
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			audit.EmitDenied(r.Context(), audit.APIKeyRotated, a.WorkspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
+		userID := a.UserID
 
 		var req rotateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

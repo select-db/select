@@ -9,12 +9,18 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	core "github.com/selectDb/dialect/core"
 )
 
 const (
 	maxExpiry         = 365 * 24 * time.Hour // upper bound when an expiry is set; nil = never
 	rotateGraceWindow = 24 * time.Hour       // old key stays valid this long after rotate
 )
+
+// manageAPIKeys is the permission that — besides workspace ownership —
+// authorizes managing API keys.
+const manageAPIKeys = core.ActionWorkspaceApiKeysManage
 
 var (
 	errBadExpiry    = errors.New("expires_at must be a future RFC3339 timestamp")
