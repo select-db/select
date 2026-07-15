@@ -9,7 +9,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
-	"backend/internal/authz"
+	"backend/internal/audit"
 
 	"github.com/google/uuid"
 )
@@ -42,8 +42,7 @@ func GetHandler() http.HandlerFunc {
 
 		workspaceID := middlewares.MemberWorkspaceID(r)
 
-		if !authz.IsWorkspaceOwner(r, workspaceID) && !authz.CompiledFromRequest(r).CanManage(req.ID) {
-			http.Error(w, "forbidden", http.StatusForbidden)
+		if !manageGuard(w, r, workspaceID, req.ID, audit.Spec{}) {
 			return
 		}
 
