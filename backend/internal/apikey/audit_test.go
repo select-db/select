@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"backend/e2e"
@@ -56,6 +57,28 @@ func TestAudit_APIKeyRevoked(t *testing.T) {
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "revoke failed: %s", rec.Body.String())
 	e2e.RequireEvent(t, f.Conn, "iam", "api_key.revoked")
+}
+
+// nonManagerToken mints a token for a workspace member with no owner rights and
+// no api-keys.manage permission, so key management is forbidden for them.
+func nonManagerToken(t *testing.T, f e2e.Fixture) string {
+	t.Helper()
+	memberID := uuid.NewString()
+	e2e.SeedUser(t, f.Conn, memberID)
+	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
+	return e2e.MintJWT(t, memberID)
+}
+
+func TestAudit_APIKeyCreateDenied(t *testing.T) {
+	f := e2e.Setup(t)
+	token := nonManagerToken(t, f)
+	rec := e2e.Do(t, f.H, http.MethodPost, "/apikey/create", token, map[string]any{
+		"workspace_id": f.Actor.WorkspaceID,
+		"name":         "x",
+		"role_ids":     []string{f.Actor.RoleID},
+	})
+	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())
+	e2e.RequireEventStatus(t, f.Conn, "iam", "api_key.created", "denied")
 }
 
 func TestAudit_APIKeySetRoles(t *testing.T) {

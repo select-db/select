@@ -18,7 +18,7 @@ type revokeRequest struct {
 
 func RevokeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r)
+		workspaceID, _, ok := guard(w, r, audit.APIKeyRevoked)
 		if !ok {
 			return
 		}

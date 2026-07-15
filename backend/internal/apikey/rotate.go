@@ -23,7 +23,7 @@ type rotateRequest struct {
 // without an outage.
 func RotateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, userID, ok := guard(w, r)
+		workspaceID, userID, ok := guard(w, r, audit.APIKeyRotated)
 		if !ok {
 			return
 		}

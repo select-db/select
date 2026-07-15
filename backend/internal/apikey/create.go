@@ -27,7 +27,7 @@ type createResponse struct {
 
 func CreateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, userID, ok := guard(w, r)
+		workspaceID, userID, ok := guard(w, r, audit.APIKeyCreated)
 		if !ok {
 			return
 		}

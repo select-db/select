@@ -23,7 +23,7 @@ type setRolesRequest struct {
 // allowed (the key then has no access) to match the user toggle UX.
 func SetRolesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r)
+		workspaceID, _, ok := guard(w, r, audit.APIKeySetRoles)
 		if !ok {
 			return
 		}

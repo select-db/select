@@ -5,6 +5,7 @@ import (
 
 	"backend/db"
 	"backend/db/db_types"
+	"backend/internal/audit"
 )
 
 type roleRef struct {
@@ -25,7 +26,7 @@ type keyEntry struct {
 
 func ListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r)
+		workspaceID, _, ok := guard(w, r, audit.Spec{})
 		if !ok {
 			return
 		}
