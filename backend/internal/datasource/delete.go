@@ -9,6 +9,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/authz"
 
 	"github.com/google/uuid"
@@ -57,6 +58,12 @@ func DeleteHandler() http.HandlerFunc {
 		}
 
 		InvalidateCache(workspaceID, req.ID)
+
+		audit.EmitAction(r.Context(), audit.DatasourceDeleted, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    req.ID,
+			Status:      audit.StatusSuccess,
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

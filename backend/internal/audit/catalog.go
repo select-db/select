@@ -226,18 +226,26 @@ func Emit(ctx context.Context, spec Spec, r Record) error {
 	return nil
 }
 
-// EmitChange is Emit for the mutation paths (upsert via patch.Apply, hand-written
-// deletes): it resolves the principal from ctx and records a before/after diff as
-// the payload. Either side may be nil — an insert has no before, a delete has no
-// after. Best-effort — a logging failure never fails the caller.
+// EmitAction is the best-effort emit for handler-initiated events: it resolves
+// the principal from ctx (the api keystone installs the resolver) and logs rather
+// than returns on failure, so a logging error never fails the request. The caller
+// fills r.WorkspaceID, TargetID/Label, Status, and a curated (secret-free!)
+// Payload. For mutation events with a before/after diff, use EmitChange.
+func EmitAction(ctx context.Context, spec Spec, r Record) {
+	r.Principal = ResolvePrincipal(ctx, r.WorkspaceID)
+	if err := Emit(ctx, spec, r); err != nil {
+		log.Printf("audit: emit %s: %v", spec.Type(), err)
+	}
+}
+
+// EmitChange is EmitAction for the mutation paths (upsert via patch.Apply,
+// hand-written deletes): the payload is a before/after diff. Either side may be
+// nil — an insert has no before, a delete has no after.
 func EmitChange(ctx context.Context, spec Spec, workspaceID, targetID string, before, after any) {
-	if err := Emit(ctx, spec, Record{
+	EmitAction(ctx, spec, Record{
 		WorkspaceID: workspaceID,
-		Principal:   ResolvePrincipal(ctx, workspaceID),
 		TargetID:    targetID,
 		Status:      StatusSuccess,
 		Payload:     Diff(before, after),
-	}); err != nil {
-		log.Printf("audit: emit %s: %v", spec.Type(), err)
-	}
+	})
 }

@@ -9,6 +9,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/authz"
 
 	"github.com/google/uuid"
@@ -121,6 +122,15 @@ func UpsertHandler() http.HandlerFunc {
 		}
 
 		InvalidateCache(workspaceID, req.ID)
+
+		// Secrets (dsn, ssh) are never logged — only the non-sensitive shape.
+		audit.EmitAction(r.Context(), audit.DatasourceUpserted, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    req.ID,
+			TargetLabel: req.Name,
+			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"db_type": req.DBType},
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
