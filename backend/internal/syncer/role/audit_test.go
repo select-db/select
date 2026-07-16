@@ -24,3 +24,13 @@ func TestAudit_RoleUpserted(t *testing.T) {
 
 	e2e.RequireEvent(t, f.Conn, "iam", "role.upserted")
 }
+
+func TestAudit_RoleDeleted(t *testing.T) {
+	f := e2e.Setup(t)
+
+	roleID := uuid.NewString()
+	e2e.SyncCommit(t, f.H, f.Actor, "create", "role", roleID, map[string]any{"id": roleID, "name": "Temp"})
+	e2e.SyncCommit(t, f.H, f.Actor, "delete", "role", roleID, map[string]any{"id": roleID})
+
+	e2e.RequireEvent(t, f.Conn, "iam", "role.deleted")
+}
