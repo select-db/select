@@ -1,0 +1,54 @@
+name: CodeQL
+
+# Deep, interprocedural taint analysis for Go — SSRF, path traversal, SQL/command
+# injection, unsafe deserialization, open redirect, etc. This is the analysis
+# gosec's whole-program SSA attempted per-PR but far too slowly (~6 min +
+# near-OOM on the backend module, which repeatedly hung the security job).
+#
+# It lives here, on a nightly schedule, deliberately OFF the PR critical path:
+# a multi-minute deep scan is free at night and never blocks a merge. Per-PR
+# security is the fast build-free semgrep step in ci.yml. Results surface in the
+# repository Security tab (Code scanning).
+#
+# Note: uploading results requires Code scanning to be enabled for the repo
+# (GitHub Advanced Security on private repositories). If it isn't, the analyze
+# step fails with a clear message and an admin can enable it in repo Settings.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # nightly 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # upload SARIF to Code scanning
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # Buildless (build-mode: none) extracts every Go source across the
+      # monorepo's modules without compiling — no per-module build wrangling and
+      # no trouble with the `replace ../dialect` local directives. For even
+      # deeper cross-module dataflow, switch build-mode to `autobuild` and run
+      # one analyze per module (backend, dialect, app, toolkit) via a matrix.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3 # pin to a SHA to match the repo's action-pinning convention
+        with:
+          languages: go
+          build-mode: none
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3 # pin to a SHA to match the repo's action-pinning convention
+        with:
+          category: "/language:go"

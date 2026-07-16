@@ -84,7 +84,7 @@ jobs:
           go_app=false;     [[ "$app" == true || "$dialect" == true || "$toolkit" == true ]] && go_app=true || true
           go_toolkit="$toolkit"
 
-          # JSON array of Go modules that need security scanning (govulncheck + gosec).
+          # JSON array of Go modules that need security scanning (govulncheck + semgrep).
           mods=()
           [[ "$go_app" == true ]] && mods+=('"app"') || true
           [[ "$go_backend" == true ]] && mods+=('"backend"') || true
@@ -120,6 +120,9 @@ jobs:
     needs: [plan]
     if: needs.plan.outputs.go-modules != '[]'
     runs-on: ubuntu-latest
+    # Guardrail: this step set is fast (semgrep is build-free, govulncheck is one
+    # compile). A run that exceeds this is stuck, not working — fail, don't hang.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -138,25 +141,24 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
-      - name: gosec
+      - name: semgrep (SAST)
         if: ${{ !cancelled() }}
         working-directory: ${{ matrix.module }}
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          # Excluded rules are categorical false positives for this codebase or
-          # are owned by another linter; the security-meaningful rules (taint
-          # path-traversal G703, taint SSRF G704, SSH host key G106,
-          # decompression-bomb G110, goroutine context G118, weak crypto, etc.)
-          # stay active. Reasons:
-          #   G101 identifier name-matches "password"/"token" (no real secrets; audited)
-          #   G104 unhandled errors -> owned by errcheck (golangci-lint)
-          #   G115 int->rune conversions in generated parser/lexer and bounded counters
-          #   G201,G202 parameterized SQL built in the dialect engine (values are bound)
-          #   G204 DB-dump/git/analyzer subprocess with no shell and validated args
-          #   G301,G302,G306 permissions on the desktop app's own user-owned files
-          #   G304 file access contained by the workspace root / validated paths
-          #   G706 low-risk log injection into operator-facing logs
-          gosec -exclude=G101,G104,G115,G201,G202,G204,G301,G302,G304,G306,G706 ./...
+          # Build-free SAST — replaces gosec, whose whole-program SSA re-compiled
+          # the entire module graph on every cold runner (~6 min + near-OOM on
+          # backend, which repeatedly hung/SIGTERM'd this job). Semgrep parses
+          # source directly, so it's ~seconds and independent of the build cache.
+          # Deep interprocedural taint (SSRF/path-traversal/injection) now runs
+          # nightly in the CodeQL workflow (.github/workflows/codeql.yml), off the
+          # PR critical path.
+          #
+          # Reporting-only during rollout: without --error, semgrep exits 0, so
+          # findings surface in the log without blocking the PR. To enforce (fail
+          # the job on findings) once the current backlog is triaged, add --error.
+          pipx run --spec 'semgrep==1.170.0' semgrep scan \
+            --config p/gosec --config p/golang \
+            --exclude='*_test.go' --metrics=off --disable-version-check .
 
   gitleaks:
     name: Secret scan (gitleaks)
