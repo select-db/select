@@ -17,6 +17,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/utils"
 )
 
@@ -52,6 +53,23 @@ var (
 	errAuthDenied  = errors.New("authorization was denied")
 	errCodeExpired = errors.New("device code expired")
 )
+
+// GitHub endpoints, as vars so tests can point the exchange at a mock server.
+var (
+	githubTokenURL      = "https://github.com/login/oauth/access_token"
+	githubUserURL       = "https://api.github.com/user"
+	githubUserEmailsURL = "https://api.github.com/user/emails"
+)
+
+// signInRejectedError is a terminal failure where GitHub proved identity but the
+// app refused the sign-in (email not on the allowlist, or no verified email). It
+// carries the attempted email so the handler can record it on auth.login_failed.
+type signInRejectedError struct {
+	email  string
+	reason string
+}
+
+func (e *signInRejectedError) Error() string { return "sign-in not allowed: " + e.reason }
 
 // pollResponse is the get-access-token body. Status "pending" => the client
 // re-polls after Interval seconds; "complete" => tokens are in the X-New-*
@@ -95,11 +113,18 @@ func GetAccessTokenHandler() http.HandlerFunc {
 
 		user, retryAfter, err := exchangeDeviceCode(ctx, req.DeviceCode)
 		if err != nil {
+			var rejected *signInRejectedError
 			switch {
 			case errors.Is(err, errAuthDenied):
+				emitLoginFailed(ctx, r, "", "access_denied")
 				http.Error(w, "authorization was denied", http.StatusForbidden)
 			case errors.Is(err, errCodeExpired):
 				http.Error(w, "device code expired", http.StatusGone)
+			case errors.As(err, &rejected):
+				// GitHub proved identity but the app refused the sign-in: a
+				// security-relevant failure, not a system fault.
+				emitLoginFailed(ctx, r, rejected.email, rejected.reason)
+				http.Error(w, "sign-in not allowed for this account", http.StatusForbidden)
 			default:
 				log.Printf("auth: device exchange: %v", err)
 				http.Error(w, "authorization failed", http.StatusBadGateway)
@@ -133,6 +158,10 @@ func GetAccessTokenHandler() http.HandlerFunc {
 		w.Header().Set("X-New-Access-Token", accessToken)
 		w.Header().Set("X-New-Refresh-Token", *refreshToken)
 
+		// Login is the user's own security event: attributed to them, no workspace
+		// (an org admin never sees a member's personal login), like token refresh.
+		emitLogin(ctx, r, user)
+
 		if err := json.NewEncoder(w).Encode(pollResponse{Status: "complete", LoggedUser: user}); err != nil {
 			http.Error(w, "Failed to encode user response", http.StatusInternalServerError)
 			return
@@ -144,6 +173,35 @@ type LoggedUser struct {
 	ID        db_types.JSONNullUUID
 	Name      db_types.JSONNullString
 	AvatarURL string
+}
+
+// emitLogin records a successful authentication as the user's own auth event
+// (no workspace). Best-effort: a logging failure never fails the login.
+func emitLogin(ctx context.Context, r *http.Request, user *LoggedUser) {
+	if err := audit.Emit(ctx, audit.AuthLogin, audit.Record{
+		Principal: audit.Principal{Type: audit.PrincipalUser, ID: user.ID.String(), Name: user.Name.ValueOrEmpty()},
+		Status:    audit.StatusSuccess,
+		ClientIP:  GetIPAddress(r),
+	}); err != nil {
+		log.Printf("audit: emit %s: %v", audit.AuthLogin.Type(), err)
+	}
+}
+
+// emitLoginFailed records a rejected sign-in. The principal is unknown (the app
+// user may not exist), so the attempted email/reason go in the payload; a SOC
+// reads these as brute-force / unauthorized-access signals.
+func emitLoginFailed(ctx context.Context, r *http.Request, email, reason string) {
+	payload := map[string]any{"provider": "github", "reason": reason}
+	if email != "" {
+		payload["email"] = email
+	}
+	if err := audit.Emit(ctx, audit.AuthLoginFailed, audit.Record{
+		Status:   audit.StatusFailure,
+		Payload:  payload,
+		ClientIP: GetIPAddress(r),
+	}); err != nil {
+		log.Printf("audit: emit %s: %v", audit.AuthLoginFailed.Type(), err)
+	}
 }
 
 // exchangeDeviceCode does ONE GitHub device-code token exchange:
@@ -168,7 +226,7 @@ func exchangeDeviceCode(ctx context.Context, deviceCode string) (*LoggedUser, in
 	var tokenResp AccessTokenResponse
 	if err := utils.Fetch(
 		"POST",
-		"https://github.com/login/oauth/access_token",
+		githubTokenURL,
 		strings.NewReader(data.Encode()),
 		headers,
 		&tokenResp,
@@ -182,11 +240,11 @@ func exchangeDeviceCode(ctx context.Context, deviceCode string) (*LoggedUser, in
 		if err != nil {
 			return nil, 0, fmt.Errorf("token OK but failed to fetch user: %w", err)
 		}
-		if !isEmailAllowed(githubUser.Email) {
-			return nil, 0, fmt.Errorf("sign-in not allowed for this account")
-		}
 		if githubUser.Email == "" {
-			return nil, 0, fmt.Errorf("no verified email on GitHub account")
+			return nil, 0, &signInRejectedError{reason: "no_verified_email"}
+		}
+		if !isEmailAllowed(githubUser.Email) {
+			return nil, 0, &signInRejectedError{email: githubUser.Email, reason: "not_allowed"}
 		}
 
 		avatarURL := githubUser.AvatarURL
@@ -302,7 +360,7 @@ func fetchGitHubUser(accessToken string) (*GitHubUser, error) {
 	}
 
 	var user GitHubUser
-	err := utils.Fetch("GET", "https://api.github.com/user", nil, headers, &user)
+	err := utils.Fetch("GET", githubUserURL, nil, headers, &user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch GitHub user: %w", err)
 	}
@@ -313,7 +371,7 @@ func fetchGitHubUser(accessToken string) (*GitHubUser, error) {
 			Primary  bool   `json:"primary"`
 			Verified bool   `json:"verified"`
 		}
-		err = utils.Fetch("GET", "https://api.github.com/user/emails", nil, headers, &emails)
+		err = utils.Fetch("GET", githubUserEmailsURL, nil, headers, &emails)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch GitHub user emails: %w", err)
 		}
