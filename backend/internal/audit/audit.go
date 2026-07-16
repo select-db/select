@@ -33,16 +33,13 @@ const (
 // (query, auth, datasource) use a bare verb; iam spans entities, so its actions
 // are entity.verb.
 const (
-	// query
-	ActionExecuted = "executed" // a statement ran via the proxy
-	ActionDenied   = "denied"   // a query blocked by permissions
-	ActionExported = "exported" // a bulk export/dump (exfiltration signal)
+	// query (a permission block is ActionExecuted with StatusDenied, not its own action)
+	ActionExecuted = "executed" // a statement ran (or was blocked) via the proxy
 
 	// auth
 	ActionLogin          = "login"
 	ActionLoginFailed    = "login_failed"
 	ActionTokenRefreshed = "token_refreshed"
-	ActionLogout         = "logout"
 
 	// iam
 	ActionPermissionUpserted = "permission.upserted"

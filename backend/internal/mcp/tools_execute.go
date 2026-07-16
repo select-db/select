@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -227,7 +228,14 @@ func (c *collectSink) OnTruncated() {
 func (c *collectSink) OnError(err error) {
 	c.err = err
 	if c.rec != nil {
-		c.rec.Status = audit.StatusError
+		// A permission block is a denied outcome, not a system fault: the engine
+		// rejected it before it ran. Same query.executed event, denied status.
+		var denied *core.PermissionDeniedError
+		if errors.As(err, &denied) {
+			c.rec.Status = audit.StatusDenied
+		} else {
+			c.rec.Status = audit.StatusError
+		}
 		c.rec.Payload["error_message"] = err.Error()
 		c.emit()
 	}

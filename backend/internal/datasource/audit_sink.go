@@ -2,6 +2,7 @@ package datasource
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 
@@ -10,6 +11,7 @@ import (
 	"backend/internal/authz"
 	"backend/internal/middlewares"
 
+	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
 
@@ -48,7 +50,15 @@ func (s *loggingSink) OnDone(rowCount, affected, durationMs int64) error {
 
 func (s *loggingSink) OnError(err error) {
 	s.Sink.OnError(err)
-	s.rec.Status = audit.StatusError
+	// A permission block is a denied outcome, not a system fault: the engine
+	// rejected it before it ran (see engine.StreamLocal). Keep it on the same
+	// query.executed event so it's filterable by status, not a separate signal.
+	var denied *core.PermissionDeniedError
+	if errors.As(err, &denied) {
+		s.rec.Status = audit.StatusDenied
+	} else {
+		s.rec.Status = audit.StatusError
+	}
 	s.rec.Payload["error_message"] = err.Error()
 	s.emit()
 }

@@ -33,18 +33,13 @@ func (s Spec) Type() string { return s.Domain + "." + s.Action }
 // control-plane mutations (iam, datasource) go through the durable outbox so a
 // crash can't lose a privilege or config change.
 var (
-	// query - Datastore Activity. The data plane: what was read/exported.
+	// query - Datastore Activity. The data plane: what was read.
 	QueryExecuted = Spec{
 		Domain: DomainQuery, Action: ActionExecuted, Lane: LaneAsync, TargetType: "datasource",
-		Doc: "a SQL query finished executing against a datasource via the proxy (status success|error)",
-	}
-	QueryDenied = Spec{
-		Domain: DomainQuery, Action: ActionDenied, Lane: LaneAsync, TargetType: "datasource",
-		Doc: "a query was blocked by the permission engine (status denied)",
-	}
-	QueryExported = Spec{
-		Domain: DomainQuery, Action: ActionExported, Lane: LaneAsync, TargetType: "datasource",
-		Doc: "a bulk export of a datasource was run",
+		// A permission block is a denied outcome of the same attempt, not a
+		// separate event: users routinely fumble into fields they can't read, so
+		// it's a filterable status, not a standalone security signal.
+		Doc: "a SQL query was run against a datasource (status success|error|denied)",
 	}
 
 	// auth - Authentication. Proving identity; no target (the principal is the subject).
@@ -59,10 +54,6 @@ var (
 	AuthTokenRefreshed = Spec{
 		Domain: DomainAuth, Action: ActionTokenRefreshed, Lane: LaneAsync,
 		Doc: "an access token was reissued from a refresh token",
-	}
-	AuthLogout = Spec{
-		Domain: DomainAuth, Action: ActionLogout, Lane: LaneAsync,
-		Doc: "a session/refresh token was revoked",
 	}
 
 	// iam - Identity & Access Management. Privilege and account changes.
@@ -158,13 +149,11 @@ var (
 	}
 )
 
-// Catalog is the full declared vocabulary. Wired today: QueryExecuted,
-// PermissionUpserted, and the group writes (GroupUpserted, GroupMemberAdded,
-// GroupRoleAttached). The rest are reserved contract, emit sites land at their
-// choke points incrementally.
+// Catalog is the full declared vocabulary. Every spec here has a live emit site
+// (a denied query rides QueryExecuted with status=denied, not a spec of its own).
 var Catalog = []Spec{
-	QueryExecuted, QueryDenied, QueryExported,
-	AuthLogin, AuthLoginFailed, AuthTokenRefreshed, AuthLogout,
+	QueryExecuted,
+	AuthLogin, AuthLoginFailed, AuthTokenRefreshed,
 	PermissionUpserted, PermissionDeleted,
 	RoleUpserted, RoleDeleted, RoleAssigned, RoleUnassigned,
 	MemberAdded, MemberRemoved,
