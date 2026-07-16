@@ -7,6 +7,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/middlewares"
 
 	"github.com/google/uuid"
@@ -70,6 +71,13 @@ func CreateHandler() http.HandlerFunc {
 
 		// Revoke tokens so the next JWT refresh includes the new workspace in claims.
 		_ = db.Queries.DeleteUserRefreshTokens(r.Context(), userUUID)
+
+		audit.EmitAction(r.Context(), audit.WorkspaceCreated, audit.Record{
+			WorkspaceID: workspaceID.String(),
+			TargetID:    workspaceID.String(),
+			TargetLabel: req.Name,
+			Status:      audit.StatusSuccess,
+		})
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(createResponse{

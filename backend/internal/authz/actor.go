@@ -30,7 +30,7 @@ func ActorOf(r *http.Request) Actor {
 }
 
 // IsOwner reports whether the actor owns its target workspace.
-func (a Actor) IsOwner() bool { return IsWorkspaceOwner(a.r, a.WorkspaceID) }
+func (a Actor) IsOwner() bool { return isWorkspaceOwner(a.r, a.WorkspaceID) }
 
 // Can reports whether the actor holds a workspace-level permission, e.g.
 // core.ActionWorkspaceApiKeysManage.

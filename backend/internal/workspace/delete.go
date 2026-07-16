@@ -6,6 +6,7 @@ import (
 
 	"backend/db"
 	"backend/db/db_types"
+	"backend/internal/audit"
 	"backend/internal/middlewares"
 )
 
@@ -51,6 +52,7 @@ func DeleteHandler() http.HandlerFunc {
 		}
 
 		if ownerID.String() != userID {
+			audit.EmitDenied(r.Context(), audit.WorkspaceDeleted, workspaceID, workspaceID)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -61,6 +63,12 @@ func DeleteHandler() http.HandlerFunc {
 		}
 
 		_ = db.Queries.DeleteUserRefreshTokens(r.Context(), userUUID)
+
+		audit.EmitAction(r.Context(), audit.WorkspaceDeleted, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    workspaceID,
+			Status:      audit.StatusSuccess,
+		})
 
 		w.WriteHeader(http.StatusNoContent)
 	}
