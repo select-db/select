@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
+	"backend/internal/audit"
+	"backend/internal/auth"
 	"backend/internal/authz"
 	"backend/internal/datasource"
 
@@ -61,7 +64,8 @@ func toolExecuteQuery() Tool {
 			if err != nil {
 				return nil, err
 			}
-			return runQuery(ctx, conn, ds, args.Statement, maxRows), nil
+			rec := buildQueryRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
+			return runQuery(ctx, conn, ds, args.Statement, maxRows, &rec), nil
 		},
 	}
 }
@@ -100,7 +104,8 @@ func toolExecuteStatement() Tool {
 			if err != nil {
 				return nil, err
 			}
-			return runQuery(ctx, conn, ds, args.Statement, 0 /* no row cap; usually no rows for DML/DDL */), nil
+			rec := buildQueryRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
+			return runQuery(ctx, conn, ds, args.Statement, 0 /* no row cap; usually no rows for DML/DDL */, &rec), nil
 		},
 	}
 }
@@ -134,8 +139,11 @@ func openConn(ctx context.Context, r *http.Request, datasourceID, workspaceID st
 	}, ds, dialect, nil
 }
 
-func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedDatasource, sql string, maxRows int) any {
-	sink := newCollectSink(maxRows)
+// runQuery streams sql through the engine and collects the result. rec is the
+// query.executed record to emit on completion; pass nil for internal queries
+// that read no data (e.g. EXPLAIN), which should not appear in the data-plane log.
+func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedDatasource, sql string, maxRows int, rec *audit.Record) any {
+	sink := newCollectSink(maxRows, rec)
 	inst := engine.DBInstance{ID: "mcp", DBType: ds.DBType}
 	engine.StreamLocal(ctx, conn, inst, sql, engine.Options{
 		// Bound the work even when callers don't supply a timeout.
@@ -144,6 +152,24 @@ func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedData
 		MaxBytes: 8 * 1024 * 1024, // 8MB hard cap for MCP results
 	}, sink)
 	return sink.Result()
+}
+
+// buildQueryRecord assembles the query.executed record for an MCP tool call. MCP
+// authenticates by API key, so the principal is the key; channel=mcp separates
+// these from the desktop app's proxied queries in the data-plane log.
+func buildQueryRecord(r *http.Request, workspaceID, datasourceID, sql, dbType string) audit.Record {
+	p := authz.RequestPrincipal(r, workspaceID)
+	return audit.Record{
+		WorkspaceID: p.WorkspaceID,
+		Principal:   p,
+		TargetID:    datasourceID,
+		Payload: map[string]any{
+			"sql_text": sql,
+			"db_type":  dbType,
+			"channel":  "mcp",
+		},
+		ClientIP: auth.GetIPAddress(r),
+	}
 }
 
 type collectSink struct {
@@ -155,10 +181,13 @@ type collectSink struct {
 	duration  int64
 	err       error
 	truncated bool
+
+	rec  *audit.Record
+	once sync.Once
 }
 
-func newCollectSink(maxRows int) *collectSink {
-	return &collectSink{maxRows: maxRows}
+func newCollectSink(maxRows int, rec *audit.Record) *collectSink {
+	return &collectSink{maxRows: maxRows, rec: rec}
 }
 
 func (c *collectSink) OnColumns(cols []string) error {
@@ -178,6 +207,16 @@ func (c *collectSink) OnDone(rowCount, affected, durationMs int64) error {
 	c.rowCount = rowCount
 	c.affected = affected
 	c.duration = durationMs
+
+	if c.rec != nil {
+		c.rec.ReturnedRowCount = rowCount
+		if affected > 0 {
+			c.rec.Payload["affected_rows"] = affected
+		}
+		c.rec.DurationMs = durationMs
+		c.rec.Status = audit.StatusSuccess
+		c.emit()
+	}
 	return nil
 }
 
@@ -187,6 +226,18 @@ func (c *collectSink) OnTruncated() {
 
 func (c *collectSink) OnError(err error) {
 	c.err = err
+	if c.rec != nil {
+		c.rec.Status = audit.StatusError
+		c.rec.Payload["error_message"] = err.Error()
+		c.emit()
+	}
+}
+
+// emit records the query.executed event exactly once (a run ends in OnDone or
+// OnError, never both, but the guard makes that explicit). Uses a background
+// context so the async lane isn't cancelled with the request.
+func (c *collectSink) emit() {
+	c.once.Do(func() { _ = audit.Emit(context.Background(), audit.QueryExecuted, *c.rec) })
 }
 
 func (c *collectSink) Result() any {

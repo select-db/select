@@ -67,6 +67,7 @@ func buildQueryRecord(r *http.Request, req executeRequest, dbType string) audit.
 		Payload: map[string]any{
 			"sql_text": req.SQL,
 			"db_type":  dbType,
+			"channel":  "app",
 		},
 		ClientIP: auth.GetIPAddress(r),
 	}

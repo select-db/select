@@ -65,6 +65,9 @@ func StartPostgres() (stop func(code int), err error) {
 			Password:   envOr("TEST_PG_PASSWORD", testPGPassword),
 			Database:   envOr("TEST_PG_DATABASE", testPGDatabase),
 			Options:    "sslmode=disable",
+			// Data-plane tests point a datasource at the test DB; the engine's
+			// cached connection pool outlives the test, so force-terminate on drop.
+			ForceTerminateConnections: true,
 		}
 		return func(code int) { _ = os.RemoveAll(cryptoDir); os.Exit(code) }, nil
 	}
@@ -78,6 +81,8 @@ func StartPostgres() (stop func(code int), err error) {
 		Password:   testPGPassword,
 		Database:   testPGDatabase,
 		Options:    "sslmode=disable",
+		// See note above: the query engine keeps datasource pools open past teardown.
+		ForceTerminateConnections: true,
 	}
 
 	runtimeDir, err := os.MkdirTemp("", "e2e-postgres-*")
@@ -145,6 +150,17 @@ func NewDB(t *testing.T) *sql.DB {
 	require.NotNil(t, conn)
 	db.SetDB(conn)
 	return conn
+}
+
+// TargetDSN is a Postgres DSN for this test's isolated database, usable as a
+// datasource the query engine connects to (the e2e process treats loopback
+// Postgres as a target). Lets data-plane tests run real queries end-to-end.
+func TargetDSN(t *testing.T, conn *sql.DB) string {
+	t.Helper()
+	var dbname string
+	require.NoError(t, conn.QueryRow("SELECT current_database()").Scan(&dbname))
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		pgConfig.User, pgConfig.Password, pgConfig.Host, pgConfig.Port, dbname)
 }
 
 // Run is the one-line TestMain body for a package that uses the harness:
