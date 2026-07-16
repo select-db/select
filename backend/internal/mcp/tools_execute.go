@@ -3,9 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
-	"sync"
 	"time"
 
 	"backend/internal/audit"
@@ -65,7 +63,7 @@ func toolExecuteQuery() Tool {
 			if err != nil {
 				return nil, err
 			}
-			rec := buildQueryRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
+			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
 			return runQuery(ctx, conn, ds, args.Statement, maxRows, &rec), nil
 		},
 	}
@@ -105,8 +103,10 @@ func toolExecuteStatement() Tool {
 			if err != nil {
 				return nil, err
 			}
-			rec := buildQueryRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
-			return runQuery(ctx, conn, ds, args.Statement, 0 /* no row cap; usually no rows for DML/DDL */, &rec), nil
+			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
+			// Always cap: nothing forces execute_statement to be write-only, so a
+			// SELECT run through it must be bounded like execute_query.
+			return runQuery(ctx, conn, ds, args.Statement, maxRowsCeiling, &rec), nil
 		},
 	}
 }
@@ -155,10 +155,10 @@ func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedData
 	return sink.Result()
 }
 
-// buildQueryRecord assembles the query.executed record for an MCP tool call. MCP
-// authenticates by API key, so the principal is the key; channel=mcp separates
-// these from the desktop app's proxied queries in the data-plane log.
-func buildQueryRecord(r *http.Request, workspaceID, datasourceID, sql, dbType string) audit.Record {
+// newQueryAuditRecord assembles the query.executed audit record for an MCP tool
+// call. MCP authenticates by API key, so the principal is the key; channel=mcp
+// separates these from the desktop app's proxied queries in the data-plane log.
+func newQueryAuditRecord(r *http.Request, workspaceID, datasourceID, sql, dbType string) audit.Record {
 	p := authz.RequestPrincipal(r, workspaceID)
 	return audit.Record{
 		WorkspaceID: p.WorkspaceID,
@@ -183,12 +183,11 @@ type collectSink struct {
 	err       error
 	truncated bool
 
-	rec  *audit.Record
-	once sync.Once
+	audit *audit.QueryRecorder
 }
 
 func newCollectSink(maxRows int, rec *audit.Record) *collectSink {
-	return &collectSink{maxRows: maxRows, rec: rec}
+	return &collectSink{maxRows: maxRows, audit: audit.NewQueryRecorder(rec)}
 }
 
 func (c *collectSink) OnColumns(cols []string) error {
@@ -208,16 +207,7 @@ func (c *collectSink) OnDone(rowCount, affected, durationMs int64) error {
 	c.rowCount = rowCount
 	c.affected = affected
 	c.duration = durationMs
-
-	if c.rec != nil {
-		c.rec.ReturnedRowCount = rowCount
-		if affected > 0 {
-			c.rec.Payload["affected_rows"] = affected
-		}
-		c.rec.DurationMs = durationMs
-		c.rec.Status = audit.StatusSuccess
-		c.emit()
-	}
+	c.audit.Success(rowCount, affected, durationMs)
 	return nil
 }
 
@@ -227,25 +217,7 @@ func (c *collectSink) OnTruncated() {
 
 func (c *collectSink) OnError(err error) {
 	c.err = err
-	if c.rec != nil {
-		// A permission block is a denied outcome, not a system fault: the engine
-		// rejected it before it ran. Same query.executed event, denied status.
-		var denied *core.PermissionDeniedError
-		if errors.As(err, &denied) {
-			c.rec.Status = audit.StatusDenied
-		} else {
-			c.rec.Status = audit.StatusError
-		}
-		c.rec.Payload["error_message"] = err.Error()
-		c.emit()
-	}
-}
-
-// emit records the query.executed event exactly once (a run ends in OnDone or
-// OnError, never both, but the guard makes that explicit). Uses a background
-// context so the async lane isn't cancelled with the request.
-func (c *collectSink) emit() {
-	c.once.Do(func() { _ = audit.Emit(context.Background(), audit.QueryExecuted, *c.rec) })
+	c.audit.Failure(err)
 }
 
 func (c *collectSink) Result() any {

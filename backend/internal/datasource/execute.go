@@ -83,7 +83,7 @@ func ExecuteHandler() http.HandlerFunc {
 		}
 
 		// Wrap the sink to capture the query's outcome for the audit log.
-		sink := newLoggingSink(inner, buildQueryRecord(r, req, ds.DBType))
+		sink := newLoggingSink(inner, newQueryAuditRecord(r, req, ds.DBType))
 
 		inst := engine.DBInstance{ID: req.ID, DBType: ds.DBType}
 		engine.StreamLocal(ctx, conn, inst, req.SQL, engine.Options{
