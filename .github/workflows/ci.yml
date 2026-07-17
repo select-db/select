@@ -725,7 +725,7 @@ jobs:
         run: find . -maxdepth 1 -type f ! -name checksums.sha256 -exec sha256sum {} + > checksums.sha256
 
       - name: Update staging pre-release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: staging-latest
           name: "Staging (latest)"
@@ -760,7 +760,7 @@ jobs:
       # Draft: signatures and the publish step happen on a maintainer's laptop
       # via the select-ops repo's sign-and-deploy.sh. Users never see this release until then.
       - name: Upload to draft release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           files: dist/*
           draft: true
