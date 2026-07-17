@@ -153,20 +153,25 @@ jobs:
           # nightly in the CodeQL workflow (.github/workflows/codeql.yml), off the
           # PR critical path.
           #
-          # Reporting-only during rollout: without --error, semgrep exits 0, so
-          # findings surface in the log without blocking the PR. To enforce (fail
-          # the job on findings) once the remaining items are triaged, add --error.
+          # Blocking gate: --error makes semgrep exit non-zero on any finding, so
+          # a new issue fails the PR.
           #
-          # Accepted rules (documented, mirrors the old gosec -exclude rationale):
-          #   string-formatted-query            engine builds parameterized SQL; values are bound (was gosec G201/G202)
-          #   unsafe-deserialization-interface  heterogeneous sync payloads unmarshaled then type-switched, by design
-          #   potential-dos-via-decompression-bomb  decompresses only our own signed release artifacts
+          # Two acceptance mechanisms, by scope:
+          #   * Categorical patterns are excluded repo-wide here (documented,
+          #     mirrors the old gosec -exclude rationale):
+          #       string-formatted-query            engine builds parameterized SQL; values are bound (was gosec G201/G202)
+          #       unsafe-deserialization-interface  heterogeneous sync payloads unmarshaled then type-switched, by design
+          #       potential-dos-via-decompression-bomb  decompresses only our own signed release artifacts
+          #   * Single reviewed sites are suppressed inline with `// nosemgrep`
+          #     (keeps the rule active for any new code): the desktop TOFU SSH
+          #     host key (dialect/engine/ssh.go) and a reflect-by-name over a
+          #     struct's own field names (app/internal/graph/helpers.go).
           pipx run --spec 'semgrep==1.170.0' semgrep scan \
             --config p/gosec --config p/golang \
             --exclude-rule go.lang.security.audit.database.string-formatted-query.string-formatted-query \
             --exclude-rule go.lang.security.deserialization.unsafe-deserialization-interface.go-unsafe-deserialization-interface \
             --exclude-rule go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb \
-            --exclude='*_test.go' --metrics=off --disable-version-check .
+            --exclude='*_test.go' --error --metrics=off --disable-version-check .
 
   gitleaks:
     name: Secret scan (gitleaks)

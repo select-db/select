@@ -49,7 +49,7 @@ func assignNonZero(target interface{}, src interface{}) {
 
 	for i := 0; i < sv.NumField(); i++ {
 		sf := sv.Field(i)
-		tf := tv.FieldByName(sv.Type().Field(i).Name)
+		tf := tv.FieldByName(sv.Type().Field(i).Name) // nosemgrep: go.lang.security.audit.unsafe-reflect-by-name.unsafe-reflect-by-name -- field name comes from the source struct's own compile-time type, never user input
 
 		if !tf.IsValid() || !tf.CanSet() {
 			continue
