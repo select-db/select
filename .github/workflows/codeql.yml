@@ -9,10 +9,9 @@ name: CodeQL
 # scan is free at night and never blocks a merge. Per-PR security is the fast
 # build-free semgrep step in ci.yml. Results surface in the Security tab.
 #
-# Scope: the long-lived branches only. A `schedule` trigger fires solely on the
-# default branch, so the job matrix checks out and scans dev and main explicitly
-# — that hardcoded matrix is also what keeps this from ever running on any other
-# branch. Feature branches / PRs are covered by the per-PR semgrep step instead.
+# Scope: a `schedule` trigger fires only on the repo's default branch, so the
+# nightly scan runs there and there only. Feature branches / PRs are covered by
+# the per-PR semgrep step instead.
 #
 # Note: uploading results requires Code scanning enabled for the repo (GitHub
 # Advanced Security on private repositories). If it isn't, analyze fails with a
@@ -20,7 +19,7 @@ name: CodeQL
 
 on:
   schedule:
-    - cron: '0 3 * * *' # nightly 03:00 UTC (on the default branch)
+    - cron: '0 3 * * *' # nightly 03:00 UTC (default branch only)
   workflow_dispatch:
 
 permissions:
@@ -34,22 +33,11 @@ concurrency:
 
 jobs:
   analyze:
-    name: CodeQL (Go, ${{ matrix.branch }})
+    name: CodeQL (Go)
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: [dev, main] # scan only the long-lived branches — both, every night
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: ${{ matrix.branch }}
-
-      # A scheduled run triggers on the default branch, but this matrix checks
-      # out each branch, so pass its ref+sha to attribute the alerts correctly.
-      - id: rev
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Buildless (build-mode: none) extracts every Go source across the
       # monorepo's modules without compiling — no per-module build wrangling and
@@ -66,6 +54,4 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@v3 # pin to a SHA to match the repo's action-pinning convention
         with:
-          category: "/language:go/branch:${{ matrix.branch }}"
-          ref: refs/heads/${{ matrix.branch }}
-          sha: ${{ steps.rev.outputs.sha }}
+          category: "/language:go"
