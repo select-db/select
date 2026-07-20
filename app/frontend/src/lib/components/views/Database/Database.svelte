@@ -39,10 +39,7 @@
 		};
 	});
 
-	let currentName = $state('');
-	$effect(() => {
-		currentName = database?.name ?? '';
-	});
+	let currentName = $derived(database?.name ?? '');
 
 	function onSuccess(saved: SavedDatabaseData) {
 		if (!database) return;

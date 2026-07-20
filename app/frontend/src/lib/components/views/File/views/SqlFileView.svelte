@@ -42,7 +42,7 @@
 	const isTemp = $derived(tab.file?.isTemp ?? false);
 	let content = $state<string>('');
 	let contentLoaded = $state(false);
-	let tableHeight = $state(0);
+	let tableHeight = $derived(tab.file?.tableHeight ?? 0);
 
 	let databasePickerOpen = $state(false);
 	let wasDatabasePickerOpen = $state(false);
@@ -54,10 +54,6 @@
 		if (!justClosed) return;
 
 		queueMicrotask(() => editorRef?.focus());
-	});
-
-	$effect(() => {
-		tableHeight = tab.file?.tableHeight ?? 0;
 	});
 
 	$effect(() => {

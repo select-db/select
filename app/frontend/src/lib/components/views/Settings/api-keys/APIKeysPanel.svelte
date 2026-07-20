@@ -151,6 +151,7 @@
 
 	async function toggleRole(roleId: string) {
 		if (!roleKey) return;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set, spread into an array argument and discarded
 		const next = new Set(assignedRoleIds);
 		if (next.has(roleId)) next.delete(roleId);
 		else next.add(roleId);

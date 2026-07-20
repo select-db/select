@@ -132,6 +132,7 @@
 	// Hierarchical edit storage - check row first, then column
 	// Most rows have no edits, so we skip column checks entirely
 	const editsByRow = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local map built and returned inside a derivation
 		const rows = new Map<number, Map<number, string>>();
 		for (const [key, edit] of Object.entries(edits)) {
 			const [rowStr, colStr] = key.split(':');

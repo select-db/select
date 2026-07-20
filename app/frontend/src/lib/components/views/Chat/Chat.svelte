@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy, tick } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	import { createChat } from '$lib/components/views/Chat/core';
 	import {
@@ -149,10 +150,9 @@
 		() => scroll.scrollTop
 	);
 
-	let expandedSections = $state<Set<string>>(new Set());
+	let expandedSections = new SvelteSet<string>();
 
 	function toggleSection(key: string) {
-		expandedSections = new Set(expandedSections);
 		if (expandedSections.has(key)) expandedSections.delete(key);
 		else expandedSections.add(key);
 	}

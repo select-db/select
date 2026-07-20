@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { graph } from '$lib/wailsjs/go/models';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { Query } from '$lib/wailsjs/go/db_client/DbClient';
 	import { updateTab, type Tab, type GraphConfig } from '$lib/components/Layout/layoutStore';
 	import {
@@ -154,14 +155,12 @@
 	const seriesSpecs = $derived(buildSeriesSpecs(config, pivoted?.seriesKeys));
 	const columns = $derived(graphResult?.columns ?? queryResult?.columns ?? []);
 
-	let hiddenSeries = $state<Set<string>>(new Set());
+	let hiddenSeries = new SvelteSet<string>();
 	const visibleSeries = $derived(seriesSpecs.filter((s) => !hiddenSeries.has(s.key)));
 
 	function toggleSeries(key: string) {
-		const next = new Set(hiddenSeries);
-		if (next.has(key)) next.delete(key);
-		else next.add(key);
-		hiddenSeries = next;
+		if (hiddenSeries.has(key)) hiddenSeries.delete(key);
+		else hiddenSeries.add(key);
 	}
 </script>
 

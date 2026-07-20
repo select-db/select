@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { core } from '$lib/wailsjs/go/models';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	import Tooltip from '$lib/system/Tooltip/Tooltip.svelte';
 
@@ -73,13 +74,10 @@
 	const formatPercent = (v: number | null | undefined, t: number) =>
 		v && t > 0 ? (v / t) * 100 : 0;
 
-	let expandedRows = $state<Set<string>>(new Set());
+	let expandedRows = new SvelteSet<string>();
 	const toggleRow = (id: string) => {
-		const next = new Set(expandedRows);
-		if (next.has(id)) next.delete(id);
-		else next.add(id);
-
-		expandedRows = next;
+		if (expandedRows.has(id)) expandedRows.delete(id);
+		else expandedRows.add(id);
 	};
 </script>
 
