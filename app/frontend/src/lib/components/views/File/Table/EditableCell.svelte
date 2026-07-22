@@ -63,12 +63,8 @@
 	]);
 
 	let menuOpen = $state(true);
-	let menuValue = $state('');
+	let menuValue = $derived(formatValue(value));
 	let menuWidth = $state(0);
-
-	$effect(() => {
-		menuValue = formatValue(value);
-	});
 
 	// Closing the menu (pick, Escape, or click-away) ends the edit. A pick has
 	// already pushed its value via onchange by the time open flips to false.
@@ -91,16 +87,11 @@
 		onEdit(picked);
 	}
 
-	let inputValue = $state('');
+	let inputValue = $derived(formatValue(value));
 	let inputElement: HTMLInputElement | null = $state(null);
 	let modalOpen = $state(false);
 
 	let actionsWidth = $state(0);
-
-	// Sync input value when prop changes (e.g. after rollback)
-	$effect(() => {
-		inputValue = formatValue(value);
-	});
 
 	// Focus and select on mount
 	$effect(() => {

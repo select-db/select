@@ -57,6 +57,7 @@
 		const dbs = databases;
 		if (dbs.length === 0) return undefined;
 
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const knownSchemaIds = new Set<string>();
 		for (const db of dbs) {
 			for (const ch of db.children ?? []) {
@@ -64,11 +65,13 @@
 			}
 		}
 
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const enabledDbIds = new Set<string>();
 		for (const db of dbs) {
 			if (dbOn[db.id] !== false) enabledDbIds.add(db.id);
 		}
 
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const enabledSchemaIds = new Set<string>();
 		for (const sid of knownSchemaIds) {
 			if (schemaOn[sid] === false) continue;

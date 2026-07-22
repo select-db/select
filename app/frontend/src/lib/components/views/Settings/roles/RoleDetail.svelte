@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
@@ -71,7 +72,7 @@
 
 	let permissions = $state<Permission[]>([]);
 	let permissionMap = $derived.by(() => buildPermissionMap(permissions));
-	let expanded = $state(new Set<string>(savedState?.expandedKeys ?? []));
+	let expanded = new SvelteSet<string>(savedState?.expandedKeys ?? []);
 
 	function dbSchemas(db: graph.DBInstanceNode) {
 		return (db.children ?? []).filter(Boolean).filter((n) => n.type === 'schema');
@@ -94,6 +95,7 @@
 	}
 
 	let indeterminateMap = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive accumulator built and returned inside a derivation
 		const m = new Map<string, boolean>();
 		for (const db of allDbInstances) {
 			for (const action of permissionActions) {
@@ -198,12 +200,10 @@
 	}
 
 	function toggleExpand(key: string) {
-		const next = new Set(expanded);
-		if (next.has(key)) next.delete(key);
-		else next.add(key);
-		expanded = next;
+		if (expanded.has(key)) expanded.delete(key);
+		else expanded.add(key);
 		onStateChange?.({
-			expandedKeys: [...next],
+			expandedKeys: [...expanded],
 			scrollTop: tableWrapEl?.scrollTop,
 			search: currentSearch
 		});
@@ -223,30 +223,28 @@
 			visibleIds = null;
 			return;
 		}
-		const ids = new Set<string>();
-		const toExpand = new Set<string>();
+		const ids = new SvelteSet<string>();
+		// auto-expand parents of matches, preserving any existing expansions
 		for (const db of allDbInstances) {
 			if (db.name.toLowerCase().includes(q)) ids.add(db.id);
 			for (const schema of dbSchemas(db)) {
 				if (schema.name.toLowerCase().includes(q)) {
 					ids.add(db.id);
 					ids.add(schema.id);
-					toExpand.add(db.id);
+					expanded.add(db.id);
 				}
 				for (const table of schemaTables(schema)) {
 					if (table.name.toLowerCase().includes(q)) {
 						ids.add(db.id);
 						ids.add(schema.id);
 						ids.add(table.id);
-						toExpand.add(db.id);
-						toExpand.add(`${db.id}|${schema.name}`);
+						expanded.add(db.id);
+						expanded.add(`${db.id}|${schema.name}`);
 					}
 				}
 			}
 		}
 		visibleIds = ids;
-		// auto-expand parents of matches, preserving any existing expansions
-		expanded = new Set([...expanded, ...toExpand]);
 		requestAnimationFrame(() => updateLayout?.());
 	}, 500);
 

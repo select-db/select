@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import ModalBody from '$lib/system/Modal/ModalBody.svelte';
 	import ModalFooter from '$lib/system/Modal/ModalFooter.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
@@ -20,7 +21,7 @@
 	let { onClose, roles, onCreate }: Props = $props();
 
 	let name = $state('');
-	let selectedRoleIds = $state<Set<string>>(new Set());
+	let selectedRoleIds = new SvelteSet<string>();
 	let creating = $state(false);
 
 	const expiryPresets = [
@@ -39,10 +40,8 @@
 	);
 
 	function toggleRole(id: string) {
-		const next = new Set(selectedRoleIds);
-		if (next.has(id)) next.delete(id);
-		else next.add(id);
-		selectedRoleIds = next;
+		if (selectedRoleIds.has(id)) selectedRoleIds.delete(id);
+		else selectedRoleIds.add(id);
 	}
 
 	let roleOptions = $derived(

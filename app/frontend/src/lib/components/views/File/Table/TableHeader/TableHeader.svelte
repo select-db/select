@@ -51,6 +51,7 @@
 
 	const edits = $derived(tableState?.edits ?? {});
 	const editedRowCount = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set used only to count rows inside a derivation
 		const rows = new Set<number>();
 		for (const key of Object.keys(edits)) {
 			const rowIndex = parseInt(key.split(':')[0], 10);

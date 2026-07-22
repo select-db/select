@@ -52,6 +52,7 @@
 		return (item.errors?.length ?? 0) > 0;
 	}
 
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level memoization cache; must stay non-reactive
 	const previewCache = new Map<string, Promise<string>>();
 
 	function previewHtml(statement: string): Promise<string> {
