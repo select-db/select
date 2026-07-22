@@ -7,6 +7,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/authz"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
@@ -34,13 +35,16 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 		return false, nil, fmt.Errorf("permission: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
-	// Look up role_id for cache invalidation (payload may not include it)
+	// Fetch the current row for the audit before-snapshot; it also yields role_id
+	// for cache invalidation (the payload may not include it).
+	var before any
 	roleID := utils.MapGetString(payload, "role_id")
-	if roleID == "" {
-		if perm, err := db.Queries.GetPermissionByID(ctx, generated.GetPermissionByIDParams{
-			ID:          idUUID,
-			WorkspaceID: workspaceUUID,
-		}); err == nil {
+	if perm, err := db.Queries.GetPermissionByID(ctx, generated.GetPermissionByIDParams{
+		ID:          idUUID,
+		WorkspaceID: workspaceUUID,
+	}); err == nil {
+		before = perm
+		if roleID == "" {
 			roleID = perm.RoleID.String()
 		}
 	}
@@ -55,5 +59,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if roleID != "" {
 		authz.Invalidate(roleID)
 	}
+	audit.EmitChange(ctx, audit.PermissionDeleted, workspaceID, id, before, nil)
 	return true, nil, nil
 }

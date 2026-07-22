@@ -33,22 +33,21 @@ const (
 // (query, auth, datasource) use a bare verb; iam spans entities, so its actions
 // are entity.verb.
 const (
-	// query
-	ActionExecuted = "executed" // a statement ran via the proxy
-	ActionDenied   = "denied"   // a query blocked by permissions
-	ActionExported = "exported" // a bulk export/dump (exfiltration signal)
+	// query (a permission block is ActionExecuted with StatusDenied, not its own action)
+	ActionExecuted = "executed" // a statement ran (or was blocked) via the proxy
 
 	// auth
 	ActionLogin          = "login"
 	ActionLoginFailed    = "login_failed"
 	ActionTokenRefreshed = "token_refreshed"
-	ActionLogout         = "logout"
 
 	// iam
 	ActionPermissionUpserted = "permission.upserted"
 	ActionPermissionDeleted  = "permission.deleted"
 	ActionRoleUpserted       = "role.upserted"
 	ActionRoleDeleted        = "role.deleted"
+	ActionRoleAssigned       = "role.assigned"   // a role granted directly to a user
+	ActionRoleUnassigned     = "role.unassigned" // a direct user-role grant removed
 	ActionMemberAdded        = "member.added"
 	ActionMemberRemoved      = "member.removed"
 	ActionGroupUpserted      = "group.upserted"
@@ -62,6 +61,7 @@ const (
 	ActionAPIKeyCreated      = "api_key.created"
 	ActionAPIKeyRotated      = "api_key.rotated"
 	ActionAPIKeyRevoked      = "api_key.revoked"
+	ActionAPIKeySetRoles     = "api_key.set_roles"
 
 	// datasource
 	ActionDatasourceUpserted = "upserted" // created or connection config changed

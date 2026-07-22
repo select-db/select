@@ -8,6 +8,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
@@ -44,7 +45,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("workspace_to_user: insert workspace if not exists: %w", err)
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppWorkspaceToUser, generated.UpsertWorkspaceToUserParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppWorkspaceToUser, generated.UpsertWorkspaceToUserParams]{
 		TableName: "workspace_to_user",
 		Fetch: func(ctx context.Context) (generated.AppWorkspaceToUser, error) {
 			return db.Queries.GetWorkspaceToUserByID(ctx, generated.GetWorkspaceToUserByIDParams{
@@ -82,4 +83,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.UpsertWorkspaceToUser(ctx, params)
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.MemberAdded, c.WorkspaceID, uid, res.Before, res.After)
+	}
+	return res.Applied, res.Restored, err
 }

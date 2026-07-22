@@ -7,6 +7,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
 )
@@ -45,8 +46,13 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	}); err != nil {
 		return false, nil, fmt.Errorf("user_to_role: set deleted_at: %w", err)
 	}
+	var before any
+	userTarget := ""
 	if fetchErr == nil {
+		before = row
+		userTarget = row.UserID.String()
 		_ = db.Queries.DeleteUserRefreshTokens(ctx, row.UserID)
 	}
+	audit.EmitChange(ctx, audit.RoleUnassigned, workspaceID, userTarget, before, nil)
 	return true, nil, nil
 }

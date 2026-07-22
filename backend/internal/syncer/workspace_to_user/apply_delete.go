@@ -7,6 +7,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
 )
@@ -50,5 +51,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	}); err != nil {
 		return false, nil, fmt.Errorf("workspace_to_user: set deleted_at: %w", err)
 	}
+	audit.EmitChange(ctx, audit.MemberRemoved, workspaceID, wtu.UserID.String(), wtu, nil)
 	return true, nil, nil
 }

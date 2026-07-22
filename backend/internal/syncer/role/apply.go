@@ -8,6 +8,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
@@ -34,7 +35,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("role: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppRole, generated.UpsertRoleParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppRole, generated.UpsertRoleParams]{
 		TableName: "role",
 		Fetch: func(ctx context.Context) (generated.AppRole, error) {
 			return db.Queries.GetRoleByID(ctx, idUUID)
@@ -68,4 +69,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.UpsertRole(ctx, params)
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.RoleUpserted, c.WorkspaceID, id, res.Before, res.After)
+	}
+	return res.Applied, res.Restored, err
 }

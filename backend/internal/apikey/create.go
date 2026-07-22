@@ -8,7 +8,9 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/authz"
 	"backend/internal/syncer/scope"
 )
 
@@ -26,10 +28,19 @@ type createResponse struct {
 
 func CreateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, userID, ok := guard(w, r)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			audit.EmitDenied(r.Context(), audit.APIKeyCreated, a.WorkspaceID, "")
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			audit.EmitDenied(r.Context(), audit.APIKeyCreated, a.WorkspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
+		userID := a.UserID
 
 		var req createRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -117,6 +128,14 @@ func CreateHandler() http.HandlerFunc {
 			http.Error(w, "failed to create api key", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeyCreated, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    created.ID.String(),
+			TargetLabel: name,
+			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"prefix": created.Prefix.ValueOrEmpty(), "role_count": len(roleUUIDs)},
+		})
 
 		writeJSON(w, createResponse{
 			ID:     created.ID.String(),

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"backend/internal/audit"
+	"backend/internal/auth"
 	"backend/internal/authz"
 	"backend/internal/datasource"
 
@@ -61,7 +63,8 @@ func toolExecuteQuery() Tool {
 			if err != nil {
 				return nil, err
 			}
-			return runQuery(ctx, conn, ds, args.Statement, maxRows), nil
+			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
+			return runQuery(ctx, conn, ds, args.Statement, maxRows, &rec), nil
 		},
 	}
 }
@@ -100,7 +103,10 @@ func toolExecuteStatement() Tool {
 			if err != nil {
 				return nil, err
 			}
-			return runQuery(ctx, conn, ds, args.Statement, 0 /* no row cap; usually no rows for DML/DDL */), nil
+			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
+			// Always cap: nothing forces execute_statement to be write-only, so a
+			// SELECT run through it must be bounded like execute_query.
+			return runQuery(ctx, conn, ds, args.Statement, maxRowsCeiling, &rec), nil
 		},
 	}
 }
@@ -134,8 +140,11 @@ func openConn(ctx context.Context, r *http.Request, datasourceID, workspaceID st
 	}, ds, dialect, nil
 }
 
-func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedDatasource, sql string, maxRows int) any {
-	sink := newCollectSink(maxRows)
+// runQuery streams sql through the engine and collects the result. rec is the
+// query.executed record to emit on completion; pass nil for internal queries
+// that read no data (e.g. EXPLAIN), which should not appear in the data-plane log.
+func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedDatasource, sql string, maxRows int, rec *audit.Record) any {
+	sink := newCollectSink(maxRows, rec)
 	inst := engine.DBInstance{ID: "mcp", DBType: ds.DBType}
 	engine.StreamLocal(ctx, conn, inst, sql, engine.Options{
 		// Bound the work even when callers don't supply a timeout.
@@ -144,6 +153,24 @@ func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedData
 		MaxBytes: 8 * 1024 * 1024, // 8MB hard cap for MCP results
 	}, sink)
 	return sink.Result()
+}
+
+// newQueryAuditRecord assembles the query.executed audit record for an MCP tool
+// call. MCP authenticates by API key, so the principal is the key; channel=mcp
+// separates these from the desktop app's proxied queries in the data-plane log.
+func newQueryAuditRecord(r *http.Request, workspaceID, datasourceID, sql, dbType string) audit.Record {
+	p := authz.RequestPrincipal(r, workspaceID)
+	return audit.Record{
+		WorkspaceID: p.WorkspaceID,
+		Principal:   p,
+		TargetID:    datasourceID,
+		Payload: map[string]any{
+			"sql_text": sql,
+			"db_type":  dbType,
+			"channel":  "mcp",
+		},
+		ClientIP: auth.GetIPAddress(r),
+	}
 }
 
 type collectSink struct {
@@ -155,10 +182,12 @@ type collectSink struct {
 	duration  int64
 	err       error
 	truncated bool
+
+	audit *audit.QueryRecorder
 }
 
-func newCollectSink(maxRows int) *collectSink {
-	return &collectSink{maxRows: maxRows}
+func newCollectSink(maxRows int, rec *audit.Record) *collectSink {
+	return &collectSink{maxRows: maxRows, audit: audit.NewQueryRecorder(rec)}
 }
 
 func (c *collectSink) OnColumns(cols []string) error {
@@ -178,6 +207,7 @@ func (c *collectSink) OnDone(rowCount, affected, durationMs int64) error {
 	c.rowCount = rowCount
 	c.affected = affected
 	c.duration = durationMs
+	c.audit.Success(rowCount, affected, durationMs)
 	return nil
 }
 
@@ -187,6 +217,7 @@ func (c *collectSink) OnTruncated() {
 
 func (c *collectSink) OnError(err error) {
 	c.err = err
+	c.audit.Failure(err)
 }
 
 func (c *collectSink) Result() any {

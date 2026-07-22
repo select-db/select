@@ -35,9 +35,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("group: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppGroup, generated.UpsertGroupParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppGroup, generated.UpsertGroupParams]{
 		TableName: "group",
-		Audit:     &patch.AuditConfig{Spec: audit.GroupUpserted, TargetID: id},
 		Fetch: func(ctx context.Context) (generated.AppGroup, error) {
 			return db.Queries.GetGroupByID(ctx, idUUID)
 		},
@@ -81,4 +80,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.UpsertGroup(ctx, params)
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.GroupUpserted, c.WorkspaceID, id, res.Before, res.After)
+	}
+	return res.Applied, res.Restored, err
 }

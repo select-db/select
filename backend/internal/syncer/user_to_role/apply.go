@@ -8,6 +8,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/scope"
 	"backend/internal/syncer/types"
@@ -53,7 +54,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("user_to_role: role_id does not belong to workspace")
 	}
 
-	return patch.Apply(ctx, c, patch.Handler[generated.AppUserToRole, generated.UpsertUserToRoleParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppUserToRole, generated.UpsertUserToRoleParams]{
 		TableName: "user_to_role",
 		Fetch: func(ctx context.Context) (generated.AppUserToRole, error) {
 			return db.Queries.GetUserToRoleByID(ctx, generated.GetUserToRoleByIDParams{
@@ -98,4 +99,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return nil
 		},
 	})
+	if res.Applied {
+		audit.EmitChange(ctx, audit.RoleAssigned, c.WorkspaceID, uid, res.Before, res.After)
+	}
+	return res.Applied, res.Restored, err
 }

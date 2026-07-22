@@ -24,7 +24,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 	}
 
 	var oldOwnerID db_types.JSONNullUUID
-	return patch.Apply(ctx, c, patch.Handler[generated.GetWorkspaceByIDRow, generated.UpsertWorkspaceParams]{
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.GetWorkspaceByIDRow, generated.UpsertWorkspaceParams]{
 		TableName: "workspace",
 		Fetch: func(ctx context.Context) (generated.GetWorkspaceByIDRow, error) {
 			return db.Queries.GetWorkspaceByID(ctx, idUUID)
@@ -91,4 +91,5 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return nil
 		},
 	})
+	return res.Applied, res.Restored, err
 }

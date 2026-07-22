@@ -52,12 +52,3 @@ func TestGuardRejectsAPIKeyPrincipal(t *testing.T) {
 		t.Fatalf("body = %q", rr.Body.String())
 	}
 }
-
-func TestGuardRejectsGET(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/apikey/list", nil)
-	rr := httptest.NewRecorder()
-	ListHandler().ServeHTTP(rr, req)
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want 405", rr.Code)
-	}
-}

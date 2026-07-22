@@ -2,9 +2,7 @@ package syncer
 
 import (
 	"backend/db/db_types"
-	"backend/internal/audit"
 	"backend/internal/auth"
-	"backend/internal/authz"
 	"backend/internal/middlewares"
 	"backend/internal/syncer/types"
 	"encoding/json"
@@ -30,25 +28,16 @@ func Handler() http.HandlerFunc {
 		}
 		ownedWorkspaceIDs := middlewares.GetOwnedWorkspaceIDs(r)
 
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
 		var req types.SyncRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		// Stash a principal resolver so patch.Apply can attach the actor without
-		// threading it through every entity signature. Workspace is per-commit: a
-		// sync spans workspaces, so there's no single member workspace here.
-		ctx := audit.ContextWithPrincipalResolver(r.Context(), func(workspaceID string) audit.Principal {
-			return authz.RequestPrincipal(r, workspaceID)
-		})
-
-		resp, needsTokenRefresh, err := Sync(ctx, userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
+		// The audit principal resolver is installed once by the authenticated
+		// middleware (see internal/api), so Sync's emit sites resolve the actor
+		// from the request context — no per-handler wiring needed here.
+		resp, needsTokenRefresh, err := Sync(r.Context(), userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

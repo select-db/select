@@ -11,7 +11,6 @@ import (
 	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/authz"
-	"backend/internal/middlewares"
 
 	core "github.com/selectDb/dialect/core"
 )
@@ -31,10 +30,6 @@ type searchUserResponse struct {
 
 func SearchUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
 
 		var req searchUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -48,14 +43,12 @@ func SearchUserHandler() http.HandlerFunc {
 			return
 		}
 
-		workspaceID := middlewares.MemberWorkspaceID(r)
+		a := authz.ActorOf(r)
+		workspaceID := a.WorkspaceID
 
-		if !authz.IsWorkspaceOwner(r, workspaceID) {
-			compiled := authz.CompiledFromRequest(r)
-			if !compiled.IsAllowed(core.ActionWorkspaceUsersManage) {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
+		if !a.IsOwner() && !a.Can(core.ActionWorkspaceUsersManage) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
 		}
 
 		workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)

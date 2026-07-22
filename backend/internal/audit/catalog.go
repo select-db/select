@@ -33,18 +33,13 @@ func (s Spec) Type() string { return s.Domain + "." + s.Action }
 // control-plane mutations (iam, datasource) go through the durable outbox so a
 // crash can't lose a privilege or config change.
 var (
-	// query - Datastore Activity. The data plane: what was read/exported.
+	// query - Datastore Activity. The data plane: what was read.
 	QueryExecuted = Spec{
 		Domain: DomainQuery, Action: ActionExecuted, Lane: LaneAsync, TargetType: "datasource",
-		Doc: "a SQL query finished executing against a datasource via the proxy (status success|error)",
-	}
-	QueryDenied = Spec{
-		Domain: DomainQuery, Action: ActionDenied, Lane: LaneAsync, TargetType: "datasource",
-		Doc: "a query was blocked by the permission engine (status denied)",
-	}
-	QueryExported = Spec{
-		Domain: DomainQuery, Action: ActionExported, Lane: LaneAsync, TargetType: "datasource",
-		Doc: "a bulk export of a datasource was run",
+		// A permission block is a denied outcome of the same attempt, not a
+		// separate event: users routinely fumble into fields they can't read, so
+		// it's a filterable status, not a standalone security signal.
+		Doc: "a SQL query was run against a datasource (status success|error|denied)",
 	}
 
 	// auth - Authentication. Proving identity; no target (the principal is the subject).
@@ -59,10 +54,6 @@ var (
 	AuthTokenRefreshed = Spec{
 		Domain: DomainAuth, Action: ActionTokenRefreshed, Lane: LaneAsync,
 		Doc: "an access token was reissued from a refresh token",
-	}
-	AuthLogout = Spec{
-		Domain: DomainAuth, Action: ActionLogout, Lane: LaneAsync,
-		Doc: "a session/refresh token was revoked",
 	}
 
 	// iam - Identity & Access Management. Privilege and account changes.
@@ -81,6 +72,14 @@ var (
 	RoleDeleted = Spec{
 		Domain: DomainIAM, Action: ActionRoleDeleted, Lane: LaneOutbox, TargetType: "role",
 		Doc: "a role was deleted",
+	}
+	RoleAssigned = Spec{
+		Domain: DomainIAM, Action: ActionRoleAssigned, Lane: LaneOutbox, TargetType: "user",
+		Doc: "a role was assigned directly to a user (user_to_role)",
+	}
+	RoleUnassigned = Spec{
+		Domain: DomainIAM, Action: ActionRoleUnassigned, Lane: LaneOutbox, TargetType: "user",
+		Doc: "a role assigned directly to a user was removed",
 	}
 	MemberAdded = Spec{
 		Domain: DomainIAM, Action: ActionMemberAdded, Lane: LaneOutbox, TargetType: "user",
@@ -134,6 +133,10 @@ var (
 		Domain: DomainIAM, Action: ActionAPIKeyRevoked, Lane: LaneOutbox, TargetType: "api_key",
 		Doc: "an API key was revoked",
 	}
+	APIKeySetRoles = Spec{
+		Domain: DomainIAM, Action: ActionAPIKeySetRoles, Lane: LaneOutbox, TargetType: "api_key",
+		Doc: "an API key's bound roles were replaced",
+	}
 
 	// datasource - connection lifecycle. Sensitive: DSNs can redirect data.
 	DatasourceUpserted = Spec{
@@ -146,21 +149,19 @@ var (
 	}
 )
 
-// Catalog is the full declared vocabulary. Wired today: QueryExecuted,
-// PermissionUpserted, and the group writes (GroupUpserted, GroupMemberAdded,
-// GroupRoleAttached). The rest are reserved contract, emit sites land at their
-// choke points incrementally.
+// Catalog is the full declared vocabulary. Every spec here has a live emit site
+// (a denied query rides QueryExecuted with status=denied, not a spec of its own).
 var Catalog = []Spec{
-	QueryExecuted, QueryDenied, QueryExported,
-	AuthLogin, AuthLoginFailed, AuthTokenRefreshed, AuthLogout,
+	QueryExecuted,
+	AuthLogin, AuthLoginFailed, AuthTokenRefreshed,
 	PermissionUpserted, PermissionDeleted,
-	RoleUpserted, RoleDeleted,
+	RoleUpserted, RoleDeleted, RoleAssigned, RoleUnassigned,
 	MemberAdded, MemberRemoved,
 	GroupUpserted, GroupDeleted,
 	GroupMemberAdded, GroupMemberRemoved,
 	GroupRoleAttached, GroupRoleDetached,
 	WorkspaceCreated, WorkspaceDeleted,
-	APIKeyCreated, APIKeyRotated, APIKeyRevoked,
+	APIKeyCreated, APIKeyRotated, APIKeyRevoked, APIKeySetRoles,
 	DatasourceUpserted, DatasourceDeleted,
 }
 
@@ -216,4 +217,38 @@ func Emit(ctx context.Context, spec Spec, r Record) error {
 	}
 	Log(e)
 	return nil
+}
+
+// EmitAction is the best-effort emit for handler-initiated events: it resolves
+// the principal from ctx (the api keystone installs the resolver) and logs rather
+// than returns on failure, so a logging error never fails the request. The caller
+// fills r.WorkspaceID, TargetID/Label, Status, and a curated (secret-free!)
+// Payload. For mutation events with a before/after diff, use EmitChange.
+func EmitAction(ctx context.Context, spec Spec, r Record) {
+	r.Principal = ResolvePrincipal(ctx, r.WorkspaceID)
+	if err := Emit(ctx, spec, r); err != nil {
+		log.Printf("audit: emit %s: %v", spec.Type(), err)
+	}
+}
+
+// EmitDenied records a permission denial from a handler's authz gate. A zero
+// spec (a read path with no action to attribute) is skipped; targetID may be ""
+// when the denied resource isn't known at gate time.
+func EmitDenied(ctx context.Context, spec Spec, workspaceID, targetID string) {
+	if spec.Action == "" {
+		return
+	}
+	EmitAction(ctx, spec, Record{WorkspaceID: workspaceID, TargetID: targetID, Status: StatusDenied})
+}
+
+// EmitChange is EmitAction for the mutation paths (upsert via patch.Apply,
+// hand-written deletes): the payload is a before/after diff. Either side may be
+// nil — an insert has no before, a delete has no after.
+func EmitChange(ctx context.Context, spec Spec, workspaceID, targetID string, before, after any) {
+	EmitAction(ctx, spec, Record{
+		WorkspaceID: workspaceID,
+		TargetID:    targetID,
+		Status:      StatusSuccess,
+		Payload:     Diff(before, after),
+	})
 }

@@ -95,7 +95,7 @@ func runPlanOrExplain(ctx context.Context, r *http.Request, workspaceID string, 
 		wrappedSQL = parser.BuildExplainQuery(args.Statement)
 	}
 
-	res := runQuery(ctx, conn, ds, wrappedSQL, maxRowsCeiling).(map[string]any)
+	res := runQuery(ctx, conn, ds, wrappedSQL, maxRowsCeiling, nil).(map[string]any)
 	if ok, _ := res["success"].(bool); !ok {
 		return res, nil
 	}

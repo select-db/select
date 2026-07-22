@@ -49,7 +49,7 @@ func sshHostKeyCallback(hostKey string) (hostKeyResult, error) {
 		if EnforceOutboundGuard {
 			return hostKeyResult{}, newConfigError("ssh host key required: configure the SSH host key for this datasource")
 		}
-		return hostKeyResult{callback: ssh.InsecureIgnoreHostKey()}, nil // #nosec G106 -- desktop-only trust-on-first-use; the proxy (EnforceOutboundGuard) requires a pinned host key
+		return hostKeyResult{callback: ssh.InsecureIgnoreHostKey()}, nil // #nosec G106 nosemgrep: go.lang.security.audit.crypto.insecure_ssh.avoid-ssh-insecure-ignore-host-key -- desktop-only trust-on-first-use; the proxy (EnforceOutboundGuard) fails closed above and requires a pinned host key
 	}
 	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(hk))
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
 )
@@ -29,9 +30,14 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if err != nil {
 		return false, nil, fmt.Errorf("group: invalid workspace_id %q: %w", workspaceID, err)
 	}
-	// Snapshot members before the delete: removing the group removes every
-	// member's group-derived roles, so their refresh tokens must be revoked to
-	// force a fresh token that no longer carries those roles.
+	// Snapshot the group (audit before-state) and its members before the delete:
+	// removing the group removes every member's group-derived roles, so their
+	// refresh tokens must be revoked to force a fresh token that no longer carries
+	// those roles.
+	var before any
+	if g, err := db.Queries.GetGroupByID(ctx, idUUID); err == nil {
+		before = g
+	}
 	members, membersErr := db.Queries.GetUserIDsByGroupID(ctx, idUUID)
 
 	if err := db.Queries.SetGroupDeletedAt(ctx, generated.SetGroupDeletedAtParams{
@@ -47,5 +53,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 			_ = db.Queries.DeleteUserRefreshTokens(ctx, m)
 		}
 	}
+	audit.EmitChange(ctx, audit.GroupDeleted, workspaceID, id, before, nil)
 	return true, nil, nil
 }

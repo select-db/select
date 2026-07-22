@@ -84,7 +84,7 @@ jobs:
           go_app=false;     [[ "$app" == true || "$dialect" == true || "$toolkit" == true ]] && go_app=true || true
           go_toolkit="$toolkit"
 
-          # JSON array of Go modules that need security scanning (govulncheck + gosec).
+          # JSON array of Go modules that need security scanning (govulncheck + semgrep).
           mods=()
           [[ "$go_app" == true ]] && mods+=('"app"') || true
           [[ "$go_backend" == true ]] && mods+=('"backend"') || true
@@ -120,6 +120,9 @@ jobs:
     needs: [plan]
     if: needs.plan.outputs.go-modules != '[]'
     runs-on: ubuntu-latest
+    # Guardrail: this step set is fast (semgrep is build-free, govulncheck is one
+    # compile). A run that exceeds this is stuck, not working — fail, don't hang.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -138,25 +141,37 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
-      - name: gosec
+      - name: semgrep (SAST)
         if: ${{ !cancelled() }}
         working-directory: ${{ matrix.module }}
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          # Excluded rules are categorical false positives for this codebase or
-          # are owned by another linter; the security-meaningful rules (taint
-          # path-traversal G703, taint SSRF G704, SSH host key G106,
-          # decompression-bomb G110, goroutine context G118, weak crypto, etc.)
-          # stay active. Reasons:
-          #   G101 identifier name-matches "password"/"token" (no real secrets; audited)
-          #   G104 unhandled errors -> owned by errcheck (golangci-lint)
-          #   G115 int->rune conversions in generated parser/lexer and bounded counters
-          #   G201,G202 parameterized SQL built in the dialect engine (values are bound)
-          #   G204 DB-dump/git/analyzer subprocess with no shell and validated args
-          #   G301,G302,G306 permissions on the desktop app's own user-owned files
-          #   G304 file access contained by the workspace root / validated paths
-          #   G706 low-risk log injection into operator-facing logs
-          gosec -exclude=G101,G104,G115,G201,G202,G204,G301,G302,G304,G306,G706 ./...
+          # Build-free SAST — replaces gosec, whose whole-program SSA re-compiled
+          # the entire module graph on every cold runner (~6 min + near-OOM on
+          # backend, which repeatedly hung/SIGTERM'd this job). Semgrep parses
+          # source directly, so it's ~seconds and independent of the build cache.
+          # Deep interprocedural taint (SSRF/path-traversal/injection) now runs
+          # nightly in the CodeQL workflow (.github/workflows/codeql.yml), off the
+          # PR critical path.
+          #
+          # Blocking gate: --error makes semgrep exit non-zero on any finding, so
+          # a new issue fails the PR.
+          #
+          # Two acceptance mechanisms, by scope:
+          #   * Categorical patterns are excluded repo-wide here (documented,
+          #     mirrors the old gosec -exclude rationale):
+          #       string-formatted-query            engine builds parameterized SQL; values are bound (was gosec G201/G202)
+          #       unsafe-deserialization-interface  heterogeneous sync payloads unmarshaled then type-switched, by design
+          #       potential-dos-via-decompression-bomb  decompresses only our own signed release artifacts
+          #   * Single reviewed sites are suppressed inline with `// nosemgrep`
+          #     (keeps the rule active for any new code): the desktop TOFU SSH
+          #     host key (dialect/engine/ssh.go) and a reflect-by-name over a
+          #     struct's own field names (app/internal/graph/helpers.go).
+          pipx run --spec 'semgrep==1.170.0' semgrep scan \
+            --config p/gosec --config p/golang \
+            --exclude-rule go.lang.security.audit.database.string-formatted-query.string-formatted-query \
+            --exclude-rule go.lang.security.deserialization.unsafe-deserialization-interface.go-unsafe-deserialization-interface \
+            --exclude-rule go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb \
+            --exclude='*_test.go' --error --metrics=off --disable-version-check .
 
   gitleaks:
     name: Secret scan (gitleaks)
@@ -242,8 +257,10 @@ jobs:
       - name: Dead code check
         run: |
           go install golang.org/x/tools/cmd/deadcode@latest
+          # -test: the e2e harness is reachable only from _test.go files, so tests
+          # must be roots or the whole support package reads as dead.
           # deadcode exits 0 even when it finds dead code; treat any output as failure
-          out=$(deadcode ./...)
+          out=$(deadcode -test ./...)
           if [ -n "$out" ]; then
             echo "$out"
             echo "::error::Dead code detected"
@@ -300,6 +317,27 @@ jobs:
           path: ~/.embedded-postgres-go
           key: embedded-postgres-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
           restore-keys: embedded-postgres-${{ runner.os }}-
+      # The audit e2e tests run against Postgres 18 + pg_partman so they exercise
+      # the production audit config (real monthly partitions), not the no-partman
+      # DEFAULT-partition fallback. The harness connects via TEST_PG_*; packages
+      # without those env vars fall back to embedded Postgres. Postgres 18 lands
+      # on a non-5432 port (the runner's preinstalled cluster holds 5432), so the
+      # port is derived, not hardcoded.
+      - name: Postgres 18 + pg_partman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-18 postgresql-18-partman
+          sudo pg_createcluster --start 18 main || sudo pg_ctlcluster 18 main start || true
+          PORT=$(pg_lsclusters -h | awk '$1==18 {print $3}')
+          sudo -u postgres psql -p "$PORT" -c "ALTER USER postgres PASSWORD 'postgres';"
+          {
+            echo "TEST_PG_HOST=localhost"
+            echo "TEST_PG_PORT=$PORT"
+            echo "TEST_PG_USER=postgres"
+            echo "TEST_PG_PASSWORD=postgres"
+          } >> "$GITHUB_ENV"
       - run: go test ./...
         working-directory: backend
 

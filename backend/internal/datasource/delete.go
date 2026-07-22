@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"backend/internal/middlewares"
-
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/authz"
 
 	"github.com/google/uuid"
@@ -30,9 +29,11 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		workspaceID := middlewares.MemberWorkspaceID(r)
+		a := authz.ActorOf(r)
+		workspaceID := a.WorkspaceID
 
-		if !authz.IsWorkspaceOwner(r, workspaceID) && !authz.CompiledFromRequest(r).CanManage(req.ID) {
+		if !a.IsOwner() && !a.CanManage(req.ID) {
+			audit.EmitDenied(r.Context(), audit.DatasourceDeleted, workspaceID, req.ID)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -57,6 +58,12 @@ func DeleteHandler() http.HandlerFunc {
 		}
 
 		InvalidateCache(workspaceID, req.ID)
+
+		audit.EmitAction(r.Context(), audit.DatasourceDeleted, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    req.ID,
+			Status:      audit.StatusSuccess,
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

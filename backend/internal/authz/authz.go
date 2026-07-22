@@ -56,7 +56,7 @@ func InSet(ids []string, id string) bool {
 	return false
 }
 
-func IsWorkspaceOwner(r *http.Request, workspaceID string) bool {
+func isWorkspaceOwner(r *http.Request, workspaceID string) bool {
 	return InSet(middlewares.GetOwnedWorkspaceIDs(r), workspaceID)
 }
 

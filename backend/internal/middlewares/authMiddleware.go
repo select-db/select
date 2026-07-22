@@ -7,9 +7,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
+	"backend/internal/audit"
 	auth "backend/internal/auth"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -350,6 +352,17 @@ func TryRefreshToken(r *http.Request, refreshToken string, deviceID string, user
 	if err != nil {
 		return nil, fmt.Errorf("failed to create access token: %w", err)
 	}
+
+	// Auth events are the user's own, not a workspace's: no workspace_id, and the
+	// principal is set explicitly (the request-scoped resolver isn't in play here).
+	if emitErr := audit.Emit(ctx, audit.AuthTokenRefreshed, audit.Record{
+		Principal: audit.Principal{Type: audit.PrincipalUser, ID: userID},
+		Status:    audit.StatusSuccess,
+		ClientIP:  currentIP,
+	}); emitErr != nil {
+		log.Printf("audit: emit %s: %v", audit.AuthTokenRefreshed.Type(), emitErr)
+	}
+
 	return &TokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: *newRefreshToken,

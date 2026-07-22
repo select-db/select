@@ -5,27 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
-	"backend/internal/audit"
 	"backend/internal/syncer/types"
 )
-
-// AuditConfig makes Apply emit an audit event after a successful upsert: the
-// before/after diff is derived generically and the principal comes from the
-// context, so an entity just declares the spec + target id.
-type AuditConfig struct {
-	Spec     audit.Spec
-	TargetID string
-}
 
 // Handler describes the table-specific operations needed for LWW apply.
 type Handler[Row any, Params any] struct {
 	TableName string
-
-	// Audit, when non-nil, emits an audit event after a successful upsert.
-	Audit *AuditConfig
 
 	// Fetch retrieves the current row by ID. Must return sql.ErrNoRows if absent.
 	Fetch func(ctx context.Context) (Row, error)
@@ -48,17 +35,28 @@ type Handler[Row any, Params any] struct {
 	Upsert func(ctx context.Context, params Params) error
 }
 
+// Result reports what Apply did so the caller can react — e.g. emit an audit
+// event — without Apply itself knowing about those concerns. Before/After are the
+// row state around the write and are set only when Applied (Before is nil on an
+// insert); Restored is set only when the server won and the client must revert.
+type Result struct {
+	Applied  bool
+	Restored *types.RestoredItem
+	Before   any
+	After    any
+}
+
 // Apply runs last-write-wins for a single commit using h.
-func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[Row, Params]) (bool, *types.RestoredItem, error) {
+func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[Row, Params]) (Result, error) {
 	payload, ok := c.Payload.(map[string]any)
 	if !ok {
-		return false, nil, fmt.Errorf("%s: payload must be an object", h.TableName)
+		return Result{}, fmt.Errorf("%s: payload must be an object", h.TableName)
 	}
 
 	existing, err := h.Fetch(ctx)
 	isNew := errors.Is(err, sql.ErrNoRows)
 	if err != nil && !isNew {
-		return false, nil, fmt.Errorf("%s: fetch: %w", h.TableName, err)
+		return Result{}, fmt.Errorf("%s: fetch: %w", h.TableName, err)
 	}
 
 	// Server win: row is deleted; reject update and send deleted row so client applies delete locally.
@@ -66,14 +64,14 @@ func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[R
 		if t := h.DeletedAt(existing); t != nil && !t.IsZero() {
 			serverPayload, err := h.Restored(existing)
 			if err != nil {
-				return false, nil, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
+				return Result{}, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
 			}
-			return false, &types.RestoredItem{
+			return Result{Restored: &types.RestoredItem{
 				ObjectID:      c.ObjectID,
 				TableName:     h.TableName,
 				ServerPayload: serverPayload,
 				UpdatedAt:     h.UpdatedAt(existing),
-			}, nil
+			}}, nil
 		}
 	}
 
@@ -87,43 +85,28 @@ func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[R
 	if !isNew && clientTime.Before(h.UpdatedAt(existing)) {
 		serverPayload, err := h.Restored(existing)
 		if err != nil {
-			return false, nil, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
+			return Result{}, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
 		}
-		return false, &types.RestoredItem{
+		return Result{Restored: &types.RestoredItem{
 			ObjectID:      c.ObjectID,
 			TableName:     h.TableName,
 			ServerPayload: serverPayload,
 			UpdatedAt:     h.UpdatedAt(existing),
-		}, nil
+		}}, nil
 	}
 
 	// Client wins: merge and upsert.
 	params, err := h.Merge(existing, isNew, payload)
 	if err != nil {
-		return false, nil, fmt.Errorf("%s: merge: %w", h.TableName, err)
+		return Result{}, fmt.Errorf("%s: merge: %w", h.TableName, err)
 	}
 	if err := h.Upsert(ctx, params); err != nil {
-		return false, nil, fmt.Errorf("%s: upsert: %w", h.TableName, err)
+		return Result{}, fmt.Errorf("%s: upsert: %w", h.TableName, err)
 	}
 
-	if h.Audit != nil {
-		var before any
-		if !isNew {
-			before = existing
-		}
-		// The event's workspace is the resource's (from the commit); the principal
-		// is resolved for that same workspace.
-		p := audit.ResolvePrincipal(ctx, c.WorkspaceID)
-		if err := audit.Emit(ctx, h.Audit.Spec, audit.Record{
-			WorkspaceID: c.WorkspaceID,
-			Principal:   p,
-			TargetID:    h.Audit.TargetID,
-			Status:      audit.StatusSuccess,
-			Payload:     audit.Diff(before, params),
-		}); err != nil {
-			// Best-effort: a logging failure must not fail the sync.
-			log.Printf("audit: emit %s: %v", h.Audit.Spec.Type(), err)
-		}
+	var before any
+	if !isNew {
+		before = existing
 	}
-	return true, nil, nil
+	return Result{Applied: true, Before: before, After: params}, nil
 }

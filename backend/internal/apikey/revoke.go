@@ -9,6 +9,8 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
+	"backend/internal/authz"
 )
 
 type revokeRequest struct {
@@ -17,10 +19,18 @@ type revokeRequest struct {
 
 func RevokeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			audit.EmitDenied(r.Context(), audit.APIKeyRevoked, a.WorkspaceID, "")
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			audit.EmitDenied(r.Context(), audit.APIKeyRevoked, a.WorkspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
 
 		var req revokeRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -55,6 +65,12 @@ func RevokeHandler() http.HandlerFunc {
 			http.Error(w, "failed to revoke api key", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeyRevoked, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    req.ID,
+			Status:      audit.StatusSuccess,
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
