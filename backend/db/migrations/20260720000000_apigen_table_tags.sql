@@ -12,6 +12,13 @@ COMMENT ON TABLE app."group"           IS '@app.sync @app.api.list|get @app.api.
 COMMENT ON TABLE app.user_to_group     IS '@app.sync @app.api.list|get @app.api.create|update|delete requires groups.manage';
 COMMENT ON TABLE app.group_to_role     IS '@app.sync @app.api.list|get @app.api.create|update|delete requires groups.manage, roles.manage';
 COMMENT ON TABLE app.workspace_to_user IS '@app.sync @app.api.list|get @app.api.create|update|delete requires roles.manage, users.manage';
+
+-- audit.event is the append-only activity log: exposed over the API as a
+-- read-only resource (list/get) named "log", gated behind audit.read, and
+-- deliberately NOT synced (server-owned, never written by clients). The internal
+-- content-address hash is hidden from the API.
+COMMENT ON TABLE audit.event IS '@app.entity log @app.api.list|get requires audit.read';
+COMMENT ON COLUMN audit.event.principal_hash IS '@app.hide';
 -- +goose StatementEnd
 
 -- +goose Down
@@ -23,4 +30,6 @@ COMMENT ON TABLE app."group"           IS NULL;
 COMMENT ON TABLE app.user_to_group     IS NULL;
 COMMENT ON TABLE app.group_to_role     IS NULL;
 COMMENT ON TABLE app.workspace_to_user IS NULL;
+COMMENT ON TABLE audit.event IS NULL;
+COMMENT ON COLUMN audit.event.principal_hash IS NULL;
 -- +goose StatementEnd

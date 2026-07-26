@@ -122,6 +122,68 @@ func TestWriteSchemaIncludesFK(t *testing.T) {
 	}
 }
 
+// A read-only, non-synced entity (the audit log) projects to GET-only endpoints
+// with no write verbs and no request-body schemas, gated by its read action.
+func TestReadOnlyLogEntity(t *testing.T) {
+	logTable := schema.RawTable{
+		Schema: "audit", Name: "event",
+		Comment: "@app.entity log @app.api.list|get requires audit.read",
+		Columns: []schema.RawColumn{
+			{Name: "id", DataType: "uuid", NotNull: true},
+			{Name: "workspace_id", DataType: "uuid"},
+			{Name: "occurred_at", DataType: "timestamptz", NotNull: true},
+			{Name: "action", DataType: "text", NotNull: true},
+			{Name: "principal_hash", DataType: "bytea", NotNull: true, Comment: "@app.hide"},
+			{Name: "payload", DataType: "jsonb", NotNull: true},
+			{Name: "client_ip", DataType: "inet"},
+		},
+		PrimaryKey: []string{"id", "action", "occurred_at"}, // composite, like the real table
+	}
+	ents := build(t, logTable)
+	raw, err := EmitOpenAPI(ents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc Document
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+
+	coll, item := doc.Paths["/logs"], doc.Paths["/logs/{id}"]
+	if coll == nil || coll.Get == nil {
+		t.Fatal("expected GET /logs (list)")
+	}
+	if coll.Post != nil {
+		t.Fatal("logs must be read-only: no POST /logs")
+	}
+	if item == nil || item.Get == nil {
+		t.Fatal("expected GET /logs/{id} (get)")
+	}
+	if item.Patch != nil || item.Delete != nil {
+		t.Fatal("logs must be read-only: no PATCH/DELETE")
+	}
+	if got := coll.Get.RequiredActions; len(got) != 1 || got[0] != "audit.read" {
+		t.Fatalf("list should require audit.read, got %v", got)
+	}
+	// Read-only => no request-body component schemas.
+	for _, name := range []string{"LogCreateRequest", "LogUpdateRequest"} {
+		if _, ok := doc.Components.Schemas[name]; ok {
+			t.Fatalf("read-only entity should not emit %s", name)
+		}
+	}
+	// Tenant column and the @app.hide column never surface; payload does.
+	props := doc.Components.Schemas["Log"].Properties
+	if _, ok := props["workspace_id"]; ok {
+		t.Fatal("workspace_id must not be exposed")
+	}
+	if _, ok := props["principal_hash"]; ok {
+		t.Fatal("hidden principal_hash must not be exposed")
+	}
+	if props["payload"] == nil || props["payload"].Type != "object" {
+		t.Fatalf("payload (jsonb) should be an object, got %+v", props["payload"])
+	}
+}
+
 func build(t *testing.T, tables ...schema.RawTable) []schema.Entity {
 	t.Helper()
 	ents, errs := schema.Build(schema.RawSchema{Tables: tables})
