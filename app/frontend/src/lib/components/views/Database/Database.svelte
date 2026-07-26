@@ -54,12 +54,14 @@
 
 {#if !database}
 	<Alert type={AlertType.Error} message="No database selected" noPulse />
-{:else if !$myPermissions.canAccessDb(database.id)}
-	<Alert
-		type={AlertType.Error}
-		message="You don't have permission to access this database."
-		noPulse
-	/>
+{:else if !$myPermissions.canAccessDb(database.id, database.proxified)}
+	<div class="alert-wrapper">
+		<Alert
+			type={AlertType.Error}
+			message="You don't have permission to access this database."
+			noPulse
+		/>
+	</div>
 {:else}
 	{#key database.id}
 		<div class="wrapper scrollable">
@@ -83,5 +85,10 @@
 		height: 100%;
 		overflow-x: hidden;
 		overflow-y: auto;
+	}
+
+	.alert-wrapper {
+		padding: var(--space-sm-md);
+		width: fit-content;
 	}
 </style>
