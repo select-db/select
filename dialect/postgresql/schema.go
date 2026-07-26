@@ -77,7 +77,7 @@ func (d *Dialect) GetSchemas(ctx context.Context, db *sql.DB) ([]string, error) 
 func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
 	// Phase 1: list table names
 	const listQuery = `
-		SELECT c.relname
+		SELECT c.relname, pg_catalog.obj_description(c.oid, 'pg_class')
 		FROM pg_catalog.pg_class AS c
 		JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
 		WHERE n.nspname = $1
@@ -89,13 +89,16 @@ func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]c
 		return nil, fmt.Errorf("failed to query tables: %w", err)
 	}
 	var tableNames []string
+	tableComments := make(map[string]string)
 	for rows.Next() {
 		var name string
-		if err := rows.Scan(&name); err != nil {
+		var comment sql.NullString
+		if err := rows.Scan(&name, &comment); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan table row: %w", err)
 		}
 		tableNames = append(tableNames, name)
+		tableComments[name] = comment.String
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -142,10 +145,11 @@ func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]c
 		fk := allFKs[name]
 		core.EnrichColumnsWithConstraints(&cols, pk, fk)
 		tables = append(tables, core.Table{
-			Name:       name,
-			Columns:    cols,
-			PrimaryKey: pk,
-			DDL:        allDDLs[name],
+			Name:        name,
+			Columns:     cols,
+			PrimaryKey:  pk,
+			DDL:         allDDLs[name],
+			Description: tableComments[name],
 		})
 	}
 	return tables, nil
@@ -160,7 +164,8 @@ func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schema string, t
 			a.attname,
 			pg_catalog.format_type(a.atttypid, a.atttypmod),
 			a.attnotnull,
-			pg_catalog.pg_get_expr(ad.adbin, ad.adrelid)
+			pg_catalog.pg_get_expr(ad.adbin, ad.adrelid),
+			pg_catalog.col_description(c.oid, a.attnum)
 		FROM pg_catalog.pg_attribute AS a
 		JOIN pg_catalog.pg_class AS c ON c.oid = a.attrelid
 		JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
@@ -181,11 +186,11 @@ func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schema string, t
 	for rows.Next() {
 		var tableName, colName, dataType string
 		var notNull bool
-		var colDefault sql.NullString
-		if err := rows.Scan(&tableName, &colName, &dataType, &notNull, &colDefault); err != nil {
+		var colDefault, colComment sql.NullString
+		if err := rows.Scan(&tableName, &colName, &dataType, &notNull, &colDefault, &colComment); err != nil {
 			return nil, err
 		}
-		col := core.Column{Name: colName, Type: dataType, Nullable: !notNull}
+		col := core.Column{Name: colName, Type: dataType, Nullable: !notNull, Description: colComment.String}
 		if colDefault.Valid && colDefault.String != "" {
 			col.Default = &colDefault.String
 		}

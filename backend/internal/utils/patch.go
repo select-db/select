@@ -21,6 +21,19 @@ func PatchNullStr(payload map[string]any, key string, existing db_types.JSONNull
 	return existing
 }
 
+// PatchStrDefault is like PatchStr but falls back to def when neither the
+// payload carries the key nor existing holds a value — for a NOT NULL column
+// with a DB default, so a newly-created row never writes SQL NULL.
+func PatchStrDefault(payload map[string]any, key string, existing db_types.JSONNullString, def string) db_types.JSONNullString {
+	if _, has := payload[key]; has {
+		return db_types.NewJSONNullString(MapGetString(payload, key))
+	}
+	if existing.Valid {
+		return existing
+	}
+	return db_types.NewJSONNullString(def)
+}
+
 // PatchUUID returns payloadValue if key is present in payload, otherwise existing.
 func PatchUUID(payload map[string]any, key string, existing db_types.JSONNullUUID, payloadValue db_types.JSONNullUUID) db_types.JSONNullUUID {
 	if _, has := payload[key]; has {
