@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"backend/internal/authz"
+	"backend/internal/syncer/gen"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
 
@@ -33,51 +34,29 @@ func authorizeCommit(userID string, workspaceIDs []string, roleIDs []string, own
 
 	compiled := authz.CompiledForWorkspace(roleIDs, c.WorkspaceID)
 
-	// Membership and RBAC tables require manage authority (owner already
-	// returned above). workspace_to_user is included: it is the membership
-	// trust root every other check reads, so it must not be member-writable.
-	manageTables := map[string]struct{}{
-		"role":              {},
-		"user_to_role":      {},
-		"permission":        {},
-		"workspace_to_user": {},
-	}
-	_, isManageOperation := manageTables[c.TableName]
-	if isManageOperation && !compiled.IsAllowed(core.ActionWorkspaceRolesManage) {
-		return false
+	// Per-table write requirements come from gen.RequiredActions (generated from
+	// each @app.sync table's @app.api `requires` clause; see gen/authorize.go).
+	// The AND-list captures the compound cases directly: group_to_role needs
+	// groups.manage AND roles.manage (attaching a role to a group grants it to
+	// every member), and workspace_to_user — the membership trust root — needs
+	// roles.manage AND users.manage.
+	for _, action := range gen.RequiredActions[c.TableName] {
+		if !compiled.IsAllowed(action) {
+			return false
+		}
 	}
 
-	// Group tables are gated by their own action, symmetric to roles.manage:
-	// managing the identity layer is a distinct privilege from managing roles.
-	groupTables := map[string]struct{}{
-		"group":         {},
-		"user_to_group": {},
-		"group_to_role": {},
-	}
-	if _, ok := groupTables[c.TableName]; ok && !compiled.IsAllowed(core.ActionWorkspaceGroupsManage) {
-		return false
-	}
-
-	// Attaching a role to a group grants that role to every member, so it also
-	// requires roles.manage — symmetric to assigning a role directly to a user
-	// (user_to_role, gated by roles.manage above). This prevents a groups.manage
-	// holder from handing out roles they couldn't otherwise grant.
-	if c.TableName == "group_to_role" && !compiled.IsAllowed(core.ActionWorkspaceRolesManage) {
-		return false
-	}
-
-	// Workspace delete is owner-only; owners returned true above, so a caller
-	// here is not the owner (mirrors the REST delete handler's 403)
-	if c.TableName == "workspace" && c.Operation == "delete" {
-		return false
-	}
-
-	if c.TableName == "workspace" && !compiled.IsAllowed(core.ActionWorkspaceSettingsWrite) {
-		return false
-	}
-
-	if c.TableName == "workspace_to_user" && !compiled.IsAllowed(core.ActionWorkspaceUsersManage) {
-		return false
+	// workspace is the hand-written special (not @app.sync, so absent from
+	// requiredActions): delete is owner-only — owners returned true above, so a
+	// caller reaching here isn't the owner (mirrors the REST delete 403) — and
+	// any other write needs settings.write.
+	if c.TableName == "workspace" {
+		if c.Operation == "delete" {
+			return false
+		}
+		if !compiled.IsAllowed(core.ActionWorkspaceSettingsWrite) {
+			return false
+		}
 	}
 
 	return true
