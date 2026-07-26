@@ -88,7 +88,7 @@ export function initializeLanguages() {
 
 	// Register JSON schemas for .lint and .config so Monaco validates and
 	// autocompletes their fields automatically.
-	monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+	monaco.json.jsonDefaults.setDiagnosticsOptions({
 		validate: true,
 		schemas: [
 			{
