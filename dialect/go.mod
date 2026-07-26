@@ -6,7 +6,7 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/apache/arrow-go/v18 v18.6.0
 	github.com/go-sql-driver/mysql v1.10.0
-	github.com/klauspost/compress v1.19.0
+	github.com/klauspost/compress v1.19.1
 	github.com/lib/pq v1.10.9
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.54.0
