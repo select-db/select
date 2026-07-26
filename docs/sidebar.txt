@@ -2,7 +2,7 @@
 
 Getting Started              : docs/content/introduction.doc.md
 API
-  Reference                  : docs/content/api-reference.doc.md
+  Reference                  : /api/
 Workspace
   Git                        : app/internal/git/git-integration.doc.md
   Users                      : app/internal/user/users.doc.md

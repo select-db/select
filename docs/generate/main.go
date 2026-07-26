@@ -25,6 +25,10 @@ type SidebarNode struct {
 	Slug     string         `json:"slug"`
 	Path     string         `json:"path,omitempty"`
 	HTMLFile string         `json:"htmlFile,omitempty"`
+	// Href marks a plain link node (a sidebar.txt value that is a URL, e.g.
+	// /api/, rather than a .doc.md). It renders as an external link that opens
+	// in a new tab, not a generated page.
+	Href     string         `json:"href,omitempty"`
 	Children []*SidebarNode `json:"children,omitempty"`
 }
 
@@ -74,6 +78,30 @@ const (
 	scalarVersion   = "1.36.2"
 	scalarBundleURL = "https://cdn.jsdelivr.net/npm/@scalar/api-reference@" + scalarVersion + "/dist/browser/standalone.js"
 )
+
+// externalIcon is the "open in new tab" glyph appended to link (Href) sidebar
+// items so a new-tab jump is visually distinct from in-site navigation.
+const externalIcon = ` <svg class="external-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:0.3em;vertical-align:-0.1em;opacity:0.65"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`
+
+// apiReferencePage is the standalone, full-viewport Scalar page served at /api/.
+// It is deliberately outside the docs layout so Scalar owns the whole screen.
+const apiReferencePage = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Select API Reference</title>
+  <link rel="icon" href="/favicon.png" />
+</head>
+<body>
+  <div id="app"></div>
+  <script src="/api/scalar.standalone.js"></script>
+  <script>
+    Scalar.createApiReference('#app', { url: '/api/openapi.json' })
+  </script>
+</body>
+</html>
+`
 
 func newBuildConfig(rootDir string) buildConfig {
 	docsDir := filepath.Join(rootDir, "docs")
@@ -399,7 +427,13 @@ func parseSidebar(path string) ([]*SidebarNode, error) {
 		node := &SidebarNode{
 			Label: label,
 			Slug:  slugify(label),
-			Path:  filePath,
+		}
+		// A URL value is a link node (opens in a new tab); anything else is a
+		// path to a .doc.md the generator renders into a page.
+		if strings.HasPrefix(filePath, "/") || strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
+			node.Href = filePath
+		} else {
+			node.Path = filePath
 		}
 
 		for len(stack) > 0 && stack[len(stack)-1].indent >= indent {
@@ -484,6 +518,8 @@ func renderSidebarNodes(b *strings.Builder, nodes []*SidebarNode, activePath str
 				activeClass = ` class="active"`
 			}
 			b.WriteString(fmt.Sprintf("%s<li><a href=\"/%s/\"%s>%s</a></li>\n", ind, n.HTMLFile, activeClass, n.Label))
+		} else if n.Href != "" {
+			b.WriteString(fmt.Sprintf("%s<li><a href=\"%s\" target=\"_blank\" rel=\"noopener\" class=\"external\">%s%s</a></li>\n", ind, n.Href, n.Label, externalIcon))
 		} else {
 			b.WriteString(fmt.Sprintf("%s<li><span>%s</span></li>\n", ind, n.Label))
 		}
@@ -814,6 +850,11 @@ func copyAPIAssets(cfg buildConfig) error {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(apiDir, "scalar.standalone.js"), scalar, 0o644); err != nil {
+		return err
+	}
+	// The standalone full-viewport reference page served at /api/ (the sidebar's
+	// "Reference" link opens it in a new tab).
+	if err := os.WriteFile(filepath.Join(apiDir, "index.html"), []byte(apiReferencePage), 0o644); err != nil {
 		return err
 	}
 	spec, err := os.ReadFile(cfg.openAPIPath)
