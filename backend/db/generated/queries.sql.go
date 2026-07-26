@@ -474,12 +474,17 @@ func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (G
 
 const getGroupByID = `-- name: GetGroupByID :one
 SELECT id, workspace_id, name, source, external_id, updated_at, deleted_at
-FROM app."group"
-WHERE id = $1
+FROM app.group
+WHERE id = $1 AND workspace_id = $2
 `
 
-func (q *Queries) GetGroupByID(ctx context.Context, id db_types.JSONNullUUID) (AppGroup, error) {
-	row := q.db.QueryRowContext(ctx, getGroupByID, id)
+type GetGroupByIDParams struct {
+	ID          db_types.JSONNullUUID
+	WorkspaceID db_types.JSONNullUUID
+}
+
+func (q *Queries) GetGroupByID(ctx context.Context, arg GetGroupByIDParams) (AppGroup, error) {
+	row := q.db.QueryRowContext(ctx, getGroupByID, arg.ID, arg.WorkspaceID)
 	var i AppGroup
 	err := row.Scan(
 		&i.ID,
@@ -519,10 +524,10 @@ func (q *Queries) GetGroupToRoleByID(ctx context.Context, arg GetGroupToRoleByID
 }
 
 const getGroupToRolesForUserSince = `-- name: GetGroupToRolesForUserSince :many
-SELECT gr.id, gr.group_id, gr.role_id, gr.workspace_id, gr.updated_at, gr.deleted_at
-FROM app.group_to_role gr
-INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = gr.workspace_id AND wtu.user_id = $1
-WHERE gr.updated_at > $2
+SELECT r.id, r.group_id, r.role_id, r.workspace_id, r.updated_at, r.deleted_at
+FROM app.group_to_role r
+INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.workspace_id AND wtu.user_id = $1
+WHERE r.updated_at > $2
 `
 
 type GetGroupToRolesForUserSinceParams struct {
@@ -561,10 +566,10 @@ func (q *Queries) GetGroupToRolesForUserSince(ctx context.Context, arg GetGroupT
 }
 
 const getGroupsForUserSince = `-- name: GetGroupsForUserSince :many
-SELECT g.id, g.workspace_id, g.name, g.source, g.external_id, g.updated_at, g.deleted_at
-FROM app."group" g
-INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = g.workspace_id AND wtu.user_id = $1
-WHERE g.updated_at > $2
+SELECT r.id, r.workspace_id, r.name, r.source, r.external_id, r.updated_at, r.deleted_at
+FROM app.group r
+INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.workspace_id AND wtu.user_id = $1
+WHERE r.updated_at > $2
 `
 
 type GetGroupsForUserSinceParams struct {
@@ -703,11 +708,10 @@ func (q *Queries) GetPermissionsByRoleID(ctx context.Context, roleID db_types.JS
 }
 
 const getPermissionsForUserSince = `-- name: GetPermissionsForUserSince :many
-SELECT p.id, p.role_id, p.workspace_id, p.db_instance_id, p.schema_name, p.table_name, p.column_name, p.action, p.effect, p.updated_at, p.deleted_at
-FROM app.permission p
-INNER JOIN app.user_to_role ur ON ur.role_id = p.role_id
-INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = ur.workspace_id AND wtu.user_id = $1
-WHERE p.updated_at > $2
+SELECT r.id, r.role_id, r.workspace_id, r.db_instance_id, r.schema_name, r.table_name, r.column_name, r.action, r.effect, r.updated_at, r.deleted_at
+FROM app.permission r
+INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.workspace_id AND wtu.user_id = $1
+WHERE r.updated_at > $2
 `
 
 type GetPermissionsForUserSinceParams struct {
@@ -776,11 +780,16 @@ func (q *Queries) GetRefreshToken(ctx context.Context, arg GetRefreshTokenParams
 const getRoleByID = `-- name: GetRoleByID :one
 SELECT id, workspace_id, name, updated_at, deleted_at
 FROM app.role
-WHERE id = $1
+WHERE id = $1 AND workspace_id = $2
 `
 
-func (q *Queries) GetRoleByID(ctx context.Context, id db_types.JSONNullUUID) (AppRole, error) {
-	row := q.db.QueryRowContext(ctx, getRoleByID, id)
+type GetRoleByIDParams struct {
+	ID          db_types.JSONNullUUID
+	WorkspaceID db_types.JSONNullUUID
+}
+
+func (q *Queries) GetRoleByID(ctx context.Context, arg GetRoleByIDParams) (AppRole, error) {
+	row := q.db.QueryRowContext(ctx, getRoleByID, arg.ID, arg.WorkspaceID)
 	var i AppRole
 	err := row.Scan(
 		&i.ID,
@@ -1112,10 +1121,10 @@ func (q *Queries) GetUserToGroupByID(ctx context.Context, arg GetUserToGroupByID
 }
 
 const getUserToGroupsForUserSince = `-- name: GetUserToGroupsForUserSince :many
-SELECT ug.id, ug.user_id, ug.group_id, ug.workspace_id, ug.source, ug.updated_at, ug.deleted_at
-FROM app.user_to_group ug
-INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = ug.workspace_id AND wtu.user_id = $1
-WHERE ug.updated_at > $2
+SELECT r.id, r.user_id, r.group_id, r.workspace_id, r.source, r.updated_at, r.deleted_at
+FROM app.user_to_group r
+INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.workspace_id AND wtu.user_id = $1
+WHERE r.updated_at > $2
 `
 
 type GetUserToGroupsForUserSinceParams struct {
@@ -1180,10 +1189,10 @@ func (q *Queries) GetUserToRoleByID(ctx context.Context, arg GetUserToRoleByIDPa
 }
 
 const getUserToRolesForUserSince = `-- name: GetUserToRolesForUserSince :many
-SELECT ur.id, ur.user_id, ur.role_id, ur.workspace_id, ur.updated_at, ur.deleted_at
-FROM app.user_to_role ur
-INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = ur.workspace_id AND wtu.user_id = $1
-WHERE ur.updated_at > $2
+SELECT r.id, r.user_id, r.role_id, r.workspace_id, r.updated_at, r.deleted_at
+FROM app.user_to_role r
+INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.workspace_id AND wtu.user_id = $1
+WHERE r.updated_at > $2
 `
 
 type GetUserToRolesForUserSinceParams struct {
@@ -1328,17 +1337,9 @@ func (q *Queries) GetWorkspaceOwnerID(ctx context.Context, id db_types.JSONNullU
 }
 
 const getWorkspaceToUserByID = `-- name: GetWorkspaceToUserByID :one
-SELECT
-    id,
-    workspace_id,
-    user_id,
-    updated_at,
-    deleted_at
-FROM
-    app.workspace_to_user
-WHERE
-    id = $1
-    AND workspace_id = $2
+SELECT id, workspace_id, user_id, updated_at, deleted_at
+FROM app.workspace_to_user
+WHERE id = $1 AND workspace_id = $2
 `
 
 type GetWorkspaceToUserByIDParams struct {
@@ -1359,22 +1360,20 @@ func (q *Queries) GetWorkspaceToUserByID(ctx context.Context, arg GetWorkspaceTo
 	return i, err
 }
 
-const getWorkspaceToUserForUserSince = `-- name: GetWorkspaceToUserForUserSince :many
-SELECT wtu.id, wtu.workspace_id, wtu.user_id, wtu.updated_at, wtu.deleted_at
-FROM app.workspace_to_user wtu
-WHERE wtu.workspace_id IN (
-    SELECT m.workspace_id FROM app.workspace_to_user m
-    WHERE m.user_id = $1 AND m.deleted_at IS NULL
-) AND wtu.updated_at > $2
+const getWorkspaceToUsersForUserSince = `-- name: GetWorkspaceToUsersForUserSince :many
+SELECT r.id, r.workspace_id, r.user_id, r.updated_at, r.deleted_at
+FROM app.workspace_to_user r
+INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.workspace_id AND wtu.user_id = $1
+WHERE r.updated_at > $2
 `
 
-type GetWorkspaceToUserForUserSinceParams struct {
+type GetWorkspaceToUsersForUserSinceParams struct {
 	UserID    db_types.JSONNullUUID
 	UpdatedAt db_types.JSONNullTime
 }
 
-func (q *Queries) GetWorkspaceToUserForUserSince(ctx context.Context, arg GetWorkspaceToUserForUserSinceParams) ([]AppWorkspaceToUser, error) {
-	rows, err := q.db.QueryContext(ctx, getWorkspaceToUserForUserSince, arg.UserID, arg.UpdatedAt)
+func (q *Queries) GetWorkspaceToUsersForUserSince(ctx context.Context, arg GetWorkspaceToUsersForUserSinceParams) ([]AppWorkspaceToUser, error) {
+	rows, err := q.db.QueryContext(ctx, getWorkspaceToUsersForUserSince, arg.UserID, arg.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1777,7 +1776,7 @@ func (q *Queries) RevokeAPIKey(ctx context.Context, id db_types.JSONNullUUID) er
 }
 
 const setGroupDeletedAt = `-- name: SetGroupDeletedAt :exec
-UPDATE app."group"
+UPDATE app.group
 SET deleted_at = now(), updated_at = now()
 WHERE id = $1 AND workspace_id = $2
 `
@@ -2039,7 +2038,7 @@ func (q *Queries) UpsertDatasource(ctx context.Context, arg UpsertDatasourcePara
 }
 
 const upsertGroup = `-- name: UpsertGroup :exec
-INSERT INTO app."group" (id, workspace_id, name, source, external_id, updated_at)
+INSERT INTO app.group (id, workspace_id, name, source, external_id, updated_at)
 VALUES ($1, $2, $3, $4, $5, now())
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
@@ -2072,9 +2071,6 @@ const upsertGroupToRole = `-- name: UpsertGroupToRole :exec
 INSERT INTO app.group_to_role (id, group_id, role_id, workspace_id, updated_at)
 VALUES ($1, $2, $3, $4, now())
 ON CONFLICT (id) DO UPDATE SET
-  group_id = EXCLUDED.group_id,
-  role_id = EXCLUDED.role_id,
-  workspace_id = EXCLUDED.workspace_id,
   updated_at = now(),
   deleted_at = NULL
 `
@@ -2100,6 +2096,11 @@ const upsertPermission = `-- name: UpsertPermission :exec
 INSERT INTO app.permission (id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 ON CONFLICT (id) DO UPDATE SET
+  db_instance_id = EXCLUDED.db_instance_id,
+  schema_name = EXCLUDED.schema_name,
+  table_name = EXCLUDED.table_name,
+  column_name = EXCLUDED.column_name,
+  action = EXCLUDED.action,
   effect = EXCLUDED.effect,
   updated_at = now(),
   deleted_at = NULL
@@ -2173,9 +2174,6 @@ const upsertUserToGroup = `-- name: UpsertUserToGroup :exec
 INSERT INTO app.user_to_group (id, user_id, group_id, workspace_id, source, updated_at)
 VALUES ($1, $2, $3, $4, $5, now())
 ON CONFLICT (id) DO UPDATE SET
-  user_id = EXCLUDED.user_id,
-  group_id = EXCLUDED.group_id,
-  workspace_id = EXCLUDED.workspace_id,
   source = EXCLUDED.source,
   updated_at = now(),
   deleted_at = NULL
@@ -2204,9 +2202,6 @@ const upsertUserToRole = `-- name: UpsertUserToRole :exec
 INSERT INTO app.user_to_role (id, user_id, role_id, workspace_id, updated_at)
 VALUES ($1, $2, $3, $4, now())
 ON CONFLICT (id) DO UPDATE SET
-  user_id = EXCLUDED.user_id,
-  role_id = EXCLUDED.role_id,
-  workspace_id = EXCLUDED.workspace_id,
   updated_at = now(),
   deleted_at = NULL
 `
@@ -2260,11 +2255,8 @@ const upsertWorkspaceToUser = `-- name: UpsertWorkspaceToUser :exec
 INSERT INTO app.workspace_to_user (id, workspace_id, user_id, updated_at)
 VALUES ($1, $2, $3, now())
 ON CONFLICT (id) DO UPDATE SET
-  workspace_id = EXCLUDED.workspace_id,
-  user_id = EXCLUDED.user_id,
   updated_at = now(),
   deleted_at = NULL
-WHERE app.workspace_to_user.workspace_id = EXCLUDED.workspace_id
 `
 
 type UpsertWorkspaceToUserParams struct {
