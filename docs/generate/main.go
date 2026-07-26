@@ -83,7 +83,7 @@ func newBuildConfig(rootDir string) buildConfig {
 		sidebarPath:   filepath.Join(docsDir, "sidebar.txt"),
 		templateDir:   filepath.Join(docsDir, "template"),
 		cssPath:       filepath.Join(docsDir, "docs.css"),
-		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", ".theme"),
+		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", "user", ".theme"),
 		componentsDir: filepath.Join(docsDir, "components"),
 		cacheDir:      filepath.Join(docsDir, ".cache"),
 		openAPIPath:   filepath.Join(rootDir, "backend", "internal", "apigen", "gen", "openapi.json"),
