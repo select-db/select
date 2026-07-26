@@ -26,7 +26,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
-	github.com/apache/arrow-go/v18 v18.6.0 // indirect
+	github.com/apache/arrow-go/v18 v18.7.0 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/danieljoos/wincred v1.2.2 // indirect
@@ -39,7 +39,7 @@ require (
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
-	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/labstack/echo/v4 v4.13.3 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
@@ -52,7 +52,7 @@ require (
 	github.com/mattn/go-isatty v0.0.21 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.26 // indirect
+	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
