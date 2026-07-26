@@ -41,7 +41,8 @@ export const myPermissions = derived(
 		const permMap: PermissionMap = buildPermissionMap($perms);
 		return {
 			isAllowed: (action: string) => isAppActionAllowed($perms, action, isOwner),
-			canAccessDb: (dbId: string) =>
+			canAccessDb: (dbId: string, isProxified?: boolean) =>
+				!isProxified ||
 				isOwner ||
 				permissionActions.some((a) => resolve(permMap, dbId, '*', '*', '*', a) === 'allow')
 		};

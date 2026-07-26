@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"backend/db/db_types"
@@ -66,7 +67,22 @@ func TestJWTRejectsTampered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tampered := tok[:len(tok)-2] + "xx"
+	// Flip the first char of the payload segment. It's fully significant (byte 0
+	// of the payload), so the signed message always changes and verification
+	// always fails — unlike mutating the last signature char, whose low bits
+	// base64 ignores, which passes ~1/256 of the time when the decoded byte is
+	// unchanged.
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		t.Fatalf("unexpected token shape: %d parts", len(parts))
+	}
+	p := []byte(parts[1])
+	if p[0] == 'A' {
+		p[0] = 'B'
+	} else {
+		p[0] = 'A'
+	}
+	tampered := parts[0] + "." + string(p) + "." + parts[2]
 	if _, _, err := ValidateJWT(tampered); err == nil {
 		t.Fatal("expected verification failure on tampered token")
 	}

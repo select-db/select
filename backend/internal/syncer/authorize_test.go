@@ -10,6 +10,7 @@ import (
 
 	"backend/db"
 	"backend/db/db_types"
+	"backend/db/generated"
 	"backend/internal/syncer/types"
 )
 
@@ -127,8 +128,9 @@ func TestAuthorize_OwnerCanCreateRole(t *testing.T) {
 	require.Len(t, resp.Confirmed, 1)
 
 	idUUID, err := db_types.NewJSONNullUUIDFromString(roleID)
+	wsUUID, _ := db_types.NewJSONNullUUIDFromString(wsID)
 	require.NoError(t, err)
-	_, err = db.Queries.GetRoleByID(context.Background(), idUUID)
+	_, err = db.Queries.GetRoleByID(context.Background(), generated.GetRoleByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	assert.NoError(t, err, "role must exist after owner commit")
 }
 
@@ -155,8 +157,9 @@ func TestAuthorize_OwnerCanUpdateRole(t *testing.T) {
 	require.Len(t, resp.Confirmed, 1)
 
 	idUUID, err := db_types.NewJSONNullUUIDFromString(roleID)
+	wsUUID, _ := db_types.NewJSONNullUUIDFromString(wsID)
 	require.NoError(t, err)
-	role, err := db.Queries.GetRoleByID(context.Background(), idUUID)
+	role, err := db.Queries.GetRoleByID(context.Background(), generated.GetRoleByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)
 	assert.Equal(t, "New Name", role.Name.String)
 }
@@ -183,8 +186,9 @@ func TestAuthorize_OwnerCanDeleteRole(t *testing.T) {
 	require.Len(t, resp.Confirmed, 1)
 
 	idUUID, err := db_types.NewJSONNullUUIDFromString(roleID)
+	wsUUID, _ := db_types.NewJSONNullUUIDFromString(wsID)
 	require.NoError(t, err)
-	role, err := db.Queries.GetRoleByID(context.Background(), idUUID)
+	role, err := db.Queries.GetRoleByID(context.Background(), generated.GetRoleByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)
 	assert.True(t, role.DeletedAt.Valid, "role must be soft-deleted after owner delete")
 }
