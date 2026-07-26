@@ -1,4 +1,4 @@
-import { toolDefinition } from '@tanstack/ai';
+import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
 import { getAllGroups, removeTab, updateTab } from '$lib/components/Layout/layoutStore';
 import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
