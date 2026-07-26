@@ -1,4 +1,4 @@
-import { clientTools } from '@tanstack/ai-client';
+import { clientTools } from '$lib/components/views/Chat/core/chat/tool-definition';
 
 import {
 	getDatabaseSchemasClient,

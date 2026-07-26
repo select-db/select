@@ -2,7 +2,7 @@ import type {
 	CreateChatReturn,
 	ToolCallPart,
 	UIMessage
-} from '$lib/components/views/Chat/core/tanstack-svelte/types';
+} from '$lib/components/views/Chat/core/chat/types';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { getDiffApproval, clearDiffApproval } from '$lib/components/views/Chat/tools/diffApprovals';
 import { removeTab, getAllGroups } from '$lib/components/Layout/layoutStore';
