@@ -7,7 +7,7 @@
 //   - gen/<table>/    per-entity CRUD SQL + syncer glue
 //   - syncer/types/   wire row structs
 //   - gen/            dispatch / authorize / changes registries
-//   - apigen/gen/     the frontend capabilities document
+//   - apigen/gen/     the frontend capabilities + OpenAPI documents
 //
 // Run scripts/generate_queries.sh (sqlc) after generate so db/generated matches.
 package main
@@ -22,6 +22,7 @@ import (
 
 	"backend/internal/apigen/api"
 	"backend/internal/apigen/codegen"
+	"backend/internal/apigen/openapi"
 	"backend/internal/apigen/schema"
 	"backend/internal/apigen/syncer"
 
@@ -101,7 +102,10 @@ func generate(root string, entities []schema.Entity) error {
 	if err := generateChangesAggregation(root, entities); err != nil {
 		return err
 	}
-	return generateAPICapabilities(root, entities)
+	if err := generateAPICapabilities(root, entities); err != nil {
+		return err
+	}
+	return generateOpenAPI(root, entities)
 }
 
 // generateSyncEntity writes one synced table's three artifacts: its sqlc CRUD
@@ -198,6 +202,22 @@ func generateAPICapabilities(root string, entities []schema.Entity) error {
 		return err
 	}
 	fmt.Println("generated capabilities.json")
+	return nil
+}
+
+// generateOpenAPI writes the OpenAPI document the docs-site API reference
+// (Scalar) renders. Emitted alongside capabilities.json under apigen/gen; the
+// docs generator copies it into the built site.
+func generateOpenAPI(root string, entities []schema.Entity) error {
+	doc, err := openapi.EmitOpenAPI(entities)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(root, "internal", "apigen", "gen", "openapi.json")
+	if err := writeFile(path, string(doc)+"\n"); err != nil {
+		return err
+	}
+	fmt.Println("generated openapi.json")
 	return nil
 }
 
