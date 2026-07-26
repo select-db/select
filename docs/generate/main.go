@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"text/template"
 	"net/http"
 	"os"
@@ -61,10 +62,18 @@ type buildConfig struct {
 	cssPath       string
 	themePath     string
 	componentsDir string
-	vendorDir     string
+	cacheDir      string
 	openAPIPath   string
 	outDir        string
 }
+
+// Scalar bundle fetched (and cached) at build time for the API reference. Pinned
+// for reproducibility; bump the version to upgrade. Fetching at build keeps the
+// bundle out of the repo while the built site still serves it same-origin.
+const (
+	scalarVersion   = "1.36.2"
+	scalarBundleURL = "https://cdn.jsdelivr.net/npm/@scalar/api-reference@" + scalarVersion + "/dist/browser/standalone.js"
+)
 
 func newBuildConfig(rootDir string) buildConfig {
 	docsDir := filepath.Join(rootDir, "docs")
@@ -76,7 +85,7 @@ func newBuildConfig(rootDir string) buildConfig {
 		cssPath:       filepath.Join(docsDir, "docs.css"),
 		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", ".theme"),
 		componentsDir: filepath.Join(docsDir, "components"),
-		vendorDir:     filepath.Join(docsDir, "vendor"),
+		cacheDir:      filepath.Join(docsDir, ".cache"),
 		openAPIPath:   filepath.Join(rootDir, "backend", "internal", "apigen", "gen", "openapi.json"),
 		outDir:        filepath.Join(docsDir, "site"),
 	}
@@ -785,19 +794,24 @@ func verifyLinks(outDir string) error {
 	return nil
 }
 
-// copyAPIAssets stages the interactive API reference under /api/: the vendored
-// Scalar bundle (required — committed under docs/vendor) and the generated
-// OpenAPI spec. The spec is produced by `apigen generate` against a database, so
-// it may be absent in a checkout that hasn't generated yet; the build proceeds
-// without it (the reference renders once the spec exists) rather than failing.
+// copyAPIAssets stages the interactive API reference under /api/: the Scalar
+// bundle (fetched+cached at build time, then served same-origin) and the
+// generated OpenAPI spec. The spec is produced by `apigen generate` against a
+// database, so it may be absent in a checkout that hasn't generated yet; the
+// build proceeds without it (the reference renders once the spec exists) rather
+// than failing.
 func copyAPIAssets(cfg buildConfig) error {
 	apiDir := filepath.Join(cfg.outDir, "api")
 	if err := os.MkdirAll(apiDir, 0o755); err != nil {
 		return err
 	}
-	scalar, err := os.ReadFile(filepath.Join(cfg.vendorDir, "scalar.standalone.js"))
+	cached := filepath.Join(cfg.cacheDir, "scalar-"+scalarVersion+".js")
+	if err := ensureScalarBundle(cached); err != nil {
+		return err
+	}
+	scalar, err := os.ReadFile(cached)
 	if err != nil {
-		return fmt.Errorf("reading vendored scalar bundle: %w", err)
+		return err
 	}
 	if err := os.WriteFile(filepath.Join(apiDir, "scalar.standalone.js"), scalar, 0o644); err != nil {
 		return err
@@ -811,6 +825,32 @@ func copyAPIAssets(cfg buildConfig) error {
 		return fmt.Errorf("reading openapi.json: %w", err)
 	}
 	return os.WriteFile(filepath.Join(apiDir, "openapi.json"), spec, 0o644)
+}
+
+// ensureScalarBundle downloads the pinned Scalar bundle into the build cache the
+// first time and reuses it thereafter (so watch-mode rebuilds don't re-fetch).
+func ensureScalarBundle(path string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil // cached
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	fmt.Printf("fetching Scalar bundle %s ...\n", scalarVersion)
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(scalarBundleURL)
+	if err != nil {
+		return fmt.Errorf("downloading scalar bundle: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("downloading scalar bundle: HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading scalar bundle: %w", err)
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func copyDir(src, dst string) error {

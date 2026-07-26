@@ -26,3 +26,5 @@ docs/site/
 
 # Minisign secret keys. The public key (minisign.pub) is committed;
 *.sec
+# docs API-reference build cache (fetched Scalar bundle)
+docs/.cache/
