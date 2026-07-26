@@ -61,6 +61,8 @@ type buildConfig struct {
 	cssPath       string
 	themePath     string
 	componentsDir string
+	vendorDir     string
+	openAPIPath   string
 	outDir        string
 }
 
@@ -74,6 +76,8 @@ func newBuildConfig(rootDir string) buildConfig {
 		cssPath:       filepath.Join(docsDir, "docs.css"),
 		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", ".theme"),
 		componentsDir: filepath.Join(docsDir, "components"),
+		vendorDir:     filepath.Join(docsDir, "vendor"),
+		openAPIPath:   filepath.Join(rootDir, "backend", "internal", "apigen", "gen", "openapi.json"),
 		outDir:        filepath.Join(docsDir, "site"),
 	}
 }
@@ -198,6 +202,9 @@ func build(cfg buildConfig) error {
 	}
 	if err := os.WriteFile(filepath.Join(cfg.outDir, "logo.png"), logo, 0o644); err != nil {
 		return fmt.Errorf("writing logo: %w", err)
+	}
+	if err := copyAPIAssets(cfg); err != nil {
+		return fmt.Errorf("staging API reference assets: %w", err)
 	}
 
 	var searchIndex []SearchEntry
@@ -776,6 +783,34 @@ func verifyLinks(outDir string) error {
 		return fmt.Errorf("broken links found:\n%s", strings.Join(broken, "\n"))
 	}
 	return nil
+}
+
+// copyAPIAssets stages the interactive API reference under /api/: the vendored
+// Scalar bundle (required — committed under docs/vendor) and the generated
+// OpenAPI spec. The spec is produced by `apigen generate` against a database, so
+// it may be absent in a checkout that hasn't generated yet; the build proceeds
+// without it (the reference renders once the spec exists) rather than failing.
+func copyAPIAssets(cfg buildConfig) error {
+	apiDir := filepath.Join(cfg.outDir, "api")
+	if err := os.MkdirAll(apiDir, 0o755); err != nil {
+		return err
+	}
+	scalar, err := os.ReadFile(filepath.Join(cfg.vendorDir, "scalar.standalone.js"))
+	if err != nil {
+		return fmt.Errorf("reading vendored scalar bundle: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(apiDir, "scalar.standalone.js"), scalar, 0o644); err != nil {
+		return err
+	}
+	spec, err := os.ReadFile(cfg.openAPIPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("note: openapi.json not found — run `apigen generate`; the API reference will be empty until it exists")
+			return nil
+		}
+		return fmt.Errorf("reading openapi.json: %w", err)
+	}
+	return os.WriteFile(filepath.Join(apiDir, "openapi.json"), spec, 0o644)
 }
 
 func copyDir(src, dst string) error {
