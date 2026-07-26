@@ -32,4 +32,5 @@ var actionConst = map[string]string{
 	"roles.manage":    "core.ActionWorkspaceRolesManage",
 	"groups.manage":   "core.ActionWorkspaceGroupsManage",
 	"api-keys.manage": "core.ActionWorkspaceApiKeysManage",
+	"audit.read":      "core.ActionWorkspaceAuditRead",
 }

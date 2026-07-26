@@ -13,6 +13,7 @@ const (
 	ActionWorkspaceRolesManage   = "workspace/roles.manage"
 	ActionWorkspaceGroupsManage  = "workspace/groups.manage"
 	ActionWorkspaceApiKeysManage = "workspace/api-keys.manage"
+	ActionWorkspaceAuditRead     = "workspace/audit.read"
 )
 
 const (
