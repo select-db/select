@@ -41,8 +41,8 @@ func TestEmitOpenAPIGolden(t *testing.T) {
 	}
 }
 
-// The emitted document is valid JSON and carries the RPC-over-POST shape, the
-// auth scheme, and per-op required actions.
+// The emitted document is valid JSON and carries the REST shape (proper verbs,
+// collection + item paths, id path param), the auth scheme, and per-op actions.
 func TestEmitOpenAPIShape(t *testing.T) {
 	ents := build(t, schema.RoleTable())
 	raw, err := EmitOpenAPI(ents)
@@ -54,18 +54,35 @@ func TestEmitOpenAPIShape(t *testing.T) {
 		t.Fatalf("emitted invalid JSON: %v", err)
 	}
 
-	// RPC paths: one POST per op, no REST verbs / path params.
-	for _, p := range []string{"/role/list", "/role/get", "/role/create", "/role/update", "/role/delete"} {
-		item, ok := doc.Paths[p]
-		if !ok || item.Post == nil {
-			t.Fatalf("missing POST %s", p)
-		}
+	// Collection path: GET (list) + POST (create).
+	coll := doc.Paths["/roles"]
+	if coll == nil || coll.Get == nil || coll.Post == nil {
+		t.Fatalf("expected GET+POST on /roles, got %+v", coll)
+	}
+	// Item path: GET (get) + PATCH (update) + DELETE (delete).
+	item := doc.Paths["/roles/{id}"]
+	if item == nil || item.Get == nil || item.Patch == nil || item.Delete == nil {
+		t.Fatalf("expected GET+PATCH+DELETE on /roles/{id}, got %+v", item)
+	}
+	// The item ops take id as a path parameter.
+	if len(item.Get.Parameters) != 1 || item.Get.Parameters[0].In != "path" || item.Get.Parameters[0].Name != "id" {
+		t.Fatalf("get should take an id path param, got %+v", item.Get.Parameters)
+	}
+	// Proper status codes: 201 on create, 204 on delete, 404 on item ops.
+	if _, ok := coll.Post.Responses["201"]; !ok {
+		t.Fatal("create should respond 201")
+	}
+	if _, ok := item.Delete.Responses["204"]; !ok {
+		t.Fatal("delete should respond 204")
+	}
+	if _, ok := item.Get.Responses["404"]; !ok {
+		t.Fatal("get should document 404")
 	}
 	// The gated ops carry the required action; the open ops do not.
-	if got := doc.Paths["/role/create"].Post.RequiredActions; len(got) != 1 || got[0] != "roles.manage" {
+	if got := coll.Post.RequiredActions; len(got) != 1 || got[0] != "roles.manage" {
 		t.Fatalf("create should require roles.manage, got %v", got)
 	}
-	if got := doc.Paths["/role/list"].Post.RequiredActions; len(got) != 0 {
+	if got := coll.Get.RequiredActions; len(got) != 0 {
 		t.Fatalf("list should be open, got %v", got)
 	}
 	// Global bearer security is declared.

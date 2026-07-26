@@ -3,10 +3,10 @@
 // the spec is derived entirely from the schema IR (@app.api ops, field kinds,
 // @app.values enums, and the convention columns).
 //
-// Endpoints follow the codebase's RPC-over-POST convention (POST /<resource>/<op>,
-// matching /workspace/create, /apikey/list, …) rather than REST, so the generated
-// API is one consistent surface with the hand-written endpoints. Auth is the
-// shared bearer token (a user JWT or an slct_ API key in the Authorization
+// Endpoints are REST: a plural collection path (/roles) and an item path
+// (/roles/{id}), each op mapped to its proper HTTP method — list=GET,
+// create=POST, get=GET, update=PATCH (a partial merge), delete=DELETE. Auth is
+// the shared bearer token (a user JWT or an slct_ API key in the Authorization
 // header); per-op required workspace actions are surfaced in the operation
 // description and as an x-required-actions extension.
 package openapi
@@ -30,13 +30,13 @@ const (
 // --- OpenAPI 3.0 document (the minimal subset this projection emits) ---
 
 type Document struct {
-	OpenAPI    string              `json:"openapi"`
-	Info       Info                `json:"info"`
-	Servers    []Server            `json:"servers,omitempty"`
-	Tags       []Tag               `json:"tags,omitempty"`
-	Security   []SecurityReq       `json:"security,omitempty"`
-	Paths      map[string]PathItem `json:"paths"`
-	Components Components          `json:"components"`
+	OpenAPI    string               `json:"openapi"`
+	Info       Info                 `json:"info"`
+	Servers    []Server             `json:"servers,omitempty"`
+	Tags       []Tag                `json:"tags,omitempty"`
+	Security   []SecurityReq        `json:"security,omitempty"`
+	Paths      map[string]*PathItem `json:"paths"`
+	Components Components           `json:"components"`
 }
 
 type Info struct {
@@ -59,8 +59,12 @@ type Tag struct {
 // (empty for our bearer token).
 type SecurityReq map[string][]string
 
+// PathItem holds the operations defined on one path, keyed by HTTP method.
 type PathItem struct {
-	Post *Operation `json:"post,omitempty"`
+	Get    *Operation `json:"get,omitempty"`
+	Post   *Operation `json:"post,omitempty"`
+	Patch  *Operation `json:"patch,omitempty"`
+	Delete *Operation `json:"delete,omitempty"`
 }
 
 type Operation struct {
@@ -68,9 +72,18 @@ type Operation struct {
 	Summary         string              `json:"summary,omitempty"`
 	Description     string              `json:"description,omitempty"`
 	OperationID     string              `json:"operationId,omitempty"`
+	Parameters      []Parameter         `json:"parameters,omitempty"`
 	RequestBody     *RequestBody        `json:"requestBody,omitempty"`
 	Responses       map[string]Response `json:"responses"`
 	RequiredActions []string            `json:"x-required-actions,omitempty"`
+}
+
+type Parameter struct {
+	Name        string  `json:"name"`
+	In          string  `json:"in"` // "path" or "query"
+	Required    bool    `json:"required,omitempty"`
+	Description string  `json:"description,omitempty"`
+	Schema      *Schema `json:"schema,omitempty"`
 }
 
 type RequestBody struct {
@@ -123,11 +136,11 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 		Info: Info{
 			Title:       "Select API",
 			Version:     apiVersion,
-			Description: "Workspace-scoped REST-over-POST API generated from the Select schema. Authenticate with a user access token or an `slct_` API key in the `Authorization: Bearer <token>` header.",
+			Description: "Workspace-scoped REST API generated from the Select schema. Authenticate with a user access token or an `slct_` API key in the `Authorization: Bearer <token>` header.",
 		},
 		Servers:  []Server{{URL: apiServerURL}},
 		Security: []SecurityReq{{bearerScheme: {}}},
-		Paths:    map[string]PathItem{},
+		Paths:    map[string]*PathItem{},
 		Components: Components{
 			Schemas: map[string]*Schema{"Error": errorSchema()},
 			SecuritySchemes: map[string]SecurityScheme{
@@ -146,6 +159,8 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 			continue // not exposed over HTTP
 		}
 		model := codegen.Pascal(e.Name)
+		coll := "/" + plural(e.Name)
+		item := coll + "/{id}"
 		doc.Tags = append(doc.Tags, Tag{Name: e.Name, Description: fmt.Sprintf("Operations on %s.", plural(e.Name))})
 
 		// Component schemas: the response object plus create/update request bodies.
@@ -158,14 +173,49 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 		}
 
 		for _, op := range e.API {
-			path := "/" + e.Name + "/" + op.Op
-			doc.Paths[path] = PathItem{Post: operationFor(e, model, op)}
+			path, method := route(coll, item, op.Op)
+			pi := doc.Paths[path]
+			if pi == nil {
+				pi = &PathItem{}
+				doc.Paths[path] = pi
+			}
+			o := operationFor(e, model, op)
+			switch method {
+			case "get":
+				pi.Get = o
+			case "post":
+				pi.Post = o
+			case "patch":
+				pi.Patch = o
+			case "delete":
+				pi.Delete = o
+			}
 		}
 	}
 	return json.MarshalIndent(doc, "", "  ")
 }
 
-// operationFor builds the POST operation for one op on one entity.
+// route maps an op to its (path, HTTP method): collection ops (list, create) on
+// the plural path, item ops (get, update, delete) on the /{id} path.
+func route(coll, item, op string) (path, method string) {
+	switch op {
+	case "list":
+		return coll, "get"
+	case "create":
+		return coll, "post"
+	case "get":
+		return item, "get"
+	case "update":
+		return item, "patch"
+	case "delete":
+		return item, "delete"
+	default:
+		return coll, "post"
+	}
+}
+
+// operationFor builds the operation for one op on one entity: its parameters
+// (path id / list query), request body (create/update), and responses.
 func operationFor(e schema.Entity, model string, op schema.APIOp) *Operation {
 	o := &Operation{
 		Tags:            []string{e.Name},
@@ -177,39 +227,23 @@ func operationFor(e schema.Entity, model string, op schema.APIOp) *Operation {
 	if len(op.Requires) > 0 {
 		o.Description = "Requires workspace action(s): " + strings.Join(op.Requires, ", ") + "."
 	}
-	if body := requestBodyFor(model, op.Op); body != nil {
-		o.RequestBody = body
+	switch op.Op {
+	case "get", "update", "delete":
+		o.Parameters = []Parameter{pathIDParam()}
+	case "list":
+		o.Parameters = listQueryParams()
+	}
+	switch op.Op {
+	case "create":
+		o.RequestBody = jsonBodyRef(model + "CreateRequest")
+	case "update":
+		o.RequestBody = jsonBodyRef(model + "UpdateRequest")
 	}
 	return o
 }
 
-// requestBodyFor is the request schema for an op: an id selector for get/delete,
-// the create/update request component for those, and a list-query body for list.
-func requestBodyFor(model, op string) *RequestBody {
-	ref := func(name string) *RequestBody {
-		return &RequestBody{Required: true, Content: map[string]MediaType{
-			"application/json": {Schema: &Schema{Ref: "#/components/schemas/" + name}},
-		}}
-	}
-	inline := func(s *Schema) *RequestBody {
-		return &RequestBody{Required: true, Content: map[string]MediaType{"application/json": {Schema: s}}}
-	}
-	switch op {
-	case "get", "delete":
-		return inline(idSelector())
-	case "create":
-		return ref(model + "CreateRequest")
-	case "update":
-		return ref(model + "UpdateRequest")
-	case "list":
-		return inline(listRequestSchema())
-	default:
-		return nil
-	}
-}
-
-// responsesFor is the response set for an op: the resource (list -> array),
-// plus the shared auth/error responses.
+// responsesFor is the response set for an op: the resource (list -> array,
+// create -> 201, delete -> 204), a 404 for item ops, plus shared auth errors.
 func responsesFor(model, op string) map[string]Response {
 	res := map[string]Response{
 		"401": errorResponse("Missing or invalid authentication."),
@@ -219,10 +253,14 @@ func responsesFor(model, op string) map[string]Response {
 	switch op {
 	case "list":
 		res["200"] = jsonResponse("A page of "+plural(strings.ToLower(model))+".", &Schema{Type: "array", Items: entityRef})
+	case "create":
+		res["201"] = jsonResponse("The created "+strings.ToLower(model)+".", entityRef)
 	case "delete":
 		res["204"] = Response{Description: "Deleted."}
-	default: // get, create, update
+		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
+	default: // get, update
 		res["200"] = jsonResponse("The "+strings.ToLower(model)+".", entityRef)
+		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
 	}
 	return res
 }
@@ -246,9 +284,14 @@ func responseSchema(e schema.Entity) *Schema {
 
 // writeSchema is the create/update request body. create requires the client to
 // supply id (offline-first client-generated UUIDs) plus every NOT NULL writable
-// column without a default; update patches, so only id is required.
+// column without a default; update patches by id-in-path, so its body carries
+// only the (optional) writable columns.
 func writeSchema(e schema.Entity, create bool) *Schema {
-	s := &Schema{Type: "object", Properties: map[string]*Schema{"id": {Type: "string", Format: "uuid"}}, Required: []string{"id"}}
+	s := &Schema{Type: "object", Properties: map[string]*Schema{}}
+	if create {
+		s.Properties["id"] = &Schema{Type: "string", Format: "uuid"}
+		s.Required = []string{"id"}
+	}
 	for _, f := range e.Fields {
 		if !isWritable(f) {
 			continue
@@ -295,26 +338,30 @@ func fieldSchema(f schema.Field) *Schema {
 	return s
 }
 
-func idSelector() *Schema {
-	return &Schema{
-		Type:       "object",
-		Properties: map[string]*Schema{"id": {Type: "string", Format: "uuid"}},
-		Required:   []string{"id"},
+func pathIDParam() Parameter {
+	return Parameter{
+		Name:        "id",
+		In:          "path",
+		Required:    true,
+		Description: "Resource id (UUID).",
+		Schema:      &Schema{Type: "string", Format: "uuid"},
 	}
 }
 
-// listRequestSchema is a provisional filter/sort/pagination body; it firms up
+// listQueryParams is a provisional pagination/sort set; per-field filters firm up
 // once the list handler's query grammar lands.
-func listRequestSchema() *Schema {
-	return &Schema{
-		Type: "object",
-		Properties: map[string]*Schema{
-			"filter": {Type: "object", Description: "Field filters keyed by column, each an operator->value object."},
-			"sort":   {Type: "string", Description: "Sort expression, e.g. \"-updated_at\"."},
-			"limit":  {Type: "integer", Description: "Maximum rows to return."},
-			"cursor": {Type: "string", Description: "Opaque pagination cursor from a previous page."},
-		},
+func listQueryParams() []Parameter {
+	return []Parameter{
+		{Name: "limit", In: "query", Description: "Maximum rows to return.", Schema: &Schema{Type: "integer"}},
+		{Name: "cursor", In: "query", Description: "Opaque pagination cursor from a previous page.", Schema: &Schema{Type: "string"}},
+		{Name: "sort", In: "query", Description: "Sort expression, e.g. \"-updated_at\".", Schema: &Schema{Type: "string"}},
 	}
+}
+
+func jsonBodyRef(name string) *RequestBody {
+	return &RequestBody{Required: true, Content: map[string]MediaType{
+		"application/json": {Schema: &Schema{Ref: "#/components/schemas/" + name}},
+	}}
 }
 
 func errorSchema() *Schema {
