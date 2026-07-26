@@ -128,13 +128,22 @@ const apiReferencePageTmpl = `<!doctype html>
       --scalar-radius-lg: var(--br-md);
     }
     html, body { height: 100%; }
-    body { margin: 0; background: var(--gray-100); color: var(--gray-1000); display: flex; flex-direction: column; }
-    /* Same header as the docs left sidebar, as a top bar linking back to docs. */
-    .api-topbar { flex: 0 0 auto; display: flex; align-items: center; height: 3.25rem; padding: 0 1rem; border-bottom: var(--bw) solid var(--border-color); background: var(--gray-100); }
+    body { margin: 0; background: var(--gray-100); color: var(--gray-1000); }
+    #app { height: 100%; }
+    /* SELECT logo pinned to the TOP OF SCALAR'S SIDEBAR (like the docs header),
+       not a full-width bar. Its width tracks Scalar's sidebar column, and the
+       sidebar is padded so its search/nav start below the logo. Sizes match the
+       docs (.logo-icon 22px, .logo-text 18px). */
+    .api-topbar {
+      position: fixed; top: 0; left: 0; z-index: 10; box-sizing: border-box;
+      width: var(--scalar-sidebar-width, 280px); height: 3.25rem;
+      display: flex; align-items: center; padding: 0 1rem;
+      background: var(--gray-100); border-bottom: var(--bw) solid var(--border-color);
+    }
     .api-topbar .logo { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--gray-1000); text-decoration: none; }
-    .api-topbar .logo-icon { height: 1.4rem; width: auto; display: block; }
-    .api-topbar .logo-text { height: 0.85rem; width: auto; display: block; }
-    #app { flex: 1 1 auto; min-height: 0; }
+    .api-topbar .logo-icon { width: 22px; height: 22px; border-radius: var(--br-xs); display: block; }
+    .api-topbar .logo-text { height: 18px; width: auto; display: block; }
+    .t-doc__sidebar { padding-top: 3.25rem; }
   </style>
   <script>
     (function () {
