@@ -51,8 +51,8 @@
     "eslint-plugin-svelte": "^3.22.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.28",
-    "marked": "^17.0.3",
-    "marked-katex-extension": "^5.1.7",
+    "marked": "^18.0.7",
+    "marked-katex-extension": "^5.1.10",
     "monaco-editor": "^0.56.0",
     "sql-formatter": "^15.8.2",
     "zod": "^4.4.3"
