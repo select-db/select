@@ -1,0 +1,76 @@
+{
+  "resources": [
+    {
+      "name": "role",
+      "operations": {
+        "create": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "roles.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,690 @@
+{
+  "resources": [
+    {
+      "name": "group",
+      "operations": {
+        "create": {
+          "requires": [
+            "groups.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "groups.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "groups.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "external_id",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    },
+    {
+      "name": "group_to_role",
+      "operations": {
+        "create": {
+          "requires": [
+            "groups.manage",
+            "roles.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "groups.manage",
+            "roles.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "groups.manage",
+            "roles.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "group_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "role_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    },
+    {
+      "name": "permission",
+      "operations": {
+        "create": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "roles.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "role_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "db_instance_id",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "schema_name",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "table_name",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "column_name",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "effect",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    },
+    {
+      "name": "role",
+      "operations": {
+        "create": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "roles.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    },
+    {
+      "name": "user_to_group",
+      "operations": {
+        "create": {
+          "requires": [
+            "groups.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "groups.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "groups.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "group_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    },
+    {
+      "name": "user_to_role",
+      "operations": {
+        "create": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "roles.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "roles.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "role_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    },
+    {
+      "name": "workspace_to_user",
+      "operations": {
+        "create": {
+          "requires": [
+            "roles.manage",
+            "users.manage"
+          ]
+        },
+        "delete": {
+          "requires": [
+            "roles.manage",
+            "users.manage"
+          ]
+        },
+        "get": {},
+        "list": {},
+        "update": {
+          "requires": [
+            "roles.manage",
+            "users.manage"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    }
+  ]
+}

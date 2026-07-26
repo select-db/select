@@ -70,10 +70,11 @@ func (m *Metadata) AllFunctions() []Function {
 
 // Table represents a relation with columns
 type Table struct {
-	Name       string
-	Columns    []Column
-	PrimaryKey []string // Column names that make up the primary key (empty for views or tables without PK)
-	DDL        string   // DDL statement for the table/view (empty if not available)
+	Name        string
+	Columns     []Column
+	PrimaryKey  []string // Column names that make up the primary key (empty for views or tables without PK)
+	DDL         string   // DDL statement for the table/view (empty if not available)
+	Description string   `json:",omitempty"` // Table COMMENT, if any (used for hover docs and schema-driven codegen)
 }
 
 // ForeignKeyRef describes the referenced table and column for a foreign key.
@@ -99,6 +100,9 @@ type Column struct {
 	// for the cell editor and the enum lint rule.
 	EnumValues []string
 	Extra      map[string]any // Dialect-specific metadata not covered above (optional)
+	// Description is the column COMMENT, if any. Used for hover docs and as the
+	// carrier for schema-driven codegen annotations.
+	Description string `json:",omitempty"`
 }
 
 // IndexInfo represents an index in the database (dialect-agnostic)
