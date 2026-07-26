@@ -83,21 +83,71 @@ const (
 // items so a new-tab jump is visually distinct from in-site navigation.
 const externalIcon = ` <svg class="external-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:0.3em;vertical-align:-0.1em;opacity:0.65"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`
 
-// apiReferencePage is the standalone, full-viewport Scalar page served at /api/.
-// It is deliberately outside the docs layout so Scalar owns the whole screen.
-const apiReferencePage = `<!doctype html>
+// apiReferencePageTmpl is the standalone, full-viewport Scalar page served at
+// /api/ (outside the docs layout so Scalar owns the whole screen). The %s is the
+// site's .theme CSS, inlined so the reference shares the docs design tokens; a
+// mapping layer binds Scalar's --scalar-* variables to those tokens (theme:
+// 'none' disables Scalar's built-in palette so ours wins). Light/dark follows
+// the docs' stored preference (localStorage doc-theme, same origin); Scalar's
+// own toggle is hidden so it can't drift from that.
+const apiReferencePageTmpl = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Select API Reference</title>
   <link rel="icon" href="/favicon.png" />
+  <style>
+%s
+    /* --ff lives in docs.css, not .theme; redeclare it here. */
+    :root { --ff: system-ui, -apple-system, sans-serif; }
+    /* Bind Scalar's tokens to ours. Our color tokens are keyed on
+       :root[data-theme], so a single mapping serves both light and dark; the
+       mode classes are included so it wins over Scalar's own definitions. */
+    :root, .light-mode, .dark-mode {
+      --scalar-background-1: var(--gray-100);
+      --scalar-background-2: var(--gray-200);
+      --scalar-background-3: var(--gray-300);
+      --scalar-color-1: var(--gray-1000);
+      --scalar-color-2: var(--gray-800);
+      --scalar-color-3: var(--gray-700);
+      --scalar-color-accent: var(--red);
+      --scalar-border-color: var(--border-color);
+      --scalar-sidebar-background-1: var(--gray-100);
+      --scalar-sidebar-border-color: var(--border-color);
+      --scalar-sidebar-color-1: var(--gray-1000);
+      --scalar-sidebar-color-2: var(--gray-800);
+      --scalar-sidebar-color-active: var(--red);
+      --scalar-sidebar-item-hover-background: var(--gray-300);
+      --scalar-sidebar-item-active-background: var(--gray-300);
+      --scalar-sidebar-search-background: var(--gray-200);
+      --scalar-sidebar-search-border-color: var(--border-color);
+      --scalar-font: var(--ff);
+      --scalar-font-code: ui-monospace, monospace;
+      --scalar-radius: var(--br-sm);
+      --scalar-radius-lg: var(--br-md);
+    }
+    html, body { margin: 0; background: var(--gray-100); color: var(--gray-1000); }
+  </style>
+  <script>
+    (function () {
+      var stored = localStorage.getItem('doc-theme');
+      var system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', stored || system);
+    })();
+  </script>
 </head>
 <body>
   <div id="app"></div>
   <script src="/api/scalar.standalone.js"></script>
   <script>
-    Scalar.createApiReference('#app', { url: '/api/openapi.json' })
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    Scalar.createApiReference('#app', {
+      url: '/api/openapi.json',
+      theme: 'none',
+      darkMode: dark,
+      hideDarkModeToggle: true,
+    });
   </script>
 </body>
 </html>
@@ -240,7 +290,7 @@ func build(cfg buildConfig) error {
 	if err := os.WriteFile(filepath.Join(cfg.outDir, "logo.png"), logo, 0o644); err != nil {
 		return fmt.Errorf("writing logo: %w", err)
 	}
-	if err := copyAPIAssets(cfg); err != nil {
+	if err := copyAPIAssets(cfg, string(themeCSS)); err != nil {
 		return fmt.Errorf("staging API reference assets: %w", err)
 	}
 
@@ -836,7 +886,7 @@ func verifyLinks(outDir string) error {
 // database, so it may be absent in a checkout that hasn't generated yet; the
 // build proceeds without it (the reference renders once the spec exists) rather
 // than failing.
-func copyAPIAssets(cfg buildConfig) error {
+func copyAPIAssets(cfg buildConfig, themeCSS string) error {
 	apiDir := filepath.Join(cfg.outDir, "api")
 	if err := os.MkdirAll(apiDir, 0o755); err != nil {
 		return err
@@ -853,8 +903,9 @@ func copyAPIAssets(cfg buildConfig) error {
 		return err
 	}
 	// The standalone full-viewport reference page served at /api/ (the sidebar's
-	// "Reference" link opens it in a new tab).
-	if err := os.WriteFile(filepath.Join(apiDir, "index.html"), []byte(apiReferencePage), 0o644); err != nil {
+	// "Reference" link opens it in a new tab), themed with the site's tokens.
+	page := fmt.Sprintf(apiReferencePageTmpl, themeCSS)
+	if err := os.WriteFile(filepath.Join(apiDir, "index.html"), []byte(page), 0o644); err != nil {
 		return err
 	}
 	spec, err := os.ReadFile(cfg.openAPIPath)
