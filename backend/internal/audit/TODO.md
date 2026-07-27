@@ -10,7 +10,7 @@ lifecycle. Live emit sites: `query.executed`, `iam.permission.lifecycle.*`.
 - [ ] iam: `role.lifecycle.create/update/delete`,
       `workspace.user_membership.add/remove`, `workspace.lifecycle.create/delete`,
       `api_key.lifecycle.create/rotate/revoke`
-- [ ] datasource: `created/updated`, `deleted`
+- [ ] datasource: `lifecycle.create/update`, `lifecycle.delete`
 
 ## Larger pieces
 - [ ] Read API + `audit:read` authz + frontend (the consumption surface; nothing yet)
