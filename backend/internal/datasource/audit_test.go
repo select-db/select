@@ -33,7 +33,7 @@ func upsertDatasource(t *testing.T, f e2e.Fixture) string {
 func TestAudit_DatasourceCreated(t *testing.T) {
 	f := e2e.Setup(t)
 	upsertDatasource(t, f)
-	e2e.RequireEvent(t, f.Conn, "datasource", "created")
+	e2e.RequireEvent(t, f.Conn, "datasource", "lifecycle.create")
 }
 
 func TestAudit_DatasourceUpdated(t *testing.T) {
@@ -48,7 +48,7 @@ func TestAudit_DatasourceUpdated(t *testing.T) {
 		"dsn":          "postgres://u:p@db:5432/app",
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "update failed: %s", rec.Body.String())
-	e2e.RequireEvent(t, f.Conn, "datasource", "updated")
+	e2e.RequireEvent(t, f.Conn, "datasource", "lifecycle.update")
 }
 
 func TestAudit_DatasourceDeleted(t *testing.T) {
@@ -61,7 +61,7 @@ func TestAudit_DatasourceDeleted(t *testing.T) {
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "delete failed: %s", rec.Body.String())
 
-	e2e.RequireEvent(t, f.Conn, "datasource", "deleted")
+	e2e.RequireEvent(t, f.Conn, "datasource", "lifecycle.delete")
 }
 
 // nonManagerToken mints a token for a workspace member with no owner rights and
@@ -88,7 +88,7 @@ func TestAudit_DatasourceUpsertDenied(t *testing.T) {
 	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())
 
 	// The id is new, so a blocked upsert is attributed to the create it would have made.
-	e2e.RequireEventStatus(t, f.Conn, "datasource", "created", "denied")
+	e2e.RequireEventStatus(t, f.Conn, "datasource", "lifecycle.create", "denied")
 }
 
 func TestAudit_DatasourceDeleteDenied(t *testing.T) {
@@ -101,5 +101,5 @@ func TestAudit_DatasourceDeleteDenied(t *testing.T) {
 	})
 	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())
 
-	e2e.RequireEventStatus(t, f.Conn, "datasource", "deleted", "denied")
+	e2e.RequireEventStatus(t, f.Conn, "datasource", "lifecycle.delete", "denied")
 }

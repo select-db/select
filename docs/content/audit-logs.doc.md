@@ -25,12 +25,13 @@ Each event records that a **principal** performed an **action** (within a
 | `payload` | Domain-specific details. |
 | `client_ip` | The client's IP address. |
 
-The full identity of an event is `domain.action`. Single-subject domains
-(`query`, `datasource`) use a bare verb; `iam` uses a dotted `object.action`
-hierarchy (the same shape as Okta's System Log): lifecycle changes are
-`<object>.lifecycle.create` / `update` / `delete`, memberships are
-`<container>.user_membership.add` / `remove`, and role grants are
-`<subject>.role.grant` / `revoke`.
+The full identity of an event is `domain.action`. The `query` domain logs
+activity with a bare verb (`executed`); `iam` and `datasource` use a dotted
+`object.action` hierarchy (the same shape as Okta's System Log): lifecycle
+changes are `<object>.lifecycle.create` / `update` / `delete` (the object
+prefix is dropped in `datasource`, where the domain is itself the object),
+memberships are `<container>.user_membership.add` / `remove`, and role grants
+are `<subject>.role.grant` / `revoke`.
 
 ## Actions
 
@@ -61,8 +62,8 @@ existing ones are never renamed, so you can rely on these values in filters.
 
 | Action | Meaning |
 |--------|---------|
-| `created` / `updated` | A datasource was created / its connection config was changed. |
-| `deleted` | A datasource was removed. |
+| `lifecycle.create` / `lifecycle.update` | A datasource was created / its connection config was changed. |
+| `lifecycle.delete` | A datasource was removed. |
 
 ## Querying the log
 

@@ -29,11 +29,12 @@ const (
 
 // Actions pair with a domain; the full event id is domain.action. This is the
 // closed vocabulary consumers' SOC/SIEM rules key on, so it's an external
-// contract: add actions, never rename or repurpose. Single-subject domains
-// (query, auth, datasource) use a bare verb. iam follows the Okta System Log
-// convention of a dotted object.action hierarchy: lifecycle is
-// <object>.lifecycle.<create|update|delete> (role.lifecycle.create,
-// permission.lifecycle.delete); memberships are
+// contract: add actions, never rename or repurpose. The activity domains query
+// and auth use a bare verb (executed, login). Lifecycle and privilege changes
+// follow the Okta System Log convention of a dotted object.action hierarchy:
+// lifecycle is <object>.lifecycle.<create|update|delete> (role.lifecycle.create,
+// permission.lifecycle.delete; in datasource the domain is itself the object, so
+// the action is a bare lifecycle.create); memberships are
 // <container>.user_membership.<add|remove>; role grants are
 // <subject>.role.<grant|revoke>.
 const (
@@ -70,10 +71,10 @@ const (
 	ActionAPIKeyRevoked        = "api_key.lifecycle.revoke"
 	ActionAPIKeySetRoles       = "api_key.role.set"
 
-	// datasource
-	ActionDatasourceCreated = "created"
-	ActionDatasourceUpdated = "updated"
-	ActionDatasourceDeleted = "deleted"
+	// datasource (the domain is itself the object, so lifecycle actions are bare)
+	ActionDatasourceCreated = "lifecycle.create"
+	ActionDatasourceUpdated = "lifecycle.update"
+	ActionDatasourceDeleted = "lifecycle.delete"
 )
 
 type Target struct {
