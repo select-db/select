@@ -78,6 +78,12 @@ func TestEmitOpenAPIShape(t *testing.T) {
 	if !hasFilter {
 		t.Fatalf("list should expose an OData $filter query param, got %+v", coll.Get.Parameters)
 	}
+	// The list description documents the filterable object model (field table).
+	for _, want := range []string{"Filterable fields", "| `name` |", "date-time"} {
+		if !strings.Contains(coll.Get.Description, want) {
+			t.Fatalf("list description should include %q, got:\n%s", want, coll.Get.Description)
+		}
+	}
 	// Proper status codes: 201 on create, 204 on delete, 404 on item ops.
 	if _, ok := coll.Post.Responses["201"]; !ok {
 		t.Fatal("create should respond 201")
