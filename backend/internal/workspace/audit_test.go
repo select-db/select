@@ -12,8 +12,9 @@ import (
 
 // Audit coverage for the dedicated workspace/member handlers: each operation must
 // emit the audit event its catalog spec declares (see
-// backend/internal/audit/catalog.go). workspace.user_membership.add and workspace.deleted are also
-// reachable via the sync path — both are audited (emit-both, by design).
+// backend/internal/audit/catalog.go). workspace.user_membership.add and
+// workspace.lifecycle.delete are also reachable via the sync path; both are
+// audited (emit-both, by design).
 
 func TestMain(m *testing.M) { e2e.Run(m) }
 
@@ -31,7 +32,7 @@ func TestAudit_WorkspaceCreated(t *testing.T) {
 	f := e2e.Setup(t)
 	rec := e2e.Do(t, f.H, http.MethodPost, "/workspace/create", f.Actor.Token, map[string]any{"name": "New WS"})
 	require.Equalf(t, http.StatusOK, rec.Code, "create: %s", rec.Body.String())
-	e2e.RequireEvent(t, f.Conn, "iam", "workspace.created")
+	e2e.RequireEvent(t, f.Conn, "iam", "workspace.lifecycle.create")
 }
 
 func TestAudit_WorkspaceDeleted(t *testing.T) {
@@ -40,7 +41,7 @@ func TestAudit_WorkspaceDeleted(t *testing.T) {
 		"id": f.Actor.WorkspaceID, "workspace_id": f.Actor.WorkspaceID,
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "delete: %s", rec.Body.String())
-	e2e.RequireEvent(t, f.Conn, "iam", "workspace.deleted")
+	e2e.RequireEvent(t, f.Conn, "iam", "workspace.lifecycle.delete")
 }
 
 func TestAudit_WorkspaceDeleteDenied(t *testing.T) {
@@ -50,7 +51,7 @@ func TestAudit_WorkspaceDeleteDenied(t *testing.T) {
 		"id": f.Actor.WorkspaceID, "workspace_id": f.Actor.WorkspaceID,
 	})
 	require.Equalf(t, http.StatusForbidden, rec.Code, "want 403: %s", rec.Body.String())
-	e2e.RequireEventStatus(t, f.Conn, "iam", "workspace.deleted", "denied")
+	e2e.RequireEventStatus(t, f.Conn, "iam", "workspace.lifecycle.delete", "denied")
 }
 
 func TestAudit_WorkspaceUserAdded(t *testing.T) {

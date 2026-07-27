@@ -30,10 +30,25 @@ func upsertDatasource(t *testing.T, f e2e.Fixture) string {
 	return id
 }
 
-func TestAudit_DatasourceUpserted(t *testing.T) {
+func TestAudit_DatasourceCreated(t *testing.T) {
 	f := e2e.Setup(t)
 	upsertDatasource(t, f)
-	e2e.RequireEvent(t, f.Conn, "datasource", "upserted")
+	e2e.RequireEvent(t, f.Conn, "datasource", "created")
+}
+
+func TestAudit_DatasourceUpdated(t *testing.T) {
+	f := e2e.Setup(t)
+	id := upsertDatasource(t, f)
+	// A second upsert of the same id is an update, not a create.
+	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/upsert", f.Actor.Token, map[string]any{
+		"id":           id,
+		"workspace_id": f.Actor.WorkspaceID,
+		"db_type":      "postgresql",
+		"name":         "prod-renamed",
+		"dsn":          "postgres://u:p@db:5432/app",
+	})
+	require.Equalf(t, http.StatusNoContent, rec.Code, "update failed: %s", rec.Body.String())
+	e2e.RequireEvent(t, f.Conn, "datasource", "updated")
 }
 
 func TestAudit_DatasourceDeleted(t *testing.T) {
@@ -72,7 +87,8 @@ func TestAudit_DatasourceUpsertDenied(t *testing.T) {
 	})
 	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())
 
-	e2e.RequireEventStatus(t, f.Conn, "datasource", "upserted", "denied")
+	// The id is new, so a blocked upsert is attributed to the create it would have made.
+	e2e.RequireEventStatus(t, f.Conn, "datasource", "created", "denied")
 }
 
 func TestAudit_DatasourceDeleteDenied(t *testing.T) {

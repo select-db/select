@@ -47,18 +47,6 @@ func UpsertHandler() http.HandlerFunc {
 		a := authz.ActorOf(r)
 		workspaceID := a.WorkspaceID
 
-		if !a.IsOwner() && !a.CanManage(req.ID) {
-			audit.EmitDenied(r.Context(), audit.DatasourceUpserted, workspaceID, req.ID)
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-
-		enc, err := getWrapper()
-		if err != nil {
-			http.Error(w, "server misconfigured", http.StatusInternalServerError)
-			return
-		}
-
 		id, err := uuid.Parse(req.ID)
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
@@ -71,6 +59,31 @@ func UpsertHandler() http.HandlerFunc {
 			return
 		}
 
+		// Fetch the current row up front: whether it exists decides create vs.
+		// update for the audit event — including a denied attempt, so a block is
+		// attributed to the change it would have made — and it feeds the
+		// write-only secret merge below.
+		existing, existErr := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
+			ID:          db_types.NewJSONNullUUID(id),
+			WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
+		})
+		spec := audit.DatasourceCreated
+		if existErr == nil {
+			spec = audit.DatasourceUpdated
+		}
+
+		if !a.IsOwner() && !a.CanManage(req.ID) {
+			audit.EmitDenied(r.Context(), spec, workspaceID, req.ID)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
+		enc, err := getWrapper()
+		if err != nil {
+			http.Error(w, "server misconfigured", http.StatusInternalServerError)
+			return
+		}
+
 		dsnAAD := fieldAAD(parsedWorkspaceID, id, "dsn")
 		sshAAD := fieldAAD(parsedWorkspaceID, id, "ssh")
 
@@ -80,10 +93,7 @@ func UpsertHandler() http.HandlerFunc {
 		// clobber a stored credential.
 		dsnToStore := req.DSN
 		sshToStore := req.SSH
-		if existing, gerr := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
-			ID:          db_types.NewJSONNullUUID(id),
-			WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
-		}); gerr == nil {
+		if existErr == nil {
 			existingDSN, derr := decryptField(r.Context(), enc, existing.EncryptedDsn, dsnAAD)
 			existingSSH, serr := decryptField(r.Context(), enc, existing.EncryptedSsh, sshAAD)
 			if derr == nil && serr == nil {
@@ -124,7 +134,7 @@ func UpsertHandler() http.HandlerFunc {
 		InvalidateCache(workspaceID, req.ID)
 
 		// Secrets (dsn, ssh) are never logged — only the non-sensitive shape.
-		audit.EmitAction(r.Context(), audit.DatasourceUpserted, audit.Record{
+		audit.EmitAction(r.Context(), spec, audit.Record{
 			WorkspaceID: workspaceID,
 			TargetID:    req.ID,
 			TargetLabel: req.Name,

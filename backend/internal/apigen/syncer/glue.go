@@ -68,9 +68,14 @@ type glueData struct {
 	RowMap                       []kv
 	// Audit: emit an audit.EmitChange on apply/delete. Target is the row id
 	// (AuditDeleteByID) or, for a junction row, an FK read from the payload on
-	// apply and from the fetched pre-delete row on delete.
+	// apply and from the fetched pre-delete row on delete. A lifecycle entity
+	// sets AuditSplit: apply picks AuditCreateSpec on insert, AuditUpdateSpec on
+	// update (via res.Created); a junction has AuditCreateSpec == AuditUpdateSpec
+	// and emits the one grant/add spec unconditionally.
 	Audit              bool
-	AuditApplySpec     string
+	AuditSplit         bool
+	AuditCreateSpec    string
+	AuditUpdateSpec    string
 	AuditDeleteSpec    string
 	AuditApplyTarget   string
 	AuditDeleteByID    bool
@@ -138,7 +143,8 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 	// FK, read it from the payload on apply and from the pre-delete row on delete.
 	if a, ok := auditSpecs[e.Table]; ok {
 		d.Audit = true
-		d.AuditApplySpec, d.AuditDeleteSpec = a.Apply, a.Delete
+		d.AuditCreateSpec, d.AuditUpdateSpec, d.AuditDeleteSpec = a.Create, a.Update, a.Delete
+		d.AuditSplit = a.Create != a.Update
 		if a.TargetCol == e.PrimaryKey[0] {
 			d.AuditApplyTarget, d.AuditDeleteByID = "id", true
 		} else {
@@ -439,7 +445,15 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 	})
 {{- if .Audit}}
 	if res.Applied {
-		audit.EmitChange(ctx, {{.AuditApplySpec}}, c.WorkspaceID, {{.AuditApplyTarget}}, res.Before, res.After)
+{{- if .AuditSplit}}
+		spec := {{.AuditCreateSpec}}
+		if !res.Created {
+			spec = {{.AuditUpdateSpec}}
+		}
+		audit.EmitChange(ctx, spec, c.WorkspaceID, {{.AuditApplyTarget}}, res.Before, res.After)
+{{- else}}
+		audit.EmitChange(ctx, {{.AuditCreateSpec}}, c.WorkspaceID, {{.AuditApplyTarget}}, res.Before, res.After)
+{{- end}}
 	}
 {{- end}}
 	return res.Applied, res.Restored, err
