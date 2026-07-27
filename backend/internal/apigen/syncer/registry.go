@@ -16,10 +16,10 @@ var auditSpecs = map[string]auditDescriptor{
 	"role":              {"audit.RoleUpserted", "audit.RoleDeleted", "id"},
 	"permission":        {"audit.PermissionUpserted", "audit.PermissionDeleted", "id"},
 	"group":             {"audit.GroupUpserted", "audit.GroupDeleted", "id"},
-	"user_to_role":      {"audit.RoleAssigned", "audit.RoleUnassigned", "user_id"},
-	"workspace_to_user": {"audit.MemberAdded", "audit.MemberRemoved", "user_id"},
-	"user_to_group":     {"audit.GroupMemberAdded", "audit.GroupMemberRemoved", "group_id"},
-	"group_to_role":     {"audit.GroupRoleAttached", "audit.GroupRoleDetached", "group_id"},
+	"user_to_role":      {"audit.UserRoleGranted", "audit.UserRoleRevoked", "user_id"},
+	"workspace_to_user": {"audit.WorkspaceUserAdded", "audit.WorkspaceUserRemoved", "user_id"},
+	"user_to_group":     {"audit.GroupUserAdded", "audit.GroupUserRemoved", "group_id"},
+	"group_to_role":     {"audit.GroupRoleGranted", "audit.GroupRoleRevoked", "group_id"},
 }
 
 // actionConst maps an @app.api `requires` value to the core.Action constant it

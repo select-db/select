@@ -73,20 +73,20 @@ var (
 		Domain: DomainIAM, Action: ActionRoleDeleted, Lane: LaneOutbox, TargetType: "role",
 		Doc: "a role was deleted",
 	}
-	RoleAssigned = Spec{
-		Domain: DomainIAM, Action: ActionRoleAssigned, Lane: LaneOutbox, TargetType: "user",
+	UserRoleGranted = Spec{
+		Domain: DomainIAM, Action: ActionUserRoleGranted, Lane: LaneOutbox, TargetType: "user",
 		Doc: "a role was assigned directly to a user (user_to_role)",
 	}
-	RoleUnassigned = Spec{
-		Domain: DomainIAM, Action: ActionRoleUnassigned, Lane: LaneOutbox, TargetType: "user",
+	UserRoleRevoked = Spec{
+		Domain: DomainIAM, Action: ActionUserRoleRevoked, Lane: LaneOutbox, TargetType: "user",
 		Doc: "a role assigned directly to a user was removed",
 	}
-	MemberAdded = Spec{
-		Domain: DomainIAM, Action: ActionMemberAdded, Lane: LaneOutbox, TargetType: "user",
+	WorkspaceUserAdded = Spec{
+		Domain: DomainIAM, Action: ActionWorkspaceUserAdded, Lane: LaneOutbox, TargetType: "user",
 		Doc: "a user was added to a workspace",
 	}
-	MemberRemoved = Spec{
-		Domain: DomainIAM, Action: ActionMemberRemoved, Lane: LaneOutbox, TargetType: "user",
+	WorkspaceUserRemoved = Spec{
+		Domain: DomainIAM, Action: ActionWorkspaceUserRemoved, Lane: LaneOutbox, TargetType: "user",
 		Doc: "a user was removed from a workspace",
 	}
 	GroupUpserted = Spec{
@@ -97,20 +97,20 @@ var (
 		Domain: DomainIAM, Action: ActionGroupDeleted, Lane: LaneOutbox, TargetType: "group",
 		Doc: "a group was deleted",
 	}
-	GroupMemberAdded = Spec{
-		Domain: DomainIAM, Action: ActionGroupMemberAdded, Lane: LaneOutbox, TargetType: "group",
+	GroupUserAdded = Spec{
+		Domain: DomainIAM, Action: ActionGroupUserAdded, Lane: LaneOutbox, TargetType: "group",
 		Doc: "a user was added to a group",
 	}
-	GroupMemberRemoved = Spec{
-		Domain: DomainIAM, Action: ActionGroupMemberRemoved, Lane: LaneOutbox, TargetType: "group",
+	GroupUserRemoved = Spec{
+		Domain: DomainIAM, Action: ActionGroupUserRemoved, Lane: LaneOutbox, TargetType: "group",
 		Doc: "a user was removed from a group",
 	}
-	GroupRoleAttached = Spec{
-		Domain: DomainIAM, Action: ActionGroupRoleAttached, Lane: LaneOutbox, TargetType: "group",
+	GroupRoleGranted = Spec{
+		Domain: DomainIAM, Action: ActionGroupRoleGranted, Lane: LaneOutbox, TargetType: "group",
 		Doc: "a role was attached to a group (grants the role to all members)",
 	}
-	GroupRoleDetached = Spec{
-		Domain: DomainIAM, Action: ActionGroupRoleDetached, Lane: LaneOutbox, TargetType: "group",
+	GroupRoleRevoked = Spec{
+		Domain: DomainIAM, Action: ActionGroupRoleRevoked, Lane: LaneOutbox, TargetType: "group",
 		Doc: "a role was detached from a group",
 	}
 	WorkspaceCreated = Spec{
@@ -155,11 +155,11 @@ var Catalog = []Spec{
 	QueryExecuted,
 	AuthLogin, AuthLoginFailed, AuthTokenRefreshed,
 	PermissionUpserted, PermissionDeleted,
-	RoleUpserted, RoleDeleted, RoleAssigned, RoleUnassigned,
-	MemberAdded, MemberRemoved,
+	RoleUpserted, RoleDeleted, UserRoleGranted, UserRoleRevoked,
+	WorkspaceUserAdded, WorkspaceUserRemoved,
 	GroupUpserted, GroupDeleted,
-	GroupMemberAdded, GroupMemberRemoved,
-	GroupRoleAttached, GroupRoleDetached,
+	GroupUserAdded, GroupUserRemoved,
+	GroupRoleGranted, GroupRoleRevoked,
 	WorkspaceCreated, WorkspaceDeleted,
 	APIKeyCreated, APIKeyRotated, APIKeyRevoked, APIKeySetRoles,
 	DatasourceUpserted, DatasourceDeleted,

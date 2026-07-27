@@ -74,7 +74,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		},
 	})
 	if res.Applied {
-		audit.EmitChange(ctx, audit.MemberAdded, c.WorkspaceID, utils.MapGetString(payload, "user_id"), res.Before, res.After)
+		audit.EmitChange(ctx, audit.WorkspaceUserAdded, c.WorkspaceID, utils.MapGetString(payload, "user_id"), res.Before, res.After)
 	}
 	return res.Applied, res.Restored, err
 }

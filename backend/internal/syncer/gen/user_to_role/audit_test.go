@@ -27,15 +27,15 @@ func assignRole(t *testing.T, f e2e.Fixture) (userID, utrID string) {
 	return userID, utrID
 }
 
-func TestAudit_RoleAssigned(t *testing.T) {
+func TestAudit_UserRoleGranted(t *testing.T) {
 	f := e2e.Setup(t)
 	assignRole(t, f)
-	e2e.RequireEvent(t, f.Conn, "iam", "role.assigned")
+	e2e.RequireEvent(t, f.Conn, "iam", "user.role.grant")
 }
 
-func TestAudit_RoleUnassigned(t *testing.T) {
+func TestAudit_UserRoleRevoked(t *testing.T) {
 	f := e2e.Setup(t)
 	_, utrID := assignRole(t, f)
 	e2e.SyncCommit(t, f.H, f.Actor, "delete", "user_to_role", utrID, map[string]any{"id": utrID})
-	e2e.RequireEvent(t, f.Conn, "iam", "role.unassigned")
+	e2e.RequireEvent(t, f.Conn, "iam", "user.role.revoke")
 }

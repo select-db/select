@@ -60,7 +60,7 @@ func AddUserHandler() http.HandlerFunc {
 		workspaceID := a.WorkspaceID
 
 		if !a.IsOwner() && !a.Can(core.ActionWorkspaceUsersManage) {
-			audit.EmitDenied(r.Context(), audit.MemberAdded, workspaceID, "")
+			audit.EmitDenied(r.Context(), audit.WorkspaceUserAdded, workspaceID, "")
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -118,7 +118,7 @@ func AddUserHandler() http.HandlerFunc {
 			return
 		}
 
-		audit.EmitAction(r.Context(), audit.MemberAdded, audit.Record{
+		audit.EmitAction(r.Context(), audit.WorkspaceUserAdded, audit.Record{
 			WorkspaceID: workspaceID,
 			TargetID:    userUUID.String(),
 			Status:      audit.StatusSuccess,

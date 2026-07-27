@@ -26,8 +26,10 @@ Each event records that a **principal** performed an **action** (within a
 | `client_ip` | The client's IP address. |
 
 The full identity of an event is `domain.action`. Single-subject domains
-(`query`, `datasource`) use a bare verb; `iam` spans several entities, so its
-actions are `entity.verb`.
+(`query`, `datasource`) use a bare verb; `iam` uses a dotted `object.action`
+hierarchy (the same shape as Okta's System Log): memberships are
+`<container>.user_membership.add` / `remove`, and role grants are
+`<subject>.role.grant` / `revoke`.
 
 ## Actions
 
@@ -46,11 +48,11 @@ existing ones are never renamed, so you can rely on these values in filters.
 |--------|---------|
 | `permission.upserted` / `permission.deleted` | A permission rule was created or updated / removed. |
 | `role.upserted` / `role.deleted` | A role was created or updated / removed. |
-| `role.assigned` / `role.unassigned` | A role was granted directly to a user / that grant was removed. |
-| `member.added` / `member.removed` | A user was added to / removed from the workspace. |
+| `user.role.grant` / `user.role.revoke` | A role was granted to / revoked from a user. |
+| `workspace.user_membership.add` / `workspace.user_membership.remove` | A user was added to / removed from the workspace. |
 | `group.upserted` / `group.deleted` | A group was created or updated / removed. |
-| `group.member_added` / `group.member_removed` | A user was added to / removed from a group. |
-| `group.role_attached` / `group.role_detached` | A role was attached to / detached from a group. |
+| `group.user_membership.add` / `group.user_membership.remove` | A user was added to / removed from a group. |
+| `group.role.grant` / `group.role.revoke` | A role was granted to / revoked from a group. |
 | `workspace.created` / `workspace.deleted` | The workspace was created / removed. |
 | `api_key.created` / `api_key.rotated` / `api_key.revoked` / `api_key.set_roles` | An API key was created / rotated / revoked / had its roles set. |
 

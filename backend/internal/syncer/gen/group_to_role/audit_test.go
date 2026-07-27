@@ -24,15 +24,15 @@ func attachRole(t *testing.T, f e2e.Fixture) (groupID, gtrID string) {
 	return groupID, gtrID
 }
 
-func TestAudit_GroupRoleAttached(t *testing.T) {
+func TestAudit_GroupRoleGranted(t *testing.T) {
 	f := e2e.Setup(t)
 	attachRole(t, f)
-	e2e.RequireEvent(t, f.Conn, "iam", "group.role_attached")
+	e2e.RequireEvent(t, f.Conn, "iam", "group.role.grant")
 }
 
-func TestAudit_GroupRoleDetached(t *testing.T) {
+func TestAudit_GroupRoleRevoked(t *testing.T) {
 	f := e2e.Setup(t)
 	_, gtrID := attachRole(t, f)
 	e2e.SyncCommit(t, f.H, f.Actor, "delete", "group_to_role", gtrID, map[string]any{"id": gtrID})
-	e2e.RequireEvent(t, f.Conn, "iam", "group.role_detached")
+	e2e.RequireEvent(t, f.Conn, "iam", "group.role.revoke")
 }
