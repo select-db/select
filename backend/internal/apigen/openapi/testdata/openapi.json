@@ -35,17 +35,9 @@
         "operationId": "listPermission",
         "parameters": [
           {
-            "name": "limit",
+            "name": "$filter",
             "in": "query",
-            "description": "Maximum rows to return.",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. Filterable fields: id, role_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at. Examples: role_id eq 'value' and db_instance_id eq 'value' · (role_id eq 'value' or db_instance_id eq 'value') and not (role_id eq 'value')",
             "schema": {
               "type": "string"
             }
@@ -59,391 +51,19 @@
             }
           },
           {
-            "name": "id",
+            "name": "limit",
             "in": "query",
-            "description": "Filter by id (operators: eq, ne, in, nin, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
+            "description": "Maximum rows to return.",
             "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "ne": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
+              "type": "integer"
             }
           },
           {
-            "name": "role_id",
+            "name": "cursor",
             "in": "query",
-            "description": "Filter by role_id (operators: eq, ne, in, nin, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
+            "description": "Opaque pagination cursor from a previous page.",
             "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "ne": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "db_instance_id",
-            "in": "query",
-            "description": "Filter by db_instance_id (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string"
-                },
-                "ilike": {
-                  "type": "string"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "like": {
-                  "type": "string"
-                },
-                "ne": {
-                  "type": "string"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "schema_name",
-            "in": "query",
-            "description": "Filter by schema_name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string"
-                },
-                "ilike": {
-                  "type": "string"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "like": {
-                  "type": "string"
-                },
-                "ne": {
-                  "type": "string"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "table_name",
-            "in": "query",
-            "description": "Filter by table_name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string"
-                },
-                "ilike": {
-                  "type": "string"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "like": {
-                  "type": "string"
-                },
-                "ne": {
-                  "type": "string"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "column_name",
-            "in": "query",
-            "description": "Filter by column_name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string"
-                },
-                "ilike": {
-                  "type": "string"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "like": {
-                  "type": "string"
-                },
-                "ne": {
-                  "type": "string"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "action",
-            "in": "query",
-            "description": "Filter by action (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string"
-                },
-                "ilike": {
-                  "type": "string"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "like": {
-                  "type": "string"
-                },
-                "ne": {
-                  "type": "string"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "effect",
-            "in": "query",
-            "description": "Filter by effect (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string"
-                },
-                "ilike": {
-                  "type": "string"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "like": {
-                  "type": "string"
-                },
-                "ne": {
-                  "type": "string"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "updated_at",
-            "in": "query",
-            "description": "Filter by updated_at (operators: eq, ne, lt, lte, gt, gte, in, nin, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "gt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "gte": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "lt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "lte": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "ne": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
+              "type": "string"
             }
           }
         ],
@@ -742,17 +362,9 @@
         "operationId": "listRole",
         "parameters": [
           {
-            "name": "limit",
+            "name": "$filter",
             "in": "query",
-            "description": "Maximum rows to return.",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. Filterable fields: id, name, updated_at. Examples: name eq 'value' and updated_at eq 2024-01-01T00:00:00Z · (name eq 'value' or updated_at eq 2024-01-01T00:00:00Z) and not (name eq 'value')",
             "schema": {
               "type": "string"
             }
@@ -766,141 +378,19 @@
             }
           },
           {
-            "name": "id",
+            "name": "limit",
             "in": "query",
-            "description": "Filter by id (operators: eq, ne, in, nin, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
+            "description": "Maximum rows to return.",
             "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "ne": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
+              "type": "integer"
             }
           },
           {
-            "name": "name",
+            "name": "cursor",
             "in": "query",
-            "description": "Filter by name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
+            "description": "Opaque pagination cursor from a previous page.",
             "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string"
-                },
-                "ilike": {
-                  "type": "string"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "like": {
-                  "type": "string"
-                },
-                "ne": {
-                  "type": "string"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          {
-            "name": "updated_at",
-            "in": "query",
-            "description": "Filter by updated_at (operators: eq, ne, lt, lte, gt, gte, in, nin, is_null, not_null).",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "eq": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "gt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "gte": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "in": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                },
-                "is_null": {
-                  "type": "boolean"
-                },
-                "lt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "lte": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "ne": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "nin": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                },
-                "not_null": {
-                  "type": "boolean"
-                }
-              }
+              "type": "string"
             }
           }
         ],

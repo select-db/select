@@ -68,6 +68,16 @@ func TestEmitOpenAPIShape(t *testing.T) {
 	if len(item.Get.Parameters) != 1 || item.Get.Parameters[0].In != "path" || item.Get.Parameters[0].Name != "id" {
 		t.Fatalf("get should take an id path param, got %+v", item.Get.Parameters)
 	}
+	// List exposes a single OData $filter query param (not per-field params).
+	hasFilter := false
+	for _, p := range coll.Get.Parameters {
+		if p.Name == "$filter" && p.In == "query" {
+			hasFilter = true
+		}
+	}
+	if !hasFilter {
+		t.Fatalf("list should expose an OData $filter query param, got %+v", coll.Get.Parameters)
+	}
 	// Proper status codes: 201 on create, 204 on delete, 404 on item ops.
 	if _, ok := coll.Post.Responses["201"]; !ok {
 		t.Fatal("create should respond 201")
