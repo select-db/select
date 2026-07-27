@@ -83,6 +83,8 @@ type Parameter struct {
 	In          string  `json:"in"` // "path" or "query"
 	Required    bool    `json:"required,omitempty"`
 	Description string  `json:"description,omitempty"`
+	Style       string  `json:"style,omitempty"`   // "deepObject" for field filters
+	Explode     bool    `json:"explode,omitempty"` // true for deepObject filters
 	Schema      *Schema `json:"schema,omitempty"`
 }
 
@@ -231,7 +233,7 @@ func operationFor(e schema.Entity, model string, op schema.APIOp) *Operation {
 	case "get", "update", "delete":
 		o.Parameters = []Parameter{pathIDParam()}
 	case "list":
-		o.Parameters = listQueryParams()
+		o.Parameters = listParams(e)
 	}
 	switch op.Op {
 	case "create":
@@ -313,9 +315,10 @@ func isWritable(f schema.Field) bool {
 	return f.Patchable || (f.FK != nil && f.Column != schema.TenantColumn)
 }
 
-// fieldSchema maps one field's kind (+ nullability, enum) to a JSON schema.
-func fieldSchema(f schema.Field) *Schema {
-	s := &Schema{Nullable: f.Nullable}
+// scalarSchema is a field's bare JSON type/format/enum, without nullability —
+// the value shape used for filter operands.
+func scalarSchema(f schema.Field) *Schema {
+	s := &Schema{}
 	switch f.Kind {
 	case schema.KindUUID:
 		s.Type, s.Format = "string", "uuid"
@@ -338,6 +341,14 @@ func fieldSchema(f schema.Field) *Schema {
 	return s
 }
 
+// fieldSchema is the scalar schema plus nullability, used for body/response
+// properties.
+func fieldSchema(f schema.Field) *Schema {
+	s := scalarSchema(f)
+	s.Nullable = f.Nullable
+	return s
+}
+
 func pathIDParam() Parameter {
 	return Parameter{
 		Name:        "id",
@@ -348,14 +359,49 @@ func pathIDParam() Parameter {
 	}
 }
 
-// listQueryParams is a provisional pagination/sort set; per-field filters firm up
-// once the list handler's query grammar lands.
-func listQueryParams() []Parameter {
-	return []Parameter{
+// listParams is the query parameters for a list op: pagination/sort, then one
+// per-field filter. A filter is a deepObject keyed by operator, so
+// ?updated_at[gte]=…&status[in]=… — the operator set per field is the shared
+// FilterOperators taxonomy (same one the capabilities doc advertises).
+func listParams(e schema.Entity) []Parameter {
+	params := []Parameter{
 		{Name: "limit", In: "query", Description: "Maximum rows to return.", Schema: &Schema{Type: "integer"}},
 		{Name: "cursor", In: "query", Description: "Opaque pagination cursor from a previous page.", Schema: &Schema{Type: "string"}},
 		{Name: "sort", In: "query", Description: "Sort expression, e.g. \"-updated_at\".", Schema: &Schema{Type: "string"}},
 	}
+	for _, f := range e.Fields {
+		if !f.Exposed {
+			continue
+		}
+		ops := schema.FilterOperators(f)
+		params = append(params, Parameter{
+			Name:        f.Name,
+			In:          "query",
+			Style:       "deepObject",
+			Explode:     true,
+			Description: "Filter by " + f.Name + " (operators: " + strings.Join(ops, ", ") + ").",
+			Schema:      filterSchema(f, ops),
+		})
+	}
+	return params
+}
+
+// filterSchema is the object of allowed operators for a field: each operator
+// maps to the value shape it takes (array for in/nin, boolean for null checks,
+// the field's scalar type otherwise).
+func filterSchema(f schema.Field, ops []string) *Schema {
+	props := map[string]*Schema{}
+	for _, op := range ops {
+		switch op {
+		case "is_null", "not_null":
+			props[op] = &Schema{Type: "boolean"}
+		case "in", "nin":
+			props[op] = &Schema{Type: "array", Items: scalarSchema(f)}
+		default:
+			props[op] = scalarSchema(f)
+		}
+	}
+	return &Schema{Type: "object", Properties: props}
 }
 
 func jsonBodyRef(name string) *RequestBody {

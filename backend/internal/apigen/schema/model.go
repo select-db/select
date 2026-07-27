@@ -247,6 +247,31 @@ func parseDefaultLiteral(expr string) string {
 	return strings.ReplaceAll(s[1:len(s)-1], "''", "'")
 }
 
+// FilterOperators is the filter operator set a field supports, derived from its
+// kind. An explicit @app.ops list overrides it wholesale. Shared by every
+// projection (capabilities, OpenAPI) so the operator taxonomy stays single-
+// sourced.
+func FilterOperators(f Field) []string {
+	if len(f.Ops) > 0 {
+		return f.Ops
+	}
+	null := []string{"is_null", "not_null"}
+	switch f.Kind {
+	case KindText:
+		return append([]string{"eq", "ne", "in", "nin", "like", "ilike"}, null...)
+	case KindUUID, KindInet:
+		return append([]string{"eq", "ne", "in", "nin"}, null...)
+	case KindInt, KindTime:
+		return append([]string{"eq", "ne", "lt", "lte", "gt", "gte", "in", "nin"}, null...)
+	case KindBool:
+		return append([]string{"eq", "ne"}, null...)
+	case KindJSON:
+		return append([]string{"contains"}, null...)
+	default:
+		return null
+	}
+}
+
 func or(a, b string) string {
 	if a != "" {
 		return a
