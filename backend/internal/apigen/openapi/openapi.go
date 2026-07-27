@@ -225,8 +225,15 @@ func operationFor(e schema.Entity, model string, op schema.APIOp) *Operation {
 		RequiredActions: op.Requires,
 		Responses:       responsesFor(model, op.Op),
 	}
+	var desc []string
 	if len(op.Requires) > 0 {
-		o.Description = "Requires workspace action(s): " + strings.Join(op.Requires, ", ") + "."
+		desc = append(desc, "Requires workspace action(s): "+strings.Join(op.Requires, ", ")+".")
+	}
+	if op.Op == "list" {
+		desc = append(desc, filterFieldsDoc(e))
+	}
+	if len(desc) > 0 {
+		o.Description = strings.Join(desc, "\n\n")
 	}
 	switch op.Op {
 	case "get", "update", "delete":
@@ -374,20 +381,98 @@ func listParams(e schema.Entity) []Parameter {
 // operators, the comparison/string/null operators, the filterable fields, and
 // worked examples built from the entity's own columns.
 func filterDoc(e schema.Entity) string {
-	var fields []string
-	for _, f := range e.Fields {
-		if f.Exposed {
-			fields = append(fields, f.Name)
-		}
-	}
 	var b strings.Builder
 	b.WriteString("OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. ")
 	b.WriteString("Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. ")
-	b.WriteString("Filterable fields: " + strings.Join(fields, ", ") + ".")
+	b.WriteString("See the endpoint description for the filterable fields and their types.")
 	if ex := filterExamples(e); len(ex) > 0 {
 		b.WriteString(" Examples: " + strings.Join(ex, " · "))
 	}
 	return b.String()
+}
+
+// filterFieldsDoc is the markdown table of an entity's filterable fields — name,
+// type (with enum values), and the OData operators that apply — rendered in the
+// list endpoint description so a caller knows exactly what is queryable.
+func filterFieldsDoc(e schema.Entity) string {
+	var b strings.Builder
+	b.WriteString("**Filterable fields**\n\n")
+	b.WriteString("| Field | Type | Operators |\n|---|---|---|\n")
+	for _, f := range e.Fields {
+		if !f.Exposed {
+			continue
+		}
+		b.WriteString("| `" + f.Name + "` | " + typeLabel(f) + " | " + strings.Join(odataOps(f), ", ") + " |\n")
+	}
+	return b.String()
+}
+
+// typeLabel is a human type name for a field, with any @app.values enum inline.
+func typeLabel(f schema.Field) string {
+	var t string
+	switch f.Kind {
+	case schema.KindUUID:
+		t = "uuid"
+	case schema.KindTime:
+		t = "date-time"
+	case schema.KindInt:
+		t = "integer"
+	case schema.KindBool:
+		t = "boolean"
+	case schema.KindJSON:
+		t = "json"
+	case schema.KindInet:
+		t = "ip"
+	default:
+		t = "string"
+	}
+	if len(f.Values) > 0 {
+		t += " (" + strings.Join(f.Values, ", ") + ")"
+	}
+	return t
+}
+
+// odataOps maps a field's operator set (the shared FilterOperators taxonomy) to
+// the OData tokens a caller writes. Null checks are omitted — they're universal
+// and covered by the grammar legend (`field eq null` / `field ne null`).
+func odataOps(f schema.Field) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(ss ...string) {
+		for _, s := range ss {
+			if !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
+	}
+	for _, op := range schema.FilterOperators(f) {
+		switch op {
+		case "eq":
+			add("eq")
+		case "ne":
+			add("ne")
+		case "lt":
+			add("lt")
+		case "lte":
+			add("le")
+		case "gt":
+			add("gt")
+		case "gte":
+			add("ge")
+		case "in":
+			add("in")
+		case "nin":
+			add("not in")
+		case "like", "ilike":
+			add("contains", "startswith", "endswith")
+		case "contains":
+			add("contains")
+		case "is_null", "not_null":
+			// universal; covered by the grammar legend
+		}
+	}
+	return out
 }
 
 // filterExamples builds one AND and one OR/NOT example from the entity's first
