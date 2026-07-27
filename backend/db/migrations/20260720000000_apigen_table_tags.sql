@@ -31,10 +31,10 @@ COMMENT ON COLUMN audit.event.occurred_at        IS 'When the event occurred (ev
 COMMENT ON COLUMN audit.event.recorded_at        IS 'When the event was recorded; may lag occurred_at.';
 COMMENT ON COLUMN audit.event.domain             IS 'Domain of the action. @app.values [query, auth, iam, datasource]';
 COMMENT ON COLUMN audit.event.action             IS 'Action performed, within its domain — e.g. executed, login, permission.upserted.';
-COMMENT ON COLUMN audit.event.principal_id       IS 'Identifier of the principal that performed the action.';
-COMMENT ON COLUMN audit.event.principal_type     IS 'Type of principal. @app.values [user, api_key]';
-COMMENT ON COLUMN audit.event.target_id          IS 'Identifier of the target the action was performed on.';
-COMMENT ON COLUMN audit.event.target_type        IS 'Type of target. @app.values [permission, role, user, datasource]';
+COMMENT ON COLUMN audit.event.principal_id       IS 'Identifier of the principal.';
+COMMENT ON COLUMN audit.event.principal_type     IS 'Type of the principal that performed the action. @app.values [user, api_key]';
+COMMENT ON COLUMN audit.event.target_id          IS 'Identifier of the target.';
+COMMENT ON COLUMN audit.event.target_type        IS 'Type of the target the action was performed on. @app.values [permission, role, user, datasource]';
 COMMENT ON COLUMN audit.event.target_label       IS 'Label of the target at the time of the event.';
 COMMENT ON COLUMN audit.event.status             IS 'Outcome of the action. @app.values [success, error, failure, denied]';
 COMMENT ON COLUMN audit.event.payload            IS 'Domain-specific details of the event.';
