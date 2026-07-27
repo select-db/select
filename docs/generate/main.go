@@ -126,7 +126,13 @@ const apiReferencePageTmpl = `<!doctype html>
       --scalar-font-code: ui-monospace, monospace;
       --scalar-radius: var(--br-sm);
       --scalar-radius-lg: var(--br-md);
+      /* Match the docs body size so generated endpoint descriptions (and the
+         filterable-fields tables inside them) read at the same scale as the
+         doc pages. Scalar's own heading/sidebar/code scale is left untouched. */
+      --scalar-paragraph: var(--fs-body);
     }
+    /* --fs-body lives in docs.css, not .theme; redeclare it for this standalone page. */
+    :root { --fs-body: 1.0625rem; }
     html, body { height: 100%; }
     body { margin: 0; background: var(--gray-100); color: var(--gray-1000); }
     #app { height: 100%; }
