@@ -13,7 +13,7 @@ import (
 
 func TestMain(m *testing.M) { e2e.Run(m) }
 
-func attachRole(t *testing.T, f e2e.Fixture) (groupID, gtrID string) {
+func grantGroupRole(t *testing.T, f e2e.Fixture) (groupID, gtrID string) {
 	t.Helper()
 	groupID = uuid.NewString()
 	e2e.SyncCommit(t, f.H, f.Actor, "create", "group", groupID, map[string]any{"id": groupID, "name": "Eng"})
@@ -26,13 +26,13 @@ func attachRole(t *testing.T, f e2e.Fixture) (groupID, gtrID string) {
 
 func TestAudit_GroupRoleGranted(t *testing.T) {
 	f := e2e.Setup(t)
-	attachRole(t, f)
+	grantGroupRole(t, f)
 	e2e.RequireEvent(t, f.Conn, "iam", "group.role.grant")
 }
 
 func TestAudit_GroupRoleRevoked(t *testing.T) {
 	f := e2e.Setup(t)
-	_, gtrID := attachRole(t, f)
+	_, gtrID := grantGroupRole(t, f)
 	e2e.SyncCommit(t, f.H, f.Actor, "delete", "group_to_role", gtrID, map[string]any{"id": gtrID})
 	e2e.RequireEvent(t, f.Conn, "iam", "group.role.revoke")
 }
