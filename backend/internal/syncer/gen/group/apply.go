@@ -72,7 +72,11 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		},
 	})
 	if res.Applied {
-		audit.EmitChange(ctx, audit.GroupUpserted, c.WorkspaceID, id, res.Before, res.After)
+		spec := audit.GroupCreated
+		if !res.Created {
+			spec = audit.GroupUpdated
+		}
+		audit.EmitChange(ctx, spec, c.WorkspaceID, id, res.Before, res.After)
 	}
 	return res.Applied, res.Restored, err
 }

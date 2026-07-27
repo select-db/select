@@ -57,17 +57,25 @@ var (
 	}
 
 	// iam - Identity & Access Management. Privilege and account changes.
-	PermissionUpserted = Spec{
-		Domain: DomainIAM, Action: ActionPermissionUpserted, Lane: LaneOutbox, TargetType: "permission",
-		Doc: "a permission rule was created or updated through the syncer",
+	PermissionCreated = Spec{
+		Domain: DomainIAM, Action: ActionPermissionCreated, Lane: LaneOutbox, TargetType: "permission",
+		Doc: "a permission rule was created through the syncer",
+	}
+	PermissionUpdated = Spec{
+		Domain: DomainIAM, Action: ActionPermissionUpdated, Lane: LaneOutbox, TargetType: "permission",
+		Doc: "a permission rule was updated through the syncer",
 	}
 	PermissionDeleted = Spec{
 		Domain: DomainIAM, Action: ActionPermissionDeleted, Lane: LaneOutbox, TargetType: "permission",
 		Doc: "a permission rule was deleted",
 	}
-	RoleUpserted = Spec{
-		Domain: DomainIAM, Action: ActionRoleUpserted, Lane: LaneOutbox, TargetType: "role",
-		Doc: "a role was created or updated",
+	RoleCreated = Spec{
+		Domain: DomainIAM, Action: ActionRoleCreated, Lane: LaneOutbox, TargetType: "role",
+		Doc: "a role was created",
+	}
+	RoleUpdated = Spec{
+		Domain: DomainIAM, Action: ActionRoleUpdated, Lane: LaneOutbox, TargetType: "role",
+		Doc: "a role was updated",
 	}
 	RoleDeleted = Spec{
 		Domain: DomainIAM, Action: ActionRoleDeleted, Lane: LaneOutbox, TargetType: "role",
@@ -89,9 +97,13 @@ var (
 		Domain: DomainIAM, Action: ActionWorkspaceUserRemoved, Lane: LaneOutbox, TargetType: "user",
 		Doc: "a user was removed from a workspace",
 	}
-	GroupUpserted = Spec{
-		Domain: DomainIAM, Action: ActionGroupUpserted, Lane: LaneOutbox, TargetType: "group",
-		Doc: "a group was created or renamed",
+	GroupCreated = Spec{
+		Domain: DomainIAM, Action: ActionGroupCreated, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a group was created",
+	}
+	GroupUpdated = Spec{
+		Domain: DomainIAM, Action: ActionGroupUpdated, Lane: LaneOutbox, TargetType: "group",
+		Doc: "a group was updated (e.g. renamed)",
 	}
 	GroupDeleted = Spec{
 		Domain: DomainIAM, Action: ActionGroupDeleted, Lane: LaneOutbox, TargetType: "group",
@@ -139,9 +151,13 @@ var (
 	}
 
 	// datasource - connection lifecycle. Sensitive: DSNs can redirect data.
-	DatasourceUpserted = Spec{
-		Domain: DomainDatasource, Action: ActionDatasourceUpserted, Lane: LaneOutbox, TargetType: "datasource",
-		Doc: "a datasource was created or its connection config changed",
+	DatasourceCreated = Spec{
+		Domain: DomainDatasource, Action: ActionDatasourceCreated, Lane: LaneOutbox, TargetType: "datasource",
+		Doc: "a datasource was created",
+	}
+	DatasourceUpdated = Spec{
+		Domain: DomainDatasource, Action: ActionDatasourceUpdated, Lane: LaneOutbox, TargetType: "datasource",
+		Doc: "a datasource's connection config was changed",
 	}
 	DatasourceDeleted = Spec{
 		Domain: DomainDatasource, Action: ActionDatasourceDeleted, Lane: LaneOutbox, TargetType: "datasource",
@@ -154,15 +170,15 @@ var (
 var Catalog = []Spec{
 	QueryExecuted,
 	AuthLogin, AuthLoginFailed, AuthTokenRefreshed,
-	PermissionUpserted, PermissionDeleted,
-	RoleUpserted, RoleDeleted, UserRoleGranted, UserRoleRevoked,
+	PermissionCreated, PermissionUpdated, PermissionDeleted,
+	RoleCreated, RoleUpdated, RoleDeleted, UserRoleGranted, UserRoleRevoked,
 	WorkspaceUserAdded, WorkspaceUserRemoved,
-	GroupUpserted, GroupDeleted,
+	GroupCreated, GroupUpdated, GroupDeleted,
 	GroupUserAdded, GroupUserRemoved,
 	GroupRoleGranted, GroupRoleRevoked,
 	WorkspaceCreated, WorkspaceDeleted,
 	APIKeyCreated, APIKeyRotated, APIKeyRevoked, APIKeySetRoles,
-	DatasourceUpserted, DatasourceDeleted,
+	DatasourceCreated, DatasourceUpdated, DatasourceDeleted,
 }
 
 // registered lets Emit flag an unregistered spec in dev.

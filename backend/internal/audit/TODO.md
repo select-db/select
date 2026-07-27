@@ -2,15 +2,15 @@
 
 Foundation merged: unified `audit.event` (partitioned by domain × month),
 async + outbox lanes, principal snapshots, catalog/`Emit`, pg_partman/pg_cron
-lifecycle. Live emit sites: `query.executed`, `iam.permission.upserted`.
+lifecycle. Live emit sites: `query.executed`, `iam.permission.lifecycle.*`.
 
 ## Wire remaining emit sites (vocabulary already declared in catalog.go)
 - [ ] query: `denied`, `exported` (dump path)
 - [ ] auth: `login`, `login_failed`, `token_refreshed`, `logout`
-- [ ] iam: `permission.deleted`, `role.upserted/deleted`,
-      `workspace.user_membership.add/remove`, `workspace.created/deleted`,
-      `api_key.created/rotated/revoked`
-- [ ] datasource: `upserted`, `deleted`
+- [ ] iam: `role.lifecycle.create/update/delete`,
+      `workspace.user_membership.add/remove`, `workspace.lifecycle.create/delete`,
+      `api_key.lifecycle.create/rotate/revoke`
+- [ ] datasource: `created/updated`, `deleted`
 
 ## Larger pieces
 - [ ] Read API + `audit:read` authz + frontend (the consumption surface; nothing yet)

@@ -7,19 +7,22 @@ package syncer
 // there's a single place to validate.
 
 // auditDescriptor maps a synced table to its audit event taxonomy: the change
-// spec emitted on apply (upsert) and on delete, plus the column whose value is
-// the audit target id (the row's own id, or the FK a junction row is "about").
-// The audit taxonomy lives in the audit package, not the SQL schema.
-type auditDescriptor struct{ Apply, Delete, TargetCol string }
+// spec emitted when an apply inserts a row (Create) vs. updates one (Update),
+// the spec emitted on delete, plus the column whose value is the audit target id
+// (the row's own id, or the FK a junction row is "about"). A lifecycle entity
+// splits Create/Update (role.lifecycle.create vs update); a junction row has no
+// "update" state, so Create == Update names the single grant/add event either
+// way. The audit taxonomy lives in the audit package, not the SQL schema.
+type auditDescriptor struct{ Create, Update, Delete, TargetCol string }
 
 var auditSpecs = map[string]auditDescriptor{
-	"role":              {"audit.RoleUpserted", "audit.RoleDeleted", "id"},
-	"permission":        {"audit.PermissionUpserted", "audit.PermissionDeleted", "id"},
-	"group":             {"audit.GroupUpserted", "audit.GroupDeleted", "id"},
-	"user_to_role":      {"audit.UserRoleGranted", "audit.UserRoleRevoked", "user_id"},
-	"workspace_to_user": {"audit.WorkspaceUserAdded", "audit.WorkspaceUserRemoved", "user_id"},
-	"user_to_group":     {"audit.GroupUserAdded", "audit.GroupUserRemoved", "group_id"},
-	"group_to_role":     {"audit.GroupRoleGranted", "audit.GroupRoleRevoked", "group_id"},
+	"role":              {"audit.RoleCreated", "audit.RoleUpdated", "audit.RoleDeleted", "id"},
+	"permission":        {"audit.PermissionCreated", "audit.PermissionUpdated", "audit.PermissionDeleted", "id"},
+	"group":             {"audit.GroupCreated", "audit.GroupUpdated", "audit.GroupDeleted", "id"},
+	"user_to_role":      {"audit.UserRoleGranted", "audit.UserRoleGranted", "audit.UserRoleRevoked", "user_id"},
+	"workspace_to_user": {"audit.WorkspaceUserAdded", "audit.WorkspaceUserAdded", "audit.WorkspaceUserRemoved", "user_id"},
+	"user_to_group":     {"audit.GroupUserAdded", "audit.GroupUserAdded", "audit.GroupUserRemoved", "group_id"},
+	"group_to_role":     {"audit.GroupRoleGranted", "audit.GroupRoleGranted", "audit.GroupRoleRevoked", "group_id"},
 }
 
 // actionConst maps an @app.api `requires` value to the core.Action constant it

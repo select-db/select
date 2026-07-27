@@ -27,7 +27,8 @@ Each event records that a **principal** performed an **action** (within a
 
 The full identity of an event is `domain.action`. Single-subject domains
 (`query`, `datasource`) use a bare verb; `iam` uses a dotted `object.action`
-hierarchy (the same shape as Okta's System Log): memberships are
+hierarchy (the same shape as Okta's System Log): lifecycle changes are
+`<object>.lifecycle.create` / `update` / `delete`, memberships are
 `<container>.user_membership.add` / `remove`, and role grants are
 `<subject>.role.grant` / `revoke`.
 
@@ -46,21 +47,21 @@ existing ones are never renamed, so you can rely on these values in filters.
 
 | Action | Meaning |
 |--------|---------|
-| `permission.upserted` / `permission.deleted` | A permission rule was created or updated / removed. |
-| `role.upserted` / `role.deleted` | A role was created or updated / removed. |
+| `permission.lifecycle.create` / `update` / `delete` | A permission rule was created / updated / removed. |
+| `role.lifecycle.create` / `update` / `delete` | A role was created / updated / removed. |
 | `user.role.grant` / `user.role.revoke` | A role was granted to / revoked from a user. |
 | `workspace.user_membership.add` / `workspace.user_membership.remove` | A user was added to / removed from the workspace. |
-| `group.upserted` / `group.deleted` | A group was created or updated / removed. |
+| `group.lifecycle.create` / `update` / `delete` | A group was created / updated / removed. |
 | `group.user_membership.add` / `group.user_membership.remove` | A user was added to / removed from a group. |
 | `group.role.grant` / `group.role.revoke` | A role was granted to / revoked from a group. |
-| `workspace.created` / `workspace.deleted` | The workspace was created / removed. |
-| `api_key.created` / `api_key.rotated` / `api_key.revoked` / `api_key.set_roles` | An API key was created / rotated / revoked / had its roles set. |
+| `workspace.lifecycle.create` / `delete` | The workspace was created / removed. |
+| `api_key.lifecycle.create` / `rotate` / `revoke` / `api_key.role.set` | An API key was created / rotated / revoked / had its roles set. |
 
 ### datasource
 
 | Action | Meaning |
 |--------|---------|
-| `upserted` | A datasource was created, or its connection config changed. |
+| `created` / `updated` | A datasource was created / its connection config was changed. |
 | `deleted` | A datasource was removed. |
 
 ## Querying the log

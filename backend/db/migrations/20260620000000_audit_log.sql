@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS audit.event (
     occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when the event happened (set by the app)
     recorded_at        TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when the row was persisted (set by the DB); lags occurred_at via the async/outbox lanes
     domain             TEXT        NOT NULL,      -- 'query' | 'auth' | 'iam' | 'datasource'
-    action             TEXT        NOT NULL,      -- 'executed', 'permission.upserted', 'login', ...
+    action             TEXT        NOT NULL,      -- 'executed', 'permission.lifecycle.create', 'login', ...
     
     principal_hash     BYTEA       NOT NULL REFERENCES audit.principal_snapshot(snapshot_hash),
     principal_id       UUID,                      -- denormalized actor id, for filtering events "by user"

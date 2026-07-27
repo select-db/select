@@ -31,8 +31,9 @@ const (
 // closed vocabulary consumers' SOC/SIEM rules key on, so it's an external
 // contract: add actions, never rename or repurpose. Single-subject domains
 // (query, auth, datasource) use a bare verb. iam follows the Okta System Log
-// convention of a dotted object.action hierarchy: lifecycle is <object>.<verb>
-// (role.upserted, permission.deleted); memberships are
+// convention of a dotted object.action hierarchy: lifecycle is
+// <object>.lifecycle.<create|update|delete> (role.lifecycle.create,
+// permission.lifecycle.delete); memberships are
 // <container>.user_membership.<add|remove>; role grants are
 // <subject>.role.<grant|revoke>.
 const (
@@ -45,30 +46,34 @@ const (
 	ActionTokenRefreshed = "token_refreshed"
 
 	// iam
-	ActionPermissionUpserted   = "permission.upserted"
-	ActionPermissionDeleted    = "permission.deleted"
-	ActionRoleUpserted         = "role.upserted"
-	ActionRoleDeleted          = "role.deleted"
+	ActionPermissionCreated    = "permission.lifecycle.create"
+	ActionPermissionUpdated    = "permission.lifecycle.update"
+	ActionPermissionDeleted    = "permission.lifecycle.delete"
+	ActionRoleCreated          = "role.lifecycle.create"
+	ActionRoleUpdated          = "role.lifecycle.update"
+	ActionRoleDeleted          = "role.lifecycle.delete"
 	ActionUserRoleGranted      = "user.role.grant"  // a role granted directly to a user
-	ActionUserRoleRevoked      = "user.role.revoke" // a direct user-role grant removed
+	ActionUserRoleRevoked      = "user.role.revoke" // a direct user-role grant revoked
 	ActionWorkspaceUserAdded   = "workspace.user_membership.add"
 	ActionWorkspaceUserRemoved = "workspace.user_membership.remove"
-	ActionGroupUpserted        = "group.upserted"
-	ActionGroupDeleted         = "group.deleted"
+	ActionGroupCreated         = "group.lifecycle.create"
+	ActionGroupUpdated         = "group.lifecycle.update"
+	ActionGroupDeleted         = "group.lifecycle.delete"
 	ActionGroupUserAdded       = "group.user_membership.add"
 	ActionGroupUserRemoved     = "group.user_membership.remove"
 	ActionGroupRoleGranted     = "group.role.grant"
 	ActionGroupRoleRevoked     = "group.role.revoke"
-	ActionWorkspaceCreated     = "workspace.created"
-	ActionWorkspaceDeleted     = "workspace.deleted"
-	ActionAPIKeyCreated        = "api_key.created"
-	ActionAPIKeyRotated        = "api_key.rotated"
-	ActionAPIKeyRevoked        = "api_key.revoked"
-	ActionAPIKeySetRoles       = "api_key.set_roles"
+	ActionWorkspaceCreated     = "workspace.lifecycle.create"
+	ActionWorkspaceDeleted     = "workspace.lifecycle.delete"
+	ActionAPIKeyCreated        = "api_key.lifecycle.create"
+	ActionAPIKeyRotated        = "api_key.lifecycle.rotate"
+	ActionAPIKeyRevoked        = "api_key.lifecycle.revoke"
+	ActionAPIKeySetRoles       = "api_key.role.set"
 
 	// datasource
-	ActionDatasourceUpserted = "upserted" // created or connection config changed
-	ActionDatasourceDeleted  = "deleted"
+	ActionDatasourceCreated = "created"
+	ActionDatasourceUpdated = "updated"
+	ActionDatasourceDeleted = "deleted"
 )
 
 type Target struct {

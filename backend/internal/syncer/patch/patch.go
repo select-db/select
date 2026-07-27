@@ -38,9 +38,12 @@ type Handler[Row any, Params any] struct {
 // Result reports what Apply did so the caller can react — e.g. emit an audit
 // event — without Apply itself knowing about those concerns. Before/After are the
 // row state around the write and are set only when Applied (Before is nil on an
-// insert); Restored is set only when the server won and the client must revert.
+// insert); Created distinguishes an insert from an update so the caller can pick
+// the right lifecycle event; Restored is set only when the server won and the
+// client must revert.
 type Result struct {
 	Applied  bool
+	Created  bool
 	Restored *types.RestoredItem
 	Before   any
 	After    any
@@ -108,5 +111,5 @@ func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[R
 	if !isNew {
 		before = existing
 	}
-	return Result{Applied: true, Before: before, After: params}, nil
+	return Result{Applied: true, Created: isNew, Before: before, After: params}, nil
 }

@@ -36,7 +36,7 @@ func createAPIKey(t *testing.T, f e2e.Fixture) string {
 func TestAudit_APIKeyCreated(t *testing.T) {
 	f := e2e.Setup(t)
 	createAPIKey(t, f)
-	e2e.RequireEvent(t, f.Conn, "iam", "api_key.created")
+	e2e.RequireEvent(t, f.Conn, "iam", "api_key.lifecycle.create")
 }
 
 func TestAudit_APIKeyRotated(t *testing.T) {
@@ -46,7 +46,7 @@ func TestAudit_APIKeyRotated(t *testing.T) {
 		"workspace_id": f.Actor.WorkspaceID, "id": id,
 	})
 	require.Equalf(t, http.StatusOK, rec.Code, "rotate failed: %s", rec.Body.String())
-	e2e.RequireEvent(t, f.Conn, "iam", "api_key.rotated")
+	e2e.RequireEvent(t, f.Conn, "iam", "api_key.lifecycle.rotate")
 }
 
 func TestAudit_APIKeyRevoked(t *testing.T) {
@@ -56,7 +56,7 @@ func TestAudit_APIKeyRevoked(t *testing.T) {
 		"workspace_id": f.Actor.WorkspaceID, "id": id,
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "revoke failed: %s", rec.Body.String())
-	e2e.RequireEvent(t, f.Conn, "iam", "api_key.revoked")
+	e2e.RequireEvent(t, f.Conn, "iam", "api_key.lifecycle.revoke")
 }
 
 // nonManagerToken mints a token for a workspace member with no owner rights and
@@ -78,7 +78,7 @@ func TestAudit_APIKeyCreateDenied(t *testing.T) {
 		"role_ids":     []string{f.Actor.RoleID},
 	})
 	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())
-	e2e.RequireEventStatus(t, f.Conn, "iam", "api_key.created", "denied")
+	e2e.RequireEventStatus(t, f.Conn, "iam", "api_key.lifecycle.create", "denied")
 }
 
 func TestAudit_APIKeySetRoles(t *testing.T) {
@@ -88,5 +88,5 @@ func TestAudit_APIKeySetRoles(t *testing.T) {
 		"workspace_id": f.Actor.WorkspaceID, "id": id, "role_ids": []string{f.Actor.RoleID},
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "set-roles failed: %s", rec.Body.String())
-	e2e.RequireEvent(t, f.Conn, "iam", "api_key.set_roles")
+	e2e.RequireEvent(t, f.Conn, "iam", "api_key.role.set")
 }
