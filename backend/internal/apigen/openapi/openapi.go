@@ -370,7 +370,7 @@ func listParams(e schema.Entity) []Parameter {
 		{Name: "sort", In: "query", Description: "Sort expression, e.g. \"-updated_at\".", Schema: &Schema{Type: "string"}},
 	}
 	for _, f := range e.Fields {
-		if !f.Filterable {
+		if !f.Exposed {
 			continue
 		}
 		ops := schema.FilterOperators(f)
