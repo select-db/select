@@ -25,20 +25,14 @@
         {
           "name": "id",
           "type": "uuid",
-          "operators": [
-            "eq",
-            "ne",
-            "in",
-            "nin",
-            "is_null",
-            "not_null"
-          ],
+          "filterable": false,
           "sortable": true,
           "selectable": true
         },
         {
           "name": "name",
           "type": "text",
+          "filterable": true,
           "operators": [
             "eq",
             "ne",
@@ -55,18 +49,7 @@
         {
           "name": "updated_at",
           "type": "time",
-          "operators": [
-            "eq",
-            "ne",
-            "lt",
-            "lte",
-            "gt",
-            "gte",
-            "in",
-            "nin",
-            "is_null",
-            "not_null"
-          ],
+          "filterable": false,
           "sortable": true,
           "selectable": true
         }

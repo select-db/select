@@ -29,6 +29,7 @@ const (
 	TenantColumn     = "workspace_id" // FK to workspace — the tenant scope
 	CursorColumn     = "updated_at"   // last-write-wins cursor
 	SoftDeleteColumn = "deleted_at"   // soft-delete marker
+	IDColumn         = "id"           // surrogate primary key
 )
 
 func kindOf(sqlType string) Kind {
@@ -92,8 +93,12 @@ type Field struct {
 	Patchable bool
 	// Exposed is false for the tenant and soft-delete columns (always enforced
 	// server-side, never selectable/filterable) and for @app.hide columns.
-	Exposed   bool
-	Hidden    bool     `json:",omitempty"`
+	Exposed bool
+	// Filterable is Exposed minus the technical columns (cursor, surrogate id)
+	// that shouldn't be offered as query filters. Business columns and FKs stay
+	// filterable, as do meaningful columns that happen to be in a composite PK.
+	Filterable bool
+	Hidden     bool     `json:",omitempty"`
 	Values    []string `json:",omitempty"`
 	JSONPaths []string `json:",omitempty"`
 	Ops       []string `json:",omitempty"`
@@ -174,6 +179,9 @@ func Build(s RawSchema) ([]Entity, []error) {
 			// Tenant + soft-delete are enforced by the engine (workspace_id =
 			// caller, deleted_at IS NULL), so they are never client-visible.
 			f.Exposed = !f.Hidden && c.Name != TenantColumn && c.Name != SoftDeleteColumn
+			// Filterable drops the technical columns (cursor, surrogate id) that
+			// are exposed but shouldn't be query filters.
+			f.Filterable = f.Exposed && c.Name != CursorColumn && c.Name != IDColumn
 			e.Fields = append(e.Fields, f)
 		}
 
