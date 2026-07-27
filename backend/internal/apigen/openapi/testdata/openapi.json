@@ -32,7 +32,7 @@
           "permission"
         ],
         "summary": "List permissions",
-        "description": "**Filterable fields**\n\n| Field | Type | Operators |\n|---|---|---|\n| `id` | uuid | eq, ne, in, not in |\n| `role_id` | uuid | eq, ne, in, not in |\n| `db_instance_id` | string | eq, ne, in, not in, contains, startswith, endswith |\n| `schema_name` | string | eq, ne, in, not in, contains, startswith, endswith |\n| `table_name` | string | eq, ne, in, not in, contains, startswith, endswith |\n| `column_name` | string | eq, ne, in, not in, contains, startswith, endswith |\n| `action` | string | eq, ne, in, not in, contains, startswith, endswith |\n| `effect` | string | eq, ne, in, not in, contains, startswith, endswith |\n| `updated_at` | date-time | eq, ne, lt, le, gt, ge, in, not in |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description | Operators |\n|---|---|---|---|\n| `id` | uuid |  | eq, ne, in, not in |\n| `role_id` | uuid |  | eq, ne, in, not in |\n| `db_instance_id` | string |  | eq, ne, in, not in, contains, startswith, endswith |\n| `schema_name` | string |  | eq, ne, in, not in, contains, startswith, endswith |\n| `table_name` | string |  | eq, ne, in, not in, contains, startswith, endswith |\n| `column_name` | string |  | eq, ne, in, not in, contains, startswith, endswith |\n| `action` | string |  | eq, ne, in, not in, contains, startswith, endswith |\n| `effect` | string |  | eq, ne, in, not in, contains, startswith, endswith |\n| `updated_at` | date-time |  | eq, ne, lt, le, gt, ge, in, not in |\n",
         "operationId": "listPermission",
         "parameters": [
           {
@@ -360,7 +360,7 @@
           "role"
         ],
         "summary": "List roles",
-        "description": "**Filterable fields**\n\n| Field | Type | Operators |\n|---|---|---|\n| `id` | uuid | eq, ne, in, not in |\n| `name` | string | eq, ne, in, not in, contains, startswith, endswith |\n| `updated_at` | date-time | eq, ne, lt, le, gt, ge, in, not in |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description | Operators |\n|---|---|---|---|\n| `id` | uuid |  | eq, ne, in, not in |\n| `name` | string |  | eq, ne, in, not in, contains, startswith, endswith |\n| `updated_at` | date-time |  | eq, ne, lt, le, gt, ge, in, not in |\n",
         "operationId": "listRole",
         "parameters": [
           {

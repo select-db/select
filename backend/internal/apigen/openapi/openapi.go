@@ -282,6 +282,7 @@ func responseSchema(e schema.Entity) *Schema {
 			continue
 		}
 		fs := fieldSchema(f)
+		fs.Description = f.Description
 		if f.IsPK || f.Column == schema.CursorColumn {
 			fs.ReadOnly = true
 		}
@@ -397,14 +398,20 @@ func filterDoc(e schema.Entity) string {
 func filterFieldsDoc(e schema.Entity) string {
 	var b strings.Builder
 	b.WriteString("**Filterable fields**\n\n")
-	b.WriteString("| Field | Type | Operators |\n|---|---|---|\n")
+	b.WriteString("| Field | Type | Description | Operators |\n|---|---|---|---|\n")
 	for _, f := range e.Fields {
 		if !f.Exposed {
 			continue
 		}
-		b.WriteString("| `" + f.Name + "` | " + typeLabel(f) + " | " + strings.Join(odataOps(f), ", ") + " |\n")
+		b.WriteString("| `" + f.Name + "` | " + typeLabel(f) + " | " + mdCell(f.Description) + " | " + strings.Join(odataOps(f), ", ") + " |\n")
 	}
 	return b.String()
+}
+
+// mdCell makes a string safe inside a one-line markdown table cell.
+func mdCell(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.ReplaceAll(s, "|", "\\|")
 }
 
 // typeLabel is a human type name for a field, with any @app.values enum inline.

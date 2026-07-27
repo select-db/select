@@ -149,6 +149,7 @@ func TestReadOnlyLogEntity(t *testing.T) {
 			{Name: "workspace_id", DataType: "uuid"},
 			{Name: "occurred_at", DataType: "timestamptz", NotNull: true},
 			{Name: "action", DataType: "text", NotNull: true},
+			{Name: "status", DataType: "text", NotNull: true, Comment: "Outcome. @app.values [success, error, denied]"},
 			{Name: "principal_hash", DataType: "bytea", NotNull: true, Comment: "@app.hide"},
 			{Name: "payload", DataType: "jsonb", NotNull: true},
 			{Name: "client_ip", DataType: "inet"},
@@ -197,6 +198,17 @@ func TestReadOnlyLogEntity(t *testing.T) {
 	}
 	if props["payload"] == nil || props["payload"].Type != "object" {
 		t.Fatalf("payload (jsonb) should be an object, got %+v", props["payload"])
+	}
+	// Enum shows in the field type; the comment prose becomes the description
+	// (both in the list table and the response schema property).
+	listDesc := doc.Paths["/logs"].Get.Description
+	for _, want := range []string{"Outcome.", "string (success, error, denied)"} {
+		if !strings.Contains(listDesc, want) {
+			t.Fatalf("list description should include %q, got:\n%s", want, listDesc)
+		}
+	}
+	if got := props["status"].Description; got != "Outcome." {
+		t.Fatalf("status property description = %q, want %q", got, "Outcome.")
 	}
 }
 
