@@ -75,11 +75,11 @@ var (
 	}
 	UserRoleGranted = Spec{
 		Domain: DomainIAM, Action: ActionUserRoleGranted, Lane: LaneOutbox, TargetType: "user",
-		Doc: "a role was assigned directly to a user (user_to_role)",
+		Doc: "a role was granted directly to a user (user_to_role)",
 	}
 	UserRoleRevoked = Spec{
 		Domain: DomainIAM, Action: ActionUserRoleRevoked, Lane: LaneOutbox, TargetType: "user",
-		Doc: "a role assigned directly to a user was removed",
+		Doc: "a role granted directly to a user was revoked",
 	}
 	WorkspaceUserAdded = Spec{
 		Domain: DomainIAM, Action: ActionWorkspaceUserAdded, Lane: LaneOutbox, TargetType: "user",
@@ -107,11 +107,11 @@ var (
 	}
 	GroupRoleGranted = Spec{
 		Domain: DomainIAM, Action: ActionGroupRoleGranted, Lane: LaneOutbox, TargetType: "group",
-		Doc: "a role was attached to a group (grants the role to all members)",
+		Doc: "a role was granted to a group (grants the role to every user in the group)",
 	}
 	GroupRoleRevoked = Spec{
 		Domain: DomainIAM, Action: ActionGroupRoleRevoked, Lane: LaneOutbox, TargetType: "group",
-		Doc: "a role was detached from a group",
+		Doc: "a role was revoked from a group",
 	}
 	WorkspaceCreated = Spec{
 		Domain: DomainIAM, Action: ActionWorkspaceCreated, Lane: LaneOutbox, TargetType: "workspace",

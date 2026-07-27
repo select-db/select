@@ -14,9 +14,9 @@ import (
 
 func TestMain(m *testing.M) { e2e.Run(m) }
 
-// assignRole seeds a fresh user and grants it the actor's role, returning the new
-// user id and the user_to_role row id.
-func assignRole(t *testing.T, f e2e.Fixture) (userID, utrID string) {
+// grantUserRole seeds a fresh user and grants it the actor's role, returning the
+// new user id and the user_to_role row id.
+func grantUserRole(t *testing.T, f e2e.Fixture) (userID, utrID string) {
 	t.Helper()
 	userID = uuid.NewString()
 	e2e.SeedUser(t, f.Conn, userID)
@@ -29,13 +29,13 @@ func assignRole(t *testing.T, f e2e.Fixture) (userID, utrID string) {
 
 func TestAudit_UserRoleGranted(t *testing.T) {
 	f := e2e.Setup(t)
-	assignRole(t, f)
+	grantUserRole(t, f)
 	e2e.RequireEvent(t, f.Conn, "iam", "user.role.grant")
 }
 
 func TestAudit_UserRoleRevoked(t *testing.T) {
 	f := e2e.Setup(t)
-	_, utrID := assignRole(t, f)
+	_, utrID := grantUserRole(t, f)
 	e2e.SyncCommit(t, f.H, f.Actor, "delete", "user_to_role", utrID, map[string]any{"id": utrID})
 	e2e.RequireEvent(t, f.Conn, "iam", "user.role.revoke")
 }
