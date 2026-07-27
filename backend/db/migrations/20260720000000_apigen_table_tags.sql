@@ -22,32 +22,36 @@ COMMENT ON TABLE audit.event IS '@app.entity log @app.api.list|get requires audi
 -- Column docs: a concise description (prose) plus @app.values for closed enums,
 -- so the generated API reference explains each field and its allowed values.
 -- These also feed the app's column hover docs.
+-- Vocabulary is deliberately consistent: a principal performs an action (within
+-- a domain) on a target, with a status. The same noun is reused everywhere —
+-- principal, action, target, domain, status — never a synonym.
 COMMENT ON COLUMN audit.event.principal_hash     IS '@app.hide';
-COMMENT ON COLUMN audit.event.id                 IS 'Unique event id.';
-COMMENT ON COLUMN audit.event.occurred_at        IS 'When the event happened (event time).';
-COMMENT ON COLUMN audit.event.recorded_at        IS 'When the event was persisted; may lag occurred_at.';
-COMMENT ON COLUMN audit.event.domain             IS 'Event category. @app.values [query, auth, iam, datasource]';
-COMMENT ON COLUMN audit.event.action             IS 'Action within the domain, e.g. executed, login, permission.upserted, role.assigned.';
-COMMENT ON COLUMN audit.event.principal_id       IS 'Id of the actor (user or API key).';
-COMMENT ON COLUMN audit.event.principal_type     IS 'Kind of actor. @app.values [user, api_key]';
-COMMENT ON COLUMN audit.event.target_type        IS 'Kind of object acted on. @app.values [permission, role, user, datasource]';
-COMMENT ON COLUMN audit.event.target_id          IS 'Id of the object acted on.';
-COMMENT ON COLUMN audit.event.target_label       IS 'Human label of the target at event time.';
-COMMENT ON COLUMN audit.event.status             IS 'Event outcome. @app.values [success, error, failure, denied]';
-COMMENT ON COLUMN audit.event.payload            IS 'Domain-specific event details (JSON).';
-COMMENT ON COLUMN audit.event.duration_ms        IS 'Duration in milliseconds (query events).';
-COMMENT ON COLUMN audit.event.returned_row_count IS 'Rows returned (query events).';
-COMMENT ON COLUMN audit.event.client_ip          IS 'Client IP address.';
+COMMENT ON COLUMN audit.event.id                 IS 'Unique identifier of the event.';
+COMMENT ON COLUMN audit.event.occurred_at        IS 'When the event occurred (event time).';
+COMMENT ON COLUMN audit.event.recorded_at        IS 'When the event was recorded; may lag occurred_at.';
+COMMENT ON COLUMN audit.event.domain             IS 'Domain of the action. @app.values [query, auth, iam, datasource]';
+COMMENT ON COLUMN audit.event.action             IS 'Action performed, within its domain — e.g. executed, login, permission.upserted.';
+COMMENT ON COLUMN audit.event.principal_id       IS 'Identifier of the principal that performed the action.';
+COMMENT ON COLUMN audit.event.principal_type     IS 'Type of principal. @app.values [user, api_key]';
+COMMENT ON COLUMN audit.event.target_id          IS 'Identifier of the target the action was performed on.';
+COMMENT ON COLUMN audit.event.target_type        IS 'Type of target. @app.values [permission, role, user, datasource]';
+COMMENT ON COLUMN audit.event.target_label       IS 'Label of the target at the time of the event.';
+COMMENT ON COLUMN audit.event.status             IS 'Outcome of the action. @app.values [success, error, failure, denied]';
+COMMENT ON COLUMN audit.event.payload            IS 'Domain-specific details of the event.';
+COMMENT ON COLUMN audit.event.duration_ms        IS 'Duration of the action in milliseconds (query events).';
+COMMENT ON COLUMN audit.event.returned_row_count IS 'Number of rows returned (query events).';
+COMMENT ON COLUMN audit.event.client_ip          IS 'IP address of the client.';
 
-COMMENT ON COLUMN app.permission.action         IS 'DB action governed. @app.values [select, insert, update, delete, ddl, see, manage]';
-COMMENT ON COLUMN app.permission.effect         IS 'Whether the rule allows or denies. @app.values [allow, deny]';
-COMMENT ON COLUMN app.permission.db_instance_id IS 'Target database instance; null = any.';
-COMMENT ON COLUMN app.permission.schema_name    IS 'Target schema; null = any.';
-COMMENT ON COLUMN app.permission.table_name     IS 'Target table; null = any.';
-COMMENT ON COLUMN app.permission.column_name    IS 'Target column; null = any.';
+-- A permission is a rule; consistent phrasing: "<scope> the rule applies to".
+COMMENT ON COLUMN app.permission.action         IS 'SQL action the rule applies to. @app.values [select, insert, update, delete, ddl, see, manage]';
+COMMENT ON COLUMN app.permission.effect         IS 'Whether the rule allows or denies the action. @app.values [allow, deny]';
+COMMENT ON COLUMN app.permission.db_instance_id IS 'Database instance the rule applies to; null = any.';
+COMMENT ON COLUMN app.permission.schema_name    IS 'Schema the rule applies to; null = any.';
+COMMENT ON COLUMN app.permission.table_name     IS 'Table the rule applies to; null = any.';
+COMMENT ON COLUMN app.permission.column_name    IS 'Column the rule applies to; null = any.';
 
-COMMENT ON COLUMN app."group".source      IS 'Origin of the group, e.g. local or an external provider.';
-COMMENT ON COLUMN app."group".external_id IS 'Identifier in the external provider, if sourced externally.';
+COMMENT ON COLUMN app."group".source      IS 'Origin of the group (e.g. local or an external provider).';
+COMMENT ON COLUMN app."group".external_id IS 'Identifier of the group in the external provider, when not local.';
 -- +goose StatementEnd
 
 -- +goose Down
