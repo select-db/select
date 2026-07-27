@@ -393,17 +393,29 @@ func filterDoc(e schema.Entity) string {
 }
 
 // filterFieldsDoc is the markdown table of an entity's filterable fields - name,
-// type (with enum values), and the OData operators that apply - rendered in the
-// list endpoint description so a caller knows exactly what is queryable.
+// type (with enum values), and description - rendered in the list endpoint
+// description so a caller knows exactly what is queryable. The OData operators
+// each field accepts are folded into the description cell (as an italic suffix)
+// rather than a column of their own, so the table stays readable when rendered
+// narrow.
 func filterFieldsDoc(e schema.Entity) string {
 	var b strings.Builder
 	b.WriteString("**Filterable fields**\n\n")
-	b.WriteString("| Field | Type | Description | Operators |\n|---|---|---|---|\n")
+	b.WriteString("| Field | Type | Description |\n|---|---|---|\n")
 	for _, f := range e.Fields {
 		if !f.Exposed {
 			continue
 		}
-		b.WriteString("| `" + f.Name + "` | " + typeLabel(f) + " | " + mdCell(f.Description) + " | " + strings.Join(odataOps(f), ", ") + " |\n")
+		desc := mdCell(f.Description)
+		if ops := strings.Join(odataOps(f), ", "); ops != "" {
+			note := "_Operators: " + ops + "._"
+			if desc != "" {
+				desc += " " + note
+			} else {
+				desc = note
+			}
+		}
+		b.WriteString("| `" + f.Name + "` | " + typeLabel(f) + " | " + desc + " |\n")
 	}
 	return b.String()
 }
