@@ -29,7 +29,7 @@ COMMENT ON COLUMN audit.event.principal_hash     IS '@app.hide';
 COMMENT ON COLUMN audit.event.id                 IS 'Unique identifier of the event.';
 COMMENT ON COLUMN audit.event.occurred_at        IS 'When the event occurred (event time).';
 COMMENT ON COLUMN audit.event.recorded_at        IS 'When the event was recorded; may lag occurred_at.';
-COMMENT ON COLUMN audit.event.domain             IS 'Domain of the action. @app.values [query, auth, iam, datasource]';
+COMMENT ON COLUMN audit.event.domain             IS 'Domain of the action. @app.values [query, iam, datasource]';
 COMMENT ON COLUMN audit.event.action             IS 'Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions.';
 COMMENT ON COLUMN audit.event.principal_id       IS 'Identifier of the principal.';
 COMMENT ON COLUMN audit.event.principal_type     IS 'Type of the principal that performed the action. @app.values [user, api_key]';
