@@ -1,10 +1,10 @@
 // Package openapi projects the apigen entity model into an OpenAPI 3.0 document.
-// Like the capabilities projection it is pure — no SQL, no sqlc, no runtime — so
+// Like the capabilities projection it is pure - no SQL, no sqlc, no runtime - so
 // the spec is derived entirely from the schema IR (@app.api ops, field kinds,
 // @app.values enums, and the convention columns).
 //
 // Endpoints are REST: a plural collection path (/roles) and an item path
-// (/roles/{id}), each op mapped to its proper HTTP method — list=GET,
+// (/roles/{id}), each op mapped to its proper HTTP method - list=GET,
 // create=POST, get=GET, update=PATCH (a partial merge), delete=DELETE. Auth is
 // the shared bearer token (a user JWT or an slct_ API key in the Authorization
 // header); per-op required workspace actions are surfaced in the operation
@@ -322,7 +322,7 @@ func isWritable(f schema.Field) bool {
 	return f.Patchable || (f.FK != nil && f.Column != schema.TenantColumn)
 }
 
-// scalarSchema is a field's bare JSON type/format/enum, without nullability —
+// scalarSchema is a field's bare JSON type/format/enum, without nullability -
 // the value shape used for filter operands.
 func scalarSchema(f schema.Field) *Schema {
 	s := &Schema{}
@@ -387,13 +387,13 @@ func filterDoc(e schema.Entity) string {
 	b.WriteString("Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. ")
 	b.WriteString("See the endpoint description for the filterable fields and their types.")
 	if ex := filterExamples(e); len(ex) > 0 {
-		b.WriteString(" Examples: " + strings.Join(ex, " · "))
+		b.WriteString(" Examples: " + strings.Join(ex, "; "))
 	}
 	return b.String()
 }
 
-// filterFieldsDoc is the markdown table of an entity's filterable fields — name,
-// type (with enum values), and the OData operators that apply — rendered in the
+// filterFieldsDoc is the markdown table of an entity's filterable fields - name,
+// type (with enum values), and the OData operators that apply - rendered in the
 // list endpoint description so a caller knows exactly what is queryable.
 func filterFieldsDoc(e schema.Entity) string {
 	var b strings.Builder
@@ -440,7 +440,7 @@ func typeLabel(f schema.Field) string {
 }
 
 // odataOps maps a field's operator set (the shared FilterOperators taxonomy) to
-// the OData tokens a caller writes. Null checks are omitted — they're universal
+// the OData tokens a caller writes. Null checks are omitted - they're universal
 // and covered by the grammar legend (`field eq null` / `field ne null`).
 func odataOps(f schema.Field) []string {
 	var out []string

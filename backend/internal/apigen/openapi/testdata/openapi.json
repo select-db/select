@@ -38,7 +38,7 @@
           {
             "name": "$filter",
             "in": "query",
-            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: role_id eq 'value' and db_instance_id eq 'value' · (role_id eq 'value' or db_instance_id eq 'value') and not (role_id eq 'value')",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: role_id eq 'value' and db_instance_id eq 'value'; (role_id eq 'value' or db_instance_id eq 'value') and not (role_id eq 'value')",
             "schema": {
               "type": "string"
             }
@@ -366,7 +366,7 @@
           {
             "name": "$filter",
             "in": "query",
-            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: name eq 'value' and updated_at eq 2024-01-01T00:00:00Z · (name eq 'value' or updated_at eq 2024-01-01T00:00:00Z) and not (name eq 'value')",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: name eq 'value' and updated_at eq 2024-01-01T00:00:00Z; (name eq 'value' or updated_at eq 2024-01-01T00:00:00Z) and not (name eq 'value')",
             "schema": {
               "type": "string"
             }
