@@ -933,7 +933,7 @@ func copyAPIAssets(cfg buildConfig, themeCSS string) error {
 	spec, err := os.ReadFile(cfg.openAPIPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Println("note: openapi.json not found — run `apigen generate`; the API reference will be empty until it exists")
+			fmt.Println("note: openapi.json not found - run `apigen generate`; the API reference will be empty until it exists")
 			return nil
 		}
 		return fmt.Errorf("reading openapi.json: %w", err)

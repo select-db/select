@@ -10,6 +10,7 @@ Workspace
   Permissions                : app/internal/role/permissions.doc.md
   Groups                     : app/internal/group/groups.doc.md
   API Keys                   : app/internal/apikey/api-keys.doc.md
+  Audit Logs                 : docs/content/audit-logs.doc.md
   MCP Server                 : backend/internal/mcp/mcp-server.doc.md
   AI Chat                    : app/frontend/src/lib/components/views/Chat/ai-chat.doc.md
 Databases
