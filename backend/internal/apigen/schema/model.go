@@ -103,6 +103,9 @@ type Field struct {
 	// (e.g. 'local'), used to coalesce a NOT NULL column the client omits.
 	// Empty for no default or a non-literal (function) default.
 	Default string `json:",omitempty"`
+	// Description is the human column comment — the prose before any @app.*
+	// directive — surfaced in the API docs (and the app's hover docs).
+	Description string `json:",omitempty"`
 }
 
 // Relation is a named, possibly unioned join path to a target table.
@@ -161,7 +164,8 @@ func Build(s RawSchema) ([]Entity, []error) {
 				Name: c.Name, Column: c.Name, Kind: kindOf(c.DataType), Nullable: !c.NotNull,
 				IsPK: pk[c.Name], Hidden: ct.Hide, Values: ct.Values, JSONPaths: ct.JSONPaths,
 				Ops: ct.Ops, Lookup: ct.Lookup, Immutable: ct.Immutable,
-				Default: parseDefaultLiteral(c.Default),
+				Default:     parseDefaultLiteral(c.Default),
+				Description: commentProse(c.Comment),
 			}
 			if fk, ok := fkByCol[c.Name]; ok {
 				f.FK = &FKRef{Schema: fk.RefSchema, Table: fk.RefTable, Column: fk.RefColumn}
@@ -270,6 +274,15 @@ func FilterOperators(f Field) []string {
 	default:
 		return null
 	}
+}
+
+// commentProse is the human description part of a column comment: everything
+// before the first @app.* directive (the tags are parsed separately).
+func commentProse(comment string) string {
+	if i := strings.Index(comment, "@app."); i >= 0 {
+		comment = comment[:i]
+	}
+	return strings.TrimSpace(comment)
 }
 
 func or(a, b string) string {
