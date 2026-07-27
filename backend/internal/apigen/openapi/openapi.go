@@ -8,7 +8,8 @@
 // create=POST, get=GET, update=PATCH (a partial merge), delete=DELETE. Auth is
 // the shared bearer token (a user JWT or an slct_ API key in the Authorization
 // header); per-op required workspace actions are surfaced in the operation
-// description and as an x-required-actions extension.
+// description and as an x-required-actions extension. List filtering uses an
+// OData $filter expression (and/or/not + grouping over the exposed fields).
 package openapi
 
 import (
@@ -83,8 +84,6 @@ type Parameter struct {
 	In          string  `json:"in"` // "path" or "query"
 	Required    bool    `json:"required,omitempty"`
 	Description string  `json:"description,omitempty"`
-	Style       string  `json:"style,omitempty"`   // "deepObject" for field filters
-	Explode     bool    `json:"explode,omitempty"` // true for deepObject filters
 	Schema      *Schema `json:"schema,omitempty"`
 }
 
@@ -359,49 +358,81 @@ func pathIDParam() Parameter {
 	}
 }
 
-// listParams is the query parameters for a list op: pagination/sort, then one
-// per-field filter. A filter is a deepObject keyed by operator, so
-// ?updated_at[gte]=…&status[in]=… — the operator set per field is the shared
-// FilterOperators taxonomy (same one the capabilities doc advertises).
+// listParams is the query parameters for a list op: a single OData $filter
+// expression (AND/OR/NOT + grouping over the filterable fields), plus sort and
+// cursor pagination.
 func listParams(e schema.Entity) []Parameter {
-	params := []Parameter{
+	return []Parameter{
+		{Name: "$filter", In: "query", Description: filterDoc(e), Schema: &Schema{Type: "string"}},
+		{Name: "sort", In: "query", Description: "Sort expression, e.g. \"-updated_at\".", Schema: &Schema{Type: "string"}},
 		{Name: "limit", In: "query", Description: "Maximum rows to return.", Schema: &Schema{Type: "integer"}},
 		{Name: "cursor", In: "query", Description: "Opaque pagination cursor from a previous page.", Schema: &Schema{Type: "string"}},
-		{Name: "sort", In: "query", Description: "Sort expression, e.g. \"-updated_at\".", Schema: &Schema{Type: "string"}},
 	}
-	for _, f := range e.Fields {
-		if !f.Exposed {
-			continue
-		}
-		ops := schema.FilterOperators(f)
-		params = append(params, Parameter{
-			Name:        f.Name,
-			In:          "query",
-			Style:       "deepObject",
-			Explode:     true,
-			Description: "Filter by " + f.Name + " (operators: " + strings.Join(ops, ", ") + ").",
-			Schema:      filterSchema(f, ops),
-		})
-	}
-	return params
 }
 
-// filterSchema is the object of allowed operators for a field: each operator
-// maps to the value shape it takes (array for in/nin, boolean for null checks,
-// the field's scalar type otherwise).
-func filterSchema(f schema.Field, ops []string) *Schema {
-	props := map[string]*Schema{}
-	for _, op := range ops {
-		switch op {
-		case "is_null", "not_null":
-			props[op] = &Schema{Type: "boolean"}
-		case "in", "nin":
-			props[op] = &Schema{Type: "array", Items: scalarSchema(f)}
-		default:
-			props[op] = scalarSchema(f)
+// filterDoc documents the OData $filter grammar for one entity: the logical
+// operators, the comparison/string/null operators, the filterable fields, and
+// worked examples built from the entity's own columns.
+func filterDoc(e schema.Entity) string {
+	var fields []string
+	for _, f := range e.Fields {
+		if f.Exposed {
+			fields = append(fields, f.Name)
 		}
 	}
-	return &Schema{Type: "object", Properties: props}
+	var b strings.Builder
+	b.WriteString("OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. ")
+	b.WriteString("Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. ")
+	b.WriteString("Filterable fields: " + strings.Join(fields, ", ") + ".")
+	if ex := filterExamples(e); len(ex) > 0 {
+		b.WriteString(" Examples: " + strings.Join(ex, " · "))
+	}
+	return b.String()
+}
+
+// filterExamples builds one AND and one OR/NOT example from the entity's first
+// couple of business (non-PK) filterable fields.
+func filterExamples(e schema.Entity) []string {
+	var fs []schema.Field
+	for _, f := range e.Fields {
+		if f.Exposed && !f.IsPK {
+			fs = append(fs, f)
+			if len(fs) == 2 {
+				break
+			}
+		}
+	}
+	switch len(fs) {
+	case 0:
+		return nil
+	case 1:
+		lit := exampleLit(fs[0])
+		return []string{
+			fs[0].Name + " eq " + lit,
+			"not (" + fs[0].Name + " eq " + lit + ")",
+		}
+	default:
+		a, b := fs[0].Name+" eq "+exampleLit(fs[0]), fs[1].Name+" eq "+exampleLit(fs[1])
+		return []string{
+			a + " and " + b,
+			"(" + a + " or " + b + ") and not (" + a + ")",
+		}
+	}
+}
+
+// exampleLit is a literal of the right OData shape for a field's kind: unquoted
+// numbers/booleans/timestamps, quoted strings otherwise.
+func exampleLit(f schema.Field) string {
+	switch f.Kind {
+	case schema.KindInt:
+		return "100"
+	case schema.KindBool:
+		return "true"
+	case schema.KindTime:
+		return "2024-01-01T00:00:00Z"
+	default: // text, uuid, inet, json
+		return "'value'"
+	}
 }
 
 func jsonBodyRef(name string) *RequestBody {
