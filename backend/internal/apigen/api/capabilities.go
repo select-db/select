@@ -62,7 +62,7 @@ func EmitAPICapabilities(entities []schema.Entity) ([]byte, error) {
 			rc.Fields = append(rc.Fields, FieldCap{
 				Name:       f.Name,
 				Type:       string(f.Kind),
-				Operators:  operatorsFor(f),
+				Operators:  schema.FilterOperators(f),
 				Sortable:   true,
 				Selectable: true,
 				Values:     f.Values,
@@ -78,25 +78,3 @@ func EmitAPICapabilities(entities []schema.Entity) ([]byte, error) {
 	return json.MarshalIndent(caps, "", "  ")
 }
 
-// operatorsFor is the filter operator set a field supports, derived from its
-// kind. @app.ops overrides it wholesale.
-func operatorsFor(f schema.Field) []string {
-	if len(f.Ops) > 0 {
-		return f.Ops
-	}
-	null := []string{"is_null", "not_null"}
-	switch f.Kind {
-	case schema.KindText:
-		return append([]string{"eq", "ne", "in", "nin", "like", "ilike"}, null...)
-	case schema.KindUUID, schema.KindInet:
-		return append([]string{"eq", "ne", "in", "nin"}, null...)
-	case schema.KindInt, schema.KindTime:
-		return append([]string{"eq", "ne", "lt", "lte", "gt", "gte", "in", "nin"}, null...)
-	case schema.KindBool:
-		return append([]string{"eq", "ne"}, null...)
-	case schema.KindJSON:
-		return append([]string{"contains"}, null...)
-	default:
-		return null
-	}
-}

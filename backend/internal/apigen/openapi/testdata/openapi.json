@@ -57,6 +57,394 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Filter by id (operators: eq, ne, in, nin, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "ne": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "query",
+            "description": "Filter by role_id (operators: eq, ne, in, nin, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "ne": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "db_instance_id",
+            "in": "query",
+            "description": "Filter by db_instance_id (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string"
+                },
+                "ilike": {
+                  "type": "string"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "like": {
+                  "type": "string"
+                },
+                "ne": {
+                  "type": "string"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "schema_name",
+            "in": "query",
+            "description": "Filter by schema_name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string"
+                },
+                "ilike": {
+                  "type": "string"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "like": {
+                  "type": "string"
+                },
+                "ne": {
+                  "type": "string"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "table_name",
+            "in": "query",
+            "description": "Filter by table_name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string"
+                },
+                "ilike": {
+                  "type": "string"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "like": {
+                  "type": "string"
+                },
+                "ne": {
+                  "type": "string"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "column_name",
+            "in": "query",
+            "description": "Filter by column_name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string"
+                },
+                "ilike": {
+                  "type": "string"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "like": {
+                  "type": "string"
+                },
+                "ne": {
+                  "type": "string"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Filter by action (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string"
+                },
+                "ilike": {
+                  "type": "string"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "like": {
+                  "type": "string"
+                },
+                "ne": {
+                  "type": "string"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "effect",
+            "in": "query",
+            "description": "Filter by effect (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string"
+                },
+                "ilike": {
+                  "type": "string"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "like": {
+                  "type": "string"
+                },
+                "ne": {
+                  "type": "string"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "updated_at",
+            "in": "query",
+            "description": "Filter by updated_at (operators: eq, ne, lt, lte, gt, gte, in, nin, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "gt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "gte": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "lt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lte": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "ne": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
           }
         ],
         "responses": {
@@ -375,6 +763,144 @@
             "description": "Sort expression, e.g. \"-updated_at\".",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Filter by id (operators: eq, ne, in, nin, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "ne": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "Filter by name (operators: eq, ne, in, nin, like, ilike, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string"
+                },
+                "ilike": {
+                  "type": "string"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "like": {
+                  "type": "string"
+                },
+                "ne": {
+                  "type": "string"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          {
+            "name": "updated_at",
+            "in": "query",
+            "description": "Filter by updated_at (operators: eq, ne, lt, lte, gt, gte, in, nin, is_null, not_null).",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "eq": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "gt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "gte": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "in": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "is_null": {
+                  "type": "boolean"
+                },
+                "lt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lte": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "ne": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "nin": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "not_null": {
+                  "type": "boolean"
+                }
+              }
             }
           }
         ],
