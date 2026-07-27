@@ -90,7 +90,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		},
 	})
 	if res.Applied {
-		audit.EmitChange(ctx, audit.GroupRoleAttached, c.WorkspaceID, utils.MapGetString(payload, "group_id"), res.Before, res.After)
+		audit.EmitChange(ctx, audit.GroupRoleGranted, c.WorkspaceID, utils.MapGetString(payload, "group_id"), res.Before, res.After)
 	}
 	return res.Applied, res.Restored, err
 }

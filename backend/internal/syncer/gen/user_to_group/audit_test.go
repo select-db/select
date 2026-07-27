@@ -24,15 +24,15 @@ func addToGroup(t *testing.T, f e2e.Fixture) (groupID, utgID string) {
 	return groupID, utgID
 }
 
-func TestAudit_GroupMemberAdded(t *testing.T) {
+func TestAudit_GroupUserAdded(t *testing.T) {
 	f := e2e.Setup(t)
 	addToGroup(t, f)
-	e2e.RequireEvent(t, f.Conn, "iam", "group.member_added")
+	e2e.RequireEvent(t, f.Conn, "iam", "group.user_membership.add")
 }
 
-func TestAudit_GroupMemberRemoved(t *testing.T) {
+func TestAudit_GroupUserRemoved(t *testing.T) {
 	f := e2e.Setup(t)
 	_, utgID := addToGroup(t, f)
 	e2e.SyncCommit(t, f.H, f.Actor, "delete", "user_to_group", utgID, map[string]any{"id": utgID})
-	e2e.RequireEvent(t, f.Conn, "iam", "group.member_removed")
+	e2e.RequireEvent(t, f.Conn, "iam", "group.user_membership.remove")
 }

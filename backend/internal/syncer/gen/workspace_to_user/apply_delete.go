@@ -46,6 +46,6 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 		before = row
 		target = row.UserID.String()
 	}
-	audit.EmitChange(ctx, audit.MemberRemoved, workspaceID, target, before, nil)
+	audit.EmitChange(ctx, audit.WorkspaceUserRemoved, workspaceID, target, before, nil)
 	return true, nil, nil
 }

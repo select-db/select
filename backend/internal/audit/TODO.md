@@ -7,8 +7,9 @@ lifecycle. Live emit sites: `query.executed`, `iam.permission.upserted`.
 ## Wire remaining emit sites (vocabulary already declared in catalog.go)
 - [ ] query: `denied`, `exported` (dump path)
 - [ ] auth: `login`, `login_failed`, `token_refreshed`, `logout`
-- [ ] iam: `permission.deleted`, `role.upserted/deleted`, `member.added/removed`,
-      `workspace.created/deleted`, `api_key.created/rotated/revoked`
+- [ ] iam: `permission.deleted`, `role.upserted/deleted`,
+      `workspace.user_membership.add/remove`, `workspace.created/deleted`,
+      `api_key.created/rotated/revoked`
 - [ ] datasource: `upserted`, `deleted`
 
 ## Larger pieces

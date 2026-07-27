@@ -30,8 +30,11 @@ const (
 // Actions pair with a domain; the full event id is domain.action. This is the
 // closed vocabulary consumers' SOC/SIEM rules key on, so it's an external
 // contract: add actions, never rename or repurpose. Single-subject domains
-// (query, auth, datasource) use a bare verb; iam spans entities, so its actions
-// are entity.verb.
+// (query, auth, datasource) use a bare verb. iam follows the Okta System Log
+// convention of a dotted object.action hierarchy: lifecycle is <object>.<verb>
+// (role.upserted, permission.deleted); memberships are
+// <container>.user_membership.<add|remove>; role grants are
+// <subject>.role.<grant|revoke>.
 const (
 	// query (a permission block is ActionExecuted with StatusDenied, not its own action)
 	ActionExecuted = "executed" // a statement ran (or was blocked) via the proxy
@@ -42,26 +45,26 @@ const (
 	ActionTokenRefreshed = "token_refreshed"
 
 	// iam
-	ActionPermissionUpserted = "permission.upserted"
-	ActionPermissionDeleted  = "permission.deleted"
-	ActionRoleUpserted       = "role.upserted"
-	ActionRoleDeleted        = "role.deleted"
-	ActionRoleAssigned       = "role.assigned"   // a role granted directly to a user
-	ActionRoleUnassigned     = "role.unassigned" // a direct user-role grant removed
-	ActionMemberAdded        = "member.added"
-	ActionMemberRemoved      = "member.removed"
-	ActionGroupUpserted      = "group.upserted"
-	ActionGroupDeleted       = "group.deleted"
-	ActionGroupMemberAdded   = "group.member_added"
-	ActionGroupMemberRemoved = "group.member_removed"
-	ActionGroupRoleAttached  = "group.role_attached"
-	ActionGroupRoleDetached  = "group.role_detached"
-	ActionWorkspaceCreated   = "workspace.created"
-	ActionWorkspaceDeleted   = "workspace.deleted"
-	ActionAPIKeyCreated      = "api_key.created"
-	ActionAPIKeyRotated      = "api_key.rotated"
-	ActionAPIKeyRevoked      = "api_key.revoked"
-	ActionAPIKeySetRoles     = "api_key.set_roles"
+	ActionPermissionUpserted   = "permission.upserted"
+	ActionPermissionDeleted    = "permission.deleted"
+	ActionRoleUpserted         = "role.upserted"
+	ActionRoleDeleted          = "role.deleted"
+	ActionUserRoleGranted      = "user.role.grant"  // a role granted directly to a user
+	ActionUserRoleRevoked      = "user.role.revoke" // a direct user-role grant removed
+	ActionWorkspaceUserAdded   = "workspace.user_membership.add"
+	ActionWorkspaceUserRemoved = "workspace.user_membership.remove"
+	ActionGroupUpserted        = "group.upserted"
+	ActionGroupDeleted         = "group.deleted"
+	ActionGroupUserAdded       = "group.user_membership.add"
+	ActionGroupUserRemoved     = "group.user_membership.remove"
+	ActionGroupRoleGranted     = "group.role.grant"
+	ActionGroupRoleRevoked     = "group.role.revoke"
+	ActionWorkspaceCreated     = "workspace.created"
+	ActionWorkspaceDeleted     = "workspace.deleted"
+	ActionAPIKeyCreated        = "api_key.created"
+	ActionAPIKeyRotated        = "api_key.rotated"
+	ActionAPIKeyRevoked        = "api_key.revoked"
+	ActionAPIKeySetRoles       = "api_key.set_roles"
 
 	// datasource
 	ActionDatasourceUpserted = "upserted" // created or connection config changed

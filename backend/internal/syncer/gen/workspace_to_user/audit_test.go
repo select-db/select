@@ -27,15 +27,15 @@ func addMember(t *testing.T, f e2e.Fixture) (userID, wtuID string) {
 	return userID, wtuID
 }
 
-func TestAudit_MemberAdded(t *testing.T) {
+func TestAudit_WorkspaceUserAdded(t *testing.T) {
 	f := e2e.Setup(t)
 	addMember(t, f)
-	e2e.RequireEvent(t, f.Conn, "iam", "member.added")
+	e2e.RequireEvent(t, f.Conn, "iam", "workspace.user_membership.add")
 }
 
-func TestAudit_MemberRemoved(t *testing.T) {
+func TestAudit_WorkspaceUserRemoved(t *testing.T) {
 	f := e2e.Setup(t)
 	_, wtuID := addMember(t, f)
 	e2e.SyncCommit(t, f.H, f.Actor, "delete", "workspace_to_user", wtuID, map[string]any{"id": wtuID})
-	e2e.RequireEvent(t, f.Conn, "iam", "member.removed")
+	e2e.RequireEvent(t, f.Conn, "iam", "workspace.user_membership.remove")
 }
