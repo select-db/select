@@ -29,8 +29,7 @@ type OpCap struct {
 type FieldCap struct {
 	Name       string   `json:"name"`
 	Type       string   `json:"type"`
-	Filterable bool     `json:"filterable"`
-	Operators  []string `json:"operators,omitempty"`
+	Operators  []string `json:"operators"`
 	Sortable   bool     `json:"sortable"`
 	Selectable bool     `json:"selectable"`
 	Values     []string `json:"values,omitempty"`
@@ -60,15 +59,10 @@ func EmitAPICapabilities(entities []schema.Entity) ([]byte, error) {
 			if !f.Exposed {
 				continue
 			}
-			var ops []string
-			if f.Filterable {
-				ops = schema.FilterOperators(f)
-			}
 			rc.Fields = append(rc.Fields, FieldCap{
 				Name:       f.Name,
 				Type:       string(f.Kind),
-				Filterable: f.Filterable,
-				Operators:  ops,
+				Operators:  schema.FilterOperators(f),
 				Sortable:   true,
 				Selectable: true,
 				Values:     f.Values,
