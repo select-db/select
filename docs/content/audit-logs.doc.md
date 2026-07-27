@@ -1,11 +1,12 @@
 # Audit Logs
 
 The audit log is an append-only record of activity in a workspace: who did what,
-to what, and when. Every security-relevant action (queries, sign-ins, permission
-and membership changes, datasource changes) is written as an immutable event.
+to what, and when. Every security-relevant action (queries, permission and
+membership changes, datasource changes) is written as an immutable event.
 
 Read the log through the API at `GET /logs` (see the [API Reference](/api/)).
-Reading it requires the `audit.read` workspace permission.
+Reading it requires the `audit.read` workspace permission. The log is scoped to
+the workspace, so it covers workspace activity only.
 
 ## The event model
 
@@ -14,7 +15,7 @@ Each event records that a **principal** performed an **action** (within a
 
 | Field | Meaning |
 |-------|---------|
-| `domain` | The area the action belongs to: `query`, `auth`, `iam`, `datasource`. |
+| `domain` | The area the action belongs to: `query`, `iam`, `datasource`. |
 | `action` | The action performed within that domain (see [Actions](#actions)). |
 | `principal_type` / `principal_id` | Who acted: a `user` or an `api_key`, and its id. |
 | `target_type` / `target_id` / `target_label` | What was acted on: a `permission`, `role`, `user`, or `datasource`. |
@@ -25,8 +26,8 @@ Each event records that a **principal** performed an **action** (within a
 | `client_ip` | The client's IP address. |
 
 The full identity of an event is `domain.action`. Single-subject domains
-(`query`, `auth`, `datasource`) use a bare verb; `iam` spans several entities, so
-its actions are `entity.verb`.
+(`query`, `datasource`) use a bare verb; `iam` spans several entities, so its
+actions are `entity.verb`.
 
 ## Actions
 
@@ -38,17 +39,6 @@ existing ones are never renamed, so you can rely on these values in filters.
 | Action | Meaning |
 |--------|---------|
 | `executed` | A statement ran, or was blocked. A blocked statement is `executed` with status `denied`. |
-
-### auth
-
-| Action | Meaning |
-|--------|---------|
-| `login` | A user signed in. |
-| `login_failed` | A sign-in attempt failed. |
-| `token_refreshed` | An access token was refreshed. |
-
-Auth events are personal to a user and carry no workspace, so they appear in a
-user's own security history rather than a workspace's log.
 
 ### iam
 
@@ -80,8 +70,8 @@ full grammar and the filterable fields). A few examples:
 # permission changes that were denied
 GET /logs?$filter=domain eq 'iam' and status eq 'denied'
 
-# failed sign-ins
-GET /logs?$filter=action eq 'login_failed'
+# query executions blocked by permissions
+GET /logs?$filter=domain eq 'query' and status eq 'denied'
 
 # everything an API key did since the start of the year
 GET /logs?$filter=principal_type eq 'api_key' and occurred_at ge 2026-01-01T00:00:00Z
