@@ -9,6 +9,7 @@ import (
 
 	"backend/internal/middlewares"
 
+	"backend/internal/api/gen"
 	apikeyhandler "backend/internal/apikey"
 	"backend/internal/audit"
 	"backend/internal/auth"
@@ -67,6 +68,15 @@ func Register(mux *http.ServeMux) {
 	mux.Handle("POST /datasource/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
 
 	mux.Handle("POST /mcp", authenticated(limited(600, mcphandler.Handler())))
+
+	// Generated REST API (roles, permissions, groups, junctions, audit log).
+	// Shares the auth + rate-limit chain, but scopes the workspace from the
+	// X-Workspace-Id header (WorkspaceFromHeader) rather than the request body, so
+	// GET routes work; per-op required actions are enforced inside each handler.
+	restMember := middlewares.WorkspaceFromHeader()
+	gen.RegisterRoutes(mux, func(perMinute int, h http.Handler) http.Handler {
+		return authenticated(restMember(middlewares.RateLimit(perMinute)(h)))
+	})
 }
 
 // withPrincipalResolver stashes an audit principal resolver on the request
