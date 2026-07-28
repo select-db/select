@@ -1466,30 +1466,26 @@ INSERT INTO audit.event (
     target_label,
     status,
     payload,
-    duration_ms,
-    returned_row_count,
     client_ip
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 `
 
 type InsertAuditEventParams struct {
-	WorkspaceID      db_types.JSONNullUUID
-	OccurredAt       db_types.JSONNullTime
-	Domain           db_types.JSONNullString
-	Action           db_types.JSONNullString
-	PrincipalHash    []byte
-	PrincipalID      db_types.JSONNullUUID
-	PrincipalType    db_types.JSONNullString
-	TargetType       db_types.JSONNullString
-	TargetID         db_types.JSONNullUUID
-	TargetLabel      db_types.JSONNullString
-	Status           db_types.JSONNullString
-	Payload          pqtype.NullRawMessage
-	DurationMs       db_types.JSONNullInt64
-	ReturnedRowCount db_types.JSONNullInt64
-	ClientIp         db_types.JSONNullInet
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
 }
 
 func (q *Queries) InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) error {
@@ -1506,8 +1502,6 @@ func (q *Queries) InsertAuditEvent(ctx context.Context, arg InsertAuditEventPara
 		arg.TargetLabel,
 		arg.Status,
 		arg.Payload,
-		arg.DurationMs,
-		arg.ReturnedRowCount,
 		arg.ClientIp,
 	)
 	return err

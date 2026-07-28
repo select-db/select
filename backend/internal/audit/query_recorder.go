@@ -25,25 +25,14 @@ func NewQueryRecorder(rec *Record) *QueryRecorder {
 	return &QueryRecorder{rec: rec}
 }
 
-// Executed records the execute-phase duration, before rows stream. Optional: a
-// sink that only sees a total duration can skip it and pass it to Success.
-func (q *QueryRecorder) Executed(durationMs int64) {
-	if q == nil || q.rec == nil {
-		return
-	}
-	q.rec.DurationMs = durationMs
-}
-
-// Success finalizes and emits a successful run. A duration already set by
-// Executed wins over the total passed here.
-func (q *QueryRecorder) Success(rowCount, affected, durationMs int64) {
+// Success finalizes and emits a successful run. The row count issued for a
+// write (affected) is kept in the payload; per-query metrics like duration and
+// returned rows are intentionally not logged (add them back as dedicated
+// columns if users ask for them).
+func (q *QueryRecorder) Success(affected int64) {
 	q.finish(func() {
-		q.rec.ReturnedRowCount = rowCount
 		if affected > 0 {
 			q.rec.Payload["affected_rows"] = affected
-		}
-		if q.rec.DurationMs == 0 {
-			q.rec.DurationMs = durationMs
 		}
 		q.rec.Status = StatusSuccess
 	})

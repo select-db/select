@@ -199,10 +199,6 @@ type Record struct {
 	Status      string
 	Payload     map[string]any
 
-	// Query-only metrics; zero for other domains.
-	DurationMs       int64
-	ReturnedRowCount int64
-
 	ClientIP string
 }
 
@@ -214,15 +210,13 @@ func Emit(ctx context.Context, spec Spec, r Record) error {
 	}
 
 	e := &Event{
-		WorkspaceID:      r.WorkspaceID,
-		Domain:           spec.Domain,
-		Action:           spec.Action,
-		Principal:        r.Principal,
-		Status:           r.Status,
-		Payload:          r.Payload,
-		DurationMs:       r.DurationMs,
-		ReturnedRowCount: r.ReturnedRowCount,
-		ClientIP:         r.ClientIP,
+		WorkspaceID: r.WorkspaceID,
+		Domain:      spec.Domain,
+		Action:      spec.Action,
+		Principal:   r.Principal,
+		Status:      r.Status,
+		Payload:     r.Payload,
+		ClientIP:    r.ClientIP,
 	}
 	if spec.TargetType != "" {
 		e.Target = &Target{Type: spec.TargetType, ID: r.TargetID, Label: r.TargetLabel}

@@ -85,16 +85,14 @@ type Target struct {
 
 // Event is the log envelope; Payload holds domain-specific fields.
 type Event struct {
-	WorkspaceID      string         `json:"workspace_id"`
-	OccurredAt       time.Time      `json:"occurred_at"`           // event time (app-set)
-	RecordedAt       time.Time      `json:"recorded_at,omitempty"` // persist time (DB-set, read-only)
-	Domain           string         `json:"domain"`
-	Action           string         `json:"action"`
-	Principal        Principal      `json:"principal"`
-	Target           *Target        `json:"target,omitempty"`
-	Status           string         `json:"status"`
-	Payload          map[string]any `json:"payload,omitempty"`
-	DurationMs       int64          `json:"duration_ms,omitempty"`
-	ReturnedRowCount int64          `json:"returned_row_count,omitempty"`
-	ClientIP         string         `json:"client_ip,omitempty"`
+	WorkspaceID string         `json:"workspace_id"`
+	OccurredAt  time.Time      `json:"occurred_at"`           // event time (app-set)
+	RecordedAt  time.Time      `json:"recorded_at,omitempty"` // persist time (DB-set, read-only)
+	Domain      string         `json:"domain"`
+	Action      string         `json:"action"`
+	Principal   Principal      `json:"principal"`
+	Target      *Target        `json:"target,omitempty"`
+	Status      string         `json:"status"`
+	Payload     map[string]any `json:"payload,omitempty"`
+	ClientIP    string         `json:"client_ip,omitempty"`
 }

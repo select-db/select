@@ -229,21 +229,19 @@ func insertEvent(ctx context.Context, q *generated.Queries, e *Event) error {
 	}
 
 	return q.InsertAuditEvent(ctx, generated.InsertAuditEventParams{
-		WorkspaceID:      nullUUID(e.WorkspaceID),
-		OccurredAt:       db_types.NewJSONNullTimeFromTime(e.OccurredAt),
-		Domain:           nullStr(e.Domain),
-		Action:           nullStr(e.Action),
-		PrincipalHash:    e.Principal.Hash(),
-		PrincipalID:      nullUUID(e.Principal.ID),
-		PrincipalType:    nullStr(e.Principal.Type),
-		TargetType:       nullStr(target.Type),
-		TargetID:         nullUUID(target.ID),
-		TargetLabel:      nullStr(target.Label),
-		Status:           nullStr(e.Status),
-		Payload:          jsonbRaw(payload),
-		DurationMs:       nullInt64(e.DurationMs),
-		ReturnedRowCount: nullInt64(e.ReturnedRowCount),
-		ClientIp:         nullInet(e.ClientIP),
+		WorkspaceID:   nullUUID(e.WorkspaceID),
+		OccurredAt:    db_types.NewJSONNullTimeFromTime(e.OccurredAt),
+		Domain:        nullStr(e.Domain),
+		Action:        nullStr(e.Action),
+		PrincipalHash: e.Principal.Hash(),
+		PrincipalID:   nullUUID(e.Principal.ID),
+		PrincipalType: nullStr(e.Principal.Type),
+		TargetType:    nullStr(target.Type),
+		TargetID:      nullUUID(target.ID),
+		TargetLabel:   nullStr(target.Label),
+		Status:        nullStr(e.Status),
+		Payload:       jsonbRaw(payload),
+		ClientIp:      nullInet(e.ClientIP),
 	})
 }
 
@@ -265,13 +263,6 @@ func nullUUID(s string) db_types.JSONNullUUID {
 		return db_types.JSONNullUUID{}
 	}
 	return v
-}
-
-func nullInt64(n int64) db_types.JSONNullInt64 {
-	if n == 0 {
-		return db_types.JSONNullInt64{}
-	}
-	return db_types.NewJSONNullInt64(n)
 }
 
 func nullInet(s string) db_types.JSONNullInet {
