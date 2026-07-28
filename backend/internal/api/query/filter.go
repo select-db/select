@@ -9,16 +9,22 @@ import (
 	"github.com/google/uuid"
 )
 
-// FilterError is a client-caused $filter problem: the handler maps it to 400
-// with Message verbatim in the {"error": ...} envelope. Its messages name the
-// offending token and, where useful, suggest a fix. Anything else Compile
-// returns is an internal fault (500).
-type FilterError struct{ Message string }
+// InputError is a client-caused query problem ($filter, sort, or cursor): the
+// handler maps it to 400 with Message verbatim in the {"error": ...} envelope.
+// Its messages name the offending token and, where useful, suggest a fix.
+// Anything else the runtime returns is an internal fault (500).
+type InputError struct{ Message string }
 
-func (e *FilterError) Error() string { return e.Message }
+func (e *InputError) Error() string { return e.Message }
 
+// filterErr builds an InputError for a $filter problem (messages say "$filter").
 func filterErr(format string, a ...any) error {
-	return &FilterError{Message: fmt.Sprintf(format, a...)}
+	return &InputError{Message: fmt.Sprintf(format, a...)}
+}
+
+// inputErr builds an InputError for a sort/cursor/other query problem.
+func inputErr(format string, a ...any) error {
+	return &InputError{Message: fmt.Sprintf(format, a...)}
 }
 
 // Compile turns an OData $filter string into a SQL boolean expression and its
