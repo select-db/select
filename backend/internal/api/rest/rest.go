@@ -28,26 +28,35 @@ type Entity struct {
 	ApplyDelete func(ctx context.Context, userID string, c types.Commit) (bool, *types.RestoredItem, error)
 }
 
-// Register wires an entity's declared ops onto the mux as REST routes, each
-// wrapped in the shared auth/membership/rate-limit middleware the caller passes
-// (so this package doesn't depend on the api package). ServeMux's {id} pattern
-// carries the path param.
-func Register(mux *http.ServeMux, wrap func(http.Handler) http.Handler, entities []Entity) {
+// Per-op request-rate ceilings (requests/minute), mirroring the hand-written
+// routes' pattern of cheap reads and stricter writes. wrap keys them by principal.
+const (
+	readRate  = 120
+	writeRate = 30
+)
+
+// Register wires an entity's declared ops onto the mux as REST routes. wrap is
+// the shared middleware chain the caller supplies — authenticated ∘
+// WorkspaceFromHeader ∘ limited(perMinute) — parameterized by rate so this
+// package reuses the app's auth/membership/rate-limit without importing it.
+// ServeMux's {id} pattern carries the path param; gate() inside each handler
+// enforces the op's `requires` actions.
+func Register(mux *http.ServeMux, wrap func(perMinute int, h http.Handler) http.Handler, entities []Entity) {
 	for _, e := range entities {
 		if hasOp(e, "list") {
-			mux.Handle("GET /"+e.Plural, wrap(listHandler(e)))
+			mux.Handle("GET /"+e.Plural, wrap(readRate, listHandler(e)))
 		}
 		if hasOp(e, "get") {
-			mux.Handle("GET /"+e.Plural+"/{id}", wrap(getHandler(e)))
+			mux.Handle("GET /"+e.Plural+"/{id}", wrap(readRate, getHandler(e)))
 		}
 		if hasOp(e, "create") {
-			mux.Handle("POST /"+e.Plural, wrap(createHandler(e)))
+			mux.Handle("POST /"+e.Plural, wrap(writeRate, createHandler(e)))
 		}
 		if hasOp(e, "update") {
-			mux.Handle("PATCH /"+e.Plural+"/{id}", wrap(updateHandler(e)))
+			mux.Handle("PATCH /"+e.Plural+"/{id}", wrap(writeRate, updateHandler(e)))
 		}
 		if hasOp(e, "delete") {
-			mux.Handle("DELETE /"+e.Plural+"/{id}", wrap(deleteHandler(e)))
+			mux.Handle("DELETE /"+e.Plural+"/{id}", wrap(writeRate, deleteHandler(e)))
 		}
 	}
 }
