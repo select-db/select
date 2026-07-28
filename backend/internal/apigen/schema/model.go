@@ -276,6 +276,53 @@ func FilterOperators(f Field) []string {
 	}
 }
 
+// ODataOperators is a field's operator set expressed as the OData $filter tokens
+// a caller writes (and the API accepts). It maps the kind-derived FilterOperators
+// to OData spelling — lt->lt, gte->ge, nin->"not in", like/ilike->the
+// contains/startswith/endswith functions — deduped and in a stable order. The
+// null checks are universal (field eq/ne null) and omitted from the token list.
+// Single-sourced here so the OpenAPI docs and the runtime $filter validator
+// advertise and accept exactly the same operators.
+func ODataOperators(f Field) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(ss ...string) {
+		for _, s := range ss {
+			if !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
+	}
+	for _, op := range FilterOperators(f) {
+		switch op {
+		case "eq":
+			add("eq")
+		case "ne":
+			add("ne")
+		case "lt":
+			add("lt")
+		case "lte":
+			add("le")
+		case "gt":
+			add("gt")
+		case "gte":
+			add("ge")
+		case "in":
+			add("in")
+		case "nin":
+			add("not in")
+		case "like", "ilike":
+			add("contains", "startswith", "endswith")
+		case "contains":
+			add("contains")
+		case "is_null", "not_null":
+			// universal; covered by the grammar legend, not a token
+		}
+	}
+	return out
+}
+
 // commentProse is the human description part of a column comment: everything
 // before the first @app.* directive (the tags are parsed separately).
 func commentProse(comment string) string {

@@ -37,3 +37,12 @@ var actionConst = map[string]string{
 	"api-keys.manage": "core.ActionWorkspaceApiKeysManage",
 	"audit.read":      "core.ActionWorkspaceAuditRead",
 }
+
+// ActionConst resolves an @app.api `requires` value to the Go expression for its
+// core.Action constant (e.g. "roles.manage" -> "core.ActionWorkspaceRolesManage").
+// ok is false for an unknown value, so a generator fails loudly rather than
+// emitting an ungated handler. Shared with the HTTP-handler emitter.
+func ActionConst(requires string) (string, bool) {
+	c, ok := actionConst[requires]
+	return c, ok
+}
