@@ -113,15 +113,20 @@ func generate(root string, entities []schema.Entity) error {
 }
 
 // generateAPIHandlers writes the generated REST route table (rest.Entity
-// descriptors + RegisterRoutes) the hand-written rest runtime consumes.
+// descriptors + RegisterRoutes) the hand-written rest runtime consumes: one
+// package folder per @app.api entity plus the top-level routes.go, under
+// internal/api/gen. File names are path-qualified (e.g. role/resource.go), so
+// writeFile's MkdirAll creates the per-table subdirs.
 func generateAPIHandlers(root string, entities []schema.Entity) error {
-	f, err := httpapi.EmitRoutes(entities)
+	files, err := httpapi.EmitRoutes(entities)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(root, "internal", "api", "gen", f.Name)
-	if err := writeFile(path, f.Content); err != nil {
-		return err
+	base := filepath.Join(root, "internal", "api", "gen")
+	for _, f := range files {
+		if err := writeFile(filepath.Join(base, filepath.FromSlash(f.Name)), f.Content); err != nil {
+			return err
+		}
 	}
 	fmt.Println("generated api routes")
 	return nil
