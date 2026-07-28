@@ -260,7 +260,7 @@ func responsesFor(model, op string) map[string]Response {
 	entityRef := &Schema{Ref: "#/components/schemas/" + model}
 	switch op {
 	case "list":
-		res["200"] = jsonResponse("A page of "+plural(strings.ToLower(model))+".", &Schema{Type: "array", Items: entityRef})
+		res["200"] = jsonResponse("A page of "+plural(strings.ToLower(model))+".", listEnvelope(entityRef))
 	case "create":
 		res["201"] = jsonResponse("The created "+strings.ToLower(model)+".", entityRef)
 	case "delete":
@@ -271,6 +271,20 @@ func responsesFor(model, op string) map[string]Response {
 		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
 	}
 	return res
+}
+
+// listEnvelope wraps a page of results in {data, next_cursor} — the cursor-
+// pagination shape the handlers return. next_cursor is absent on the last page;
+// pass it back as the `cursor` query param to fetch the next page.
+func listEnvelope(items *Schema) *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"data":        {Type: "array", Items: items},
+			"next_cursor": {Type: "string", Description: "Opaque cursor for the next page; omitted on the last page."},
+		},
+		Required: []string{"data"},
+	}
 }
 
 // responseSchema is the object returned for an entity: every exposed field, with
@@ -372,10 +386,20 @@ func pathIDParam() Parameter {
 func listParams(e schema.Entity) []Parameter {
 	return []Parameter{
 		{Name: "$filter", In: "query", Description: filterDoc(e), Schema: &Schema{Type: "string"}},
-		{Name: "sort", In: "query", Description: "Sort expression, e.g. \"-updated_at\".", Schema: &Schema{Type: "string"}},
-		{Name: "limit", In: "query", Description: "Maximum rows to return.", Schema: &Schema{Type: "integer"}},
-		{Name: "cursor", In: "query", Description: "Opaque pagination cursor from a previous page.", Schema: &Schema{Type: "string"}},
+		{Name: "sort", In: "query", Description: sortDoc(e), Schema: &Schema{Type: "string"}},
+		{Name: "limit", In: "query", Description: "Maximum rows to return (default 50, max 200).", Schema: &Schema{Type: "integer"}},
+		{Name: "cursor", In: "query", Description: "Opaque pagination cursor; pass a previous page's next_cursor.", Schema: &Schema{Type: "string"}},
 	}
+}
+
+// sortDoc documents the sort param and the resource's default (which applies
+// when sort is omitted), keeping the spec in step with the @app.sort tag.
+func sortDoc(e schema.Entity) string {
+	s := "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`)."
+	if e.DefaultSort != "" {
+		s += " Defaults to `" + e.DefaultSort + "`."
+	}
+	return s
 }
 
 // filterDoc documents the OData $filter grammar for one entity: the logical

@@ -46,7 +46,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -54,7 +54,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -62,7 +62,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -74,10 +74,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Permission"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Permission"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -374,7 +386,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -382,7 +394,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -390,7 +402,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -402,10 +414,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Role"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Role"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
