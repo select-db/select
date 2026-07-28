@@ -28,40 +28,23 @@ type Entity struct {
 	ApplyDelete func(ctx context.Context, userID string, c types.Commit) (bool, *types.RestoredItem, error)
 }
 
+// Wrap is the shared middleware chain a generated route table applies to each
+// handler — authenticated ∘ WorkspaceFromHeader ∘ limited(perMinute) — supplied
+// by the api package so this package needn't import it. Parameterized by rate.
+type Wrap = func(perMinute int, h http.Handler) http.Handler
+
 // Per-op request-rate ceilings (requests/minute), mirroring the hand-written
-// routes' pattern of cheap reads and stricter writes. wrap keys them by principal.
+// routes' pattern of cheap reads and stricter writes. Keyed by principal.
 const (
-	readRate  = 120
-	writeRate = 30
+	ReadRate  = 120
+	WriteRate = 30
 )
 
-// Register wires an entity's declared ops onto the mux as REST routes. wrap is
-// the shared middleware chain the caller supplies — authenticated ∘
-// WorkspaceFromHeader ∘ limited(perMinute) — parameterized by rate so this
-// package reuses the app's auth/membership/rate-limit without importing it.
-// ServeMux's {id} pattern carries the path param; gate() inside each handler
-// enforces the op's `requires` actions.
-func Register(mux *http.ServeMux, wrap func(perMinute int, h http.Handler) http.Handler, entities []Entity) {
-	for _, e := range entities {
-		if hasOp(e, "list") {
-			mux.Handle("GET /"+e.Plural, wrap(readRate, listHandler(e)))
-		}
-		if hasOp(e, "get") {
-			mux.Handle("GET /"+e.Plural+"/{id}", wrap(readRate, getHandler(e)))
-		}
-		if hasOp(e, "create") {
-			mux.Handle("POST /"+e.Plural, wrap(writeRate, createHandler(e)))
-		}
-		if hasOp(e, "update") {
-			mux.Handle("PATCH /"+e.Plural+"/{id}", wrap(writeRate, updateHandler(e)))
-		}
-		if hasOp(e, "delete") {
-			mux.Handle("DELETE /"+e.Plural+"/{id}", wrap(writeRate, deleteHandler(e)))
-		}
-	}
-}
-
-func hasOp(e Entity, op string) bool { _, ok := e.Requires[op]; return ok }
+// ListHandler, GetHandler, CreateHandler, UpdateHandler, and DeleteHandler build
+// the http.HandlerFunc for one op over an entity. The generated per-table
+// package calls the ones its @app.api ops declare; all request handling
+// (decode, the `requires` gate, the query runtime, the syncer Apply/ApplyDelete)
+// is here, generic. gate() enforces the op's required actions.
 
 // gate enforces the op's required workspace actions: the owner bypasses, anyone
 // else must hold every listed action. Membership itself is already enforced by
@@ -78,7 +61,7 @@ func gate(a authz.Actor, actions []string) bool {
 	return true
 }
 
-func listHandler(e Entity) http.HandlerFunc {
+func ListHandler(e Entity) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
 		if !gate(a, e.Requires["list"]) {
@@ -102,7 +85,7 @@ func listHandler(e Entity) http.HandlerFunc {
 	}
 }
 
-func getHandler(e Entity) http.HandlerFunc {
+func GetHandler(e Entity) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
 		if !gate(a, e.Requires["get"]) {
@@ -122,7 +105,7 @@ func getHandler(e Entity) http.HandlerFunc {
 	}
 }
 
-func createHandler(e Entity) http.HandlerFunc {
+func CreateHandler(e Entity) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
 		if !gate(a, e.Requires["create"]) {
@@ -158,7 +141,7 @@ func createHandler(e Entity) http.HandlerFunc {
 	}
 }
 
-func updateHandler(e Entity) http.HandlerFunc {
+func UpdateHandler(e Entity) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
 		if !gate(a, e.Requires["update"]) {
@@ -191,7 +174,7 @@ func updateHandler(e Entity) http.HandlerFunc {
 	}
 }
 
-func deleteHandler(e Entity) http.HandlerFunc {
+func DeleteHandler(e Entity) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
 		if !gate(a, e.Requires["delete"]) {
