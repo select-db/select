@@ -174,12 +174,18 @@ func buildListSQL(res Resource, fs *FieldSet, workspaceID, filter string, sortFi
 	}
 
 	if cur != nil {
+		// Keyset over (sort, pk). The pk (a random uuid) only has to be a unique,
+		// stable tiebreaker with a total order — which uuid is — so pagination has
+		// no skips or dupes even though ids aren't monotonic; it is in fact
+		// required because the sort column (e.g. updated_at) is not unique. The
+		// bound values carry explicit ::type casts so the comparison never leans
+		// on Postgres inferring a uuid from a string param inside a row compare.
 		op := "<"
 		if !desc {
 			op = ">"
 		}
 		if sortField.Column == pk.Column {
-			where = append(where, fmt.Sprintf("%s %s $%d", pk.Column, op, param))
+			where = append(where, fmt.Sprintf("%s %s $%d::%s", pk.Column, op, param, sqlType(pk.Kind)))
 			args = append(args, cur.ID)
 			param++
 		} else {
@@ -187,7 +193,8 @@ func buildListSQL(res Resource, fs *FieldSet, workspaceID, filter string, sortFi
 			if err != nil {
 				return "", nil, err
 			}
-			where = append(where, fmt.Sprintf("(%s, %s) %s ($%d, $%d)", sortField.Column, pk.Column, op, param, param+1))
+			where = append(where, fmt.Sprintf("(%s, %s) %s ($%d::%s, $%d::%s)",
+				sortField.Column, pk.Column, op, param, sqlType(sortField.Kind), param+1, sqlType(pk.Kind)))
 			args = append(args, v, cur.ID)
 			param += 2
 		}
@@ -228,6 +235,26 @@ func scanRows(rows *sql.Rows, fields []Field) ([]map[string]any, error) {
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// sqlType is the Postgres type a kind's bound value is cast to in the keyset
+// comparison, so string-bound values (uuid, inet) compare as the column type
+// rather than as text.
+func sqlType(k Kind) string {
+	switch k {
+	case KindInt:
+		return "bigint"
+	case KindTime:
+		return "timestamptz"
+	case KindBool:
+		return "boolean"
+	case KindUUID:
+		return "uuid"
+	case KindInet:
+		return "inet"
+	default: // text
+		return "text"
+	}
 }
 
 func scanDest(k Kind) any {

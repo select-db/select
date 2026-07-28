@@ -98,7 +98,7 @@ func TestBuildListSQL(t *testing.T) {
 		cur := &Cursor{Value: "2026-01-01T00:00:00Z", ID: "abc"}
 		sql, args, err := buildListSQL(res, fs, "ws1", "", updatedAt, true, cur, 50)
 		mustSQL(t, err, sql,
-			"SELECT id, status, updated_at FROM audit.event WHERE workspace_id = $1 AND deleted_at IS NULL AND (updated_at, id) < ($2, $3) ORDER BY updated_at DESC, id DESC LIMIT $4")
+			"SELECT id, status, updated_at FROM audit.event WHERE workspace_id = $1 AND deleted_at IS NULL AND (updated_at, id) < ($2::timestamptz, $3::uuid) ORDER BY updated_at DESC, id DESC LIMIT $4")
 		wantArgs(t, args, []any{"ws1", mustTime(t, "2026-01-01T00:00:00Z"), "abc", 51})
 	})
 
@@ -106,7 +106,7 @@ func TestBuildListSQL(t *testing.T) {
 		cur := &Cursor{Value: "abc", ID: "abc"}
 		sql, args, err := buildListSQL(res, fs, "ws1", "", id, false, cur, 50)
 		mustSQL(t, err, sql,
-			"SELECT id, status, updated_at FROM audit.event WHERE workspace_id = $1 AND deleted_at IS NULL AND id > $2 ORDER BY id ASC LIMIT $3")
+			"SELECT id, status, updated_at FROM audit.event WHERE workspace_id = $1 AND deleted_at IS NULL AND id > $2::uuid ORDER BY id ASC LIMIT $3")
 		wantArgs(t, args, []any{"ws1", "abc", 51})
 	})
 
@@ -114,7 +114,7 @@ func TestBuildListSQL(t *testing.T) {
 		cur := &Cursor{Value: "2026-01-01T00:00:00Z", ID: "abc"}
 		sql, _, err := buildListSQL(res, fs, "ws1", "status eq 'error'", updatedAt, true, cur, 25)
 		mustSQL(t, err, sql,
-			"SELECT id, status, updated_at FROM audit.event WHERE workspace_id = $1 AND deleted_at IS NULL AND status = $2 AND (updated_at, id) < ($3, $4) ORDER BY updated_at DESC, id DESC LIMIT $5")
+			"SELECT id, status, updated_at FROM audit.event WHERE workspace_id = $1 AND deleted_at IS NULL AND status = $2 AND (updated_at, id) < ($3::timestamptz, $4::uuid) ORDER BY updated_at DESC, id DESC LIMIT $5")
 	})
 }
 
