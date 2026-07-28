@@ -25,14 +25,9 @@ func newLoggingSink(inner *arrowstream.Sink, rec audit.Record) *loggingSink {
 	return &loggingSink{Sink: inner, audit: audit.NewQueryRecorder(&rec)}
 }
 
-func (s *loggingSink) OnExecuted(durationMs int64) {
-	s.audit.Executed(durationMs)
-	s.Sink.OnExecuted(durationMs)
-}
-
 func (s *loggingSink) OnDone(rowCount, affected, durationMs int64) error {
 	err := s.Sink.OnDone(rowCount, affected, durationMs)
-	s.audit.Success(rowCount, affected, durationMs)
+	s.audit.Success(affected)
 	return err
 }
 

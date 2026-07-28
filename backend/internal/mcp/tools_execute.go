@@ -207,7 +207,7 @@ func (c *collectSink) OnDone(rowCount, affected, durationMs int64) error {
 	c.rowCount = rowCount
 	c.affected = affected
 	c.duration = durationMs
-	c.audit.Success(rowCount, affected, durationMs)
+	c.audit.Success(affected)
 	return nil
 }
 
