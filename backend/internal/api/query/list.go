@@ -227,7 +227,7 @@ func buildListSQL(res Resource, fs *FieldSet, workspaceID, filter string, sortFi
 // scanRows reads the result set into one map per row, keyed by API field name,
 // with each value converted to a JSON-friendly Go type by the field's kind.
 func scanRows(rows *sql.Rows, fields []Field) ([]map[string]any, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []map[string]any
 	for rows.Next() {
 		dests := make([]any, len(fields))
