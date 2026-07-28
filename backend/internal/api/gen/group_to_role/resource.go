@@ -2,35 +2,23 @@
 
 package group_to_role
 
-import (
-	"backend/internal/api/query"
-	"backend/internal/api/rest"
+import "backend/internal/api/query"
 
-	core "github.com/selectDb/dialect/core"
-
-	syncgen "backend/internal/syncer/gen/group_to_role"
-)
-
-// entity describes the group_to_role resource: its queryable fields and the
-// per-op required workspace actions, plus the syncer Apply/ApplyDelete
-// the write handlers delegate to.
-var entity = rest.Entity{
-	Singular: "group_to_role", Plural: "group_to_roles", Table: "group_to_role",
-	Resource: query.Resource{
-		Table: "app.group_to_role", PK: "id", DefaultSort: "-updated_at",
-		Fields: []query.Field{
-			{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "group_id", Column: "group_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
-		},
+// resource is the queryable shape of the group_to_role table: the fields the API
+// exposes, the operators each accepts, the default sort, and the keyset
+// primary key. The list and get handlers run over it.
+var resource = query.Resource{
+	Table: "app.group_to_role", PK: "id", DefaultSort: "-updated_at",
+	Fields: []query.Field{
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "group_id", Column: "group_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
 	},
-	Requires: map[string][]string{
-		"list":   {},
-		"get":    {},
-		"create": {core.ActionWorkspaceGroupsManage, core.ActionWorkspaceRolesManage},
-		"update": {core.ActionWorkspaceGroupsManage, core.ActionWorkspaceRolesManage},
-		"delete": {core.ActionWorkspaceGroupsManage, core.ActionWorkspaceRolesManage},
-	},
-	Apply: syncgen.Apply, ApplyDelete: syncgen.ApplyDelete,
 }
+
+// singular names the resource in handler error messages ("group_to_role not found").
+const singular = "group_to_role"
+
+// table is the short table name carried on the write commit.
+const table = "group_to_role"

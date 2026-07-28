@@ -13,8 +13,8 @@ func roleEntity() schema.Entity {
 		PrimaryKey:  []string{"id"},
 		DefaultSort: "name",
 		API: []schema.APIOp{
-			{Op: "list", Requires: []string{"roles.manage"}},
-			{Op: "get", Requires: []string{"roles.manage"}},
+			{Op: "list"}, // open to any member
+			{Op: "get"},
 			{Op: "create", Requires: []string{"roles.manage"}},
 			{Op: "update", Requires: []string{"roles.manage"}},
 			{Op: "delete", Requires: []string{"roles.manage"}},
@@ -44,8 +44,8 @@ func logEntity() schema.Entity {
 	}
 }
 
-// filesByName indexes the emitted set by path-qualified name, and collapses
-// each file's whitespace runs (gofmt aligns struct/map values, so single-space
+// filesByName indexes the emitted set by path-qualified name, and collapses each
+// file's whitespace runs (gofmt aligns struct/map values, so single-space
 // assertions would otherwise be brittle).
 func filesByName(t *testing.T, ents ...schema.Entity) map[string]string {
 	t.Helper()
@@ -73,6 +73,15 @@ func mustFile(t *testing.T, files map[string]string, name string) string {
 	return c
 }
 
+func mustContain(t *testing.T, name, content string, wants ...string) {
+	t.Helper()
+	for _, w := range wants {
+		if !strings.Contains(content, w) {
+			t.Fatalf("%s is missing:\n%s\n---\n%s", name, w, content)
+		}
+	}
+}
+
 func TestEmitRoutesLayout(t *testing.T) {
 	files := filesByName(t, roleEntity(), logEntity())
 
@@ -97,90 +106,119 @@ func TestEmitRoutesLayout(t *testing.T) {
 
 func TestEmitTopRoutes(t *testing.T) {
 	c := mustFile(t, filesByName(t, roleEntity(), logEntity()), "routes.go")
-	for _, want := range []string{
+	mustContain(t, "routes.go", c,
 		`package gen`,
 		`role "backend/internal/api/gen/role"`,
 		`event "backend/internal/api/gen/event"`,
 		`func RegisterRoutes(mux *http.ServeMux, wrap rest.Wrap)`,
 		`role.Register(mux, wrap)`,
 		`event.Register(mux, wrap)`,
-	} {
-		if !strings.Contains(c, want) {
-			t.Fatalf("top routes.go is missing:\n%s\n---\n%s", want, c)
-		}
-	}
+	)
 }
 
 func TestEmitResource(t *testing.T) {
 	files := filesByName(t, roleEntity(), logEntity())
 
 	role := mustFile(t, files, "role/resource.go")
-	for _, want := range []string{
+	mustContain(t, "role/resource.go", role,
 		`package role`,
-		`core "github.com/selectDb/dialect/core"`,
-		`syncgen "backend/internal/syncer/gen/role"`,
-		`var entity = rest.Entity{`,
-		`Singular: "role", Plural: "roles", Table: "role"`,
+		`import "backend/internal/api/query"`,
+		`var resource = query.Resource{`,
 		`Table: "app.role", PK: "id", DefaultSort: "name"`,
 		`{Name: "name", Column: "name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}}`,
-		`"list": {core.ActionWorkspaceRolesManage}`,
-		`Apply: syncgen.Apply, ApplyDelete: syncgen.ApplyDelete`,
-	} {
-		if !strings.Contains(role, want) {
-			t.Fatalf("role/resource.go is missing:\n%s\n---\n%s", want, role)
-		}
+		`const singular = "role"`,
+		`const table = "role"`, // has write ops
+	)
+	// resource.go is data only: no handler logic, no requires map, no Apply refs.
+	if strings.Contains(role, "Requires") || strings.Contains(role, "Apply") || strings.Contains(role, "http.HandlerFunc") {
+		t.Fatalf("resource.go should be data only:\n%s", role)
 	}
-	// The tenant column and hidden columns must never be exposed as fields.
+	// The tenant column must never be exposed as a field.
 	if strings.Contains(role, `Column: "workspace_id"`) {
 		t.Fatal("tenant column leaked into the field spec")
 	}
 
 	log := mustFile(t, files, "event/resource.go")
-	for _, want := range []string{
+	mustContain(t, "event/resource.go", log,
 		`package event`,
-		`Singular: "log", Plural: "logs", Table: "event"`,
 		`Table: "audit.event", PK: "id"`,
 		`Enum: []string{"success", "error", "denied"}`,
-		`"list": {core.ActionWorkspaceAuditRead}`,
-	} {
-		if !strings.Contains(log, want) {
-			t.Fatalf("event/resource.go is missing:\n%s\n---\n%s", want, log)
-		}
-	}
-	// The read-only entity must not reference the syncer Apply funcs, nor leak the
-	// @app.hide column into the field spec.
-	if strings.Contains(log, "ApplyDelete") || strings.Contains(log, "syncgen") {
-		t.Fatal("read-only entity should have no Apply/ApplyDelete")
+		`const singular = "log"`,
+	)
+	// A read-only entity carries no write commit, so no table const, and never
+	// leaks the @app.hide column.
+	if strings.Contains(log, "const table") {
+		t.Fatal("read-only entity should not declare the write-commit table const")
 	}
 	if strings.Contains(log, `principal_hash`) {
 		t.Fatal("@app.hide column leaked into the field spec")
 	}
 }
 
-func TestEmitOpAndRoutes(t *testing.T) {
-	files := filesByName(t, roleEntity())
+func TestEmitListInlined(t *testing.T) {
+	files := filesByName(t, roleEntity(), logEntity())
 
-	list := mustFile(t, files, "role/list.go")
-	for _, want := range []string{
-		`package role`,
-		`func List() http.HandlerFunc { return rest.ListHandler(entity) }`,
-	} {
-		if !strings.Contains(list, want) {
-			t.Fatalf("role/list.go is missing:\n%s\n---\n%s", want, list)
-		}
+	// The full list handler is inlined into the file — the gate, the query runtime
+	// call, the envelope response — not a delegation into the rest package.
+	role := mustFile(t, files, "role/list.go")
+	mustContain(t, "role/list.go", role,
+		`func List() http.HandlerFunc {`,
+		`a := authz.ActorOf(r)`,
+		`if !rest.Gate(a, nil) {`, // list is open to any member
+		`page, err := query.List(r.Context(), db.GetDB(), resource, query.Request{`,
+		`rest.WriteQueryError(w, err)`,
+		`rest.WriteJSON(w, http.StatusOK, page)`,
+	)
+	// An open op does not import the core action package.
+	if strings.Contains(role, "dialect/core") {
+		t.Fatalf("open list op should not import core:\n%s", role)
 	}
 
-	routes := mustFile(t, files, "role/routes.go")
-	for _, want := range []string{
+	// A gated read states its required action inline.
+	log := mustFile(t, files, "event/list.go")
+	mustContain(t, "event/list.go", log,
+		`if !rest.Gate(a, []string{core.ActionWorkspaceAuditRead}) {`,
+		`core "github.com/selectDb/dialect/core"`,
+	)
+}
+
+func TestEmitCreateInlined(t *testing.T) {
+	role := mustFile(t, filesByName(t, roleEntity()), "role/create.go")
+	// The whole create flow is present in the one file: gate, decode, id/conflict
+	// checks, the synthesized syncer commit, Apply, and the read-back response.
+	mustContain(t, "role/create.go", role,
+		`func Create() http.HandlerFunc {`,
+		`if !rest.Gate(a, []string{core.ActionWorkspaceRolesManage}) {`,
+		`body, ok := rest.DecodeBody(w, r)`,
+		`id, _ := body["id"].(string)`,
+		`rest.WriteError(w, http.StatusConflict, singular+" already exists")`,
+		`c := types.Commit{`,
+		`Operation: "create",`,
+		`TableName: table,`,
+		`applied, _, err := syncgen.Apply(r.Context(), a.UserID, c, time.Time{})`,
+		`syncgen "backend/internal/syncer/gen/role"`,
+		`rest.WriteJSON(w, http.StatusCreated, row)`,
+	)
+}
+
+func TestEmitDeleteInlined(t *testing.T) {
+	role := mustFile(t, filesByName(t, roleEntity()), "role/delete.go")
+	mustContain(t, "role/delete.go", role,
+		`func Delete() http.HandlerFunc {`,
+		`Operation: "delete",`,
+		`if _, _, err := syncgen.ApplyDelete(r.Context(), a.UserID, c); err != nil {`,
+		`w.WriteHeader(http.StatusNoContent)`,
+	)
+}
+
+func TestEmitEntityRoutes(t *testing.T) {
+	routes := mustFile(t, filesByName(t, roleEntity()), "role/routes.go")
+	mustContain(t, "role/routes.go", routes,
 		`func Register(mux *http.ServeMux, wrap rest.Wrap)`,
 		`mux.Handle("GET /roles", wrap(rest.ReadRate, List()))`,
 		`mux.Handle("GET /roles/{id}", wrap(rest.ReadRate, Get()))`,
 		`mux.Handle("POST /roles", wrap(rest.WriteRate, Create()))`,
 		`mux.Handle("PATCH /roles/{id}", wrap(rest.WriteRate, Update()))`,
 		`mux.Handle("DELETE /roles/{id}", wrap(rest.WriteRate, Delete()))`,
-	} {
-		if !strings.Contains(routes, want) {
-			t.Fatalf("role/routes.go is missing:\n%s\n---\n%s", want, routes)
-		}
-	}
+	)
 }

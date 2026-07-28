@@ -4,9 +4,69 @@ package group_to_role
 
 import (
 	"net/http"
+	"time"
 
+	"backend/db"
+	"backend/internal/api/query"
 	"backend/internal/api/rest"
+	"backend/internal/authz"
+	"backend/internal/syncer/types"
+
+	core "github.com/selectDb/dialect/core"
+
+	syncgen "backend/internal/syncer/gen/group_to_role"
 )
 
-// Update handles PATCH /group_to_roles/{id}.
-func Update() http.HandlerFunc { return rest.UpdateHandler(entity) }
+// Update handles PATCH /group_to_roles/{id}: apply the request body to an existing row.
+// The path id is authoritative. The write goes through the syncer's Apply.
+func Update() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a := authz.ActorOf(r)
+		if !rest.Gate(a, []string{core.ActionWorkspaceGroupsManage, core.ActionWorkspaceRolesManage}) {
+			rest.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		id := r.PathValue("id")
+		if _, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id); err != nil {
+			rest.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		} else if !found {
+			rest.WriteError(w, http.StatusNotFound, singular+" not found")
+			return
+		}
+		body, ok := rest.DecodeBody(w, r)
+		if !ok {
+			return
+		}
+		body["id"] = id // the path id is authoritative
+		c := types.Commit{
+			ID:          id + ":update",
+			CreatedAt:   time.Now(),
+			Operation:   "update",
+			TableName:   table,
+			ObjectID:    id,
+			Payload:     body,
+			UserID:      a.UserID,
+			WorkspaceID: a.WorkspaceID,
+		}
+		applied, _, err := syncgen.Apply(r.Context(), a.UserID, c, time.Time{})
+		if err != nil {
+			rest.WriteError(w, http.StatusUnprocessableEntity, "could not process the "+singular)
+			return
+		}
+		if !applied {
+			rest.WriteError(w, http.StatusConflict, "the "+singular+" was changed concurrently; retry")
+			return
+		}
+		row, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id)
+		if err != nil {
+			rest.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if !found {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		rest.WriteJSON(w, http.StatusOK, row)
+	}
+}

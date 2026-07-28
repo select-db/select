@@ -2,35 +2,23 @@
 
 package user_to_role
 
-import (
-	"backend/internal/api/query"
-	"backend/internal/api/rest"
+import "backend/internal/api/query"
 
-	core "github.com/selectDb/dialect/core"
-
-	syncgen "backend/internal/syncer/gen/user_to_role"
-)
-
-// entity describes the user_to_role resource: its queryable fields and the
-// per-op required workspace actions, plus the syncer Apply/ApplyDelete
-// the write handlers delegate to.
-var entity = rest.Entity{
-	Singular: "user_to_role", Plural: "user_to_roles", Table: "user_to_role",
-	Resource: query.Resource{
-		Table: "app.user_to_role", PK: "id", DefaultSort: "-updated_at",
-		Fields: []query.Field{
-			{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "user_id", Column: "user_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
-		},
+// resource is the queryable shape of the user_to_role table: the fields the API
+// exposes, the operators each accepts, the default sort, and the keyset
+// primary key. The list and get handlers run over it.
+var resource = query.Resource{
+	Table: "app.user_to_role", PK: "id", DefaultSort: "-updated_at",
+	Fields: []query.Field{
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "user_id", Column: "user_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
 	},
-	Requires: map[string][]string{
-		"list":   {},
-		"get":    {},
-		"create": {core.ActionWorkspaceRolesManage},
-		"update": {core.ActionWorkspaceRolesManage},
-		"delete": {core.ActionWorkspaceRolesManage},
-	},
-	Apply: syncgen.Apply, ApplyDelete: syncgen.ApplyDelete,
 }
+
+// singular names the resource in handler error messages ("user_to_role not found").
+const singular = "user_to_role"
+
+// table is the short table name carried on the write commit.
+const table = "user_to_role"

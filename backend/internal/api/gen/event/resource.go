@@ -2,37 +2,29 @@
 
 package event
 
-import (
-	"backend/internal/api/query"
-	"backend/internal/api/rest"
+import "backend/internal/api/query"
 
-	core "github.com/selectDb/dialect/core"
-)
-
-// entity describes the log resource: its queryable fields and the
-// per-op required workspace actions (read-only: no writes).
-var entity = rest.Entity{
-	Singular: "log", Plural: "logs", Table: "event",
-	Resource: query.Resource{
-		Table: "audit.event", PK: "id", DefaultSort: "-occurred_at",
-		Fields: []query.Field{
-			{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "occurred_at", Column: "occurred_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
-			{Name: "recorded_at", Column: "recorded_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
-			{Name: "domain", Column: "domain", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"query", "iam", "datasource"}},
-			{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-			{Name: "principal_id", Column: "principal_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "principal_type", Column: "principal_type", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"user", "api_key"}},
-			{Name: "target_type", Column: "target_type", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"permission", "role", "user", "datasource"}},
-			{Name: "target_id", Column: "target_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "target_label", Column: "target_label", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-			{Name: "status", Column: "status", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"success", "error", "failure", "denied"}},
-			{Name: "payload", Column: "payload", Kind: query.KindJSON, Ops: []query.Op{query.OpContains}},
-			{Name: "client_ip", Column: "client_ip", Kind: query.KindInet, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-		},
-	},
-	Requires: map[string][]string{
-		"list": {core.ActionWorkspaceAuditRead},
-		"get":  {core.ActionWorkspaceAuditRead},
+// resource is the queryable shape of the event table: the fields the API
+// exposes, the operators each accepts, the default sort, and the keyset
+// primary key. The list and get handlers run over it.
+var resource = query.Resource{
+	Table: "audit.event", PK: "id", DefaultSort: "-occurred_at",
+	Fields: []query.Field{
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "occurred_at", Column: "occurred_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
+		{Name: "recorded_at", Column: "recorded_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
+		{Name: "domain", Column: "domain", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"query", "iam", "datasource"}},
+		{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
+		{Name: "principal_id", Column: "principal_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "principal_type", Column: "principal_type", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"user", "api_key"}},
+		{Name: "target_type", Column: "target_type", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"permission", "role", "user", "datasource"}},
+		{Name: "target_id", Column: "target_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "target_label", Column: "target_label", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
+		{Name: "status", Column: "status", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"success", "error", "failure", "denied"}},
+		{Name: "payload", Column: "payload", Kind: query.KindJSON, Ops: []query.Op{query.OpContains}},
+		{Name: "client_ip", Column: "client_ip", Kind: query.KindInet, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
 	},
 }
+
+// singular names the resource in handler error messages ("log not found").
+const singular = "log"
