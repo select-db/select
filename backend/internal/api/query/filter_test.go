@@ -105,9 +105,9 @@ func TestCompileErrors(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected an error, got none")
 			}
-			var fe *FilterError
+			var fe *InputError
 			if !errors.As(err, &fe) {
-				t.Fatalf("expected *FilterError, got %T: %v", err, err)
+				t.Fatalf("expected *InputError, got %T: %v", err, err)
 			}
 			if !strings.Contains(fe.Message, tc.wantSub) {
 				t.Fatalf("message %q does not contain %q", fe.Message, tc.wantSub)
