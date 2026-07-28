@@ -387,7 +387,7 @@
           "group"
         ],
         "summary": "List groups",
-        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `source` | string | Origin of the group (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `external_id` | string | Identifier of the group in the external provider, when not local. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | Name of the group. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `source` | string | Origin of the group (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `external_id` | string | Identifier of the group in the external provider, when not local. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
         "operationId": "listGroup",
         "parameters": [
           {
@@ -715,7 +715,7 @@
           "log"
         ],
         "summary": "List logs",
-        "description": "Requires workspace action(s): audit.read.\n\n**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | Unique identifier of the event. _Operators: eq, ne, in, not in._ |\n| `occurred_at` | date-time | When the event occurred (event time). _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `recorded_at` | date-time | When the event was recorded; may lag occurred_at. _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `domain` | string (query, auth, iam, datasource) | Domain of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string | Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `principal_id` | uuid | Identifier of the principal. _Operators: eq, ne, in, not in._ |\n| `principal_type` | string (user, api_key) | Type of the principal that performed the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_type` | string (permission, role, user, datasource) | Type of the target the action was performed on. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_id` | uuid | Identifier of the target. _Operators: eq, ne, in, not in._ |\n| `target_label` | string | Label of the target at the time of the event. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `status` | string (success, error, failure, denied) | Outcome of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `payload` | json | Domain-specific details of the event. _Operators: contains._ |\n| `client_ip` | ip | IP address of the client. _Operators: eq, ne, in, not in._ |\n",
+        "description": "Requires workspace action(s): audit.read.\n\n**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | Unique identifier of the event. _Operators: eq, ne, in, not in._ |\n| `occurred_at` | date-time | When the event occurred (event time). _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `recorded_at` | date-time | When the event was recorded; may lag occurred_at. _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `domain` | string (query, iam, datasource) | Domain of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string | Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `principal_id` | uuid | Identifier of the principal. _Operators: eq, ne, in, not in._ |\n| `principal_type` | string (user, api_key) | Type of the principal that performed the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_type` | string (permission, role, user, datasource) | Type of the target the action was performed on. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_id` | uuid | Identifier of the target. _Operators: eq, ne, in, not in._ |\n| `target_label` | string | Label of the target at the time of the event. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `status` | string (success, error, failure, denied) | Outcome of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `payload` | json | Domain-specific details of the event. _Operators: contains._ |\n| `client_ip` | ip | IP address of the client. _Operators: eq, ne, in, not in._ |\n",
         "operationId": "listLog",
         "parameters": [
           {
@@ -1192,7 +1192,7 @@
           "role"
         ],
         "summary": "List roles",
-        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | Name of the role. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
         "operationId": "listRole",
         "parameters": [
           {
@@ -2530,7 +2530,8 @@
             "readOnly": true
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Name of the group."
           },
           "source": {
             "type": "string",
@@ -2656,7 +2657,6 @@
             "readOnly": true,
             "enum": [
               "query",
-              "auth",
               "iam",
               "datasource"
             ],
@@ -2898,7 +2898,8 @@
             "readOnly": true
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Name of the role."
           },
           "updated_at": {
             "type": "string",
