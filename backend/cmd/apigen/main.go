@@ -22,6 +22,7 @@ import (
 
 	"backend/internal/apigen/api"
 	"backend/internal/apigen/codegen"
+	"backend/internal/apigen/httpapi"
 	"backend/internal/apigen/openapi"
 	"backend/internal/apigen/schema"
 	"backend/internal/apigen/syncer"
@@ -105,7 +106,25 @@ func generate(root string, entities []schema.Entity) error {
 	if err := generateAPICapabilities(root, entities); err != nil {
 		return err
 	}
-	return generateOpenAPI(root, entities)
+	if err := generateOpenAPI(root, entities); err != nil {
+		return err
+	}
+	return generateAPIHandlers(root, entities)
+}
+
+// generateAPIHandlers writes the generated REST route table (rest.Entity
+// descriptors + RegisterRoutes) the hand-written rest runtime consumes.
+func generateAPIHandlers(root string, entities []schema.Entity) error {
+	f, err := httpapi.EmitRoutes(entities)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(root, "internal", "api", "gen", f.Name)
+	if err := writeFile(path, f.Content); err != nil {
+		return err
+	}
+	fmt.Println("generated api routes")
+	return nil
 }
 
 // generateSyncEntity writes one synced table's three artifacts: its sqlc CRUD

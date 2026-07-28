@@ -454,45 +454,7 @@ func typeLabel(f schema.Field) string {
 // odataOps maps a field's operator set (the shared FilterOperators taxonomy) to
 // the OData tokens a caller writes. Null checks are omitted - they're universal
 // and covered by the grammar legend (`field eq null` / `field ne null`).
-func odataOps(f schema.Field) []string {
-	var out []string
-	seen := map[string]bool{}
-	add := func(ss ...string) {
-		for _, s := range ss {
-			if !seen[s] {
-				seen[s] = true
-				out = append(out, s)
-			}
-		}
-	}
-	for _, op := range schema.FilterOperators(f) {
-		switch op {
-		case "eq":
-			add("eq")
-		case "ne":
-			add("ne")
-		case "lt":
-			add("lt")
-		case "lte":
-			add("le")
-		case "gt":
-			add("gt")
-		case "gte":
-			add("ge")
-		case "in":
-			add("in")
-		case "nin":
-			add("not in")
-		case "like", "ilike":
-			add("contains", "startswith", "endswith")
-		case "contains":
-			add("contains")
-		case "is_null", "not_null":
-			// universal; covered by the grammar legend
-		}
-	}
-	return out
-}
+func odataOps(f schema.Field) []string { return schema.ODataOperators(f) }
 
 // filterExamples builds one AND and one OR/NOT example from the entity's first
 // couple of business (non-PK) filterable fields.
@@ -590,9 +552,4 @@ func summary(op, name string) string {
 
 // plural is a naive pluralizer good enough for resource names (role -> roles,
 // permission -> permissions, user_to_role -> user_to_roles).
-func plural(name string) string {
-	if strings.HasSuffix(name, "s") {
-		return name
-	}
-	return name + "s"
-}
+func plural(name string) string { return codegen.Plural(name) }
