@@ -54,7 +54,7 @@ func TestParseSort(t *testing.T) {
 		{"-status", "status", true},
 	}
 	for _, tc := range cases {
-		f, desc, err := parseSort(tc.in, fs)
+		f, desc, err := parseSort(tc.in, "", fs)
 		if err != nil {
 			t.Fatalf("%q: %v", tc.in, err)
 		}
@@ -62,12 +62,21 @@ func TestParseSort(t *testing.T) {
 			t.Fatalf("%q: got (%s, desc=%v) want (%s, desc=%v)", tc.in, f.Name, desc, tc.wantName, tc.wantDesc)
 		}
 	}
+	// The resource's default applies when the request omits sort; an explicit
+	// sort overrides it.
+	if f, desc, err := parseSort("", "-status", fs); err != nil || f.Name != "status" || !desc {
+		t.Fatalf("resource default: f=%s desc=%v err=%v", f.Name, desc, err)
+	}
+	if f, desc, err := parseSort("id", "-status", fs); err != nil || f.Name != "id" || desc {
+		t.Fatalf("explicit overrides default: f=%s desc=%v err=%v", f.Name, desc, err)
+	}
+
 	for _, bad := range []struct{ in, sub string }{
 		{"nope", `unknown field "nope"`},
 		{"staus", `did you mean "status"`},
 		{"a,b", "single field"},
 	} {
-		_, _, err := parseSort(bad.in, fs)
+		_, _, err := parseSort(bad.in, "", fs)
 		var ie *InputError
 		if !errors.As(err, &ie) || !contains(ie.Message, bad.sub) {
 			t.Fatalf("%q: got %v, want InputError containing %q", bad.in, err, bad.sub)

@@ -19,6 +19,8 @@ type ColumnTags struct {
 	JSONPaths []string
 	Ops       []string
 	Lookup    string
+	Sort      bool // @app.sort: this column is the resource's default list sort
+	SortDesc  bool // @app.sort desc: newest/highest first (default is ascending)
 }
 
 // Edge is one join step, table.col -> table.col.
@@ -71,6 +73,9 @@ func ParseColumnTags(comment string) ColumnTags {
 			c.Ops = parseList(rest)
 		case "lookup":
 			c.Lookup = firstToken(rest)
+		case "sort":
+			c.Sort = true
+			c.SortDesc = strings.EqualFold(firstToken(rest), "desc")
 		}
 	}
 	return c

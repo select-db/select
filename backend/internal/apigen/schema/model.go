@@ -99,6 +99,8 @@ type Field struct {
 	Ops       []string `json:",omitempty"`
 	Lookup    string   `json:",omitempty"`
 	Immutable bool     `json:",omitempty"`
+	Sort      bool     `json:",omitempty"` // @app.sort: the resource's default list sort column
+	SortDesc  bool     `json:",omitempty"` // @app.sort desc
 	// Default is the literal value of a simple string-literal column default
 	// (e.g. 'local'), used to coalesce a NOT NULL column the client omits.
 	// Empty for no default or a non-literal (function) default.
@@ -132,6 +134,10 @@ type Entity struct {
 	API        []APIOp    `json:",omitempty"`
 	Relations  []Relation `json:",omitempty"`
 	Fields     []Field
+	// DefaultSort is the list endpoint's default sort as a "[-]field" expression
+	// (leading '-' = descending): the @app.sort column if one is tagged, else the
+	// cursor column newest-first. Empty when neither applies.
+	DefaultSort string `json:",omitempty"`
 }
 
 // Build derives the entity model from the raw catalog + parsed @app tags.
@@ -164,6 +170,7 @@ func Build(s RawSchema) ([]Entity, []error) {
 				Name: c.Name, Column: c.Name, Kind: kindOf(c.DataType), Nullable: !c.NotNull,
 				IsPK: pk[c.Name], Hidden: ct.Hide, Values: ct.Values, JSONPaths: ct.JSONPaths,
 				Ops: ct.Ops, Lookup: ct.Lookup, Immutable: ct.Immutable,
+				Sort: ct.Sort, SortDesc: ct.SortDesc,
 				Default:     parseDefaultLiteral(c.Default),
 				Description: commentProse(c.Comment),
 			}
@@ -181,6 +188,7 @@ func Build(s RawSchema) ([]Entity, []error) {
 			e.Fields = append(e.Fields, f)
 		}
 
+		e.DefaultSort = defaultSort(e)
 		errs = append(errs, lint(e)...)
 		ents = append(ents, e)
 	}
@@ -212,19 +220,77 @@ func buildRelations(decls []RelationDecl) []Relation {
 // table must have a primary key and carry every convention column the emitters
 // assume — a missing one means the table simply can't be generated.
 func lint(e Entity) []error {
-	if !e.Sync {
+	var errs []error
+	if e.Sync {
+		if len(e.PrimaryKey) == 0 {
+			errs = append(errs, fmt.Errorf("%s: @app.sync but no primary key", e.Name))
+		}
+		for _, col := range []string{TenantColumn, CursorColumn, SoftDeleteColumn} {
+			if !hasColumn(e, col) {
+				errs = append(errs, fmt.Errorf("%s: @app.sync but missing convention column %q", e.Name, col))
+			}
+		}
+	}
+	errs = append(errs, lintSort(e)...)
+	return errs
+}
+
+// lintSort validates the default-sort tag for a resource that exposes a list
+// endpoint: at most one @app.sort column, on an exposed non-json column, and a
+// resolvable default (the tag, or a cursor column to fall back to).
+func lintSort(e Entity) []error {
+	if !hasOp(e, "list") {
 		return nil
 	}
 	var errs []error
-	if len(e.PrimaryKey) == 0 {
-		errs = append(errs, fmt.Errorf("%s: @app.sync but no primary key", e.Name))
-	}
-	for _, col := range []string{TenantColumn, CursorColumn, SoftDeleteColumn} {
-		if !hasColumn(e, col) {
-			errs = append(errs, fmt.Errorf("%s: @app.sync but missing convention column %q", e.Name, col))
+	var tagged int
+	for _, f := range e.Fields {
+		if !f.Sort {
+			continue
+		}
+		tagged++
+		if !f.Exposed {
+			errs = append(errs, fmt.Errorf("%s: @app.sort on non-exposed column %q", e.Name, f.Column))
+		}
+		if f.Kind == KindJSON {
+			errs = append(errs, fmt.Errorf("%s: @app.sort on json column %q (a json value has no order)", e.Name, f.Column))
 		}
 	}
+	if tagged > 1 {
+		errs = append(errs, fmt.Errorf("%s: %d @app.sort columns; exactly one is the default list sort", e.Name, tagged))
+	}
+	if e.DefaultSort == "" {
+		errs = append(errs, fmt.Errorf("%s: list endpoint needs a default sort — tag a column @app.sort (no %q column to fall back to)", e.Name, CursorColumn))
+	}
 	return errs
+}
+
+func hasOp(e Entity, op string) bool {
+	for _, o := range e.API {
+		if o.Op == op {
+			return true
+		}
+	}
+	return false
+}
+
+// defaultSort is the resolved "[-]field" default: the @app.sort column (with its
+// direction), else the cursor column newest-first, else empty.
+func defaultSort(e Entity) string {
+	for _, f := range e.Fields {
+		if f.Sort {
+			if f.SortDesc {
+				return "-" + f.Name
+			}
+			return f.Name
+		}
+	}
+	for _, f := range e.Fields {
+		if f.Column == CursorColumn && f.Exposed {
+			return "-" + f.Name
+		}
+	}
+	return ""
 }
 
 func hasColumn(e Entity, name string) bool {
