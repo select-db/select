@@ -4,9 +4,50 @@ package permission
 
 import (
 	"net/http"
+	"time"
 
+	"backend/db"
+	"backend/internal/api/query"
 	"backend/internal/api/rest"
+	"backend/internal/authz"
+	"backend/internal/syncer/types"
+
+	core "github.com/selectDb/dialect/core"
+
+	syncgen "backend/internal/syncer/gen/permission"
 )
 
-// Delete handles DELETE /permissions/{id}.
-func Delete() http.HandlerFunc { return rest.DeleteHandler(entity) }
+// Delete handles DELETE /permissions/{id}: soft-delete a row through the syncer's
+// ApplyDelete, returning 204 on success.
+func Delete() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a := authz.ActorOf(r)
+		if !rest.Gate(a, []string{core.ActionWorkspaceRolesManage}) {
+			rest.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		id := r.PathValue("id")
+		if _, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id); err != nil {
+			rest.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		} else if !found {
+			rest.WriteError(w, http.StatusNotFound, singular+" not found")
+			return
+		}
+		c := types.Commit{
+			ID:          id + ":delete",
+			CreatedAt:   time.Now(),
+			Operation:   "delete",
+			TableName:   table,
+			ObjectID:    id,
+			Payload:     map[string]any{"id": id},
+			UserID:      a.UserID,
+			WorkspaceID: a.WorkspaceID,
+		}
+		if _, _, err := syncgen.ApplyDelete(r.Context(), a.UserID, c); err != nil {
+			rest.WriteError(w, http.StatusUnprocessableEntity, "could not process the "+singular)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

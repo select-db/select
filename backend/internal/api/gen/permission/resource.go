@@ -2,40 +2,28 @@
 
 package permission
 
-import (
-	"backend/internal/api/query"
-	"backend/internal/api/rest"
+import "backend/internal/api/query"
 
-	core "github.com/selectDb/dialect/core"
-
-	syncgen "backend/internal/syncer/gen/permission"
-)
-
-// entity describes the permission resource: its queryable fields and the
-// per-op required workspace actions, plus the syncer Apply/ApplyDelete
-// the write handlers delegate to.
-var entity = rest.Entity{
-	Singular: "permission", Plural: "permissions", Table: "permission",
-	Resource: query.Resource{
-		Table: "app.permission", PK: "id", DefaultSort: "-updated_at",
-		Fields: []query.Field{
-			{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "db_instance_id", Column: "db_instance_id", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-			{Name: "schema_name", Column: "schema_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-			{Name: "table_name", Column: "table_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-			{Name: "column_name", Column: "column_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-			{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"select", "insert", "update", "delete", "ddl", "see", "manage"}},
-			{Name: "effect", Column: "effect", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"allow", "deny"}},
-			{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
-		},
+// resource is the queryable shape of the permission table: the fields the API
+// exposes, the operators each accepts, the default sort, and the keyset
+// primary key. The list and get handlers run over it.
+var resource = query.Resource{
+	Table: "app.permission", PK: "id", DefaultSort: "-updated_at",
+	Fields: []query.Field{
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "db_instance_id", Column: "db_instance_id", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
+		{Name: "schema_name", Column: "schema_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
+		{Name: "table_name", Column: "table_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
+		{Name: "column_name", Column: "column_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
+		{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"select", "insert", "update", "delete", "ddl", "see", "manage"}},
+		{Name: "effect", Column: "effect", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"allow", "deny"}},
+		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
 	},
-	Requires: map[string][]string{
-		"list":   {},
-		"get":    {},
-		"create": {core.ActionWorkspaceRolesManage},
-		"update": {core.ActionWorkspaceRolesManage},
-		"delete": {core.ActionWorkspaceRolesManage},
-	},
-	Apply: syncgen.Apply, ApplyDelete: syncgen.ApplyDelete,
 }
+
+// singular names the resource in handler error messages ("permission not found").
+const singular = "permission"
+
+// table is the short table name carried on the write commit.
+const table = "permission"

@@ -4,9 +4,37 @@ package group
 
 import (
 	"net/http"
+	"strconv"
 
+	"backend/db"
+	"backend/internal/api/query"
 	"backend/internal/api/rest"
+	"backend/internal/authz"
 )
 
-// List handles GET /groups.
-func List() http.HandlerFunc { return rest.ListHandler(entity) }
+// List handles GET /groups: a workspace-scoped, soft-delete-filtered list with
+// OData $filter, sort, and keyset pagination, returning the
+// {data, next_cursor} envelope.
+func List() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a := authz.ActorOf(r)
+		if !rest.Gate(a, nil) {
+			rest.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		page, err := query.List(r.Context(), db.GetDB(), resource, query.Request{
+			WorkspaceID: a.WorkspaceID,
+			Filter:      q.Get("$filter"),
+			Sort:        q.Get("sort"),
+			Limit:       limit,
+			Cursor:      q.Get("cursor"),
+		})
+		if err != nil {
+			rest.WriteQueryError(w, err)
+			return
+		}
+		rest.WriteJSON(w, http.StatusOK, page)
+	}
+}

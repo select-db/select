@@ -5,8 +5,29 @@ package workspace_to_user
 import (
 	"net/http"
 
+	"backend/db"
+	"backend/internal/api/query"
 	"backend/internal/api/rest"
+	"backend/internal/authz"
 )
 
-// Get handles GET /workspace_to_users/{id}.
-func Get() http.HandlerFunc { return rest.GetHandler(entity) }
+// Get handles GET /workspace_to_users/{id}: fetch one workspace-scoped row by id.
+func Get() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a := authz.ActorOf(r)
+		if !rest.Gate(a, nil) {
+			rest.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		row, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, r.PathValue("id"))
+		if err != nil {
+			rest.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if !found {
+			rest.WriteError(w, http.StatusNotFound, singular+" not found")
+			return
+		}
+		rest.WriteJSON(w, http.StatusOK, row)
+	}
+}

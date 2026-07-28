@@ -4,9 +4,73 @@ package workspace_to_user
 
 import (
 	"net/http"
+	"time"
 
+	"backend/db"
+	"backend/internal/api/query"
 	"backend/internal/api/rest"
+	"backend/internal/authz"
+	"backend/internal/syncer/types"
+
+	core "github.com/selectDb/dialect/core"
+
+	syncgen "backend/internal/syncer/gen/workspace_to_user"
 )
 
-// Create handles POST /workspace_to_users.
-func Create() http.HandlerFunc { return rest.CreateHandler(entity) }
+// Create handles POST /workspace_to_users: create a row from the request body. The client
+// supplies the id. The write goes through the syncer's Apply, so tenancy, the
+// cross-workspace FK guard, LWW, and audit emission match the sync path.
+func Create() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a := authz.ActorOf(r)
+		if !rest.Gate(a, []string{core.ActionWorkspaceRolesManage, core.ActionWorkspaceUsersManage}) {
+			rest.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		body, ok := rest.DecodeBody(w, r)
+		if !ok {
+			return
+		}
+		id, _ := body["id"].(string)
+		if id == "" {
+			rest.WriteError(w, http.StatusBadRequest, "id is required")
+			return
+		}
+		if _, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id); err != nil {
+			rest.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		} else if found {
+			rest.WriteError(w, http.StatusConflict, singular+" already exists")
+			return
+		}
+		c := types.Commit{
+			ID:          id + ":create",
+			CreatedAt:   time.Now(),
+			Operation:   "create",
+			TableName:   table,
+			ObjectID:    id,
+			Payload:     body,
+			UserID:      a.UserID,
+			WorkspaceID: a.WorkspaceID,
+		}
+		applied, _, err := syncgen.Apply(r.Context(), a.UserID, c, time.Time{})
+		if err != nil {
+			rest.WriteError(w, http.StatusUnprocessableEntity, "could not process the "+singular)
+			return
+		}
+		if !applied { // LWW rejected it (e.g. a soft-deleted row holds this id)
+			rest.WriteError(w, http.StatusConflict, singular+" already exists")
+			return
+		}
+		row, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id)
+		if err != nil {
+			rest.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if !found {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		rest.WriteJSON(w, http.StatusCreated, row)
+	}
+}

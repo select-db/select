@@ -2,34 +2,22 @@
 
 package workspace_to_user
 
-import (
-	"backend/internal/api/query"
-	"backend/internal/api/rest"
+import "backend/internal/api/query"
 
-	core "github.com/selectDb/dialect/core"
-
-	syncgen "backend/internal/syncer/gen/workspace_to_user"
-)
-
-// entity describes the workspace_to_user resource: its queryable fields and the
-// per-op required workspace actions, plus the syncer Apply/ApplyDelete
-// the write handlers delegate to.
-var entity = rest.Entity{
-	Singular: "workspace_to_user", Plural: "workspace_to_users", Table: "workspace_to_user",
-	Resource: query.Resource{
-		Table: "app.workspace_to_user", PK: "id", DefaultSort: "-updated_at",
-		Fields: []query.Field{
-			{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "user_id", Column: "user_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-			{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
-		},
+// resource is the queryable shape of the workspace_to_user table: the fields the API
+// exposes, the operators each accepts, the default sort, and the keyset
+// primary key. The list and get handlers run over it.
+var resource = query.Resource{
+	Table: "app.workspace_to_user", PK: "id", DefaultSort: "-updated_at",
+	Fields: []query.Field{
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "user_id", Column: "user_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
+		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
 	},
-	Requires: map[string][]string{
-		"list":   {},
-		"get":    {},
-		"create": {core.ActionWorkspaceRolesManage, core.ActionWorkspaceUsersManage},
-		"update": {core.ActionWorkspaceRolesManage, core.ActionWorkspaceUsersManage},
-		"delete": {core.ActionWorkspaceRolesManage, core.ActionWorkspaceUsersManage},
-	},
-	Apply: syncgen.Apply, ApplyDelete: syncgen.ApplyDelete,
 }
+
+// singular names the resource in handler error messages ("workspace_to_user not found").
+const singular = "workspace_to_user"
+
+// table is the short table name carried on the write commit.
+const table = "workspace_to_user"
