@@ -36,6 +36,10 @@ type Resource struct {
 	Table  string
 	PK     string
 	Fields []Field
+	// DefaultSort is the "[-]field" sort applied when the request omits `sort`
+	// (leading '-' = descending). The generator sets it from the @app.sort column,
+	// falling back to the cursor column newest-first. Empty falls back here.
+	DefaultSort string
 }
 
 // Request is a parsed list query.
@@ -61,7 +65,7 @@ type Page struct {
 func List(ctx context.Context, q Querier, res Resource, req Request) (Page, error) {
 	fs := NewFieldSet(res.Fields)
 
-	sortField, desc, err := parseSort(req.Sort, fs)
+	sortField, desc, err := parseSort(req.Sort, res.DefaultSort, fs)
 	if err != nil {
 		return Page{}, err
 	}
@@ -115,10 +119,15 @@ func clampLimit(n int) int {
 	return n
 }
 
-// parseSort reads a "[-]field" sort expression (leading '-' = descending),
-// defaulting to newest-first. The field must be exposed and non-json.
-func parseSort(s string, fs *FieldSet) (Field, bool, error) {
+// parseSort reads a "[-]field" sort expression (leading '-' = descending). When
+// the request omits it, the resource's configured default applies (and if that
+// too is empty, newest-first by the cursor column). The field must be exposed
+// and non-json.
+func parseSort(s, resourceDefault string, fs *FieldSet) (Field, bool, error) {
 	s = strings.TrimSpace(s)
+	if s == "" {
+		s = resourceDefault
+	}
 	if s == "" {
 		s = defaultSort
 	}

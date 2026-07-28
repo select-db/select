@@ -90,7 +90,7 @@ func writeEntity(b *strings.Builder, e schema.Entity) error {
 	}
 	b.WriteString("\t\t{\n")
 	b.WriteString(fmt.Sprintf("\t\t\tSingular: %q, Plural: %q, Table: %q,\n", e.Name, codegen.Plural(e.Name), e.Table))
-	b.WriteString(fmt.Sprintf("\t\t\tResource: query.Resource{\n\t\t\t\tTable: %q, PK: %q,\n", e.Schema+"."+e.Table, pk))
+	b.WriteString(fmt.Sprintf("\t\t\tResource: query.Resource{\n\t\t\t\tTable: %q, PK: %q, DefaultSort: %q,\n", e.Schema+"."+e.Table, pk, e.DefaultSort))
 	b.WriteString("\t\t\t\tFields: []query.Field{\n")
 	for _, f := range e.Fields {
 		if !f.Exposed {

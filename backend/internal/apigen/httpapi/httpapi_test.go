@@ -10,7 +10,8 @@ import (
 func roleEntity() schema.Entity {
 	return schema.Entity{
 		Name: "role", Schema: "app", Table: "role", Sync: true,
-		PrimaryKey: []string{"id"},
+		PrimaryKey:  []string{"id"},
+		DefaultSort: "name",
 		API: []schema.APIOp{
 			{Op: "list", Requires: []string{"roles.manage"}},
 			{Op: "get", Requires: []string{"roles.manage"}},
@@ -61,7 +62,7 @@ func TestEmitRoutes(t *testing.T) {
 		`func RegisterRoutes(mux *http.ServeMux, wrap func(perMinute int, h http.Handler) http.Handler)`,
 		`rest.Register(mux, wrap, entities())`,
 		`Singular: "role", Plural: "roles", Table: "role"`,
-		`Table: "app.role", PK: "id"`,
+		`Table: "app.role", PK: "id", DefaultSort: "name"`,
 		`{Name: "name", Column: "name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}}`,
 		`"list": {core.ActionWorkspaceRolesManage}`,
 		`Apply: role.Apply, ApplyDelete: role.ApplyDelete`,
