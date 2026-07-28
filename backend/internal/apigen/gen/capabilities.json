@@ -319,7 +319,16 @@
             "not_null"
           ],
           "sortable": true,
-          "selectable": true
+          "selectable": true,
+          "values": [
+            "select",
+            "insert",
+            "update",
+            "delete",
+            "ddl",
+            "see",
+            "manage"
+          ]
         },
         {
           "name": "effect",
@@ -335,7 +344,11 @@
             "not_null"
           ],
           "sortable": true,
-          "selectable": true
+          "selectable": true,
+          "values": [
+            "allow",
+            "deny"
+          ]
         },
         {
           "name": "updated_at",
@@ -676,6 +689,244 @@
             "lte",
             "gt",
             "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        }
+      ]
+    },
+    {
+      "name": "log",
+      "operations": {
+        "get": {
+          "requires": [
+            "audit.read"
+          ]
+        },
+        "list": {
+          "requires": [
+            "audit.read"
+          ]
+        }
+      },
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "occurred_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "recorded_at",
+          "type": "time",
+          "operators": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "domain",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true,
+          "values": [
+            "query",
+            "auth",
+            "iam",
+            "datasource"
+          ]
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "principal_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "principal_type",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true,
+          "values": [
+            "user",
+            "api_key"
+          ]
+        },
+        {
+          "name": "target_type",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true,
+          "values": [
+            "permission",
+            "role",
+            "user",
+            "datasource"
+          ]
+        },
+        {
+          "name": "target_id",
+          "type": "uuid",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "target_label",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "operators": [
+            "eq",
+            "ne",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true,
+          "values": [
+            "success",
+            "error",
+            "failure",
+            "denied"
+          ]
+        },
+        {
+          "name": "payload",
+          "type": "json",
+          "operators": [
+            "contains",
+            "is_null",
+            "not_null"
+          ],
+          "sortable": true,
+          "selectable": true
+        },
+        {
+          "name": "client_ip",
+          "type": "inet",
+          "operators": [
+            "eq",
+            "ne",
             "in",
             "nin",
             "is_null",
