@@ -166,10 +166,10 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 
 		// Component schemas: the response object plus create/update request bodies.
 		doc.Components.Schemas[model] = responseSchema(e)
-		if hasOp(e, "create") {
+		if schema.HasOp(e, "create") {
 			doc.Components.Schemas[model+"CreateRequest"] = writeSchema(e, true)
 		}
-		if hasOp(e, "update") {
+		if schema.HasOp(e, "update") {
 			doc.Components.Schemas[model+"UpdateRequest"] = writeSchema(e, false)
 		}
 
@@ -197,22 +197,15 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 }
 
 // route maps an op to its (path, HTTP method): collection ops (list, create) on
-// the plural path, item ops (get, update, delete) on the /{id} path.
+// the plural path, item ops (get, update, delete) on the /{id} path. The op
+// method/collection semantics are single-sourced in schema (shared with the
+// handler emitter); OpenAPI wants the method lowercased.
 func route(coll, item, op string) (path, method string) {
-	switch op {
-	case "list":
-		return coll, "get"
-	case "create":
-		return coll, "post"
-	case "get":
-		return item, "get"
-	case "update":
-		return item, "patch"
-	case "delete":
-		return item, "delete"
-	default:
-		return coll, "post"
+	method = strings.ToLower(schema.RESTMethod(op))
+	if schema.OnCollection(op) {
+		return coll, method
 	}
+	return item, method
 }
 
 // operationFor builds the operation for one op on one entity: its parameters
@@ -545,15 +538,6 @@ func errorResponse(desc string) Response {
 
 func jsonResponse(desc string, s *Schema) Response {
 	return Response{Description: desc, Content: map[string]MediaType{"application/json": {Schema: s}}}
-}
-
-func hasOp(e schema.Entity, op string) bool {
-	for _, o := range e.API {
-		if o.Op == op {
-			return true
-		}
-	}
-	return false
 }
 
 // summary is a human title for an op on a resource, e.g. list+role -> "List roles".

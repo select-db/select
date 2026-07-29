@@ -60,13 +60,13 @@ func writeRequires(e schema.Entity) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, op := range e.API {
-		switch op.Op {
-		case "create", "update", "delete":
-			for _, r := range op.Requires {
-				if !seen[r] {
-					seen[r] = true
-					out = append(out, r)
-				}
+		if !schema.IsWriteOp(op.Op) {
+			continue
+		}
+		for _, r := range op.Requires {
+			if !seen[r] {
+				seen[r] = true
+				out = append(out, r)
 			}
 		}
 	}
