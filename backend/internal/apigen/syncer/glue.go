@@ -400,7 +400,10 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 	if ok, err := scope.{{.Fn}}(ctx, {{.Var}}, workspaceUUID); err != nil {
 		return false, nil, fmt.Errorf("{{.Pkg}}: validate {{.Table}}: %w", err)
 	} else if !ok {
-		return false, nil, fmt.Errorf("{{.Pkg}}: {{.Column}} does not belong to workspace")
+		// FK doesn't resolve to a row in this workspace (missing, soft-deleted, or
+		// in another workspace). A typed FieldError so the REST layer surfaces a
+		// precise, safe 422; the message never reveals cross-workspace existence.
+		return false, nil, &types.FieldError{Field: {{printf "%q" .Column}}, Message: "does not reference a {{.Table}} in this workspace"}
 	}
 {{end -}}
 	res, err := patch.Apply(ctx, c, patch.Handler[generated.{{.Model}}, generated.Upsert{{.Sing}}Params]{

@@ -17,6 +17,7 @@ import (
 
 	"backend/internal/api/query"
 	"backend/internal/api/validate"
+	"backend/internal/syncer/types"
 )
 
 // WriteJSON encodes v as the response body with the given status. The generated
@@ -52,4 +53,18 @@ func WriteValidationError(w http.ResponseWriter, e *validate.Error) {
 		"error":  "the request body is invalid",
 		"fields": e.Issues,
 	})
+}
+
+// WriteWriteError maps an Apply/ApplyDelete failure to a response. A typed
+// FieldError — the relational check the syncer runs that the body validator
+// can't (a foreign key that doesn't resolve to a row in the workspace) — becomes
+// a precise field-level 422 in the same envelope as body validation. Anything
+// else stays an opaque 422 so a raw DB message never reaches the client.
+func WriteWriteError(w http.ResponseWriter, singular string, err error) {
+	var fe *types.FieldError
+	if errors.As(err, &fe) {
+		WriteValidationError(w, &validate.Error{Issues: []validate.Issue{{Field: fe.Field, Message: fe.Message}}})
+		return
+	}
+	WriteError(w, http.StatusUnprocessableEntity, "could not process the "+singular)
 }

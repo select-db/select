@@ -57,6 +57,9 @@ func TestEmitPermissionUniform(t *testing.T) {
 	apply := glueByName(t, schema.PermissionTable())["apply.go"]
 	has(t, apply, `roleUUID, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "role_id"))`)
 	has(t, apply, `scope.RoleInWorkspace(ctx, roleUUID, workspaceUUID)`) // cross-workspace guard
+	// FK-out-of-workspace yields a typed FieldError so the REST layer can surface a
+	// precise, safe 422 (never revealing cross-workspace existence).
+	has(t, apply, `&types.FieldError{Field: "role_id", Message: "does not reference a role in this workspace"}`)
 	has(t, apply, `utils.PatchUUID(payload, "role_id", existing.RoleID, roleUUID)`)
 	has(t, apply, `utils.PatchNullStr(payload, "db_instance_id", existing.DbInstanceID)`)
 	has(t, apply, `utils.PatchStr(payload, "action", existing.Action)`)
