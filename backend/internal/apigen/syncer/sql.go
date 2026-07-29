@@ -63,10 +63,10 @@ func EmitSyncSQL(e schema.Entity) []codegen.GenFile {
 	d.SetBlock = strings.Join(setLines, "\n")
 
 	return []codegen.GenFile{
-		{Name: fmt.Sprintf("get_%s_by_id_query.sql", e.Table), Content: renderSQL(sqlByIDTmpl, d)},
-		{Name: fmt.Sprintf("get_%ss_for_user_since_query.sql", e.Table), Content: renderSQL(sqlSinceTmpl, d)},
-		{Name: fmt.Sprintf("set_%s_deleted_at_statement.sql", e.Table), Content: renderSQL(sqlDeleteTmpl, d)},
-		{Name: fmt.Sprintf("upsert_%s_statement.sql", e.Table), Content: renderSQL(sqlUpsertTmpl, d)},
+		{Name: fmt.Sprintf("get_%s_by_id_query.sql", e.Table), Content: codegen.Render(sqlByIDTmpl, d)},
+		{Name: fmt.Sprintf("get_%ss_for_user_since_query.sql", e.Table), Content: codegen.Render(sqlSinceTmpl, d)},
+		{Name: fmt.Sprintf("set_%s_deleted_at_statement.sql", e.Table), Content: codegen.Render(sqlDeleteTmpl, d)},
+		{Name: fmt.Sprintf("upsert_%s_statement.sql", e.Table), Content: codegen.Render(sqlUpsertTmpl, d)},
 	}
 }
 
@@ -79,14 +79,6 @@ type sqlData struct {
 	SoftDelete                 string
 	Cols, RCols, InsCols, Vals string
 	SetBlock                   string
-}
-
-func renderSQL(t *template.Template, d sqlData) string {
-	var b strings.Builder
-	if err := t.Execute(&b, d); err != nil {
-		panic(err) // templates are constant; a failure is a programming error
-	}
-	return b.String()
 }
 
 var (
