@@ -13,6 +13,7 @@ import (
 	"backend/internal/authz"
 	"backend/internal/syncer/types"
 
+	"github.com/google/uuid"
 	core "github.com/selectDb/dialect/core"
 
 	syncgen "backend/internal/syncer/gen/permission"
@@ -20,10 +21,11 @@ import (
 
 // createBodySchema is the request-body contract POST /permissions validates
 // against: the fields a client may set, their types and enums, and which are
-// required on create. Derived from the same field IR as the OpenAPI request
-// schema. (A Go const can't hold a composite value, so this is a package var.)
+// required. id is optional (a uuid when supplied; the handler generates one when
+// omitted). Derived from the same field IR as the OpenAPI request schema. (A Go
+// const can't hold a composite value, so this is a package var.)
 var createBodySchema = validate.Schema{Fields: []validate.Field{
-	{Name: "id", Kind: query.KindUUID, Required: true},
+	{Name: "id", Kind: query.KindUUID},
 	{Name: "role_id", Kind: query.KindUUID, Required: true},
 	{Name: "db_instance_id", Kind: query.KindText, Nullable: true},
 	{Name: "schema_name", Kind: query.KindText, Nullable: true},
@@ -34,8 +36,9 @@ var createBodySchema = validate.Schema{Fields: []validate.Field{
 }}
 
 // Create handles POST /permissions: create a row from the request body. The
-// client supplies the id. The write goes through the syncer's Apply, so tenancy,
-// the cross-workspace FK guard, LWW, and audit emission match the sync path.
+// client may supply the id or let the server generate one. The write goes
+// through the syncer's Apply, so tenancy, the cross-workspace FK guard, LWW, and
+// audit emission match the sync path.
 func Create() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
@@ -52,6 +55,10 @@ func Create() http.HandlerFunc {
 			return
 		}
 		id, _ := body["id"].(string)
+		if id == "" { // server-assigned id when the client omits it
+			id = uuid.NewString()
+			body["id"] = id
+		}
 		if _, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id); err != nil {
 			rest.WriteError(w, http.StatusInternalServerError, "internal error")
 			return

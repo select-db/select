@@ -303,15 +303,14 @@ func responseSchema(e schema.Entity) *Schema {
 	return s
 }
 
-// writeSchema is the create/update request body. create requires the client to
-// supply id (offline-first client-generated UUIDs) plus every NOT NULL writable
-// column without a default; update patches by id-in-path, so its body carries
-// only the (optional) writable columns.
+// writeSchema is the create/update request body. create takes an optional
+// client-supplied id (a uuid; the server generates one when omitted) plus every
+// NOT NULL writable column without a default; update patches by id-in-path, so
+// its body carries only the (optional) writable columns.
 func writeSchema(e schema.Entity, create bool) *Schema {
 	s := &Schema{Type: "object", Properties: map[string]*Schema{}}
 	if create {
-		s.Properties["id"] = &Schema{Type: "string", Format: "uuid"}
-		s.Required = []string{"id"}
+		s.Properties["id"] = &Schema{Type: "string", Format: "uuid", Description: "Optional client-supplied id; the server generates one when omitted."}
 	}
 	for _, f := range e.Fields {
 		if !schema.IsWritable(f) {

@@ -187,13 +187,19 @@ func TestEmitWriteSchemaPerFile(t *testing.T) {
 		}
 	}
 
-	// create: the client supplies the id in the body (required); NOT NULL columns
-	// are required too.
+	// create: id is optional (a uuid when supplied; the handler generates one when
+	// omitted), while NOT NULL columns are required.
 	create := files["role/create.go"]
 	mustContain(t, "role/create.go", create,
-		`{Name: "id", Kind: query.KindUUID, Required: true}`,
+		`{Name: "id", Kind: query.KindUUID},`, // optional: no Required
 		`{Name: "name", Kind: query.KindText, Required: true}`,
+		`if id == "" {`, // server-assigned id when omitted
+		`id = uuid.NewString()`,
+		`"github.com/google/uuid"`,
 	)
+	if strings.Contains(create, `{Name: "id", Kind: query.KindUUID, Required: true}`) {
+		t.Fatalf("create id must be optional (no Required):\n%s", create)
+	}
 
 	// update: the id is the URL path, not a body field, so it is absent from the
 	// schema; and a partial patch requires nothing. The handler validates the
