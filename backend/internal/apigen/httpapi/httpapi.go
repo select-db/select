@@ -280,41 +280,18 @@ func kindExpr(k schema.Kind) string {
 	}
 }
 
+// opsExpr renders a field's operator set as a []query.Op literal. query.Op is a
+// string type whose values are exactly the OData tokens ODataOperators yields
+// (query.OpEq == "eq"), so the token value is emitted directly rather than
+// re-deriving query's constant identifiers here — the token spelling is the
+// contract, owned by the query package.
 func opsExpr(f schema.Field) string {
 	toks := schema.ODataOperators(f)
 	parts := make([]string, 0, len(toks))
 	for _, t := range toks {
-		parts = append(parts, opConst(t))
+		parts = append(parts, fmt.Sprintf("%q", t))
 	}
 	return "[]query.Op{" + strings.Join(parts, ", ") + "}"
-}
-
-func opConst(tok string) string {
-	switch tok {
-	case "eq":
-		return "query.OpEq"
-	case "ne":
-		return "query.OpNe"
-	case "lt":
-		return "query.OpLt"
-	case "le":
-		return "query.OpLe"
-	case "gt":
-		return "query.OpGt"
-	case "ge":
-		return "query.OpGe"
-	case "in":
-		return "query.OpIn"
-	case "not in":
-		return "query.OpNotIn"
-	case "contains":
-		return "query.OpContains"
-	case "startswith":
-		return "query.OpStartsWith"
-	case "endswith":
-		return "query.OpEndsWith"
-	}
-	return ""
 }
 
 func enumExpr(f schema.Field) string {

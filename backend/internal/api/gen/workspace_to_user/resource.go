@@ -10,9 +10,9 @@ import "backend/internal/api/query"
 var resource = query.Resource{
 	Table: "app.workspace_to_user", PK: "id", DefaultSort: "-updated_at",
 	Fields: []query.Field{
-		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-		{Name: "user_id", Column: "user_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{"eq", "ne", "in", "not in"}},
+		{Name: "user_id", Column: "user_id", Kind: query.KindUUID, Ops: []query.Op{"eq", "ne", "in", "not in"}},
+		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{"eq", "ne", "lt", "le", "gt", "ge", "in", "not in"}},
 	},
 }
 

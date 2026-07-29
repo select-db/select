@@ -10,15 +10,15 @@ import "backend/internal/api/query"
 var resource = query.Resource{
 	Table: "app.permission", PK: "id", DefaultSort: "-updated_at",
 	Fields: []query.Field{
-		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-		{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-		{Name: "db_instance_id", Column: "db_instance_id", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-		{Name: "schema_name", Column: "schema_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-		{Name: "table_name", Column: "table_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-		{Name: "column_name", Column: "column_name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-		{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"select", "insert", "update", "delete", "ddl", "see", "manage"}},
-		{Name: "effect", Column: "effect", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}, Enum: []string{"allow", "deny"}},
-		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{"eq", "ne", "in", "not in"}},
+		{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{"eq", "ne", "in", "not in"}},
+		{Name: "db_instance_id", Column: "db_instance_id", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
+		{Name: "schema_name", Column: "schema_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
+		{Name: "table_name", Column: "table_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
+		{Name: "column_name", Column: "column_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
+		{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}, Enum: []string{"select", "insert", "update", "delete", "ddl", "see", "manage"}},
+		{Name: "effect", Column: "effect", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}, Enum: []string{"allow", "deny"}},
+		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{"eq", "ne", "lt", "le", "gt", "ge", "in", "not in"}},
 	},
 }
 
