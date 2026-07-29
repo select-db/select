@@ -9,6 +9,7 @@ import (
 	"backend/db"
 	"backend/internal/api/query"
 	"backend/internal/api/rest"
+	"backend/internal/api/validate"
 	"backend/internal/authz"
 	"backend/internal/syncer/types"
 
@@ -39,6 +40,10 @@ func Update() http.HandlerFunc {
 			return
 		}
 		body["id"] = id // the path id is authoritative
+		if verr := validate.ForUpdate(writeSpec, body); verr != nil {
+			rest.WriteValidationError(w, verr)
+			return
+		}
 		c := types.Commit{
 			ID:          id + ":update",
 			CreatedAt:   time.Now(),

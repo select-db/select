@@ -2,7 +2,10 @@
 
 package permission
 
-import "backend/internal/api/query"
+import (
+	"backend/internal/api/query"
+	"backend/internal/api/validate"
+)
 
 // resource is the queryable shape of the permission table: the fields the API
 // exposes, the operators each accepts, the default sort, and the keyset
@@ -27,3 +30,19 @@ const singular = "permission"
 
 // table is the short table name carried on the write commit.
 const table = "permission"
+
+// writeSpec is the create/update body contract: the settable fields with their
+// types, enums, and create-required-ness. The create and update handlers
+// validate the request body against it (shape/type/enum) before the write
+// reaches Apply, so a client mistake gets a precise field error, not an opaque
+// write failure. Derived from the same IR as the OpenAPI request schema.
+var writeSpec = validate.Schema{Fields: []validate.Field{
+	{Name: "id", Kind: query.KindUUID, Required: true},
+	{Name: "role_id", Kind: query.KindUUID, Required: true},
+	{Name: "db_instance_id", Kind: query.KindText, Nullable: true},
+	{Name: "schema_name", Kind: query.KindText, Nullable: true},
+	{Name: "table_name", Kind: query.KindText, Nullable: true},
+	{Name: "column_name", Kind: query.KindText, Nullable: true},
+	{Name: "action", Kind: query.KindText, Required: true, Enum: []string{"select", "insert", "update", "delete", "ddl", "see", "manage"}},
+	{Name: "effect", Kind: query.KindText, Enum: []string{"allow", "deny"}},
+}}

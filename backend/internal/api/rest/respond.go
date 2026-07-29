@@ -16,6 +16,7 @@ import (
 	"net/http"
 
 	"backend/internal/api/query"
+	"backend/internal/api/validate"
 )
 
 // WriteJSON encodes v as the response body with the given status. The generated
@@ -41,4 +42,14 @@ func WriteQueryError(w http.ResponseWriter, err error) {
 		return
 	}
 	WriteError(w, http.StatusInternalServerError, "internal error")
+}
+
+// WriteValidationError emits a 422 with the field-level issues from a write-body
+// validation failure: {"error": <summary>, "fields": [{"field","message"}, …]}.
+// The generated create/update handlers call it before the write reaches Apply.
+func WriteValidationError(w http.ResponseWriter, e *validate.Error) {
+	WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
+		"error":  "the request body is invalid",
+		"fields": e.Issues,
+	})
 }

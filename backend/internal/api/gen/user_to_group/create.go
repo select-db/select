@@ -9,6 +9,7 @@ import (
 	"backend/db"
 	"backend/internal/api/query"
 	"backend/internal/api/rest"
+	"backend/internal/api/validate"
 	"backend/internal/authz"
 	"backend/internal/syncer/types"
 
@@ -31,11 +32,11 @@ func Create() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		id, _ := body["id"].(string)
-		if id == "" {
-			rest.WriteError(w, http.StatusBadRequest, "id is required")
+		if verr := validate.ForCreate(writeSpec, body); verr != nil {
+			rest.WriteValidationError(w, verr)
 			return
 		}
+		id, _ := body["id"].(string)
 		if _, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id); err != nil {
 			rest.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
