@@ -1,0 +1,5 @@
+-- name: Get{{.Plur}}ForUserSince :many
+SELECT {{.RCols}}
+FROM {{.Table}} r
+INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.{{.Tenant}} AND wtu.user_id = $1
+WHERE r.{{.Cursor}} > $2;
