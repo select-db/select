@@ -169,8 +169,8 @@ func TestEmitWriteSchemaPerFile(t *testing.T) {
 		f := mustFile(t, files, name)
 		mustContain(t, name, f,
 			`var `+varName+` = validate.Schema{Fields: []validate.Field{`,
-			`{Name: "id", Kind: query.KindUUID, Required: true}`,
-			`{Name: "name", Kind: query.KindText, Required: true}`,
+			`{Name: "id", Kind: query.KindUUID`,
+			`{Name: "name", Kind: query.KindText`,
 		)
 		// The schema is declared before the handler, not inside it, and the handler
 		// references it by name.
@@ -186,6 +186,16 @@ func TestEmitWriteSchemaPerFile(t *testing.T) {
 		if strings.Contains(mustFile(t, files, name), "validate.Schema") {
 			t.Fatalf("%s should not carry a write schema", name)
 		}
+	}
+
+	// create marks required fields; update is a partial patch, so its schema marks
+	// nothing required (else the generated file would claim, e.g., that name is
+	// required on a PATCH when it isn't).
+	if !strings.Contains(files["role/create.go"], `{Name: "name", Kind: query.KindText, Required: true}`) {
+		t.Fatal("create schema should mark name required")
+	}
+	if strings.Contains(files["role/update.go"], "Required: true") {
+		t.Fatalf("update schema must not mark any field required:\n%s", files["role/update.go"])
 	}
 }
 

@@ -24,8 +24,8 @@ import (
 // request schema. (A Go const can't hold a composite value, so this is a package
 // var.)
 var updateBodySchema = validate.Schema{Fields: []validate.Field{
-	{Name: "id", Kind: query.KindUUID, Required: true},
-	{Name: "name", Kind: query.KindText, Required: true},
+	{Name: "id", Kind: query.KindUUID},
+	{Name: "name", Kind: query.KindText},
 }}
 
 // Update handles PATCH /roles/{id}: apply the request body to an existing

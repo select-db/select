@@ -126,23 +126,28 @@ func newResourceData(e schema.Entity) (resourceData, error) {
 	return d, nil
 }
 
-// writeFields builds the per-field validate.Field literals a create/update
-// handler validates its body against: the client-supplied id (required, a uuid),
-// then every client-settable column, required-on-create iff NOT NULL with no
-// default. Same writable/required rules as the OpenAPI request schema. The spec
-// is inlined into each write handler (create.go, update.go) so the file shows
-// exactly what it accepts.
-func writeFields(e schema.Entity) ([]string, error) {
+// writeFields builds the per-field validate.Field literals a write handler
+// validates its body against: the id (a uuid) plus every client-settable column,
+// with the field's type/nullable/enum. Same writable set as the OpenAPI request
+// schema.
+//
+// requireOnCreate distinguishes the two contracts. On create a NOT NULL column
+// with no default (and the client-supplied id) is Required. On update the body
+// is a partial patch — nothing is required — so no field carries Required, which
+// keeps updateBodySchema honest (ForUpdate ignores Required either way, but the
+// generated file shouldn't claim a field is required when it isn't).
+func writeFields(e schema.Entity, requireOnCreate bool) ([]string, error) {
 	pk, err := pkFieldName(e)
 	if err != nil {
 		return nil, err
 	}
-	out := []string{writeFieldLit(pk, "query.KindUUID", true, false, nil)}
+	out := []string{writeFieldLit(pk, "query.KindUUID", requireOnCreate, false, nil)}
 	for _, f := range e.Fields {
 		if !schema.IsWritable(f) {
 			continue
 		}
-		out = append(out, writeFieldLit(f.Name, kindExpr(f.Kind), schema.RequiredOnCreate(f), f.Nullable, f.Values))
+		required := requireOnCreate && schema.RequiredOnCreate(f)
+		out = append(out, writeFieldLit(f.Name, kindExpr(f.Kind), required, f.Nullable, f.Values))
 	}
 	return out, nil
 }
@@ -189,7 +194,7 @@ func newOpData(e schema.Entity, op schema.APIOp) (opData, error) {
 		SyncImport: "backend/internal/syncer/gen/" + e.Table,
 	}
 	if op.Op == "create" || op.Op == "update" {
-		if d.WriteFields, err = writeFields(e); err != nil {
+		if d.WriteFields, err = writeFields(e, op.Op == "create"); err != nil {
 			return opData{}, err
 		}
 	}
