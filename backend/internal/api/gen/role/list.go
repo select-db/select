@@ -12,8 +12,8 @@ import (
 	"backend/internal/authz"
 )
 
-// List handles GET /roles: a workspace-scoped, soft-delete-filtered list with
-// OData $filter, sort, and keyset pagination, returning the
+// List handles GET /roles: a workspace-scoped, soft-delete-filtered list
+// with OData $filter, sort, and keyset pagination, returning the
 // {data, next_cursor} envelope.
 func List() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

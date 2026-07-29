@@ -17,8 +17,8 @@ import (
 	syncgen "backend/internal/syncer/gen/user_to_group"
 )
 
-// Delete handles DELETE /user_to_groups/{id}: soft-delete a row through the syncer's
-// ApplyDelete, returning 204 on success.
+// Delete handles DELETE /user_to_groups/{id}: soft-delete a row through the
+// syncer's ApplyDelete, returning 204 on success.
 func Delete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
