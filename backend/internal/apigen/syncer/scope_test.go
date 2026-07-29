@@ -15,15 +15,18 @@ func scopeEntities() ([]schema.Entity, map[string]bool) {
 		return schema.Field{Name: col, Column: col, Kind: schema.KindUUID, FK: &schema.FKRef{Schema: "app", Table: target}}
 	}
 	ents := []schema.Entity{
-		{Name: "permission", Table: "permission", Fields: []schema.Field{fk("role_id", "role")}},
-		{Name: "user_to_group", Table: "user_to_group", Fields: []schema.Field{
+		{Name: "permission", Table: "permission", Sync: true, Fields: []schema.Field{fk("role_id", "role")}},
+		{Name: "user_to_group", Table: "user_to_group", Sync: true, Fields: []schema.Field{
 			fk("user_id", "user"), fk("group_id", "group"),
 		}},
-		{Name: "group_to_role", Table: "group_to_role", Fields: []schema.Field{
+		{Name: "group_to_role", Table: "group_to_role", Sync: true, Fields: []schema.Field{
 			fk("group_id", "group"), fk("role_id", "role"), // role repeated → deduped
 		}},
+		// A read-only (unsynced) entity whose scoped FK must NOT produce a guard —
+		// its writes never go through Apply, so nothing would call it.
+		{Name: "log", Table: "event", Sync: false, Fields: []schema.Field{fk("snapshot_id", "principal_snapshot")}},
 	}
-	scoped := map[string]bool{"role": true, "group": true} // user is global
+	scoped := map[string]bool{"role": true, "group": true, "principal_snapshot": true} // user is global
 	return ents, scoped
 }
 
@@ -54,6 +57,11 @@ func TestEmitScope(t *testing.T) {
 	// The global target (user, no workspace_id) gets no guard.
 	if strings.Contains(c, "UserInWorkspace") {
 		t.Fatalf("global FK target must not be guarded:\n%s", c)
+	}
+	// A scoped FK target referenced only by a read-only (unsynced) entity gets no
+	// guard — nothing writes it through Apply, and it may lack a by-id query.
+	if strings.Contains(c, "PrincipalSnapshotInWorkspace") {
+		t.Fatalf("FK target of an unsynced entity must not be guarded:\n%s", c)
 	}
 	// Deduped: role appears in two entities but is emitted once.
 	if n := strings.Count(c, "func RoleInWorkspace"); n != 1 {
