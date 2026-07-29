@@ -15,6 +15,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"backend/internal/apigen/codegen"
@@ -243,32 +244,34 @@ func operationFor(e schema.Entity, model string, op schema.APIOp) *Operation {
 	return o
 }
 
-// responsesFor is the response set for an op: the resource (list -> array,
-// create -> 201, delete -> 204), a 404 for item ops, plus shared auth errors.
+// responsesFor documents exactly the responses schema.ResponseCodes lists for the
+// op — the single source shared with the handler-alignment test, so the doc and
+// the API can't drift. "resource" in each description is swapped for the model.
 func responsesFor(model, op string) map[string]Response {
-	res := map[string]Response{
-		"401": errorResponse("Missing or invalid authentication."),
-		"403": errorResponse("Authenticated but lacks the required workspace action."),
-	}
-	entityRef := &Schema{Ref: "#/components/schemas/" + model}
-	switch op {
-	case "list":
-		res["200"] = jsonResponse("A page of "+codegen.Plural(strings.ToLower(model))+".", listEnvelope(entityRef))
-	case "create":
-		res["201"] = jsonResponse("The created "+strings.ToLower(model)+".", entityRef)
-	case "delete":
-		res["204"] = Response{Description: "Deleted."}
-		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
-	default: // get, update
-		res["200"] = jsonResponse("The "+strings.ToLower(model)+".", entityRef)
-		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
-	}
-	// The body-carrying writes validate the request against the resource's write
-	// contract and return field-level errors before the write is attempted.
-	if op == "create" || op == "update" {
-		res["422"] = validationErrorResponse()
+	res := map[string]Response{}
+	for _, r := range schema.ResponseCodes(op) {
+		res[strconv.Itoa(r.Status)] = responseFor(model, r)
 	}
 	return res
+}
+
+// responseFor renders one APIResponse into an OpenAPI Response, attaching the
+// body schema its kind calls for.
+func responseFor(model string, r schema.APIResponse) Response {
+	desc := strings.ReplaceAll(r.Desc, "resource", strings.ToLower(model))
+	entityRef := &Schema{Ref: "#/components/schemas/" + model}
+	switch r.Body {
+	case schema.RespNone:
+		return Response{Description: desc}
+	case schema.RespResource:
+		return jsonResponse(desc, entityRef)
+	case schema.RespPage:
+		return jsonResponse(desc, listEnvelope(entityRef))
+	case schema.RespValidation:
+		return jsonResponse(desc, &Schema{Ref: "#/components/schemas/ValidationError"})
+	default: // RespError
+		return jsonResponse(desc, &Schema{Ref: "#/components/schemas/Error"})
+	}
 }
 
 // listEnvelope wraps a page of results in {data, next_cursor} — the cursor-
@@ -523,12 +526,11 @@ func errorSchema() *Schema {
 	}
 }
 
-func errorResponse(desc string) Response {
-	return jsonResponse(desc, &Schema{Ref: "#/components/schemas/Error"})
-}
-
-// validationErrorSchema is the write-body validation failure: a summary plus a
-// field-level issue list, matching rest.WriteValidationError's response.
+// validationErrorSchema is the 422 body: an {error} summary always, plus a
+// field-level issue list when the failure is per-field (body validation or a
+// cross-workspace FK). fields is optional — a generic write rejection carries
+// only error — so this schema covers both, matching rest.WriteValidationError /
+// WriteWriteError.
 func validationErrorSchema() *Schema {
 	return &Schema{
 		Type: "object",
@@ -536,7 +538,7 @@ func validationErrorSchema() *Schema {
 			"error": {Type: "string", Description: "Human-readable summary."},
 			"fields": {
 				Type:        "array",
-				Description: "The offending fields and why each was rejected.",
+				Description: "The offending fields and why each was rejected (present for per-field failures).",
 				Items: &Schema{
 					Type: "object",
 					Properties: map[string]*Schema{
@@ -547,12 +549,8 @@ func validationErrorSchema() *Schema {
 				},
 			},
 		},
-		Required: []string{"error", "fields"},
+		Required: []string{"error"},
 	}
-}
-
-func validationErrorResponse() Response {
-	return jsonResponse("The request body failed validation.", &Schema{Ref: "#/components/schemas/ValidationError"})
 }
 
 func jsonResponse(desc string, s *Schema) Response {
