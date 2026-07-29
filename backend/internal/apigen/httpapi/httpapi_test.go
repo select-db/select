@@ -155,23 +155,36 @@ func TestEmitResource(t *testing.T) {
 	}
 }
 
-func TestEmitWriteSpecInlined(t *testing.T) {
+func TestEmitWriteSchemaPerFile(t *testing.T) {
 	files := filesByName(t, roleEntity())
 
-	// The write-body contract is inlined into each write handler (not referenced
-	// from resource.go), so the file shows exactly what it accepts.
-	for _, name := range []string{"role/create.go", "role/update.go"} {
+	// The write-body contract is a package-level var at the top of each write
+	// handler file (not referenced from resource.go), named for its operation, so
+	// the file shows exactly what it accepts.
+	cases := map[string]string{
+		"role/create.go": "createBodySchema",
+		"role/update.go": "updateBodySchema",
+	}
+	for name, varName := range cases {
 		f := mustFile(t, files, name)
 		mustContain(t, name, f,
-			`spec := validate.Schema{Fields: []validate.Field{`,
+			`var `+varName+` = validate.Schema{Fields: []validate.Field{`,
 			`{Name: "id", Kind: query.KindUUID, Required: true}`,
 			`{Name: "name", Kind: query.KindText, Required: true}`,
 		)
+		// The schema is declared before the handler, not inside it, and the handler
+		// references it by name.
+		if strings.Index(f, "var "+varName) > strings.Index(f, "http.HandlerFunc") {
+			t.Fatalf("%s: %s should be declared above the handler", name, varName)
+		}
+		if strings.Contains(f, "validate.Schema{Fields: []validate.Field{\n\t\t\t{") {
+			t.Fatalf("%s: schema should not be built inside the handler body", name)
+		}
 	}
-	// Read handlers and delete carry no write spec.
+	// Read handlers and delete carry no write schema.
 	for _, name := range []string{"role/list.go", "role/get.go", "role/delete.go"} {
 		if strings.Contains(mustFile(t, files, name), "validate.Schema") {
-			t.Fatalf("%s should not carry a write spec", name)
+			t.Fatalf("%s should not carry a write schema", name)
 		}
 	}
 }
@@ -211,9 +224,8 @@ func TestEmitCreateInlined(t *testing.T) {
 		`func Create() http.HandlerFunc {`,
 		`if !rest.Gate(a, []string{core.ActionWorkspaceRolesManage}) {`,
 		`body, ok := rest.DecodeBody(w, r)`,
-		// body is validated against the inlined write contract before proceeding.
-		`spec := validate.Schema{Fields: []validate.Field{`,
-		`if verr := validate.ForCreate(spec, body); verr != nil {`,
+		// body is validated against the file's write-schema var before proceeding.
+		`if verr := validate.ForCreate(createBodySchema, body); verr != nil {`,
 		`rest.WriteValidationError(w, verr)`,
 		`"backend/internal/api/validate"`,
 		`id, _ := body["id"].(string)`,

@@ -18,6 +18,18 @@ import (
 	syncgen "backend/internal/syncer/gen/group"
 )
 
+// updateBodySchema is the request-body contract PATCH /groups/{id} validates
+// against. Update is a partial patch, so ForUpdate treats every field as optional
+// and only checks the types/enums of those present. Same field IR as the OpenAPI
+// request schema. (A Go const can't hold a composite value, so this is a package
+// var.)
+var updateBodySchema = validate.Schema{Fields: []validate.Field{
+	{Name: "id", Kind: query.KindUUID, Required: true},
+	{Name: "name", Kind: query.KindText, Required: true},
+	{Name: "source", Kind: query.KindText},
+	{Name: "external_id", Kind: query.KindText, Nullable: true},
+}}
+
 // Update handles PATCH /groups/{id}: apply the request body to an existing
 // row. The path id is authoritative. The write goes through the syncer's Apply.
 func Update() http.HandlerFunc {
@@ -40,15 +52,7 @@ func Update() http.HandlerFunc {
 			return
 		}
 		body["id"] = id // the path id is authoritative
-		// spec is the body contract: the fields a client may set and their types
-		// and enums. Update is a partial patch, so none are required here.
-		spec := validate.Schema{Fields: []validate.Field{
-			{Name: "id", Kind: query.KindUUID, Required: true},
-			{Name: "name", Kind: query.KindText, Required: true},
-			{Name: "source", Kind: query.KindText},
-			{Name: "external_id", Kind: query.KindText, Nullable: true},
-		}}
-		if verr := validate.ForUpdate(spec, body); verr != nil {
+		if verr := validate.ForUpdate(updateBodySchema, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}

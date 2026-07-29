@@ -18,6 +18,16 @@ import (
 	syncgen "backend/internal/syncer/gen/workspace_to_user"
 )
 
+// updateBodySchema is the request-body contract PATCH /workspace_to_users/{id} validates
+// against. Update is a partial patch, so ForUpdate treats every field as optional
+// and only checks the types/enums of those present. Same field IR as the OpenAPI
+// request schema. (A Go const can't hold a composite value, so this is a package
+// var.)
+var updateBodySchema = validate.Schema{Fields: []validate.Field{
+	{Name: "id", Kind: query.KindUUID, Required: true},
+	{Name: "user_id", Kind: query.KindUUID, Required: true},
+}}
+
 // Update handles PATCH /workspace_to_users/{id}: apply the request body to an existing
 // row. The path id is authoritative. The write goes through the syncer's Apply.
 func Update() http.HandlerFunc {
@@ -40,13 +50,7 @@ func Update() http.HandlerFunc {
 			return
 		}
 		body["id"] = id // the path id is authoritative
-		// spec is the body contract: the fields a client may set and their types
-		// and enums. Update is a partial patch, so none are required here.
-		spec := validate.Schema{Fields: []validate.Field{
-			{Name: "id", Kind: query.KindUUID, Required: true},
-			{Name: "user_id", Kind: query.KindUUID, Required: true},
-		}}
-		if verr := validate.ForUpdate(spec, body); verr != nil {
+		if verr := validate.ForUpdate(updateBodySchema, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}
