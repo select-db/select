@@ -16,17 +16,25 @@ import (
 type scopeTarget struct{ Sing, Param string }
 
 // EmitScope renders internal/syncer/scope/scope.go: one <Target>InWorkspace guard
-// per distinct workspace-scoped foreign-key target across all entities. The
-// decision is pure introspection — a target is guarded iff its table carries the
-// tenant column (scoped) — so a new workspace-scoped FK target gets its guard
-// generated automatically, with no hand-maintained scope package. The guard
-// leans on the target's sqlc by-id query (Get<Sing>ByID), which is
-// workspace-scoped, so a row in another workspace reads as ErrNoRows; `go build`
-// against db/generated validates the query exists (i.e. the target is synced).
+// per distinct workspace-scoped foreign-key target referenced by a SYNCED entity.
+// The decision is pure introspection — a target is guarded iff its table carries
+// the tenant column (scoped) — so a new workspace-scoped FK target gets its guard
+// generated automatically, with no hand-maintained scope package.
+//
+// Only synced entities are considered, because the FK-scope guards live in the
+// syncer Apply, and Apply exists only for synced tables. A read-only entity
+// (e.g. the audit log) never writes its FKs through the API, so its FK targets
+// need no guard — and may not even be synced (so have no by-id query). The guard
+// leans on the target's workspace-scoped sqlc by-id query (Get<Sing>ByID), so a
+// row in another workspace reads as ErrNoRows; `go build` against db/generated
+// validates the query exists.
 func EmitScope(entities []schema.Entity, scoped map[string]bool) (codegen.GenFile, error) {
 	seen := map[string]bool{}
 	var targets []scopeTarget
 	for _, e := range entities {
+		if !e.Sync {
+			continue // guards live in Apply, which only synced entities have
+		}
 		for _, f := range e.Fields {
 			if f.FK == nil || !scoped[f.FK.Table] || seen[f.FK.Table] {
 				continue

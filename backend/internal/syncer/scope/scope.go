@@ -29,19 +29,6 @@ func GroupInWorkspace(ctx context.Context, groupID, workspaceID db_types.JSONNul
 	return true, nil
 }
 
-// PrincipalSnapshotInWorkspace reports whether principalSnapshotID exists and belongs to
-// workspaceID (a workspace-scoped by-id lookup).
-func PrincipalSnapshotInWorkspace(ctx context.Context, principalSnapshotID, workspaceID db_types.JSONNullUUID) (bool, error) {
-	_, err := db.Queries.GetPrincipalSnapshotByID(ctx, generated.GetPrincipalSnapshotByIDParams{ID: principalSnapshotID, WorkspaceID: workspaceID})
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
 // RoleInWorkspace reports whether roleID exists and belongs to
 // workspaceID (a workspace-scoped by-id lookup).
 func RoleInWorkspace(ctx context.Context, roleID, workspaceID db_types.JSONNullUUID) (bool, error) {
