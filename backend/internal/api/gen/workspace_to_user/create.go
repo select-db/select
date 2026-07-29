@@ -18,6 +18,15 @@ import (
 	syncgen "backend/internal/syncer/gen/workspace_to_user"
 )
 
+// createBodySchema is the request-body contract POST /workspace_to_users validates
+// against: the fields a client may set, their types and enums, and which are
+// required on create. Derived from the same field IR as the OpenAPI request
+// schema. (A Go const can't hold a composite value, so this is a package var.)
+var createBodySchema = validate.Schema{Fields: []validate.Field{
+	{Name: "id", Kind: query.KindUUID, Required: true},
+	{Name: "user_id", Kind: query.KindUUID, Required: true},
+}}
+
 // Create handles POST /workspace_to_users: create a row from the request body. The
 // client supplies the id. The write goes through the syncer's Apply, so tenancy,
 // the cross-workspace FK guard, LWW, and audit emission match the sync path.
@@ -32,13 +41,7 @@ func Create() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// spec is the body contract: the fields a client may set, their types,
-		// enums, and which are required on create. Validated before the write.
-		spec := validate.Schema{Fields: []validate.Field{
-			{Name: "id", Kind: query.KindUUID, Required: true},
-			{Name: "user_id", Kind: query.KindUUID, Required: true},
-		}}
-		if verr := validate.ForCreate(spec, body); verr != nil {
+		if verr := validate.ForCreate(createBodySchema, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}
