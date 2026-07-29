@@ -72,7 +72,7 @@ func Create() http.HandlerFunc {
 		}
 		applied, _, err := syncgen.Apply(r.Context(), a.UserID, c, time.Time{})
 		if err != nil {
-			rest.WriteError(w, http.StatusUnprocessableEntity, "could not process the "+singular)
+			rest.WriteWriteError(w, singular, err)
 			return
 		}
 		if !applied { // LWW rejected it (e.g. a soft-deleted row holds this id)

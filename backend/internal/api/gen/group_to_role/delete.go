@@ -45,7 +45,7 @@ func Delete() http.HandlerFunc {
 			WorkspaceID: a.WorkspaceID,
 		}
 		if _, _, err := syncgen.ApplyDelete(r.Context(), a.UserID, c); err != nil {
-			rest.WriteError(w, http.StatusUnprocessableEntity, "could not process the "+singular)
+			rest.WriteWriteError(w, singular, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
