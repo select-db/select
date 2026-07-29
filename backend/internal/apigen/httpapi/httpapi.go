@@ -171,9 +171,9 @@ func newRouteData(e schema.Entity) routeData {
 	d := routeData{Pkg: e.Table, Name: e.Name}
 	for _, op := range e.API {
 		d.Routes = append(d.Routes, routeLine{
-			Pattern: method(op.Op) + " " + path(op.Op, plural),
+			Pattern: schema.RESTMethod(op.Op) + " " + path(op.Op, plural),
 			Rate:    rateConst(op.Op),
-			Handler: opFn(op.Op),
+			Handler: codegen.Pascal(op.Op),
 		})
 	}
 	return d
@@ -222,44 +222,27 @@ func opTemplate(op string) (*template.Template, error) {
 	return nil, fmt.Errorf("unknown api op %q", op)
 }
 
-// opFn is the exported handler/registration name for an op (list -> List).
-func opFn(op string) string { return strings.ToUpper(op[:1]) + op[1:] }
-
-func method(op string) string {
-	switch op {
-	case "create":
-		return "POST"
-	case "update":
-		return "PATCH"
-	case "delete":
-		return "DELETE"
-	default: // list, get
-		return "GET"
-	}
-}
-
+// path is the REST path an op mounts on: the collection /plural (list, create)
+// or the item /plural/{id} (get, update, delete). The collection/item split is
+// single-sourced in schema (shared with the OpenAPI emitter).
 func path(op, plural string) string {
-	switch op {
-	case "list", "create":
+	if schema.OnCollection(op) {
 		return "/" + plural
-	default: // get, update, delete
-		return "/" + plural + "/{id}"
 	}
+	return "/" + plural + "/{id}"
 }
 
+// rateConst is the per-op rate constant: stricter for writes, cheap for reads.
 func rateConst(op string) string {
-	switch op {
-	case "create", "update", "delete":
+	if schema.IsWriteOp(op) {
 		return "WriteRate"
-	default:
-		return "ReadRate"
 	}
+	return "ReadRate"
 }
 
 func hasWriteOp(e schema.Entity) bool {
 	for _, op := range e.API {
-		switch op.Op {
-		case "create", "update", "delete":
+		if schema.IsWriteOp(op.Op) {
 			return true
 		}
 	}

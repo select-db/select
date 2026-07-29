@@ -239,7 +239,7 @@ func lint(e Entity) []error {
 // endpoint: at most one @app.sort column, on an exposed non-json column, and a
 // resolvable default (the tag, or a cursor column to fall back to).
 func lintSort(e Entity) []error {
-	if !hasOp(e, "list") {
+	if !HasOp(e, "list") {
 		return nil
 	}
 	var errs []error
@@ -263,15 +263,6 @@ func lintSort(e Entity) []error {
 		errs = append(errs, fmt.Errorf("%s: list endpoint needs a default sort — tag a column @app.sort (no %q column to fall back to)", e.Name, CursorColumn))
 	}
 	return errs
-}
-
-func hasOp(e Entity, op string) bool {
-	for _, o := range e.API {
-		if o.Op == op {
-			return true
-		}
-	}
-	return false
 }
 
 // defaultSort is the resolved "[-]field" default: the @app.sort column (with its
