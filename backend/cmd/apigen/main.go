@@ -103,6 +103,9 @@ func generate(root string, entities []schema.Entity) error {
 	if err := generateChangesAggregation(root, entities); err != nil {
 		return err
 	}
+	if err := generateScope(root, entities); err != nil {
+		return err
+	}
 	if err := generateAPICapabilities(root, entities); err != nil {
 		return err
 	}
@@ -212,6 +215,21 @@ func generateChangesAggregation(root string, entities []schema.Entity) error {
 		return fmt.Errorf("sync changes: %w", err)
 	}
 	return writeGen(syncerGenDir(root), f, "syncer changes aggregation")
+}
+
+// generateScope writes internal/syncer/scope/scope.go — the <Target>InWorkspace
+// cross-workspace FK guards, one per workspace-scoped FK target.
+func generateScope(root string, entities []schema.Entity) error {
+	f, err := syncer.EmitScope(entities, workspaceScopedTables(entities))
+	if err != nil {
+		return fmt.Errorf("scope: %w", err)
+	}
+	path := filepath.Join(root, "internal", "syncer", "scope", f.Name)
+	if err := writeFile(path, f.Content); err != nil {
+		return err
+	}
+	fmt.Println("generated scope guards")
+	return nil
 }
 
 // generateAPICapabilities writes the machine-readable capabilities document the
