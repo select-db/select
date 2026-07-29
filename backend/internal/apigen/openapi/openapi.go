@@ -143,7 +143,7 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 		Security: []SecurityReq{{bearerScheme: {}}},
 		Paths:    map[string]*PathItem{},
 		Components: Components{
-			Schemas: map[string]*Schema{"Error": errorSchema()},
+			Schemas: map[string]*Schema{"Error": errorSchema(), "ValidationError": validationErrorSchema()},
 			SecuritySchemes: map[string]SecurityScheme{
 				bearerScheme: {
 					Type:         "http",
@@ -263,6 +263,11 @@ func responsesFor(model, op string) map[string]Response {
 		res["200"] = jsonResponse("The "+strings.ToLower(model)+".", entityRef)
 		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
 	}
+	// The body-carrying writes validate the request against the resource's write
+	// contract and return field-level errors before the write is attempted.
+	if op == "create" || op == "update" {
+		res["422"] = validationErrorResponse()
+	}
 	return res
 }
 
@@ -309,24 +314,15 @@ func writeSchema(e schema.Entity, create bool) *Schema {
 		s.Required = []string{"id"}
 	}
 	for _, f := range e.Fields {
-		if !isWritable(f) {
+		if !schema.IsWritable(f) {
 			continue
 		}
 		s.Properties[f.Name] = fieldSchema(f)
-		if create && !f.Nullable && f.Default == "" {
+		if create && schema.RequiredOnCreate(f) {
 			s.Required = append(s.Required, f.Name)
 		}
 	}
 	return s
-}
-
-// isWritable reports whether a field is client-settable: a patchable value column
-// or a non-tenant foreign key (relationship identity set on write).
-func isWritable(f schema.Field) bool {
-	if f.Hidden || f.IsPK {
-		return false
-	}
-	return f.Patchable || (f.FK != nil && f.Column != schema.TenantColumn)
 }
 
 // scalarSchema is a field's bare JSON type/format/enum, without nullability -
@@ -530,6 +526,34 @@ func errorSchema() *Schema {
 
 func errorResponse(desc string) Response {
 	return jsonResponse(desc, &Schema{Ref: "#/components/schemas/Error"})
+}
+
+// validationErrorSchema is the write-body validation failure: a summary plus a
+// field-level issue list, matching rest.WriteValidationError's response.
+func validationErrorSchema() *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"error": {Type: "string", Description: "Human-readable summary."},
+			"fields": {
+				Type:        "array",
+				Description: "The offending fields and why each was rejected.",
+				Items: &Schema{
+					Type: "object",
+					Properties: map[string]*Schema{
+						"field":   {Type: "string"},
+						"message": {Type: "string"},
+					},
+					Required: []string{"field", "message"},
+				},
+			},
+		},
+		Required: []string{"error", "fields"},
+	}
+}
+
+func validationErrorResponse() Response {
+	return jsonResponse("The request body failed validation.", &Schema{Ref: "#/components/schemas/ValidationError"})
 }
 
 func jsonResponse(desc string, s *Schema) Response {

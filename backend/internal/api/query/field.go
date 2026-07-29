@@ -89,9 +89,17 @@ func (fs *FieldSet) lookup(name string) (Field, bool) {
 // suggest returns the closest known field name to an unknown one, for a
 // "did you mean" hint, or "" when nothing is close enough.
 func (fs *FieldSet) suggest(unknown string) string {
+	return Suggest(fs.names, unknown)
+}
+
+// Suggest returns the closest name in known to unknown, for a "did you mean"
+// hint, or "" when nothing is close enough (edit distance scaled to the typo's
+// length). Exported so the write-body validator produces the same hint the
+// $filter/sort validator does, without duplicating the edit-distance logic.
+func Suggest(known []string, unknown string) string {
 	best, bestDist := "", 1<<30
 	limit := len(unknown)/2 + 1 // scale tolerance to the typo'd length
-	for _, n := range fs.names {
+	for _, n := range known {
 		if d := levenshtein(unknown, n); d < bestDist {
 			best, bestDist = n, d
 		}

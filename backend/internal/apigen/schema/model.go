@@ -308,6 +308,25 @@ func parseDefaultLiteral(expr string) string {
 	return strings.ReplaceAll(s[1:len(s)-1], "''", "'")
 }
 
+// IsWritable reports whether a field is client-settable on create/update: a
+// patchable value column or a non-tenant foreign key (relationship identity set
+// on write). The primary key, @app.hide columns, and the tenant column are never
+// writable. Single-sourced so the OpenAPI request schema and the write-body
+// validator accept exactly the same fields.
+func IsWritable(f Field) bool {
+	if f.Hidden || f.IsPK {
+		return false
+	}
+	return f.Patchable || (f.FK != nil && f.Column != TenantColumn)
+}
+
+// RequiredOnCreate reports whether a writable field must be present on create: a
+// NOT NULL column with no database default (an omitted value would violate the
+// constraint). On update every field is optional (partial patch by id-in-path).
+func RequiredOnCreate(f Field) bool {
+	return !f.Nullable && f.Default == ""
+}
+
 // FilterOperators is the filter operator set a field supports, derived from its
 // kind. An explicit @app.ops list overrides it wholesale. Shared by every
 // projection (capabilities, OpenAPI) so the operator taxonomy stays single-

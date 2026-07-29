@@ -2,7 +2,10 @@
 
 package group_to_role
 
-import "backend/internal/api/query"
+import (
+	"backend/internal/api/query"
+	"backend/internal/api/validate"
+)
 
 // resource is the queryable shape of the group_to_role table: the fields the API
 // exposes, the operators each accepts, the default sort, and the keyset
@@ -22,3 +25,14 @@ const singular = "group_to_role"
 
 // table is the short table name carried on the write commit.
 const table = "group_to_role"
+
+// writeSpec is the create/update body contract: the settable fields with their
+// types, enums, and create-required-ness. The create and update handlers
+// validate the request body against it (shape/type/enum) before the write
+// reaches Apply, so a client mistake gets a precise field error, not an opaque
+// write failure. Derived from the same IR as the OpenAPI request schema.
+var writeSpec = validate.Schema{Fields: []validate.Field{
+	{Name: "id", Kind: query.KindUUID, Required: true},
+	{Name: "group_id", Kind: query.KindUUID, Required: true},
+	{Name: "role_id", Kind: query.KindUUID, Required: true},
+}}
