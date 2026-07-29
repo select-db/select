@@ -32,7 +32,13 @@ func Create() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if verr := validate.ForCreate(writeSpec, body); verr != nil {
+		// spec is the body contract: the fields a client may set, their types,
+		// enums, and which are required on create. Validated before the write.
+		spec := validate.Schema{Fields: []validate.Field{
+			{Name: "id", Kind: query.KindUUID, Required: true},
+			{Name: "name", Kind: query.KindText, Required: true},
+		}}
+		if verr := validate.ForCreate(spec, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}

@@ -40,7 +40,14 @@ func Update() http.HandlerFunc {
 			return
 		}
 		body["id"] = id // the path id is authoritative
-		if verr := validate.ForUpdate(writeSpec, body); verr != nil {
+		// spec is the body contract: the fields a client may set and their types
+		// and enums. Update is a partial patch, so none are required here.
+		spec := validate.Schema{Fields: []validate.Field{
+			{Name: "id", Kind: query.KindUUID, Required: true},
+			{Name: "group_id", Kind: query.KindUUID, Required: true},
+			{Name: "role_id", Kind: query.KindUUID, Required: true},
+		}}
+		if verr := validate.ForUpdate(spec, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}
