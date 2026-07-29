@@ -118,6 +118,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -130,6 +140,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -188,12 +208,32 @@
               }
             }
           },
+          "409": {
+            "description": "A grouptorole with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -264,6 +304,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -298,7 +348,7 @@
         },
         "responses": {
           "200": {
-            "description": "The grouptorole.",
+            "description": "The updated grouptorole.",
             "content": {
               "application/json": {
                 "schema": {
@@ -337,12 +387,32 @@
               }
             }
           },
+          "409": {
+            "description": "The grouptorole was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -398,6 +468,26 @@
           },
           "404": {
             "description": "No such grouptorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The grouptorole could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -481,6 +571,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -493,6 +593,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -551,12 +661,32 @@
               }
             }
           },
+          "409": {
+            "description": "A group with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -626,6 +756,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -660,7 +800,7 @@
         },
         "responses": {
           "200": {
-            "description": "The group.",
+            "description": "The updated group.",
             "content": {
               "application/json": {
                 "schema": {
@@ -699,12 +839,32 @@
               }
             }
           },
+          "409": {
+            "description": "The group was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -759,6 +919,26 @@
           },
           "404": {
             "description": "No such group in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The group could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -841,6 +1021,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -853,6 +1043,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -920,6 +1120,16 @@
           },
           "404": {
             "description": "No such log in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1002,6 +1212,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -1014,6 +1234,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1072,12 +1302,32 @@
               }
             }
           },
+          "409": {
+            "description": "A permission with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1147,6 +1397,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1181,7 +1441,7 @@
         },
         "responses": {
           "200": {
-            "description": "The permission.",
+            "description": "The updated permission.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1220,12 +1480,32 @@
               }
             }
           },
+          "409": {
+            "description": "The permission was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1280,6 +1560,26 @@
           },
           "404": {
             "description": "No such permission in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The permission could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1362,6 +1662,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -1374,6 +1684,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1432,12 +1752,32 @@
               }
             }
           },
+          "409": {
+            "description": "A role with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1507,6 +1847,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1541,7 +1891,7 @@
         },
         "responses": {
           "200": {
-            "description": "The role.",
+            "description": "The updated role.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1580,12 +1930,32 @@
               }
             }
           },
+          "409": {
+            "description": "The role was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1640,6 +2010,26 @@
           },
           "404": {
             "description": "No such role in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The role could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1722,6 +2112,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -1734,6 +2134,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1792,12 +2202,32 @@
               }
             }
           },
+          "409": {
+            "description": "A usertogroup with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1867,6 +2297,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1901,7 +2341,7 @@
         },
         "responses": {
           "200": {
-            "description": "The usertogroup.",
+            "description": "The updated usertogroup.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1940,12 +2380,32 @@
               }
             }
           },
+          "409": {
+            "description": "The usertogroup was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2000,6 +2460,26 @@
           },
           "404": {
             "description": "No such usertogroup in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The usertogroup could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2082,6 +2562,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -2094,6 +2584,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2152,12 +2652,32 @@
               }
             }
           },
+          "409": {
+            "description": "A usertorole with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2227,6 +2747,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2261,7 +2791,7 @@
         },
         "responses": {
           "200": {
-            "description": "The usertorole.",
+            "description": "The updated usertorole.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2300,12 +2830,32 @@
               }
             }
           },
+          "409": {
+            "description": "The usertorole was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2360,6 +2910,26 @@
           },
           "404": {
             "description": "No such usertorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The usertorole could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2442,6 +3012,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid authentication.",
             "content": {
@@ -2454,6 +3034,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2512,12 +3102,32 @@
               }
             }
           },
+          "409": {
+            "description": "A workspacetouser with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2588,6 +3198,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2622,7 +3242,7 @@
         },
         "responses": {
           "200": {
-            "description": "The workspacetouser.",
+            "description": "The updated workspacetouser.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2661,12 +3281,32 @@
               }
             }
           },
+          "409": {
+            "description": "The workspacetouser was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "The request body failed validation.",
+            "description": "The body failed validation or references a row outside this workspace.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2722,6 +3362,26 @@
           },
           "404": {
             "description": "No such workspacetouser in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The workspacetouser could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3302,7 +3962,7 @@
           },
           "fields": {
             "type": "array",
-            "description": "The offending fields and why each was rejected.",
+            "description": "The offending fields and why each was rejected (present for per-field failures).",
             "items": {
               "type": "object",
               "properties": {
@@ -3321,8 +3981,7 @@
           }
         },
         "required": [
-          "error",
-          "fields"
+          "error"
         ]
       },
       "WorkspaceToUser": {
