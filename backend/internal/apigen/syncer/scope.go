@@ -5,7 +5,6 @@ import (
 	"go/format"
 	"sort"
 	"strings"
-	"text/template"
 
 	"backend/internal/apigen/codegen"
 	"backend/internal/apigen/schema"
@@ -53,33 +52,4 @@ func lowerFirst(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
-var scopeTmpl = template.Must(template.New("scope").Parse(genHeader +
-	`// Package scope holds the cross-workspace foreign-key guards the generated
-// syncer Apply calls: <Target>InWorkspace reports whether a referenced row
-// exists in the caller's workspace, so a write can't point an FK at a row in
-// another workspace. One guard per workspace-scoped FK target.
-package scope
-
-import (
-	"context"
-	"database/sql"
-	"errors"
-
-	"backend/db"
-	"backend/db/db_types"
-	"backend/db/generated"
-)
-{{range .}}
-// {{.Sing}}InWorkspace reports whether {{.Param}} exists and belongs to
-// workspaceID (a workspace-scoped by-id lookup).
-func {{.Sing}}InWorkspace(ctx context.Context, {{.Param}}, workspaceID db_types.JSONNullUUID) (bool, error) {
-	_, err := db.Queries.Get{{.Sing}}ByID(ctx, generated.Get{{.Sing}}ByIDParams{ID: {{.Param}}, WorkspaceID: workspaceID})
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-{{end}}`))
+var scopeTmpl = mustParse("scope.go.tmpl")

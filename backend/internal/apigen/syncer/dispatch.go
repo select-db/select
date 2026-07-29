@@ -7,7 +7,6 @@ import (
 	"go/format"
 	"sort"
 	"strings"
-	"text/template"
 )
 
 // EmitSyncDispatch renders the dispatch registry (package gen) mapping each
@@ -34,31 +33,4 @@ func EmitSyncDispatch(entities []schema.Entity) (codegen.GenFile, error) {
 	return codegen.GenFile{Name: "dispatch.go", Content: string(formatted)}, nil
 }
 
-var dispatchTmpl = template.Must(template.New("dispatch").Parse(genHeader +
-	`package gen
-
-import (
-	"context"
-	"time"
-
-	"backend/internal/syncer/types"
-{{- range .}}
-	"backend/internal/syncer/gen/{{.}}"
-{{- end}}
-)
-
-// Handler is one @app.sync table's write entry points. The hand-written syncer
-// builds its dispatch map from Handlers plus the specials (workspace).
-type Handler struct {
-	Apply        func(context.Context, string, types.Commit, time.Time) (bool, *types.RestoredItem, error)
-	ApplyDelete  func(context.Context, string, types.Commit) (bool, *types.RestoredItem, error)
-	FetchCurrent func(context.Context, types.Commit) (*types.RestoredItem, error)
-}
-
-// Handlers is the dispatch registry for every @app.sync table.
-var Handlers = map[string]Handler{
-{{- range .}}
-	{{printf "%q" .}}: { {{.}}.Apply, {{.}}.ApplyDelete, {{.}}.FetchCurrent},
-{{- end}}
-}
-`))
+var dispatchTmpl = mustParse("dispatch.go.tmpl")

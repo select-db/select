@@ -1,0 +1,59 @@
+package {{.Pkg}}
+
+import (
+	"context"
+	"fmt"
+
+	"backend/db"
+	"backend/db/db_types"
+	"backend/db/generated"
+{{- if .Audit}}
+	"backend/internal/audit"
+{{- end}}
+	"backend/internal/syncer/types"
+	"backend/internal/utils"
+)
+
+func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *types.RestoredItem, error) {
+	payload, _ := c.Payload.(map[string]any)
+	id := utils.MapGetString(payload, "id")
+	if id == "" {
+		id = c.ObjectID
+	}
+	workspaceID := c.WorkspaceID
+	if id == "" || workspaceID == "" {
+		return false, nil, fmt.Errorf("{{.Pkg}}: missing id or workspace_id")
+	}
+	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	if err != nil {
+		return false, nil, fmt.Errorf("{{.Pkg}}: invalid id %q: %w", id, err)
+	}
+	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+	if err != nil {
+		return false, nil, fmt.Errorf("{{.Pkg}}: invalid workspace_id %q: %w", workspaceID, err)
+	}
+{{- if .Audit}}
+	// Fetch the pre-delete row for the audit before-image{{if not .AuditDeleteByID}} and target{{end}}.
+	row, fetchErr := db.Queries.Get{{.Sing}}ByID(ctx, generated.Get{{.Sing}}ByIDParams{ {{.PKField}}: idUUID, {{.TenantField}}: workspaceUUID})
+{{- end}}
+	if err := db.Queries.Set{{.Sing}}DeletedAt(ctx, generated.Set{{.Sing}}DeletedAtParams{
+		{{.PKField}}:          idUUID,
+		{{.TenantField}}: workspaceUUID,
+	}); err != nil {
+		return false, nil, fmt.Errorf("{{.Pkg}}: set deleted_at: %w", err)
+	}
+{{- if .Audit}}
+	var before any
+{{- if not .AuditDeleteByID}}
+	target := ""
+{{- end}}
+	if fetchErr == nil {
+		before = row
+{{- if not .AuditDeleteByID}}
+		target = {{.AuditDeleteRowExpr}}
+{{- end}}
+	}
+	audit.EmitChange(ctx, {{.AuditDeleteSpec}}, workspaceID, {{if .AuditDeleteByID}}id{{else}}target{{end}}, before, nil)
+{{- end}}
+	return true, nil, nil
+}

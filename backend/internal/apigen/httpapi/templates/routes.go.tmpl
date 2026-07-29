@@ -1,0 +1,14 @@
+package {{.Pkg}}
+
+import (
+	"net/http"
+
+	"backend/internal/api/rest"
+)
+
+// Register mounts the {{.Name}} endpoints on mux.
+func Register(mux *http.ServeMux, wrap rest.Wrap) {
+{{- range .Routes}}
+	mux.Handle({{printf "%q" .Pattern}}, wrap(rest.{{.Rate}}, {{.Handler}}()))
+{{- end}}
+}
