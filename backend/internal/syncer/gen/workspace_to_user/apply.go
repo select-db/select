@@ -37,9 +37,14 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("workspace_to_user: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
-	userUUID, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "user_id"))
-	if err != nil {
-		return false, nil, fmt.Errorf("workspace_to_user: invalid user_id: %w", err)
+	// user_id is parsed only when present: a partial update may omit it, in
+	// which case the merge keeps the existing value (so the FK isn't re-validated).
+	var userUUID db_types.JSONNullUUID
+	if _, present := payload["user_id"]; present {
+		userUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "user_id"))
+		if err != nil {
+			return false, nil, fmt.Errorf("workspace_to_user: invalid user_id: %w", err)
+		}
 	}
 	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppWorkspaceToUser, generated.UpsertWorkspaceToUserParams]{
 		TableName: "workspace_to_user",

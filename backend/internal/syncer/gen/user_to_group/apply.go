@@ -38,18 +38,31 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("user_to_group: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
-	userUUID, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "user_id"))
-	if err != nil {
-		return false, nil, fmt.Errorf("user_to_group: invalid user_id: %w", err)
+	// user_id is parsed only when present: a partial update may omit it, in
+	// which case the merge keeps the existing value (so the FK isn't re-validated).
+	var userUUID db_types.JSONNullUUID
+	if _, present := payload["user_id"]; present {
+		userUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "user_id"))
+		if err != nil {
+			return false, nil, fmt.Errorf("user_to_group: invalid user_id: %w", err)
+		}
 	}
-	groupUUID, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "group_id"))
-	if err != nil {
-		return false, nil, fmt.Errorf("user_to_group: invalid group_id: %w", err)
-	}
-	if ok, err := scope.GroupInWorkspace(ctx, groupUUID, workspaceUUID); err != nil {
-		return false, nil, fmt.Errorf("user_to_group: validate group: %w", err)
-	} else if !ok {
-		return false, nil, fmt.Errorf("user_to_group: group_id does not belong to workspace")
+	// group_id is parsed only when present: a partial update may omit it, in
+	// which case the merge keeps the existing value (so the FK isn't re-validated).
+	var groupUUID db_types.JSONNullUUID
+	if _, present := payload["group_id"]; present {
+		groupUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "group_id"))
+		if err != nil {
+			return false, nil, fmt.Errorf("user_to_group: invalid group_id: %w", err)
+		}
+		if ok, err := scope.GroupInWorkspace(ctx, groupUUID, workspaceUUID); err != nil {
+			return false, nil, fmt.Errorf("user_to_group: validate group: %w", err)
+		} else if !ok {
+			// FK doesn't resolve to a row in this workspace (missing, soft-deleted, or
+			// in another workspace). A typed FieldError so the REST layer surfaces a
+			// precise, safe 422; the message never reveals cross-workspace existence.
+			return false, nil, &types.FieldError{Field: "group_id", Message: "does not reference a group in this workspace"}
+		}
 	}
 	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppUserToGroup, generated.UpsertUserToGroupParams]{
 		TableName: "user_to_group",
