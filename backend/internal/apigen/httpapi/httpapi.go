@@ -131,10 +131,12 @@ func newResourceData(e schema.Entity) (resourceData, error) {
 // type/nullable/enum, the same writable set as the OpenAPI request schema.
 //
 // The create flag captures the two contracts' real differences. On create the
-// client supplies the id in the body (offline-first, client-generated UUIDs), so
-// id leads the list and NOT NULL no-default columns (and id) are Required. On
-// update the id is the URL path, not a body field, so id is absent, and the body
-// is a partial patch, so nothing is Required.
+// client MAY supply the id in the body — validated as a uuid when present, but
+// optional; the handler generates one when it's omitted (REST-conventional
+// server-assigned id, with a client-supplied id supported for idempotent
+// creates). So id leads the list but is not Required, while NOT NULL no-default
+// columns are. On update the id is the URL path, not a body field, so id is
+// absent, and the body is a partial patch, so nothing is Required.
 func writeFields(e schema.Entity, create bool) ([]string, error) {
 	var out []string
 	if create {
@@ -142,7 +144,7 @@ func writeFields(e schema.Entity, create bool) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, writeFieldLit(pk, "query.KindUUID", true, false, nil))
+		out = append(out, writeFieldLit(pk, "query.KindUUID", false, false, nil))
 	}
 	for _, f := range e.Fields {
 		if !schema.IsWritable(f) {
@@ -488,8 +490,9 @@ import (
 	"backend/internal/api/validate"
 	"backend/internal/authz"
 	"backend/internal/syncer/types"
-{{- if .UsesCore}}
 
+	"github.com/google/uuid"
+{{- if .UsesCore}}
 	core "github.com/selectDb/dialect/core"
 {{- end}}
 
@@ -498,8 +501,9 @@ import (
 
 // createBodySchema is the request-body contract POST /{{.Plural}} validates
 // against: the fields a client may set, their types and enums, and which are
-// required on create. Derived from the same field IR as the OpenAPI request
-// schema. (A Go const can't hold a composite value, so this is a package var.)
+// required. id is optional (a uuid when supplied; the handler generates one when
+// omitted). Derived from the same field IR as the OpenAPI request schema. (A Go
+// const can't hold a composite value, so this is a package var.)
 var createBodySchema = validate.Schema{Fields: []validate.Field{
 {{- range .WriteFields}}
 	{{.}},
@@ -507,8 +511,9 @@ var createBodySchema = validate.Schema{Fields: []validate.Field{
 }}
 
 // Create handles POST /{{.Plural}}: create a row from the request body. The
-// client supplies the id. The write goes through the syncer's Apply, so tenancy,
-// the cross-workspace FK guard, LWW, and audit emission match the sync path.
+// client may supply the id or let the server generate one. The write goes
+// through the syncer's Apply, so tenancy, the cross-workspace FK guard, LWW, and
+// audit emission match the sync path.
 func Create() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
@@ -525,6 +530,10 @@ func Create() http.HandlerFunc {
 			return
 		}
 		id, _ := body["id"].(string)
+		if id == "" { // server-assigned id when the client omits it
+			id = uuid.NewString()
+			body["id"] = id
+		}
 		if _, found, err := query.Get(r.Context(), db.GetDB(), resource, a.WorkspaceID, id); err != nil {
 			rest.WriteError(w, http.StatusInternalServerError, "internal error")
 			return

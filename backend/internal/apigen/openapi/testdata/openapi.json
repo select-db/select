@@ -821,7 +821,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "role_id": {
             "type": "string",
@@ -837,7 +838,6 @@
           }
         },
         "required": [
-          "id",
           "role_id",
           "action",
           "effect"
@@ -898,16 +898,14 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "name": {
             "type": "string",
             "nullable": true
           }
-        },
-        "required": [
-          "id"
-        ]
+        }
       },
       "RoleUpdateRequest": {
         "type": "object",
