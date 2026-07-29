@@ -10,9 +10,9 @@ import "backend/internal/api/query"
 var resource = query.Resource{
 	Table: "app.role", PK: "id", DefaultSort: "name",
 	Fields: []query.Field{
-		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn}},
-		{Name: "name", Column: "name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}},
-		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{query.OpEq, query.OpNe, query.OpLt, query.OpLe, query.OpGt, query.OpGe, query.OpIn, query.OpNotIn}},
+		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{"eq", "ne", "in", "not in"}},
+		{Name: "name", Column: "name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
+		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{"eq", "ne", "lt", "le", "gt", "ge", "in", "not in"}},
 	},
 }
 

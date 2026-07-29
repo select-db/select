@@ -125,7 +125,7 @@ func TestEmitResource(t *testing.T) {
 		`import "backend/internal/api/query"`,
 		`var resource = query.Resource{`,
 		`Table: "app.role", PK: "id", DefaultSort: "name"`,
-		`{Name: "name", Column: "name", Kind: query.KindText, Ops: []query.Op{query.OpEq, query.OpNe, query.OpIn, query.OpNotIn, query.OpContains, query.OpStartsWith, query.OpEndsWith}}`,
+		`{Name: "name", Column: "name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}}`,
 		`const singular = "role"`,
 		`const table = "role"`, // has write ops
 	)
