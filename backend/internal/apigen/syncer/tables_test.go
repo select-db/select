@@ -55,7 +55,10 @@ func hasNot(t *testing.T, hay, needle string) {
 // PatchNullStr, NOT NULL text → PatchStr; every non-FK column is updatable.
 func TestEmitPermissionUniform(t *testing.T) {
 	apply := glueByName(t, schema.PermissionTable())["apply.go"]
-	has(t, apply, `roleUUID, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "role_id"))`)
+	// The FK is parsed + scope-checked only when present, so a partial update that
+	// omits role_id keeps the existing value instead of failing.
+	has(t, apply, `if _, present := payload["role_id"]; present {`)
+	has(t, apply, `roleUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "role_id"))`)
 	has(t, apply, `scope.RoleInWorkspace(ctx, roleUUID, workspaceUUID)`) // cross-workspace guard
 	// FK-out-of-workspace yields a typed FieldError so the REST layer can surface a
 	// precise, safe 422 (never revealing cross-workspace existence).
