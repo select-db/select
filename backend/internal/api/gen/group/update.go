@@ -17,8 +17,8 @@ import (
 	syncgen "backend/internal/syncer/gen/group"
 )
 
-// Update handles PATCH /groups/{id}: apply the request body to an existing row.
-// The path id is authoritative. The write goes through the syncer's Apply.
+// Update handles PATCH /groups/{id}: apply the request body to an existing
+// row. The path id is authoritative. The write goes through the syncer's Apply.
 func Update() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
