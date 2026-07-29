@@ -51,7 +51,7 @@ func EmitRoutes(entities []schema.Entity) ([]codegen.GenFile, error) {
 		}
 		files = append(files, fs...)
 	}
-	files = append(files, codegen.GenFile{Name: "routes.go", Content: renderGo(topRoutesTmpl, topData{Tables: tableNames(apis)})})
+	files = append(files, codegen.GenFile{Name: "routes.go", Content: codegen.Render(topRoutesTmpl, topData{Tables: tableNames(apis)})})
 
 	for i, f := range files {
 		formatted, err := format.Source([]byte(f.Content))
@@ -72,7 +72,7 @@ func emitEntity(e schema.Entity) ([]codegen.GenFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	files := []codegen.GenFile{{Name: dir + "resource.go", Content: renderGo(resourceTmpl, rd)}}
+	files := []codegen.GenFile{{Name: dir + "resource.go", Content: codegen.Render(resourceTmpl, rd)}}
 
 	for _, op := range e.API {
 		od, err := newOpData(e, op)
@@ -83,21 +83,11 @@ func emitEntity(e schema.Entity) ([]codegen.GenFile, error) {
 		if err != nil {
 			return nil, fmt.Errorf("entity %s: %w", e.Table, err)
 		}
-		files = append(files, codegen.GenFile{Name: dir + op.Op + ".go", Content: renderGo(tmpl, od)})
+		files = append(files, codegen.GenFile{Name: dir + op.Op + ".go", Content: codegen.Render(tmpl, od)})
 	}
 
-	files = append(files, codegen.GenFile{Name: dir + "routes.go", Content: renderGo(routesTmpl, newRouteData(e))})
+	files = append(files, codegen.GenFile{Name: dir + "routes.go", Content: codegen.Render(routesTmpl, newRouteData(e))})
 	return files, nil
-}
-
-// renderGo executes a constant template into source text; a failure is a
-// programming error, not a runtime condition (as in the syncer emitter).
-func renderGo(t *template.Template, d any) string {
-	var b strings.Builder
-	if err := t.Execute(&b, d); err != nil {
-		panic(err)
-	}
-	return b.String()
 }
 
 // --- views -----------------------------------------------------------------

@@ -23,10 +23,10 @@ import (
 func EmitSyncGlue(e schema.Entity, scoped map[string]bool) ([]codegen.GenFile, error) {
 	d := newGlueData(e, scoped)
 	files := []codegen.GenFile{
-		{Name: "getsince.go", Content: renderGo(glueGetSinceTmpl, d)},
-		{Name: "fetch_current.go", Content: renderGo(glueFetchCurrentTmpl, d)},
-		{Name: "apply_delete.go", Content: renderGo(glueApplyDeleteTmpl, d)},
-		{Name: "apply.go", Content: renderGo(glueApplyTmpl, d)},
+		{Name: "getsince.go", Content: codegen.Render(glueGetSinceTmpl, d)},
+		{Name: "fetch_current.go", Content: codegen.Render(glueFetchCurrentTmpl, d)},
+		{Name: "apply_delete.go", Content: codegen.Render(glueApplyDeleteTmpl, d)},
+		{Name: "apply.go", Content: codegen.Render(glueApplyTmpl, d)},
 	}
 	for i, f := range files {
 		formatted, err := format.Source([]byte(f.Content))
@@ -153,14 +153,6 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		}
 	}
 	return d
-}
-
-func renderGo(t *template.Template, d glueData) string {
-	var b strings.Builder
-	if err := t.Execute(&b, d); err != nil {
-		panic(err) // templates are constant; a failure is a programming error
-	}
-	return b.String()
 }
 
 // accessor is the db_types.JSONNull* reader that yields the plain Go value the

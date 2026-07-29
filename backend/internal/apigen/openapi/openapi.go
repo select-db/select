@@ -160,9 +160,9 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 			continue // not exposed over HTTP
 		}
 		model := codegen.Pascal(e.Name)
-		coll := "/" + plural(e.Name)
+		coll := "/" + codegen.Plural(e.Name)
 		item := coll + "/{id}"
-		doc.Tags = append(doc.Tags, Tag{Name: e.Name, Description: fmt.Sprintf("Operations on %s.", plural(e.Name))})
+		doc.Tags = append(doc.Tags, Tag{Name: e.Name, Description: fmt.Sprintf("Operations on %s.", codegen.Plural(e.Name))})
 
 		// Component schemas: the response object plus create/update request bodies.
 		doc.Components.Schemas[model] = responseSchema(e)
@@ -253,7 +253,7 @@ func responsesFor(model, op string) map[string]Response {
 	entityRef := &Schema{Ref: "#/components/schemas/" + model}
 	switch op {
 	case "list":
-		res["200"] = jsonResponse("A page of "+plural(strings.ToLower(model))+".", listEnvelope(entityRef))
+		res["200"] = jsonResponse("A page of "+codegen.Plural(strings.ToLower(model))+".", listEnvelope(entityRef))
 	case "create":
 		res["201"] = jsonResponse("The created "+strings.ToLower(model)+".", entityRef)
 	case "delete":
@@ -424,7 +424,7 @@ func filterFieldsDoc(e schema.Entity) string {
 			continue
 		}
 		desc := mdCell(f.Description)
-		if ops := strings.Join(odataOps(f), ", "); ops != "" {
+		if ops := strings.Join(schema.ODataOperators(f), ", "); ops != "" {
 			note := "_Operators: " + ops + "._"
 			if desc != "" {
 				desc += " " + note
@@ -468,10 +468,6 @@ func typeLabel(f schema.Field) string {
 	return t
 }
 
-// odataOps maps a field's operator set (the shared FilterOperators taxonomy) to
-// the OData tokens a caller writes. Null checks are omitted - they're universal
-// and covered by the grammar legend (`field eq null` / `field ne null`).
-func odataOps(f schema.Field) []string { return schema.ODataOperators(f) }
 
 // filterExamples builds one AND and one OR/NOT example from the entity's first
 // couple of business (non-PK) filterable fields.
@@ -544,7 +540,7 @@ func jsonResponse(desc string, s *Schema) Response {
 func summary(op, name string) string {
 	switch op {
 	case "list":
-		return "List " + plural(name)
+		return "List " + codegen.Plural(name)
 	case "get":
 		return "Get " + name
 	case "create":
@@ -557,7 +553,3 @@ func summary(op, name string) string {
 		return codegen.Pascal(op) + " " + name
 	}
 }
-
-// plural is a naive pluralizer good enough for resource names (role -> roles,
-// permission -> permissions, user_to_role -> user_to_roles).
-func plural(name string) string { return codegen.Plural(name) }
