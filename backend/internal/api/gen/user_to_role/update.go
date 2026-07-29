@@ -19,12 +19,12 @@ import (
 )
 
 // updateBodySchema is the request-body contract PATCH /user_to_roles/{id} validates
-// against. Update is a partial patch, so ForUpdate treats every field as optional
-// and only checks the types/enums of those present. Same field IR as the OpenAPI
-// request schema. (A Go const can't hold a composite value, so this is a package
-// var.)
+// against: the settable columns only. The id is the URL path, not a body field,
+// so it isn't here. Update is a partial patch, so ForUpdate treats every field as
+// optional and only checks the types/enums of those present. Same field IR as the
+// OpenAPI request schema. (A Go const can't hold a composite value, so this is a
+// package var.)
 var updateBodySchema = validate.Schema{Fields: []validate.Field{
-	{Name: "id", Kind: query.KindUUID},
 	{Name: "user_id", Kind: query.KindUUID},
 	{Name: "role_id", Kind: query.KindUUID},
 }}
@@ -50,11 +50,12 @@ func Update() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		body["id"] = id // the path id is authoritative
+		delete(body, "id") // the id is the URL path, not a body field
 		if verr := validate.ForUpdate(updateBodySchema, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}
+		body["id"] = id // the path id is authoritative for the write
 		c := types.Commit{
 			ID:          id + ":update",
 			CreatedAt:   time.Now(),

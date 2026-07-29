@@ -169,7 +169,6 @@ func TestEmitWriteSchemaPerFile(t *testing.T) {
 		f := mustFile(t, files, name)
 		mustContain(t, name, f,
 			`var `+varName+` = validate.Schema{Fields: []validate.Field{`,
-			`{Name: "id", Kind: query.KindUUID`,
 			`{Name: "name", Kind: query.KindText`,
 		)
 		// The schema is declared before the handler, not inside it, and the handler
@@ -188,14 +187,29 @@ func TestEmitWriteSchemaPerFile(t *testing.T) {
 		}
 	}
 
-	// create marks required fields; update is a partial patch, so its schema marks
-	// nothing required (else the generated file would claim, e.g., that name is
-	// required on a PATCH when it isn't).
-	if !strings.Contains(files["role/create.go"], `{Name: "name", Kind: query.KindText, Required: true}`) {
-		t.Fatal("create schema should mark name required")
+	// create: the client supplies the id in the body (required); NOT NULL columns
+	// are required too.
+	create := files["role/create.go"]
+	mustContain(t, "role/create.go", create,
+		`{Name: "id", Kind: query.KindUUID, Required: true}`,
+		`{Name: "name", Kind: query.KindText, Required: true}`,
+	)
+
+	// update: the id is the URL path, not a body field, so it is absent from the
+	// schema; and a partial patch requires nothing. The handler validates the
+	// client body, then attaches the path id.
+	update := files["role/update.go"]
+	if strings.Contains(update, `{Name: "id"`) {
+		t.Fatalf("update schema must not list id (it is the URL path):\n%s", update)
 	}
-	if strings.Contains(files["role/update.go"], "Required: true") {
-		t.Fatalf("update schema must not mark any field required:\n%s", files["role/update.go"])
+	if strings.Contains(update, "Required: true") {
+		t.Fatalf("update schema must not mark any field required:\n%s", update)
+	}
+	if strings.Index(update, "validate.ForUpdate(") > strings.Index(update, `body["id"] = id`) {
+		t.Fatal("update must validate the body before attaching the path id")
+	}
+	if !strings.Contains(update, `delete(body, "id")`) {
+		t.Fatal("update should drop any client-sent id before validating")
 	}
 }
 
