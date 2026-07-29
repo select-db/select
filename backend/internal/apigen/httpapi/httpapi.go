@@ -127,26 +127,28 @@ func newResourceData(e schema.Entity) (resourceData, error) {
 }
 
 // writeFields builds the per-field validate.Field literals a write handler
-// validates its body against: the id (a uuid) plus every client-settable column,
-// with the field's type/nullable/enum. Same writable set as the OpenAPI request
-// schema.
+// validates its body against: every client-settable column with its
+// type/nullable/enum, the same writable set as the OpenAPI request schema.
 //
-// requireOnCreate distinguishes the two contracts. On create a NOT NULL column
-// with no default (and the client-supplied id) is Required. On update the body
-// is a partial patch — nothing is required — so no field carries Required, which
-// keeps updateBodySchema honest (ForUpdate ignores Required either way, but the
-// generated file shouldn't claim a field is required when it isn't).
-func writeFields(e schema.Entity, requireOnCreate bool) ([]string, error) {
-	pk, err := pkFieldName(e)
-	if err != nil {
-		return nil, err
+// The create flag captures the two contracts' real differences. On create the
+// client supplies the id in the body (offline-first, client-generated UUIDs), so
+// id leads the list and NOT NULL no-default columns (and id) are Required. On
+// update the id is the URL path, not a body field, so id is absent, and the body
+// is a partial patch, so nothing is Required.
+func writeFields(e schema.Entity, create bool) ([]string, error) {
+	var out []string
+	if create {
+		pk, err := pkFieldName(e)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, writeFieldLit(pk, "query.KindUUID", true, false, nil))
 	}
-	out := []string{writeFieldLit(pk, "query.KindUUID", requireOnCreate, false, nil)}
 	for _, f := range e.Fields {
 		if !schema.IsWritable(f) {
 			continue
 		}
-		required := requireOnCreate && schema.RequiredOnCreate(f)
+		required := create && schema.RequiredOnCreate(f)
 		out = append(out, writeFieldLit(f.Name, kindExpr(f.Kind), required, f.Nullable, f.Values))
 	}
 	return out, nil
@@ -585,10 +587,11 @@ import (
 )
 
 // updateBodySchema is the request-body contract PATCH /{{.Plural}}/{id} validates
-// against. Update is a partial patch, so ForUpdate treats every field as optional
-// and only checks the types/enums of those present. Same field IR as the OpenAPI
-// request schema. (A Go const can't hold a composite value, so this is a package
-// var.)
+// against: the settable columns only. The id is the URL path, not a body field,
+// so it isn't here. Update is a partial patch, so ForUpdate treats every field as
+// optional and only checks the types/enums of those present. Same field IR as the
+// OpenAPI request schema. (A Go const can't hold a composite value, so this is a
+// package var.)
 var updateBodySchema = validate.Schema{Fields: []validate.Field{
 {{- range .WriteFields}}
 	{{.}},
@@ -616,11 +619,12 @@ func Update() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		body["id"] = id // the path id is authoritative
+		delete(body, "id") // the id is the URL path, not a body field
 		if verr := validate.ForUpdate(updateBodySchema, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}
+		body["id"] = id // the path id is authoritative for the write
 		c := types.Commit{
 			ID:          id + ":update",
 			CreatedAt:   time.Now(),
