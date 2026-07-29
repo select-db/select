@@ -70,7 +70,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -78,7 +78,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -86,7 +86,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -98,10 +98,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/GroupToRole"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GroupToRole"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -172,6 +184,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -314,6 +336,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -401,7 +433,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `name`.",
             "schema": {
               "type": "string"
             }
@@ -409,7 +441,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -417,7 +449,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -429,10 +461,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Group"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Group"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -503,6 +547,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -644,6 +698,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -729,7 +793,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-occurred_at`.",
             "schema": {
               "type": "string"
             }
@@ -737,7 +801,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -745,7 +809,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -757,10 +821,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Log"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Log"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -878,7 +954,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -886,7 +962,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -894,7 +970,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -906,10 +982,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Permission"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Permission"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -980,6 +1068,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -1121,6 +1219,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -1206,7 +1314,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `name`.",
             "schema": {
               "type": "string"
             }
@@ -1214,7 +1322,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -1222,7 +1330,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -1234,10 +1342,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Role"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Role"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -1308,6 +1428,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -1449,6 +1579,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -1534,7 +1674,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -1542,7 +1682,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -1550,7 +1690,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -1562,10 +1702,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserToGroup"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserToGroup"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -1636,6 +1788,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -1777,6 +1939,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -1862,7 +2034,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -1870,7 +2042,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -1878,7 +2050,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -1890,10 +2062,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserToRole"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserToRole"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -1964,6 +2148,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -2105,6 +2299,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -2190,7 +2394,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -2198,7 +2402,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -2206,7 +2410,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -2218,10 +2422,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WorkspaceToUser"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WorkspaceToUser"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -2292,6 +2508,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -2434,6 +2660,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -2553,7 +2789,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "name": {
             "type": "string"
@@ -2563,7 +2800,6 @@
           }
         },
         "required": [
-          "id",
           "name"
         ]
       },
@@ -2599,7 +2835,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "role_id": {
             "type": "string",
@@ -2607,7 +2844,6 @@
           }
         },
         "required": [
-          "id",
           "group_id",
           "role_id"
         ]
@@ -2824,7 +3060,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "role_id": {
             "type": "string",
@@ -2840,7 +3077,6 @@
           }
         },
         "required": [
-          "id",
           "role_id",
           "action"
         ]
@@ -2913,14 +3149,14 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "name": {
             "type": "string"
           }
         },
         "required": [
-          "id",
           "name"
         ]
       },
@@ -2967,7 +3203,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "source": {
             "type": "string"
@@ -2978,7 +3215,6 @@
           }
         },
         "required": [
-          "id",
           "user_id",
           "group_id"
         ]
@@ -3027,7 +3263,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "role_id": {
             "type": "string",
@@ -3039,7 +3276,6 @@
           }
         },
         "required": [
-          "id",
           "user_id",
           "role_id"
         ]
@@ -3056,6 +3292,38 @@
             "format": "uuid"
           }
         }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable summary."
+          },
+          "fields": {
+            "type": "array",
+            "description": "The offending fields and why each was rejected.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "error",
+          "fields"
+        ]
       },
       "WorkspaceToUser": {
         "type": "object",
@@ -3081,7 +3349,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "user_id": {
             "type": "string",
@@ -3089,7 +3358,6 @@
           }
         },
         "required": [
-          "id",
           "user_id"
         ]
       },
