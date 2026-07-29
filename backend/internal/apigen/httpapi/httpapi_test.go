@@ -122,21 +122,18 @@ func TestEmitResource(t *testing.T) {
 	role := mustFile(t, files, "role/resource.go")
 	mustContain(t, "role/resource.go", role,
 		`package role`,
-		`"backend/internal/api/query"`,
-		`"backend/internal/api/validate"`, // write entity imports the validator
+		`import "backend/internal/api/query"`,
 		`var resource = query.Resource{`,
 		`Table: "app.role", PK: "id", DefaultSort: "name"`,
 		`{Name: "name", Column: "name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}}`,
 		`const singular = "role"`,
 		`const table = "role"`, // has write ops
-		// write-body contract: id (client-supplied, required) + writable columns.
-		`var writeSpec = validate.Schema{Fields: []validate.Field{`,
-		`{Name: "id", Kind: query.KindUUID, Required: true}`,
-		`{Name: "name", Kind: query.KindText, Required: true}`,
 	)
-	// resource.go is data only: no handler logic, no requires map, no Apply wiring.
-	if strings.Contains(role, "Requires") || strings.Contains(role, "http.HandlerFunc") || strings.Contains(role, "syncgen") {
-		t.Fatalf("resource.go should be data only:\n%s", role)
+	// resource.go is read-side data only: no handler logic, no Apply wiring, and
+	// the write-body contract lives in the write handlers, not here.
+	if strings.Contains(role, "Requires") || strings.Contains(role, "http.HandlerFunc") ||
+		strings.Contains(role, "syncgen") || strings.Contains(role, "validate") {
+		t.Fatalf("resource.go should be read-side data only:\n%s", role)
 	}
 	// The tenant column must never be exposed as a field.
 	if strings.Contains(role, `Column: "workspace_id"`) {
@@ -150,13 +147,32 @@ func TestEmitResource(t *testing.T) {
 		`Enum: []string{"success", "error", "denied"}`,
 		`const singular = "log"`,
 	)
-	// A read-only entity carries no write commit and no write-body contract, so no
-	// table const, no writeSpec, no validate import, and never leaks @app.hide.
-	if strings.Contains(log, "const table") || strings.Contains(log, "writeSpec") || strings.Contains(log, "validate") {
-		t.Fatalf("read-only entity should have no write-side declarations:\n%s", log)
+	if strings.Contains(log, "const table") {
+		t.Fatal("read-only entity should not declare the write-commit table const")
 	}
 	if strings.Contains(log, `principal_hash`) {
 		t.Fatal("@app.hide column leaked into the field spec")
+	}
+}
+
+func TestEmitWriteSpecInlined(t *testing.T) {
+	files := filesByName(t, roleEntity())
+
+	// The write-body contract is inlined into each write handler (not referenced
+	// from resource.go), so the file shows exactly what it accepts.
+	for _, name := range []string{"role/create.go", "role/update.go"} {
+		f := mustFile(t, files, name)
+		mustContain(t, name, f,
+			`spec := validate.Schema{Fields: []validate.Field{`,
+			`{Name: "id", Kind: query.KindUUID, Required: true}`,
+			`{Name: "name", Kind: query.KindText, Required: true}`,
+		)
+	}
+	// Read handlers and delete carry no write spec.
+	for _, name := range []string{"role/list.go", "role/get.go", "role/delete.go"} {
+		if strings.Contains(mustFile(t, files, name), "validate.Schema") {
+			t.Fatalf("%s should not carry a write spec", name)
+		}
 	}
 }
 
@@ -195,8 +211,9 @@ func TestEmitCreateInlined(t *testing.T) {
 		`func Create() http.HandlerFunc {`,
 		`if !rest.Gate(a, []string{core.ActionWorkspaceRolesManage}) {`,
 		`body, ok := rest.DecodeBody(w, r)`,
-		// body is validated against the write contract before the write proceeds.
-		`if verr := validate.ForCreate(writeSpec, body); verr != nil {`,
+		// body is validated against the inlined write contract before proceeding.
+		`spec := validate.Schema{Fields: []validate.Field{`,
+		`if verr := validate.ForCreate(spec, body); verr != nil {`,
 		`rest.WriteValidationError(w, verr)`,
 		`"backend/internal/api/validate"`,
 		`id, _ := body["id"].(string)`,

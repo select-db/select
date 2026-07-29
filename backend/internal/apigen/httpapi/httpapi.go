@@ -96,14 +96,12 @@ func emitEntity(e schema.Entity) ([]codegen.GenFile, error) {
 // Ops, and Enum are pre-rendered Go expressions so the template only places them.
 type fieldData struct{ Name, Column, Kind, Ops, Enum string }
 
-// resourceData is the view for resource.go: the table's shared query.Resource,
-// the naming constants the handlers reference, and (for write entities) the
-// validate.Schema write-body contract.
+// resourceData is the view for resource.go: the table's shared query.Resource
+// and the naming constants the handlers reference.
 type resourceData struct {
 	Pkg, QualTable, PK, DefaultSort, Name string
 	Fields                                []fieldData
 	HasWrite                              bool
-	WriteFields                           []string // pre-rendered validate.Field literals
 }
 
 func newResourceData(e schema.Entity) (resourceData, error) {
@@ -125,19 +123,28 @@ func newResourceData(e schema.Entity) (resourceData, error) {
 			Kind: kindExpr(f.Kind), Ops: opsExpr(f), Enum: enumExpr(f),
 		})
 	}
-	if d.HasWrite {
-		// The client supplies id on create (required, a uuid); update sets it from
-		// the path. Then every client-settable column, required-on-create iff NOT
-		// NULL with no default. Same writable/required rules as the OpenAPI schema.
-		d.WriteFields = append(d.WriteFields, writeFieldLit(pk, "query.KindUUID", true, false, nil))
-		for _, f := range e.Fields {
-			if !schema.IsWritable(f) {
-				continue
-			}
-			d.WriteFields = append(d.WriteFields, writeFieldLit(f.Name, kindExpr(f.Kind), schema.RequiredOnCreate(f), f.Nullable, f.Values))
-		}
-	}
 	return d, nil
+}
+
+// writeFields builds the per-field validate.Field literals a create/update
+// handler validates its body against: the client-supplied id (required, a uuid),
+// then every client-settable column, required-on-create iff NOT NULL with no
+// default. Same writable/required rules as the OpenAPI request schema. The spec
+// is inlined into each write handler (create.go, update.go) so the file shows
+// exactly what it accepts.
+func writeFields(e schema.Entity) ([]string, error) {
+	pk, err := pkFieldName(e)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{writeFieldLit(pk, "query.KindUUID", true, false, nil)}
+	for _, f := range e.Fields {
+		if !schema.IsWritable(f) {
+			continue
+		}
+		out = append(out, writeFieldLit(f.Name, kindExpr(f.Kind), schema.RequiredOnCreate(f), f.Nullable, f.Values))
+	}
+	return out, nil
 }
 
 // writeFieldLit renders one validate.Field literal, emitting only the non-zero
@@ -168,6 +175,7 @@ func writeFieldLit(name, kindExpr string, required, nullable bool, enum []string
 type opData struct {
 	Pkg, Plural, Gate, SyncImport string
 	UsesCore                      bool
+	WriteFields                   []string // validate.Field literals; set for create/update
 }
 
 func newOpData(e schema.Entity, op schema.APIOp) (opData, error) {
@@ -175,11 +183,17 @@ func newOpData(e schema.Entity, op schema.APIOp) (opData, error) {
 	if err != nil {
 		return opData{}, err
 	}
-	return opData{
+	d := opData{
 		Pkg: e.Table, Plural: codegen.Plural(e.Name),
 		Gate: gate, UsesCore: usesCore,
 		SyncImport: "backend/internal/syncer/gen/" + e.Table,
-	}, nil
+	}
+	if op.Op == "create" || op.Op == "update" {
+		if d.WriteFields, err = writeFields(e); err != nil {
+			return opData{}, err
+		}
+	}
+	return d, nil
 }
 
 // routeLine is one mux.Handle mounting: the "METHOD /path" pattern, the rate
@@ -348,14 +362,7 @@ func actionExprs(requires []string) (string, error) {
 var resourceTmpl = template.Must(template.New("resource").Parse(genHeader +
 	`package {{.Pkg}}
 
-{{if .HasWrite -}}
-import (
-	"backend/internal/api/query"
-	"backend/internal/api/validate"
-)
-{{- else -}}
 import "backend/internal/api/query"
-{{- end}}
 
 // resource is the queryable shape of the {{.Pkg}} table: the fields the API
 // exposes, the operators each accepts, the default sort, and the keyset
@@ -375,17 +382,6 @@ const singular = {{printf "%q" .Name}}
 
 // table is the short table name carried on the write commit.
 const table = {{printf "%q" .Pkg}}
-
-// writeSpec is the create/update body contract: the settable fields with their
-// types, enums, and create-required-ness. The create and update handlers
-// validate the request body against it (shape/type/enum) before the write
-// reaches Apply, so a client mistake gets a precise field error, not an opaque
-// write failure. Derived from the same IR as the OpenAPI request schema.
-var writeSpec = validate.Schema{Fields: []validate.Field{
-{{- range .WriteFields}}
-	{{.}},
-{{- end}}
-}}
 {{- end}}
 `))
 
@@ -507,7 +503,14 @@ func Create() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if verr := validate.ForCreate(writeSpec, body); verr != nil {
+		// spec is the body contract: the fields a client may set, their types,
+		// enums, and which are required on create. Validated before the write.
+		spec := validate.Schema{Fields: []validate.Field{
+{{- range .WriteFields}}
+			{{.}},
+{{- end}}
+		}}
+		if verr := validate.ForCreate(spec, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}
@@ -595,7 +598,14 @@ func Update() http.HandlerFunc {
 			return
 		}
 		body["id"] = id // the path id is authoritative
-		if verr := validate.ForUpdate(writeSpec, body); verr != nil {
+		// spec is the body contract: the fields a client may set and their types
+		// and enums. Update is a partial patch, so none are required here.
+		spec := validate.Schema{Fields: []validate.Field{
+{{- range .WriteFields}}
+			{{.}},
+{{- end}}
+		}}
+		if verr := validate.ForUpdate(spec, body); verr != nil {
 			rest.WriteValidationError(w, verr)
 			return
 		}
