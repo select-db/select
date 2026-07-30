@@ -50,8 +50,12 @@ COMMENT ON COLUMN app.permission.schema_name    IS 'Schema the rule applies to; 
 COMMENT ON COLUMN app.permission.table_name     IS 'Table the rule applies to; null = any.';
 COMMENT ON COLUMN app.permission.column_name    IS 'Column the rule applies to; null = any.';
 
-COMMENT ON COLUMN app."group".source      IS 'Origin of the group (e.g. local or an external provider).';
-COMMENT ON COLUMN app."group".external_id IS 'Identifier of the group in the external provider, when not local.';
+-- source/external_id are provenance owned by the (future) SCIM path, never the
+-- client: @app.immutable keeps them readable and filterable but out of the write
+-- body, so a client can't forge a row's origin or hijack an IdP object mapping.
+COMMENT ON COLUMN app."group".source      IS 'Origin of the group (e.g. local or an external provider). @app.immutable';
+COMMENT ON COLUMN app."group".external_id IS 'Identifier of the group in the external provider, when not local. @app.immutable';
+COMMENT ON COLUMN app.user_to_group.source IS 'Origin of the membership (e.g. local or an external provider). @app.immutable';
 -- +goose StatementEnd
 
 -- +goose Down
@@ -88,4 +92,5 @@ COMMENT ON COLUMN app.permission.table_name     IS NULL;
 COMMENT ON COLUMN app.permission.column_name    IS NULL;
 COMMENT ON COLUMN app."group".source      IS NULL;
 COMMENT ON COLUMN app."group".external_id IS NULL;
+COMMENT ON COLUMN app.user_to_group.source IS NULL;
 -- +goose StatementEnd
