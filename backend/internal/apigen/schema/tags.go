@@ -14,7 +14,7 @@ type Tags struct {
 // ColumnTags are the column-level @app directives.
 type ColumnTags struct {
 	Hide      bool
-	Immutable bool
+	ReadOnly  bool
 	Values    []string
 	JSONPaths []string
 	Ops       []string
@@ -63,8 +63,8 @@ func ParseColumnTags(comment string) ColumnTags {
 		switch head {
 		case "hide":
 			c.Hide = true
-		case "immutable":
-			c.Immutable = true
+		case "api.readonly":
+			c.ReadOnly = true
 		case "values":
 			c.Values = parseList(rest)
 		case "json.paths":
