@@ -179,8 +179,11 @@ func Build(s RawSchema) ([]Entity, []error) {
 			}
 			// Patchable = the row's own value columns: not PK, not tenant/cursor/
 			// soft-delete, and not a foreign key (FKs are relationship identity,
-			// passed through on insert but never updated on conflict).
-			f.Patchable = !f.IsPK && !f.Immutable && f.FK == nil &&
+			// passed through on insert but never updated on conflict). This drives
+			// the syncer's upsert (which columns it writes and conflict-updates), so
+			// it is independent of @app.immutable: a column the app/syncer owns but
+			// the API can't write (see IsWritable) stays patchable here.
+			f.Patchable = !f.IsPK && f.FK == nil &&
 				c.Name != TenantColumn && c.Name != CursorColumn && c.Name != SoftDeleteColumn
 			// Tenant + soft-delete are enforced by the engine (workspace_id =
 			// caller, deleted_at IS NULL), so they are never client-visible.
@@ -308,13 +311,16 @@ func parseDefaultLiteral(expr string) string {
 	return strings.ReplaceAll(s[1:len(s)-1], "''", "'")
 }
 
-// IsWritable reports whether a field is client-settable on create/update: a
-// patchable value column or a non-tenant foreign key (relationship identity set
-// on write). The primary key, @app.hide columns, and the tenant column are never
-// writable. Single-sourced so the OpenAPI request schema and the write-body
-// validator accept exactly the same fields.
+// IsWritable reports whether a field is client-settable on create/update via the
+// REST API: a patchable value column or a non-tenant foreign key (relationship
+// identity set on write). The primary key, @app.hide columns, the tenant column,
+// and @app.immutable columns are never API-writable. @app.immutable gates only
+// this API write-set — not the syncer, which still owns and writes such columns
+// (e.g. SCIM provenance the app sets but a client must not forge). Single-sourced
+// so the OpenAPI request schema and the write-body validator accept exactly the
+// same fields.
 func IsWritable(f Field) bool {
-	if f.Hidden || f.IsPK {
+	if f.Hidden || f.IsPK || f.Immutable {
 		return false
 	}
 	return f.Patchable || (f.FK != nil && f.Column != TenantColumn)
