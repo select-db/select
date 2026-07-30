@@ -91,6 +91,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 				WorkspaceID: workspaceUUID,
 				UserID:      utils.PatchUUID(payload, "user_id", existing.UserID, userUUID),
 				GroupID:     utils.PatchUUID(payload, "group_id", existing.GroupID, groupUUID),
+				Source:      utils.PatchStrDefault(payload, "source", existing.Source, "local"),
 			}, nil
 		},
 		Upsert: func(ctx context.Context, params generated.UpsertUserToGroupParams) error {

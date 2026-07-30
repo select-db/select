@@ -63,6 +63,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 				ID:          idUUID,
 				WorkspaceID: workspaceUUID,
 				Name:        utils.PatchStr(payload, "name", existing.Name),
+				Source:      utils.PatchStrDefault(payload, "source", existing.Source, "local"),
+				ExternalID:  utils.PatchNullStr(payload, "external_id", existing.ExternalID),
 			}, nil
 		},
 		Upsert: func(ctx context.Context, params generated.UpsertGroupParams) error {
