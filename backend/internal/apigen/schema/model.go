@@ -98,7 +98,7 @@ type Field struct {
 	JSONPaths []string `json:",omitempty"`
 	Ops       []string `json:",omitempty"`
 	Lookup    string   `json:",omitempty"`
-	Immutable bool     `json:",omitempty"`
+	ReadOnly  bool     `json:",omitempty"` // @app.api.readonly: system/sync-owned, not API-writable
 	Sort      bool     `json:",omitempty"` // @app.sort: the resource's default list sort column
 	SortDesc  bool     `json:",omitempty"` // @app.sort desc
 	// Default is the literal value of a simple string-literal column default
@@ -169,7 +169,7 @@ func Build(s RawSchema) ([]Entity, []error) {
 			f := Field{
 				Name: c.Name, Column: c.Name, Kind: kindOf(c.DataType), Nullable: !c.NotNull,
 				IsPK: pk[c.Name], Hidden: ct.Hide, Values: ct.Values, JSONPaths: ct.JSONPaths,
-				Ops: ct.Ops, Lookup: ct.Lookup, Immutable: ct.Immutable,
+				Ops: ct.Ops, Lookup: ct.Lookup, ReadOnly: ct.ReadOnly,
 				Sort: ct.Sort, SortDesc: ct.SortDesc,
 				Default:     parseDefaultLiteral(c.Default),
 				Description: commentProse(c.Comment),
@@ -181,7 +181,7 @@ func Build(s RawSchema) ([]Entity, []error) {
 			// soft-delete, and not a foreign key (FKs are relationship identity,
 			// passed through on insert but never updated on conflict). This drives
 			// the syncer's upsert (which columns it writes and conflict-updates), so
-			// it is independent of @app.immutable: a column the app/syncer owns but
+			// it is independent of @app.api.readonly: a column the app/syncer owns but
 			// the API can't write (see IsWritable) stays patchable here.
 			f.Patchable = !f.IsPK && f.FK == nil &&
 				c.Name != TenantColumn && c.Name != CursorColumn && c.Name != SoftDeleteColumn
@@ -314,13 +314,13 @@ func parseDefaultLiteral(expr string) string {
 // IsWritable reports whether a field is client-settable on create/update via the
 // REST API: a patchable value column or a non-tenant foreign key (relationship
 // identity set on write). The primary key, @app.hide columns, the tenant column,
-// and @app.immutable columns are never API-writable. @app.immutable gates only
-// this API write-set — not the syncer, which still owns and writes such columns
-// (e.g. SCIM provenance the app sets but a client must not forge). Single-sourced
-// so the OpenAPI request schema and the write-body validator accept exactly the
-// same fields.
+// and @app.api.readonly columns are never API-writable. @app.api.readonly gates
+// only this API write-set — not the syncer, which still owns and writes such
+// columns (e.g. SCIM provenance the app sets but a client must not forge).
+// Single-sourced so the OpenAPI request schema and the write-body validator
+// accept exactly the same fields.
 func IsWritable(f Field) bool {
-	if f.Hidden || f.IsPK || f.Immutable {
+	if f.Hidden || f.IsPK || f.ReadOnly {
 		return false
 	}
 	return f.Patchable || (f.FK != nil && f.Column != TenantColumn)
