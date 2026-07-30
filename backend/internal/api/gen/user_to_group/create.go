@@ -28,7 +28,6 @@ var createBodySchema = validate.Schema{Fields: []validate.Field{
 	{Name: "id", Kind: query.KindUUID},
 	{Name: "user_id", Kind: query.KindUUID, Required: true},
 	{Name: "group_id", Kind: query.KindUUID, Required: true},
-	{Name: "source", Kind: query.KindText},
 }}
 
 // Create handles POST /user_to_groups: create a row from the request body. The

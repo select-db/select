@@ -2050,7 +2050,7 @@
           "user_to_group"
         ],
         "summary": "List user_to_groups",
-        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `user_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `group_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `source` | string | _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `user_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `group_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `source` | string | Origin of the membership (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
         "operationId": "listUserToGroup",
         "parameters": [
           {
@@ -3443,19 +3443,12 @@
       "GroupCreateRequest": {
         "type": "object",
         "properties": {
-          "external_id": {
-            "type": "string",
-            "nullable": true
-          },
           "id": {
             "type": "string",
             "format": "uuid",
             "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "name": {
-            "type": "string"
-          },
-          "source": {
             "type": "string"
           }
         },
@@ -3524,14 +3517,7 @@
       "GroupUpdateRequest": {
         "type": "object",
         "properties": {
-          "external_id": {
-            "type": "string",
-            "nullable": true
-          },
           "name": {
-            "type": "string"
-          },
-          "source": {
             "type": "string"
           }
         }
@@ -3841,7 +3827,8 @@
             "readOnly": true
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "description": "Origin of the membership (e.g. local or an external provider)."
           },
           "updated_at": {
             "type": "string",
@@ -3866,9 +3853,6 @@
             "format": "uuid",
             "description": "Optional client-supplied id; the server generates one when omitted."
           },
-          "source": {
-            "type": "string"
-          },
           "user_id": {
             "type": "string",
             "format": "uuid"
@@ -3885,9 +3869,6 @@
           "group_id": {
             "type": "string",
             "format": "uuid"
-          },
-          "source": {
-            "type": "string"
           },
           "user_id": {
             "type": "string",

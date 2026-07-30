@@ -26,8 +26,6 @@ import (
 // package var.)
 var updateBodySchema = validate.Schema{Fields: []validate.Field{
 	{Name: "name", Kind: query.KindText},
-	{Name: "source", Kind: query.KindText},
-	{Name: "external_id", Kind: query.KindText, Nullable: true},
 }}
 
 // Update handles PATCH /groups/{id}: apply the request body to an existing

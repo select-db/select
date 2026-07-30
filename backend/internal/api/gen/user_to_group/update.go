@@ -27,7 +27,6 @@ import (
 var updateBodySchema = validate.Schema{Fields: []validate.Field{
 	{Name: "user_id", Kind: query.KindUUID},
 	{Name: "group_id", Kind: query.KindUUID},
-	{Name: "source", Kind: query.KindText},
 }}
 
 // Update handles PATCH /user_to_groups/{id}: apply the request body to an existing
