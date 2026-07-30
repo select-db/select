@@ -27,8 +27,6 @@ import (
 var createBodySchema = validate.Schema{Fields: []validate.Field{
 	{Name: "id", Kind: query.KindUUID},
 	{Name: "name", Kind: query.KindText, Required: true},
-	{Name: "source", Kind: query.KindText},
-	{Name: "external_id", Kind: query.KindText, Nullable: true},
 }}
 
 // Create handles POST /groups: create a row from the request body. The
