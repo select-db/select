@@ -18,7 +18,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/wailsapp/wails/v2 v2.10.1
 	github.com/zalando/go-keyring v0.2.6
-	modernc.org/sqlite v1.54.0
+	modernc.org/sqlite v1.55.0
 )
 
 require (
