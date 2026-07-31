@@ -45,13 +45,13 @@ jobs:
       # deeper cross-module dataflow, switch build-mode to `autobuild` and run
       # one analyze per module (backend, dialect, app, toolkit) via a matrix.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4 # pin to a SHA to match the repo's action-pinning convention
+        uses: github/codeql-action/init@v4.37.3 # pin to a SHA to match the repo's action-pinning convention
         with:
           languages: go
           build-mode: none
           queries: security-extended
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v4 # pin to a SHA to match the repo's action-pinning convention
+        uses: github/codeql-action/analyze@v4.37.3 # pin to a SHA to match the repo's action-pinning convention
         with:
           category: "/language:go"
