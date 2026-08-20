@@ -5,8 +5,6 @@ import type { LlmTool, StreamChunk } from './llm';
 import type { SelectOptionGroup } from '$lib/system/Select/Select.types';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { get } from 'svelte/store';
-import * as graphApi from '$lib/wailsjs/go/graph/Graph';
-import { tryCatch } from '$lib/utils/tryCatch';
 import type { graph } from '$lib/wailsjs/go/models';
 
 // Curated for high TPM/throughput (agent use). OpenRouter accepts any model ID string.
@@ -75,41 +73,22 @@ const PROVIDER_ENV_VARS: Record<string, string> = {
 	grok: 'XAI_API_KEY'
 };
 
-let cachedRootFolderId: string | null = null;
-let cachedVars: Record<string, string> | null = null;
-
-async function getWorkspaceEnvVars(): Promise<Record<string, string>> {
+// Read env vars straight from the reactive workspace graph store. The backend
+// file watcher updates the root folder's `variables` and emits
+// `workspaceGraphUpdated` whenever a .env file changes, so this stays live
+// without a refresh. The chat only ever needs the root folder, and
+// GetUriVariables(rootFolderId) resolves to exactly the root folder's own
+// variables (it walks up the tree, and the root has no parent), so reading the
+// store directly is equivalent — no RPC or cache needed.
+function getWorkspaceEnvVars(): Record<string, string> {
 	const ws = get(workspaceGraphStore) as graph.WorkspaceNode | undefined;
-	const rootFolderId = ws?.folders?.[0]?.id ?? '';
-	if (!rootFolderId) return {};
-
-	if (cachedRootFolderId === rootFolderId && cachedVars) {
-		return cachedVars;
-	}
-
-	const [vars, err] = await tryCatch(graphApi.GetUriVariables, rootFolderId);
-	if (err || !vars) {
-		cachedRootFolderId = rootFolderId;
-		cachedVars = {};
-		return cachedVars;
-	}
-
-	const map: Record<string, string> = {};
-	for (const v of vars as Array<{ name?: string; value?: string }>) {
-		if (typeof v?.name === 'string' && typeof v?.value === 'string') {
-			map[v.name] = v.value;
-		}
-	}
-
-	cachedRootFolderId = rootFolderId;
-	cachedVars = map;
-	return map;
+	return ws?.folders?.[0]?.variables ?? {};
 }
 
 async function getProviderApiKey(provider: string): Promise<string> {
 	const envVar = PROVIDER_ENV_VARS[provider];
 	if (!envVar) return '';
-	const vars = await getWorkspaceEnvVars();
+	const vars = getWorkspaceEnvVars();
 	return vars[envVar] ?? '';
 }
 
@@ -120,7 +99,7 @@ export async function hasApiKey(provider: string): Promise<boolean> {
 
 /** True if workspace root .env defines at least one known LLM API key (non-empty). */
 export async function hasAnyWorkspaceApiKey(): Promise<boolean> {
-	const vars = await getWorkspaceEnvVars();
+	const vars = getWorkspaceEnvVars();
 	for (const envName of Object.values(PROVIDER_ENV_VARS)) {
 		const v = vars[envName]?.trim();
 		if (v && v.length > 0) return true;
