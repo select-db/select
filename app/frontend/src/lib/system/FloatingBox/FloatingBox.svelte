@@ -29,28 +29,52 @@
 
 	let boxElement = $state<HTMLDivElement | undefined>(undefined);
 	let boxPosition = $state({ x: 0, y: 0 });
+	let maxWidth = $state<number | null>(null);
 	let visible = $state(false);
 	let timeoutId: number | null = null;
+
+	/**
+	 * The app scales the whole UI with `zoom` on <html> (see zoomStore). Client
+	 * coordinates — mouse events, getBoundingClientRect() — come back multiplied
+	 * by it, while the left/top we write out are multiplied again on render. So
+	 * divide incoming client values by the zoom and do the math in the same
+	 * (zoomed) space the box is laid out in.
+	 */
+	const rootZoom = () => {
+		const zoom = parseFloat(getComputedStyle(document.documentElement).zoom);
+		return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+	};
 
 	const calculatePosition = async () => {
 		if (!boxElement) return;
 
 		await tick(); // Wait for content to render
+		if (!boxElement) return; // destroyed while awaiting
 
-		const box = boxElement.getBoundingClientRect();
+		const zoom = rootZoom();
 		const viewport = {
-			width: window.innerWidth,
-			height: window.innerHeight
+			width: window.innerWidth / zoom,
+			height: window.innerHeight / zoom
 		};
 
-		let x = position.x + offset.x;
-		let y = position.y + offset.y;
+		// Never let the box itself be wider than the safe area: `width: fit-content`
+		// otherwise measures a box that can't be nudged back inside the screen.
+		maxWidth = Math.max(0, viewport.width - SCREEN_MARGIN * 2);
+
+		// offsetWidth/offsetHeight, not getBoundingClientRect(): the box measures
+		// itself while its `scale` intro transition is running, and the rect would
+		// report the mid-animation size (~10% short) — which is exactly how much of
+		// the right/bottom margin went missing.
+		const box = { width: boxElement.offsetWidth, height: boxElement.offsetHeight };
+
+		let x = position.x / zoom + offset.x;
+		let y = position.y / zoom + offset.y;
 
 		// If anchor element is provided, position relative to it
-		if (anchor) {
-			const anchorRect = anchor.getBoundingClientRect();
-			x = anchorRect.left;
-			y = anchorRect.bottom + offset.y;
+		const anchorRect = anchor?.getBoundingClientRect();
+		if (anchorRect) {
+			x = anchorRect.left / zoom;
+			y = anchorRect.bottom / zoom + offset.y;
 		}
 
 		// Adjust horizontal position to stay on screen with margin
@@ -61,10 +85,9 @@
 
 		// Adjust vertical position to stay on screen with margin
 		if (y + box.height > viewport.height - SCREEN_MARGIN) {
-			if (anchor) {
+			if (anchorRect) {
 				// Try positioning above the anchor
-				const anchorRect = anchor.getBoundingClientRect();
-				const aboveY = anchorRect.top - box.height - offset.y;
+				const aboveY = anchorRect.top / zoom - box.height - offset.y;
 				if (aboveY >= SCREEN_MARGIN) {
 					y = aboveY;
 				} else {
@@ -77,7 +100,9 @@
 		}
 		if (y < SCREEN_MARGIN) y = SCREEN_MARGIN;
 
-		boxPosition = { x, y };
+		// Only write when it actually moved: the resize observer re-measures often
+		// and an identical object would still churn a re-render.
+		if (boxPosition.x !== x || boxPosition.y !== y) boxPosition = { x, y };
 	};
 
 	onMount(() => {
@@ -109,6 +134,17 @@
 		return () => window.removeEventListener('resize', handleResize);
 	});
 
+	// ...and whenever the content itself resizes (async menu options, a filtered
+	// list, a growing tooltip): the first measure alone would leave a grown box
+	// hanging past the screen margin.
+	$effect(() => {
+		const el = boxElement;
+		if (!el) return;
+		const observer = new ResizeObserver(() => calculatePosition());
+		observer.observe(el);
+		return () => observer.disconnect();
+	});
+
 	// Recalculate when position or anchor changes
 	$effect(() => {
 		void position;
@@ -135,7 +171,9 @@
 		bind:this={boxElement}
 		class="floating-box"
 		class:top-layer={topLayer}
-		style="left: {boxPosition.x}px; top: {boxPosition.y}px;"
+		style="left: {boxPosition.x}px; top: {boxPosition.y}px;{maxWidth === null
+			? ''
+			: ` max-width: ${maxWidth}px;`}"
 		transition:scale={{ duration: 100, start: 0.9 }}
 	>
 		{@render children()}
@@ -145,10 +183,9 @@
 <style>
 	.backdrop {
 		position: fixed;
-		top: 0;
-		left: 0;
-		width: 100vw;
-		height: 100vh;
+		/* inset, not 100vw/100vh: viewport units ignore the root `zoom` and would
+		   overflow the window once the UI is zoomed in. */
+		inset: 0;
 		z-index: 999;
 	}
 
