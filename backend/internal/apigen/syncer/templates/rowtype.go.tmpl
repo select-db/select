@@ -1,0 +1,10 @@
+package types
+{{if .NeedTime}}
+import "time"
+{{end}}
+// {{.Sing}}Row is a {{.Table}} row for sync.
+type {{.Sing}}Row struct {
+{{- range .Fields}}
+	{{.Name}} {{.Type}} `{{.Tag}}`
+{{- end}}
+}

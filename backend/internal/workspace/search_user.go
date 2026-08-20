@@ -15,11 +15,6 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-type searchUserRequest struct {
-	WorkspaceID string `json:"workspace_id"`
-	Email       string `json:"email"`
-}
-
 type searchUserResponse struct {
 	Found        bool    `json:"found"`
 	UserID       string  `json:"user_id,omitempty"`
@@ -31,13 +26,7 @@ type searchUserResponse struct {
 func SearchUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		var req searchUserRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		email := strings.TrimSpace(strings.ToLower(req.Email))
+		email := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("email")))
 		if email == "" {
 			http.Error(w, "email is required", http.StatusBadRequest)
 			return

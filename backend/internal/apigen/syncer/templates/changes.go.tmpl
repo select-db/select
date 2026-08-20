@@ -1,0 +1,44 @@
+package gen
+
+import (
+	"context"
+	"time"
+
+	"backend/internal/syncer/types"
+{{- range .}}
+	"backend/internal/syncer/gen/{{.Pkg}}"
+{{- end}}
+)
+
+// FetchChanges fills the @app.sync fields of changes with every row updated for
+// userID since `since`. The specials (the workspace field and the
+// related-users side channel) are composed by the hand-written getChangesSince.
+func FetchChanges(ctx context.Context, userID string, since time.Time, changes *types.SyncChanges) error {
+	var err error
+{{- range .}}
+	if changes.{{.Field}}, err = {{.Pkg}}.GetChangesSince(ctx, userID, since); err != nil {
+		return err
+	}
+{{- end}}
+	return nil
+}
+
+// FilterApplied drops rows from the @app.sync fields whose id was applied in
+// this request, so a client isn't echoed its own writes back.
+func FilterApplied(changes *types.SyncChanges, applied map[string]struct{}) {
+{{- range .}}
+	changes.{{.Field}} = FilterByID(changes.{{.Field}}, applied, func(r {{.RowType}}) string { return r.ID })
+{{- end}}
+}
+
+// FilterByID removes rows whose ID is in the applied set. The hand-written
+// syncer uses it for the workspace special too.
+func FilterByID[T any](rows []T, applied map[string]struct{}, id func(T) string) []T {
+	filtered := rows[:0]
+	for _, r := range rows {
+		if _, ok := applied[id(r)]; !ok {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}

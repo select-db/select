@@ -18,6 +18,14 @@ import (
 
 var zstdDecoder, _ = zstd.NewReader(nil)
 
+// HeaderWorkspaceID selects the target workspace for workspace-scoped endpoints.
+const HeaderWorkspaceID = "X-Workspace-Id"
+
+// WorkspaceHeader builds the header map that scopes a request to a workspace.
+func WorkspaceHeader(workspaceID string) map[string]string {
+	return map[string]string{HeaderWorkspaceID: workspaceID}
+}
+
 var (
 	httpClient = &http.Client{
 		Timeout: 3 * time.Minute,
@@ -130,6 +138,7 @@ func FetchStream(
 	method,
 	endpoint string,
 	payload interface{},
+	headers map[string]string,
 ) (io.ReadCloser, error) {
 	resp, err := doWithRetry(
 		ctx,
@@ -137,7 +146,7 @@ func FetchStream(
 		method,
 		endpoint,
 		payload,
-		nil,
+		headers,
 	)
 	if err != nil {
 		return nil, err

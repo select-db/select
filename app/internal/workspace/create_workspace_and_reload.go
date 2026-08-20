@@ -27,7 +27,7 @@ func (w *Workspace) CreateWorkspaceAndReload(name string) error {
 	}
 
 	var resp createWorkspaceResponse
-	if err := api.Fetch(ctx, "POST", "workspace/create", map[string]string{"name": name}, nil, &resp); err != nil {
+	if err := api.Fetch(ctx, "POST", "workspaces", map[string]string{"name": name}, nil, &resp); err != nil {
 		return fmt.Errorf("create workspace on server: %w", err)
 	}
 

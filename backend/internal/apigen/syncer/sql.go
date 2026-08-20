@@ -5,7 +5,6 @@ import (
 	"backend/internal/apigen/schema"
 	"fmt"
 	"strings"
-	"text/template"
 )
 
 // EmitSyncSQL renders the four sqlc CRUD queries every synced entity needs:
@@ -63,10 +62,10 @@ func EmitSyncSQL(e schema.Entity) []codegen.GenFile {
 	d.SetBlock = strings.Join(setLines, "\n")
 
 	return []codegen.GenFile{
-		{Name: fmt.Sprintf("get_%s_by_id_query.sql", e.Table), Content: renderSQL(sqlByIDTmpl, d)},
-		{Name: fmt.Sprintf("get_%ss_for_user_since_query.sql", e.Table), Content: renderSQL(sqlSinceTmpl, d)},
-		{Name: fmt.Sprintf("set_%s_deleted_at_statement.sql", e.Table), Content: renderSQL(sqlDeleteTmpl, d)},
-		{Name: fmt.Sprintf("upsert_%s_statement.sql", e.Table), Content: renderSQL(sqlUpsertTmpl, d)},
+		{Name: fmt.Sprintf("get_%s_by_id_query.sql", e.Table), Content: codegen.Render(sqlByIDTmpl, d)},
+		{Name: fmt.Sprintf("get_%ss_for_user_since_query.sql", e.Table), Content: codegen.Render(sqlSinceTmpl, d)},
+		{Name: fmt.Sprintf("set_%s_deleted_at_statement.sql", e.Table), Content: codegen.Render(sqlDeleteTmpl, d)},
+		{Name: fmt.Sprintf("upsert_%s_statement.sql", e.Table), Content: codegen.Render(sqlUpsertTmpl, d)},
 	}
 }
 
@@ -81,38 +80,12 @@ type sqlData struct {
 	SetBlock                   string
 }
 
-func renderSQL(t *template.Template, d sqlData) string {
-	var b strings.Builder
-	if err := t.Execute(&b, d); err != nil {
-		panic(err) // templates are constant; a failure is a programming error
-	}
-	return b.String()
-}
-
 var (
-	sqlByIDTmpl = template.Must(template.New("byid").Parse(
-		"-- name: Get{{.Sing}}ByID :one\n" +
-			"SELECT {{.Cols}}\n" +
-			"FROM {{.Table}}\n" +
-			"WHERE {{.PK}} = $1 AND {{.Tenant}} = $2;\n"))
+	sqlByIDTmpl = mustParseSQL("byid.sql.tmpl")
 
-	sqlSinceTmpl = template.Must(template.New("since").Parse(
-		"-- name: Get{{.Plur}}ForUserSince :many\n" +
-			"SELECT {{.RCols}}\n" +
-			"FROM {{.Table}} r\n" +
-			"INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.{{.Tenant}} AND wtu.user_id = $1\n" +
-			"WHERE r.{{.Cursor}} > $2;\n"))
+	sqlSinceTmpl = mustParseSQL("since.sql.tmpl")
 
-	sqlDeleteTmpl = template.Must(template.New("delete").Parse(
-		"-- name: Set{{.Sing}}DeletedAt :exec\n" +
-			"UPDATE {{.Table}}\n" +
-			"SET {{.SoftDelete}} = now(), {{.Cursor}} = now()\n" +
-			"WHERE {{.PK}} = $1 AND {{.Tenant}} = $2;\n"))
+	sqlDeleteTmpl = mustParseSQL("delete.sql.tmpl")
 
-	sqlUpsertTmpl = template.Must(template.New("upsert").Parse(
-		"-- name: Upsert{{.Sing}} :exec\n" +
-			"INSERT INTO {{.Table}} ({{.InsCols}})\n" +
-			"VALUES ({{.Vals}})\n" +
-			"ON CONFLICT ({{.PK}}) DO UPDATE SET\n" +
-			"{{.SetBlock}}\n"))
+	sqlUpsertTmpl = mustParseSQL("upsert.sql.tmpl")
 )

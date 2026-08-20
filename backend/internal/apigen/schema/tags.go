@@ -14,11 +14,13 @@ type Tags struct {
 // ColumnTags are the column-level @app directives.
 type ColumnTags struct {
 	Hide      bool
-	Immutable bool
+	ReadOnly  bool
 	Values    []string
 	JSONPaths []string
 	Ops       []string
 	Lookup    string
+	Sort      bool // @app.sort: this column is the resource's default list sort
+	SortDesc  bool // @app.sort desc: newest/highest first (default is ascending)
 }
 
 // Edge is one join step, table.col -> table.col.
@@ -61,8 +63,8 @@ func ParseColumnTags(comment string) ColumnTags {
 		switch head {
 		case "hide":
 			c.Hide = true
-		case "immutable":
-			c.Immutable = true
+		case "api.readonly":
+			c.ReadOnly = true
 		case "values":
 			c.Values = parseList(rest)
 		case "json.paths":
@@ -71,6 +73,9 @@ func ParseColumnTags(comment string) ColumnTags {
 			c.Ops = parseList(rest)
 		case "lookup":
 			c.Lookup = firstToken(rest)
+		case "sort":
+			c.Sort = true
+			c.SortDesc = strings.EqualFold(firstToken(rest), "desc")
 		}
 	}
 	return c

@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"backend/db"
@@ -9,10 +8,6 @@ import (
 	"backend/internal/audit"
 	"backend/internal/middlewares"
 )
-
-type deleteRequest struct {
-	ID string `json:"id"`
-}
 
 func DeleteHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -22,12 +17,7 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		var req deleteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		workspaceID := req.ID
+		workspaceID := r.PathValue("id")
 		if workspaceID == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return

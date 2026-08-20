@@ -30,16 +30,15 @@ func nonOwnerToken(t *testing.T, f e2e.Fixture) string {
 
 func TestAudit_WorkspaceCreated(t *testing.T) {
 	f := e2e.Setup(t)
-	rec := e2e.Do(t, f.H, http.MethodPost, "/workspace/create", f.Actor.Token, map[string]any{"name": "New WS"})
+	rec := e2e.Do(t, f.H, http.MethodPost, "/workspaces", f.Actor.Token, map[string]any{"name": "New WS"})
 	require.Equalf(t, http.StatusOK, rec.Code, "create: %s", rec.Body.String())
 	e2e.RequireEvent(t, f.Conn, "iam", "workspace.lifecycle.create")
 }
 
 func TestAudit_WorkspaceDeleted(t *testing.T) {
 	f := e2e.Setup(t)
-	rec := e2e.Do(t, f.H, http.MethodPost, "/workspace/delete", f.Actor.Token, map[string]any{
-		"id": f.Actor.WorkspaceID, "workspace_id": f.Actor.WorkspaceID,
-	})
+	rec := e2e.Do(t, f.H, http.MethodDelete, "/workspaces/"+f.Actor.WorkspaceID, f.Actor.Token,
+		map[string]any{"workspace_id": f.Actor.WorkspaceID})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "delete: %s", rec.Body.String())
 	e2e.RequireEvent(t, f.Conn, "iam", "workspace.lifecycle.delete")
 }
@@ -47,9 +46,8 @@ func TestAudit_WorkspaceDeleted(t *testing.T) {
 func TestAudit_WorkspaceDeleteDenied(t *testing.T) {
 	f := e2e.Setup(t)
 	token := nonOwnerToken(t, f)
-	rec := e2e.Do(t, f.H, http.MethodPost, "/workspace/delete", token, map[string]any{
-		"id": f.Actor.WorkspaceID, "workspace_id": f.Actor.WorkspaceID,
-	})
+	rec := e2e.Do(t, f.H, http.MethodDelete, "/workspaces/"+f.Actor.WorkspaceID, token,
+		map[string]any{"workspace_id": f.Actor.WorkspaceID})
 	require.Equalf(t, http.StatusForbidden, rec.Code, "want 403: %s", rec.Body.String())
 	e2e.RequireEventStatus(t, f.Conn, "iam", "workspace.lifecycle.delete", "denied")
 }
@@ -57,7 +55,7 @@ func TestAudit_WorkspaceDeleteDenied(t *testing.T) {
 func TestAudit_WorkspaceUserAdded(t *testing.T) {
 	f := e2e.Setup(t)
 	email := "member-" + uuid.NewString()[:8] + "@test.local"
-	rec := e2e.Do(t, f.H, http.MethodPost, "/user/add", f.Actor.Token, map[string]any{
+	rec := e2e.Do(t, f.H, http.MethodPost, "/users", f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID, "email": email,
 	})
 	require.Equalf(t, http.StatusOK, rec.Code, "add: %s", rec.Body.String())
@@ -68,7 +66,7 @@ func TestAudit_MemberAddDenied(t *testing.T) {
 	f := e2e.Setup(t)
 	token := nonOwnerToken(t, f)
 	email := "member-" + uuid.NewString()[:8] + "@test.local"
-	rec := e2e.Do(t, f.H, http.MethodPost, "/user/add", token, map[string]any{
+	rec := e2e.Do(t, f.H, http.MethodPost, "/users", token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID, "email": email,
 	})
 	require.Equalf(t, http.StatusForbidden, rec.Code, "want 403: %s", rec.Body.String())

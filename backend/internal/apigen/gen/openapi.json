@@ -70,7 +70,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -78,7 +78,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -86,7 +86,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -98,10 +98,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/GroupToRole"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GroupToRole"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -118,6 +140,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -168,6 +200,36 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A grouptorole with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -242,6 +304,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -276,7 +348,7 @@
         },
         "responses": {
           "200": {
-            "description": "The grouptorole.",
+            "description": "The updated grouptorole.",
             "content": {
               "application/json": {
                 "schema": {
@@ -307,6 +379,36 @@
           },
           "404": {
             "description": "No such grouptorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The grouptorole was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -373,6 +475,26 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The grouptorole could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -387,7 +509,7 @@
           "group"
         ],
         "summary": "List groups",
-        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `source` | string | Origin of the group (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `external_id` | string | Identifier of the group in the external provider, when not local. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | Name of the group. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `source` | string | Origin of the group (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `external_id` | string | Identifier of the group in the external provider, when not local. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
         "operationId": "listGroup",
         "parameters": [
           {
@@ -401,7 +523,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `name`.",
             "schema": {
               "type": "string"
             }
@@ -409,7 +531,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -417,7 +539,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -429,10 +551,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Group"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Group"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -449,6 +593,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -499,6 +653,36 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A group with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -572,6 +756,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -606,7 +800,7 @@
         },
         "responses": {
           "200": {
-            "description": "The group.",
+            "description": "The updated group.",
             "content": {
               "application/json": {
                 "schema": {
@@ -637,6 +831,36 @@
           },
           "404": {
             "description": "No such group in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The group was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -702,6 +926,26 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The group could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -715,7 +959,7 @@
           "log"
         ],
         "summary": "List logs",
-        "description": "Requires workspace action(s): audit.read.\n\n**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | Unique identifier of the event. _Operators: eq, ne, in, not in._ |\n| `occurred_at` | date-time | When the event occurred (event time). _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `recorded_at` | date-time | When the event was recorded; may lag occurred_at. _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `domain` | string (query, auth, iam, datasource) | Domain of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string | Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `principal_id` | uuid | Identifier of the principal. _Operators: eq, ne, in, not in._ |\n| `principal_type` | string (user, api_key) | Type of the principal that performed the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_type` | string (permission, role, user, datasource) | Type of the target the action was performed on. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_id` | uuid | Identifier of the target. _Operators: eq, ne, in, not in._ |\n| `target_label` | string | Label of the target at the time of the event. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `status` | string (success, error, failure, denied) | Outcome of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `payload` | json | Domain-specific details of the event. _Operators: contains._ |\n| `client_ip` | ip | IP address of the client. _Operators: eq, ne, in, not in._ |\n",
+        "description": "Requires workspace action(s): audit.read.\n\n**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | Unique identifier of the event. _Operators: eq, ne, in, not in._ |\n| `occurred_at` | date-time | When the event occurred (event time). _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `recorded_at` | date-time | When the event was recorded; may lag occurred_at. _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `domain` | string (query, iam, datasource) | Domain of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string | Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `principal_id` | uuid | Identifier of the principal. _Operators: eq, ne, in, not in._ |\n| `principal_type` | string (user, api_key) | Type of the principal that performed the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_type` | string (permission, role, user, datasource) | Type of the target the action was performed on. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_id` | uuid | Identifier of the target. _Operators: eq, ne, in, not in._ |\n| `target_label` | string | Label of the target at the time of the event. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `status` | string (success, error, failure, denied) | Outcome of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `payload` | json | Domain-specific details of the event. _Operators: contains._ |\n| `client_ip` | ip | IP address of the client. _Operators: eq, ne, in, not in._ |\n",
         "operationId": "listLog",
         "parameters": [
           {
@@ -729,7 +973,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-occurred_at`.",
             "schema": {
               "type": "string"
             }
@@ -737,7 +981,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -745,7 +989,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -757,10 +1001,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Log"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Log"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -777,6 +1043,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -851,6 +1127,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -878,7 +1164,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -886,7 +1172,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -894,7 +1180,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -906,10 +1192,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Permission"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Permission"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -926,6 +1234,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -976,6 +1294,36 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A permission with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1049,6 +1397,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1083,7 +1441,7 @@
         },
         "responses": {
           "200": {
-            "description": "The permission.",
+            "description": "The updated permission.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1114,6 +1472,36 @@
           },
           "404": {
             "description": "No such permission in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The permission was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1179,6 +1567,26 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The permission could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -1192,7 +1600,7 @@
           "role"
         ],
         "summary": "List roles",
-        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | Name of the role. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
         "operationId": "listRole",
         "parameters": [
           {
@@ -1206,7 +1614,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `name`.",
             "schema": {
               "type": "string"
             }
@@ -1214,7 +1622,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -1222,7 +1630,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -1234,10 +1642,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Role"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Role"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1254,6 +1684,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1304,6 +1744,36 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A role with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1377,6 +1847,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1411,7 +1891,7 @@
         },
         "responses": {
           "200": {
-            "description": "The role.",
+            "description": "The updated role.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1442,6 +1922,36 @@
           },
           "404": {
             "description": "No such role in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The role was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1507,6 +2017,26 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The role could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -1520,7 +2050,7 @@
           "user_to_group"
         ],
         "summary": "List user_to_groups",
-        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `user_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `group_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `source` | string | _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `user_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `group_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `source` | string | Origin of the membership (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
         "operationId": "listUserToGroup",
         "parameters": [
           {
@@ -1534,7 +2064,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -1542,7 +2072,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -1550,7 +2080,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -1562,10 +2092,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserToGroup"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserToGroup"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1582,6 +2134,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1632,6 +2194,36 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A usertogroup with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1705,6 +2297,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1739,7 +2341,7 @@
         },
         "responses": {
           "200": {
-            "description": "The usertogroup.",
+            "description": "The updated usertogroup.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1770,6 +2372,36 @@
           },
           "404": {
             "description": "No such usertogroup in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The usertogroup was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1835,6 +2467,26 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The usertogroup could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -1862,7 +2514,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -1870,7 +2522,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -1878,7 +2530,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -1890,10 +2542,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserToRole"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserToRole"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1910,6 +2584,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1960,6 +2644,36 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A usertorole with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2033,6 +2747,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2067,7 +2791,7 @@
         },
         "responses": {
           "200": {
-            "description": "The usertorole.",
+            "description": "The updated usertorole.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2098,6 +2822,36 @@
           },
           "404": {
             "description": "No such usertorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The usertorole was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2163,6 +2917,26 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The usertorole could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -2190,7 +2964,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort expression, e.g. \"-updated_at\".",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
             "schema": {
               "type": "string"
             }
@@ -2198,7 +2972,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum rows to return.",
+            "description": "Maximum rows to return (default 50, max 200).",
             "schema": {
               "type": "integer"
             }
@@ -2206,7 +2980,7 @@
           {
             "name": "cursor",
             "in": "query",
-            "description": "Opaque pagination cursor from a previous page.",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
             "schema": {
               "type": "string"
             }
@@ -2218,10 +2992,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WorkspaceToUser"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WorkspaceToUser"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2238,6 +3034,16 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2288,6 +3094,36 @@
           },
           "403": {
             "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A workspacetouser with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2362,6 +3198,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2396,7 +3242,7 @@
         },
         "responses": {
           "200": {
-            "description": "The workspacetouser.",
+            "description": "The updated workspacetouser.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2427,6 +3273,36 @@
           },
           "404": {
             "description": "No such workspacetouser in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The workspacetouser was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2493,6 +3369,26 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The workspacetouser could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "x-required-actions": [
@@ -2530,7 +3426,8 @@
             "readOnly": true
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Name of the group."
           },
           "source": {
             "type": "string",
@@ -2546,23 +3443,16 @@
       "GroupCreateRequest": {
         "type": "object",
         "properties": {
-          "external_id": {
-            "type": "string",
-            "nullable": true
-          },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "name": {
-            "type": "string"
-          },
-          "source": {
             "type": "string"
           }
         },
         "required": [
-          "id",
           "name"
         ]
       },
@@ -2598,7 +3488,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "role_id": {
             "type": "string",
@@ -2606,7 +3497,6 @@
           }
         },
         "required": [
-          "id",
           "group_id",
           "role_id"
         ]
@@ -2627,14 +3517,7 @@
       "GroupUpdateRequest": {
         "type": "object",
         "properties": {
-          "external_id": {
-            "type": "string",
-            "nullable": true
-          },
           "name": {
-            "type": "string"
-          },
-          "source": {
             "type": "string"
           }
         }
@@ -2656,7 +3539,6 @@
             "readOnly": true,
             "enum": [
               "query",
-              "auth",
               "iam",
               "datasource"
             ],
@@ -2824,7 +3706,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "role_id": {
             "type": "string",
@@ -2840,7 +3723,6 @@
           }
         },
         "required": [
-          "id",
           "role_id",
           "action"
         ]
@@ -2898,7 +3780,8 @@
             "readOnly": true
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Name of the role."
           },
           "updated_at": {
             "type": "string",
@@ -2912,14 +3795,14 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "name": {
             "type": "string"
           }
         },
         "required": [
-          "id",
           "name"
         ]
       },
@@ -2944,7 +3827,8 @@
             "readOnly": true
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "description": "Origin of the membership (e.g. local or an external provider)."
           },
           "updated_at": {
             "type": "string",
@@ -2966,10 +3850,8 @@
           },
           "id": {
             "type": "string",
-            "format": "uuid"
-          },
-          "source": {
-            "type": "string"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "user_id": {
             "type": "string",
@@ -2977,7 +3859,6 @@
           }
         },
         "required": [
-          "id",
           "user_id",
           "group_id"
         ]
@@ -2988,9 +3869,6 @@
           "group_id": {
             "type": "string",
             "format": "uuid"
-          },
-          "source": {
-            "type": "string"
           },
           "user_id": {
             "type": "string",
@@ -3026,7 +3904,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "role_id": {
             "type": "string",
@@ -3038,7 +3917,6 @@
           }
         },
         "required": [
-          "id",
           "user_id",
           "role_id"
         ]
@@ -3055,6 +3933,37 @@
             "format": "uuid"
           }
         }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable summary."
+          },
+          "fields": {
+            "type": "array",
+            "description": "The offending fields and why each was rejected (present for per-field failures).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "error"
+        ]
       },
       "WorkspaceToUser": {
         "type": "object",
@@ -3080,7 +3989,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
           },
           "user_id": {
             "type": "string",
@@ -3088,7 +3998,6 @@
           }
         },
         "required": [
-          "id",
           "user_id"
         ]
       },

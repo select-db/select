@@ -13,6 +13,16 @@ func Pascal(s string) string {
 	return strings.Join(parts, "")
 }
 
+// Plural is the collection path segment for a resource name (role -> roles).
+// Simple English suffixing is enough for the current entity names; a name that
+// already ends in "s" is left as-is.
+func Plural(name string) string {
+	if strings.HasSuffix(name, "s") {
+		return name
+	}
+	return name + "s"
+}
+
 // GoField mirrors sqlc's column -> Go field naming for this repo (only "id" is an
 // initialism: WorkspaceID, RoleID, ClientIp). `go build` against db/generated is
 // the check that this stays correct.

@@ -91,10 +91,10 @@ func TestParseTags_RelationRepeatsAndMalformed(t *testing.T) {
 // --- column-level directives (ParseColumnTags) ---
 
 func TestParseColumnTags_All(t *testing.T) {
-	ct := ParseColumnTags(`Outcome. @app.hide @app.immutable @app.values [success, error, denied] ` +
+	ct := ParseColumnTags(`Outcome. @app.hide @app.api.readonly @app.values [success, error, denied] ` +
 		`@app.ops [eq, in] @app.lookup users @app.json.paths [$.a, $.b]`)
-	if !ct.Hide || !ct.Immutable {
-		t.Errorf("hide=%v immutable=%v, want both true", ct.Hide, ct.Immutable)
+	if !ct.Hide || !ct.ReadOnly {
+		t.Errorf("hide=%v readonly=%v, want both true", ct.Hide, ct.ReadOnly)
 	}
 	if !reflect.DeepEqual(ct.Values, []string{"success", "error", "denied"}) {
 		t.Errorf("values = %v", ct.Values)
@@ -112,7 +112,7 @@ func TestParseColumnTags_All(t *testing.T) {
 
 func TestParseColumnTags_None(t *testing.T) {
 	ct := ParseColumnTags("just a description, no tags")
-	if ct.Hide || ct.Immutable || len(ct.Values) != 0 || len(ct.Ops) != 0 || ct.Lookup != "" || len(ct.JSONPaths) != 0 {
+	if ct.Hide || ct.ReadOnly || len(ct.Values) != 0 || len(ct.Ops) != 0 || ct.Lookup != "" || len(ct.JSONPaths) != 0 {
 		t.Errorf("expected empty column tags, got %+v", ct)
 	}
 }

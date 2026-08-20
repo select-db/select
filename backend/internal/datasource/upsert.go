@@ -32,6 +32,7 @@ func UpsertHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		req.ID = r.PathValue("id")
 		if req.ID == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return

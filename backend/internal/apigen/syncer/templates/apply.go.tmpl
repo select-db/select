@@ -1,0 +1,110 @@
+package {{.Pkg}}
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"backend/db"
+	"backend/db/db_types"
+	"backend/db/generated"
+{{- if .Audit}}
+	"backend/internal/audit"
+{{- end}}
+	"backend/internal/syncer/patch"
+{{- if .NeedScope}}
+	"backend/internal/syncer/scope"
+{{- end}}
+	"backend/internal/syncer/types"
+	"backend/internal/utils"
+)
+
+func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time.Time) (bool, *types.RestoredItem, error) {
+	payload, ok := c.Payload.(map[string]any)
+	if !ok {
+		return false, nil, fmt.Errorf("{{.Pkg}}: payload must be an object")
+	}
+
+	id := utils.MapGetString(payload, "id")
+	workspaceID := c.WorkspaceID
+	if id == "" || workspaceID == "" {
+		return false, nil, fmt.Errorf("{{.Pkg}}: missing id or workspace_id")
+	}
+
+	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	if err != nil {
+		return false, nil, fmt.Errorf("{{.Pkg}}: invalid id %q: %w", id, err)
+	}
+	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+	if err != nil {
+		return false, nil, fmt.Errorf("{{.Pkg}}: invalid workspace_id %q: %w", workspaceID, err)
+	}
+
+{{range .FKs -}}
+	// {{.Column}} is parsed only when present: a partial update may omit it, in
+	// which case the merge keeps the existing value (so the FK isn't re-validated).
+	var {{.Var}} db_types.JSONNullUUID
+	if _, present := payload[{{printf "%q" .Column}}]; present {
+		{{.Var}}, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, {{printf "%q" .Column}}))
+		if err != nil {
+			return false, nil, fmt.Errorf("{{.Pkg}}: invalid {{.Column}}: %w", err)
+		}
+{{- if .Scoped}}
+		if ok, err := scope.{{.ScopeFn}}(ctx, {{.Var}}, workspaceUUID); err != nil {
+			return false, nil, fmt.Errorf("{{.Pkg}}: validate {{.Target}}: %w", err)
+		} else if !ok {
+			// FK doesn't resolve to a row in this workspace (missing, soft-deleted, or
+			// in another workspace). A typed FieldError so the REST layer surfaces a
+			// precise, safe 422; the message never reveals cross-workspace existence.
+			return false, nil, &types.FieldError{Field: {{printf "%q" .Column}}, Message: "does not reference a {{.Target}} in this workspace"}
+		}
+{{- end}}
+	}
+{{end -}}
+	res, err := patch.Apply(ctx, c, patch.Handler[generated.{{.Model}}, generated.Upsert{{.Sing}}Params]{
+		TableName: {{printf "%q" .Table}},
+		Fetch: func(ctx context.Context) (generated.{{.Model}}, error) {
+			return db.Queries.Get{{.Sing}}ByID(ctx, generated.Get{{.Sing}}ByIDParams{ {{.PKField}}: idUUID, {{.TenantField}}: workspaceUUID})
+		},
+		UpdatedAt: func(row generated.{{.Model}}) time.Time {
+			return row.{{.CursorField}}.ValueOrZero()
+		},
+		DeletedAt: func(row generated.{{.Model}}) *time.Time {
+			if row.{{.SoftDeleteField}}.Valid {
+				t := row.{{.SoftDeleteField}}.ValueOrZero()
+				return &t
+			}
+			return nil
+		},
+		Restored: func(row generated.{{.Model}}) (interface{}, error) {
+			return types.ToRestoredPayload({{.MapperFn}}(row))
+		},
+		Merge: func(existing generated.{{.Model}}, isNew bool, payload map[string]any) (generated.Upsert{{.Sing}}Params, error) {
+			if !isNew && existing.{{.TenantField}} != workspaceUUID {
+				return generated.Upsert{{.Sing}}Params{}, fmt.Errorf("{{.Pkg}}: belongs to another workspace")
+			}
+			return generated.Upsert{{.Sing}}Params{
+{{- range .Merge}}
+				{{.Key}}: {{.Val}},
+{{- end}}
+			}, nil
+		},
+		Upsert: func(ctx context.Context, params generated.Upsert{{.Sing}}Params) error {
+			return db.Queries.Upsert{{.Sing}}(ctx, params)
+		},
+	})
+{{- if .Audit}}
+	if res.Applied {
+{{- if .AuditSplit}}
+		spec := {{.AuditCreateSpec}}
+		if !res.Created {
+			spec = {{.AuditUpdateSpec}}
+		}
+		audit.EmitChange(ctx, spec, c.WorkspaceID, {{.AuditApplyTarget}}, res.Before, res.After)
+{{- else}}
+		audit.EmitChange(ctx, {{.AuditCreateSpec}}, c.WorkspaceID, {{.AuditApplyTarget}}, res.Before, res.After)
+{{- end}}
+	}
+{{- end}}
+	return res.Applied, res.Restored, err
+}
