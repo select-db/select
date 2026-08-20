@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { graph } from '$lib/wailsjs/go/models';
 	import type { Tab } from '$lib/components/Layout/layoutStore';
-	import { updateTab } from '$lib/components/Layout/layoutStore';
+	import { getTabByNodeId, updateTab } from '$lib/components/Layout/layoutStore';
 	import DatabaseForm, {
 		type AvailableDatabases,
 		type SavedDatabaseData
@@ -41,12 +41,19 @@
 
 	let currentName = $derived(database?.name ?? '');
 
+	// The form auto-saves on a debounce, so this lands well after the edit — and
+	// `tab` is a live prop that by then resolves to whatever tab is active, not
+	// the one this form belongs to. Switching tabs mid-save would therefore graft
+	// this database onto the tab switched to (a Settings tab, say, would render
+	// as a clone of this one). Re-resolve the database's own tab instead.
 	function onSuccess(saved: SavedDatabaseData) {
-		if (!database) return;
+		const savedTab = getTabByNodeId(saved.id);
+		if (!savedTab?.database) return;
 		updateTab({
-			...tab,
+			...savedTab,
 			database: {
-				node: { ...database, ...saved } as graph.DBInstanceNode
+				...savedTab.database,
+				node: { ...savedTab.database.node, ...saved } as graph.DBInstanceNode
 			}
 		});
 	}
