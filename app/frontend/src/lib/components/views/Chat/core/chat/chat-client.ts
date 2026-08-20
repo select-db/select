@@ -37,6 +37,14 @@ function parseArgs(json: string): unknown {
 }
 
 /**
+ * Cap on consecutive turns that produce nothing usable (empty / whitespace /
+ * reasoning-only). Productive turns reset the counter, so this bounds only
+ * runaway "the model keeps returning nothing" loops, not legitimate long tool
+ * chains.
+ */
+const MAX_IDLE_TURNS = 3;
+
+/**
  * Owns the conversation: streams assistant turns from the connection, reduces
  * chunks into message parts, runs auto-executable tools, and re-invokes the
  * model once every tool call in the last turn has a result (the agent loop).
@@ -53,7 +61,10 @@ export class ChatClient {
 	private error: Error | undefined;
 
 	private abortController: AbortController | null = null;
-	private continuationPending = false;
+	/** True while the multi-turn agent loop is running (guards re-entry). */
+	private loopRunning = false;
+	/** Whether the most recent streamed turn produced a surviving, usable message. */
+	private lastTurnProductive = false;
 	private currentAssistantId: string | null = null;
 
 	private onChunk?: (chunk: StreamChunk) => void;
@@ -107,7 +118,7 @@ export class ChatClient {
 	async sendMessage(content: string | MultimodalContent): Promise<void> {
 		const text = typeof content === 'string' ? content : content.content;
 		if (typeof content === 'string' && !text.trim()) return;
-		if (this.isLoading) return;
+		if (this.loopRunning) return;
 
 		this.messages = [
 			...this.messages,
@@ -119,22 +130,23 @@ export class ChatClient {
 			}
 		];
 		this.emitMessages();
-		await this.streamResponse();
+		await this.runTurns();
 	}
 
 	async append(message: UIMessage): Promise<void> {
 		if (message.role === 'system') return;
 		this.messages = [...this.messages, message];
 		this.emitMessages();
-		if (!this.isLoading) await this.streamResponse();
+		if (!this.loopRunning) await this.runTurns();
 	}
 
 	async reload(): Promise<void> {
+		if (this.loopRunning) return;
 		const lastUser = this.messages.map((m) => m.role).lastIndexOf('user');
 		if (lastUser === -1) return;
 		this.messages = this.messages.slice(0, lastUser + 1);
 		this.emitMessages();
-		await this.streamResponse();
+		await this.runTurns();
 	}
 
 	stop(): void {
@@ -166,8 +178,7 @@ export class ChatClient {
 	async addToolResult(result: AddToolResultParams): Promise<void> {
 		this.recordToolResult(result.toolCallId, result.output, result.errorText);
 		this.emitMessages();
-		if (this.isLoading) return;
-		await this.checkForContinuation();
+		await this.maybeContinue();
 	}
 
 	async addToolApprovalResponse(response: { id: string; approved: boolean }): Promise<void> {
@@ -176,21 +187,71 @@ export class ChatClient {
 			if (part.approval) part.approval = { ...part.approval, approved: response.approved };
 		});
 		this.emitMessages();
-		if (this.isLoading) return;
-		await this.checkForContinuation();
+		await this.maybeContinue();
 	}
 
 	// ---- request lifecycle ----------------------------------------------------
 
-	private async streamResponse(): Promise<void> {
-		if (this.isLoading) return;
+	/**
+	 * Drive consecutive model turns until the model gives a final answer, a tool
+	 * is waiting on an external result, or too many turns produce nothing usable.
+	 * Iterative (not recursive) so an empty turn can re-prompt without tripping a
+	 * re-entrancy guard.
+	 */
+	private async runTurns(): Promise<void> {
+		if (this.loopRunning) return;
+		this.loopRunning = true;
+		try {
+			let idleTurns = 0;
+			for (;;) {
+				const productive = await this.streamOneTurn();
+				if (this.status === 'error') break;
 
+				const last = this.lastAssistant();
+				const toolCalls =
+					last?.parts.filter((p): p is ToolCallPart => p.type === 'tool-call') ?? [];
+
+				// A tool call is still waiting on its result (a manual/approval tool):
+				// pause here — addToolResult/addToolApprovalResponse resumes the loop.
+				if (toolCalls.length > 0 && !this.areAllToolsComplete(toolCalls)) break;
+
+				if (productive) {
+					idleTurns = 0;
+					// A final answer with no tools to react to: we're done.
+					if (toolCalls.length === 0) break;
+					// Otherwise every tool call is resolved — loop so the model reacts.
+					continue;
+				}
+
+				// Unproductive turn (empty / whitespace / reasoning-only, now removed).
+				// Retry only while there is a completed tool the model still owes an
+				// answer for, and only up to the idle cap so it can't spin forever.
+				if (++idleTurns >= MAX_IDLE_TURNS) break;
+				if (toolCalls.length === 0) break;
+			}
+		} finally {
+			this.loopRunning = false;
+		}
+	}
+
+	/** Resume the loop after an externally-supplied tool result completes a turn. */
+	private async maybeContinue(): Promise<void> {
+		if (this.loopRunning) return;
+		const last = this.lastAssistant();
+		const toolCalls = last?.parts.filter((p): p is ToolCallPart => p.type === 'tool-call') ?? [];
+		if (toolCalls.length === 0) return;
+		if (!this.areAllToolsComplete(toolCalls)) return;
+		await this.runTurns();
+	}
+
+	/** Stream a single assistant turn. Returns whether it produced a usable message. */
+	private async streamOneTurn(): Promise<boolean> {
+		this.lastTurnProductive = false;
 		this.setLoading(true);
 		this.setStatus('submitted');
 		this.setError(undefined);
 		const ac = new AbortController();
 		this.abortController = ac;
-		let completed = false;
 
 		try {
 			await this.onResponse?.();
@@ -198,7 +259,6 @@ export class ChatClient {
 			const source = this.connection.connect(this.messages, data, ac.signal);
 			await this.processStream(source);
 			await this.runAutoExecutableTools();
-			completed = true;
 		} catch (err) {
 			if (!ac.signal.aborted && (err as Error)?.name !== 'AbortError') {
 				const e = err instanceof Error ? err : new Error(String(err));
@@ -212,7 +272,7 @@ export class ChatClient {
 			if (this.status !== 'error') this.setStatus('ready');
 		}
 
-		if (completed) await this.checkForContinuation();
+		return this.lastTurnProductive;
 	}
 
 	private async processStream(source: AsyncIterable<StreamChunk>): Promise<void> {
@@ -288,23 +348,23 @@ export class ChatClient {
 		});
 
 		const finalized = this.currentAssistant();
-		const hasToolCalls = finalized?.parts.some((p) => p.type === 'tool-call');
-		const textOnly = (finalized?.parts ?? []).every((p) => p.type === 'text');
-		const whitespaceOnly =
-			textOnly &&
-			(finalized?.parts ?? [])
-				.map((p) => (p as { content: string }).content)
-				.join('')
-				.trim().length === 0;
+		const parts = finalized?.parts ?? [];
+		const hasToolCall = parts.some((p) => p.type === 'tool-call');
+		const hasVisibleText = parts.some(
+			(p) => p.type === 'text' && (p as { content: string }).content.trim().length > 0
+		);
 
-		// Drop a stray whitespace-only assistant turn (e.g. a provider emitting "\n").
-		if (!hasToolCalls && whitespaceOnly && this.status !== 'error') {
+		// Drop a turn with nothing usable — empty, whitespace-only (e.g. a provider
+		// emitting "\n"), or reasoning-only — so runTurns can re-prompt instead of
+		// leaving the user staring at an empty/thinking-only bubble.
+		if (!hasToolCall && !hasVisibleText && this.status !== 'error') {
 			this.messages = this.messages.filter((m) => m.id !== this.currentAssistantId);
 			this.currentAssistantId = null;
 			this.emitMessages();
 			return;
 		}
 
+		this.lastTurnProductive = true;
 		if (finalized) this.onFinish?.(finalized);
 	}
 
@@ -331,21 +391,6 @@ export class ChatClient {
 				this.recordToolResult(part.id, { error: message, success: false }, message);
 			}
 			this.emitMessages();
-		}
-	}
-
-	private async checkForContinuation(): Promise<void> {
-		if (this.continuationPending || this.isLoading) return;
-		const last = this.lastAssistant();
-		const toolCalls = last?.parts.filter((p): p is ToolCallPart => p.type === 'tool-call') ?? [];
-		if (toolCalls.length === 0) return;
-		if (!this.areAllToolsComplete(toolCalls)) return;
-
-		this.continuationPending = true;
-		try {
-			await this.streamResponse();
-		} finally {
-			this.continuationPending = false;
 		}
 	}
 
