@@ -4,7 +4,11 @@
 	import SearchScopePanel from './SearchScopePanel.svelte';
 	import { parseDbInstanceIdFromSchemaId } from '$lib/components/ResourceMenu/resourceMenuScope';
 	import { addTab, focusTab } from '$lib/components/Layout/layoutStore';
-	import { quickActions, executeQuickAction } from '$lib/components/QuickActions/quickActionsData';
+	import {
+		quickActions,
+		settingsQuickActions,
+		executeQuickAction
+	} from '$lib/components/QuickActions/quickActionsData';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { loadSchema } from '$lib/utils/query/loadSchema';
@@ -134,7 +138,7 @@
 			width={470}
 			maxHeight={PANEL_MAX_HEIGHT}
 			noBorder
-			extraOptions={quickActions}
+			extraOptions={[...quickActions, ...settingsQuickActions]}
 			{searchScope}
 		/>
 	</div>
