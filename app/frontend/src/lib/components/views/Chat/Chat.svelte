@@ -15,6 +15,7 @@
 	import { buildContext } from '$lib/components/views/Chat/utils/buildContext';
 	import { tryCatch, must } from '$lib/utils/tryCatch';
 	import { updateTab, type Tab } from '$lib/components/Layout/layoutStore';
+	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import type { UIMessage } from '$lib/components/views/Chat/core';
 
 	import {
@@ -187,6 +188,10 @@
 	let workspaceHasApiKey = $state<boolean | null>(null);
 
 	$effect(() => {
+		// Re-check whenever the workspace graph changes — the backend file
+		// watcher emits a new graph when a .env is edited, so the API-key
+		// state updates live without a refresh.
+		void $workspaceGraphStore;
 		void (async () => {
 			workspaceHasApiKey = await hasAnyWorkspaceApiKey();
 		})();

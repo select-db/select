@@ -96,6 +96,7 @@
 		display: flex;
 		height: 100%;
 		gap: var(--space-xs);
+		overflow: hidden;
 	}
 
 	.resizer {
