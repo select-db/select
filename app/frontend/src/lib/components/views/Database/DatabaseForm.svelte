@@ -50,6 +50,9 @@
 
 	/** Payload passed to onSuccess after a successful save (use to update tab/store). */
 	export type SavedDatabaseData = {
+		/** Identifies which database was saved: the save is async, so the caller
+		 *  can't assume it still is whatever it was looking at when it started. */
+		id: string;
 		name: string;
 		db_type: AvailableDatabases;
 		dsn: string;
@@ -378,6 +381,7 @@
 		}
 
 		onSuccess?.({
+			id,
 			name,
 			db_type,
 			dsn: dsnLocal,
