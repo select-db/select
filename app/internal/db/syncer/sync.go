@@ -46,9 +46,10 @@ func normalizePayloadForSync(payload interface{}) interface{} {
 // Only the current workspace is used for pending commits and last_pulled_at.
 func (s *Syncer) Sync(ctx context.Context, userID string) error {
 	currentWTU, err := s.Queries.GetCurrentWorkspaceToUser(ctx)
-	if err != nil {
-		// No current workspace: pull the backend's default
-		// workspace so the next Sync call uses the normal path.
+	if err != nil || currentWTU.UserID != userID {
+		// No current workspace for this user — or a stale pointer left by a
+		// previous user (e.g. after the backend reassigned ids). Full-pull the
+		// backend's workspaces so the next Sync uses the normal path.
 		return s.syncWith(ctx, userID, nil, nil, false, "")
 	}
 
@@ -86,7 +87,7 @@ func (s *Syncer) Sync(ctx context.Context, userID string) error {
 // Use this after server-side operations (e.g. /user/add) to pull new records locally.
 func (s *Syncer) Pull(ctx context.Context, userID string) error {
 	currentWTU, err := s.Queries.GetCurrentWorkspaceToUser(ctx)
-	if err != nil {
+	if err != nil || currentWTU.UserID != userID {
 		return s.syncWith(ctx, userID, nil, nil, false, "")
 	}
 
