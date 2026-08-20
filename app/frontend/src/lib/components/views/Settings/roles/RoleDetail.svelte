@@ -928,11 +928,10 @@
 		gap: var(--space-xs);
 		right: 0;
 		flex-shrink: 0;
-		background: var(--gray-300);
+		background: var(--gray-0);
 		visibility: hidden;
 		position: absolute;
 		padding: var(--space-xs-sm) var(--space-xs);
-		box-shadow: var(--gray-300) -15px 0px 10px 0px !important;
 	}
 
 	tbody tr:hover .row-actions {
