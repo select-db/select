@@ -272,6 +272,12 @@ func exchangeDeviceCode(ctx context.Context, deviceCode string) (*LoggedUser, in
 					return nil, 0, fmt.Errorf("failed to update user email: %w", err)
 				}
 			}
+			// Returning user: guarantee they still have a workspace. Idempotent
+			// (no-op when they already have one), it recovers accounts whose
+			// workspaces were all removed, which would otherwise dead-end login.
+			if err := EnsureDefaultWorkspaceForUser(ctx, identityRow.ID.String()); err != nil {
+				return nil, 0, fmt.Errorf("existing user default workspace setup failed: %w", err)
+			}
 			return &LoggedUser{ID: identityRow.ID, Name: identityRow.Name, AvatarURL: avatarURL}, 0, nil
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
