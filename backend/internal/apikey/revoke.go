@@ -2,7 +2,6 @@ package apikey
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -12,10 +11,6 @@ import (
 	"backend/internal/audit"
 	"backend/internal/authz"
 )
-
-type revokeRequest struct {
-	ID string `json:"id"`
-}
 
 func RevokeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -32,12 +27,7 @@ func RevokeHandler() http.HandlerFunc {
 		}
 		workspaceID := a.WorkspaceID
 
-		var req revokeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		idUUID, err := db_types.NewJSONNullUUIDFromString(req.ID)
+		idUUID, err := db_types.NewJSONNullUUIDFromString(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
@@ -68,7 +58,7 @@ func RevokeHandler() http.HandlerFunc {
 
 		audit.EmitAction(r.Context(), audit.APIKeyRevoked, audit.Record{
 			WorkspaceID: workspaceID,
-			TargetID:    req.ID,
+			TargetID:    idUUID.String(),
 			Status:      audit.StatusSuccess,
 		})
 		w.WriteHeader(http.StatusNoContent)

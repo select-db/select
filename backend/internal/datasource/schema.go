@@ -10,28 +10,20 @@ import (
 	"github.com/selectDb/dialect/engine"
 )
 
-type schemaRequest struct {
-	ID      string `json:"id"`
-	NoCache bool   `json:"no_cache,omitempty"`
-}
-
 var zstdEncoder, _ = zstd.NewWriter(nil)
 
 func SchemaHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req schemaRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if req.ID == "" {
+		id := r.PathValue("id")
+		if id == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
+		noCache := r.URL.Query().Get("no_cache") == "true"
 
 		workspaceID := middlewares.MemberWorkspaceID(r)
 
-		ds, err := GetOrLoadDatasource(r.Context(), req.ID, workspaceID)
+		ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
 		if err != nil {
 			http.Error(w, "datasource not found", http.StatusNotFound)
 			return
@@ -39,7 +31,7 @@ func SchemaHandler() http.HandlerFunc {
 
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource schema", workspaceID, req.ID), http.StatusBadGateway)
+			http.Error(w, safeConnErr(err, "datasource schema", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 
@@ -49,7 +41,7 @@ func SchemaHandler() http.HandlerFunc {
 			return
 		}
 
-		meta, err := engine.GetOrFetchMetadata(r.Context(), workspaceID, ds.DSN, dbConn, dialect, "", req.NoCache)
+		meta, err := engine.GetOrFetchMetadata(r.Context(), workspaceID, ds.DSN, dbConn, dialect, "", noCache)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

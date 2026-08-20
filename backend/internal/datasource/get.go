@@ -12,10 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type getDatasourceRequest struct {
-	ID string `json:"id"`
-}
-
 type getDatasourceResponse struct {
 	Name            string `json:"name"`
 	DSN             string `json:"dsn"`
@@ -28,12 +24,8 @@ type getDatasourceResponse struct {
 
 func GetHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req getDatasourceRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if req.ID == "" {
+		id := r.PathValue("id")
+		if id == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
@@ -41,7 +33,7 @@ func GetHandler() http.HandlerFunc {
 		a := authz.ActorOf(r)
 		workspaceID := a.WorkspaceID
 
-		if !a.IsOwner() && !a.CanManage(req.ID) {
+		if !a.IsOwner() && !a.CanManage(id) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -52,7 +44,7 @@ func GetHandler() http.HandlerFunc {
 			return
 		}
 
-		parsedID, err := uuid.Parse(req.ID)
+		parsedID, err := uuid.Parse(id)
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return

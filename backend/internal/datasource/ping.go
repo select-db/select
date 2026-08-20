@@ -2,7 +2,6 @@ package datasource
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -29,26 +28,18 @@ func safeConnErr(err error, logPrefix, workspaceID, dsID string) string {
 	return genericConnErr
 }
 
-type pingRequest struct {
-	ID      string `json:"id"`
-	NoCache bool   `json:"no_cache,omitempty"`
-}
-
 func PingHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req pingRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if req.ID == "" {
+		id := r.PathValue("id")
+		if id == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
+		noCache := r.URL.Query().Get("no_cache") == "true"
 
 		workspaceID := middlewares.MemberWorkspaceID(r)
-		pingKey := cacheKey(workspaceID, req.ID)
-		if !req.NoCache {
+		pingKey := cacheKey(workspaceID, id)
+		if !noCache {
 			if cached, ok := pingCache.Get(pingKey); ok {
 				if errMsg, _ := cached.(string); errMsg != "" {
 					http.Error(w, errMsg, http.StatusBadGateway)
@@ -59,7 +50,7 @@ func PingHandler() http.HandlerFunc {
 			}
 		}
 
-		ds, err := GetOrLoadDatasource(r.Context(), req.ID, workspaceID)
+		ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
 		if err != nil {
 			http.Error(w, "datasource not found", http.StatusNotFound)
 			return
@@ -67,7 +58,7 @@ func PingHandler() http.HandlerFunc {
 
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
-			msg := safeConnErr(err, "datasource ping", workspaceID, req.ID)
+			msg := safeConnErr(err, "datasource ping", workspaceID, id)
 			pingCache.Set(pingKey, msg)
 			http.Error(w, msg, http.StatusBadGateway)
 			return
@@ -77,7 +68,7 @@ func PingHandler() http.HandlerFunc {
 		defer cancel()
 
 		if err := dbConn.PingContext(ctx); err != nil {
-			log.Printf("datasource ping: ping ws=%s id=%s: %v", workspaceID, req.ID, err)
+			log.Printf("datasource ping: ping ws=%s id=%s: %v", workspaceID, id, err)
 			pingCache.Set(pingKey, genericConnErr)
 			http.Error(w, genericConnErr, http.StatusBadGateway)
 			return

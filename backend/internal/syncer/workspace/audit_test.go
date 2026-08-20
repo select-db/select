@@ -8,7 +8,7 @@ import (
 
 // Audit coverage for the workspace entity via the sync path. Creation isn't
 // reachable here: a caller must already belong to the workspace it commits to,
-// so workspace.lifecycle.create lives on the dedicated /workspace/create
+// so workspace.lifecycle.create lives on the dedicated POST /workspaces
 // handler. Deletion is owner-only and reachable, so it is covered (see
 // backend/internal/audit/catalog.go).
 
