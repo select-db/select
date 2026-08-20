@@ -235,11 +235,13 @@
 	<div class="item"></div>
 	<div class="item center top">
 		{#if currentServer && $serverIndicatorStore[currentServer]?.manifest?.warning}
-			<Alert
-				type={AlertType.Default}
-				message={$serverIndicatorStore[currentServer]?.manifest?.warning ?? ''}
-				noPulse
-			/>
+			<div class="alert-slot">
+				<Alert
+					type={AlertType.Default}
+					message={$serverIndicatorStore[currentServer]?.manifest?.warning ?? ''}
+					noPulse
+				/>
+			</div>
 		{/if}
 		<div class="login-actions">
 			<LoginBtn />
@@ -255,6 +257,11 @@
 	}
 
 	.wrapper {
+		/* The window is frameless (title bar hidden on macOS), and the login screen
+		   renders no tab bar, so nothing here was window-draggable: the whole
+		   backdrop is the drag handle instead. */
+		--wails-draggable: drag;
+
 		border-top: var(--border);
 		border-bottom: var(--border);
 		position: relative;
@@ -265,6 +272,16 @@
 		height: 100vh;
 		background-color: var(--gray-0);
 		overflow: hidden;
+	}
+
+	/* --wails-draggable inherits, so anything interactive has to opt back out or
+	   its mousedown starts a window drag instead of reaching the control. */
+	.server-select,
+	.login-actions,
+	.alert-slot,
+	.wrapper :global(button),
+	.wrapper :global(input) {
+		--wails-draggable: no-drag;
 	}
 
 	.divider {
