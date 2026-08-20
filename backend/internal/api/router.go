@@ -9,6 +9,7 @@ import (
 
 	"backend/internal/middlewares"
 
+	"backend/internal/api/gen"
 	apikeyhandler "backend/internal/apikey"
 	"backend/internal/audit"
 	"backend/internal/auth"
@@ -23,6 +24,8 @@ import (
 // chain. Callers add their own infrastructure routes (health, version) before or
 // after, then wrap the mux with Wrap.
 func Register(mux *http.ServeMux) {
+	// Workspace scoping: reads the X-Workspace-Id header (so GET routes work) or
+	// a workspace_id in the body, validated against the caller's memberships.
 	member := middlewares.Membership()
 	// Per-endpoint rate limit (requests/minute, keyed by user else IP).
 	// Applied innermost so authenticated routes key by user.
@@ -40,33 +43,39 @@ func Register(mux *http.ServeMux) {
 		return authMW(withPrincipalResolver(h))
 	}
 
-	mux.Handle("POST /auth/get-device-code", limited(15, auth.GetDeviceCodeHandler()))
-	mux.Handle("POST /auth/get-access-token", limited(30, auth.GetAccessTokenHandler()))
+	mux.Handle("GET /auth/device-code", limited(15, auth.GetDeviceCodeHandler()))
+	mux.Handle("POST /auth/access-token", limited(30, auth.GetAccessTokenHandler()))
 
 	mux.Handle("POST /sync/v1/sync", authenticated(limited(600, synchandler.Handler())))
-
-	mux.Handle("POST /workspace/create", authenticated(limited(60, workspacehandler.CreateHandler())))
-	mux.Handle("POST /workspace/delete", authenticated(member(limited(30, workspacehandler.DeleteHandler()))))
-
-	mux.Handle("POST /user/search", authenticated(member(limited(120, workspacehandler.SearchUserHandler()))))
-	mux.Handle("POST /user/add", authenticated(member(limited(120, workspacehandler.AddUserHandler()))))
-
-	mux.Handle("POST /apikey/list", authenticated(member(limited(120, apikeyhandler.ListHandler()))))
-	mux.Handle("POST /apikey/create", authenticated(member(limited(10, apikeyhandler.CreateHandler()))))
-	mux.Handle("POST /apikey/revoke", authenticated(member(limited(30, apikeyhandler.RevokeHandler()))))
-	mux.Handle("POST /apikey/rotate", authenticated(member(limited(10, apikeyhandler.RotateHandler()))))
-	mux.Handle("POST /apikey/set-roles", authenticated(member(limited(30, apikeyhandler.SetRolesHandler()))))
-
-	mux.Handle("POST /datasource/get", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
-	mux.Handle("POST /datasource/upsert", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
-	mux.Handle("POST /datasource/delete", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))
-
-	mux.Handle("POST /datasource/ping", authenticated(member(limited(60, datasourcehandler.PingHandler()))))
-	mux.Handle("POST /datasource/schema", authenticated(member(limited(120, datasourcehandler.SchemaHandler()))))
-	mux.Handle("POST /datasource/execute", authenticated(member(limited(240, datasourcehandler.ExecuteHandler()))))
-	mux.Handle("POST /datasource/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
-
 	mux.Handle("POST /mcp", authenticated(limited(600, mcphandler.Handler())))
+
+	mux.Handle("POST /workspaces", authenticated(limited(60, workspacehandler.CreateHandler())))
+	mux.Handle("DELETE /workspaces/{id}", authenticated(member(limited(30, workspacehandler.DeleteHandler()))))
+
+	mux.Handle("GET /users/search", authenticated(member(limited(120, workspacehandler.SearchUserHandler()))))
+	mux.Handle("POST /users", authenticated(member(limited(120, workspacehandler.AddUserHandler()))))
+
+	mux.Handle("GET /apikeys", authenticated(member(limited(120, apikeyhandler.ListHandler()))))
+	mux.Handle("POST /apikeys", authenticated(member(limited(10, apikeyhandler.CreateHandler()))))
+	mux.Handle("POST /apikeys/{id}/revoke", authenticated(member(limited(30, apikeyhandler.RevokeHandler()))))
+	mux.Handle("POST /apikeys/{id}/rotate", authenticated(member(limited(10, apikeyhandler.RotateHandler()))))
+	mux.Handle("PUT /apikeys/{id}/roles", authenticated(member(limited(30, apikeyhandler.SetRolesHandler()))))
+
+	mux.Handle("GET /datasources/{id}", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
+	mux.Handle("PUT /datasources/{id}", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
+	mux.Handle("DELETE /datasources/{id}", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))
+
+	mux.Handle("POST /datasources/{id}/ping", authenticated(member(limited(60, datasourcehandler.PingHandler()))))
+	mux.Handle("GET /datasources/{id}/schema", authenticated(member(limited(120, datasourcehandler.SchemaHandler()))))
+	mux.Handle("POST /datasources/{id}/execute", authenticated(member(limited(240, datasourcehandler.ExecuteHandler()))))
+	mux.Handle("GET /datasources/{id}/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
+
+	// Generated REST API (roles, permissions, groups, junctions, audit log).
+	// Shares the same auth + workspace-scoping + rate-limit chain; per-op
+	// required actions are enforced inside each handler.
+	gen.RegisterRoutes(mux, func(perMinute int, h http.Handler) http.Handler {
+		return authenticated(member(middlewares.RateLimit(perMinute)(h)))
+	})
 }
 
 // withPrincipalResolver stashes an audit principal resolver on the request

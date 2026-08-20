@@ -26,6 +26,7 @@ function createQuickActionNode(type: string, name: string): graph.FileNode {
 
 const SETTINGS_SECTION_PREFIX = 'quick-action-settings-';
 
+// Primary actions shown in the tabs empty-state view.
 export const quickActions: ResourceMenuOption[] = [
 	{
 		id: 'quick-action-new-query',
@@ -61,15 +62,17 @@ export const quickActions: ResourceMenuOption[] = [
 		type: 'quick_action',
 		uri: '',
 		node: createQuickActionNode('quick_action:settings', 'Open settings')
-	},
-	...settingsSections.map((s) => ({
-		id: `${SETTINGS_SECTION_PREFIX}${s.id}`,
-		label: `Settings: ${s.label}`,
-		type: 'quick_action' as const,
-		uri: '',
-		node: createQuickActionNode('quick_action:settings', `Settings: ${s.label}`)
-	}))
+	}
 ];
+
+// Per-section settings shortcuts. Surfaced only in search, not the empty state.
+export const settingsQuickActions: ResourceMenuOption[] = settingsSections.map((s) => ({
+	id: `${SETTINGS_SECTION_PREFIX}${s.id}`,
+	label: `Settings: ${s.label}`,
+	type: 'quick_action' as const,
+	uri: '',
+	node: createQuickActionNode('quick_action:settings', `Settings: ${s.label}`)
+}));
 
 export function executeQuickAction(option: ResourceMenuOption): void {
 	if (option.type !== 'quick_action') return;

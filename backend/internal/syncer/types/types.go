@@ -5,6 +5,20 @@ import (
 	"time"
 )
 
+// FieldError is a client-caused write rejection tied to a specific request field
+// — most commonly a foreign key that doesn't resolve to a row in the caller's
+// workspace. The generated syncer Apply returns it so the REST layer can surface
+// a precise, safe 422 ({field, message}) instead of an opaque one; the sync path
+// treats it as any other apply error. The message is deliberately
+// workspace-relative ("… in this workspace") and never reveals whether the id
+// exists in a different workspace.
+type FieldError struct {
+	Field   string
+	Message string
+}
+
+func (e *FieldError) Error() string { return e.Field + ": " + e.Message }
+
 // ToRestoredPayload converts a typed row to the interface{} form used in RestoredItem.ServerPayload
 // (marshal then unmarshal so the API returns a JSON object, not a custom type).
 func ToRestoredPayload(row interface{}) (interface{}, error) {

@@ -35,7 +35,7 @@ func mockGitHub(t *testing.T, email string) {
 
 func postAccessToken(t *testing.T, h http.Handler, code, deviceID string) int {
 	t.Helper()
-	rec := e2e.Do(t, h, http.MethodPost, "/auth/get-access-token", "",
+	rec := e2e.Do(t, h, http.MethodPost, "/auth/access-token", "",
 		map[string]any{"device_code": code, "device_id": deviceID})
 	return rec.Code
 }

@@ -24,8 +24,7 @@ func TestAudit_MCPQueryExecuted(t *testing.T) {
 
 	// A datasource the engine can actually connect to: this test's own database.
 	dsID := uuid.NewString()
-	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/upsert", f.Actor.Token, map[string]any{
-		"id":           dsID,
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+dsID, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "self",
@@ -71,8 +70,7 @@ func TestAudit_MCPQueryDenied(t *testing.T) {
 	f := e2e.Setup(t)
 
 	dsID := uuid.NewString()
-	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/upsert", f.Actor.Token, map[string]any{
-		"id":           dsID,
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+dsID, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "self",

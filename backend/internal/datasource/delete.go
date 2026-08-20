@@ -1,7 +1,6 @@
 package datasource
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"backend/db"
@@ -13,18 +12,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type deleteRequest struct {
-	ID string `json:"id"`
-}
-
 func DeleteHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req deleteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if req.ID == "" {
+		idStr := r.PathValue("id")
+		if idStr == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
@@ -32,13 +23,13 @@ func DeleteHandler() http.HandlerFunc {
 		a := authz.ActorOf(r)
 		workspaceID := a.WorkspaceID
 
-		if !a.IsOwner() && !a.CanManage(req.ID) {
-			audit.EmitDenied(r.Context(), audit.DatasourceDeleted, workspaceID, req.ID)
+		if !a.IsOwner() && !a.CanManage(idStr) {
+			audit.EmitDenied(r.Context(), audit.DatasourceDeleted, workspaceID, idStr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 
-		id, err := uuid.Parse(req.ID)
+		id, err := uuid.Parse(idStr)
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
@@ -57,11 +48,11 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		InvalidateCache(workspaceID, req.ID)
+		InvalidateCache(workspaceID, idStr)
 
 		audit.EmitAction(r.Context(), audit.DatasourceDeleted, audit.Record{
 			WorkspaceID: workspaceID,
-			TargetID:    req.ID,
+			TargetID:    idStr,
 			Status:      audit.StatusSuccess,
 		})
 		w.WriteHeader(http.StatusNoContent)

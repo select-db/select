@@ -23,18 +23,20 @@ var engineClient = engine.Client{
 			ctx context.Context,
 			method,
 			endpoint string,
-			payload,
+			payload any,
+			headers map[string]string,
 			response any,
 		) error {
-			return api.Fetch(ctx, method, endpoint, payload, nil, response)
+			return api.Fetch(ctx, method, endpoint, payload, headers, response)
 		},
 		FetchStream: func(
 			ctx context.Context,
 			method,
 			endpoint string,
 			payload any,
+			headers map[string]string,
 		) (io.ReadCloser, error) {
-			return api.FetchStream(ctx, method, endpoint, payload)
+			return api.FetchStream(ctx, method, endpoint, payload, headers)
 		},
 	},
 }

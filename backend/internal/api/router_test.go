@@ -14,7 +14,7 @@ func TestRouter_RejectsWrongMethod(t *testing.T) {
 	mux := http.NewServeMux()
 	api.Register(mux)
 
-	for _, path := range []string{"/apikey/list", "/datasource/upsert", "/sync/v1/sync", "/mcp"} {
+	for _, path := range []string{"/workspaces", "/datasources/abc/execute", "/sync/v1/sync", "/mcp"} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusMethodNotAllowed {

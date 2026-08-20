@@ -15,6 +15,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"backend/internal/apigen/codegen"
@@ -143,7 +144,7 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 		Security: []SecurityReq{{bearerScheme: {}}},
 		Paths:    map[string]*PathItem{},
 		Components: Components{
-			Schemas: map[string]*Schema{"Error": errorSchema()},
+			Schemas: map[string]*Schema{"Error": errorSchema(), "ValidationError": validationErrorSchema()},
 			SecuritySchemes: map[string]SecurityScheme{
 				bearerScheme: {
 					Type:         "http",
@@ -160,16 +161,16 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 			continue // not exposed over HTTP
 		}
 		model := codegen.Pascal(e.Name)
-		coll := "/" + plural(e.Name)
+		coll := "/" + codegen.Plural(e.Name)
 		item := coll + "/{id}"
-		doc.Tags = append(doc.Tags, Tag{Name: e.Name, Description: fmt.Sprintf("Operations on %s.", plural(e.Name))})
+		doc.Tags = append(doc.Tags, Tag{Name: e.Name, Description: fmt.Sprintf("Operations on %s.", codegen.Plural(e.Name))})
 
 		// Component schemas: the response object plus create/update request bodies.
 		doc.Components.Schemas[model] = responseSchema(e)
-		if hasOp(e, "create") {
+		if schema.HasOp(e, "create") {
 			doc.Components.Schemas[model+"CreateRequest"] = writeSchema(e, true)
 		}
-		if hasOp(e, "update") {
+		if schema.HasOp(e, "update") {
 			doc.Components.Schemas[model+"UpdateRequest"] = writeSchema(e, false)
 		}
 
@@ -197,22 +198,15 @@ func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
 }
 
 // route maps an op to its (path, HTTP method): collection ops (list, create) on
-// the plural path, item ops (get, update, delete) on the /{id} path.
+// the plural path, item ops (get, update, delete) on the /{id} path. The op
+// method/collection semantics are single-sourced in schema (shared with the
+// handler emitter); OpenAPI wants the method lowercased.
 func route(coll, item, op string) (path, method string) {
-	switch op {
-	case "list":
-		return coll, "get"
-	case "create":
-		return coll, "post"
-	case "get":
-		return item, "get"
-	case "update":
-		return item, "patch"
-	case "delete":
-		return item, "delete"
-	default:
-		return coll, "post"
+	method = strings.ToLower(schema.RESTMethod(op))
+	if schema.OnCollection(op) {
+		return coll, method
 	}
+	return item, method
 }
 
 // operationFor builds the operation for one op on one entity: its parameters
@@ -250,27 +244,48 @@ func operationFor(e schema.Entity, model string, op schema.APIOp) *Operation {
 	return o
 }
 
-// responsesFor is the response set for an op: the resource (list -> array,
-// create -> 201, delete -> 204), a 404 for item ops, plus shared auth errors.
+// responsesFor documents exactly the responses schema.ResponseCodes lists for the
+// op — the single source shared with the handler-alignment test, so the doc and
+// the API can't drift. "resource" in each description is swapped for the model.
 func responsesFor(model, op string) map[string]Response {
-	res := map[string]Response{
-		"401": errorResponse("Missing or invalid authentication."),
-		"403": errorResponse("Authenticated but lacks the required workspace action."),
-	}
-	entityRef := &Schema{Ref: "#/components/schemas/" + model}
-	switch op {
-	case "list":
-		res["200"] = jsonResponse("A page of "+plural(strings.ToLower(model))+".", &Schema{Type: "array", Items: entityRef})
-	case "create":
-		res["201"] = jsonResponse("The created "+strings.ToLower(model)+".", entityRef)
-	case "delete":
-		res["204"] = Response{Description: "Deleted."}
-		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
-	default: // get, update
-		res["200"] = jsonResponse("The "+strings.ToLower(model)+".", entityRef)
-		res["404"] = errorResponse("No such " + strings.ToLower(model) + " in this workspace.")
+	res := map[string]Response{}
+	for _, r := range schema.ResponseCodes(op) {
+		res[strconv.Itoa(r.Status)] = responseFor(model, r)
 	}
 	return res
+}
+
+// responseFor renders one APIResponse into an OpenAPI Response, attaching the
+// body schema its kind calls for.
+func responseFor(model string, r schema.APIResponse) Response {
+	desc := strings.ReplaceAll(r.Desc, "resource", strings.ToLower(model))
+	entityRef := &Schema{Ref: "#/components/schemas/" + model}
+	switch r.Body {
+	case schema.RespNone:
+		return Response{Description: desc}
+	case schema.RespResource:
+		return jsonResponse(desc, entityRef)
+	case schema.RespPage:
+		return jsonResponse(desc, listEnvelope(entityRef))
+	case schema.RespValidation:
+		return jsonResponse(desc, &Schema{Ref: "#/components/schemas/ValidationError"})
+	default: // RespError
+		return jsonResponse(desc, &Schema{Ref: "#/components/schemas/Error"})
+	}
+}
+
+// listEnvelope wraps a page of results in {data, next_cursor} — the cursor-
+// pagination shape the handlers return. next_cursor is absent on the last page;
+// pass it back as the `cursor` query param to fetch the next page.
+func listEnvelope(items *Schema) *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"data":        {Type: "array", Items: items},
+			"next_cursor": {Type: "string", Description: "Opaque cursor for the next page; omitted on the last page."},
+		},
+		Required: []string{"data"},
+	}
 }
 
 // responseSchema is the object returned for an entity: every exposed field, with
@@ -291,35 +306,25 @@ func responseSchema(e schema.Entity) *Schema {
 	return s
 }
 
-// writeSchema is the create/update request body. create requires the client to
-// supply id (offline-first client-generated UUIDs) plus every NOT NULL writable
-// column without a default; update patches by id-in-path, so its body carries
-// only the (optional) writable columns.
+// writeSchema is the create/update request body. create takes an optional
+// client-supplied id (a uuid; the server generates one when omitted) plus every
+// NOT NULL writable column without a default; update patches by id-in-path, so
+// its body carries only the (optional) writable columns.
 func writeSchema(e schema.Entity, create bool) *Schema {
 	s := &Schema{Type: "object", Properties: map[string]*Schema{}}
 	if create {
-		s.Properties["id"] = &Schema{Type: "string", Format: "uuid"}
-		s.Required = []string{"id"}
+		s.Properties["id"] = &Schema{Type: "string", Format: "uuid", Description: "Optional client-supplied id; the server generates one when omitted."}
 	}
 	for _, f := range e.Fields {
-		if !isWritable(f) {
+		if !schema.IsWritable(f) {
 			continue
 		}
 		s.Properties[f.Name] = fieldSchema(f)
-		if create && !f.Nullable && f.Default == "" {
+		if create && schema.RequiredOnCreate(f) {
 			s.Required = append(s.Required, f.Name)
 		}
 	}
 	return s
-}
-
-// isWritable reports whether a field is client-settable: a patchable value column
-// or a non-tenant foreign key (relationship identity set on write).
-func isWritable(f schema.Field) bool {
-	if f.Hidden || f.IsPK {
-		return false
-	}
-	return f.Patchable || (f.FK != nil && f.Column != schema.TenantColumn)
 }
 
 // scalarSchema is a field's bare JSON type/format/enum, without nullability -
@@ -372,10 +377,20 @@ func pathIDParam() Parameter {
 func listParams(e schema.Entity) []Parameter {
 	return []Parameter{
 		{Name: "$filter", In: "query", Description: filterDoc(e), Schema: &Schema{Type: "string"}},
-		{Name: "sort", In: "query", Description: "Sort expression, e.g. \"-updated_at\".", Schema: &Schema{Type: "string"}},
-		{Name: "limit", In: "query", Description: "Maximum rows to return.", Schema: &Schema{Type: "integer"}},
-		{Name: "cursor", In: "query", Description: "Opaque pagination cursor from a previous page.", Schema: &Schema{Type: "string"}},
+		{Name: "sort", In: "query", Description: sortDoc(e), Schema: &Schema{Type: "string"}},
+		{Name: "limit", In: "query", Description: "Maximum rows to return (default 50, max 200).", Schema: &Schema{Type: "integer"}},
+		{Name: "cursor", In: "query", Description: "Opaque pagination cursor; pass a previous page's next_cursor.", Schema: &Schema{Type: "string"}},
 	}
+}
+
+// sortDoc documents the sort param and the resource's default (which applies
+// when sort is omitted), keeping the spec in step with the @app.sort tag.
+func sortDoc(e schema.Entity) string {
+	s := "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`)."
+	if e.DefaultSort != "" {
+		s += " Defaults to `" + e.DefaultSort + "`."
+	}
+	return s
 }
 
 // filterDoc documents the OData $filter grammar for one entity: the logical
@@ -407,7 +422,7 @@ func filterFieldsDoc(e schema.Entity) string {
 			continue
 		}
 		desc := mdCell(f.Description)
-		if ops := strings.Join(odataOps(f), ", "); ops != "" {
+		if ops := strings.Join(schema.ODataOperators(f), ", "); ops != "" {
 			note := "_Operators: " + ops + "._"
 			if desc != "" {
 				desc += " " + note
@@ -451,48 +466,6 @@ func typeLabel(f schema.Field) string {
 	return t
 }
 
-// odataOps maps a field's operator set (the shared FilterOperators taxonomy) to
-// the OData tokens a caller writes. Null checks are omitted - they're universal
-// and covered by the grammar legend (`field eq null` / `field ne null`).
-func odataOps(f schema.Field) []string {
-	var out []string
-	seen := map[string]bool{}
-	add := func(ss ...string) {
-		for _, s := range ss {
-			if !seen[s] {
-				seen[s] = true
-				out = append(out, s)
-			}
-		}
-	}
-	for _, op := range schema.FilterOperators(f) {
-		switch op {
-		case "eq":
-			add("eq")
-		case "ne":
-			add("ne")
-		case "lt":
-			add("lt")
-		case "lte":
-			add("le")
-		case "gt":
-			add("gt")
-		case "gte":
-			add("ge")
-		case "in":
-			add("in")
-		case "nin":
-			add("not in")
-		case "like", "ilike":
-			add("contains", "startswith", "endswith")
-		case "contains":
-			add("contains")
-		case "is_null", "not_null":
-			// universal; covered by the grammar legend
-		}
-	}
-	return out
-}
 
 // filterExamples builds one AND and one OR/NOT example from the entity's first
 // couple of business (non-PK) filterable fields.
@@ -553,28 +526,42 @@ func errorSchema() *Schema {
 	}
 }
 
-func errorResponse(desc string) Response {
-	return jsonResponse(desc, &Schema{Ref: "#/components/schemas/Error"})
+// validationErrorSchema is the 422 body: an {error} summary always, plus a
+// field-level issue list when the failure is per-field (body validation or a
+// cross-workspace FK). fields is optional — a generic write rejection carries
+// only error — so this schema covers both, matching rest.WriteValidationError /
+// WriteWriteError.
+func validationErrorSchema() *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"error": {Type: "string", Description: "Human-readable summary."},
+			"fields": {
+				Type:        "array",
+				Description: "The offending fields and why each was rejected (present for per-field failures).",
+				Items: &Schema{
+					Type: "object",
+					Properties: map[string]*Schema{
+						"field":   {Type: "string"},
+						"message": {Type: "string"},
+					},
+					Required: []string{"field", "message"},
+				},
+			},
+		},
+		Required: []string{"error"},
+	}
 }
 
 func jsonResponse(desc string, s *Schema) Response {
 	return Response{Description: desc, Content: map[string]MediaType{"application/json": {Schema: s}}}
 }
 
-func hasOp(e schema.Entity, op string) bool {
-	for _, o := range e.API {
-		if o.Op == op {
-			return true
-		}
-	}
-	return false
-}
-
 // summary is a human title for an op on a resource, e.g. list+role -> "List roles".
 func summary(op, name string) string {
 	switch op {
 	case "list":
-		return "List " + plural(name)
+		return "List " + codegen.Plural(name)
 	case "get":
 		return "Get " + name
 	case "create":
@@ -586,13 +573,4 @@ func summary(op, name string) string {
 	default:
 		return codegen.Pascal(op) + " " + name
 	}
-}
-
-// plural is a naive pluralizer good enough for resource names (role -> roles,
-// permission -> permissions, user_to_role -> user_to_roles).
-func plural(name string) string {
-	if strings.HasSuffix(name, "s") {
-		return name
-	}
-	return name + "s"
 }

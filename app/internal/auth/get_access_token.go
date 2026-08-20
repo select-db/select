@@ -63,7 +63,7 @@ func (ga *GithubAuth) GetAccessToken(deviceCode string) error {
 	var backendUser BackendUserResponse
 	for {
 		var pr accessTokenPoll
-		if ferr := api.Fetch(logUserCtx, "POST", "auth/get-access-token", params, nil, &pr); ferr != nil {
+		if ferr := api.Fetch(logUserCtx, "POST", "auth/access-token", params, nil, &pr); ferr != nil {
 			return ferr
 		}
 		if pr.Status == "complete" {

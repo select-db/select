@@ -147,7 +147,7 @@ func TestReadOnlyLogEntity(t *testing.T) {
 		Columns: []schema.RawColumn{
 			{Name: "id", DataType: "uuid", NotNull: true},
 			{Name: "workspace_id", DataType: "uuid"},
-			{Name: "occurred_at", DataType: "timestamptz", NotNull: true},
+			{Name: "occurred_at", DataType: "timestamptz", NotNull: true, Comment: "When the event occurred. @app.sort desc"},
 			{Name: "action", DataType: "text", NotNull: true},
 			{Name: "status", DataType: "text", NotNull: true, Comment: "Outcome. @app.values [success, error, denied]"},
 			{Name: "principal_hash", DataType: "bytea", NotNull: true, Comment: "@app.hide"},

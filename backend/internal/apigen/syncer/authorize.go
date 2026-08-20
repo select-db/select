@@ -7,7 +7,6 @@ import (
 	"go/format"
 	"sort"
 	"strings"
-	"text/template"
 )
 
 // authzEntry is one table's required-action AND-list for the registry.
@@ -60,31 +59,17 @@ func writeRequires(e schema.Entity) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, op := range e.API {
-		switch op.Op {
-		case "create", "update", "delete":
-			for _, r := range op.Requires {
-				if !seen[r] {
-					seen[r] = true
-					out = append(out, r)
-				}
+		if !schema.IsWriteOp(op.Op) {
+			continue
+		}
+		for _, r := range op.Requires {
+			if !seen[r] {
+				seen[r] = true
+				out = append(out, r)
 			}
 		}
 	}
 	return out
 }
 
-var authorizeTmpl = template.Must(template.New("authorize").Parse(genHeader +
-	`package gen
-
-import core "github.com/selectDb/dialect/core"
-
-// RequiredActions maps each @app.sync table to the workspace actions a caller
-// must hold to write it via sync (create/update/delete), from the ` + "`requires`" + `
-// clause on the table's @app.api write ops. Owners bypass these (see
-// authorizeCommit); workspace is the hand-written special and is not listed.
-var RequiredActions = map[string][]string{
-{{- range .}}
-	{{printf "%q" .Table}}: { {{range $i, $a := .Actions}}{{if $i}}, {{end}}{{$a}}{{end}}},
-{{- end}}
-}
-`))
+var authorizeTmpl = mustParse("authorize.go.tmpl")

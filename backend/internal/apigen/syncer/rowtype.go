@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/format"
 	"strings"
-	"text/template"
 )
 
 // EmitSyncRowType renders the sync wire struct types.<Sing>Row. It lives in the
@@ -38,18 +37,7 @@ func EmitSyncRowType(e schema.Entity) (codegen.GenFile, error) {
 	return codegen.GenFile{Name: e.Table + "_row_gen.go", Content: string(formatted)}, nil
 }
 
-var rowTypeTmpl = template.Must(template.New("rowtype").Parse(genHeader +
-	`package types
-{{if .NeedTime}}
-import "time"
-{{end}}
-// {{.Sing}}Row is a {{.Table}} row for sync.
-type {{.Sing}}Row struct {
-{{- range .Fields}}
-	{{.Name}} {{.Type}} ` + "`{{.Tag}}`" + `
-{{- end}}
-}
-`))
+var rowTypeTmpl = mustParse("rowtype.go.tmpl")
 
 // rowGoType is the plain Go type for a sync-row field. The soft-delete column
 // is a nullable pointer; every other nullable column uses its zero value.

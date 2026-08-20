@@ -18,7 +18,7 @@ func (ga *GithubAuth) GetDeviceCode() (*DeviceCodeResponse, error) {
 	err := api.Fetch(
 		context.Background(),
 		"GET",
-		"auth/get-device-code",
+		"auth/device-code",
 		nil,
 		nil,
 		&deviceCodeResponse,

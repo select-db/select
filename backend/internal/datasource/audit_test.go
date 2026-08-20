@@ -19,8 +19,7 @@ func TestMain(m *testing.M) { e2e.Run(m) }
 func upsertDatasource(t *testing.T, f e2e.Fixture) string {
 	t.Helper()
 	id := uuid.NewString()
-	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/upsert", f.Actor.Token, map[string]any{
-		"id":           id,
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+id, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "prod",
@@ -40,8 +39,7 @@ func TestAudit_DatasourceUpdated(t *testing.T) {
 	f := e2e.Setup(t)
 	id := upsertDatasource(t, f)
 	// A second upsert of the same id is an update, not a create.
-	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/upsert", f.Actor.Token, map[string]any{
-		"id":           id,
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+id, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "prod-renamed",
@@ -55,8 +53,7 @@ func TestAudit_DatasourceDeleted(t *testing.T) {
 	f := e2e.Setup(t)
 	id := upsertDatasource(t, f)
 
-	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/delete", f.Actor.Token, map[string]any{
-		"id":           id,
+	rec := e2e.Do(t, f.H, http.MethodDelete, "/datasources/"+id, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "delete failed: %s", rec.Body.String())
@@ -78,8 +75,7 @@ func TestAudit_DatasourceUpsertDenied(t *testing.T) {
 	f := e2e.Setup(t)
 	token := nonManagerToken(t, f)
 
-	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/upsert", token, map[string]any{
-		"id":           uuid.NewString(),
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+uuid.NewString(), token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "prod",
@@ -95,8 +91,7 @@ func TestAudit_DatasourceDeleteDenied(t *testing.T) {
 	f := e2e.Setup(t)
 	token := nonManagerToken(t, f)
 
-	rec := e2e.Do(t, f.H, http.MethodPost, "/datasource/delete", token, map[string]any{
-		"id":           uuid.NewString(),
+	rec := e2e.Do(t, f.H, http.MethodDelete, "/datasources/"+uuid.NewString(), token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 	})
 	require.Equalf(t, http.StatusForbidden, rec.Code, "expected 403, got %d: %s", rec.Code, rec.Body.String())

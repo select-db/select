@@ -25,10 +25,10 @@ func (w *Workspace) AddUserToWorkspace(email string) error {
 		return fmt.Errorf("get current workspace: %w", err)
 	}
 
-	err = api.Fetch(ctx, "POST", "user/add", map[string]string{
+	err = api.Fetch(ctx, "POST", "users", map[string]string{
 		"workspace_id": wtu.WorkspaceID,
 		"email":        email,
-	}, nil, nil)
+	}, api.WorkspaceHeader(wtu.WorkspaceID), nil)
 	if err != nil {
 		return fmt.Errorf("add user: %w", err)
 	}

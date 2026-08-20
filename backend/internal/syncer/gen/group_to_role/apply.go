@@ -38,23 +38,39 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("group_to_role: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
-	groupUUID, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "group_id"))
-	if err != nil {
-		return false, nil, fmt.Errorf("group_to_role: invalid group_id: %w", err)
+	// group_id is parsed only when present: a partial update may omit it, in
+	// which case the merge keeps the existing value (so the FK isn't re-validated).
+	var groupUUID db_types.JSONNullUUID
+	if _, present := payload["group_id"]; present {
+		groupUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "group_id"))
+		if err != nil {
+			return false, nil, fmt.Errorf("group_to_role: invalid group_id: %w", err)
+		}
+		if ok, err := scope.GroupInWorkspace(ctx, groupUUID, workspaceUUID); err != nil {
+			return false, nil, fmt.Errorf("group_to_role: validate group: %w", err)
+		} else if !ok {
+			// FK doesn't resolve to a row in this workspace (missing, soft-deleted, or
+			// in another workspace). A typed FieldError so the REST layer surfaces a
+			// precise, safe 422; the message never reveals cross-workspace existence.
+			return false, nil, &types.FieldError{Field: "group_id", Message: "does not reference a group in this workspace"}
+		}
 	}
-	roleUUID, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "role_id"))
-	if err != nil {
-		return false, nil, fmt.Errorf("group_to_role: invalid role_id: %w", err)
-	}
-	if ok, err := scope.GroupInWorkspace(ctx, groupUUID, workspaceUUID); err != nil {
-		return false, nil, fmt.Errorf("group_to_role: validate group: %w", err)
-	} else if !ok {
-		return false, nil, fmt.Errorf("group_to_role: group_id does not belong to workspace")
-	}
-	if ok, err := scope.RoleInWorkspace(ctx, roleUUID, workspaceUUID); err != nil {
-		return false, nil, fmt.Errorf("group_to_role: validate role: %w", err)
-	} else if !ok {
-		return false, nil, fmt.Errorf("group_to_role: role_id does not belong to workspace")
+	// role_id is parsed only when present: a partial update may omit it, in
+	// which case the merge keeps the existing value (so the FK isn't re-validated).
+	var roleUUID db_types.JSONNullUUID
+	if _, present := payload["role_id"]; present {
+		roleUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "role_id"))
+		if err != nil {
+			return false, nil, fmt.Errorf("group_to_role: invalid role_id: %w", err)
+		}
+		if ok, err := scope.RoleInWorkspace(ctx, roleUUID, workspaceUUID); err != nil {
+			return false, nil, fmt.Errorf("group_to_role: validate role: %w", err)
+		} else if !ok {
+			// FK doesn't resolve to a row in this workspace (missing, soft-deleted, or
+			// in another workspace). A typed FieldError so the REST layer surfaces a
+			// precise, safe 422; the message never reveals cross-workspace existence.
+			return false, nil, &types.FieldError{Field: "role_id", Message: "does not reference a role in this workspace"}
+		}
 	}
 	res, err := patch.Apply(ctx, c, patch.Handler[generated.AppGroupToRole, generated.UpsertGroupToRoleParams]{
 		TableName: "group_to_role",
