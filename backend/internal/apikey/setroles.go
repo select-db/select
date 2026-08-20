@@ -15,7 +15,6 @@ import (
 )
 
 type setRolesRequest struct {
-	ID      string   `json:"id"`
 	RoleIDs []string `json:"role_ids"`
 }
 
@@ -42,7 +41,7 @@ func SetRolesHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		idUUID, err := db_types.NewJSONNullUUIDFromString(req.ID)
+		idUUID, err := db_types.NewJSONNullUUIDFromString(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
@@ -113,7 +112,7 @@ func SetRolesHandler() http.HandlerFunc {
 
 		audit.EmitAction(r.Context(), audit.APIKeySetRoles, audit.Record{
 			WorkspaceID: workspaceID,
-			TargetID:    req.ID,
+			TargetID:    idUUID.String(),
 			Status:      audit.StatusSuccess,
 			Payload:     map[string]any{"role_ids": req.RoleIDs},
 		})

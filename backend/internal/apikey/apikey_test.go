@@ -39,7 +39,7 @@ func TestResolveExpiry(t *testing.T) {
 }
 
 func TestGuardRejectsAPIKeyPrincipal(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/apikey/list", strings.NewReader(`{"workspace_id":"w"}`))
+	req := httptest.NewRequest(http.MethodGet, "/apikeys", nil)
 	req = req.WithContext(middlewares.ContextWithAPIKeyPrincipal(context.Background(), "key-1", "Key One", "ws-1", nil))
 	rr := httptest.NewRecorder()
 

@@ -19,7 +19,7 @@ func TestMain(m *testing.M) { e2e.Run(m) }
 // createAPIKey creates a key as the owner and returns its id.
 func createAPIKey(t *testing.T, f e2e.Fixture) string {
 	t.Helper()
-	rec := e2e.Do(t, f.H, http.MethodPost, "/apikey/create", f.Actor.Token, map[string]any{
+	rec := e2e.Do(t, f.H, http.MethodPost, "/apikeys", f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"name":         "ci",
 		"role_ids":     []string{f.Actor.RoleID},
@@ -42,8 +42,8 @@ func TestAudit_APIKeyCreated(t *testing.T) {
 func TestAudit_APIKeyRotated(t *testing.T) {
 	f := e2e.Setup(t)
 	id := createAPIKey(t, f)
-	rec := e2e.Do(t, f.H, http.MethodPost, "/apikey/rotate", f.Actor.Token, map[string]any{
-		"workspace_id": f.Actor.WorkspaceID, "id": id,
+	rec := e2e.Do(t, f.H, http.MethodPost, "/apikeys/"+id+"/rotate", f.Actor.Token, map[string]any{
+		"workspace_id": f.Actor.WorkspaceID,
 	})
 	require.Equalf(t, http.StatusOK, rec.Code, "rotate failed: %s", rec.Body.String())
 	e2e.RequireEvent(t, f.Conn, "iam", "api_key.lifecycle.rotate")
@@ -52,8 +52,8 @@ func TestAudit_APIKeyRotated(t *testing.T) {
 func TestAudit_APIKeyRevoked(t *testing.T) {
 	f := e2e.Setup(t)
 	id := createAPIKey(t, f)
-	rec := e2e.Do(t, f.H, http.MethodPost, "/apikey/revoke", f.Actor.Token, map[string]any{
-		"workspace_id": f.Actor.WorkspaceID, "id": id,
+	rec := e2e.Do(t, f.H, http.MethodPost, "/apikeys/"+id+"/revoke", f.Actor.Token, map[string]any{
+		"workspace_id": f.Actor.WorkspaceID,
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "revoke failed: %s", rec.Body.String())
 	e2e.RequireEvent(t, f.Conn, "iam", "api_key.lifecycle.revoke")
@@ -72,7 +72,7 @@ func nonManagerToken(t *testing.T, f e2e.Fixture) string {
 func TestAudit_APIKeyCreateDenied(t *testing.T) {
 	f := e2e.Setup(t)
 	token := nonManagerToken(t, f)
-	rec := e2e.Do(t, f.H, http.MethodPost, "/apikey/create", token, map[string]any{
+	rec := e2e.Do(t, f.H, http.MethodPost, "/apikeys", token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"name":         "x",
 		"role_ids":     []string{f.Actor.RoleID},
@@ -84,8 +84,8 @@ func TestAudit_APIKeyCreateDenied(t *testing.T) {
 func TestAudit_APIKeySetRoles(t *testing.T) {
 	f := e2e.Setup(t)
 	id := createAPIKey(t, f)
-	rec := e2e.Do(t, f.H, http.MethodPost, "/apikey/set-roles", f.Actor.Token, map[string]any{
-		"workspace_id": f.Actor.WorkspaceID, "id": id, "role_ids": []string{f.Actor.RoleID},
+	rec := e2e.Do(t, f.H, http.MethodPut, "/apikeys/"+id+"/roles", f.Actor.Token, map[string]any{
+		"workspace_id": f.Actor.WorkspaceID, "role_ids": []string{f.Actor.RoleID},
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "set-roles failed: %s", rec.Body.String())
 	e2e.RequireEvent(t, f.Conn, "iam", "api_key.role.set")

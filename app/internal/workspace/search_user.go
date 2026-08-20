@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"selectDb/internal/api"
@@ -30,10 +31,8 @@ func (w *Workspace) SearchUser(email string) (*SearchUserResult, error) {
 	}
 
 	var result SearchUserResult
-	err = api.Fetch(ctx, "POST", "user/search", map[string]string{
-		"workspace_id": wtu.WorkspaceID,
-		"email":        email,
-	}, nil, &result)
+	endpoint := "users/search?email=" + url.QueryEscape(email)
+	err = api.Fetch(ctx, "GET", endpoint, nil, api.WorkspaceHeader(wtu.WorkspaceID), &result)
 	if err != nil {
 		return nil, fmt.Errorf("search user: %w", err)
 	}

@@ -13,7 +13,7 @@ import (
 func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 	ctx := context.Background()
 
-	if err := api.Fetch(ctx, "POST", "workspace/delete", map[string]string{"id": workspaceID}, nil, nil); err != nil {
+	if err := api.Fetch(ctx, "DELETE", "workspaces/"+workspaceID, nil, api.WorkspaceHeader(workspaceID), nil); err != nil {
 		return fmt.Errorf("delete workspace on server: %w", err)
 	}
 

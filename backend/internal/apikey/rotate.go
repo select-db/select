@@ -2,7 +2,6 @@ package apikey
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -14,10 +13,6 @@ import (
 	"backend/internal/auth"
 	"backend/internal/authz"
 )
-
-type rotateRequest struct {
-	ID string `json:"id"`
-}
 
 // RotateHandler mints a successor carrying the old key's name, roles, and
 // expiry, then shortens the old key to a grace window so a client can swap
@@ -38,12 +33,7 @@ func RotateHandler() http.HandlerFunc {
 		workspaceID := a.WorkspaceID
 		userID := a.UserID
 
-		var req rotateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		oldID, err := db_types.NewJSONNullUUIDFromString(req.ID)
+		oldID, err := db_types.NewJSONNullUUIDFromString(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
@@ -128,7 +118,7 @@ func RotateHandler() http.HandlerFunc {
 
 		audit.EmitAction(r.Context(), audit.APIKeyRotated, audit.Record{
 			WorkspaceID: workspaceID,
-			TargetID:    req.ID,
+			TargetID:    oldID.String(),
 			TargetLabel: old.Name.ValueOrEmpty(),
 			Status:      audit.StatusSuccess,
 			Payload:     map[string]any{"new_api_key_id": created.ID.String()},

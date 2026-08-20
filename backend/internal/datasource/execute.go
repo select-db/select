@@ -28,6 +28,7 @@ func ExecuteHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		req.ID = r.PathValue("id")
 		if req.ID == "" || req.SQL == "" {
 			http.Error(w, "id and sql are required", http.StatusBadRequest)
 			return

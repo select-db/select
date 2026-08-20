@@ -45,10 +45,7 @@ func (d *Datasource) GetDatasource(id string) (*GetResult, error) {
 		return nil, err
 	}
 	var result GetResult
-	if err := api.Fetch(ctx, "POST", "datasource/get", map[string]string{
-		"id":           id,
-		"workspace_id": workspaceID,
-	}, nil, &result); err != nil {
+	if err := api.Fetch(ctx, "GET", "datasources/"+id, nil, api.WorkspaceHeader(workspaceID), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -85,7 +82,7 @@ func (d *Datasource) UpsertDatasource(params UpsertParams) error {
 	if err != nil {
 		return err
 	}
-	return api.Fetch(ctx, "POST", "datasource/upsert", upsertRemoteParams{
+	return api.Fetch(ctx, "PUT", "datasources/"+params.ID, upsertRemoteParams{
 		ID:              params.ID,
 		WorkspaceID:     workspaceID,
 		DBType:          params.DBType,
@@ -96,7 +93,7 @@ func (d *Datasource) UpsertDatasource(params UpsertParams) error {
 		MaxIdleConns:    params.MaxIdleConns,
 		ConnMaxLifetime: params.ConnMaxLifetime,
 		ConnMaxIdleTime: params.ConnMaxIdleTime,
-	}, nil, nil)
+	}, api.WorkspaceHeader(workspaceID), nil)
 }
 
 type deleteRemoteParams struct {
@@ -110,8 +107,8 @@ func (d *Datasource) DeleteDatasource(id string) error {
 	if err != nil {
 		return err
 	}
-	return api.Fetch(ctx, "POST", "datasource/delete", deleteRemoteParams{
+	return api.Fetch(ctx, "DELETE", "datasources/"+id, deleteRemoteParams{
 		ID:          id,
 		WorkspaceID: workspaceID,
-	}, nil, nil)
+	}, api.WorkspaceHeader(workspaceID), nil)
 }
