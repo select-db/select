@@ -11,11 +11,23 @@
 		value: string;
 		dataType?: string;
 		columnName?: string;
-		onSave: (value: string) => void;
+		/** Viewer mode: the value can be read and formatted, but not written back. */
+		readOnly?: boolean;
+		/** Why writing is off, shown next to the read-only chip. */
+		readOnlyReason?: string;
+		onSave?: (value: string) => void;
 		onClose: () => void;
 	};
 
-	let { value, dataType, columnName, onSave, onClose }: Props = $props();
+	let {
+		value,
+		dataType,
+		columnName,
+		readOnly = false,
+		readOnlyReason,
+		onSave,
+		onClose
+	}: Props = $props();
 
 	const language = languageFor(dataType);
 	let jsonError = $state<string | null>(null);
@@ -45,12 +57,14 @@
 	}
 
 	function save() {
-		onSave(editor?.getValue() ?? value);
+		if (readOnly) return;
+		onSave?.(editor?.getValue() ?? value);
 		onClose();
 	}
 
 	function setNull() {
-		onSave('NULL');
+		if (readOnly) return;
+		onSave?.('NULL');
 		onClose();
 	}
 
@@ -90,9 +104,11 @@
 			lineNumbersMinChars: 3,
 			scrollBeyondLastLine: false,
 			scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
-			fixedOverflowWidgets: true
+			fixedOverflowWidgets: true,
+			readOnly,
+			domReadOnly: readOnly
 		});
-		editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, save);
+		if (!readOnly) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, save);
 		model.onDidChangeContent(() => validate(model!.getValue()));
 		validate(value);
 		editor.focus();
@@ -110,6 +126,12 @@
 		<span class="field-chip">{columnName}</span>
 	</span>
 	<div class="toolbar-right">
+		{#if readOnly}
+			<span class="readonly-chip">Read only</span>
+			{#if readOnlyReason}
+				<span class="readonly-reason">{readOnlyReason}</span>
+			{/if}
+		{/if}
 		{#if language === 'json'}
 			<Button
 				content="Format"
@@ -125,14 +147,18 @@
 <div class="editor" bind:this={container}></div>
 
 {#if jsonError}
-	<p class="hint">Invalid JSON: {jsonError}, you can still save.</p>
+	<p class="hint">Invalid JSON: {jsonError}{readOnly ? '' : ', you can still save.'}</p>
 {/if}
 
-<ModalFooter
-	leftAction={{ label: 'Set NULL', action: handleSetNull }}
-	secondaryAction={{ label: 'Cancel', action: handleCancel }}
-	mainAction={{ label: 'Save', action: handleSave }}
-/>
+{#if readOnly}
+	<ModalFooter mainAction={{ label: 'Close', action: handleCancel }} />
+{:else}
+	<ModalFooter
+		leftAction={{ label: 'Set NULL', action: handleSetNull }}
+		secondaryAction={{ label: 'Cancel', action: handleCancel }}
+		mainAction={{ label: 'Save', action: handleSave }}
+	/>
+{/if}
 
 <style>
 	.toolbar {
@@ -142,6 +168,25 @@
 		padding: var(--space-sm);
 		border-bottom: var(--border);
 		background-color: var(--gray-200);
+	}
+
+	.toolbar-right {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+	}
+
+	.readonly-chip {
+		font-size: 11px;
+		color: var(--gray-800);
+		border: var(--border);
+		border-radius: var(--br-xs);
+		padding: 2px var(--space-sm);
+	}
+
+	.readonly-reason {
+		font-size: var(--fs-xs);
+		color: var(--gray-700);
 	}
 
 	.title-wrapper {

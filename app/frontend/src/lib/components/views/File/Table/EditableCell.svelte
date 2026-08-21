@@ -53,6 +53,16 @@
 
 	const editable = $derived(hasAllPrimaryKeys && !isPrimaryKey);
 
+	/** Why this cell can't be written to, or null when it can. */
+	const notEditableReason = $derived.by(() => {
+		if (editable) return null;
+		if (isPrimaryKey) return 'Column is a primary key and cannot be edited.';
+		if (missingPrimaryKeys.length > 0) {
+			return `Missing primary key${missingPrimaryKeys.length > 1 ? 's' : ''} in SELECT: ${missingPrimaryKeys.join(', ')}`;
+		}
+		return 'Column cannot be edited: computed expression or no primary key.';
+	});
+
 	// NULL emits the literal "NULL" string, matching what typing NULL into the
 	// text input does today, so the edit pipeline stays byte-for-byte unchanged.
 	const NULL_VALUE = 'NULL';
@@ -121,8 +131,9 @@
 		onEndEdit();
 	}
 
+	// Opening the value is always allowed — only writing it back is gated. A cell
+	// that can't be edited opens in the read-only viewer instead of refusing.
 	function openModal() {
-		if (!checkEditable()) return;
 		modalOpen = true;
 		const onCancel = () => {
 			modalStore.set(null);
@@ -132,7 +143,9 @@
 			});
 		};
 
-		if (foreignKey) {
+		// The foreign-key picker exists to choose a new value; with nothing to write
+		// back, the plain viewer is what's useful.
+		if (foreignKey && !notEditableReason) {
 			modalStore.set({
 				content: () => ForeignKeyPickerModal as unknown as Component,
 				width: 'min(80vw, 860px)',
@@ -161,7 +174,9 @@
 				value: inputValue,
 				dataType,
 				columnName,
-				onSave: (v: string) => onEdit(v),
+				readOnly: !!notEditableReason,
+				readOnlyReason: notEditableReason ?? undefined,
+				onSave: notEditableReason ? undefined : (v: string) => onEdit(v),
 				onCancel
 			}
 		});
@@ -203,17 +218,8 @@
 	}
 
 	function checkEditable(): boolean {
-		if (editable) return true;
-
-		if (isPrimaryKey) {
-			notifyError(`Column is a primary key and cannot be edited.`);
-		} else if (missingPrimaryKeys.length > 0) {
-			notifyError(
-				`Missing primary key${missingPrimaryKeys.length > 1 ? 's' : ''} in SELECT: ${missingPrimaryKeys.join(', ')}`
-			);
-		} else {
-			notifyError(`Column cannot be edited: computed expression or no primary key.`);
-		}
+		if (!notEditableReason) return true;
+		notifyError(notEditableReason);
 		return false;
 	}
 </script>
