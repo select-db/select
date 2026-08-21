@@ -202,17 +202,24 @@ function ensureToolResultsForAllToolCalls(messages: ModelMessage[]): ModelMessag
  */
 function modelOptionsForProvider(provider: string, modelId: string): Record<string, unknown> {
 	switch (provider) {
+		case 'openai':
+			// gpt-5.6+ reject function tools on /chat/completions unless reasoning is off
+			// (they default to medium reasoning; sending tools alone 400s otherwise).
+			if (/^gpt-5/i.test(modelId)) return { reasoning_effort: 'none' };
+			return {};
 		case 'openrouter':
 			return { reasoning: { exclude: true } };
 		case 'gemini':
-			// 2.5+ and 3.x support thinking; hide the thoughts so they don't leak into text.
-			if (/^gemini-([2-9]\.5|[3-9])/i.test(modelId)) {
+			// Gemini 2.5 uses thinkingConfig.includeThoughts to hide thoughts. Gemini 3
+			// replaced this with thinkingLevel and rejects the legacy field, so send
+			// nothing there — our parser already routes any thought parts away from text.
+			if (/^gemini-2\.5/i.test(modelId)) {
 				return { thinkingConfig: { includeThoughts: false } };
 			}
 			return {};
 		default:
-			// OpenAI/Grok Chat Completions never stream reasoning as content; Anthropic
-			// leaves extended thinking off unless explicitly enabled. Nothing to send.
+			// Grok Chat Completions never streams reasoning as content; Anthropic leaves
+			// extended thinking off unless explicitly enabled. Nothing to send.
 			return {};
 	}
 }
