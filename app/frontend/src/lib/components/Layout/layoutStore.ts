@@ -1,7 +1,7 @@
 import type { graph } from '$lib/wailsjs/go/models';
 import { derived, get, writable } from 'svelte/store';
 import { closeTab } from '$lib/components/views/shared/assistant/all';
-import { setItemSelection } from '$lib/components/views/shared/sharedStore';
+import { clearItemSelection, setItemSelection } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { recentItemsStore } from '$lib/stores/recentItemsStore';
 import { settingsSectionLabels } from '$lib/components/views/Settings/sections';
@@ -359,7 +359,11 @@ export const setActiveTab = (groupId: string, tabId: string) => {
 function syncSelectionAndRecentForActiveTab() {
 	const tab = getActiveTab();
 	const nodeId = tab?.file?.node?.id ?? tab?.database?.node?.id;
+	// Tabs with no file-system item behind them (settings, terminal, chat, ...)
+	// clear the selection: leaving the previous file highlighted points at
+	// something the workbench is no longer showing.
 	if (nodeId) setItemSelection([nodeId]);
+	else clearItemSelection();
 	if (tab?.file?.node) {
 		const node = tab.file.node;
 		recentItemsStore.addItem({
