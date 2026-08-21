@@ -37,6 +37,7 @@
 	import { createQueryRegistry } from './tools/query/queryRegistry.ts';
 	import Alert from '$lib/system/Alert/Alert.svelte';
 	import { AlertType } from '$lib/system/Alert/types.ts';
+	import { scrollShadow } from '$lib/actions/scrollShadow.ts';
 
 	type Props = {
 		tab: Tab;
@@ -232,10 +233,12 @@
 		onscroll={scroll.onScroll}
 		role="region"
 		aria-label="Chat messages"
+		use:scrollShadow={{ axis: 'y', top: true }}
 	>
 		{#if !lastMessageStreaming && visibleMessages.length === 0 && workspaceHasApiKey === false}
 			<EmptyState />
 		{:else}
+			<div class="spacer"></div>
 			{#each visibleMessages as message (message.id)}
 				<MessageBubble
 					{message}
@@ -248,6 +251,7 @@
 				/>
 			{/each}
 			<StatusIndicator status={statusLabel} />
+			<div class="spacer"></div>
 		{/if}
 		{#if displayError}
 			<Alert
@@ -276,6 +280,7 @@
 		flex-direction: column;
 		height: 100%;
 		overflow: hidden;
+		--scroll-shadow-color: var(--gray-200);
 	}
 
 	.messages {
@@ -287,7 +292,9 @@
 		flex-direction: column;
 		gap: var(--space-md);
 
-		padding: var(--space-sm-md) var(--space-md) var(--space-sm-md) var(--space-md);
 		min-width: 275px;
+	}
+	.spacer {
+		margin-top: var(--space-sm-md) 0;
 	}
 </style>

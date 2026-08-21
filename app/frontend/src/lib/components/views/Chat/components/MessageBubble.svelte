@@ -84,6 +84,7 @@
 		flex-direction: column;
 		gap: var(--space-xs);
 		border-radius: var(--br-xs);
+		margin: 0 var(--space-sm-md);
 	}
 
 	.message.user {
