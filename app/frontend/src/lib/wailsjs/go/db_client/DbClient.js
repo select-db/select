@@ -18,6 +18,10 @@ export function Export(arg1) {
   return window['go']['db_client']['DbClient']['Export'](arg1);
 }
 
+export function GenerateSelectSQL(arg1) {
+  return window['go']['db_client']['DbClient']['GenerateSelectSQL'](arg1);
+}
+
 export function GenerateUpdateSQL(arg1) {
   return window['go']['db_client']['DbClient']['GenerateUpdateSQL'](arg1);
 }

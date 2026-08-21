@@ -805,6 +805,36 @@ export namespace db_client {
 	        this.primaryKeyValues = source["primaryKeyValues"];
 	    }
 	}
+	export class GenerateSelectSQLParams {
+	    databaseId: string;
+	    schema: string;
+	    table: string;
+	    limit: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateSelectSQLParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.databaseId = source["databaseId"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	        this.limit = source["limit"];
+	    }
+	}
+	export class GenerateSelectSQLResult {
+	    sql: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateSelectSQLResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sql = source["sql"];
+	    }
+	}
 	export class GenerateUpdateSQLParams {
 	    databaseId: string;
 	    edits: TableEditInput[];

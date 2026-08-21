@@ -14,6 +14,8 @@ export function Explain(arg1:db_client.ExplainParams):Promise<graph.ExplainResul
 
 export function Export(arg1:db_client.ExportParams):Promise<void>;
 
+export function GenerateSelectSQL(arg1:db_client.GenerateSelectSQLParams):Promise<db_client.GenerateSelectSQLResult>;
+
 export function GenerateUpdateSQL(arg1:db_client.GenerateUpdateSQLParams):Promise<db_client.GenerateUpdateSQLResult>;
 
 export function GetMeta(arg1:graph.DBInstanceNode,arg2:boolean):Promise<core.Metadata>;

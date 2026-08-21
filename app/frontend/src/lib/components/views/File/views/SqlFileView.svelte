@@ -305,6 +305,20 @@
 		});
 	};
 
+	// Tabs opened with a prefilled statement (e.g. "View data" on a table) run it
+	// once, as soon as the content is in the editor. The flag is cleared so the
+	// query is not replayed when the tab is re-rendered.
+	let autoRunHandled = false;
+	$effect(() => {
+		if (!contentLoaded) return;
+		if (!tab.file?.runOnOpen) return;
+		if (autoRunHandled) return;
+
+		autoRunHandled = true;
+		updateTab({ ...tab, file: { ...tab.file, runOnOpen: false } });
+		void run('run');
+	});
+
 	const effectiveDbId = $derived(getEffectiveSelectedDbId(file, tab));
 	const currentQueryResult = $derived(getQueryResultForDb(file, effectiveDbId));
 	const currentPlanResult = $derived(getPlanResultForDb(file, effectiveDbId));

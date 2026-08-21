@@ -17,6 +17,7 @@
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+	import { isPreviewableDbItem, viewTableData } from '$lib/components/views/shared/viewTableData';
 	import { get } from 'svelte/store';
 
 	let {
@@ -78,6 +79,18 @@
 		if (item.type === 'db_instance' && 'children' in item && item.children.length === 0) {
 			QuerySchema({ DatabaseInstanceID: item.id, NoCache: false });
 		}
+	};
+
+	// Double-clicking a table opens its data straight away. The two single
+	// clicks that precede it toggle the item twice, so its expansion state is
+	// left as it was.
+	const handleDbItemDoubleClick = (
+		item: graph.FolderNode | graph.DBInstanceNode | graph.DBInstanceItemNode | graph.FileNode
+	) => {
+		const dbItem = item as graph.DBInstanceItemNode;
+		if (!isPreviewableDbItem(dbItem)) return;
+
+		void viewTableData(dbItem);
 	};
 
 	const isExpanded = (id: string): boolean => {
@@ -149,6 +162,7 @@
 			{item}
 			{parentIds}
 			handleClick={handleSimpleClick}
+			handleDoubleClick={handleDbItemDoubleClick}
 			options={() => getOptions(item)}
 		/>
 
