@@ -930,7 +930,8 @@
 {/snippet}
 
 <div class="wrapper selectable" class:resizing={resizingColumn !== null}>
-	{#if queryResult?.columns && (totalRows > 0 || isStreaming)}
+	<!-- Columns are enough to render: an empty result set still shows its headers. -->
+	{#if queryResult?.columns?.length}
 		{@const colSpan =
 			pinnedIndices.length +
 			visibleNonPinnedIndices.length +

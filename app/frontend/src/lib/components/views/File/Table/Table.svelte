@@ -67,6 +67,11 @@
 		{@const isStreaming = execution?.status === 'streaming'}
 		{@const affectedRows = execution?.affectedRows ?? queryResult?.affectedRows}
 		{@const errorMessage = execution?.error ?? queryResult?.errors?.[0]}
+		{@const affectedOnly =
+			!hasRows &&
+			!isStreaming &&
+			affectedRows !== undefined &&
+			(affectedRows > 0 || !hasColumns)}
 		{#if loading && !execution}
 			<p class="placeholder">Loading...</p>
 		{:else if queryResult}
@@ -77,10 +82,13 @@
 					onRun={() => run('run')}
 				/>
 			{/if}
-			{#if hasRows || (isStreaming && hasColumns)}
-				<ResultsTable {tab} />
-			{:else if affectedRows !== undefined && (affectedRows > 0 || !hasColumns)}
+			{#if affectedOnly}
 				<p class="placeholder">{affectedRows} row(s) affected.</p>
+			{:else if hasColumns}
+				<!-- Also the zero-row case: a header row with nothing under it reads as
+				     "ran, matched nothing", where a text placeholder read like the
+				     not-run-yet state. -->
+				<ResultsTable {tab} />
 			{:else if !errorMessage && !isStreaming}
 				<p class="placeholder muted">No rows returned.</p>
 			{/if}
