@@ -24,6 +24,7 @@
 			onClick(item: T): void;
 		}[];
 		handleClick(item: T, event?: MouseEvent): void;
+		handleDoubleClick?(item: T, event?: MouseEvent): void;
 		depth?: number;
 		parentIds?: string[];
 		draggable?: boolean;
@@ -47,6 +48,7 @@
 		options,
 		actions,
 		handleClick,
+		handleDoubleClick,
 		depth = 0,
 		parentIds = [],
 		draggable = false,
@@ -116,6 +118,10 @@
 			onclick={(e) => {
 				if ($renamingItemIdStore === item.id) return;
 				handleClick(item, e);
+			}}
+			ondblclick={(e) => {
+				if ($renamingItemIdStore === item.id) return;
+				handleDoubleClick?.(item, e);
 			}}
 			role="presentation"
 			data-id={item.id}

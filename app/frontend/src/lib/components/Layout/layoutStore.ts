@@ -75,6 +75,7 @@ export type Tab = {
 		node: graph.FileNode;
 		isTemp?: boolean; // True for temporary files not persisted to disk
 		content?: string; // In-memory content for temp files
+		runOnOpen?: boolean; // Run the content once, as soon as the view mounts; cleared on run
 
 		editor?: { viewState?: unknown; lintMarkers?: unknown };
 
@@ -611,6 +612,8 @@ export const addTempFileTab = (
 		name: string;
 		dbInstanceId?: string;
 		folderId: string;
+		/** Execute the content against the attached database as soon as the tab mounts. */
+		runOnOpen?: boolean;
 	},
 	split: boolean = true
 ) => {
@@ -636,7 +639,8 @@ export const addTempFileTab = (
 		file: {
 			node: virtualNode,
 			isTemp: true,
-			content: params.content
+			content: params.content,
+			...(params.runOnOpen && { runOnOpen: true })
 		}
 	};
 
