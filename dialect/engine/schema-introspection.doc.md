@@ -43,3 +43,5 @@ You can force a refresh from the schema panel. Cached schema dumps are **compres
 ## Schema explorer
 
 The sidebar shows the full schema tree for each connected database: schemas, tables, columns, types. Clicking a table reveals its columns, keys, and indexes. This tree is built from the cached metadata and updates when the cache refreshes.
+
+To read a table's rows, **double-click** it, or right-click it and choose **View data**. Either opens a temporary SQL tab already attached to the owning database, prefilled with a `SELECT *` limited to the first 100 rows and executed as the tab opens. The statement is a normal SQL file from there on: edit the `LIMIT`, add a `WHERE`, and re-run with **Cmd+Enter**.
