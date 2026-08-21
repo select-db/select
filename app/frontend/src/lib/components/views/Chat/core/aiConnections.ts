@@ -7,33 +7,30 @@ import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { get } from 'svelte/store';
 import type { graph } from '$lib/wailsjs/go/models';
 
-// Curated for high TPM/throughput (agent use). OpenRouter accepts any model ID string.
-// Order: higher throughput first.
-const OPENAI_POPULAR_CHAT_MODELS = [
-	'gpt-4o-mini', // highest TPM tier
-	'gpt-4o',
-	'gpt-5-mini',
-	'gpt-5.2'
-];
+// Current, agent-suitable models per provider (tool-calling required). First entry
+// in each group is the sensible default. OpenRouter accepts any model ID string.
 const ANTHROPIC_POPULAR = [
-	'claude-sonnet-4-5', // high TPM, good for agents
-	'claude-haiku-4-5',
-	'claude-opus-4-5',
-	'claude-sonnet-4'
+	'claude-sonnet-5', // SOTA balance, 1M context — default
+	'claude-haiku-4-5', // fastest & cheapest, great for tool-heavy loops
+	'claude-opus-4-8' // most capable
+];
+const OPENAI_POPULAR_CHAT_MODELS = [
+	'gpt-5.2', // flagship
+	'gpt-5.1',
+	'gpt-5-mini' // fast & cheap
 ];
 const GEMINI_POPULAR = [
-	'gemini-2.5-flash', // 250k+ TPM
-	'gemini-2.5-pro',
-	'gemini-2.0-flash'
+	'gemini-3-pro', // flagship
+	'gemini-3-flash',
+	'gemini-2.5-flash' // fast & cheap
 ];
 const OPENROUTER_POPULAR = [
-	'openai/gpt-4o-mini',
-	'openai/gpt-4o',
-	'anthropic/claude-sonnet-4',
-	'google/gemini-2.5-flash',
-	'meta-llama/llama-3.3-70b-instruct'
+	'anthropic/claude-sonnet-5',
+	'openai/gpt-5.2',
+	'google/gemini-3-pro',
+	'x-ai/grok-4'
 ];
-const GROK_POPULAR = ['grok-4-1-fast-reasoning', 'grok-4'];
+const GROK_POPULAR = ['grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-4'];
 
 const SEP = ':';
 
@@ -115,7 +112,7 @@ export async function getPreferredModelWithApiKey(): Promise<string> {
 		const provider = getProvider(first.value);
 		if (await hasApiKey(provider)) return first.value;
 	}
-	return 'anthropic:claude-sonnet-4-5';
+	return 'anthropic:claude-sonnet-5';
 }
 
 type MessageLike = {
@@ -208,7 +205,8 @@ function modelOptionsForProvider(provider: string, modelId: string): Record<stri
 		case 'openrouter':
 			return { reasoning: { exclude: true } };
 		case 'gemini':
-			if (/^gemini-2\.5/i.test(modelId)) {
+			// 2.5+ and 3.x support thinking; hide the thoughts so they don't leak into text.
+			if (/^gemini-([2-9]\.5|[3-9])/i.test(modelId)) {
 				return { thinkingConfig: { includeThoughts: false } };
 			}
 			return {};
@@ -243,7 +241,7 @@ export function createUnifiedConnection(tools?: ReadonlyArray<AnyClientTool>): C
 		async *connect(messages, data, abortSignal): AsyncIterable<StreamChunk> {
 			if (!messages.length) return;
 			const provider = (data?.provider as string) ?? 'anthropic';
-			const model = (data?.model as string) ?? 'claude-sonnet-4-5';
+			const model = (data?.model as string) ?? 'claude-sonnet-5';
 
 			const key = await getProviderApiKey(provider);
 			if (!key.length) {

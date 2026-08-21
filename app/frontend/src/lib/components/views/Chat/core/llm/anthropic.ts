@@ -5,6 +5,16 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 const DEFAULT_MAX_TOKENS = 4096;
 
+/**
+ * Anthropic removed sampling params (`temperature`) on the reasoning-first
+ * models — the 5 family and Opus 4.7+ reject `temperature` with a 400. Only the
+ * 4.6/4.5/3.x families still accept it. Default to omitting for anything newer
+ * or unknown so future models don't break.
+ */
+function acceptsTemperature(model: string): boolean {
+	return /claude-(3|(?:haiku|sonnet|opus)-4-[56])/i.test(model);
+}
+
 type AnthropicBlock =
 	| { type: 'text'; text: string }
 	| { type: 'tool_use'; id: string; name: string; input: unknown }
@@ -68,7 +78,9 @@ export const streamAnthropic: ProviderStream = async function* (
 		messages: toAnthropicMessages(req.messages),
 		stream: true,
 		...(req.system ? { system: req.system } : {}),
-		...(req.temperature != null ? { temperature: req.temperature } : {}),
+		...(req.temperature != null && acceptsTemperature(req.model)
+			? { temperature: req.temperature }
+			: {}),
 		...(req.tools?.length
 			? {
 					tools: req.tools.map((t) => ({
