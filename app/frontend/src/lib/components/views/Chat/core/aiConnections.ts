@@ -12,25 +12,25 @@ import type { graph } from '$lib/wailsjs/go/models';
 const ANTHROPIC_POPULAR = [
 	'claude-sonnet-5', // SOTA balance, 1M context — default
 	'claude-haiku-4-5', // fastest & cheapest, great for tool-heavy loops
-	'claude-opus-4-8' // most capable
+	'claude-opus-5' // most capable
 ];
 const OPENAI_POPULAR_CHAT_MODELS = [
-	'gpt-5.2', // flagship
-	'gpt-5.1',
-	'gpt-5-mini' // fast & cheap
+	'gpt-5.6-sol', // flagship
+	'gpt-5.6-terra', // balanced
+	'gpt-5.6-luna' // fast & cheap
 ];
 const GEMINI_POPULAR = [
-	'gemini-3-pro', // flagship
-	'gemini-3-flash',
-	'gemini-2.5-flash' // fast & cheap
+	'gemini-3.7-flash', // fast & cheap
+	'gemini-3.1-pro-preview', // most capable
+	'gemini-3.5-flash-lite' // cheapest
 ];
 const OPENROUTER_POPULAR = [
 	'anthropic/claude-sonnet-5',
-	'openai/gpt-5.2',
-	'google/gemini-3-pro',
-	'x-ai/grok-4'
+	'openai/gpt-5.6-sol',
+	'google/gemini-3.7-flash',
+	'x-ai/grok-4.6'
 ];
-const GROK_POPULAR = ['grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-4'];
+const GROK_POPULAR = ['grok-4.6', 'grok-4.20'];
 
 const SEP = ':';
 
