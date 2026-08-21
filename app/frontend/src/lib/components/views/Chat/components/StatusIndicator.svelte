@@ -16,5 +16,6 @@
 		color: var(--gray-800);
 		align-self: flex-start;
 		font-size: var(--fs-sm);
+		margin: 0 var(--space-sm-md);
 	}
 </style>
