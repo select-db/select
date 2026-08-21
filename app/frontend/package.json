@@ -39,7 +39,7 @@
     "@tanstack/ai-anthropic": "^0.5.0",
     "@tanstack/ai-client": "^0.4.4",
     "@tanstack/ai-gemini": "^0.5.0",
-    "@tanstack/ai-grok": "^0.5.0",
+    "@tanstack/ai-grok": "^0.14.11",
     "@tanstack/ai-openai": "^0.5.0",
     "@tanstack/ai-openrouter": "^0.5.0",
     "@types/d3": "^7.4.3",
