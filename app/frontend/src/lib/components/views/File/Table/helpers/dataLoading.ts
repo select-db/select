@@ -83,6 +83,9 @@ export async function loadMissingPagesForVisibleRange(
 	totalRows: number
 ): Promise<graph.QueryResult | null> {
 	if (!queryResult) return null;
+	// An empty result set has no page to fetch; without this the zero-row table
+	// would still ask the backend for page 0.
+	if (totalRows <= 0) return null;
 
 	const pageSize = queryResult.pageSize || 75;
 	const firstPageInRange = calculatePageNumber(visibleRange.start, pageSize);
