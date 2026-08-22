@@ -10,7 +10,7 @@
 	} from '$lib/components/views/shared/sharedStore';
 	import { getActions } from './actions/getActions';
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
-	import { createClickHandlers } from './helpers/clickHandlers';
+	import { createClickHandlers, createDeferredClickHandlers } from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
 	import { QuerySchema } from '$lib/wailsjs/go/db_client/DbClient';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
@@ -19,6 +19,7 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { isPreviewableDbItem, viewTableData } from '$lib/components/views/shared/viewTableData';
 	import { get } from 'svelte/store';
+	import { onDestroy } from 'svelte';
 
 	let {
 		files,
@@ -53,10 +54,14 @@
 		lastClickedId
 	);
 
+	type AnyItem =
+		| graph.FolderNode
+		| graph.DBInstanceNode
+		| graph.DBInstanceItemNode
+		| graph.FileNode;
+
 	// Simple click handler for items inside database (no selection support)
-	const handleSimpleClick = (
-		item: graph.FolderNode | graph.DBInstanceNode | graph.DBInstanceItemNode | graph.FileNode
-	) => {
+	const handleSimpleClick = (item: AnyItem) => {
 		if (item.type === 'file') {
 			const file = item as graph.FileNode;
 			// Special handling for schema.sql files inside database folders
@@ -81,17 +86,20 @@
 		}
 	};
 
-	// Double-clicking a table opens its data straight away. The two single
-	// clicks that precede it toggle the item twice, so its expansion state is
-	// left as it was.
-	const handleDbItemDoubleClick = (
-		item: graph.FolderNode | graph.DBInstanceNode | graph.DBInstanceItemNode | graph.FileNode
-	) => {
-		const dbItem = item as graph.DBInstanceItemNode;
-		if (!isPreviewableDbItem(dbItem)) return;
+	// Double-clicking a table opens its data. Only tables defer their click, so
+	// the double-click no longer expands and collapses them on the way; every
+	// other catalog item still toggles on the first click.
+	const {
+		handleClick: handleDbItemClick,
+		handleDoubleClick: handleDbItemDoubleClick,
+		cancel: cancelPendingDbItemClick
+	} = createDeferredClickHandlers<AnyItem>({
+		shouldDefer: (item) => isPreviewableDbItem(item as graph.DBInstanceItemNode),
+		onClick: handleSimpleClick,
+		onDoubleClick: (item) => void viewTableData(item as graph.DBInstanceItemNode)
+	});
 
-		void viewTableData(dbItem);
-	};
+	onDestroy(cancelPendingDbItemClick);
 
 	const isExpanded = (id: string): boolean => {
 		const store = $expandedItemIdsStore;
@@ -161,7 +169,7 @@
 			{depth}
 			{item}
 			{parentIds}
-			handleClick={handleSimpleClick}
+			handleClick={handleDbItemClick}
 			handleDoubleClick={handleDbItemDoubleClick}
 			options={() => getOptions(item)}
 		/>
