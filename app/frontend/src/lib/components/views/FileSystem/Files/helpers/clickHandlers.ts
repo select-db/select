@@ -281,3 +281,60 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
 
 	return selectedIds;
 };
+
+/**
+ * How long a single click is held before it is acted on, for items that also
+ * answer to a double-click. Long enough to swallow a normal double-click, short
+ * enough that expanding the item still feels immediate. A double-click slower
+ * than this expands the item first, which is the same outcome as before.
+ */
+const DOUBLE_CLICK_DELAY_MS = 250;
+
+/**
+ * Separates single from double clicks on the same item.
+ *
+ * A double-click is preceded by two plain clicks, so without this a table
+ * visibly expands and collapses again before its data opens. The single-click
+ * action is held back for DOUBLE_CLICK_DELAY_MS and dropped when a double-click
+ * lands first. Items that opt out of `shouldDefer` keep reacting immediately, so
+ * only the ones with a double-click action pay the delay.
+ *
+ * `cancel` must run on destroy so a pending click cannot fire after unmount.
+ */
+export const createDeferredClickHandlers = <T>({
+	shouldDefer,
+	onClick,
+	onDoubleClick
+}: {
+	shouldDefer: (item: T) => boolean;
+	onClick: (item: T, event?: MouseEvent) => void;
+	onDoubleClick: (item: T) => void;
+}) => {
+	let pending: ReturnType<typeof setTimeout> | null = null;
+
+	const cancel = () => {
+		if (pending === null) return;
+		clearTimeout(pending);
+		pending = null;
+	};
+
+	return {
+		handleClick: (item: T, event?: MouseEvent) => {
+			if (!shouldDefer(item)) {
+				onClick(item, event);
+				return;
+			}
+
+			cancel();
+			pending = setTimeout(() => {
+				pending = null;
+				onClick(item, event);
+			}, DOUBLE_CLICK_DELAY_MS);
+		},
+		handleDoubleClick: (item: T) => {
+			cancel();
+			onDoubleClick(item);
+		},
+		cancel
+	};
+};

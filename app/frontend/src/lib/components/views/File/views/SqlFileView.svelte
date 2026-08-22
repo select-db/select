@@ -306,15 +306,18 @@
 	};
 
 	// Tabs opened with a prefilled statement (e.g. "View data" on a table) run it
-	// once, as soon as the content is in the editor. The flag is cleared so the
-	// query is not replayed when the tab is re-rendered.
-	let autoRunHandled = false;
+	// once, as soon as the content is in the editor. This view instance is shared
+	// by every tab of its group (see the content loader above), so the guard
+	// tracks the tab it ran for rather than being a one-shot flag. Clearing the
+	// tab's own flag then keeps the query from replaying when the tab is
+	// re-selected later.
+	let autoRunTabId: string | undefined;
 	$effect(() => {
 		if (!contentLoaded) return;
 		if (!tab.file?.runOnOpen) return;
-		if (autoRunHandled) return;
+		if (autoRunTabId === tab.id) return;
 
-		autoRunHandled = true;
+		autoRunTabId = tab.id;
 		updateTab({ ...tab, file: { ...tab.file, runOnOpen: false } });
 		void run('run');
 	});
