@@ -779,32 +779,6 @@ export namespace db_client {
 	        this.RuntimeVars = source["RuntimeVars"];
 	    }
 	}
-	export class TableEditInput {
-	    databaseId: string;
-	    schema: string;
-	    table: string;
-	    column: string;
-	    value: string;
-	    rowIndex: number;
-	    columnIndex: number;
-	    primaryKeyValues: Record<string, any>;
-	
-	    static createFrom(source: any = {}) {
-	        return new TableEditInput(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.databaseId = source["databaseId"];
-	        this.schema = source["schema"];
-	        this.table = source["table"];
-	        this.column = source["column"];
-	        this.value = source["value"];
-	        this.rowIndex = source["rowIndex"];
-	        this.columnIndex = source["columnIndex"];
-	        this.primaryKeyValues = source["primaryKeyValues"];
-	    }
-	}
 	export class GenerateSelectSQLParams {
 	    databaseId: string;
 	    schema: string;
@@ -833,6 +807,32 @@ export namespace db_client {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sql = source["sql"];
+	    }
+	}
+	export class TableEditInput {
+	    databaseId: string;
+	    schema: string;
+	    table: string;
+	    column: string;
+	    value: string;
+	    rowIndex: number;
+	    columnIndex: number;
+	    primaryKeyValues: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableEditInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.databaseId = source["databaseId"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	        this.column = source["column"];
+	        this.value = source["value"];
+	        this.rowIndex = source["rowIndex"];
+	        this.columnIndex = source["columnIndex"];
+	        this.primaryKeyValues = source["primaryKeyValues"];
 	    }
 	}
 	export class GenerateUpdateSQLParams {
