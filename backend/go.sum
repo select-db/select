@@ -75,10 +75,10 @@ github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOF
 github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
 github.com/oapi-codegen/nullable v1.1.0 h1:eAh8JVc5430VtYVnq00Hrbpag9PFRGWLjxR1/3KntMs=
 github.com/oapi-codegen/nullable v1.1.0/go.mod h1:KUZ3vUzkmEKY90ksAmit2+5juDIhIZhfDl+0PwOQlFY=
-github.com/oapi-codegen/runtime v1.4.1 h1:9nwLoI+KrWxzbBcp0jO/R8uXqbik/HUyCvPeU68Y/qo=
-github.com/oapi-codegen/runtime v1.4.1/go.mod h1:GwV7hC2hviaMzj+ITfHVRESK5J2W/GefVwIND/bMGvU=
-github.com/ovh/okms-sdk-go v0.5.3 h1:1J+WXq8H3qgiG8ZV2/pA0gn6y9CA6jYvxPVSy6V8uuY=
-github.com/ovh/okms-sdk-go v0.5.3/go.mod h1:nd/5UimVy2xrU+4UEHX2im9pYA4+WmfLDTSXqIIAtAU=
+github.com/oapi-codegen/runtime v1.6.0 h1:7Xx+GlueD6nRuyKoCPzL434Jfi3BetbiJOrzCHp/VPU=
+github.com/oapi-codegen/runtime v1.6.0/go.mod h1:GwV7hC2hviaMzj+ITfHVRESK5J2W/GefVwIND/bMGvU=
+github.com/ovh/okms-sdk-go v0.5.4 h1:XcK8mCzxWEI3JX/A7dJOpqqQhT+PRuQLqE/3YupGokM=
+github.com/ovh/okms-sdk-go v0.5.4/go.mod h1:dhxMgl8yM5bvUlvoJlEpoU6o/T57AQrmYXMrmXILsks=
 github.com/peterldowns/pgtestdb v0.1.1 h1:+hBCD1DcbKeg5Sfg0G+5WNIy/Cm0ORgwMkF4ygihrmU=
 github.com/peterldowns/pgtestdb v0.1.1/go.mod h1:yVWInWV0dxvmLdL2ao3nXDzWZ9+G6EhJ4gRwvI1Ozeg=
 github.com/peterldowns/pgtestdb/migrators/goosemigrator v0.1.1 h1:f+e5A8elEb+5VJnrtlPI8GKq2LunCFJH+3by7ekJ3io=
