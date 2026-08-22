@@ -101,7 +101,6 @@
 	.message.user .content :global(p) {
 		color: var(--gray-900);
 		white-space: pre-wrap;
-		font-size: var(--fs-md);
 		line-height: 20px;
 	}
 
