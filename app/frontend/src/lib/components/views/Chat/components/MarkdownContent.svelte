@@ -36,7 +36,7 @@
 	.markdown-wrapper :global(h3) {
 		margin: 0;
 		color: var(--gray-900);
-		font-size: var(--fs-md);
+		font-weight: var(--fw-md);
 		line-height: 20px;
 	}
 

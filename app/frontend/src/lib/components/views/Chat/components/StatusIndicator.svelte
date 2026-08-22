@@ -12,7 +12,6 @@
 
 <style>
 	.status-indicator {
-		font-size: 0.85em;
 		color: var(--gray-800);
 		align-self: flex-start;
 		font-size: var(--fs-sm);
