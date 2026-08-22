@@ -288,7 +288,7 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
  * enough that expanding the item still feels immediate. A double-click slower
  * than this expands the item first, which is the same outcome as before.
  */
-const DOUBLE_CLICK_DELAY_MS = 250;
+const DOUBLE_CLICK_DELAY_MS = 200;
 
 /**
  * Separates single from double clicks on the same item.
