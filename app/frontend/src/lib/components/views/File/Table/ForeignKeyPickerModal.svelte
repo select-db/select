@@ -312,6 +312,7 @@
 	}
 
 	.right-pane {
+		background-color: var(--gray-200);
 		flex: 1;
 		min-width: 0;
 		display: flex;
@@ -350,5 +351,4 @@
 		white-space: pre-wrap;
 		max-width: 100%;
 	}
-
 </style>
