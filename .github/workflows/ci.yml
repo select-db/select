@@ -70,7 +70,7 @@ jobs:
               frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
             else
               grep -q '^app/frontend/' <<<"$FILES" && frontend=true || true
-              grep -qE '^app/(backend|main\.go|go\.(mod|sum)|\.golangci)' <<<"$FILES" && app=true || true
+              grep -qE '^app/(internal|build)/|^app/(main\.go|Taskfile\.yml|go\.(mod|sum)|\.golangci)' <<<"$FILES" && app=true || true
               grep -q '^backend/' <<<"$FILES" && backend=true || true
               { grep '^dialect/' <<<"$FILES" | grep -qv '^dialect/core/tokenanalyzer/python/'; } && dialect=true || true
               grep -q '^dialect/core/tokenanalyzer/python/' <<<"$FILES" && python=true || true
