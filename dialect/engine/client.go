@@ -22,13 +22,14 @@ type Client struct {
 func (client *Client) Stream(
 	ctx context.Context,
 	key string,
+	resultID string,
 	conn Conn,
 	instance DBInstance,
 	workspaceID, sql string,
 	options Options,
 	listener StreamListener,
 ) *StreamingResult {
-	result := NewStreamingResult()
+	result := NewStreamingResult(resultID)
 	SetStreamingResult(key, result)
 
 	cancelCtx, cancelFunc := context.WithCancel(ctx)

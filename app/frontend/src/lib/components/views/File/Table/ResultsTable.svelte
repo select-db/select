@@ -446,7 +446,7 @@
 		);
 
 		if (pageResult) {
-			const merged = mergeNewPageIntoState(pageResult, dataState);
+			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
 		}
 	};
@@ -539,7 +539,7 @@
 		// CASE 1: Pagination
 		// same query, new page loaded
 		if (!shouldInitialize) {
-			const mergedState = mergeNewPageIntoState(newResult, dataState);
+			const mergedState = mergeNewPageIntoState(newResult, dataState, queryResult?.columns);
 			if (!mergedState) return;
 
 			dataState = mergedState;
@@ -587,7 +587,7 @@
 		);
 
 		if (pageResult) {
-			const merged = mergeNewPageIntoState(pageResult, dataState);
+			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
 		}
 
@@ -647,7 +647,7 @@
 				totalRows
 			);
 			if (!pageResult) return;
-			const merged = mergeNewPageIntoState(pageResult, dataState);
+			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
 		});
 	});
