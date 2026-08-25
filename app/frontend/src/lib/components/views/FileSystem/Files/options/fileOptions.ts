@@ -14,6 +14,7 @@ import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { notify } from '$lib/system/Notifications/notificationsStore';
 
 import { addToItemSelection } from '$lib/components/views/shared/sharedStore';
+import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 import { loadGitFileStatus, gitFileStatusStore } from '$lib/components/views/Git/gitStore';
 import { uriToGitPath } from '$lib/components/views/Git/helpers';
@@ -69,6 +70,14 @@ export const fileSystemOptions = [
 ] satisfies ContextMenuOption[];
 
 const fsFileOptions = [
+	{
+		label: 'Open',
+		runOnDoubleClick: true,
+		action: async (onClose, file: graph.FileNode) => {
+			await navigateToFile(file);
+			onClose();
+		}
+	},
 	{
 		label: 'Rename...',
 		action: (onClose, { id }: graph.FileNode) => {

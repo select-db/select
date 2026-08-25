@@ -17,7 +17,7 @@
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { isPreviewableDbItem, viewTableData } from '$lib/components/views/shared/viewTableData';
+	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 	import { get } from 'svelte/store';
 	import { onDestroy } from 'svelte';
 
@@ -86,20 +86,33 @@
 		}
 	};
 
-	// Double-clicking a table opens its data. Only tables defer their click, so
-	// the double-click no longer expands and collapses them on the way; every
-	// other catalog item still toggles on the first click.
+	// Route a click to the handler that item kind would have got on its own.
+	const clickItem = (item: AnyItem, event?: MouseEvent) => {
+		if (insideDatabase) return handleSimpleClick(item);
+		if (item.type === 'folder') return handleFolderClick(item as graph.FolderNode, event);
+		if (item.type === 'file') return handleFileClick(item as graph.FileNode, event);
+		return handleDatabaseClick(item as graph.DBInstanceNode, event);
+	};
+
+	// Double-clicking runs the item's runOnDoubleClick option, so the gesture is
+	// declared next to the action itself instead of listed again here.
+	const doubleClickOption = (item: AnyItem): ContextMenuOption | undefined =>
+		getOptions(item, ctx).find((option) => option.runOnDoubleClick);
+
+	// Items that toggle open on click hold that click back for the double-click
+	// window, so a double-click doesn't expand and collapse them on the way. The
+	// rest act on the first click, where the delay would only feel slow.
 	const {
-		handleClick: handleDbItemClick,
-		handleDoubleClick: handleDbItemDoubleClick,
-		cancel: cancelPendingDbItemClick
+		handleClick,
+		handleDoubleClick,
+		cancel: cancelPendingClick
 	} = createDeferredClickHandlers<AnyItem>({
-		shouldDefer: (item) => isPreviewableDbItem(item as graph.DBInstanceItemNode),
-		onClick: handleSimpleClick,
-		onDoubleClick: (item) => void viewTableData(item as graph.DBInstanceItemNode)
+		shouldDefer: (item) => expandableItemTypes.has(item.type) && !!doubleClickOption(item),
+		onClick: clickItem,
+		onDoubleClick: (item) => doubleClickOption(item)?.action?.(() => {}, item)
 	});
 
-	onDestroy(cancelPendingDbItemClick);
+	onDestroy(cancelPendingClick);
 
 	const isExpanded = (id: string): boolean => {
 		const store = $expandedItemIdsStore;
@@ -120,7 +133,8 @@
 			{depth}
 			{parentIds}
 			{draggable}
-			handleClick={insideDatabase ? handleSimpleClick : handleDatabaseClick}
+			{handleClick}
+			{handleDoubleClick}
 			item={database}
 			options={() => getOptions(database)}
 			actions={getActions({ item: database })}
@@ -169,8 +183,8 @@
 			{depth}
 			{item}
 			{parentIds}
-			handleClick={handleDbItemClick}
-			handleDoubleClick={handleDbItemDoubleClick}
+			{handleClick}
+			{handleDoubleClick}
 			options={() => getOptions(item)}
 		/>
 
@@ -194,7 +208,8 @@
 			{parentIds}
 			{draggable}
 			item={folder}
-			handleClick={insideDatabase ? handleSimpleClick : handleFolderClick}
+			{handleClick}
+			{handleDoubleClick}
 			options={() => getOptions(folder, ctx)}
 			actions={getActions({ item: folder, ctx })}
 			onDragStart={handleDragStart}
@@ -239,7 +254,8 @@
 			{parentIds}
 			{draggable}
 			item={file}
-			handleClick={insideDatabase ? handleSimpleClick : handleFileClick}
+			{handleClick}
+			{handleDoubleClick}
 			options={() => getOptions(file, ctx)}
 			actions={getActions({ item: file, ctx })}
 			onDragStart={handleDragStart}

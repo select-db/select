@@ -18,6 +18,7 @@ const infoOption = {
 
 const viewDataOption = {
 	label: 'View data',
+	runOnDoubleClick: true,
 	action: async (onClose, item: graph.DBInstanceItemNode) => {
 		onClose();
 		await viewTableData(item);
