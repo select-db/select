@@ -82,6 +82,9 @@
 </script>
 
 {#snippet inputEl()}
+	<!-- The caller opts in, and the desktop app's modals and pickers rely on it
+	     to be usable from the keyboard alone. -->
+	<!-- svelte-ignore a11y_autofocus -->
 	<input
 		bind:this={inputRef}
 		bind:value
@@ -109,6 +112,7 @@
 {/snippet}
 
 {#snippet textareaEl()}
+	<!-- svelte-ignore a11y_autofocus -->
 	<textarea
 		bind:value
 		{placeholder}
@@ -125,8 +129,7 @@
 		autocomplete="off"
 		spellcheck="false"
 		onfocus={handleFocus}
-		onblur={handleBlur}
-	></textarea>
+		onblur={handleBlur}></textarea>
 {/snippet}
 
 {#if needsWrap}

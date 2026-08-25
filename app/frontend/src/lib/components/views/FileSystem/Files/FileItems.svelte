@@ -19,7 +19,7 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 	import { get } from 'svelte/store';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 
 	let {
 		files,
@@ -45,13 +45,15 @@
 	const lastClickedId = { current: null as string | null };
 
 	// Create drag and drop handlers (includes auto-expand)
-	const { handleDragStart, handleDragOver, handleDrop, handleDragEnd } =
-		createDragAndDropHandlers(ctx);
+	// The context a tree is rendered in is fixed for its lifetime, so the
+	// handlers are built once from it.
+	const { handleDragStart, handleDragOver, handleDrop, handleDragEnd } = untrack(() =>
+		createDragAndDropHandlers(ctx)
+	);
 
 	// Create click and selection handlers (used when not inside database)
-	const { handleFolderClick, handleFileClick, handleDatabaseClick } = createClickHandlers(
-		ctx,
-		lastClickedId
+	const { handleFolderClick, handleFileClick, handleDatabaseClick } = untrack(() =>
+		createClickHandlers(ctx, lastClickedId)
 	);
 
 	type AnyItem =
@@ -67,9 +69,7 @@
 			// Special handling for schema.sql files inside database folders
 			if (file.name === 'schema.sql' && file.folder_id) {
 				const workspace = get(workspaceGraphStore);
-				const database = (workspace?.db_instances ?? []).find(
-					(db) => db.uri === file.folder_id
-				);
+				const database = (workspace?.db_instances ?? []).find((db) => db.uri === file.folder_id);
 				if (database) {
 					void navigateToSchema(database.id);
 					return;
@@ -126,7 +126,7 @@
 		return target.closest(`[data-drop-zone="${itemId}"]`);
 	};
 
-	const draggable = ctx === 'fs';
+	const draggable = $derived(ctx === 'fs');
 </script>
 
 <div data-depth={depth}>

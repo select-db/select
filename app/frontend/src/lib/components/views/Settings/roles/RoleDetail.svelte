@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import Icon from '$lib/system/Icon/Icon.svelte';
@@ -75,7 +76,8 @@
 
 	let permissions = $state<Permission[]>([]);
 	let permissionMap = $derived.by(() => buildPermissionMap(permissions));
-	let expanded = new SvelteSet<string>(savedState?.expandedKeys ?? []);
+	// Seeded once from the persisted state; this component owns it afterwards.
+	let expanded = new SvelteSet<string>(untrack(() => savedState?.expandedKeys ?? []));
 
 	function dbSchemas(db: graph.DBInstanceNode) {
 		return db.children.filter((n) => n.type === 'schema');
@@ -213,7 +215,7 @@
 	}
 
 	let visibleIds = $state<Set<string> | null>(null); // null = show everything
-	let currentSearch = $state(savedState?.search ?? '');
+	let currentSearch = $state(untrack(() => savedState?.search ?? ''));
 
 	const applySearch = debounce((v: string) => {
 		currentSearch = v;
@@ -329,7 +331,7 @@
 		}
 	}
 
-	let allDbInstances = $derived(($workspaceGraphStore?.db_instances ?? []));
+	let allDbInstances = $derived($workspaceGraphStore?.db_instances ?? []);
 	let dbInstances = $derived(
 		!visibleIds ? allDbInstances : allDbInstances.filter((db) => visibleIds!.has(db.id))
 	);

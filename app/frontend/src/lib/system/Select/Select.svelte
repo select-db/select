@@ -41,11 +41,15 @@
 	}: Props = $props();
 	let triggerEl = $state<HTMLDivElement | null>(null);
 	let searchQuery = $state('');
-	let internalMenuWidth = $state<number>(menuWidth ?? width ?? 200);
+	// The menu matches an explicit menuWidth, else the trigger it was measured
+	// against, else the field width. Derived so a change to either prop is
+	// followed rather than frozen at whatever they were when the select mounted.
+	let measuredMenuWidth = $state<number | null>(null);
+	const internalMenuWidth = $derived(menuWidth ?? measuredMenuWidth ?? width ?? 200);
 
 	$effect(() => {
 		if (!open || !triggerEl || menuWidth) return;
-		internalMenuWidth = Math.round(triggerEl.getBoundingClientRect().width);
+		measuredMenuWidth = Math.round(triggerEl.getBoundingClientRect().width);
 	});
 
 	const displayLabel = (option: SelectOption | null): string => option?.label ?? '';

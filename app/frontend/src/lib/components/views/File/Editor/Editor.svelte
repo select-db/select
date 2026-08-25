@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './config/monacoWorkers';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import * as monaco from 'monaco-editor';
 
 	import { EventsOn } from '$lib/wails/events';
@@ -124,7 +124,7 @@
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null);
 	let diffEditor = $state<monaco.editor.IStandaloneDiffEditor | null>(null);
 	let currentTabId: string;
-	let currentLanguage: string = language;
+	let currentLanguage: string = untrack(() => language);
 	let changeListenerDisposable: monaco.IDisposable | null = null;
 	let diffChangeDisposable: monaco.IDisposable | null = null;
 	let editorDirty = false;
