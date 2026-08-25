@@ -20,18 +20,10 @@ import type * as dbClientModels from '$lib/bindings/selectDb/internal/db_client/
 import * as searchService from '$lib/bindings/selectDb/internal/search/search';
 import type * as searchModels from '$lib/bindings/selectDb/internal/search/models';
 
-/**
- * Removes `null` from array element types. Nullable values that are not array
- * entries — an absent `ssh` config, an unknown `errorPosition` — are left
- * alone, because those nulls are real.
- */
-export type NonNullItems<T> = unknown extends T
-	? T
-	: T extends (infer U)[]
-		? NonNullItems<NonNullable<U>>[]
-		: T extends object
-			? { [K in keyof T]: NonNullItems<T[K]> }
-			: T;
+export type { NonNullItems } from './stripNullItems';
+import { stripNullItems, type NonNullItems } from './stripNullItems';
+
+export { stripNullItems };
 
 export type WorkspaceNode = NonNullItems<models.WorkspaceNode>;
 export type FolderNode = NonNullItems<models.FolderNode>;
@@ -45,35 +37,10 @@ export type ExplainNode = NonNullItems<coreModels.ExplainNode>;
 export type ResolveResult = NonNullItems<sqlLangModels.ResolveResult>;
 export type SearchResultWithNodes = NonNullItems<searchModels.SearchResultWithNodes>;
 
-/**
- * Drops null and undefined entries from every array reachable from `value`,
- * in place — which keeps the model classes' prototypes intact.
- */
-export function stripNullItems<T>(value: T): NonNullItems<T> {
-	strip(value);
-	return value as NonNullItems<T>;
-}
-
-function strip(value: unknown): void {
-	if (Array.isArray(value)) {
-		for (let i = value.length - 1; i >= 0; i--) {
-			if (value[i] == null) value.splice(i, 1);
-			else strip(value[i]);
-		}
-		return;
-	}
-
-	if (value !== null && typeof value === 'object') {
-		for (const nested of Object.values(value)) strip(nested);
-	}
-}
-
 export const GetWorkspaceGraph = async (): Promise<WorkspaceNode | null> =>
 	stripNullItems(await graphService.GetWorkspaceGraph());
 
-export const GetDBInstanceNodeByID = async (
-	dbInstanceID: string
-): Promise<DBInstanceNode | null> =>
+export const GetDBInstanceNodeByID = async (dbInstanceID: string): Promise<DBInstanceNode | null> =>
 	stripNullItems(await graphService.GetDBInstanceNodeByID(dbInstanceID));
 
 export const SearchWithNodes = async (
