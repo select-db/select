@@ -1,10 +1,11 @@
 import { get } from 'svelte/store';
 
-import { GetOSPathFromURI } from '$lib/wailsjs/go/fs_provider/FSProvider';
-import { RevealInExplorer } from '$lib/wailsjs/go/system/System';
-import { StageFile, UnstageFile, RevertFile } from '$lib/wailsjs/go/git/Git';
-import type { git, graph } from '$lib/wailsjs/go/models';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import { GetOSPathFromURI } from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+import { RevealInExplorer } from '$lib/bindings/selectDb/internal/system/system';
+import { StageFile, UnstageFile, RevertFile } from '$lib/bindings/selectDb/internal/git/git';
+import type * as git from '$lib/bindings/selectDb/internal/git/models';
+import type * as graph from '$lib/wails/graph';
+import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';

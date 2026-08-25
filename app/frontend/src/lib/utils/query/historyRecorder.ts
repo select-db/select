@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 
-import { CreateHistory } from '$lib/wailsjs/go/history/History';
+import { CreateHistory } from '$lib/bindings/selectDb/internal/history/history';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { bumpHistoryRefresh } from '$lib/components/views/History/historyStore';
 
@@ -48,9 +48,9 @@ export function recordHistory(executionId: string, outcome: HistoryOutcome): voi
 		WorkspaceID: workspaceId,
 		DbInstanceID: entry.dbInstanceId,
 		Statement: entry.statement,
-		AffectedRows: outcome.affectedRows,
-		RowCount: outcome.rowCount,
-		DurationMs: outcome.durationMs,
+		AffectedRows: outcome.affectedRows ?? null,
+		RowCount: outcome.rowCount ?? null,
+		DurationMs: outcome.durationMs ?? null,
 		Errors: outcome.errors
 	})
 		.then(() => bumpHistoryRefresh())

@@ -11,7 +11,7 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 type QuerySchemaParams struct {
@@ -142,7 +142,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 		},
 	})
 
-	runtime.EventsEmit(dbc.ctx, "databaseAvailability", map[string]interface{}{
+	desktop.Emit("databaseAvailability", map[string]interface{}{
 		"databases": []map[string]interface{}{
 			{"id": dbInstance.ID},
 		},

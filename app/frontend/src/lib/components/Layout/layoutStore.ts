@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { derived, get, writable } from 'svelte/store';
 import { closeTab } from '$lib/components/views/shared/assistant/all';
 import { clearItemSelection, setItemSelection } from '$lib/components/views/shared/sharedStore';

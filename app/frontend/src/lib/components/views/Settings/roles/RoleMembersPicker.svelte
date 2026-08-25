@@ -3,15 +3,20 @@
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notify } from '$lib/system/Notifications/notificationsStore';
 	import { AlertType } from '$lib/system/Alert/types';
-	import { ListUsersInRole, AssignUserToRole, RemoveUserFromRole } from '$lib/wailsjs/go/role/Role';
-	import { ListWorkspaceUsers } from '$lib/wailsjs/go/workspace/Workspace';
-	import { GetCurrentUserAvatar } from '$lib/wailsjs/go/user/User';
-	import { EventsOn, EventsOff } from '$lib/wailsjs/runtime/runtime';
+	import {
+		ListUsersInRole,
+		AssignUserToRole,
+		RemoveUserFromRole
+	} from '$lib/bindings/selectDb/internal/role/role';
+	import { ListWorkspaceUsers } from '$lib/bindings/selectDb/internal/workspace/workspace';
+	import { GetCurrentUserAvatar } from '$lib/bindings/selectDb/internal/user/user';
+	import { EventsOn, EventsOff } from '$lib/wails/events';
 	import FloatingBox from '$lib/system/FloatingBox/FloatingBox.svelte';
 	import Menu from '$lib/system/Menu/Menu.svelte';
 	import Portal from '$lib/system/Portal/Portal.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
-	import type { role, workspace } from '$lib/wailsjs/go/models';
+	import type * as role from '$lib/bindings/selectDb/internal/role/models';
+	import type * as workspace from '$lib/bindings/selectDb/internal/workspace/models';
 	import type { MenuOption, MenuOptionContentSnippet } from '$lib/system/Menu/Menu.types';
 
 	const MAX_VISIBLE = 5;

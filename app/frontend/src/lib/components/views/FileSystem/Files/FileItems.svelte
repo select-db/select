@@ -2,7 +2,7 @@
 	import FileItems from './FileItems.svelte';
 	import { getOptions } from './options/getOptions';
 	import ItemDisplay from '$lib/components/views/shared/ItemDisplay.svelte';
-	import { graph } from '$lib/wailsjs/go/models';
+	import * as graph from '$lib/wails/graph';
 	import {
 		expandedItemIdsStore,
 		dragStateStore,
@@ -12,7 +12,7 @@
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
 	import { createClickHandlers, createDeferredClickHandlers } from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
-	import { QuerySchema } from '$lib/wailsjs/go/db_client/DbClient';
+	import { QuerySchema } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
@@ -67,7 +67,9 @@
 			// Special handling for schema.sql files inside database folders
 			if (file.name === 'schema.sql' && file.folder_id) {
 				const workspace = get(workspaceGraphStore);
-				const database = workspace?.db_instances.find((db) => db.uri === file.folder_id);
+				const database = (workspace?.db_instances ?? []).find(
+					(db) => db.uri === file.folder_id
+				);
 				if (database) {
 					void navigateToSchema(database.id);
 					return;
@@ -162,14 +164,14 @@
 			>
 				<FileItems
 					depth={depth + 1}
-					folders={database.folders ?? []}
+					folders={database.folders}
 					databases={[]}
 					databaseItems={filterVisibleChildren(
 						database.id,
-						database.children ?? [],
+						database.children,
 						$hiddenChildrenStore
 					)}
-					files={database.files ?? []}
+					files={database.files}
 					parentIds={[...parentIds, database.id]}
 					{ctx}
 					insideDatabase={true}
@@ -193,7 +195,7 @@
 				folders={[]}
 				databases={[]}
 				files={[]}
-				databaseItems={filterVisibleChildren(item.id, item.children ?? [], $hiddenChildrenStore)}
+				databaseItems={filterVisibleChildren(item.id, item.children, $hiddenChildrenStore)}
 				depth={depth + 1}
 				parentIds={[...parentIds, item.id]}
 				{ctx}

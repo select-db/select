@@ -1,6 +1,6 @@
 import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { truncate, toToolError } from './context';
 

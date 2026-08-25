@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { GetMyPermissions } from '$lib/wailsjs/go/role/Role';
+import { GetMyPermissions } from '$lib/bindings/selectDb/internal/role/role';
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import {

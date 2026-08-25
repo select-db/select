@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import type { Layout } from './layoutStore';
 import { layoutStore, createInitialLayout } from './layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';

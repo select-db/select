@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Tab } from '$lib/components/Layout/layoutStore';
 	import { addChatTab } from '$lib/components/Layout/layoutStore';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
 	import { getExecution } from '$lib/utils/query/queryStream.svelte';

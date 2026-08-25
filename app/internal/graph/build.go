@@ -282,6 +282,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	g.WorkspaceGraph.Folders = []*FolderNode{rootFolder}
 
 	sortDBInstancesByName(rootFolder)
+	ensureArrays(g.WorkspaceGraph)
 
 	return nil
 }

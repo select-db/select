@@ -98,28 +98,15 @@
 	const clamp = (value: number, size: number, extent: number) =>
 		Math.max(SCREEN_MARGIN, Math.min(value, extent - size - SCREEN_MARGIN));
 
-	/**
-	 * The app scales the whole UI with `zoom` on <html> (see zoomStore). Client
-	 * coordinates — mouse events, getBoundingClientRect() — come back multiplied
-	 * by it, while the left/top we write out are multiplied again on render. So
-	 * divide incoming client values by the zoom and do the math in the same
-	 * (zoomed) space the box is laid out in.
-	 */
-	const rootZoom = () => {
-		const zoom = parseFloat(getComputedStyle(document.documentElement).zoom);
-		return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-	};
-
 	const calculatePosition = async () => {
 		if (!boxElement) return;
 
 		await tick(); // Wait for content to render
 		if (!boxElement) return; // destroyed while awaiting
 
-		const zoom = rootZoom();
 		const viewport = {
-			width: window.innerWidth / zoom,
-			height: window.innerHeight / zoom
+			width: window.innerWidth,
+			height: window.innerHeight
 		};
 
 		// Never let the box itself be wider than the safe area: `width: fit-content`
@@ -132,15 +119,7 @@
 		// the right/bottom margin went missing.
 		const box = { width: boxElement.offsetWidth, height: boxElement.offsetHeight };
 
-		const clientRect = anchor?.getBoundingClientRect();
-		const anchorRect: Rect | undefined = clientRect && {
-			top: clientRect.top / zoom,
-			right: clientRect.right / zoom,
-			bottom: clientRect.bottom / zoom,
-			left: clientRect.left / zoom,
-			width: clientRect.width / zoom,
-			height: clientRect.height / zoom
-		};
+		const anchorRect: Rect | undefined = anchor?.getBoundingClientRect();
 
 		// Side placement: the anchor decides the main axis, so only the cross axis
 		// is clamped to the screen. Clamping the main axis too is what used to slide
@@ -155,8 +134,8 @@
 			return;
 		}
 
-		let x = position.x / zoom + offset.x;
-		let y = position.y / zoom + offset.y;
+		let x = position.x + offset.x;
+		let y = position.y + offset.y;
 
 		if (anchorRect) {
 			x = anchorRect.left;
@@ -274,8 +253,6 @@
 <style>
 	.backdrop {
 		position: fixed;
-		/* inset, not 100vw/100vh: viewport units ignore the root `zoom` and would
-		   overflow the window once the UI is zoomed in. */
 		inset: 0;
 		z-index: 999;
 	}

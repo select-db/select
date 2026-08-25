@@ -1,10 +1,9 @@
 <script lang="ts">
-	import { core } from '$lib/wailsjs/go/models';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	import Tooltip from '$lib/system/Tooltip/Tooltip.svelte';
 
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
 		result: graph.ExplainResult;
@@ -16,13 +15,13 @@
 
 	type FlatRow = {
 		level: number;
-		node: core.ExplainNode;
+		node: graph.ExplainNode;
 		isLast: boolean;
 		branches: number[];
 	};
 
 	const flattenTree = (
-		node: core.ExplainNode,
+		node: graph.ExplainNode,
 		level: number,
 		isLast: boolean,
 		branches: number[]
@@ -32,9 +31,10 @@
 
 		if (!isLast) branches.push(level);
 
-		if (node.children && node.children.length > 0) {
-			node.children.forEach((child, index) => {
-				const childIsLast = index === node.children.length - 1;
+		const children = node.children;
+		if (children.length > 0) {
+			children.forEach((child, index) => {
+				const childIsLast = index === children.length - 1;
 				rows.push(...flattenTree(child, level + 1, childIsLast, branches));
 			});
 		}

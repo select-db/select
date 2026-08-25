@@ -1,7 +1,7 @@
 import { writable, get } from 'svelte/store';
 
-import { ListHistory } from '$lib/wailsjs/go/history/History';
-import type { history } from '$lib/wailsjs/go/models';
+import { ListHistory } from '$lib/bindings/selectDb/internal/history/history';
+import type * as history from '$lib/bindings/selectDb/internal/history/models';
 
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 

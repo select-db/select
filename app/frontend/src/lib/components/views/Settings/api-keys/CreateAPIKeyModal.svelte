@@ -9,7 +9,7 @@
 	import Portal from '$lib/system/Portal/Portal.svelte';
 	import FloatingBox from '$lib/system/FloatingBox/FloatingBox.svelte';
 	import { tryCatch } from '$lib/utils/tryCatch';
-	import type { apikey } from '$lib/wailsjs/go/models';
+	import type * as apikey from '$lib/bindings/selectDb/internal/apikey/models';
 
 	type Role = { id: string; name: string };
 	type Props = {

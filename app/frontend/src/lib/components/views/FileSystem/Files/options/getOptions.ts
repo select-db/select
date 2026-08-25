@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { getDatabaseItemOptions } from './databaseItemOptions';
 import { databaseOptions } from './databaseOptions';
 import { getFileOptions } from './fileOptions';

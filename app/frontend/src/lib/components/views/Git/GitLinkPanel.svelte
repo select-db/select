@@ -13,7 +13,7 @@
 		CompleteLinkExistingRepo,
 		LinkExistingRepo,
 		UnlinkRemote
-	} from '$lib/wailsjs/go/git/Git';
+	} from '$lib/bindings/selectDb/internal/git/git';
 
 	let { showUnsync = false }: { showUnsync?: boolean } = $props();
 

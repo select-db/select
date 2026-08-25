@@ -40,7 +40,7 @@ import (
 	"time"
 
 	"github.com/jedisct1/go-minisign"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 
 	"selectDb/internal/server"
 )
@@ -231,11 +231,11 @@ func (u *Updater) Apply() {
 		return
 	}
 
-	wailsruntime.Quit(ctx)
+	desktop.Quit()
 }
 
 func emit(ctx context.Context, e UpdateEvent) {
-	wailsruntime.EventsEmit(ctx, "update", e)
+	desktop.Emit("update", e)
 }
 
 // cleanupBak removes the .bak left by atomicSwap on a previous update.

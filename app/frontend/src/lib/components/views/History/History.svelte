@@ -10,7 +10,8 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { findItemById } from '$lib/components/views/FileSystem/Files/helpers/dragHelpers';
 	import { colorizeSql } from '$lib/system/SqlViewer/colorizeSql';
-	import type { graph, history } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
+	import type * as history from '$lib/bindings/selectDb/internal/history/models';
 
 	import {
 		historyItems,
@@ -44,7 +45,7 @@
 	function dbNameFor(item: history.HistoryEntry): string {
 		const ws = $workspaceGraphStore;
 		if (!ws) return '';
-		const node = findItemById(item.dbInstanceId, [], ws.folders ?? [], ws.db_instances ?? []);
+		const node = findItemById(item.dbInstanceId, [], ws.folders, ws.db_instances);
 		return node && 'db_type' in node ? (node as graph.DBInstanceNode).name : '';
 	}
 

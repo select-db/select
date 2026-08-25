@@ -1,10 +1,10 @@
 import * as monaco from 'monaco-editor';
 import { get } from 'svelte/store';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 
 function addNamesFromFunctionsFolder(folder: graph.DBInstanceItemNode, names: Set<string>): void {
-	for (const leaf of folder.children ?? []) {
+	for (const leaf of folder.children) {
 		if (leaf.type !== 'function') continue;
 		const meta = leaf.metadata as Record<string, unknown> | undefined | null;
 		let raw =
@@ -22,17 +22,17 @@ function collectSqlFunctionNamesForDbInstance(
 ): Set<string> {
 	const names = new Set<string>();
 	if (!workspace || !dbInstanceId) return names;
-	const db = (workspace.db_instances ?? []).find((d) => d.id === dbInstanceId);
+	const db = workspace.db_instances.find((d) => d.id === dbInstanceId);
 	if (!db?.children?.length) return names;
 	for (const top of db.children) {
 		if (top.type === 'schema') {
-			for (const child of top.children ?? []) {
+			for (const child of top.children) {
 				if (child.type === 'functions') {
 					addNamesFromFunctionsFolder(child, names);
 				}
 			}
 		} else if (top.type === 'system_catalog') {
-			for (const section of top.children ?? []) {
+			for (const section of top.children) {
 				if (section.type === 'functions') addNamesFromFunctionsFolder(section, names);
 			}
 		}

@@ -2,8 +2,8 @@ import type { Component } from 'svelte';
 
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import SSHPassphraseModal from '$lib/components/views/Database/SSHPassphraseModal.svelte';
-import { SetSSHKeyPassphrase } from '$lib/wailsjs/go/db_client/DbClient';
-import { GetDBInstanceNodeByID } from '$lib/wailsjs/go/graph/Graph';
+import { SetSSHKeyPassphrase } from '$lib/bindings/selectDb/internal/db_client/dbclient';
+import { GetDBInstanceNodeByID } from '$lib/wails/graph';
 import { tryCatch } from '$lib/utils/tryCatch';
 
 /** Whether a connection error indicates the SSH key file needs a passphrase. */

@@ -2,7 +2,7 @@
 	import { fly } from 'svelte/transition';
 	import { updateStore } from '$lib/stores/updateStore';
 	import Button from '$lib/system/Button/Button.svelte';
-	import { Apply } from '$lib/wailsjs/go/updater/Updater';
+	import { Apply } from '$lib/bindings/selectDb/internal/updater/updater';
 </script>
 
 {#if $updateStore?.status === 'available'}

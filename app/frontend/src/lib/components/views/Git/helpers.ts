@@ -1,5 +1,5 @@
-import { graph } from '$lib/wailsjs/go/models';
-import type { git } from '$lib/wailsjs/go/models';
+import * as graph from '$lib/wails/graph';
+import type * as git from '$lib/bindings/selectDb/internal/git/models';
 
 /**
  * Creates a synthetic FileNode from a git file path.
@@ -13,7 +13,7 @@ function createSyntheticFileNode(
 	const parts = path.split('/');
 	const name = parts[parts.length - 1];
 
-	return new graph.FileNode({
+	return graph.newFileNode({
 		// We add git::<status> in file.id to help identify status
 		// in the fs getActions, getOptions
 		id: `git::${status}/${path}`,

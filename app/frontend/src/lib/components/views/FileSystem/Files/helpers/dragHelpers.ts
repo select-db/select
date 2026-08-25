@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 /**
  * Check if a target is a valid drop target
@@ -26,7 +26,12 @@ export const findItemById = (
 	// Check folders
 	for (const folder of folders) {
 		if (folder.id === id) return folder;
-		const found = findItemById(id, folder.files, folder.folders, folder.db_instances);
+		const found = findItemById(
+			id,
+			folder.files,
+			folder.folders,
+			folder.db_instances
+		);
 		if (found) return found;
 	}
 
@@ -34,7 +39,7 @@ export const findItemById = (
 	for (const db of databases) {
 		if (db.id === id) return db;
 		// Search inside database files and folders
-		const found = findItemById(id, db.files ?? [], db.folders ?? [], []);
+		const found = findItemById(id, db.files, db.folders, []);
 		if (found) return found;
 	}
 

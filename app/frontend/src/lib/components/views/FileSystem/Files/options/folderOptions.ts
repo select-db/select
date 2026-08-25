@@ -1,7 +1,7 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 

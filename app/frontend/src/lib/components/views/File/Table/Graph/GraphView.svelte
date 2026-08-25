@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { Query } from '$lib/wailsjs/go/db_client/DbClient';
+	import { Query } from '$lib/wails/graph';
 	import { updateTab, type Tab, type GraphConfig } from '$lib/components/Layout/layoutStore';
 	import {
 		inferDefaultConfig,

@@ -4,7 +4,7 @@
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import Button from '$lib/system/Button/Button.svelte';
-	import { ResetTheme } from '$lib/wailsjs/go/system/System';
+	import { ResetTheme } from '$lib/bindings/selectDb/internal/system/system';
 	import ConfirmResetModal from './ConfirmResetModal.svelte';
 
 	type Props = {

@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"bufio"
-	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -12,7 +11,7 @@ import (
 	"sync"
 
 	pty "github.com/aymanbagabas/go-pty"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 
 	"selectDb/internal/graph"
 )
@@ -30,7 +29,6 @@ type session struct {
 }
 
 type Terminal struct {
-	ctx      context.Context
 	mu       sync.Mutex
 	sessions map[string]*session
 	Graph    *graph.Graph
@@ -41,10 +39,6 @@ func New(g *graph.Graph) *Terminal {
 		sessions: make(map[string]*session),
 		Graph:    g,
 	}
-}
-
-func (t *Terminal) SetContext(ctx context.Context) {
-	t.ctx = ctx
 }
 
 func (t *Terminal) workspaceRootPath() (string, error) {
@@ -184,7 +178,7 @@ func (t *Terminal) readLoop(sess *session) {
 		n, err := sess.pty.Read(buf)
 		if n > 0 {
 			encoded := base64.StdEncoding.EncodeToString(buf[:n])
-			wailsRuntime.EventsEmit(t.ctx, "terminal:output:"+sess.id, encoded)
+			desktop.Emit("terminal:output:"+sess.id, encoded)
 		}
 		if err != nil {
 			break
@@ -196,7 +190,7 @@ func (t *Terminal) waitForExit(sess *session) {
 	defer func() { recover() }() //nolint:errcheck
 	_ = sess.cmd.Wait()
 	close(sess.done)
-	wailsRuntime.EventsEmit(t.ctx, "terminal:exit:"+sess.id)
+	desktop.Emit("terminal:exit:" + sess.id)
 
 	t.mu.Lock()
 	delete(t.sessions, sess.id)

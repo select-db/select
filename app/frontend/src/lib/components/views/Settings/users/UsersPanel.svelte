@@ -8,19 +8,28 @@
 		SearchUser,
 		AddUserToWorkspace,
 		RemoveUserFromWorkspace
-	} from '$lib/wailsjs/go/workspace/Workspace';
-	import { ListRoles, AssignUserToRole, RemoveUserFromRole } from '$lib/wailsjs/go/role/Role';
-	import { ListGroups, AddUserToGroup, RemoveUserFromGroup } from '$lib/wailsjs/go/group/Group';
-	import { GetCurrentUserAvatar } from '$lib/wailsjs/go/user/User';
+	} from '$lib/bindings/selectDb/internal/workspace/workspace';
+	import {
+		ListRoles,
+		AssignUserToRole,
+		RemoveUserFromRole
+	} from '$lib/bindings/selectDb/internal/role/role';
+	import {
+		ListGroups,
+		AddUserToGroup,
+		RemoveUserFromGroup
+	} from '$lib/bindings/selectDb/internal/group/group';
+	import { GetCurrentUserAvatar } from '$lib/bindings/selectDb/internal/user/user';
 	import FloatingBox from '$lib/system/FloatingBox/FloatingBox.svelte';
 	import Menu from '$lib/system/Menu/Menu.svelte';
 	import Portal from '$lib/system/Portal/Portal.svelte';
-	import { EventsOn, EventsOff } from '$lib/wailsjs/runtime/runtime';
+	import { EventsOn, EventsOff } from '$lib/wails/events';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
 	import { notify } from '$lib/system/Notifications/notificationsStore';
 	import { AlertType } from '$lib/system/Alert/types';
 	import { isEmail } from '$lib/utils/isEmail';
-	import type { workspace, generated } from '$lib/wailsjs/go/models';
+	import type * as workspace from '$lib/bindings/selectDb/internal/workspace/models';
+	import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 
 	type UserEntry = workspace.WorkspaceUserEntry;
 

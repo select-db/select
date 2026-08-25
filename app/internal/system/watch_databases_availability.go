@@ -8,7 +8,7 @@ import (
 	"selectDb/internal/db_client"
 	"selectDb/internal/graph"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 const (
@@ -101,7 +101,7 @@ func (s *System) watchDatabases(ctx context.Context) {
 					}
 					databases = append(databases, entry)
 				}
-				runtime.EventsEmit(s.ctx, "databaseAvailability", map[string]interface{}{
+				desktop.Emit("databaseAvailability", map[string]interface{}{
 					"databases": databases,
 				})
 			}

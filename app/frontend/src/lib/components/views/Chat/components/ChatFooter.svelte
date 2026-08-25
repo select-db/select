@@ -17,7 +17,7 @@
 	import { findItemById } from '$lib/components/views/FileSystem/Files/helpers/dragHelpers';
 	import type { Tab, ChatContextFile } from '$lib/components/Layout/layoutStore';
 	import type { ResourceMenuOption } from '$lib/components/ResourceMenu/types';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
 		inputText: string;
@@ -41,7 +41,7 @@
 	let inputActive = $state(false);
 	let inputRef: { focus: () => void } | undefined;
 
-	const contextFiles = $derived(tab.chat?.files ?? []);
+	const contextFiles = $derived((tab.chat?.files ?? []));
 	const selectedFileIds = $derived(contextFiles.map((f) => f.id));
 
 	function focusInputOnFooterClick(e: MouseEvent) {
@@ -51,7 +51,7 @@
 	}
 
 	function toggleContextFile(option: ResourceMenuOption) {
-		const existingFiles = tab.chat?.files ?? [];
+		const existingFiles = (tab.chat?.files ?? []);
 		const existingIndex = existingFiles.findIndex((f) => f.id === option.id);
 
 		let files: ChatContextFile[];
@@ -74,7 +74,7 @@
 	function getFileNode(file: ChatContextFile): graph.FileNode | null {
 		const ws = get(workspaceGraphStore);
 		if (ws) {
-			const found = findItemById(file.id, [], ws.folders || [], ws.db_instances || []);
+			const found = findItemById(file.id, [], ws.folders, ws.db_instances);
 			if (found && found.type === 'file') return found as graph.FileNode;
 		}
 		// Temp files are not in the workspace graph, find the node from the open tab.
@@ -93,7 +93,7 @@
 	function handleDatabaseChange(v: string | string[]) {
 		const ids = Array.isArray(v) ? v : v ? [v] : [];
 		const ws = get(workspaceGraphStore);
-		const dbInstances = ws?.db_instances ?? [];
+		const dbInstances = (ws?.db_instances ?? []);
 		const databases = ids
 			.map((id) => dbInstances.find((d) => d.id === id))
 			.filter(Boolean)

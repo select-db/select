@@ -1,12 +1,14 @@
 import { writable, get } from 'svelte/store';
-import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-import { GetThemeVariables } from '$lib/wailsjs/go/system/System';
+import { EventsOn } from '$lib/wails/events';
+import { GetThemeVariables } from '$lib/bindings/selectDb/internal/system/system';
 import { tryCatch } from '$lib/utils/tryCatch';
 
+// Values are optional because the bindings model Go maps as possibly-missing
+// keys; entries without a value are skipped when applying the theme.
 export type ThemeVariables = {
-	shared: Record<string, string>;
-	light: Record<string, string>;
-	dark: Record<string, string>;
+	shared: Record<string, string | undefined>;
+	light: Record<string, string | undefined>;
+	dark: Record<string, string | undefined>;
 };
 
 export const themeVersionStore = writable<number>(0);
@@ -32,16 +34,16 @@ function applyThemeVariables(variables: ThemeVariables): void {
 	}
 	appliedVarNames.clear();
 
-	for (const [varName, value] of Object.entries(variables.shared)) {
-		root.style.setProperty(varName, value);
-		appliedVarNames.add(varName);
-	}
+	const apply = (vars: Record<string, string | undefined>) => {
+		for (const [varName, value] of Object.entries(vars)) {
+			if (value === undefined) continue;
+			root.style.setProperty(varName, value);
+			appliedVarNames.add(varName);
+		}
+	};
 
-	const modeVars = mode === 'dark' ? variables.dark : variables.light;
-	for (const [varName, value] of Object.entries(modeVars)) {
-		root.style.setProperty(varName, value);
-		appliedVarNames.add(varName);
-	}
+	apply(variables.shared);
+	apply(mode === 'dark' ? variables.dark : variables.light);
 
 	themeVariablesStore.set(variables);
 	themeVersionStore.update((v) => v + 1);

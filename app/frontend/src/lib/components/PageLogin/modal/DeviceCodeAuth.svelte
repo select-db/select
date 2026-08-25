@@ -21,7 +21,7 @@
 		/** Message when opening URL fails */
 		openUrlErrorLabel?: string;
 		/** Fetch device code from the provider */
-		getDeviceCode: () => Promise<DeviceCodeResult>;
+		getDeviceCode: () => Promise<DeviceCodeResult | null>;
 		/** Start polling for token; backend will emit "login" on success */
 		startPolling: (deviceCode: string) => Promise<void>;
 		/** Cancel any ongoing polling */
@@ -32,7 +32,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 
-	import { OpenURL } from '$lib/wailsjs/go/system/System';
+	import { OpenURL } from '$lib/bindings/selectDb/internal/system/system';
 
 	import Alert from '$lib/system/Alert/Alert.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
@@ -52,7 +52,7 @@
 	export let initErrorLabel = 'Failed to initiate login.';
 	export let authErrorLabel = 'Authorization failed or timed out';
 	export let openUrlErrorLabel = 'Failed to open the login page. Please open the URL manually';
-	export let getDeviceCode: () => Promise<DeviceCodeResult>;
+	export let getDeviceCode: () => Promise<DeviceCodeResult | null>;
 	export let startPolling: (deviceCode: string) => Promise<void>;
 	export let cancelPolling: () => void;
 
@@ -63,7 +63,7 @@
 
 	onMount(async () => {
 		const [r, err] = await tryCatch(getDeviceCode);
-		if (err) {
+		if (err || !r) {
 			error = initErrorLabel;
 			return;
 		}

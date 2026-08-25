@@ -6,7 +6,7 @@ import (
 	"errors"
 	"selectDb/internal/api"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 func (s *System) Logout() error {
@@ -16,7 +16,7 @@ func (s *System) Logout() error {
 	_ = api.ClearAccessToken()
 	_ = api.ClearRefreshToken()
 
-	runtime.EventsEmit(s.ctx, "logout")
+	desktop.Emit("logout")
 	return nil
 }
 
@@ -28,7 +28,7 @@ func (s *System) CheckForLogout() {
 	_, refreshErr := api.LoadRefreshToken()
 
 	if accessErr != nil || refreshErr != nil {
-		runtime.EventsEmit(s.ctx, "logout")
+		desktop.Emit("logout")
 	}
 }
 
@@ -55,5 +55,5 @@ func (s *System) CheckForLogin() {
 		}
 		return
 	}
-	runtime.EventsEmit(s.ctx, "login")
+	desktop.Emit("login")
 }

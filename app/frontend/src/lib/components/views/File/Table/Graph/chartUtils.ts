@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import type { GraphConfig } from '$lib/components/Layout/layoutStore';
 
 export type ColumnKind = 'numeric' | 'temporal' | 'categorical';

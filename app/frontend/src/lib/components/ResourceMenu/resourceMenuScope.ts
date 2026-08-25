@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import type { ResourceMenuOption, ResourceSearchScope } from './types';
 
 /** Infix between DB instance id and schema name in graph node ids (see backend schema.go). */

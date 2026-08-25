@@ -14,7 +14,7 @@ import { modalStore } from '$lib/system/Modal/ModalStore';
 import SearchModalContent from '$lib/components/Leftbar/Search/SearchModalContent.svelte';
 
 import { registerCommand } from './commandRegistry';
-import { zoomIn, zoomOut, resetZoom } from './zoomStore';
+import { zoomIn, zoomOut, resetZoom } from '$lib/wails/zoom';
 import {
 	addTerminalTab,
 	addTempFileTab,

@@ -1,6 +1,7 @@
 import * as monaco from 'monaco-editor';
-import { Lint } from '$lib/wailsjs/go/sqllang/SqlLang';
-import type { graph, sqllang } from '$lib/wailsjs/go/models';
+import { Lint } from '$lib/bindings/selectDb/internal/sqllang/sqllang';
+import type * as graph from '$lib/wails/graph';
+import type * as sqllang from '$lib/bindings/selectDb/internal/sqllang/models';
 import { debounce } from '$lib/utils/debounce';
 
 export const LINT_SOURCE = 'sql-lint';

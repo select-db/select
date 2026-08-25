@@ -90,8 +90,10 @@
 	.message.user {
 		align-self: flex-end;
 		border: var(--border);
-		background-color: var(--gray-400);
-		padding: var(--space-xs-sm) var(--space-sm);
+		padding: var(--space-sm) var(--space-sm-md);
+		background-color: var(--gray-300);
+		border-radius: var(--br-sm);
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.message.assistant {
@@ -108,6 +110,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm-md);
+
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

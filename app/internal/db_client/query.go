@@ -8,7 +8,7 @@ import (
 	"selectDb/internal/utils"
 
 	"github.com/selectDb/dialect/engine"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 type QueryParams struct {
@@ -101,7 +101,7 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		out.Errors = []string{err.Error()}
 		// Emit an immediate error event so the frontend can surface it
 		// through the same event channel as live failures.
-		runtime.EventsEmit(dbc.ctx, "query:error", queryErrorEvent{
+		desktop.Emit("query:error", queryErrorEvent{
 			ExecutionID:  executionID,
 			DbInstanceID: params.DbInstanceID,
 			FileID:       params.FileID,
@@ -138,13 +138,11 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		listener,
 	)
 
-	runtime.EventsEmit(
-		dbc.ctx,
-		"databaseAvailability", map[string]interface{}{
-			"databases": []map[string]interface{}{
-				{"id": params.DbInstanceID},
-			},
-		})
+	desktop.Emit("databaseAvailability", map[string]interface{}{
+		"databases": []map[string]interface{}{
+			{"id": params.DbInstanceID},
+		},
+	})
 
 	return out
 }

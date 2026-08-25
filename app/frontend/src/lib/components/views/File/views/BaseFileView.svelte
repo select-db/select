@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import type { Snippet } from 'svelte';
 
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import { updateTab, removeTab, type Tab } from '$lib/components/Layout/layoutStore';
 	import { notifyError } from '$lib/system/Notifications/notificationsStore';
 	import { tryCatch, must } from '$lib/utils/tryCatch';

@@ -10,8 +10,8 @@
 		CreateGroup,
 		DeleteGroup,
 		RenameGroup
-	} from '$lib/wailsjs/go/group/Group';
-	import type { generated } from '$lib/wailsjs/go/models';
+	} from '$lib/bindings/selectDb/internal/group/group';
+	import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 	import ConfirmDeleteGroupModal from './ConfirmDeleteGroupModal.svelte';
 	import CreateGroupModal from './CreateGroupModal.svelte';
 	import RenameGroupModal from './RenameGroupModal.svelte';
@@ -20,7 +20,7 @@
 	import FloatingBox from '$lib/system/FloatingBox/FloatingBox.svelte';
 	import Menu from '$lib/system/Menu/Menu.svelte';
 	import Portal from '$lib/system/Portal/Portal.svelte';
-	import { EventsOn, EventsOff } from '$lib/wailsjs/runtime/runtime';
+	import { EventsOn, EventsOff } from '$lib/wails/events';
 
 	let groups = $state<generated.ListGroupsByWorkspaceRow[]>([]);
 	let selectedGroupId = $state<string | null>(null);

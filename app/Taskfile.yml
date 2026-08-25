@@ -1,0 +1,192 @@
+version: '3'
+
+# Wails v3 drives builds through Task instead of `wails build`. `wails3 build`,
+# `wails3 dev` and `wails3 package` all dispatch to the tasks below.
+#
+# Build metadata is injected through vars, e.g.
+#   wails3 task build APP_VERSION=1.2.3 APP_ENV=production MINISIGN_PUBLIC_KEY=...
+
+vars:
+  APP_NAME: 'select'
+  BIN_DIR: 'build/bin'
+  APP_BUNDLE: 'build/bin/select.app'
+  BINDINGS_DIR: 'frontend/src/lib/bindings'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+
+  APP_VERSION: '{{.APP_VERSION | default "dev"}}'
+  APP_ENV: '{{.APP_ENV | default "dev"}}'
+  MINISIGN_PUBLIC_KEY: '{{.MINISIGN_PUBLIC_KEY | default ""}}'
+
+  # Linux keeps GTK3 + WebKit2GTK 4.1 (wails v3 defaults to GTK4 + WebKitGTK 6.0,
+  # which is not available on the distros we currently ship to).
+  PLATFORM_TAGS: '{{if eq OS "linux"}}gtk3{{end}}'
+
+  META_LDFLAGS: '-X main.appVersion={{.APP_VERSION}} -X main.appEnv={{.APP_ENV}} -X selectDb/internal/updater.minisignPublicKey={{.MINISIGN_PUBLIC_KEY}}'
+
+tasks:
+  generate:bindings:
+    summary: Regenerates the frontend bindings from the bound Go services
+    cmds:
+      - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}}
+
+  generate:icons:
+    summary: Generates the macOS `.icns` and Windows `.ico` from build/appicon.png
+    status:
+      - test -f build/darwin/icons.icns
+      - test -f build/windows/icon.ico
+    cmds:
+      - wails3 generate icons -input build/appicon.png -macfilename build/darwin/icons.icns -windowsfilename build/windows/icon.ico
+
+  install:frontend:
+    summary: Installs the frontend dependencies
+    dir: frontend
+    sources:
+      - package.json
+      - package-lock.json
+    cmds:
+      - npm install
+
+  build:frontend:
+    summary: Builds the Svelte frontend into frontend/build
+    deps:
+      - install:frontend
+      - generate:bindings
+    dir: frontend
+    cmds:
+      - npm run build
+    env:
+      PUBLIC_APP_ENV: '{{.APP_ENV}}'
+
+  build:
+    summary: Builds the desktop application into build/bin
+    deps:
+      - build:frontend
+    cmds:
+      - task: 'syso:{{OS}}'
+      - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}{{exeExt}}"
+      - task: 'bundle:{{OS}}'
+      - cmd: rm -f *.syso
+        platforms: [linux, darwin]
+      - cmd: powershell -Command "Remove-Item -Force -ErrorAction Ignore *.syso"
+        platforms: [windows]
+    vars:
+      TAGS: '{{if eq .DEV "true"}}{{.PLATFORM_TAGS}}{{else}}production{{if .PLATFORM_TAGS}},{{.PLATFORM_TAGS}}{{end}}{{end}}'
+      # Dev builds keep symbols and inlining; production strips and, on Windows,
+      # drops the console window.
+      BUILD_FLAGS: '{{if .TAGS}}-tags {{.TAGS}} {{end}}-buildvcs=false {{if eq .DEV "true"}}-gcflags=all="-l" -ldflags="{{.META_LDFLAGS}}"{{else}}-trimpath -ldflags="-w -s{{if eq OS "windows"}} -H windowsgui{{end}} {{.META_LDFLAGS}}"{{end}}'
+    env:
+      CGO_ENABLED: 1
+
+  syso:windows:
+    summary: Embeds the Windows icon, manifest and version metadata into the binary
+    internal: true
+    deps:
+      - generate:icons
+    cmds:
+      # `wails3 generate syso` copies the info file verbatim, so the version
+      # resource is written here with the version being built.
+      - |
+        cat > build/windows/info.gen.json <<'JSON'
+        {
+        	"fixed": {
+        		"file_version": "{{.FILE_VERSION}}"
+        	},
+        	"info": {
+        		"0000": {
+        			"ProductVersion": "{{.APP_VERSION}}",
+        			"FileVersion": "{{.APP_VERSION}}",
+        			"CompanyName": "Select",
+        			"FileDescription": "Select database client",
+        			"LegalCopyright": "(c) 2026, Select",
+        			"ProductName": "Select",
+        			"Comments": "Select database client"
+        		}
+        	}
+        }
+        JSON
+      - wails3 generate syso -arch {{ARCH}} -icon build/windows/icon.ico -manifest build/windows/wails.exe.manifest -info build/windows/info.gen.json -out wails_windows_{{ARCH}}.syso
+      - cmd: rm -f build/windows/info.gen.json
+        platforms: [linux, darwin]
+      - cmd: powershell -Command "Remove-Item -Force -ErrorAction Ignore build/windows/info.gen.json"
+        platforms: [windows]
+    vars:
+      # Windows wants four numbers, while APP_VERSION can be a tag (0.0.1), a
+      # staging build number, or "dev": keep the digits, pad out the rest.
+      NUMERIC_VERSION: '{{regexReplaceAll "[^0-9.]" .APP_VERSION ""}}'
+      FILE_VERSION: '{{$parts := concat (splitList "." (default "0" .NUMERIC_VERSION)) (list "0" "0" "0" "0")}}{{join "." (slice $parts 0 4)}}'
+
+  bundle:darwin:
+    # macOS reads an app's icon, name and identifier from the bundle around the
+    # binary, so a bare executable has none of them. v2 wrapped the binary on
+    # every build, including `dev`; this keeps that true.
+    internal: true
+    deps:
+      - generate:icons
+    cmds:
+      - mkdir -p "{{.APP_BUNDLE}}/Contents/MacOS" "{{.APP_BUNDLE}}/Contents/Resources"
+      - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}"
+      - cp build/darwin/icons.icns "{{.APP_BUNDLE}}/Contents/Resources/icons.icns"
+      - sed -e 's/__APP_VERSION__/{{.APP_VERSION}}/g' build/darwin/Info.plist > "{{.APP_BUNDLE}}/Contents/Info.plist"
+
+  bundle:linux:
+    internal: true
+    cmds: []
+
+  bundle:windows:
+    internal: true
+    cmds: []
+
+  syso:linux:
+    internal: true
+    cmds: []
+
+  syso:darwin:
+    internal: true
+    cmds: []
+
+  package:
+    summary: Packages the application for the host platform
+    cmds:
+      - task: 'package:{{OS}}'
+
+  package:darwin:
+    summary: macOS ships the `.app` bundle that every build produces
+    deps:
+      - build
+
+  package:linux:
+    summary: Linux ships the bare binary; nothing to package
+    deps:
+      - build
+
+  package:windows:
+    summary: Windows ships the bare executable; nothing to package
+    deps:
+      - build
+
+  run:
+    summary: Runs the built application
+    cmds:
+      # From inside the bundle on macOS: launched as a bare binary the app has
+      # no icon and no name of its own.
+      - cmd: '{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}'
+        platforms: [darwin]
+      - cmd: '{{.BIN_DIR}}/{{.APP_NAME}}{{exeExt}}'
+        platforms: [linux, windows]
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  dev:frontend:
+    summary: Runs the frontend dev server (used by `wails3 dev`)
+    deps:
+      - install:frontend
+    dir: frontend
+    cmds:
+      # --host 127.0.0.1: `wails3 dev` points the webview at
+      # http://localhost:{{.VITE_PORT}} and its proxy dials that over IPv4, while
+      # Vite's default `localhost` binding resolves to ::1 on macOS. Without this
+      # the app only gets "connection refused" from the dev server.
+      - npm run dev -- --host 127.0.0.1 --port {{.VITE_PORT}} --strictPort

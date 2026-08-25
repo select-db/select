@@ -1,6 +1,6 @@
-import { GetResultPage } from '$lib/wailsjs/go/db_client/DbClient';
+import { GetResultPage } from '$lib/wails/graph';
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import type { VisibleRange } from './virtualScrolling';
 
 export interface DataLoadingState {

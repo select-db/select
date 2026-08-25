@@ -2,7 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import type { Component } from 'svelte';
 
-	import { graph } from '$lib/wailsjs/go/models';
+	import * as graph from '$lib/wails/graph';
 
 	import Button from '$lib/system/Button/Button.svelte';
 	import Group from '$lib/system/Group/Group.svelte';
@@ -54,15 +54,15 @@
 		table: string
 	): graph.DBInstanceItemNode | null {
 		if (!ws) return null;
-		const db = ws.db_instances?.find((d) => d.id === databaseId);
+		const db = ws.db_instances.find((d) => d.id === databaseId);
 		if (!db) return null;
-		const schemaNode = db.children?.find((c) => c.type === 'schema' && c.name === schema);
+		const schemaNode = db.children.find((c) => c.type === 'schema' && c.name === schema);
 		if (!schemaNode) return null;
-		const tablesGroup = schemaNode.children?.find((c) => c.type === 'tables');
-		const viewsGroup = schemaNode.children?.find((c) => c.type === 'views');
+		const tablesGroup = schemaNode.children.find((c) => c.type === 'tables');
+		const viewsGroup = schemaNode.children.find((c) => c.type === 'views');
 		return (
-			tablesGroup?.children?.find((c) => c.name === table) ??
-			viewsGroup?.children?.find((c) => c.name === table) ??
+			(tablesGroup?.children ?? []).find((c) => c.name === table) ??
+			(viewsGroup?.children ?? []).find((c) => c.name === table) ??
 			null
 		);
 	}
@@ -76,8 +76,8 @@
 		}
 		const tableNode = findTableNode(ws, meta.databaseId, meta.schema, meta.table);
 		if (!tableNode) return null;
-		const columnsGroup = tableNode.children?.find((c) => c.type === 'columns');
-		return columnsGroup?.children?.find((c) => c.name === meta.originalColumnName) ?? null;
+		const columnsGroup = tableNode.children.find((c) => c.type === 'columns');
+		return (columnsGroup?.children ?? []).find((c) => c.name === meta.originalColumnName) ?? null;
 	}
 
 	type FkRef = { schemaName: string; tableName: string; columnName: string };
@@ -89,7 +89,7 @@
 	}
 
 	function tableColumnNames(node: graph.DBInstanceItemNode | null): string[] {
-		const columnsGroup = node?.children?.find((c) => c.type === 'columns');
+		const columnsGroup = (node?.children ?? []).find((c) => c.type === 'columns');
 		return (columnsGroup?.children ?? []).map((c) => c.name ?? '').filter(Boolean);
 	}
 

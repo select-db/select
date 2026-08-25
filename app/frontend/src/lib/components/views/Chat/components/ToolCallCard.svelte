@@ -107,10 +107,11 @@
 <style>
 	.tool-card {
 		border: var(--border);
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		background-color: var(--gray-0);
 		overflow: hidden;
 		font-size: var(--fs-sm);
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.tool-card.pending {

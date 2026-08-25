@@ -1,4 +1,4 @@
-import type { generated } from '$lib/wailsjs/go/models';
+import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 import { expandItem } from '$lib/components/views/shared/sharedStore';
 
 export function createFolder(commit: generated.MutationCommit) {

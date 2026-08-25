@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { getTabLabel, type Tab, type TabGroup, type SplitContainer } from '$lib/components/Layout/layoutStore';
 import type { ResourceType, ResourceMenuOption, ResourceSearchScope } from './types';
 import type { RecentItem } from '$lib/stores/recentItemsStore';
@@ -53,35 +53,27 @@ export function flattenWorkspaceGraph(
 
 		// SQL files (and nested folders) can live inside a database, not just in
 		// regular workspace folders — index them too.
-		if (types.includes('file') && db.files) {
+		if (types.includes('file')) {
 			for (const file of db.files) pushFile(file);
 		}
-		if (db.folders) {
-			for (const subFolder of db.folders) processFolder(subFolder);
-		}
+		for (const subFolder of db.folders) processFolder(subFolder);
 	};
 
 	const processFolder = (folder: graph.FolderNode) => {
-		if (types.includes('file') && folder.files) {
+		if (types.includes('file')) {
 			for (const file of folder.files) pushFile(file);
 		}
 
-		if (folder.db_instances) {
-			for (const db of folder.db_instances) processDbInstance(db);
-		}
+		for (const db of folder.db_instances) processDbInstance(db);
 
-		if (folder.folders) {
-			for (const subFolder of folder.folders) processFolder(subFolder);
-		}
+		for (const subFolder of folder.folders) processFolder(subFolder);
 	};
 
-	for (const folder of workspace.folders || []) {
+	for (const folder of workspace.folders) {
 		processFolder(folder);
 	}
 
-	if (workspace.db_instances) {
-		for (const db of workspace.db_instances) processDbInstance(db);
-	}
+	for (const db of workspace.db_instances) processDbInstance(db);
 
 	return options;
 }

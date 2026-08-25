@@ -37,10 +37,10 @@
 		PullWorkspaceRepo,
 		PullWithRebase,
 		ResetBranchToRemote
-	} from '$lib/wailsjs/go/git/Git';
+	} from '$lib/bindings/selectDb/internal/git/git';
 	import LinkOptionsModal from '$lib/components/views/Git/LinkOptionsModal.svelte';
 
-	import { graph } from '$lib/wailsjs/go/models';
+	import * as graph from '$lib/wails/graph';
 	import type { Component } from 'svelte';
 
 	function isPushRejected(err: Error): boolean {
@@ -141,7 +141,7 @@
 
 	// Create placeholder folders for git changes
 	const createGitFolder = (name: string, id: string, files: graph.FileNode[]): graph.FolderNode => {
-		return new graph.FolderNode({
+		return graph.newFolderNode({
 			id,
 			uri: id,
 			type: 'folder',
@@ -150,7 +150,7 @@
 			files,
 			folders: [],
 			db_instances: [],
-			badges: [files.length]
+			badges: [String(files.length)]
 		});
 	};
 

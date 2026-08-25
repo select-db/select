@@ -13,7 +13,7 @@ type switchOrLogoutHandler struct {
 
 func (h *switchOrLogoutHandler) OnAfterWorkspaceSwitch() {
 	if h.app.ctx != nil && h.app.Graph != nil && h.app.Graph.WorkspaceGraph != nil {
-		utils.DebouncedEventsEmit(h.app.ctx, "workspaceGraphUpdated", 100*time.Millisecond, h.app.Graph.WorkspaceGraph)
+		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, h.app.Graph.WorkspaceGraph)
 	}
 }
 

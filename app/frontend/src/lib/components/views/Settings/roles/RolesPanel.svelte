@@ -11,8 +11,8 @@
 		DeleteRole,
 		RenameRole,
 		DuplicateRole
-	} from '$lib/wailsjs/go/role/Role';
-	import type { generated } from '$lib/wailsjs/go/models';
+	} from '$lib/bindings/selectDb/internal/role/role';
+	import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 	import ConfirmDeleteRoleModal from './ConfirmDeleteRoleModal.svelte';
 	import CreateRoleModal from './CreateRoleModal.svelte';
 	import RenameRoleModal from './RenameRoleModal.svelte';
@@ -28,7 +28,7 @@
 	import FloatingBox from '$lib/system/FloatingBox/FloatingBox.svelte';
 	import Menu from '$lib/system/Menu/Menu.svelte';
 	import Portal from '$lib/system/Portal/Portal.svelte';
-	import { EventsOn, EventsOff } from '$lib/wailsjs/runtime/runtime';
+	import { EventsOn, EventsOff } from '$lib/wails/events';
 
 	const saved = getActiveTab()?.settings?.roles;
 

@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 
-import type { graph } from '$lib/wailsjs/go/models';
-import { Rename } from '$lib/wailsjs/go/fs_provider/FSProvider';
+import type * as graph from '$lib/wails/graph';
+import { Rename } from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
@@ -128,9 +128,9 @@ export const createDropHandler = (ctx: 'fs' | 'git' | 'search') => {
 		try {
 			// Get root data for finding items
 			const workspace = get(workspaceGraphStore);
-			const rootFiles = workspace?.folders[0]?.files || [];
-			const rootFolders = workspace?.folders[0]?.folders || [];
-			const rootDatabases = workspace?.folders[0]?.db_instances || [];
+			const rootFiles = (workspace?.folders[0]?.files ?? []);
+			const rootFolders = (workspace?.folders[0]?.folders ?? []);
+			const rootDatabases = (workspace?.folders[0]?.db_instances ?? []);
 
 			for (const id of draggedIds) {
 				const item = findItemById(id, rootFiles, rootFolders, rootDatabases);

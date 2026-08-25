@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 const ITEM_HEIGHT = 30;
 const OVERSCAN = 50;
@@ -104,7 +104,7 @@ export function buildVisibilityIndex(
 			flatIds.push(db.id);
 
 			if (expandedIds.get(db.id)) {
-				walk(db.folders ?? [], db.files ?? [], [], visibleChildren(db.id, db.children ?? []));
+				walk(db.folders, db.files, [], visibleChildren(db.id, db.children));
 			}
 
 			recordRange(db.id, myIndex + 1);
@@ -115,7 +115,7 @@ export function buildVisibilityIndex(
 			flatIds.push(folder.id);
 
 			if (expandedIds.get(folder.id)) {
-				walk(folder.folders ?? [], folder.files ?? [], folder.db_instances ?? [], []);
+				walk(folder.folders, folder.files, folder.db_instances, []);
 			}
 
 			recordRange(folder.id, myIndex + 1);

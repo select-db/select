@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import * as dbc from '$lib/wailsjs/go/db_client/DbClient';
-	import { db_client } from '$lib/wailsjs/go/models';
-	import * as graphApi from '$lib/wailsjs/go/graph/Graph';
+	import * as dbc from '$lib/bindings/selectDb/internal/db_client/dbclient';
+	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
+	import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 	import Button from '$lib/system/Button/Button.svelte';
 	import SegmentedControl from '$lib/system/SegmentedControl/SegmentedControl.svelte';
 

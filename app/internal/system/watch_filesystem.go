@@ -140,7 +140,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 
 			if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove) != 0 {
 				s.handleFSEvent(event, user.ID, fsCtx)
-				utils.DebouncedEventsEmit(s.ctx, "gitDetailedStatusChanged", 200*time.Millisecond, nil)
+				utils.DebouncedEventsEmit("gitDetailedStatusChanged", 200*time.Millisecond, nil)
 			}
 		case <-watcher.Errors:
 			// @todo handle error
@@ -161,7 +161,7 @@ func (s *System) rebuildGraphAndEmit() {
 	if err != nil {
 		return
 	}
-	utils.DebouncedEventsEmit(s.ctx, "workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
 }
 
 // LoadAllDatabaseSchemas runs QuerySchema for each workspace DB instance (same as after other graph rebuilds).
@@ -281,7 +281,7 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 		}
 	}
 
-	utils.DebouncedEventsEmit(s.ctx, "workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
 }
 
 // Emits themeUpdated when the per-user .theme file changes.
@@ -293,7 +293,7 @@ func (s *System) handleThemeFileEvent(event fsnotify.Event, ctx *graph.Workspace
 	if err != nil {
 		themeVars = graph.LoadDefaultTheme()
 	}
-	utils.DebouncedEventsEmit(s.ctx, "themeUpdated", 100*time.Millisecond, themeVars)
+	utils.DebouncedEventsEmit("themeUpdated", 100*time.Millisecond, themeVars)
 }
 
 // Emits configUpdated when the per-user .config file changes. Always sends the
@@ -304,7 +304,7 @@ func (s *System) handleConfigFileEvent(event fsnotify.Event, ctx *graph.Workspac
 	if err != nil {
 		return
 	}
-	utils.DebouncedEventsEmit(s.ctx, "configUpdated", 100*time.Millisecond, configResponse)
+	utils.DebouncedEventsEmit("configUpdated", 100*time.Millisecond, configResponse)
 }
 
 func (s *System) handleLintFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS) {
@@ -315,7 +315,7 @@ func (s *System) handleLintFileEvent(event fsnotify.Event, ctx *graph.WorkspaceF
 	if err != nil {
 		return
 	}
-	utils.DebouncedEventsEmit(s.ctx, "lintUpdated", 100*time.Millisecond, lintConfig)
+	utils.DebouncedEventsEmit("lintUpdated", 100*time.Millisecond, lintConfig)
 }
 
 // Emits a file update mutation when a .metadata.json sidecar changes.

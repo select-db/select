@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
 		databases: graph.DBInstanceNode[];
@@ -16,7 +16,7 @@
 	<p class="scope-heading">Search in</p>
 	<div class="scopes scrollable">
 		{#each databases as db (db.id)}
-			{@const schemas = (db.children ?? []).filter((c) => c.type === 'schema')}
+			{@const schemas = db.children.filter((c) => c.type === 'schema')}
 			<div class="db-block">
 				<div class="scope-row">
 					<Checkbox

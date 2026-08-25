@@ -3,8 +3,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import * as monaco from 'monaco-editor';
 
-	import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-	import { GetOSPathFromURI } from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import { EventsOn } from '$lib/wails/events';
+	import { GetOSPathFromURI } from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 	import {
 		updateTab,
@@ -15,7 +15,6 @@
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { syncCurrentFileFromEditor } from '$lib/components/views/Chat/utils/currentFile';
 	import { setContext } from '$lib/stores/keybindingsContextStore';
-	import { zoomStore } from '$lib/stores/zoomStore';
 	import { registerCommand, unregisterCommand } from '$lib/stores/commandRegistry';
 	import { debounce } from '$lib/utils/debounce';
 	import { format as formatSQL } from './utils/format';
@@ -426,28 +425,6 @@
 		}
 	});
 
-	// Monaco's mouse->text hit math ignores ancestor CSS `zoom`.
-	const BASE_FONT_SIZE = 12;
-	const BASE_LINE_HEIGHT = 18;
-	$effect(() => {
-		const z = $zoomStore;
-		container?.style.setProperty('--editor-zoom', String(z));
-		const opts: monaco.editor.IEditorOptions = {
-			fontSize: BASE_FONT_SIZE * z,
-			lineHeight: Math.round(BASE_LINE_HEIGHT * z)
-		};
-		editor?.updateOptions(opts);
-		if (diffEditor) {
-			diffEditor.getOriginalEditor().updateOptions(opts);
-			diffEditor.getModifiedEditor().updateOptions(opts);
-		}
-		const raf = requestAnimationFrame(() => {
-			editor?.layout();
-			diffEditor?.layout();
-		});
-		return () => cancelAnimationFrame(raf);
-	});
-
 	const isFocused = $derived($activeGroupStore?.activeTabId === tab.id);
 	// Detached editors (Settings theme/config) are never the active tab of a
 	// layout group, so fall back to live editor focus to own keybinding commands.
@@ -682,8 +659,7 @@
 	}
 
 	.editorScale {
-		width: calc(100% * var(--editor-zoom, 1));
-		height: calc(100% * var(--editor-zoom, 1));
-		zoom: calc(1 / var(--editor-zoom, 1));
+		width: 100%;
+		height: 100%;
 	}
 </style>

@@ -1,4 +1,4 @@
-import { EventsOn } from '$lib/wailsjs/runtime/runtime';
+import { EventsOn } from '$lib/wails/events';
 import { get, writable } from 'svelte/store';
 
 export const databaseAvailabilityStore = writable<Set<string>>(new Set());

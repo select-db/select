@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Tab } from '$lib/components/Layout/layoutStore';
-	import { GetDefaultUserConfigContent } from '$lib/wailsjs/go/system/System';
+	import { GetDefaultUserConfigContent } from '$lib/bindings/selectDb/internal/system/system';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import BaseFileView from './BaseFileView.svelte';
 	import ConfigFileHeader from './ConfigFileHeader.svelte';

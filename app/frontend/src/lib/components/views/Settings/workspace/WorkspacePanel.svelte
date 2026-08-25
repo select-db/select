@@ -7,10 +7,13 @@
 	import { notify } from '$lib/system/Notifications/notificationsStore';
 	import { AlertType } from '$lib/system/Alert/types';
 	import { tryCatch } from '$lib/utils/tryCatch';
-	import { UpdateName, DeleteWorkspace } from '$lib/wailsjs/go/workspace/Workspace';
-	import { Logout, UpdateWorkspaceExecutionLimits } from '$lib/wailsjs/go/system/System';
+	import { UpdateName, DeleteWorkspace } from '$lib/bindings/selectDb/internal/workspace/workspace';
+	import {
+		Logout,
+		UpdateWorkspaceExecutionLimits
+	} from '$lib/bindings/selectDb/internal/system/system';
 	import { get } from 'svelte/store';
-	import { graph } from '$lib/wailsjs/go/models';
+	import * as graph from '$lib/wails/graph';
 	import ConfirmDeleteWorkspaceModal from './ConfirmDeleteWorkspaceModal.svelte';
 
 	let name = $state('');

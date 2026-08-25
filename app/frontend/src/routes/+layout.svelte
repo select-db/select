@@ -11,7 +11,10 @@
 		gitWorkspaceStatusStore,
 		gitFileStatusStore
 	} from '$lib/components/views/Git/gitStore';
-	import { StartFileWatcher, StartDatabaseWatcher } from '$lib/wailsjs/go/system/System';
+	import {
+		StartFileWatcher,
+		StartDatabaseWatcher
+	} from '$lib/bindings/selectDb/internal/system/system';
 
 	import Leftbar from '$lib/components/Leftbar/Leftbar.svelte';
 	import PageLogin from '$lib/components/PageLogin/PageLogin.svelte';
@@ -26,14 +29,14 @@
 	import { lintVersionStore } from '$lib/stores/lintStore';
 	import '$lib/utils/query/queryStream.svelte';
 	import { setContext } from '$lib/stores/keybindingsContextStore';
-	import { zoomStore } from '$lib/stores/zoomStore';
 	import KeybindingsManager from '$lib/components/KeybindingsManager.svelte';
+	import { initZoom } from '$lib/wails/zoom';
 
 	import { setupSessionWall, teardownSessionWall, sessionCheckingStore } from './sessionWall';
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import { initLayoutPersistence } from '$lib/components/Layout/layoutPersistence';
-	import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-	import { CheckVersion } from '$lib/wailsjs/go/updater/Updater';
+	import { EventsOn } from '$lib/wails/events';
+	import { CheckVersion } from '$lib/bindings/selectDb/internal/updater/updater';
 	import { updateStore } from '$lib/stores/updateStore';
 	import { notifyError } from '$lib/system/Notifications/notificationsStore';
 	import UpdateOverlay from '$lib/components/UpdateOverlay/UpdateOverlay.svelte';
@@ -59,6 +62,7 @@
 	);
 
 	onMount(() => {
+		void initZoom();
 		setupSessionWall();
 		initTheme();
 		teardownLayoutPersistence = initLayoutPersistence();
@@ -82,7 +86,6 @@
 
 	$: setContext('leftPanelVisible', $isLeftbarOpened);
 	$: setContext('rightPanelVisible', $isRightbarOpened);
-	$: document.documentElement.style.zoom = String($zoomStore);
 </script>
 
 <div class="wrapper">

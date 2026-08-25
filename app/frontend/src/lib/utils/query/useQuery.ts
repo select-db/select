@@ -1,7 +1,9 @@
 import { get } from 'svelte/store';
 
-import { Query, Explain, Plan, CancelQuery, StartQuery } from '$lib/wailsjs/go/db_client/DbClient';
-import type { db_client, graph } from '$lib/wailsjs/go/models';
+import { CancelQuery, StartQuery } from '$lib/bindings/selectDb/internal/db_client/dbclient';
+import { Explain, Plan, Query } from '$lib/wails/graph';
+import type * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
+import type * as graph from '$lib/wails/graph';
 
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
 

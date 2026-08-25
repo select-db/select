@@ -1,5 +1,5 @@
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 export const writeFolder = async (uri: string) => {
 	await must(

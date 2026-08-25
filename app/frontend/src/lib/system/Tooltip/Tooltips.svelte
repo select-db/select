@@ -16,7 +16,7 @@
 	{#key tooltip.id}
 		<!-- Placement (including flipping to the opposite side when the preferred one
 		     is too tight) is FloatingBox's job: it is the one that knows the box's
-		     size, the zoom and the screen margins. passthrough keeps the tooltip from
+		     size and the screen margins. passthrough keeps the tooltip from
 		     ever swallowing a click meant for the element it describes. -->
 		<FloatingBox
 			anchor={tooltip.anchor}

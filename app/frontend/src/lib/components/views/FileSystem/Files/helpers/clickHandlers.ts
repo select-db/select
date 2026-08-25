@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { get } from 'svelte/store';
 import {
 	setItemSelection,
@@ -96,7 +96,7 @@ export const createFileClickHandler = (
 		if (file.name === 'schema.sql' && file.folder_id) {
 			const workspace = get(workspaceGraphStore);
 			// Find database whose URI matches the file's folder_id
-			const database = workspace?.db_instances.find((db) => db.uri === file.folder_id);
+			const database = (workspace?.db_instances ?? []).find((db) => db.uri === file.folder_id);
 			if (database) {
 				setItemSelection([file.id]);
 				await navigateToSchema(database.id);
@@ -237,8 +237,18 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
 	if (!root) return [];
 
 	// Find both items with their parent information
-	const fromResult = findItemWithParent(fromId, root.files, root.folders, root.db_instances);
-	const toResult = findItemWithParent(toId, root.files, root.folders, root.db_instances);
+	const fromResult = findItemWithParent(
+		fromId,
+		root.files,
+		root.folders,
+		root.db_instances
+	);
+	const toResult = findItemWithParent(
+		toId,
+		root.files,
+		root.folders,
+		root.db_instances
+	);
 
 	if (!fromResult || !toResult) return [];
 

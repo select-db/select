@@ -1,6 +1,6 @@
 import { runExplain, runPlan, runQuery } from '$lib/utils/query/useQuery';
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 export const hasDatabase = (file: graph.FileNode | null): boolean => {
 	return (file?.databases?.length ?? 0) > 0;

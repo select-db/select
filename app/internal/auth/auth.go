@@ -8,7 +8,6 @@ import (
 )
 
 type GithubAuth struct {
-	ctx                          context.Context
 	Queries                      *generated.Queries
 	CancelAccessTokenPollingFunc context.CancelFunc
 	WorkspaceService             *workspace.Workspace
@@ -21,8 +20,4 @@ func New(Queries *generated.Queries, WorkspaceService *workspace.Workspace, Sync
 		WorkspaceService: WorkspaceService,
 		Syncer:           Syncer,
 	}
-}
-
-func (ga *GithubAuth) SetContext(ctx context.Context) {
-	ga.ctx = ctx
 }
