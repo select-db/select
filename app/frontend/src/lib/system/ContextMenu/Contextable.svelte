@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	import ContextMenu from './ContextMenu.svelte';
 	import type { ContextMenuOption } from './types';
 
@@ -10,7 +12,8 @@
 		style,
 		anchor = 'cursor',
 		on = 'context',
-		menuWidth
+		menuWidth,
+		children
 	}: {
 		options: ContextMenuOption[] | (() => ContextMenuOption[]);
 		direction: 'right' | 'left';
@@ -20,6 +23,7 @@
 		anchor?: 'cursor' | 'child';
 		on?: 'click' | 'context';
 		menuWidth?: number;
+		children?: Snippet;
 	} = $props();
 
 	let isOpen = $state(false);
@@ -80,7 +84,7 @@
 	data-id={metadataId}
 	class="no-scrollbar"
 >
-	<slot />
+	{@render children?.()}
 
 	{#if isOpen}
 		<ContextMenu

@@ -29,7 +29,7 @@
 		onClose
 	}: Props = $props();
 
-	const language = languageFor(dataType);
+	const language = $derived(languageFor(dataType));
 	let jsonError = $state<string | null>(null);
 
 	let container: HTMLDivElement;

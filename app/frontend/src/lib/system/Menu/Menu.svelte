@@ -38,7 +38,7 @@
 	let mouseInteractionEnabled = $state(false);
 	let mouseMoveHandler: ((event: MouseEvent) => void) | null = null;
 	let containerRef: HTMLDivElement;
-	let searchInputWrapperRef: HTMLDivElement | undefined;
+	let searchInputWrapperRef = $state<HTMLDivElement | undefined>();
 	const sortedOptions = $derived.by(() => {
 		const hasGroups = options.some((opt) => opt.type === 'group-label' || opt.type === 'divider');
 		if (sortOptions && !hasGroups) {

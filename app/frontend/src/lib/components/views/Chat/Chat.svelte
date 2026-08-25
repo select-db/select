@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	import { createChat } from '$lib/components/views/Chat/core';
@@ -45,18 +45,23 @@
 
 	let { tab }: Props = $props();
 
-	const sessionId = tab.chat?.sessionId ?? tab.id;
+	// A chat tab keeps its session for as long as this component lives, so its
+	// stored state is read once here to seed the local state below. Everything
+	// after this point is owned by the component and pushed back to the tab.
+	const { sessionId, initialMessages, initialModel, initialInput } = untrack(() => {
+		const restoredMessages = (tab.chat?.messages ?? []).map((m) => ({
+			id: m.id ?? crypto.randomUUID(),
+			role: m.role as 'system' | 'user' | 'assistant',
+			parts: m.parts ?? []
+		})) as UIMessage[];
 
-	const restoredMessages = (tab.chat?.messages ?? []).map((m) => ({
-		id: m.id ?? crypto.randomUUID(),
-		role: m.role as 'system' | 'user' | 'assistant',
-		parts: m.parts ?? []
-	})) as UIMessage[];
-
-	const task = tab.chat?.task;
-	const initialMessages = [createSystemMessage(task), ...restoredMessages];
-	const initialModel = tab.chat?.selectedModel ?? DEFAULT_MODEL;
-	const initialInput = tab.chat?.inputValue ?? '';
+		return {
+			sessionId: tab.chat?.sessionId ?? tab.id,
+			initialMessages: [createSystemMessage(tab.chat?.task), ...restoredMessages],
+			initialModel: tab.chat?.selectedModel ?? DEFAULT_MODEL,
+			initialInput: tab.chat?.inputValue ?? ''
+		};
+	});
 
 	let selectedValue = $state(initialModel);
 	let inputText = $state(initialInput);
@@ -100,11 +105,14 @@
 	});
 
 	let messagesEl: HTMLDivElement | undefined;
-	const scroll = useChatScroll(tab, {
-		getScrollEl: () => messagesEl,
-		getIsStreaming: () => lastMessageStreaming,
-		getMessages: () => chat.messages
-	});
+	const scroll = useChatScroll(
+		untrack(() => tab),
+		{
+			getScrollEl: () => messagesEl,
+			getIsStreaming: () => lastMessageStreaming,
+			getMessages: () => chat.messages
+		}
+	);
 
 	onMount(() => {
 		scroll.restore();

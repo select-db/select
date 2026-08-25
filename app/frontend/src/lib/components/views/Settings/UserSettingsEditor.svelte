@@ -1,10 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import {
-		getActiveTab,
-		updateSettingsTab,
-		type Tab
-	} from '$lib/components/Layout/layoutStore';
+	import { onMount, untrack } from 'svelte';
+	import { getActiveTab, updateSettingsTab, type Tab } from '$lib/components/Layout/layoutStore';
 	import type * as graph from '$lib/wails/graph';
 	import { EnsureUserConfigDefaults } from '$lib/bindings/selectDb/internal/system/system';
 	import { tryCatch } from '$lib/utils/tryCatch';
@@ -24,9 +20,9 @@
 	const fileName = $derived(kind === 'theme' ? '.theme' : '.config');
 	const uri = $derived(`selectdb://user/${fileName}`);
 
-	// We snapshot the last-saved view state on init (to restore after the remount) 
+	// We snapshot the last-saved view state on init (to restore after the remount)
 	// and push updates back into the settings tab as it moves.
-	const savedViewState = getActiveTab()?.settings?.editors?.[kind]?.viewState;
+	const savedViewState = untrack(() => getActiveTab()?.settings?.editors?.[kind]?.viewState);
 
 	function persistViewState(viewState: unknown) {
 		const editors = getActiveTab()?.settings?.editors;

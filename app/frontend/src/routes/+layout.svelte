@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, type Snippet } from 'svelte';
 
 	import Modal from '$lib/system/Modal/Modal.svelte';
 	import Notifications from '$lib/system/Notifications/Notifications.svelte';
@@ -42,6 +42,11 @@
 	import UpdateOverlay from '$lib/components/UpdateOverlay/UpdateOverlay.svelte';
 	import UpdateToast from '$lib/components/UpdateOverlay/UpdateToast.svelte';
 
+	// SvelteKit hands every layout its page's content. Ours is deliberately
+	// empty — see +page.svelte — but it is rendered where a page would go, so
+	// nothing is silently dropped.
+	let { children }: { children?: Snippet } = $props();
+
 	let teardownLayoutPersistence: (() => void) | undefined;
 
 	EventsOn(
@@ -74,18 +79,24 @@
 		teardownLayoutPersistence?.();
 	});
 
+	// Runes, because this component takes props now and the two modes cannot be
+	// mixed. These ran on init before and run after mount now, which neither the
+	// watchers nor the keybinding context care about.
 	let watchedWorkspaceId: string | undefined;
-	$: if ($workspaceGraphStore && $workspaceGraphStore.id !== watchedWorkspaceId) {
-		watchedWorkspaceId = $workspaceGraphStore.id;
+	$effect(() => {
+		const workspace = $workspaceGraphStore;
+		if (!workspace || workspace.id === watchedWorkspaceId) return;
+
+		watchedWorkspaceId = workspace.id;
 		gitWorkspaceStatusStore.set(null);
 		gitFileStatusStore.set(null);
 		loadGitStatus();
-		StartFileWatcher($workspaceGraphStore.id);
+		StartFileWatcher(workspace.id);
 		StartDatabaseWatcher();
-	}
+	});
 
-	$: setContext('leftPanelVisible', $isLeftbarOpened);
-	$: setContext('rightPanelVisible', $isRightbarOpened);
+	$effect(() => setContext('leftPanelVisible', $isLeftbarOpened));
+	$effect(() => setContext('rightPanelVisible', $isRightbarOpened));
 </script>
 
 <div class="wrapper">
@@ -96,6 +107,7 @@
 			{#key `${$themeVersionStore}-${$configVersionStore}-${$lintVersionStore}`}
 				<Leftbar />
 				<main class:left-bar-closed={!$isLeftbarOpened} class:right-bar-closed={!$isRightbarOpened}>
+					{@render children?.()}
 					<div class="drag-spacer" style="--wails-draggable:drag"></div>
 					<EditorLayout node={$layoutStore.root} />
 				</main>

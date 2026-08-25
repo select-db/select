@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { LookupForeignKey } from '$lib/wails/graph';
 	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
@@ -41,7 +42,8 @@
 	const NULL_VALUE = 'NULL';
 	const isNull = (v: string) => v === '' || v === NULL_VALUE;
 
-	let selected = $state<string[]>([...selectedColumns]);
+	// Seeded once: the picker owns the selection while it is open.
+	let selected = $state<string[]>(untrack(() => [...selectedColumns]));
 	let searchQuery = $state('');
 	let columnFilter = $state('');
 	let rows = $state<unknown[][]>([]);

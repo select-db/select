@@ -42,7 +42,7 @@
 	);
 
 	// When anchoring to the cursor, apply an offset to position the menu
-	const OFFSET = anchor === 'cursor' ? (direction === 'left' ? 20 : -20) : 0;
+	const OFFSET = $derived(anchor === 'cursor' ? (direction === 'left' ? 20 : -20) : 0);
 </script>
 
 <Portal>

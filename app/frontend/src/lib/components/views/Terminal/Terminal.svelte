@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { Terminal as XTerm } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -16,8 +16,11 @@
 	};
 
 	let { tab }: Props = $props();
-	const sessionId = tab.terminal!.sessionId;
-	let currentShell = $state(tab.terminal!.shell);
+	// A tab keeps the same terminal session for its lifetime, so these are read
+	// once on purpose: the session id never changes, and the shell is owned by
+	// this component from here on.
+	const sessionId = untrack(() => tab.terminal!.sessionId);
+	let currentShell = $state(untrack(() => tab.terminal!.shell));
 
 	let containerEl: HTMLDivElement;
 	let xterm: XTerm | null = null;

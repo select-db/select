@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
 	import ModalBody from '$lib/system/Modal/ModalBody.svelte';
 	import ModalFooter from '$lib/system/Modal/ModalFooter.svelte';
@@ -12,7 +13,8 @@
 	};
 
 	let { currentName, onClose, onRename }: Props = $props();
-	let name = $state(currentName);
+	// Seeded once: the field owns the name while the modal is open.
+	let name = $state(untrack(() => currentName));
 	let saving = $state(false);
 
 	const handleRename = async () => {

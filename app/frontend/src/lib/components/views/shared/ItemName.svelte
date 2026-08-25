@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { clickOutside } from '$lib/utils/clickOutside';
 	import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
@@ -18,8 +19,9 @@
 		type?: string;
 	} = $props();
 
-	let initialName = $state(name);
-	let localName = $state(name);
+	// Seeded once; the effect below re-syncs both when the prop changes.
+	let initialName = $state(untrack(() => name));
+	let localName = $state(untrack(() => name));
 
 	$effect(() => {
 		initialName = name;

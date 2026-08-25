@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
 	import ModalBody from '$lib/system/Modal/ModalBody.svelte';
 	import ModalFooter from '$lib/system/Modal/ModalFooter.svelte';
@@ -32,11 +32,15 @@
 
 	let formEl = $state<HTMLFormElement | undefined>();
 
+	// Seeded once: the form owns these from here on, and re-deriving them from
+	// the props would discard what the user has typed.
 	let values = $state<Record<string, string>>(
-		Object.fromEntries(vars.map((name) => [name, initial[name] ?? '']))
+		untrack(() => Object.fromEntries(vars.map((name) => [name, initial[name] ?? ''])))
 	);
 	let types = $state<Record<string, VarType>>(
-		Object.fromEntries(vars.map((name) => [name, (initialTypes[name] as VarType) ?? 'text']))
+		untrack(() =>
+			Object.fromEntries(vars.map((name) => [name, (initialTypes[name] as VarType) ?? 'text']))
+		)
 	);
 
 	// Notify parent on every change so values can be persisted between modal open/close.
