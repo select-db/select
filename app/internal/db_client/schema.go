@@ -41,9 +41,9 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 		schemaPath := dbName + " / " + schema.Name
 
 		// Convert all data to graph nodes for this schema
-		dbIndexNodes := convertIndexesToNodes(schema.Indexes, schemaID, schemaPath)
-		dbTriggerNodes := convertTriggersToNodes(schema.Triggers, schemaID, schemaPath)
-		dbTableNodes, err := convertTablesToNodes(schema.Tables, schemaID, schemaPath, schema.Stats, dbIndexNodes, dbTriggerNodes)
+		dbIndexNodes, indexesByTable := convertIndexesToNodes(schema.Indexes, schemaID, schemaPath)
+		dbTriggerNodes, triggersByTable := convertTriggersToNodes(schema.Triggers, schemaID, schemaPath)
+		dbTableNodes, err := convertTablesToNodes(schema.Tables, schemaID, schemaPath, schema.Stats, indexesByTable, triggersByTable)
 		if err != nil {
 			return err
 		}
@@ -178,9 +178,13 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 	return nil
 }
 
-// convertIndexesToNodes converts core.IndexInfo to graph nodes
-func convertIndexesToNodes(indexes []core.IndexInfo, dbInstanceID string, schemaPath string) []*graph.DBInstanceItemNode {
+// convertIndexesToNodes converts core.IndexInfo to graph nodes. It returns the
+// flat list (used for the schema-level Indexes section) and the same nodes
+// grouped by owning table name, so callers never have to recover the table from
+// the node ID.
+func convertIndexesToNodes(indexes []core.IndexInfo, dbInstanceID string, schemaPath string) ([]*graph.DBInstanceItemNode, map[string][]*graph.DBInstanceItemNode) {
 	var indexNodes []*graph.DBInstanceItemNode
+	byTable := make(map[string][]*graph.DBInstanceItemNode)
 
 	for _, idx := range indexes {
 		indexPath := schemaPath + " / " + idx.TableName + " / " + idx.Name
@@ -216,14 +220,18 @@ func convertIndexesToNodes(indexes []core.IndexInfo, dbInstanceID string, schema
 		}
 
 		indexNodes = append(indexNodes, indexNode)
+		byTable[idx.TableName] = append(byTable[idx.TableName], indexNode)
 	}
 
-	return indexNodes
+	return indexNodes, byTable
 }
 
-// convertTriggersToNodes converts core.TriggerInfo to graph nodes
-func convertTriggersToNodes(triggers []core.TriggerInfo, dbInstanceID string, schemaPath string) []*graph.DBInstanceItemNode {
+// convertTriggersToNodes converts core.TriggerInfo to graph nodes. Like
+// convertIndexesToNodes it returns both the flat list and a grouping by owning
+// table name.
+func convertTriggersToNodes(triggers []core.TriggerInfo, dbInstanceID string, schemaPath string) ([]*graph.DBInstanceItemNode, map[string][]*graph.DBInstanceItemNode) {
 	var triggerNodes []*graph.DBInstanceItemNode
+	byTable := make(map[string][]*graph.DBInstanceItemNode)
 
 	for _, trigger := range triggers {
 		triggerID := fmt.Sprintf("%s:table:%s:trigger:%s", dbInstanceID, trigger.TableName, trigger.Name)
@@ -241,9 +249,10 @@ func convertTriggersToNodes(triggers []core.TriggerInfo, dbInstanceID string, sc
 		}
 
 		triggerNodes = append(triggerNodes, triggerNode)
+		byTable[trigger.TableName] = append(byTable[trigger.TableName], triggerNode)
 	}
 
-	return triggerNodes
+	return triggerNodes, byTable
 }
 
 // columnMetadataFromCore builds the column metadata map matching the frontend Zod column schema:
@@ -279,8 +288,8 @@ func convertTablesToNodes(
 	dbID string,
 	schemaPath string,
 	stats core.TableStats,
-	indexes []*graph.DBInstanceItemNode,
-	triggers []*graph.DBInstanceItemNode,
+	indexesByTable map[string][]*graph.DBInstanceItemNode,
+	triggersByTable map[string][]*graph.DBInstanceItemNode,
 ) ([]*graph.DBInstanceItemNode, error) {
 	var tableNodes []*graph.DBInstanceItemNode
 
@@ -292,8 +301,8 @@ func convertTablesToNodes(
 			stat = stats[table.Name]
 		}
 
-		// Filter indexes for this table and build per-column index metadata
-		indexGroup := filterByPrefix(indexes, objectID)
+		// Look up this table's indexes and build per-column index metadata
+		indexGroup := indexesByTable[table.Name]
 		indexedColumns := make(map[string]bool)
 		indexesByColumn := make(map[string][]*graph.DBInstanceItemNode)
 		for _, idx := range indexGroup {
@@ -338,8 +347,8 @@ func convertTablesToNodes(
 			Children: columnNodes,
 		}
 
-		// Filter triggers for this table (indexGroup already computed above)
-		triggersGroup := filterByPrefix(triggers, objectID)
+		// Look up this table's triggers (indexGroup already computed above)
+		triggersGroup := triggersByTable[table.Name]
 
 		indexesNode := &graph.DBInstanceItemNode{
 			ID:       fmt.Sprintf("%s:indexes", objectID),
@@ -515,17 +524,6 @@ func convertFunctionsToNodes(funcs []core.Function, schemaID, schemaPath string)
 		})
 	}
 	return nodes
-}
-
-// filterByPrefix filters items by ID prefix
-func filterByPrefix(items []*graph.DBInstanceItemNode, prefix string) []*graph.DBInstanceItemNode {
-	filtered := make([]*graph.DBInstanceItemNode, 0, len(items))
-	for _, item := range items {
-		if strings.HasPrefix(item.ID, prefix) {
-			filtered = append(filtered, item)
-		}
-	}
-	return filtered
 }
 
 func countBadge[T any](items []T) []string {
