@@ -1,7 +1,7 @@
 import * as monaco from 'monaco-editor';
 import { tryCatch } from '$lib/utils/tryCatch';
-import * as graphApi from '$lib/wailsjs/go/graph/Graph';
-import type { graph } from '$lib/wailsjs/go/models';
+import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
+import type * as graph from '$lib/wails/graph';
 
 export type VariableCompletionOptions = {
 	/** When true, suggest SQL files from the same folder as $name. Only enable in SQL file context. */

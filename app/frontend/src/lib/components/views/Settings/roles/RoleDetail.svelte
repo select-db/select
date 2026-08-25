@@ -5,11 +5,15 @@
 	import Input from '$lib/system/Input/Input.svelte';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
-	import { ListPermissions, AddPermission, RemovePermission } from '$lib/wailsjs/go/role/Role';
-	import { EventsOn, EventsOff } from '$lib/wailsjs/runtime/runtime';
+	import {
+		ListPermissions,
+		AddPermission,
+		RemovePermission
+	} from '$lib/bindings/selectDb/internal/role/role';
+	import { EventsOn, EventsOff } from '$lib/wails/events';
 	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
 	import type { Component } from 'svelte';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import { debounce } from '$lib/utils/debounce';
 	import {
 		resolve,
@@ -74,23 +78,20 @@
 	let expanded = new SvelteSet<string>(savedState?.expandedKeys ?? []);
 
 	function dbSchemas(db: graph.DBInstanceNode) {
-		return (db.children ?? []).filter(Boolean).filter((n) => n.type === 'schema');
+		return db.children.filter((n) => n.type === 'schema');
 	}
 
 	function schemaTables(schema: graph.DBInstanceItemNode) {
 		return schema.children
 			.filter((n) => n.type === 'tables' || n.type === 'views')
-			.flatMap((g) => g.children)
-			.filter(Boolean);
+			.flatMap((g) => g.children);
 	}
 
 	function tableColumns(table: graph.DBInstanceItemNode) {
-		const direct = (table.children ?? []).filter(Boolean);
+		const direct = table.children;
 		// columns may be direct children (type==='column') or nested under a 'columns' group node
 		const group = direct.find((n) => n.type === 'columns');
-		return group
-			? (group.children ?? []).filter(Boolean)
-			: direct.filter((n) => n.type === 'column');
+		return group ? group.children : direct.filter((n) => n.type === 'column');
 	}
 
 	let indeterminateMap = $derived.by(() => {
@@ -169,10 +170,10 @@
 		const row = await must(
 			tryCatch(AddPermission, {
 				role_id: roleId,
-				db_instance_id: db || undefined,
-				schema_name: schema || undefined,
-				table_name: table || undefined,
-				column_name: col || undefined,
+				db_instance_id: db || null,
+				schema_name: schema || null,
+				table_name: table || null,
+				column_name: col || null,
 				action,
 				effect
 			})
@@ -328,7 +329,7 @@
 		}
 	}
 
-	let allDbInstances = $derived($workspaceGraphStore?.db_instances ?? []);
+	let allDbInstances = $derived(($workspaceGraphStore?.db_instances ?? []));
 	let dbInstances = $derived(
 		!visibleIds ? allDbInstances : allDbInstances.filter((db) => visibleIds!.has(db.id))
 	);

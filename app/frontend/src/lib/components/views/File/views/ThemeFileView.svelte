@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Tab } from '$lib/components/Layout/layoutStore';
-	import { GetDefaultThemeContent } from '$lib/wailsjs/go/system/System';
+	import { GetDefaultThemeContent } from '$lib/bindings/selectDb/internal/system/system';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import BaseFileView from './BaseFileView.svelte';
 	import ThemeFileHeader from './ThemeFileHeader.svelte';

@@ -40,7 +40,7 @@ export default ts.config(
 		ignores: [
 			'**/*.svelte.ts',
 			// Wails-generated bindings; do not lint (namespaces, `any`, etc.)
-			'src/lib/wailsjs/**'
+			'src/lib/bindings/**'
 		]
 	}
 );

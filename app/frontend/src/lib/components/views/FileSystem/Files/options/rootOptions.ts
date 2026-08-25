@@ -1,5 +1,5 @@
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import { expandItem, renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
@@ -45,7 +45,7 @@ export const createFolderInFolder = async (folder: FolderLike) => {
 };
 
 export const createFileInFolder = async (folder: FolderLike) => {
-	const name = findUniqueFileName(folder.files ?? []);
+	const name = findUniqueFileName(folder.files);
 	const fileUri = `${folder.uri}/${name}`;
 	await writeFile(fileUri);
 	navigateToFile({

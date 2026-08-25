@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 const (
@@ -70,24 +70,20 @@ func (dbc *DbClient) Export(params ExportParams) error {
 		filename = filename + ext
 	}
 
-	var filters []runtime.FileFilter
+	var filters []desktop.FileFilter
 	if params.Format == FormatJSON {
-		filters = []runtime.FileFilter{
+		filters = []desktop.FileFilter{
 			{DisplayName: "JSON (*.json)", Pattern: "*.json"},
 			{DisplayName: "All", Pattern: "*"},
 		}
 	} else {
-		filters = []runtime.FileFilter{
+		filters = []desktop.FileFilter{
 			{DisplayName: "CSV (*.csv)", Pattern: "*.csv"},
 			{DisplayName: "All", Pattern: "*"},
 		}
 	}
 
-	path, err := runtime.SaveFileDialog(dbc.ctx, runtime.SaveDialogOptions{
-		DefaultFilename: filename,
-		Title:           "Export query results",
-		Filters:         filters,
-	})
+	path, err := desktop.SaveFile("Export query results", filename, filters)
 	if err != nil {
 		return fmt.Errorf("save dialog failed: %w", err)
 	}

@@ -2,10 +2,10 @@ import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { loadSchema } from '$lib/utils/query/loadSchema';
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import DatabaseSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 import { fileSystemOptions } from './fileOptions';

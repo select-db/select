@@ -10,7 +10,7 @@ import (
 	"selectDb/internal/sqllang"
 
 	"github.com/selectDb/dialect/engine"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 // sshPassphrases holds key-file passphrases entered at runtime, keyed by the
@@ -111,11 +111,8 @@ func (dbc *DbClient) ChooseSSHKeyFile() (string, error) {
 	if home, herr := os.UserHomeDir(); herr == nil {
 		defaultDir = filepath.Join(home, ".ssh")
 	}
-	path, err := runtime.OpenFileDialog(dbc.ctx, runtime.OpenDialogOptions{
-		Title:            "Choose SSH private key",
-		DefaultDirectory: defaultDir,
-		ShowHiddenFiles:  true, // ~/.ssh and its keys are hidden
-	})
+	// ~/.ssh and its keys are hidden
+	path, err := desktop.OpenFile("Choose SSH private key", defaultDir, true)
 	if err != nil {
 		return "", fmt.Errorf("open dialog failed: %w", err)
 	}

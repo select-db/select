@@ -4,9 +4,9 @@ import { notifyError } from '$lib/system/Notifications/notificationsStore';
 import { selectedItemsStore, clearItemSelection } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { findItemById } from '../helpers/dragHelpers';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 export const batchDeleteOptions: ContextMenuOption[] = [
 	{
@@ -17,7 +17,7 @@ export const batchDeleteOptions: ContextMenuOption[] = [
 			if (!graph) return onClose?.();
 
 			for (const id of selected) {
-				const item = findItemById(id, [], graph.folders || [], graph.db_instances || []);
+				const item = findItemById(id, [], graph.folders, graph.db_instances);
 				if (item) await deleteItem(item);
 			}
 

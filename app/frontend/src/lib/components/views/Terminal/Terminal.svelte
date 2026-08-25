@@ -5,8 +5,8 @@
 	import { WebLinksAddon } from '@xterm/addon-web-links';
 	import '@xterm/xterm/css/xterm.css';
 
-	import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-	import * as TerminalBackend from '$lib/wailsjs/go/terminal/Terminal';
+	import { EventsOn } from '$lib/wails/events';
+	import * as TerminalBackend from '$lib/bindings/selectDb/internal/terminal/terminal';
 	import { type Tab, updateTab } from '$lib/components/Layout/layoutStore';
 	import { getTerminalTheme } from './terminalTheme';
 	import Header from './Header.svelte';

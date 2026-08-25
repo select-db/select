@@ -1,10 +1,10 @@
 import { get } from 'svelte/store';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-import { GetDBInstanceNodeByID } from '$lib/wailsjs/go/graph/Graph';
-import { QuerySchema } from '$lib/wailsjs/go/db_client/DbClient';
+import { GetDBInstanceNodeByID } from '$lib/wails/graph';
+import { QuerySchema } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { toToolError } from './context';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import {
 	dbInstanceToContextDb,
 	type ChatContextDatabase

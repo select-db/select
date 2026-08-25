@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import Button from '$lib/system/Button/Button.svelte';
 	import { getDbIds } from '$lib/utils/query/helpers';
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';

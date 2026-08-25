@@ -13,7 +13,7 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { loadSchema } from '$lib/utils/query/loadSchema';
 	import type { ResourceMenuOption, ResourceSearchScope } from '$lib/components/ResourceMenu/types';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import type { Component } from 'svelte';
 	import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 	import { readWorkspaceSearch, writeWorkspaceSearch } from './workspaceSearchStorage';
@@ -26,7 +26,7 @@
 
 	let { onClose }: Props = $props();
 
-	const databases = $derived($workspaceGraphStore?.db_instances ?? []);
+	const databases = $derived(($workspaceGraphStore?.db_instances ?? []));
 
 	const persisted = readWorkspaceSearch();
 	let searchQuery = $state('');
@@ -45,7 +45,7 @@
 		const dbs = databases;
 		const dbIds = dbs.map((d) => d.id);
 		const schemaIds = dbs.flatMap((db) =>
-			(db.children ?? []).filter((c) => c.type === 'schema').map((c) => c.id)
+			db.children.filter((c) => c.type === 'schema').map((c) => c.id)
 		);
 		untrack(() => {
 			dbOn = syncKeyMap(dbOn, dbIds);
@@ -64,7 +64,7 @@
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const knownSchemaIds = new Set<string>();
 		for (const db of dbs) {
-			for (const ch of db.children ?? []) {
+			for (const ch of db.children) {
 				if (ch.type === 'schema') knownSchemaIds.add(ch.id);
 			}
 		}

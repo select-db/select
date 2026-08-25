@@ -6,15 +6,16 @@
 		ListGroupRoles,
 		AttachRoleToGroup,
 		DetachRoleFromGroup
-	} from '$lib/wailsjs/go/group/Group';
-	import { ListRoles } from '$lib/wailsjs/go/role/Role';
-	import { EventsOn, EventsOff } from '$lib/wailsjs/runtime/runtime';
+	} from '$lib/bindings/selectDb/internal/group/group';
+	import { ListRoles } from '$lib/bindings/selectDb/internal/role/role';
+	import { EventsOn, EventsOff } from '$lib/wails/events';
 	import FloatingBox from '$lib/system/FloatingBox/FloatingBox.svelte';
 	import Menu from '$lib/system/Menu/Menu.svelte';
 	import Portal from '$lib/system/Portal/Portal.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
-	import type { group, generated } from '$lib/wailsjs/go/models';
+	import type * as group from '$lib/bindings/selectDb/internal/group/models';
+	import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 	import type { MenuOption } from '$lib/system/Menu/Menu.types';
 
 	type Props = { groupId: string };

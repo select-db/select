@@ -1,6 +1,6 @@
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import type { Icons } from '$lib/system/Icon/types';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 export const databaseActions = [
 	{

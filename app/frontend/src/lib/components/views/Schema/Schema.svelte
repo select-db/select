@@ -10,7 +10,7 @@
 	import type { SelectOption } from '$lib/system/Select/Select.types';
 	import DatabasePicker from '$lib/components/views/File/Header/DatabasePicker.svelte';
 	import { tryCatch } from '$lib/utils/tryCatch';
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 
 	type Props = {
@@ -26,7 +26,7 @@
 	const selectedSchemaTable = $derived(tab.schema?.selectedSchemaTable ?? '');
 
 	const dbInstance = $derived(
-		$workspaceGraphStore?.db_instances?.find((dbi) => dbi.id === databaseId)
+		($workspaceGraphStore?.db_instances ?? []).find((dbi) => dbi.id === databaseId)
 	);
 
 	const schemaFileUri = $derived(
@@ -84,7 +84,7 @@
 
 	const onDatabaseChange = (value: string | string[]) => {
 		const newDatabaseId = Array.isArray(value) ? (value[0] ?? '') : value;
-		const newDbInstance = $workspaceGraphStore?.db_instances?.find(
+		const newDbInstance = ($workspaceGraphStore?.db_instances ?? []).find(
 			(dbi) => dbi.id === newDatabaseId
 		);
 		updateTab({

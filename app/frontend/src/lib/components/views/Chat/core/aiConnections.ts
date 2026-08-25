@@ -5,7 +5,7 @@ import type { LlmTool, StreamChunk } from './llm';
 import type { SelectOptionGroup } from '$lib/system/Select/Select.types';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { get } from 'svelte/store';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 // Current, agent-suitable models per provider (tool-calling required). First entry
 // in each group is the sensible default. OpenRouter accepts any model ID string.
@@ -77,7 +77,7 @@ const PROVIDER_ENV_VARS: Record<string, string> = {
 // GetUriVariables(rootFolderId) resolves to exactly the root folder's own
 // variables (it walks up the tree, and the root has no parent), so reading the
 // store directly is equivalent — no RPC or cache needed.
-function getWorkspaceEnvVars(): Record<string, string> {
+function getWorkspaceEnvVars(): Record<string, string | undefined> {
 	const ws = get(workspaceGraphStore) as graph.WorkspaceNode | undefined;
 	return ws?.folders?.[0]?.variables ?? {};
 }

@@ -14,7 +14,7 @@
 	import { expandableItemTypes } from './expandableItemTypes';
 	import { visibleIdsStore } from '$lib/components/views/FileSystem/Files/helpers/visibilityStore';
 	import ChildVisibilityBadge from '$lib/components/views/FileSystem/Files/ChildVisibilityBadge.svelte';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type DisplayProps<T> = {
 		item: T;
@@ -99,7 +99,7 @@
 	const filterableChildren = $derived.by<{ id: string; name: string }[]>(() => {
 		if (!FILTERABLE_TYPES.has(item.type)) return [];
 		if (!('children' in item)) return [];
-		const children = item.children ?? [];
+		const children = item.children;
 		return children.map((c) => ({ id: c.id, name: c.name }));
 	});
 </script>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { expandedItemIdsStore } from '$lib/components/views/shared/sharedStore';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import { getItemIconSlot } from '$lib/components/views/shared/getIcon';
 	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
 	import { expandableItemTypes } from './expandableItemTypes';

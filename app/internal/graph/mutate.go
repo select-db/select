@@ -11,7 +11,7 @@ import (
 
 	"github.com/selectDb/toolkit"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 var nodeBuilders = map[string]func(interface{}) Node{
@@ -25,14 +25,6 @@ var nodeBuilders = map[string]func(interface{}) Node{
 		return BuildDBInstanceNode(src.(DBInstanceDTO))
 	},
 }
-
-var eventsEmit = runtime.EventsEmit
-
-// debouncedEventsEmit is a package-level indirection so tests can replace it
-// with a no-op; the production utils.DebouncedEventsEmit schedules a wails
-// runtime emit on a timer, which calls log.Fatal when invoked with a
-// non-lifecycle context (as is the case in unit tests).
-var debouncedEventsEmit = utils.DebouncedEventsEmit
 
 func (g *Graph) Mutate(ctx context.Context, commit generated.MutationCommit) error {
 	g.mu.Lock()
@@ -81,9 +73,11 @@ func (g *Graph) Mutate(ctx context.Context, commit generated.MutationCommit) err
 		return fmt.Errorf("unknown operation: %s", commit.Operation)
 	}
 
+	ensureArrays(g.WorkspaceGraph)
+
 	commit.Payload = dto
-	eventsEmit(ctx, "mutation", commit)
-	debouncedEventsEmit(ctx, "workspaceGraphUpdated", 100*time.Millisecond, g.WorkspaceGraph)
+	desktop.Emit("mutation", commit)
+	utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, g.WorkspaceGraph)
 
 	return nil
 }

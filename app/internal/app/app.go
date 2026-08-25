@@ -8,6 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/ngrok/sqlmw"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"modernc.org/sqlite"
 
 	commands "selectDb/internal/cmd/cli"
@@ -159,29 +160,27 @@ func NewApp() *App {
 	}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
-func (a *App) Startup(ctx context.Context) {
+// ServiceStartup is called by Wails when the application starts. The context
+// stays valid until shutdown, and is saved so long-running work can be tied to
+// the application's lifetime.
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 
 	a.InternalDb.Syncer.SetContext(ctx)
 	a.Syncer.SetContext(ctx)
 	a.Syncer.SwitchOrLogout = &switchOrLogoutHandler{app: a}
 	a.Syncer.EmitRolesUpdated = func() {
-		utils.DebouncedEventsEmit(a.ctx, "rolesUpdated", 100*time.Millisecond)
+		utils.DebouncedEventsEmit("rolesUpdated", 100*time.Millisecond)
 	}
 	a.Syncer.EmitWorkspaceRepoChanged = func(res git.ReconcileResult) {
-		if a.ctx == nil {
-			return
-		}
-		utils.DebouncedEventsEmit(a.ctx, "workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
-		utils.DebouncedEventsEmit(a.ctx, "workspaceRepoChanged", 100*time.Millisecond, res)
+		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
+		utils.DebouncedEventsEmit("workspaceRepoChanged", 100*time.Millisecond, res)
 	}
 	a.Workspace.PullFunc = a.Syncer.Pull
 	a.Workspace.ReloadHooks = &workspace.ReloadHooks{
 		BuildWorkspaceGraph: a.Graph.RebuildWorkspaceGraph,
 		EmitWorkspaceGraphUpdated: func() {
-			utils.DebouncedEventsEmit(a.ctx, "workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
+			utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
 		},
 		RunSwitchOrLogout: a.Syncer.RunSwitchOrLogout,
 		ReconcileGitRemote: func(workspaceID string) {
@@ -192,13 +191,10 @@ func (a *App) Startup(ctx context.Context) {
 			_, _ = a.Git.ReconcileWorkspaceRemote(workspaceID, ws.GitRemoteUrl.Ptr())
 		},
 	}
-	a.GithubAuth.SetContext(ctx)
 	a.Git.SetContext(ctx)
 	a.Search.SetContext(ctx)
 
 	a.DbClient.SetContext(ctx)
-
-	a.Terminal.SetContext(ctx)
 
 	a.System.SetContext(ctx)
 	go a.System.WatchNetworkQuality()
@@ -207,4 +203,6 @@ func (a *App) Startup(ctx context.Context) {
 	go a.History.PruneOnStartup()
 
 	a.Updater.SetContext(ctx)
+
+	return nil
 }

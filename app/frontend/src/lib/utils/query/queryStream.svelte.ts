@@ -1,5 +1,5 @@
-import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-import type { graph } from '$lib/wailsjs/go/models';
+import { EventsOn } from '$lib/wails/events';
+import type * as graph from '$lib/wails/graph';
 import { removeFromLoadingStore } from './loadingStore';
 import { recordHistory } from './historyRecorder';
 

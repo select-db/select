@@ -31,7 +31,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  WAILS_VERSION: v2.10.1
+  WAILS_VERSION: v3.0.0-beta.12
   # Minimum app version, bump when a release contains a breaking change.
   MIN_APP_VERSION: 0.0.0
 
@@ -136,11 +136,17 @@ jobs:
       # The app module embeds the frontend build output; stub it so packages compile.
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
       - run: sudo apt-get update && sudo apt-get install -y gcc
+      # The app module binds the webview through cgo, so loading its packages
+      # needs the GTK3/WebKit2GTK headers the desktop build links against.
+      - if: matrix.module == 'app'
+        run: sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: govulncheck
         working-directory: ${{ matrix.module }}
+        env:
+          BUILD_TAGS: ${{ matrix.module == 'app' && 'gtk3' || '' }}
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
       - name: semgrep (SAST)
         if: ${{ !cancelled() }}
         working-directory: ${{ matrix.module }}
@@ -215,12 +221,20 @@ jobs:
     needs: [plan]
     if: needs.plan.outputs.go-app == 'true'
     runs-on: ubuntu-latest
+    # Wails v3 binds the webview through cgo, so analysing the app module needs
+    # the GTK3/WebKit2GTK headers the desktop build links against.
+    env:
+      GOFLAGS: -tags=gtk3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgtk-3-dev libwebkit2gtk-4.1-dev
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -229,8 +243,10 @@ jobs:
       - name: Dead code check
         run: |
           go install golang.org/x/tools/cmd/deadcode@latest
+          # deadcode sets its own -tags, which overrides the one in GOFLAGS, so
+          # the cgo build tag has to be repeated here.
           # deadcode exits 0 even when it finds dead code; treat any output as failure
-          out=$(deadcode ./...)
+          out=$(deadcode -tags=gtk3 ./...)
           if [ -n "$out" ]; then
             echo "$out"
             echo "::error::Dead code detected"
@@ -297,8 +313,8 @@ jobs:
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
-      - run: sudo apt-get update && sudo apt-get install -y gcc
-      - run: go test ./internal/...
+      - run: sudo apt-get update && sudo apt-get install -y gcc libgtk-3-dev libwebkit2gtk-4.1-dev
+      - run: go test -tags gtk3 ./internal/...
         working-directory: app
 
   test-backend:
@@ -477,7 +493,7 @@ jobs:
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
@@ -494,20 +510,20 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform darwin/arm64 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-arm64.zip *.app
@@ -544,7 +560,7 @@ jobs:
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
@@ -555,26 +571,28 @@ jobs:
       - name: Build
         working-directory: app
         env:
+          # macos-latest runners are arm64; cross-compile the Intel build.
+          GOARCH: amd64
           VERSION: ${{ github.ref_name }}
           IS_PROD: ${{ startsWith(github.ref, 'refs/tags/') }}
           STAGING_VERSION: ${{ needs.version.outputs.staging }}
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform darwin/amd64 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-amd64.zip *.app
@@ -611,7 +629,7 @@ jobs:
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
@@ -631,10 +649,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -642,10 +660,10 @@ jobs:
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
           cp build/appicon-default.png build/appicon.png
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform windows/amd64 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer.exe build/bin/analyzer.exe
 
       - name: Package
@@ -694,7 +712,10 @@ jobs:
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+        # The CLI links the webview through cgo like the app does, so on Linux
+        # it needs the same gtk3 tag; without it the build reaches for the
+        # GTK4/WebKitGTK 6 headers we do not install.
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
@@ -711,10 +732,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -722,11 +743,10 @@ jobs:
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
           cp build/appicon-default.png build/appicon.png
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform linux/amd64 \
-            -tags webkit2_41 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/analyzer
           cd build/bin
           zip selectDb-linux-amd64.zip select analyzer

@@ -9,7 +9,7 @@ import {
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { settingsSections } from '$lib/components/views/Settings/sections';
 import type { ResourceMenuOption } from '$lib/components/ResourceMenu/types';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 function createQuickActionNode(type: string, name: string): graph.FileNode {
 	return {

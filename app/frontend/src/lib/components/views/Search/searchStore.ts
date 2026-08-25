@@ -1,11 +1,11 @@
 import { writable } from 'svelte/store';
 
-import { SearchWithNodes, Replace } from '$lib/wailsjs/go/search/Search';
-import type { search } from '$lib/wailsjs/go/models';
-import { EventsEmit } from '$lib/wailsjs/runtime/runtime';
+import { Replace } from '$lib/bindings/selectDb/internal/search/search';
+import { SearchWithNodes, type SearchResultWithNodes } from '$lib/wails/graph';
+import { EventsEmit } from '$lib/wails/events';
 import { expandItem } from '../shared/sharedStore';
 
-export const searchResultsStore = writable<search.SearchResultWithNodes | null>(null);
+export const searchResultsStore = writable<SearchResultWithNodes | null>(null);
 
 export interface SearchParams {
 	workspaceId: string;
@@ -26,7 +26,7 @@ export interface ReplaceParams extends SearchParams {
 export async function performSearch(params: SearchParams) {
 	const result = await SearchWithNodes(params);
 	searchResultsStore.set(result);
-	const root = result.resultFolder;
+	const root = result?.resultFolder;
 	if (!root) return result;
 	for (const folder of root.folders) expandItem(folder.id);
 	return result;
@@ -36,7 +36,7 @@ export async function performReplace(params: ReplaceParams) {
 	const result = await Replace(params);
 
 	// Notify editors that files have been modified on disk
-	if (result.modifiedFiles?.length) {
+	if (result?.modifiedFiles?.length) {
 		const fileURIs = result.modifiedFiles.map(
 			(path) => `selectdb://workspaces/${params.workspaceId}/${path}`
 		);

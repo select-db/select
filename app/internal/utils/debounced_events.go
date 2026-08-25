@@ -1,13 +1,12 @@
 package utils
 
 import (
-	"context"
 	"sync"
 	"time"
 
 	"github.com/selectDb/toolkit/debounce"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 // DebouncedEventsEmitter manages debounced event emissions
@@ -33,7 +32,7 @@ func GetDebouncedEventsEmitter() *DebouncedEventsEmitter {
 
 // Emit emits an event with debouncing based on the event name
 // Subsequent calls with the same eventName within the timeout period will be debounced
-func (e *DebouncedEventsEmitter) Emit(ctx context.Context, eventName string, timeout time.Duration, data ...interface{}) {
+func (e *DebouncedEventsEmitter) Emit(eventName string, timeout time.Duration, data ...interface{}) {
 	e.mutex.Lock()
 
 	// Get or create debouncer for this event
@@ -41,14 +40,14 @@ func (e *DebouncedEventsEmitter) Emit(ctx context.Context, eventName string, tim
 	if !exists {
 		// Create new debouncer with callback
 		newDebouncer := debounce.NewDebounce(timeout, func() {
-			runtime.EventsEmit(ctx, eventName, data...)
+			desktop.Emit(eventName, data...)
 		})
 		e.debouncers[eventName] = &newDebouncer
 		debouncer = &newDebouncer
 	} else {
 		// Update callback with new data
 		debouncer.UpdateDebounceCallback(func() {
-			runtime.EventsEmit(ctx, eventName, data...)
+			desktop.Emit(eventName, data...)
 		})
 	}
 
@@ -59,12 +58,13 @@ func (e *DebouncedEventsEmitter) Emit(ctx context.Context, eventName string, tim
 }
 
 // DebouncedEventsEmit is a convenience function that uses the global emitter
-// It debounces runtime.EventsEmit calls based on eventName
+// It debounces desktop.Emit calls based on eventName
 //
 // Example usage:
-//   utils.DebouncedEventsEmit(ctx, "databaseAvailability", 500*time.Millisecond, map[string]interface{}{
-//       "databases": databases,
-//   })
-func DebouncedEventsEmit(ctx context.Context, eventName string, timeout time.Duration, data ...interface{}) {
-	GetDebouncedEventsEmitter().Emit(ctx, eventName, timeout, data...)
+//
+//	utils.DebouncedEventsEmit("databaseAvailability", 500*time.Millisecond, map[string]interface{}{
+//	    "databases": databases,
+//	})
+func DebouncedEventsEmit(eventName string, timeout time.Duration, data ...interface{}) {
+	GetDebouncedEventsEmitter().Emit(eventName, timeout, data...)
 }

@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { Ping, ChooseSSHKeyFile } from '$lib/wailsjs/go/db_client/DbClient';
-	import { db_client } from '$lib/wailsjs/go/models';
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import { Ping, ChooseSSHKeyFile } from '$lib/bindings/selectDb/internal/db_client/dbclient';
+	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import {
 		DeleteDatasource,
 		GetDatasource,
 		UpsertDatasource
-	} from '$lib/wailsjs/go/datasource/Datasource';
+	} from '$lib/bindings/selectDb/internal/datasource/datasource';
 
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import { debounce } from '$lib/utils/debounce';

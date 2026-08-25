@@ -21,10 +21,10 @@
 		CreateServer,
 		RemoveServer,
 		GetDefaultServer
-	} from '$lib/wailsjs/go/server/Server';
+	} from '$lib/bindings/selectDb/internal/server/server';
 	import type { Component } from 'svelte';
 	import ConfirmRemoveServerModal from './ConfirmRemoveServerModal.svelte';
-	import { GetAppEnv } from '$lib/wailsjs/go/system/System';
+	import { GetAppEnv } from '$lib/bindings/selectDb/internal/system/system';
 	import RegionSelect from './RegionSelect.svelte';
 
 	let servers = $state<SelectOption[]>([]);

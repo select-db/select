@@ -9,9 +9,9 @@
 		ListWorkspacesForCurrentUser,
 		SwitchWorkspace,
 		CreateWorkspaceAndReload
-	} from '$lib/wailsjs/go/workspace/Workspace';
-	import { Logout } from '$lib/wailsjs/go/system/System';
-	import type { workspace } from '$lib/wailsjs/go/models';
+	} from '$lib/bindings/selectDb/internal/workspace/workspace';
+	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
+	import type * as workspace from '$lib/bindings/selectDb/internal/workspace/models';
 
 	let workspaces = $state<workspace.WorkspaceWithCurrent[]>([]);
 	let loading = $state(true);

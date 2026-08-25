@@ -1,7 +1,7 @@
 import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
 import { getAllGroups } from '$lib/components/Layout/layoutStore';
-import { ReadFile } from '$lib/wailsjs/go/fs_provider/FSProvider';
+import { ReadFile } from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { truncate, toToolError } from '../context';
 

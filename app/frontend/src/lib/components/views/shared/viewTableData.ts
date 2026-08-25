@@ -4,8 +4,9 @@ import { addTempFileTab } from '$lib/components/Layout/layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
-import * as dbc from '$lib/wailsjs/go/db_client/DbClient';
-import { db_client, type graph } from '$lib/wailsjs/go/models';
+import * as dbc from '$lib/bindings/selectDb/internal/db_client/dbclient';
+import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
+import type * as graph from '$lib/wails/graph';
 
 /**
  * Node types the "View data" action applies to. Views sit here with tables: the
@@ -33,12 +34,12 @@ type TableLocation = {
 export const findDbItemLocation = (itemId: string): TableLocation | null => {
 	const workspace = get(workspaceGraphStore);
 
-	for (const database of workspace?.db_instances ?? []) {
-		for (const schema of database.children ?? []) {
+	for (const database of (workspace?.db_instances ?? [])) {
+		for (const schema of database.children) {
 			if (schema.type !== 'schema') continue;
 
-			for (const group of schema.children ?? []) {
-				if (!(group.children ?? []).some((child) => child.id === itemId)) continue;
+			for (const group of schema.children) {
+				if (!group.children.some((child) => child.id === itemId)) continue;
 
 				return {
 					databaseId: database.id,

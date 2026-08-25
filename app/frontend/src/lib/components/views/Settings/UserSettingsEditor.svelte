@@ -5,8 +5,8 @@
 		updateSettingsTab,
 		type Tab
 	} from '$lib/components/Layout/layoutStore';
-	import type { graph } from '$lib/wailsjs/go/models';
-	import { EnsureUserConfigDefaults } from '$lib/wailsjs/go/system/System';
+	import type * as graph from '$lib/wails/graph';
+	import { EnsureUserConfigDefaults } from '$lib/bindings/selectDb/internal/system/system';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import ThemeFileView from '$lib/components/views/File/views/ThemeFileView.svelte';
 	import ConfigFileView from '$lib/components/views/File/views/ConfigFileView.svelte';

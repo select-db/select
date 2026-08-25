@@ -1,7 +1,7 @@
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import DatabaseSystemInfo from '../../modals/ItemInfoModal.svelte';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { isPreviewableDbItem, viewTableData } from '$lib/components/views/shared/viewTableData';
 
 const infoOption = {

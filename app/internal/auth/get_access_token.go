@@ -12,7 +12,7 @@ import (
 	"selectDb/internal/utils"
 	"selectDb/internal/workspace"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 type GetAccessTokenParams struct {
@@ -116,9 +116,7 @@ func (ga *GithubAuth) GetAccessToken(deviceCode string) error {
 
 	_ = utils.FetchAndSaveAvatar(ctx, backendUser.AvatarURL, user.ID)
 
-	if ga.ctx != nil {
-		runtime.EventsEmit(ga.ctx, "login")
-	}
+	desktop.Emit("login")
 	return nil
 }
 

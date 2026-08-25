@@ -17,9 +17,10 @@
 		RevokeAPIKey,
 		RotateAPIKey,
 		SetAPIKeyRoles
-	} from '$lib/wailsjs/go/apikey/APIKey';
-	import { ListRoles } from '$lib/wailsjs/go/role/Role';
-	import type { apikey, generated } from '$lib/wailsjs/go/models';
+	} from '$lib/bindings/selectDb/internal/apikey/apikey';
+	import { ListRoles } from '$lib/bindings/selectDb/internal/role/role';
+	import type * as apikey from '$lib/bindings/selectDb/internal/apikey/models';
+	import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 	import CreateAPIKeyModal from './CreateAPIKeyModal.svelte';
 	import RevealAPIKeyModal from './RevealAPIKeyModal.svelte';
 	import ConfirmRevokeAPIKeyModal from './ConfirmRevokeAPIKeyModal.svelte';

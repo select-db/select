@@ -18,7 +18,7 @@ Monorepo of Go modules + a Svelte frontend + a Python analyzer:
 
 ## Prerequisites
 
-Go 1.25+ · Node 20+ · [Wails v2](https://wails.io) (desktop) · [uv](https://docs.astral.sh/uv/) (analyzer)
+Go 1.25+ · Node 20+ · [Wails v3](https://v3.wails.io) (desktop) · [uv](https://docs.astral.sh/uv/) (analyzer)
 
 ## Branches
 
@@ -38,6 +38,10 @@ Go 1.25+ · Node 20+ · [Wails v2](https://wails.io) (desktop) · [uv](https://d
 ```bash
 npm ci && npm run check && npm run lint
 ```
+> The frontend calls the Go services through the generated bindings in
+> `app/frontend/src/lib/bindings`. They are committed; regenerate and commit them
+> whenever a bound service's signature changes:
+> `cd app && wails3 task generate:bindings`
 
 **Go modules** (`app` | `backend` | `dialect`): golangci-lint + tests; CI also fails on dead code:
 ```bash
@@ -47,6 +51,11 @@ go test ./...
 ```
 > The `app` module embeds the frontend build output; stub it when testing Go only:
 > `mkdir -p app/frontend/build && touch app/frontend/build/.keep`
+>
+> On Linux the desktop app links against GTK3/WebKit2GTK 4.1 through cgo, so
+> building, linting or testing the `app` module needs `libgtk-3-dev` and
+> `libwebkit2gtk-4.1-dev` installed and the `gtk3` build tag
+> (`go test -tags gtk3 ./internal/...`).
 
 **Python analyzer** (`dialect/core/tokenanalyzer/python`):
 ```bash

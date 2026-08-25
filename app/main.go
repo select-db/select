@@ -1,18 +1,13 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"log"
+	"log/slog"
 	"os"
 	"runtime"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	appcore "selectDb/internal/app"
 
@@ -24,7 +19,7 @@ var assets embed.FS
 
 // Build-time vars, overridden via:
 //
-//	wails build -ldflags "-X main.appVersion=1.2.3 -X main.appEnv=production"
+//	wails3 build -ldflags "-X main.appVersion=1.2.3 -X main.appEnv=production"
 var (
 	appVersion = "dev"
 	appEnv     = "dev"
@@ -63,74 +58,85 @@ func main() {
 		title = "Select"
 	}
 
-	// Create application with options
-	err := wails.Run(&options.App{
-		EnableDefaultContextMenu: appEnv != "production",
-		Title:                    title,
-		Width:                    1024,
-		MinWidth:                 450,
-		Height:                   768,
-		MinHeight:                450,
-		LogLevel:                 5,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
+	isProduction := appEnv == "production"
 
-		Windows: &windows.Options{
-			WebviewIsTransparent: false,
-			WindowIsTranslucent:  false,
-			IsZoomControlEnabled: true,
-		},
+	// Create application with options. Services replace v2's `Bind` list: each
+	// one is exposed to the frontend through the generated bindings, and the
+	// app service drives startup via its ServiceStartup method.
+	wailsApp := application.New(application.Options{
+		Name:        "Select",
+		Description: "Select database client",
+		LogLevel:    slog.LevelError,
+		Services: []application.Service{
+			application.NewService(app),
+			application.NewService(app.Graph),
+			application.NewService(app.System),
+			application.NewService(app.GithubAuth),
+			application.NewService(app.Git),
+			application.NewService(app.Search),
 
-		Mac: &mac.Options{
-			Appearance:           mac.DefaultAppearance,
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
-			// TitleBarHidden gives frameless look but keeps native window so fullscreen/minimize work.
-			TitleBar: mac.TitleBarHidden(),
-		},
+			application.NewService(app.User),
+			application.NewService(app.Workspace),
+			application.NewService(app.Role),
+			application.NewService(app.Group),
+			application.NewService(app.History),
+			application.NewService(app.Server),
 
-		Linux: &linux.Options{
-			WindowIsTranslucent: false,
-		},
+			application.NewService(app.Datasource),
+			application.NewService(app.APIKey),
 
-		OnStartup: func(ctx context.Context) {
-			app.Startup(ctx)
+			application.NewService(app.DbClient),
+			application.NewService(app.SqlLang),
+			application.NewService(app.FSProvider),
+			application.NewService(app.Updater),
+			application.NewService(app.Terminal),
 		},
-		OnShutdown: func(ctx context.Context) {
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+		OnShutdown: func() {
 			app.SqlLang.Close()
 			app.Terminal.DestroyAll()
 		},
+	})
+
+	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:     title,
+		Width:     1024,
+		MinWidth:  450,
+		Height:    768,
+		MinHeight: 450,
+		URL:       "/",
+
 		// On macOS use non-frameless + hidden titlebar so green
 		// (fullscreen) and yellow (minimize) work.
 		Frameless: runtime.GOOS != "darwin",
-		Bind: []interface{}{
-			app,
-			app.Graph,
-			app.System,
-			app.GithubAuth,
-			app.Git,
-			app.Search,
 
-			app.User,
-			app.Workspace,
-			app.Role,
-			app.Group,
-			app.History,
-			app.Server,
+		// The zoom ladder lives in the frontend (see $lib/wails/zoom), so the
+		// webview's own Ctrl+wheel accelerators stay off: they would move the
+		// zoom factor without the app knowing about it.
+		ZoomControlEnabled: false,
 
-			app.Datasource,
-			app.APIKey,
+		DevToolsEnabled:            !isProduction,
+		DefaultContextMenuDisabled: isProduction,
 
-			app.DbClient,
-			app.SqlLang,
-			app.FSProvider,
-			app.Updater,
-			app.Terminal,
+		Mac: application.MacWindow{
+			Appearance: application.DefaultAppearance,
+			Backdrop:   application.MacBackdropTranslucent,
+			// TitleBarHidden gives frameless look but keeps native window so
+			// fullscreen/minimize work.
+			TitleBar: application.MacTitleBarHidden,
+		},
+
+		Linux: application.LinuxWindow{
+			WindowIsTranslucent: false,
 		},
 	})
 
-	if err != nil {
+	if err := wailsApp.Run(); err != nil {
 		log.Fatal("Wails boot error:", err.Error())
 	}
 }

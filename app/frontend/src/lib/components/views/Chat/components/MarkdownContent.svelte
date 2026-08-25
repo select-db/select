@@ -61,14 +61,15 @@
 	}
 
 	.markdown-wrapper :global(pre) {
-		padding: var(--space-sm);
-		background-color: var(--gray-400);
-		border-radius: var(--br-xs);
+		padding: var(--space-sm-md);
+		background-color: var(--gray-300);
+		border-radius: var(--br-sm);
 		border: var(--border);
 		height: fit-content;
 		overflow-x: auto;
 		overflow-y: hidden;
 		font-size: var(--fs-sm);
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.markdown-wrapper :global(code) {

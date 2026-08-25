@@ -1,6 +1,6 @@
 import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
-import { Plan } from '$lib/wailsjs/go/db_client/DbClient';
+import { Plan } from '$lib/wails/graph';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { toToolError } from '../context';
 import { explainPlanResultSchema } from './types';

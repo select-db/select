@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as graphApi from '$lib/wailsjs/go/graph/Graph';
+	import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 	import { createEventDispatcher } from 'svelte';
 
 	import { tryCatch } from '$lib/utils/tryCatch';

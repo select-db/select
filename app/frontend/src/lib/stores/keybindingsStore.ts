@@ -1,9 +1,9 @@
 import { writable, get } from 'svelte/store';
-import { EventsOn } from '$lib/wailsjs/runtime/runtime';
+import { EventsOn } from '$lib/wails/events';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { isMac } from '$lib/utils/platform';
 import type { KeybindingsContext } from './keybindingsContextStore';
-import { GetConfig } from '$lib/wailsjs/go/system/System';
+import { GetConfig } from '$lib/bindings/selectDb/internal/system/system';
 
 export type Keybinding = {
 	key: string;

@@ -9,9 +9,13 @@ import { notify } from '$lib/system/Notifications/notificationsStore';
 import { AlertType } from '$lib/system/Alert/types';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { tryCatch } from '$lib/utils/tryCatch';
-import { CheckForLogin, CheckForLogout, Logout } from '$lib/wailsjs/go/system/System';
-import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-import type { graph } from '$lib/wailsjs/go/models';
+import {
+	CheckForLogin,
+	CheckForLogout,
+	Logout
+} from '$lib/bindings/selectDb/internal/system/system';
+import { EventsOn } from '$lib/wails/events';
+import { stripNullItems, type WorkspaceNode } from '$lib/wails/graph';
 import { writable, get } from 'svelte/store';
 
 export const sessionCheckingStore = writable(true);
@@ -20,7 +24,8 @@ let checkSessionInterval: ReturnType<typeof setInterval> | undefined;
 
 let lastState: 'loggedin' | 'loggedout' | undefined;
 
-EventsOn('workspaceGraphUpdated', async (g: graph.WorkspaceNode) => {
+EventsOn('workspaceGraphUpdated', async (g: WorkspaceNode) => {
+	stripNullItems(g);
 	if (lastState === 'loggedin') {
 		workspaceGraphStore.set(g);
 	}

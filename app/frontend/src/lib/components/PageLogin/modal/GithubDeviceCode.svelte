@@ -4,7 +4,7 @@
 		GetAccessToken,
 		GetDeviceCode,
 		CancelAccessTokenPolling
-	} from '$lib/wailsjs/go/auth/GithubAuth';
+	} from '$lib/bindings/selectDb/internal/auth/githubauth';
 </script>
 
 <DeviceCodeAuth

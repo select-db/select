@@ -1,12 +1,12 @@
 <script lang="ts">
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import DatabasePicker from './DatabasePicker.svelte';
 	import RunButton from './RunButton.svelte';
 	import VariablePicker from './VariablePicker.svelte';
 	import { updateTab, type Tab } from '$lib/components/Layout/layoutStore';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
 		isTemp?: boolean;
@@ -28,10 +28,9 @@
 		const ids = Array.isArray(value) ? value : value ? [value] : [];
 
 		const graph = $workspaceGraphStore;
-		const databases =
-			graph?.db_instances
-				?.filter((db) => ids.includes(db.id))
-				.map((db) => ({ id: db.id, name: db.name })) ?? [];
+		const databases = (graph?.db_instances ?? [])
+			.filter((db) => ids.includes(db.id))
+			.map((db) => ({ id: db.id, name: db.name }));
 
 		let activeDatabaseId = tab.file?.activeDatabaseId;
 		if (!databases.find(({ id }) => id === activeDatabaseId)) activeDatabaseId = databases[0]?.id;

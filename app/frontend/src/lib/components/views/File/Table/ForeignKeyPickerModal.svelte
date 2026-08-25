@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { LookupForeignKey } from '$lib/wailsjs/go/db_client/DbClient';
-	import { db_client } from '$lib/wailsjs/go/models';
+	import { LookupForeignKey } from '$lib/wails/graph';
+	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';

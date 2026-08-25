@@ -14,7 +14,7 @@
 
 	let { dbId, run, active = false, error = false, onclick }: Props = $props();
 
-	const dbInstances = $derived($workspaceGraphStore?.db_instances ?? []);
+	const dbInstances = $derived(($workspaceGraphStore?.db_instances ?? []));
 	const name = $derived(dbInstances.find((dbi) => dbi.id === dbId)?.name ?? dbId);
 
 	const options = $derived<ContextMenuOption[]>([

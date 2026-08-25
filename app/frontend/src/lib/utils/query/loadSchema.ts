@@ -1,5 +1,5 @@
-import { graph } from '$lib/wailsjs/go/models';
-import { QuerySchema } from '$lib/wailsjs/go/db_client/DbClient';
+import * as graph from '$lib/wails/graph';
+import { QuerySchema } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 
 import { AlertType } from '$lib/system/Alert/types';
 import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';

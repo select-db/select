@@ -1,11 +1,18 @@
 build/*
 !build/appicon*.png
+!build/config.yml
 # Hand-maintained bundle/signing config (not build artifacts). Keep in VCS so
 # the release/signing flow is reproducible. build/bin/ stays ignored.
 !build/darwin/
 build/darwin/*
 !build/darwin/*.plist
+!build/windows/
+build/windows/*
+!build/windows/wails.exe.manifest
 tmp/
+
+# go-task checksum cache (wails3 build/dev)
+.task/
 
 .env
 .DS_Store

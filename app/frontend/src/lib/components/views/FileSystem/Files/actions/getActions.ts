@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { databaseActions } from './databaseActions';
 import { getFileActions } from './fileActions';
 import { getFolderActions } from './folderActions';

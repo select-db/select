@@ -9,11 +9,11 @@ import * as monaco from 'monaco-editor';
 import { addTab } from '$lib/components/Layout/layoutStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { tryCatch } from '$lib/utils/tryCatch';
-import { Resolve } from '$lib/wailsjs/go/sqllang/SqlLang';
-import * as graphApi from '$lib/wailsjs/go/graph/Graph';
+import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 import { loadDatabase } from '$lib/components/views/Chat/tools/helpers';
 import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
-import { graph } from '$lib/wailsjs/go/models';
+import * as graph from '$lib/wails/graph';
+import { Resolve } from '$lib/wails/graph';
 
 const DEBOUNCE_MS = 50;
 const VAR_RE = /\$[A-Za-z_][A-Za-z0-9_]*/g;
@@ -48,7 +48,7 @@ function getSqlVariableTokenAtPosition(
 }
 
 function makeFileNode(uri: string, name: string): graph.FileNode {
-	return new graph.FileNode({
+	return graph.newFileNode({
 		id: uri,
 		uri,
 		type: 'file',

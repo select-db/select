@@ -4,13 +4,13 @@ import (
 	"net"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 func (s *System) WatchNetworkQuality() {
 	for {
 		quality, ping := measureNetworkQuality()
-		runtime.EventsEmit(s.ctx, "networkQuality", map[string]interface{}{
+		desktop.Emit("networkQuality", map[string]interface{}{
 			"quality": quality,
 			"ping":    ping.Milliseconds(),
 		})

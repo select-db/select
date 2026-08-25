@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import type { Tab } from '$lib/components/Layout/layoutStore';
 	import { getTabByNodeId, updateTab } from '$lib/components/Layout/layoutStore';
 	import DatabaseForm, {

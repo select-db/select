@@ -40,7 +40,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm);
-		padding-top: var(--space-xs);
+		padding: var(--space-md);
 	}
 	.empty {
 		color: var(--gray-900);

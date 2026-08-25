@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { GetCurrentUserAvatar } from '$lib/wailsjs/go/user/User';
+	import { GetCurrentUserAvatar } from '$lib/bindings/selectDb/internal/user/user';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
 	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { Logout } from '$lib/wailsjs/go/system/System';
+	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
 	import { tryCatch } from '$lib/utils/tryCatch';
 
 	let avatarSrc: string = '';

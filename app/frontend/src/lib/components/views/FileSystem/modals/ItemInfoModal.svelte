@@ -89,10 +89,10 @@
 
 	const findDbItemByPath = (targetPath: string): DbItem | undefined => {
 		const workspace = get(workspaceGraphStore);
-		const dbs = workspace?.db_instances ?? [];
+		const dbs = (workspace?.db_instances ?? []);
 
 		for (const db of dbs) {
-			const stack: DbItem[] = [...(db.children ?? [])];
+			const stack: DbItem[] = [...db.children];
 			while (stack.length) {
 				const node = stack.pop()!;
 				if (node.path === targetPath) return node;
@@ -122,12 +122,12 @@
 
 	const getBreadcrumbDatabase = (firstSegment: BreadcrumbSegment) => {
 		const workspace = get(workspaceGraphStore);
-		const dbs = workspace?.db_instances ?? [];
+		const dbs = (workspace?.db_instances ?? []);
 		return dbs.find((db) => db.name === firstSegment.label);
 	};
 
 	const childrenMenuOptions = $derived(() => {
-		const allChildren = children() ?? [];
+		const allChildren = (children() ?? []);
 		return allChildren.map(
 			(child: DbItem): MenuOption => ({
 				id: child.id ?? child.name ?? '',

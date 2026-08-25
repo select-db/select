@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import { untrack, type Component } from 'svelte';
 
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import {
 		getTabByNodeId,
 		updateTab,
@@ -17,7 +17,7 @@
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
 	import { getDbIds, runStatement, type RunStatementResult } from '$lib/utils/query/helpers';
 	import { registerCommand, unregisterCommand } from '$lib/stores/commandRegistry';
-	import * as graphApi from '$lib/wailsjs/go/graph/Graph';
+	import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import RuntimeVarsModal from '../RuntimeVarsModal.svelte';
 
@@ -267,13 +267,13 @@
 			}
 		}
 
-		const queryResults: Record<string, graph.QueryResult> = {
+		const queryResults: NonNullable<graph.FileNode['queryResults']> = {
 			...currentTab.file.node.queryResults
 		};
-		const planResults: Record<string, graph.ExplainResult> = {
+		const planResults: NonNullable<graph.FileNode['planResults']> = {
 			...(currentTab.file.node.planResults ?? {})
 		};
-		const explainResults: Record<string, graph.ExplainResult> = {
+		const explainResults: NonNullable<graph.FileNode['explainResults']> = {
 			...currentTab.file.node.explainResults
 		};
 

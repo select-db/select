@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { git } from '$lib/wailsjs/go/models';
-	import { GetBranches, SwitchBranch } from '$lib/wailsjs/go/git/Git';
+	import type * as git from '$lib/bindings/selectDb/internal/git/models';
+	import { GetBranches, SwitchBranch } from '$lib/bindings/selectDb/internal/git/git';
 
 	import { Menu } from '$lib/system/Menu';
 	import type { MenuOption } from '$lib/system/Menu';

@@ -7,7 +7,7 @@ import { createSqlHoverProvider } from '../providers/sqlHoverProvider';
 import { createSqlSnippetProvider } from '../providers/sqlSnippetProvider';
 import { createVariableCompletionProvider } from '../providers/variableCompletionProvider';
 import { createSqlLintCodeActionsProvider } from '../providers/sqlLintCodeActionsProvider';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 // Track whether languages have been initialized to prevent duplicate registration
 let languagesInitialized = false;

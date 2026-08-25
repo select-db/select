@@ -9,7 +9,7 @@ import (
 	"selectDb/internal/fs_provider"
 	"selectDb/internal/graph"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 type System struct {
@@ -40,14 +40,26 @@ func (s *System) SetContext(ctx context.Context) {
 }
 
 func (s *System) WindowClose() {
-	wailsruntime.Quit(s.ctx)
+	desktop.Quit()
 }
 
 func (s *System) WindowMinimise() {
-	wailsruntime.WindowMinimise(s.ctx)
+	desktop.MinimiseWindow()
 }
 
 func (s *System) WindowToggleFullscreen() {
-	wailsruntime.WindowToggleMaximise(s.ctx)
+	desktop.ToggleMaximiseWindow()
 
+}
+
+// SetZoom applies a page zoom factor to the window and returns the factor that
+// was actually applied, which the frontend uses to keep its zoom level in step
+// with the webview (Windows cannot go below 100%).
+func (s *System) SetZoom(factor float64) (float64, error) {
+	return desktop.SetZoom(factor)
+}
+
+// GetZoom returns the window's current page zoom factor.
+func (s *System) GetZoom() float64 {
+	return desktop.GetZoom()
 }

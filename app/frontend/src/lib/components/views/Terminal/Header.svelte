@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Select from '$lib/system/Select/Select.svelte';
-	import * as TerminalBackend from '$lib/wailsjs/go/terminal/Terminal';
+	import * as TerminalBackend from '$lib/bindings/selectDb/internal/terminal/terminal';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 
 	type Props = {
