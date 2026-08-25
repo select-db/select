@@ -1,4 +1,4 @@
-import { test as base, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test as base, type APIRequestContext, type Page } from '@playwright/test';
 
 /**
  * Talking to the Go side the way the app does — over `/wails/runtime`, the
@@ -46,18 +46,16 @@ export const test = base.extend<{
 	 * Emits an event, standing in for a backend that emitted it itself: the Go
 	 * side broadcasts it to every listener, the app included.
 	 *
-	 * The app receives events over a WebSocket its runtime opens shortly after
-	 * the page loads — server mode has no native bridge to deliver them — so an
-	 * event emitted too early would reach nobody. Waiting for that socket is
-	 * what makes this deterministic.
+	 * Events are never queued or replayed, and in server mode the socket that
+	 * carries them and the app bundle that listens on it come up independently —
+	 * so an event can reach a page that is not listening yet, and is then simply
+	 * dropped. There is no earlier moment to wait for instead: the only reliable
+	 * signal is the app acting on it. Callers therefore emit inside a poll and
+	 * stop once they see the effect, which is why every event used here has to
+	 * be safe to send more than once.
 	 */
-	emit: async ({ page, request }, use) => {
-		const connected = page.waitForEvent('websocket', (socket) =>
-			socket.url().includes('/wails/events')
-		);
-
+	emit: async ({ request }, use) => {
 		await use(async (name, data) => {
-			await connected;
 			await request.post('/wails/runtime', {
 				headers: { 'x-wails-client-id': 'e2e' },
 				// An absent `data` would drop out of the JSON, which the Go side rejects.
@@ -71,15 +69,21 @@ export const test = base.extend<{
 	 *
 	 * `login` is the event the frontend's session wall listens for; the Go side
 	 * emits it once it finds a stored token and a current user. Tokens live in
-	 * the OS keyring, which a headless runner has none of, so the suite emits
-	 * the event and lets the app read the seeded database for the rest. Events
-	 * are not replayed, so the wall has to be listening first — its login screen
-	 * is the proof that it is.
+	 * the OS keyring, which a headless runner has none of, so the suite emits the
+	 * event and lets the app read the seeded database for the rest. The login
+	 * screen giving way is the app confirming it was listening.
 	 */
 	signIn: async ({ page, emit }, use) => {
 		await use(async () => {
-			await page.getByText('Log in with Github').waitFor();
-			await emit('login');
+			const loginScreen = page.getByText('Log in with Github');
+			await loginScreen.waitFor();
+
+			await expect
+				.poll(async () => {
+					await emit('login');
+					return loginScreen.isVisible();
+				})
+				.toBe(false);
 		});
 	},
 
@@ -94,5 +98,5 @@ export const test = base.extend<{
 	]
 });
 
-export { expect } from '@playwright/test';
+export { expect };
 export type { Page };

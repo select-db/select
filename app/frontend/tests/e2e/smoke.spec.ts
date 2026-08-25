@@ -23,12 +23,19 @@ test('calls a bound Go method and gets its value back', async ({ request }) => {
 test('applies a theme the backend broadcasts', async ({ page, emit }) => {
 	// themeStore listens for this from module scope, so it is live on the login
 	// screen, and what it does with the payload — writing custom properties onto
-	// the document root — is visible from here.
-	await emit('themeUpdated', { shared: { '--e2e-probe': 'rgb(1, 2, 3)' }, light: {}, dark: {} });
-
+	// the document root — is visible from here. The emit sits inside the poll
+	// because an event that lands before themeStore is listening is dropped
+	// rather than queued; re-applying the same properties costs nothing.
 	await expect
-		.poll(() =>
-			page.evaluate(() => document.documentElement.style.getPropertyValue('--e2e-probe').trim())
-		)
+		.poll(async () => {
+			await emit('themeUpdated', {
+				shared: { '--e2e-probe': 'rgb(1, 2, 3)' },
+				light: {},
+				dark: {}
+			});
+			return page.evaluate(() =>
+				document.documentElement.style.getPropertyValue('--e2e-probe').trim()
+			);
+		})
 		.toBe('rgb(1, 2, 3)');
 });
