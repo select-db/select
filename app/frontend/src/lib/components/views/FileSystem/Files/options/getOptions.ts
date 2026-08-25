@@ -1,4 +1,5 @@
 import { get } from 'svelte/store';
+import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import type { graph } from '$lib/wailsjs/go/models';
 import { getDatabaseItemOptions } from './databaseItemOptions';
 import { databaseOptions } from './databaseOptions';
@@ -10,7 +11,7 @@ import { batchDeleteOptions } from './batchDeleteOptions';
 export const getOptions = (
 	item: graph.FileNode | graph.FolderNode | graph.DBInstanceNode | graph.DBInstanceItemNode,
 	ctx?: 'fs' | 'git' | 'search'
-) => {
+): ContextMenuOption[] => {
 	const selectedItems = get(selectedItemsStore);
 	if (selectedItems.size > 1) return batchDeleteOptions;
 

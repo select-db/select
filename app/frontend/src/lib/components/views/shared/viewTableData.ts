@@ -7,8 +7,12 @@ import { notifyError } from '$lib/system/Notifications/notificationsStore';
 import * as dbc from '$lib/wailsjs/go/db_client/DbClient';
 import { db_client, type graph } from '$lib/wailsjs/go/models';
 
-/** Node types the "View data" action applies to. */
-const PREVIEWABLE_TYPES = new Set(['table']);
+/**
+ * Node types the "View data" action applies to. Views sit here with tables: the
+ * generated statement is a plain SELECT against the relation's name, which a
+ * view answers as readily as a table.
+ */
+const PREVIEWABLE_TYPES = new Set(['table', 'view']);
 
 export const isPreviewableDbItem = (item: graph.DBInstanceItemNode): boolean =>
 	PREVIEWABLE_TYPES.has(item.type);

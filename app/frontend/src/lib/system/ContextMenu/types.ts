@@ -8,6 +8,11 @@ export type ContextMenuOption = {
 	action?: (onClose: () => void, metadata: ContextMenu['metadata']) => void;
 	submenu?: ContextMenuOption[];
 	divider?: boolean;
+	/**
+	 * Run this action when the item is double-clicked. At most one option per
+	 * menu carries it, and an item without one simply has no double-click.
+	 */
+	runOnDoubleClick?: boolean;
 };
 
 export type ContextMenu = {
