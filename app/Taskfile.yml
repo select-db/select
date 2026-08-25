@@ -27,7 +27,10 @@ tasks:
   generate:bindings:
     summary: Regenerates the frontend bindings from the bound Go services
     cmds:
-      - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}}
+      # The generator loads the whole app module, so it needs the same build
+      # tags the build uses; without them it would look for the GTK4/WebKitGTK 6
+      # headers we do not ship against.
+      - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}}{{if .PLATFORM_TAGS}} -f "-tags {{.PLATFORM_TAGS}}"{{end}}
 
   generate:icons:
     summary: Generates the macOS `.icns` and Windows `.ico` from build/appicon.png
@@ -190,3 +193,24 @@ tasks:
       # Vite's default `localhost` binding resolves to ::1 on macOS. Without this
       # the app only gets "connection refused" from the dev server.
       - npm run dev -- --host 127.0.0.1 --port {{.VITE_PORT}} --strictPort
+
+  build:server:
+    summary: Builds the app in headless server mode, for the e2e suite
+    deps:
+      - build:frontend
+    cmds:
+      # Wails' `server` tag swaps the webview for an HTTP server that hands out
+      # the same embedded frontend and the same `/wails/runtime` binding
+      # endpoint. No GUI toolkit is linked in, so this builds and runs anywhere.
+      - go build -tags server -buildvcs=false -ldflags="{{.META_LDFLAGS}}" -o "{{.BIN_DIR}}/{{.APP_NAME}}-server{{exeExt}}" .
+    env:
+      CGO_ENABLED: 0
+
+  test:e2e:
+    summary: Runs the Playwright end-to-end suite against a server-mode build
+    deps:
+      - build:server
+      - install:frontend
+    dir: frontend
+    cmds:
+      - npx playwright test {{.CLI_ARGS}}

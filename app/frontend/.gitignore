@@ -12,3 +12,6 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Playwright (e2e run output)
+/test-results
+/playwright-report

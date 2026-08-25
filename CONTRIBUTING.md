@@ -57,6 +57,25 @@ go test ./...
 > `libwebkit2gtk-4.1-dev` installed and the `gtk3` build tag
 > (`go test -tags gtk3 ./internal/...`).
 
+**End-to-end** (`app`):
+```bash
+cd app && wails3 task test:e2e
+```
+> The suite drives the real app built with wails' `server` tag: the same Go
+> services, bindings and events, served over HTTP instead of embedded in a
+> webview, so Playwright can drive it with no display server. It cannot cover
+> anything that needs a native window — zoom, dialogs, menus — and it runs
+> against Chromium rather than WebKit/WebView2, so those stay manual.
+>
+> Specs live in `app/frontend/tests/e2e`. `npx playwright test --ui` gives the
+> watch mode; the binary it drives comes from `wails3 task build:server`.
+>
+> Each run gets a throwaway data directory, seeded by `internal/cmd/e2eseed`
+> with a migrated database, a user, a workspace and its files — without which
+> the app only ever shows a login screen. Sign-in itself is not part of it: the
+> tokens live in the OS keyring, so specs use the `signIn` fixture, which emits
+> the same `login` event the Go side emits once it finds them.
+
 **Python analyzer** (`dialect/core/tokenanalyzer/python`):
 ```bash
 uv sync
