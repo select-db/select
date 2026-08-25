@@ -16,9 +16,10 @@
 	};
 
 	let { tab }: Props = $props();
-	// A tab keeps the same terminal session for its lifetime, so these are read
-	// once on purpose: the session id never changes, and the shell is owned by
-	// this component from here on.
+	// Read once, as before. Note this component is NOT remounted per tab the way
+	// Chat is ({#key activeTab.id} in GroupRenderer wraps Chat only), so switching
+	// between two terminal tabs reuses it with a new `tab` while these stay on the
+	// first one's session. That predates this change and is left alone here.
 	const sessionId = untrack(() => tab.terminal!.sessionId);
 	let currentShell = $state(untrack(() => tab.terminal!.shell));
 
