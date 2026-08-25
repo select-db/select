@@ -3,7 +3,7 @@ package engine
 import "testing"
 
 func TestStreamingResultPagePending(t *testing.T) {
-	sr := NewStreamingResult()
+	sr := NewStreamingResult("test-exec")
 	sr.SetColumns([]string{"id", "name"})
 
 	page, status := sr.Page(0, 10)
@@ -19,7 +19,7 @@ func TestStreamingResultPagePending(t *testing.T) {
 }
 
 func TestStreamingResultPagePartial(t *testing.T) {
-	sr := NewStreamingResult()
+	sr := NewStreamingResult("test-exec")
 	sr.SetColumns([]string{"id"})
 
 	for i := 0; i < 5; i++ {
@@ -39,7 +39,7 @@ func TestStreamingResultPagePartial(t *testing.T) {
 }
 
 func TestStreamingResultPageReady(t *testing.T) {
-	sr := NewStreamingResult()
+	sr := NewStreamingResult("test-exec")
 	sr.SetColumns([]string{"id"})
 
 	for i := 0; i < 25; i++ {
@@ -77,7 +77,7 @@ func TestStreamingResultPageReady(t *testing.T) {
 }
 
 func TestStreamingResultFailCarriesError(t *testing.T) {
-	sr := NewStreamingResult()
+	sr := NewStreamingResult("test-exec")
 	sr.SetColumns([]string{"id"})
 	sr.AppendRow([]any{1})
 	sr.Fail("boom", nil)
