@@ -22,16 +22,37 @@ func hashWorkspaceDSN(workspaceID, dsn string) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
+// defaultMetadataConcurrency bounds how many introspection queries FetchMetadata
+// runs at once when the caller doesn't specify. Metadata fetches fan out one
+// query per schema × object type; left unbounded they can open dozens of pooled
+// connections at once and trip the remote's max_connections ("too many clients").
+const defaultMetadataConcurrency = 8
+
 // FetchMetadata loads full schema info (schemas/tables/views/indexes/
 // triggers/stats/types/functions) into a *core.Metadata. Uncached;
 // most callers want GetOrFetchMetadata. ctx bounds every query.
-func FetchMetadata(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName string) (*core.Metadata, error) {
+//
+// maxConcurrency optionally caps how many introspection queries run at once
+// across all schemas. Unset or <=0 uses defaultMetadataConcurrency. The desktop
+// app passes 1 so the whole load serialises onto a single pooled connection,
+// staying well under the remote's connection limit; user queries then reuse the
+// same cached pool.
+func FetchMetadata(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName string, maxConcurrency ...int) (*core.Metadata, error) {
 	if db == nil {
 		return nil, fmt.Errorf("FetchMetadata: db is nil")
 	}
 	if dialect == nil {
 		return nil, fmt.Errorf("FetchMetadata: dialect is nil")
 	}
+
+	// A shared buffered channel bounds concurrent DB calls across every schema.
+	limit := defaultMetadataConcurrency
+	if len(maxConcurrency) > 0 && maxConcurrency[0] > 0 {
+		limit = maxConcurrency[0]
+	}
+	sem := make(chan struct{}, limit)
+	acquire := func() { sem <- struct{}{} }
+	release := func() { <-sem }
 
 	schemaNames, err := dialect.GetSchemas(ctx, db)
 	if err != nil {
@@ -68,14 +89,24 @@ func FetchMetadata(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbN
 				functions           []core.Function
 				errTables, errViews error
 			)
+			// run executes fn in its own goroutine, but only holds a DB
+			// connection while inside the semaphore. limit=1 => fully serial.
+			run := func(fn func()) {
+				go func() {
+					defer swg.Done()
+					acquire()
+					defer release()
+					fn()
+				}()
+			}
 			swg.Add(7)
-			go func() { defer swg.Done(); tables, errTables = dialect.GetTables(ctx, db, name) }()
-			go func() { defer swg.Done(); views, errViews = dialect.GetViews(ctx, db, name) }()
-			go func() { defer swg.Done(); indexes, _ = dialect.GetIndexes(ctx, db, name) }()
-			go func() { defer swg.Done(); triggers, _ = dialect.GetTriggers(ctx, db, name) }()
-			go func() { defer swg.Done(); stats, _ = dialect.GetStats(ctx, db, name) }()
-			go func() { defer swg.Done(); types, _ = dialect.GetTypes(ctx, db, name) }()
-			go func() { defer swg.Done(); functions, _ = dialect.GetFunctions(ctx, db, name) }()
+			run(func() { tables, errTables = dialect.GetTables(ctx, db, name) })
+			run(func() { views, errViews = dialect.GetViews(ctx, db, name) })
+			run(func() { indexes, _ = dialect.GetIndexes(ctx, db, name) })
+			run(func() { triggers, _ = dialect.GetTriggers(ctx, db, name) })
+			run(func() { stats, _ = dialect.GetStats(ctx, db, name) })
+			run(func() { types, _ = dialect.GetTypes(ctx, db, name) })
+			run(func() { functions, _ = dialect.GetFunctions(ctx, db, name) })
 			swg.Wait()
 
 			if errTables != nil {

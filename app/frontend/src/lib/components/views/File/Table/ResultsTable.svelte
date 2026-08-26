@@ -857,7 +857,7 @@
 	isEditingThisRow: boolean
 )}
 	{#if columnIndex === 0}
-		<span class="text-cell" style="display: block; text-align: end;">{rowIndex + 1}</span>
+		<span class="text-cell index" style="display: block; text-align: end;">{rowIndex + 1}</span>
 	{:else if row}
 		{@const colIndex = columnIndex - 1}
 		{@const cell = row[colIndex]}
@@ -1095,8 +1095,13 @@
 		text-align: left;
 		border-top: none;
 		border-right: none;
-		border-bottom: none;
 		border-left: none;
+	}
+	th {
+		border-bottom: none;
+	}
+	td {
+		border-bottom: var(--border);
 	}
 
 	th span,
@@ -1225,6 +1230,11 @@
 	td > .text-cell {
 		display: block;
 		padding: var(--space-sm-md) var(--space-sm);
+	}
+
+	.text-cell.index {
+		font-size: var(--fs-sm);
+		font-family: monospace;
 	}
 
 	/* Edited cell wrapper and styles */

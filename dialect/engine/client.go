@@ -10,6 +10,10 @@ import (
 // Client routes queries local vs proxified, manages cancel + result cache.
 type Client struct {
 	Transport Transport
+	// MetadataConcurrency caps concurrent schema-introspection queries during a
+	// local metadata fetch. 0 uses the engine default; the desktop app sets 1 so
+	// a multi-schema load reuses a single pooled connection instead of bursting.
+	MetadataConcurrency int
 }
 
 // Stream kicks off sql execution and returns a *StreamingResult that fills
@@ -117,7 +121,7 @@ func (client *Client) GetMetadata(ctx context.Context, conn Conn, instance DBIns
 			return nil, fmt.Errorf("unsupported database type: %s", instance.DBType)
 		}
 
-		return GetOrFetchMetadata(ctx, workspaceID, instance.ID, conn.DB, dialect, dbName, noCache)
+		return GetOrFetchMetadata(ctx, workspaceID, instance.ID, conn.DB, dialect, dbName, noCache, client.MetadataConcurrency)
 	}
 
 	if client.Transport == nil {
