@@ -13,8 +13,6 @@
 	import { createClickHandlers, createDeferredClickHandlers } from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
 	import { loadSchema } from '$lib/utils/query/loadSchema';
-	import { databaseErrorsStore } from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
-	import SchemaErrorRow from './SchemaErrorRow.svelte';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
@@ -168,10 +166,6 @@
 				role="region"
 				aria-label={`${database.name} content drop zone`}
 			>
-				{#if $databaseErrorsStore.has(database.id) && database.children.length === 0}
-					<SchemaErrorRow {database} message={$databaseErrorsStore.get(database.id) ?? ''} />
-				{/if}
-
 				<FileItems
 					depth={depth + 1}
 					folders={database.folders}
