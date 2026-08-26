@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ToolCallPart } from '$lib/components/views/Chat/core';
 	import Button from '$lib/system/Button/Button.svelte';
+	import Loader from '$lib/system/Loader/Loader.svelte';
 	import SqlViewer from '$lib/system/SqlViewer/SqlViewer.svelte';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { highlightJson } from '../utils/formatting';
@@ -45,9 +46,10 @@
 		toolCall.output != null && (toolCall.output as { success?: boolean }).success === false
 	);
 	const showBody = $derived(expanded || pending);
-	const statusLabel = $derived(
-		pending ? 'Awaiting approval' : failed ? '✕' : toolCall.output != null ? '✓' : '…'
-	);
+	// No output and nothing to approve means it is still running. That state used
+	// to read as an ellipsis, which sits still and looks like a result.
+	const running = $derived(!pending && toolCall.output == null);
+	const statusLabel = $derived(pending ? 'Awaiting approval' : failed ? '✕' : '✓');
 	const isSqlTool = $derived(
 		['execute_query', 'execute_statement', 'plan_query', 'explain_query'].includes(toolCall.name)
 	);
@@ -63,7 +65,11 @@
 	<button type="button" class="tool-card-header" onclick={onToggle} aria-expanded={expanded}>
 		<ToolCardTitle {toolCall} />
 		<span class="tool-state" class:success={!failed && toolCall.output != null} class:failed>
-			{statusLabel}
+			{#if running}
+				<Loader size={14} />
+			{:else}
+				{statusLabel}
+			{/if}
 		</span>
 	</button>
 	{#if isSqlTool && sqlStatement != null}
@@ -166,6 +172,8 @@
 	.tool-state {
 		margin-left: auto;
 		opacity: 0.7;
+		display: flex;
+		align-items: center;
 	}
 
 	.tool-state.success {
