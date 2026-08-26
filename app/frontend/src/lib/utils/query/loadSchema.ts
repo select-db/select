@@ -3,11 +3,6 @@ import { QuerySchema } from '$lib/bindings/selectDb/internal/db_client/dbclient'
 
 import { AlertType } from '$lib/system/Alert/types';
 import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';
-import {
-	clearDatabaseError,
-	setDatabaseError
-} from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
-
 import { pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
 import { tryCatch } from '../tryCatch';
 
@@ -30,16 +25,12 @@ export const loadSchema = async ({
 
 	removeFromLoadingStore(database.id);
 
-	// The failure is recorded whether or not this call wanted an alert: a toast
-	// is gone in seconds, and the thing the user is looking at is a database
-	// that expanded to nothing. The tree reads this to say why.
+	// A failed load reports and stops: announcing "schema loaded" straight after
+	// an error is what made this read as a silent failure.
 	if (err) {
-		setDatabaseError(database.id, err.message);
 		if (!silent) notifyError(err.message);
 		return;
 	}
-
-	clearDatabaseError(database.id);
 
 	if (noCache)
 		notify({
