@@ -193,6 +193,36 @@
 			});
 		});
 
+	/**
+	 * Drops the last result for the databases about to run.
+	 *
+	 * A run only writes its own result once `query:started` comes back, which on
+	 * a remote or tunnelled connection is seconds away. Until then the pane kept
+	 * showing the previous run's rows, row count and duration — and because a
+	 * finished duration stops the clock, the header read as a query that had
+	 * already returned while it was still going. The pane already has a running
+	 * state; it just could not reach it while the old result sat in the slot.
+	 */
+	const clearResultsForRun = (dbIdsToClear: string[], mode: 'run' | 'explain' | 'plan') => {
+		if (!file) return;
+
+		const currentTab = getTabByNodeId(file.id);
+		if (!currentTab?.file?.node) return;
+
+		const key =
+			mode === 'run' ? 'queryResults' : mode === 'plan' ? 'planResults' : 'explainResults';
+		const cleared = { ...(currentTab.file.node[key] ?? {}) };
+		for (const dbId of dbIdsToClear) delete cleared[dbId];
+
+		updateTab({
+			...currentTab,
+			file: {
+				...currentTab.file,
+				node: { ...currentTab.file.node, [key]: cleared } as graph.FileNode
+			}
+		});
+	};
+
 	const run = async (mode: 'run' | 'explain' | 'plan', dbIdsArg?: string[]) => {
 		if (!file || !tab.file || !tab.file.node) return;
 
@@ -239,6 +269,8 @@
 				});
 			}
 		}
+
+		clearResultsForRun(targetDbIds, mode);
 
 		const results: Record<string, RunStatementResult> = {};
 		for (const dbId of targetDbIds) {
