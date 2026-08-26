@@ -6,15 +6,21 @@ import { notify, notifyError } from '$lib/system/Notifications/notificationsStor
 import { pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
 import { tryCatch } from '../tryCatch';
 
+/**
+ * Loads a database's schema, reporting failure the way the rest of the app
+ * reports failure.
+ *
+ * There used to be a `silent` option, taken by four of the nine call sites —
+ * including both tree-click paths and the explicit "Reload schema" action — and
+ * it suppressed the error, not the noise. A database that cannot be read then
+ * expanded to nothing with the reason only in the log.
+ */
 export const loadSchema = async ({
 	database,
-	noCache = false,
-	silent = false
+	noCache = false
 }: {
 	database: graph.DBInstanceNode;
 	noCache?: boolean;
-	/** When true, do not show an error alert */
-	silent?: boolean;
 }) => {
 	pushToLoadingStore(database.id);
 
@@ -25,10 +31,10 @@ export const loadSchema = async ({
 
 	removeFromLoadingStore(database.id);
 
-	// A failed load reports and stops: announcing "schema loaded" straight after
-	// an error is what made this read as a silent failure.
+	// Reports and stops: announcing "schema loaded" straight after an error is
+	// what made this read as a silent failure.
 	if (err) {
-		if (!silent) notifyError(err.message);
+		notifyError(err.message);
 		return;
 	}
 
