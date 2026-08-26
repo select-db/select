@@ -2,7 +2,10 @@
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { loadingStore } from '$lib/utils/query/loadingStore';
-	import { databaseAvailabilityStore } from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
+	import {
+		databaseAvailabilityStore,
+		databaseErrorsStore
+	} from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
 
 	type DatabaseIndicatorProps = {
 		id?: string | null;
@@ -12,6 +15,11 @@
 	};
 
 	let { id = null, size = 18, loaderSize = 16, error = false }: DatabaseIndicatorProps = $props();
+
+	// A database whose schema would not load is not "fine" just because the
+	// connection stands, so the icon carries the failure whether or not the
+	// caller knew about it — including while the node is collapsed.
+	const hasError = $derived(error || (id != null && $databaseErrorsStore.has(id)));
 
 	const dbPrefix = $derived(() => (id ? `db:${id}` : null));
 	const isLoading = $derived(() => {
@@ -24,7 +32,7 @@
 {#if id}
 	{#if isLoading()}
 		<Loader size={loaderSize} />
-	{:else if error}
+	{:else if hasError}
 		<div class="icon-wrapper" style={`--indicator-size: ${size}px`}>
 			<div class="dot-wrapper">
 				<Icon icon="db" {size} />
