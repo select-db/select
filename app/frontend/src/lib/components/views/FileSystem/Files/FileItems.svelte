@@ -12,7 +12,9 @@
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
 	import { createClickHandlers, createDeferredClickHandlers } from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
-	import { QuerySchema } from '$lib/bindings/selectDb/internal/db_client/dbclient';
+	import { loadSchema } from '$lib/utils/query/loadSchema';
+	import { databaseErrorsStore } from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
+	import SchemaErrorRow from './SchemaErrorRow.svelte';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
@@ -83,8 +85,12 @@
 
 		toggleIsItemExpanded(item.id);
 
+		// Through loadSchema, not QuerySchema directly: expanding a database is the
+		// most common way to load a schema, and it was the one path that dropped
+		// the result on the floor — no await, no catch. A server that refuses the
+		// read left the node expanded and empty with nothing said anywhere.
 		if (item.type === 'db_instance' && 'children' in item && item.children.length === 0) {
-			QuerySchema({ DatabaseInstanceID: item.id, NoCache: false });
+			void loadSchema({ database: item as graph.DBInstanceNode });
 		}
 	};
 
@@ -162,6 +168,10 @@
 				role="region"
 				aria-label={`${database.name} content drop zone`}
 			>
+				{#if $databaseErrorsStore.has(database.id) && database.children.length === 0}
+					<SchemaErrorRow {database} message={$databaseErrorsStore.get(database.id) ?? ''} />
+				{/if}
+
 				<FileItems
 					depth={depth + 1}
 					folders={database.folders}

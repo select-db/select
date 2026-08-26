@@ -3,6 +3,10 @@ import { QuerySchema } from '$lib/bindings/selectDb/internal/db_client/dbclient'
 
 import { AlertType } from '$lib/system/Alert/types';
 import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';
+import {
+	clearDatabaseError,
+	setDatabaseError
+} from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
 
 import { pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
 import { tryCatch } from '../tryCatch';
@@ -19,15 +23,23 @@ export const loadSchema = async ({
 }) => {
 	pushToLoadingStore(database.id);
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const [_, err] = await tryCatch(QuerySchema, {
+	const [, err] = await tryCatch(QuerySchema, {
 		DatabaseInstanceID: database.id,
 		NoCache: noCache
 	});
 
-	if (err && !silent) notifyError(err.message);
-
 	removeFromLoadingStore(database.id);
+
+	// The failure is recorded whether or not this call wanted an alert: a toast
+	// is gone in seconds, and the thing the user is looking at is a database
+	// that expanded to nothing. The tree reads this to say why.
+	if (err) {
+		setDatabaseError(database.id, err.message);
+		if (!silent) notifyError(err.message);
+		return;
+	}
+
+	clearDatabaseError(database.id);
 
 	if (noCache)
 		notify({
