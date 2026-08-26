@@ -153,6 +153,15 @@ export function useToolExecution(
 	}
 
 	async function runExecutor(tc: ToolCallPart, args: unknown): Promise<void> {
+		// One execution per tool call, whichever path asks for it. Approving flips
+		// the state to 'approval-responded', which is exactly what the safety-net
+		// effect below looks for, and the result is not recorded until this
+		// returns — so both reach the same executor. The second run finds the work
+		// already done (edit_file has consumed its diff session by then) and
+		// reports a failure over the top of the success.
+		if (executionStartedIds.has(tc.id)) return;
+		executionStartedIds.add(tc.id);
+
 		const [result, err] = await tryCatch(toolExecutors[tc.name], args, buildContext(tc));
 		if (err) {
 			await chat.addToolResult({
@@ -226,7 +235,6 @@ export function useToolExecution(
 			if (executionStartedIds.has(tc.id)) continue;
 			if (!tc.arguments) continue;
 
-			executionStartedIds.add(tc.id);
 			const args = parseArgs(tc.arguments);
 			runExecutor(tc, args);
 		}
