@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { GetAppVersion } from '$lib/bindings/selectDb/internal/system/system';
 	import Select from '$lib/system/Select/Select.svelte';
 	import type { SelectOption } from '$lib/system/Select/Select.types';
 	import LoginBtn from './LoginBtn.svelte';
@@ -123,7 +124,13 @@
 		openRemoveConfirm(domain);
 	}
 
+	// The app's own version, which nothing in the UI showed before: the only
+	// version on screen was the server's, so an update prompt naming a different
+	// number read as a bug rather than as a build the app had not caught up to.
+	let appVersion = $state('');
+
 	onMount(async () => {
+		void GetAppVersion().then((v) => (appVersion = v));
 		await loadServers();
 		const [defaultDomain] = await tryCatch(GetDefaultServer);
 		defaultServer = typeof defaultDomain === 'string' ? defaultDomain : '';
@@ -222,9 +229,13 @@
 					<p class="server-version server-version--muted">Checking server…</p>
 				{:else if $serverIndicatorStore[currentServer]?.manifest?.backend_version}
 					<p class="server-version">
-						v.{$serverIndicatorStore[currentServer].manifest?.backend_version}
+						Server v.{$serverIndicatorStore[currentServer].manifest?.backend_version}
 					</p>
 				{/if}
+			{/if}
+
+			{#if appVersion}
+				<p class="server-version">App v.{appVersion}</p>
 			{/if}
 
 			<div class="divider"></div>
