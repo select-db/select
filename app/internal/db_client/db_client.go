@@ -17,7 +17,20 @@ import (
 	"github.com/selectDb/dialect/engine/transport"
 )
 
+// appPoolConfig bounds every pool the desktop app opens to a remote DB. Without
+// it database/sql defaults to unlimited open connections, so schema loads and
+// concurrent queries could open dozens of connections and trip the remote's
+// "too many clients already". MetadataConcurrency=1 (below) keeps a schema load
+// to a single connection; the rest of this budget is for user queries.
+var appPoolConfig = engine.PoolConfig{
+	MaxOpenConns:    4,
+	MaxIdleConns:    2,
+	ConnMaxLifetime: 30 * time.Minute,
+	ConnMaxIdleTime: 5 * time.Minute,
+}
+
 var engineClient = engine.Client{
+	MetadataConcurrency: 1,
 	Transport: &transport.HTTPTransport{
 		Fetch: func(
 			ctx context.Context,
@@ -72,7 +85,7 @@ func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, ss
 		return nil, fmt.Errorf("SSH config: %w", err)
 	}
 
-	return engine.GetOrOpenConn(workspaceID, dbType, dsn, resolvedSSH)
+	return engine.GetOrOpenConn(workspaceID, dbType, dsn, resolvedSSH, appPoolConfig)
 }
 
 // getEngineConn returns Conn with DB for local, empty Conn{} for proxified.

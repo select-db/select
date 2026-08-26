@@ -35,8 +35,8 @@ type ResolvedSSHConfig struct {
 }
 
 type hostKeyResult struct {
-	callback  ssh.HostKeyCallback
-	algorithm string // empty = no preference
+	callback   ssh.HostKeyCallback
+	algorithms []string // empty = no preference (accept the server's default order)
 }
 
 // sshHostKeyCallback pins the bastion's host key. When a key is configured it
@@ -56,9 +56,19 @@ func sshHostKeyCallback(hostKey string) (hostKeyResult, error) {
 		return hostKeyResult{}, newConfigErrorf("invalid ssh host key (expected \"type base64\", e.g. ssh-keyscan output): %v", err)
 	}
 	return hostKeyResult{
-		callback:  ssh.FixedHostKey(pub),
-		algorithm: pub.Type(),
+		callback:   ssh.FixedHostKey(pub),
+		algorithms: hostKeyAlgorithmsFor(pub.Type()),
 	}, nil
+}
+
+// hostKeyAlgorithmsFor returns the algorithms that authenticate a pinned host
+// key. An RSA key must also allow the rsa-sha2-256/512 variants: they verify the
+// same key, and modern OpenSSH no longer offers legacy SHA-1 "ssh-rsa".
+func hostKeyAlgorithmsFor(keyType string) []string {
+	if keyType == ssh.KeyAlgoRSA {
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+	}
+	return []string{keyType}
 }
 
 // sshTunnel is a single SSH local port-forward. It implements Tunnel.
@@ -153,14 +163,17 @@ func StartSSHTunnel(config ResolvedSSHConfig, remoteHost string, remotePort int)
 		HostKeyCallback: hkResult.callback,
 		Timeout:         5 * time.Second,
 	}
-	if hkResult.algorithm != "" {
-		sshConfig.HostKeyAlgorithms = []string{hkResult.algorithm}
+	if len(hkResult.algorithms) > 0 {
+		sshConfig.HostKeyAlgorithms = hkResult.algorithms
 	}
 
 	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	client, err := ssh.Dial("tcp", addr, sshConfig)
 	if err != nil {
-		return nil, fmt.Errorf("ssh dial %s: %w", addr, err)
+		// Safe to surface: the bastion is user-configured and guard-validated,
+		// and handshake detail (host-key/algorithm/auth) is actionable. The
+		// DB-target probe below stays masked to avoid an SSRF oracle.
+		return nil, newConfigErrorf("ssh connection to %s failed: %v", addr, err)
 	}
 
 	// Preflight: confirm the bastion can actually reach the database. Without
@@ -217,6 +230,16 @@ func buildSSHAuth(config ResolvedSSHConfig) (sshAuth, error) {
 		}
 		signer, err := ssh.ParsePrivateKey([]byte(keyText))
 		if err != nil {
+			// A pasted key carries no passphrase (unlike key_file), so an
+			// encrypted one can't be decrypted here. Say so instead of leaking
+			// the raw "this private key is passphrase protected".
+			var missing *ssh.PassphraseMissingError
+			if errors.As(err, &missing) {
+				if EnforceOutboundGuard {
+					return sshAuth{}, newConfigError("ssh private key is passphrase-protected, which proxied connections cannot use; paste an unencrypted key")
+				}
+				return sshAuth{}, newConfigError("ssh private key is passphrase-protected; paste an unencrypted key, or use the key-file option to supply its passphrase")
+			}
 			return sshAuth{}, newConfigErrorf("ssh private key parse error: %v", err)
 		}
 		return sshAuth{method: ssh.PublicKeys(signer), cleanup: noCleanup}, nil

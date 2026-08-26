@@ -377,6 +377,7 @@
 		color: var(--gray-800);
 		border-left: none;
 		border-right: none;
+		background-color: var(--gray-200);
 	}
 
 	.grid-table thead tr:last-child th {
@@ -415,21 +416,19 @@
 
 	.grid-table td {
 		font-size: var(--fs-sm);
-		padding: var(--space-sm) var(--space-sm) calc(var(--space-xs-sm) + 2px) var(--space-sm);
+		padding: var(--space-sm-md) var(--space-sm) calc(var(--space-sm) + 2px) var(--space-sm);
 		text-align: left;
 		vertical-align: center;
 		white-space: nowrap;
+		background-color: var(--gray-200);
 
 		border-left: none;
 		border-right: none;
+		border-bottom: var(--border);
 	}
 
 	.grid-table tbody tr td:last-child {
 		padding-right: var(--space-md);
-	}
-
-	.grid-table tr:last-child td {
-		border-bottom: var(--border);
 	}
 
 	.row-wrapper {
@@ -464,7 +463,6 @@
 		left: 0;
 		top: 0;
 		z-index: 5 !important;
-		background: var(--gray-200);
 		box-shadow: 0.5px 0 0 0 var(--shadow);
 	}
 
@@ -472,8 +470,8 @@
 		position: sticky;
 		left: 0;
 		z-index: 2;
-		background: var(--gray-100);
 		box-shadow: 0.5px 0 0 0 var(--shadow);
+		border-right: var(--border);
 	}
 
 	.row-wrapper:hover td.sticky {
@@ -622,14 +620,6 @@
 		font-size: var(--fs-sm);
 		border-bottom: none !important;
 	}
-
-	/* .metadata-table tbody tr:not(:last-child) {
-		border-bottom: 1px solid var(--gray-300);
-	}
-
-	.metadata-table tbody tr:last-child {
-		border-bottom: none;
-	} */
 
 	.metadata-key {
 		padding: var(--space-xs) var(--space-sm);

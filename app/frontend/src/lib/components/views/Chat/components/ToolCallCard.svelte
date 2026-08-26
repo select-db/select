@@ -152,7 +152,7 @@
 	.tool-card-command {
 		border-top: var(--border);
 		padding: var(--space-sm) var(--space-sm-md);
-		background-color: var(--gray-400);
+		background-color: var(--gray-100);
 		overflow-x: auto;
 	}
 
@@ -199,12 +199,10 @@
 
 	.tool-pre {
 		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
-		font-size: 0.85em;
 		line-height: 1.5;
 		white-space: pre;
 		word-break: break-word;
-		background-color: var(--gray-400);
-		border-radius: var(--br-xs);
+		background-color: var(--gray-200);
 	}
 
 	.tool-pre.tool-json {
@@ -218,6 +216,7 @@
 		font-size: inherit;
 		background: transparent !important;
 		border: var(--border);
+		border-radius: var(--br-sm);
 	}
 
 	.tool-pre.tool-json code.hljs {

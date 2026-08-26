@@ -36,6 +36,7 @@ func GetOrFetchMetadata(
 	dialect core.SQLDialect,
 	dbName string,
 	refresh bool,
+	maxConcurrency ...int,
 ) (*core.Metadata, error) {
 	key := hashWorkspaceDSN(workspaceID, dsn)
 
@@ -48,7 +49,7 @@ func GetOrFetchMetadata(
 		}
 	}
 
-	meta, err := FetchMetadata(ctx, db, dialect, dbName)
+	meta, err := FetchMetadata(ctx, db, dialect, dbName, maxConcurrency...)
 	if err != nil {
 		return nil, err
 	}
