@@ -15,7 +15,7 @@ export const databaseOptions = [
 	{
 		label: 'Refresh',
 		action: (onClose, database: graph.DBInstanceNode) => {
-			void loadSchema({ database, noCache: true, silent: true });
+			void loadSchema({ database, noCache: true });
 			onClose();
 		}
 	},

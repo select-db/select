@@ -10,5 +10,5 @@ export const navigateToDatabase = async (database: graph.DBInstanceNode) => {
 	const shouldLoadSchema =
 		'children' in database && (!database.children || database.children.length === 0);
 
-	if (shouldLoadSchema) loadSchema({ database, silent: true });
+	if (shouldLoadSchema) loadSchema({ database });
 };

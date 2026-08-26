@@ -26,7 +26,7 @@
 
 	let { onClose }: Props = $props();
 
-	const databases = $derived(($workspaceGraphStore?.db_instances ?? []));
+	const databases = $derived($workspaceGraphStore?.db_instances ?? []);
 
 	const persisted = readWorkspaceSearch();
 	let searchQuery = $state('');
@@ -89,7 +89,7 @@
 	onMount(() => {
 		for (const db of databases) {
 			if ((db.children?.length ?? 0) !== 0) continue;
-			loadSchema({ database: db, silent: true });
+			loadSchema({ database: db });
 		}
 	});
 

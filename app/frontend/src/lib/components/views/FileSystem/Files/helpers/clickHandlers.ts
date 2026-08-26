@@ -124,7 +124,7 @@ const clickItem = async (item: graph.DBInstanceNode | graph.DBInstanceItemNode) 
 	const shouldLoadSchema =
 		item.type === 'db_instance' && 'children' in item && item.children.length === 0;
 
-	if (shouldLoadSchema) loadSchema({ database: item as graph.DBInstanceNode, silent: true });
+	if (shouldLoadSchema) loadSchema({ database: item as graph.DBInstanceNode });
 
 	setItemSelection([item.id]);
 };
@@ -237,18 +237,8 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
 	if (!root) return [];
 
 	// Find both items with their parent information
-	const fromResult = findItemWithParent(
-		fromId,
-		root.files,
-		root.folders,
-		root.db_instances
-	);
-	const toResult = findItemWithParent(
-		toId,
-		root.files,
-		root.folders,
-		root.db_instances
-	);
+	const fromResult = findItemWithParent(fromId, root.files, root.folders, root.db_instances);
+	const toResult = findItemWithParent(toId, root.files, root.folders, root.db_instances);
 
 	if (!fromResult || !toResult) return [];
 
