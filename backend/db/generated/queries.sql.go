@@ -1969,6 +1969,23 @@ func (q *Queries) UpdateUserIdentityEmail(ctx context.Context, arg UpdateUserIde
 	return err
 }
 
+const updateWorkspaceLogo = `-- name: UpdateWorkspaceLogo :exec
+UPDATE app.workspace
+SET logo = $2,
+    updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type UpdateWorkspaceLogoParams struct {
+	ID   db_types.JSONNullUUID
+	Logo db_types.JSONNullString
+}
+
+func (q *Queries) UpdateWorkspaceLogo(ctx context.Context, arg UpdateWorkspaceLogoParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceLogo, arg.ID, arg.Logo)
+	return err
+}
+
 const upsertDatasource = `-- name: UpsertDatasource :exec
 INSERT INTO
   app.datasource (
@@ -2223,23 +2240,6 @@ func (q *Queries) UpsertUserToRole(ctx context.Context, arg UpsertUserToRolePara
 		arg.RoleID,
 		arg.WorkspaceID,
 	)
-	return err
-}
-
-const updateWorkspaceLogo = `-- name: UpdateWorkspaceLogo :exec
-UPDATE app.workspace
-SET logo = $2,
-    updated_at = now()
-WHERE id = $1 AND deleted_at IS NULL
-`
-
-type UpdateWorkspaceLogoParams struct {
-	ID   db_types.JSONNullUUID
-	Logo db_types.JSONNullString
-}
-
-func (q *Queries) UpdateWorkspaceLogo(ctx context.Context, arg UpdateWorkspaceLogoParams) error {
-	_, err := q.db.ExecContext(ctx, updateWorkspaceLogo, arg.ID, arg.Logo)
 	return err
 }
 
