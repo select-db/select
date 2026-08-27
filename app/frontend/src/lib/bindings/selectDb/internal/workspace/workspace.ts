@@ -58,6 +58,13 @@ export function ListWorkspacesForCurrentUser(): $CancellablePromise<$models.Work
     });
 }
 
+/**
+ * RemoveLogo clears the workspace logo on the server, then locally.
+ */
+export function RemoveLogo(workspaceID: string): $CancellablePromise<void> {
+    return $Call.ByID(393921065, workspaceID);
+}
+
 export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<void> {
     return $Call.ByID(3038059970, userID);
 }
@@ -91,16 +98,9 @@ export function SwitchWorkspace(workspaceID: string): $CancellablePromise<void> 
 }
 
 /**
- * RemoveLogo clears the workspace logo on the server, then locally.
- */
-export function RemoveLogo(workspaceID: string): $CancellablePromise<void> {
-    return $Call.ByID(393921065, workspaceID);
-}
-
-/**
  * UpdateLogo uploads a workspace logo through the backend, then mirrors what the
  * server stored into the local database.
- *
+ * 
  * The server is the one that validates and re-encodes the image, so the value
  * written locally is the server's, not the caller's. The local write is
  * deliberately untracked (@no-track): a tracked UPDATE would queue a mutation
