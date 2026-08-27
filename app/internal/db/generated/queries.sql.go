@@ -106,7 +106,7 @@ const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspace (id, name, owner_id)
 VALUES (?1, ?2, ?3)
 ON CONFLICT (id) DO NOTHING
-RETURNING id, name, git_remote_url, last_pulled_at, owner_id, statement_timeout_ms, max_result_size_mb
+RETURNING id, name, git_remote_url, last_pulled_at, owner_id, statement_timeout_ms, max_result_size_mb, logo
 `
 
 type CreateWorkspaceParams struct {
@@ -126,6 +126,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.OwnerID,
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
+		&i.Logo,
 	)
 	return i, err
 }
@@ -337,7 +338,7 @@ func (q *Queries) GetCurrentUser(ctx context.Context) (User, error) {
 
 const getCurrentWorkspace = `-- name: GetCurrentWorkspace :one
 SELECT 
-    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb 
+    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
 FROM 
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
@@ -360,6 +361,7 @@ func (q *Queries) GetCurrentWorkspace(ctx context.Context, userID string) (Works
 		&i.OwnerID,
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
+		&i.Logo,
 	)
 	return i, err
 }
@@ -547,7 +549,7 @@ func (q *Queries) GetRoleWorkspaceID(ctx context.Context, id string) (string, er
 }
 
 const getWorkspaceByID = `-- name: GetWorkspaceByID :one
-SELECT id, name, git_remote_url, last_pulled_at, statement_timeout_ms, max_result_size_mb
+SELECT id, name, git_remote_url, last_pulled_at, statement_timeout_ms, max_result_size_mb, logo
 FROM workspace
 WHERE id = ?1
 `
@@ -559,6 +561,7 @@ type GetWorkspaceByIDRow struct {
 	LastPulledAt       sql.NullTime            `json:"last_pulled_at"`
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
 	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
+	Logo               db_types.JSONNullString `json:"logo"`
 }
 
 func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspaceByIDRow, error) {
@@ -571,6 +574,7 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspace
 		&i.LastPulledAt,
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
+		&i.Logo,
 	)
 	return i, err
 }
@@ -618,7 +622,7 @@ func (q *Queries) GetWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg 
 
 const getWorkspaceToUserByUserId = `-- name: GetWorkspaceToUserByUserId :one
 SELECT 
-    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb 
+    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
 FROM 
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
@@ -640,6 +644,7 @@ func (q *Queries) GetWorkspaceToUserByUserId(ctx context.Context, userID string)
 		&i.OwnerID,
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
+		&i.Logo,
 	)
 	return i, err
 }
@@ -1432,6 +1437,7 @@ const listWorkspacesByUserID = `-- name: ListWorkspacesByUserID :many
 SELECT
     w.id,
     w.name,
+    w.logo,
     wtu.current
 FROM
     workspace w
@@ -1443,9 +1449,10 @@ ORDER BY
 `
 
 type ListWorkspacesByUserIDRow struct {
-	ID      string       `json:"id"`
-	Name    string       `json:"name"`
-	Current sql.NullBool `json:"current"`
+	ID      string                  `json:"id"`
+	Name    string                  `json:"name"`
+	Logo    db_types.JSONNullString `json:"logo"`
+	Current sql.NullBool            `json:"current"`
 }
 
 func (q *Queries) ListWorkspacesByUserID(ctx context.Context, userID string) ([]ListWorkspacesByUserIDRow, error) {
@@ -1457,7 +1464,12 @@ func (q *Queries) ListWorkspacesByUserID(ctx context.Context, userID string) ([]
 	var items []ListWorkspacesByUserIDRow
 	for rows.Next() {
 		var i ListWorkspacesByUserIDRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Current); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Logo,
+			&i.Current,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1714,6 +1726,23 @@ type UpdateWorkspaceGitRemoteParams struct {
 
 func (q *Queries) UpdateWorkspaceGitRemote(ctx context.Context, arg UpdateWorkspaceGitRemoteParams) error {
 	_, err := q.db.ExecContext(ctx, updateWorkspaceGitRemote, arg.GitRemoteUrl, arg.ID)
+	return err
+}
+
+const updateWorkspaceLogo = `-- name: UpdateWorkspaceLogo :exec
+; -- @no-track
+UPDATE workspace
+SET logo = ?1
+WHERE id = ?2
+`
+
+type UpdateWorkspaceLogoParams struct {
+	Logo db_types.JSONNullString `json:"logo"`
+	ID   string                  `json:"id"`
+}
+
+func (q *Queries) UpdateWorkspaceLogo(ctx context.Context, arg UpdateWorkspaceLogoParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceLogo, arg.Logo, arg.ID)
 	return err
 }
 
@@ -1991,14 +2020,15 @@ func (q *Queries) UpsertUserToRoleForSync(ctx context.Context, arg UpsertUserToR
 
 const upsertWorkspaceForSync = `-- name: UpsertWorkspaceForSync :exec
 ; -- @no-track
-INSERT INTO workspace (id, name, git_remote_url, owner_id, statement_timeout_ms, max_result_size_mb)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+INSERT INTO workspace (id, name, git_remote_url, owner_id, statement_timeout_ms, max_result_size_mb, logo)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
     git_remote_url = excluded.git_remote_url,
     owner_id = excluded.owner_id,
     statement_timeout_ms = excluded.statement_timeout_ms,
-    max_result_size_mb = excluded.max_result_size_mb
+    max_result_size_mb = excluded.max_result_size_mb,
+    logo = excluded.logo
 `
 
 type UpsertWorkspaceForSyncParams struct {
@@ -2008,6 +2038,7 @@ type UpsertWorkspaceForSyncParams struct {
 	OwnerID            db_types.JSONNullString `json:"owner_id"`
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
 	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
+	Logo               db_types.JSONNullString `json:"logo"`
 }
 
 func (q *Queries) UpsertWorkspaceForSync(ctx context.Context, arg UpsertWorkspaceForSyncParams) error {
@@ -2018,6 +2049,7 @@ func (q *Queries) UpsertWorkspaceForSync(ctx context.Context, arg UpsertWorkspac
 		arg.OwnerID,
 		arg.StatementTimeoutMs,
 		arg.MaxResultSizeMb,
+		arg.Logo,
 	)
 	return err
 }

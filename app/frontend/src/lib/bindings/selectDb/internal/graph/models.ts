@@ -878,6 +878,13 @@ export class WorkspaceNode {
     "is_owner": boolean;
 
     /**
+     * Logo is the base64 of a 128x128 PNG, empty when unset. Stored bare rather
+     * than as a data URL so a row can never carry its own media type into an
+     * <img src>; the frontend adds the "data:image/png;base64," prefix.
+     */
+    "logo": string;
+
+    /**
      * Execution limits are team policy stored on the workspace row (synced via
      * the backend), not in a workspace file.
      */
@@ -900,6 +907,9 @@ export class WorkspaceNode {
         }
         if (!("is_owner" in $$source)) {
             this["is_owner"] = false;
+        }
+        if (!("logo" in $$source)) {
+            this["logo"] = "";
         }
         if (!("statement_timeout_ms" in $$source)) {
             this["statement_timeout_ms"] = 0;

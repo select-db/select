@@ -7,7 +7,14 @@
 	import { notify } from '$lib/system/Notifications/notificationsStore';
 	import { AlertType } from '$lib/system/Alert/types';
 	import { tryCatch } from '$lib/utils/tryCatch';
-	import { UpdateName, DeleteWorkspace } from '$lib/bindings/selectDb/internal/workspace/workspace';
+	import {
+		UpdateName,
+		DeleteWorkspace,
+		UpdateLogo,
+		RemoveLogo
+	} from '$lib/bindings/selectDb/internal/workspace/workspace';
+	import Avatar from '$lib/system/Avatar/Avatar.svelte';
+	import { fileToLogoBase64, logoSrc, LOGO_ACCEPT, LOGO_SIZE } from '$lib/utils/workspaceLogo';
 	import {
 		Logout,
 		UpdateWorkspaceExecutionLimits
@@ -18,6 +25,53 @@
 
 	let name = $state('');
 	let saving = $state(false);
+
+	// The logo is edited like the rest of the form: picking a file only stages it,
+	// Save is what sends it. undefined means "unchanged", null means "remove".
+	let stagedLogo = $state<string | null | undefined>(undefined);
+	let logoError = $state('');
+	let fileInput = $state<HTMLInputElement | null>(null);
+
+	const currentLogo = $derived($workspaceGraphStore?.logo ?? '');
+	const previewLogo = $derived(stagedLogo === undefined ? currentLogo : (stagedLogo ?? ''));
+
+	async function pickLogo(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		// Reset the input so picking the same file twice still fires a change.
+		input.value = '';
+		if (!file) return;
+
+		logoError = '';
+		const [base64, err] = await tryCatch(fileToLogoBase64, file);
+		if (err || !base64) {
+			logoError = err?.message ?? 'Could not read that image';
+			return;
+		}
+		stagedLogo = base64;
+	}
+
+	function clearLogo() {
+		logoError = '';
+		stagedLogo = currentLogo ? null : undefined;
+	}
+
+	// Sends the staged logo, if any. The server validates and re-encodes it, so
+	// what lands in the database is never the bytes the picker produced.
+	async function saveLogo(workspaceID: string): Promise<boolean> {
+		if (stagedLogo === undefined) return true;
+
+		const [, err] =
+			stagedLogo === null
+				? await tryCatch(RemoveLogo, workspaceID)
+				: await tryCatch(UpdateLogo, workspaceID, stagedLogo);
+		if (err) {
+			logoError = err?.message ?? 'Failed to save logo';
+			return false;
+		}
+		stagedLogo = undefined;
+		return true;
+	}
 
 	// Execution limits are team policy stored on the workspace (synced via the
 	// backend), shared with everyone in the workspace.
@@ -38,6 +92,12 @@
 
 		saving = true;
 		const trimmedName = name.trim();
+
+		if (!(await saveLogo(g.id))) {
+			saving = false;
+			notify({ type: AlertType.Error, message: logoError });
+			return;
+		}
 
 		// Name is required: only update it when it changed and is non-empty.
 		if (trimmedName && trimmedName !== g.name) {
@@ -65,9 +125,12 @@
 		maxResultSizeMb = res.max_result_size_mb;
 		notify({ type: AlertType.Success, message: 'Workspace settings saved' });
 
+		// Re-read rather than reusing the snapshot taken at the top of save(): the
+		// logo upload rebuilds the graph, so `g` no longer has the current logo.
+		const latest = get(workspaceGraphStore) ?? g;
 		workspaceGraphStore.set({
-			...g,
-			name: trimmedName || g.name,
+			...latest,
+			name: trimmedName || latest.name,
 			statement_timeout_ms: res.statement_timeout_ms,
 			max_result_size_mb: res.max_result_size_mb
 		} as graph.WorkspaceNode);
@@ -107,6 +170,38 @@
 		<div class="field">
 			<Input bind:value={name} placeholder="My Workspace" />
 		</div>
+		<div></div>
+		<p class="section-title">Workspace logo</p>
+		<div class="logo-field">
+			<Avatar src={logoSrc(previewLogo)} {name} size={48} shape="rounded" />
+			<div class="logo-actions">
+				<div class="actions">
+					<Button
+						content={previewLogo ? 'Replace' : 'Upload'}
+						emphasis="low"
+						size="sm"
+						onclick={() => fileInput?.click()}
+					/>
+					{#if previewLogo}
+						<Button content="Remove" emphasis="low" size="sm" onclick={clearLogo} />
+					{/if}
+				</div>
+				{#if logoError}
+					<span class="logo-error">{logoError}</span>
+				{:else}
+					<span class="field-label">
+						PNG, JPEG or WebP. Cropped to {LOGO_SIZE}&times;{LOGO_SIZE}.
+					</span>
+				{/if}
+			</div>
+		</div>
+		<input
+			bind:this={fileInput}
+			class="logo-input"
+			type="file"
+			accept={LOGO_ACCEPT}
+			onchange={pickLogo}
+		/>
 		<div></div>
 		<p class="section-title">Execution limits</p>
 		<div class="field" style="max-width: 150px;">
@@ -160,6 +255,23 @@
 	.field-label {
 		font-size: var(--fs-xs);
 		color: var(--gray-800);
+	}
+	.logo-field {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm-md);
+	}
+	.logo-actions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+	.logo-error {
+		font-size: var(--fs-xs);
+		color: var(--red);
+	}
+	.logo-input {
+		display: none;
 	}
 	.actions {
 		margin-top: var(--space-xs);

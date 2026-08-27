@@ -90,6 +90,28 @@ export function SwitchWorkspace(workspaceID: string): $CancellablePromise<void> 
     return $Call.ByID(1184707179, workspaceID);
 }
 
+/**
+ * RemoveLogo clears the workspace logo on the server, then locally.
+ */
+export function RemoveLogo(workspaceID: string): $CancellablePromise<void> {
+    return $Call.ByID(393921065, workspaceID);
+}
+
+/**
+ * UpdateLogo uploads a workspace logo through the backend, then mirrors what the
+ * server stored into the local database.
+ *
+ * The server is the one that validates and re-encodes the image, so the value
+ * written locally is the server's, not the caller's. The local write is
+ * deliberately untracked (@no-track): a tracked UPDATE would queue a mutation
+ * commit and push the logo back up the sync path, which does not carry the
+ * column. Teammates receive it on their next pull instead, because the endpoint
+ * bumps the workspace's updated_at.
+ */
+export function UpdateLogo(workspaceID: string, logo: string): $CancellablePromise<void> {
+    return $Call.ByID(3908011900, workspaceID, logo);
+}
+
 export function UpdateName(workspaceID: string, name: string): $CancellablePromise<void> {
     return $Call.ByID(1330736336, workspaceID, name);
 }

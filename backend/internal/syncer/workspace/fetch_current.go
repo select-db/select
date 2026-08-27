@@ -30,6 +30,7 @@ func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, err
 		ID:           row.ID.String(),
 		Name:         row.Name.ValueOrEmpty(),
 		GitRemoteURL: row.GitRemoteUrl.Ptr(),
+		Logo:         row.Logo.Ptr(),
 		UpdatedAt:    row.UpdatedAt.ValueOrZero(),
 	}
 	if row.OwnerID.Valid {

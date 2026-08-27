@@ -49,6 +49,7 @@ func (g *Graph) BuildWorkspaceGraph() error {
 
 		Name:    ws.Name,
 		IsOwner: ws.OwnerID.String == user.ID,
+		Logo:    ws.Logo.Or(""),
 
 		StatementTimeoutMs: NormalizeStatementTimeoutMs(int(ws.StatementTimeoutMs)),
 		MaxResultSizeMB:    NormalizeMaxResultSizeMB(int(ws.MaxResultSizeMb)),

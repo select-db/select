@@ -37,6 +37,7 @@ func appWorkspaceToTypesRow(row generated.GetWorkspacesForUserSinceRow) types.Wo
 		ID:           row.ID.String(),
 		Name:         row.Name.ValueOrEmpty(),
 		GitRemoteURL: row.GitRemoteUrl.Ptr(),
+		Logo:         row.Logo.Ptr(),
 		UpdatedAt:    row.UpdatedAt.ValueOrZero(),
 	}
 	if row.OwnerID.Valid {

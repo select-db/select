@@ -44,6 +44,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 				ID:           row.ID.String(),
 				Name:         row.Name.ValueOrEmpty(),
 				GitRemoteURL: row.GitRemoteUrl.Ptr(),
+				Logo:         row.Logo.Ptr(),
 				UpdatedAt:    row.UpdatedAt.ValueOrZero(),
 			}
 			if row.OwnerID.Valid {
@@ -73,6 +74,11 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 					}
 				}
 			}
+			// logo is deliberately absent here and from UpsertWorkspace's column
+			// list: it is written only by the logo endpoints, which validate and
+			// re-encode the image first. A commit — forged, replayed or merely
+			// malformed — therefore cannot reach the column, and the existing
+			// value survives every upsert.
 			return generated.UpsertWorkspaceParams{
 				ID:           idUUID,
 				Name:         name,

@@ -88,11 +88,17 @@ type UserRow struct {
 	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
-// WorkspaceRow is a workspace row for sync.
+// WorkspaceRow is a workspace row for sync. Logo is pull-only: it is written
+// exclusively by the workspace logo endpoints (see backend/internal/workspace/
+// logo_handler.go), never by an applied commit, so clients receive it here but
+// cannot set it through sync. It carries no omitempty on purpose — a cleared
+// logo has to reach clients as an explicit null, or a removal would never
+// propagate.
 type WorkspaceRow struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
 	GitRemoteURL *string    `json:"git_remote_url"`
+	Logo         *string    `json:"logo"`
 	OwnerID      *string    `json:"owner_id,omitempty"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`

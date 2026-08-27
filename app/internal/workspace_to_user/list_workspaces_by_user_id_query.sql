@@ -2,6 +2,7 @@
 SELECT
     w.id,
     w.name,
+    w.logo,
     wtu.current
 FROM
     workspace w
