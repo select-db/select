@@ -5,19 +5,26 @@
 	import History from '$lib/components/views/History/History.svelte';
 
 	import Resizer from './Resizer.svelte';
-	import { isRightbarOpened, rightPanelTab } from './rightbarStore';
-
-	const MIN_WIDTH = 0;
-	const DEFAULT_WIDTH = 300;
+	import {
+		isRightbarOpened,
+		rightPanelTab,
+		RIGHTBAR_WIDTH_KEY,
+		RIGHTBAR_MIN_WIDTH as MIN_WIDTH,
+		RIGHTBAR_MAX_WIDTH as MAX_WIDTH,
+		RIGHTBAR_DEFAULT_WIDTH as DEFAULT_WIDTH
+	} from './rightbarStore';
+	import { readStoredWidth } from '$lib/utils/storedWidth';
 
 	let closed = $state(false);
 	let rightbarWidth: number = $state(
-		parseInt(localStorage.getItem('rightbarWidth') || `${DEFAULT_WIDTH}`, 200)
+		Math.min(readStoredWidth(RIGHTBAR_WIDTH_KEY, DEFAULT_WIDTH), MAX_WIDTH)
 	);
 	let resizing: boolean = $state(false);
-	let style = $derived(
-		`${closed ? `width: ${MIN_WIDTH}px; padding-left: 0;` : `width: ${rightbarWidth}px;`}`
-	);
+	let width = $derived(closed ? MIN_WIDTH : rightbarWidth);
+	// Pin the container to the same width as the bar: with the width only on the
+	// inner <aside>, the container still sized to its content.
+	let containerStyle = $derived(`min-width: ${width}px; max-width: ${width}px;`);
+	let style = $derived(`width: ${width}px;${closed ? ' padding-left: 0;' : ''}`);
 
 	const unsubscribe = isRightbarOpened.subscribe((v) => {
 		closed = !v;
@@ -27,7 +34,7 @@
 	onDestroy(() => unsubscribe());
 </script>
 
-<div id="rightbarContainer">
+<div id="rightbarContainer" style={containerStyle}>
 	<Resizer bind:width={rightbarWidth} bind:resizing />
 
 	<aside id="rightbar" {style} class:resizing>
@@ -54,7 +61,6 @@
 		flex-direction: column;
 		transition: width 0.1s ease-in;
 		overflow: hidden;
-		max-width: 420px;
 	}
 
 	#rightbar.resizing {

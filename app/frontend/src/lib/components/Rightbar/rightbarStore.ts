@@ -4,6 +4,13 @@ export type RightPanelTab = 'search' | 'history';
 
 const RIGHT_PANEL_TAB_KEY = 'rightPanelTab';
 
+/** Shared by the bar (reads it) and its resizer (writes it) — keep them in sync. */
+export const RIGHTBAR_WIDTH_KEY = 'rightbarWidth';
+
+export const RIGHTBAR_MIN_WIDTH = 0;
+export const RIGHTBAR_MAX_WIDTH = 420;
+export const RIGHTBAR_DEFAULT_WIDTH = 300;
+
 let internalIsRightbarOpened = JSON.parse(localStorage.getItem('isRightbarOpened') ?? 'false');
 let internalRightPanelTab: RightPanelTab =
 	(localStorage.getItem(RIGHT_PANEL_TAB_KEY) as RightPanelTab) ?? 'search';
