@@ -3,9 +3,11 @@
 		name?: string | null;
 		src?: string | null;
 		size?: number;
+		/** People are round, workspaces are squircles. */
+		shape?: 'circle' | 'rounded';
 	};
 
-	let { name, src, size = 18 }: Props = $props();
+	let { name, src, size = 18, shape = 'circle' }: Props = $props();
 
 	function initials(n: string | null | undefined): string {
 		if (!n) return '?';
@@ -17,7 +19,12 @@
 	}
 </script>
 
-<span class="avatar" style:width="{size}px" style:height="{size}px" style:font-size="{Math.round(size * 0.44)}px">
+<span
+	class="avatar {shape}"
+	style:width="{size}px"
+	style:height="{size}px"
+	style:font-size="{Math.round(size * 0.44)}px"
+>
 	{#if src}
 		<img {src} alt={name ?? ''} />
 	{:else}
@@ -26,8 +33,15 @@
 </span>
 
 <style>
-	.avatar {
+	.avatar.circle {
 		border-radius: 50%;
+	}
+
+	.avatar.rounded {
+		border-radius: var(--br-xs);
+	}
+
+	.avatar {
 		background: var(--gray-200);
 		color: var(--gray-900);
 		font-weight: 600;

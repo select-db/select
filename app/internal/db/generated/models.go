@@ -118,6 +118,7 @@ type Workspace struct {
 	OwnerID            db_types.JSONNullString `json:"owner_id"`
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
 	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
+	Logo               db_types.JSONNullString `json:"logo"`
 }
 
 type WorkspaceToUser struct {

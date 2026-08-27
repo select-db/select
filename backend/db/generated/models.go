@@ -109,6 +109,7 @@ type AppWorkspace struct {
 	UpdatedAt    db_types.JSONNullTime
 	DeletedAt    db_types.JSONNullTime
 	OwnerID      db_types.JSONNullUUID
+	Logo         db_types.JSONNullString
 }
 
 type AppWorkspaceToUser struct {

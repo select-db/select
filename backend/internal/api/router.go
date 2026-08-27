@@ -33,6 +33,17 @@ func Register(mux *http.ServeMux) {
 		return middlewares.RateLimit(perMinute)(h)
 	}
 
+	// bodyLimit caps a request body before anything downstream reads it. The
+	// membership middleware buffers the body whole when the X-Workspace-Id header
+	// is absent, so a route that accepts an upload has to be bounded here rather
+	// than inside its handler.
+	bodyLimit := func(max int64, h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, max)
+			h.ServeHTTP(w, r)
+		})
+	}
+
 	// authenticated validates the token and then stashes an audit principal
 	// resolver on the context, so any handler below can attach the actor to an
 	// audit event via audit.ResolvePrincipal without threading it through
@@ -51,6 +62,11 @@ func Register(mux *http.ServeMux) {
 
 	mux.Handle("POST /workspaces", authenticated(limited(60, workspacehandler.CreateHandler())))
 	mux.Handle("DELETE /workspaces/{id}", authenticated(member(limited(30, workspacehandler.DeleteHandler()))))
+
+	// The logo endpoints are the only write path for workspace.logo: they
+	// validate and re-encode the image, which the sync commit path cannot do.
+	mux.Handle("PUT /workspaces/{id}/logo", authenticated(bodyLimit(workspacehandler.MaxLogoRequestBytes, member(limited(10, workspacehandler.UpdateLogoHandler())))))
+	mux.Handle("DELETE /workspaces/{id}/logo", authenticated(member(limited(10, workspacehandler.DeleteLogoHandler()))))
 
 	mux.Handle("GET /users/search", authenticated(member(limited(120, workspacehandler.SearchUserHandler()))))
 	mux.Handle("POST /users", authenticated(member(limited(120, workspacehandler.AddUserHandler()))))
