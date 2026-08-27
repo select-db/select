@@ -934,18 +934,18 @@ export class WorkspaceNode {
      * Creates a new WorkspaceNode instance from a string or object.
      */
     static createFrom($$source: any = {}): WorkspaceNode {
-        const $$createField6_0 = $$createType36;
-        const $$createField7_0 = $$createType16;
-        const $$createField8_0 = $$createType29;
+        const $$createField7_0 = $$createType36;
+        const $$createField8_0 = $$createType16;
+        const $$createField9_0 = $$createType29;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user" in $$parsedSource) {
-            $$parsedSource["user"] = $$createField6_0($$parsedSource["user"]);
+            $$parsedSource["user"] = $$createField7_0($$parsedSource["user"]);
         }
         if ("folders" in $$parsedSource) {
-            $$parsedSource["folders"] = $$createField7_0($$parsedSource["folders"]);
+            $$parsedSource["folders"] = $$createField8_0($$parsedSource["folders"]);
         }
         if ("db_instances" in $$parsedSource) {
-            $$parsedSource["db_instances"] = $$createField8_0($$parsedSource["db_instances"]);
+            $$parsedSource["db_instances"] = $$createField9_0($$parsedSource["db_instances"]);
         }
         return new WorkspaceNode($$parsedSource as Partial<WorkspaceNode>);
     }
