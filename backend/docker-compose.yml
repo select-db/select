@@ -1,0 +1,28 @@
+# Local dev database. `./dev.sh db` (and `./dev.sh start`) bring this up.
+#
+# pg_partman is baked into the image (see Dockerfile.postgres) so the app's
+# audit-partition retention path works. Port 5431 on the host matches the
+# default POSTGRES_DSN in backend/.env, so nothing else needs configuring.
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    image: select-dev-postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      # The dev DSN carries no password (sslmode=disable). Dev-only; never prod.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5431:5432"
+    volumes:
+      - select_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  select_pgdata:
