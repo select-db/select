@@ -10,7 +10,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.55.0
-	modernc.org/sqlite v1.56.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (
