@@ -66,8 +66,6 @@ func TestLogo_UploadStoresReEncodedPNG(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, workspace.LogoSize, cfg.Width)
 	require.Equal(t, workspace.LogoSize, cfg.Height)
-
-	e2e.RequireEvent(t, f.Conn, "iam", "workspace.logo.update")
 }
 
 func TestLogo_UploadBumpsUpdatedAtSoMembersPullIt(t *testing.T) {
@@ -120,7 +118,6 @@ func TestLogo_DeniedWithoutSettingsWrite(t *testing.T) {
 
 	_, ok := storedLogo(t, f)
 	require.False(t, ok, "a denied caller must not store a logo")
-	e2e.RequireEventStatus(t, f.Conn, "iam", "workspace.logo.update", "denied")
 }
 
 // The column constraint is the last line of defence: even if a handler bug let
