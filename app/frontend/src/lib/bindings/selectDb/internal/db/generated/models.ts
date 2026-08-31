@@ -270,6 +270,7 @@ export class Workspace {
     "owner_id": db_types$0.JSONNullString;
     "statement_timeout_ms": number;
     "max_result_size_mb": number;
+    "logo": db_types$0.JSONNullString;
 
     /** Creates a new Workspace instance. */
     constructor($$source: Partial<Workspace> = {}) {
@@ -293,6 +294,9 @@ export class Workspace {
         }
         if (!("max_result_size_mb" in $$source)) {
             this["max_result_size_mb"] = 0;
+        }
+        if (!("logo" in $$source)) {
+            this["logo"] = null;
         }
 
         Object.assign(this, $$source);

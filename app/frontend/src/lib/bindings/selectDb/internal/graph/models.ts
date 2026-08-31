@@ -878,6 +878,13 @@ export class WorkspaceNode {
     "is_owner": boolean;
 
     /**
+     * Logo is the base64 of a 128x128 PNG, empty when unset. Stored bare rather
+     * than as a data URL so a row can never carry its own media type into an
+     * <img src>; the frontend adds the "data:image/png;base64," prefix.
+     */
+    "logo": string;
+
+    /**
      * Execution limits are team policy stored on the workspace row (synced via
      * the backend), not in a workspace file.
      */
@@ -900,6 +907,9 @@ export class WorkspaceNode {
         }
         if (!("is_owner" in $$source)) {
             this["is_owner"] = false;
+        }
+        if (!("logo" in $$source)) {
+            this["logo"] = "";
         }
         if (!("statement_timeout_ms" in $$source)) {
             this["statement_timeout_ms"] = 0;
@@ -924,18 +934,18 @@ export class WorkspaceNode {
      * Creates a new WorkspaceNode instance from a string or object.
      */
     static createFrom($$source: any = {}): WorkspaceNode {
-        const $$createField6_0 = $$createType36;
-        const $$createField7_0 = $$createType16;
-        const $$createField8_0 = $$createType29;
+        const $$createField7_0 = $$createType36;
+        const $$createField8_0 = $$createType16;
+        const $$createField9_0 = $$createType29;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user" in $$parsedSource) {
-            $$parsedSource["user"] = $$createField6_0($$parsedSource["user"]);
+            $$parsedSource["user"] = $$createField7_0($$parsedSource["user"]);
         }
         if ("folders" in $$parsedSource) {
-            $$parsedSource["folders"] = $$createField7_0($$parsedSource["folders"]);
+            $$parsedSource["folders"] = $$createField8_0($$parsedSource["folders"]);
         }
         if ("db_instances" in $$parsedSource) {
-            $$parsedSource["db_instances"] = $$createField8_0($$parsedSource["db_instances"]);
+            $$parsedSource["db_instances"] = $$createField9_0($$parsedSource["db_instances"]);
         }
         return new WorkspaceNode($$parsedSource as Partial<WorkspaceNode>);
     }

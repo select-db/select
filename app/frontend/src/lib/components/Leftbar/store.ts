@@ -4,6 +4,9 @@ export type LeftPanelTab = 'files' | 'github-branch';
 
 const LEFT_PANEL_TAB_KEY = 'leftPanelTab';
 
+/** Shared by the bar (reads it) and its resizer (writes it) — keep them in sync. */
+export const LEFTBAR_WIDTH_KEY = 'leftbarWidth';
+
 let internalIsLeftbarOpened = JSON.parse(localStorage.getItem('isLeftbarOpened') ?? 'true');
 let internalLeftPanelTab: LeftPanelTab =
 	(localStorage.getItem(LEFT_PANEL_TAB_KEY) as LeftPanelTab) ?? 'files';

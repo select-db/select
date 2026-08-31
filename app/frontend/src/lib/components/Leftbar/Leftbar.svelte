@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { isLeftbarOpened } from '$lib/components/Leftbar/store';
+	import { isLeftbarOpened, LEFTBAR_WIDTH_KEY } from '$lib/components/Leftbar/store';
+	import { readStoredWidth } from '$lib/utils/storedWidth';
 
 	import Resizer from './Resizer.svelte';
 	import Content from './Content/Content.svelte';
@@ -12,9 +13,7 @@
 	const DEFAULT_WIDTH = 200;
 
 	let closed = $state(false);
-	let leftbarWidth: number = $state(
-		parseInt(localStorage.getItem('leftbarWidth') || `${DEFAULT_WIDTH}`, 200)
-	);
+	let leftbarWidth: number = $state(readStoredWidth(LEFTBAR_WIDTH_KEY, DEFAULT_WIDTH));
 	let resizing: boolean = $state(false);
 	let style = $derived(
 		`${closed ? `min-width: ${MIN_WIDTH}px;max-width: ${MIN_WIDTH}px;` : `min-width: ${leftbarWidth}px;max-width: ${leftbarWidth}px;`}`

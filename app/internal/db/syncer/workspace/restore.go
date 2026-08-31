@@ -57,6 +57,16 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 	statementTimeoutMs := utils.MapGetIntOr(payload, "statement_timeout_ms", defaultTimeout)
 	maxResultSizeMB := utils.MapGetIntOr(payload, "max_result_size_mb", defaultSize)
 
+	// Server-authoritative: the pulled value replaces whatever is stored locally.
+	// An explicit null must land as null; only an absent key (a server predating
+	// the column) leaves the local value alone.
+	logo := db_types.JSONNullString{}
+	if payloadLogo := utils.MapGetStringPtr(payload, "logo"); payloadLogo != nil {
+		logo = db_types.NewJSONNullString(*payloadLogo)
+	} else if _, present := payload["logo"]; !present && existedBefore {
+		logo = existing.Logo
+	}
+
 	if err := queries.UpsertWorkspaceForSync(ctx, generated.UpsertWorkspaceForSyncParams{
 		ID:                 id,
 		Name:               name,
@@ -64,6 +74,7 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 		OwnerID:            ownerID,
 		StatementTimeoutMs: int64(statementTimeoutMs),
 		MaxResultSizeMb:    int64(maxResultSizeMB),
+		Logo:               logo,
 	}); err != nil {
 		return err
 	}

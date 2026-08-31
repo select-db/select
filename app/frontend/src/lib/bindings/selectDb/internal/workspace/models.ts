@@ -199,10 +199,14 @@ export class WorkspaceUserRole {
 
 /**
  * WorkspaceWithCurrent is a workspace entry with a current flag for the UI.
+ * Logo is the base64 of a 128x128 PNG, empty when the workspace has none; the
+ * UI composes the data URL around it so a stored value can never bring its own
+ * media type.
  */
 export class WorkspaceWithCurrent {
     "id": string;
     "name": string;
+    "logo": string;
     "current": boolean;
 
     /** Creates a new WorkspaceWithCurrent instance. */
@@ -212,6 +216,9 @@ export class WorkspaceWithCurrent {
         }
         if (!("name" in $$source)) {
             this["name"] = "";
+        }
+        if (!("logo" in $$source)) {
+            this["logo"] = "";
         }
         if (!("current" in $$source)) {
             this["current"] = false;
