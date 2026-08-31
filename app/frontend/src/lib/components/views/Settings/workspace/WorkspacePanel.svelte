@@ -10,8 +10,7 @@
 	import {
 		UpdateName,
 		DeleteWorkspace,
-		UpdateLogo,
-		RemoveLogo
+		UpdateLogo
 	} from '$lib/bindings/selectDb/internal/workspace/workspace';
 	import Avatar from '$lib/system/Avatar/Avatar.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
@@ -28,13 +27,13 @@
 	let saving = $state(false);
 
 	// The logo is edited like the rest of the form: picking a file only stages it,
-	// Save is what sends it. undefined means "unchanged", null means "remove".
-	let stagedLogo = $state<string | null | undefined>(undefined);
+	// Save is what sends it. undefined means "unchanged".
+	let stagedLogo = $state<string | undefined>(undefined);
 	let logoError = $state('');
 	let fileInput = $state<HTMLInputElement | null>(null);
 
 	const currentLogo = $derived($workspaceGraphStore?.logo ?? '');
-	const previewLogo = $derived(stagedLogo === undefined ? currentLogo : (stagedLogo ?? ''));
+	const previewLogo = $derived(stagedLogo ?? currentLogo);
 
 	async function pickLogo(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
@@ -57,10 +56,7 @@
 	async function saveLogo(workspaceID: string): Promise<boolean> {
 		if (stagedLogo === undefined) return true;
 
-		const [, err] =
-			stagedLogo === null
-				? await tryCatch(RemoveLogo, workspaceID)
-				: await tryCatch(UpdateLogo, workspaceID, stagedLogo);
+		const [, err] = await tryCatch(UpdateLogo, workspaceID, stagedLogo);
 		if (err) {
 			logoError = err?.message ?? 'Failed to save logo';
 			return false;

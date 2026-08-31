@@ -58,9 +58,10 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 	maxResultSizeMB := utils.MapGetIntOr(payload, "max_result_size_mb", defaultSize)
 
 	// The logo is server-authoritative: it is only ever written by the backend's
-	// logo endpoints, so the pulled value replaces whatever is stored locally,
-	// including clearing it when the workspace no longer has one. A row that
-	// predates the column omits the key, in which case the local value stands.
+	// logo endpoint, so the pulled value replaces whatever is stored locally. A
+	// workspace that has never had one sends an explicit null, which must land as
+	// null rather than as "keep what you have". A row that predates the column
+	// omits the key entirely, and there the local value stands.
 	logo := db_types.JSONNullString{}
 	if payloadLogo := utils.MapGetStringPtr(payload, "logo"); payloadLogo != nil {
 		logo = db_types.NewJSONNullString(*payloadLogo)
