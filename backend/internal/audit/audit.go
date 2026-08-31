@@ -67,7 +67,6 @@ const (
 	ActionWorkspaceCreated     = "workspace.lifecycle.create"
 	ActionWorkspaceDeleted     = "workspace.lifecycle.delete"
 	ActionWorkspaceLogoUpdated = "workspace.logo.update"
-	ActionWorkspaceLogoRemoved = "workspace.logo.remove"
 	ActionAPIKeyCreated        = "api_key.lifecycle.create"
 	ActionAPIKeyRotated        = "api_key.lifecycle.rotate"
 	ActionAPIKeyRevoked        = "api_key.lifecycle.revoke"

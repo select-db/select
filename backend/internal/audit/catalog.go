@@ -137,10 +137,6 @@ var (
 		Domain: DomainIAM, Action: ActionWorkspaceLogoUpdated, Lane: LaneOutbox, TargetType: "workspace",
 		Doc: "a workspace logo was uploaded or replaced",
 	}
-	WorkspaceLogoRemoved = Spec{
-		Domain: DomainIAM, Action: ActionWorkspaceLogoRemoved, Lane: LaneOutbox, TargetType: "workspace",
-		Doc: "a workspace logo was removed",
-	}
 	APIKeyCreated = Spec{
 		Domain: DomainIAM, Action: ActionAPIKeyCreated, Lane: LaneOutbox, TargetType: "api_key",
 		Doc: "an API key was created",
@@ -184,7 +180,7 @@ var Catalog = []Spec{
 	GroupCreated, GroupUpdated, GroupDeleted,
 	GroupUserAdded, GroupUserRemoved,
 	GroupRoleGranted, GroupRoleRevoked,
-	WorkspaceCreated, WorkspaceDeleted, WorkspaceLogoUpdated, WorkspaceLogoRemoved,
+	WorkspaceCreated, WorkspaceDeleted, WorkspaceLogoUpdated,
 	APIKeyCreated, APIKeyRotated, APIKeyRevoked, APIKeySetRoles,
 	DatasourceCreated, DatasourceUpdated, DatasourceDeleted,
 }

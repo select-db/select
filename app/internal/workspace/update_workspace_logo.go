@@ -9,8 +9,9 @@ import (
 	"selectDb/internal/db/generated"
 )
 
-// logoResponse is the server's echo of what it stored: the re-encoded image for
-// an update, null for a removal.
+// logoResponse is the server's echo of what it stored: the re-encoded image, not
+// the bytes we sent. It is a pointer so a response missing the field reads as
+// nil rather than as an empty logo.
 type logoResponse struct {
 	Logo *string `json:"logo"`
 }
@@ -37,25 +38,13 @@ func (w *Workspace) UpdateLogo(workspaceID, logo string) error {
 		return fmt.Errorf("update workspace logo on server: empty response")
 	}
 
-	return w.storeLogoLocally(ctx, workspaceID, db_types.NewJSONNullString(*res.Logo))
+	return w.storeLogoLocally(ctx, workspaceID, *res.Logo)
 }
 
-// RemoveLogo clears the workspace logo on the server, then locally.
-func (w *Workspace) RemoveLogo(workspaceID string) error {
-	ctx := context.Background()
-
-	if err := api.Fetch(ctx, "DELETE", "workspaces/"+workspaceID+"/logo", nil,
-		api.WorkspaceHeader(workspaceID), nil); err != nil {
-		return fmt.Errorf("remove workspace logo on server: %w", err)
-	}
-
-	return w.storeLogoLocally(ctx, workspaceID, db_types.JSONNullString{})
-}
-
-func (w *Workspace) storeLogoLocally(ctx context.Context, workspaceID string, logo db_types.JSONNullString) error {
+func (w *Workspace) storeLogoLocally(ctx context.Context, workspaceID, logo string) error {
 	if err := w.Queries.UpdateWorkspaceLogo(ctx, generated.UpdateWorkspaceLogoParams{
 		ID:   workspaceID,
-		Logo: logo,
+		Logo: db_types.NewJSONNullString(logo),
 	}); err != nil {
 		return fmt.Errorf("store workspace logo: %w", err)
 	}

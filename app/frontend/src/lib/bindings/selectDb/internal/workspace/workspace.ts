@@ -58,13 +58,6 @@ export function ListWorkspacesForCurrentUser(): $CancellablePromise<$models.Work
     });
 }
 
-/**
- * RemoveLogo clears the workspace logo on the server, then locally.
- */
-export function RemoveLogo(workspaceID: string): $CancellablePromise<void> {
-    return $Call.ByID(393921065, workspaceID);
-}
-
 export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<void> {
     return $Call.ByID(3038059970, userID);
 }

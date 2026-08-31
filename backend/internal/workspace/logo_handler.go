@@ -19,7 +19,7 @@ type updateLogoRequest struct {
 }
 
 type logoResponse struct {
-	Logo *string `json:"logo"`
+	Logo string `json:"logo"`
 }
 
 // UpdateLogoHandler stores a workspace logo. The image never reaches the
@@ -32,7 +32,7 @@ type logoResponse struct {
 // stored logo has been through the checks below.
 func UpdateLogoHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a, workspaceUUID, ok := authorizeLogoWrite(w, r, audit.WorkspaceLogoUpdated)
+		a, workspaceUUID, ok := authorizeLogoWrite(w, r)
 		if !ok {
 			return
 		}
@@ -71,40 +71,13 @@ func UpdateLogoHandler() http.HandlerFunc {
 		})
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(logoResponse{Logo: &logo})
+		_ = json.NewEncoder(w).Encode(logoResponse{Logo: logo})
 	}
 }
 
-// DeleteLogoHandler clears a workspace logo.
-func DeleteLogoHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		a, workspaceUUID, ok := authorizeLogoWrite(w, r, audit.WorkspaceLogoRemoved)
-		if !ok {
-			return
-		}
-
-		if err := db.Queries.UpdateWorkspaceLogo(r.Context(), generated.UpdateWorkspaceLogoParams{
-			ID:   workspaceUUID,
-			Logo: db_types.JSONNullString{},
-		}); err != nil {
-			http.Error(w, "failed to remove logo", http.StatusInternalServerError)
-			return
-		}
-
-		audit.EmitAction(r.Context(), audit.WorkspaceLogoRemoved, audit.Record{
-			WorkspaceID: a.WorkspaceID,
-			TargetID:    a.WorkspaceID,
-			Status:      audit.StatusSuccess,
-		})
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(logoResponse{Logo: nil})
-	}
-}
-
-// authorizeLogoWrite gates both logo endpoints on the same permission the sync
+// authorizeLogoWrite gates the logo endpoint on the same permission the sync
 // path required for a workspace write: owner, or workspace/settings.write.
-func authorizeLogoWrite(w http.ResponseWriter, r *http.Request, spec audit.Spec) (authz.Actor, db_types.JSONNullUUID, bool) {
+func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (authz.Actor, db_types.JSONNullUUID, bool) {
 	a := authz.ActorOf(r)
 
 	// The actor's permissions were compiled for the workspace the membership
@@ -112,13 +85,13 @@ func authorizeLogoWrite(w http.ResponseWriter, r *http.Request, spec audit.Spec)
 	// checked against the wrong set. Requiring them to match keeps the id in the
 	// route honest rather than decorative.
 	if id := r.PathValue("id"); id != a.WorkspaceID {
-		audit.EmitDenied(r.Context(), spec, a.WorkspaceID, id)
+		audit.EmitDenied(r.Context(), audit.WorkspaceLogoUpdated, a.WorkspaceID, id)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return a, db_types.JSONNullUUID{}, false
 	}
 
 	if !a.IsOwner() && !a.Can(core.ActionWorkspaceSettingsWrite) {
-		audit.EmitDenied(r.Context(), spec, a.WorkspaceID, a.WorkspaceID)
+		audit.EmitDenied(r.Context(), audit.WorkspaceLogoUpdated, a.WorkspaceID, a.WorkspaceID)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return a, db_types.JSONNullUUID{}, false
 	}

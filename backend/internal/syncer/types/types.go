@@ -89,11 +89,11 @@ type UserRow struct {
 }
 
 // WorkspaceRow is a workspace row for sync. Logo is pull-only: it is written
-// exclusively by the workspace logo endpoints (see backend/internal/workspace/
+// exclusively by the workspace logo endpoint (see backend/internal/workspace/
 // logo_handler.go), never by an applied commit, so clients receive it here but
-// cannot set it through sync. It carries no omitempty on purpose — a cleared
-// logo has to reach clients as an explicit null, or a removal would never
-// propagate.
+// cannot set it through sync. It carries no omitempty on purpose — a workspace
+// without a logo has to reach clients as an explicit null, or they would read
+// the absent key as "keep whatever you have".
 type WorkspaceRow struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`

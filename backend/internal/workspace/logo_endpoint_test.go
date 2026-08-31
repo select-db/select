@@ -85,21 +85,6 @@ func TestLogo_UploadBumpsUpdatedAtSoMembersPullIt(t *testing.T) {
 	require.NotEqual(t, before, after, "updated_at must move or members never pull the logo")
 }
 
-func TestLogo_Remove(t *testing.T) {
-	f := e2e.Setup(t)
-
-	rec := e2e.Do(t, f.H, http.MethodPut, "/workspaces/"+f.Actor.WorkspaceID+"/logo", f.Actor.Token,
-		map[string]any{"logo": squarePNGBase64(t, workspace.LogoSize)})
-	require.Equalf(t, http.StatusOK, rec.Code, "upload: %s", rec.Body.String())
-
-	rec = e2e.Do(t, f.H, http.MethodDelete, "/workspaces/"+f.Actor.WorkspaceID+"/logo", f.Actor.Token, nil)
-	require.Equalf(t, http.StatusOK, rec.Code, "remove: %s", rec.Body.String())
-
-	_, ok := storedLogo(t, f)
-	require.False(t, ok, "logo should be cleared")
-	e2e.RequireEvent(t, f.Conn, "iam", "workspace.logo.remove")
-}
-
 func TestLogo_RejectsBadImages(t *testing.T) {
 	cases := []struct {
 		name string
