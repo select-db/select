@@ -26,8 +26,7 @@
 	let name = $state('');
 	let saving = $state(false);
 
-	// The logo is edited like the rest of the form: picking a file only stages it,
-	// Save is what sends it. undefined means "unchanged".
+	// Picking a file only stages it; Save sends it. undefined means "unchanged".
 	let stagedLogo = $state<string | undefined>(undefined);
 	let logoError = $state('');
 	let fileInput = $state<HTMLInputElement | null>(null);
@@ -51,8 +50,6 @@
 		stagedLogo = base64;
 	}
 
-	// Sends the staged logo, if any. The server validates and re-encodes it, so
-	// what lands in the database is never the bytes the picker produced.
 	async function saveLogo(workspaceID: string): Promise<boolean> {
 		if (stagedLogo === undefined) return true;
 
@@ -65,8 +62,7 @@
 		return true;
 	}
 
-	// Execution limits are team policy stored on the workspace (synced via the
-	// backend), shared with everyone in the workspace.
+	// Team policy, shared with everyone in the workspace.
 	let statementTimeoutMs = $state(30000);
 	let maxResultSizeMb = $state(100);
 
@@ -77,7 +73,6 @@
 		if (g?.max_result_size_mb != null) maxResultSizeMb = g.max_result_size_mb;
 	});
 
-	// Saves the whole workspace settings form (name + execution limits) at once.
 	async function save() {
 		const g = get(workspaceGraphStore);
 		if (!g?.id) return;
@@ -257,8 +252,7 @@
 		flex-shrink: 0;
 		line-height: 0;
 	}
-	/* The edit affordance stays out of the way until the logo is hovered — or the
-	   button is focused, so it is still reachable from the keyboard. */
+	/* Hidden until hover, or focus so it stays keyboard-reachable. */
 	.logo-edit {
 		position: absolute;
 		top: -6px;

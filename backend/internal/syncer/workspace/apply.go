@@ -75,10 +75,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 				}
 			}
 			// logo is deliberately absent here and from UpsertWorkspace's column
-			// list: it is written only by the logo endpoint, which validates and
-			// re-encodes the image first. A commit — forged, replayed or merely
-			// malformed — therefore cannot reach the column, and the existing
-			// value survives every upsert.
+			// list, so no commit — forged, replayed or malformed — can reach it and
+			// the existing value survives every upsert. Only the logo endpoint writes it.
 			return generated.UpsertWorkspaceParams{
 				ID:           idUUID,
 				Name:         name,

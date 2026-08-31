@@ -1,28 +1,21 @@
 /**
- * Workspace logo helpers.
- *
  * A logo is stored as the bare base64 of a 128x128 PNG — no `data:` prefix, so a
  * stored value can never bring its own media type into an `<img src>`. This
- * module owns both ends of that convention: turning a picked file into the
- * base64 the backend expects, and composing the data URL for rendering.
+ * module owns both ends of that convention.
  *
  * Normalizing here is a convenience, not a security boundary: the backend
- * re-decodes and re-encodes whatever it receives (see backend/internal/workspace/
- * logo.go). What it buys us is that a 12 MB phone photo never leaves the machine,
- * and that the canvas round trip drops EXIF and colour profiles on the way.
+ * re-decodes and re-encodes whatever it receives (backend/internal/workspace/
+ * logo.go). It buys us a 12 MB phone photo never leaving the machine.
  */
 
 export const LOGO_SIZE = 128;
 
-/** Formats the browser can decode for us. SVG is deliberately absent. */
+/** SVG is deliberately absent. */
 export const LOGO_ACCEPT = 'image/png,image/jpeg,image/webp';
 
 const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
-
-/** Refuses an obviously oversized pick before spending memory decoding it. */
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-/** Composes the src for an `<img>`, or null when the workspace has no logo. */
 export function logoSrc(base64: string | null | undefined): string | null {
 	if (!base64) return null;
 	return `data:image/png;base64,${base64}`;
@@ -30,8 +23,8 @@ export function logoSrc(base64: string | null | undefined): string | null {
 
 /**
  * Decodes a picked file and re-encodes it as a 128x128 PNG, returning bare
- * base64. The image is scaled to cover the square and centre-cropped, so a
- * non-square logo keeps its aspect ratio instead of being stretched.
+ * base64. Scaled to cover and centre-cropped, so a non-square logo keeps its
+ * aspect ratio instead of being stretched.
  */
 export async function fileToLogoBase64(file: File): Promise<string> {
 	if (!ALLOWED_TYPES.has(file.type)) {
@@ -56,7 +49,6 @@ export async function fileToLogoBase64(file: File): Promise<string> {
 		const ctx = canvas.getContext('2d');
 		if (!ctx) throw new Error('Could not read that image');
 
-		// Cover: scale by the larger ratio, then centre what overflows.
 		const scale = Math.max(LOGO_SIZE / bitmap.width, LOGO_SIZE / bitmap.height);
 		const width = bitmap.width * scale;
 		const height = bitmap.height * scale;
@@ -73,7 +65,7 @@ export async function fileToLogoBase64(file: File): Promise<string> {
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-	// Chunked so a large image cannot blow the argument limit of String.fromCharCode.
+	// Chunked: String.fromCharCode has an argument limit.
 	const chunkSize = 0x8000;
 	let binary = '';
 	for (let i = 0; i < bytes.length; i += chunkSize) {
