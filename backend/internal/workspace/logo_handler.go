@@ -21,14 +21,10 @@ type logoResponse struct {
 	Logo string `json:"logo"`
 }
 
-// UpdateLogoHandler stores a workspace logo. The image never reaches the
-// database as the caller sent it: NormalizeLogo decodes it, checks its shape and
-// re-encodes it with our own PNG encoder, and the CHECK constraint on the column
-// backs that up at the storage layer.
-//
-// This is the only write path for workspace.logo. The sync commit path does not
-// carry the column at all (see internal/syncer/workspace/apply.go), so every
-// stored logo has been through the checks below.
+// UpdateLogoHandler stores a workspace logo. This is the only write path for
+// workspace.logo — the sync commit path does not carry the column at all (see
+// internal/syncer/workspace/apply.go) — so every stored logo has been through
+// NormalizeLogo, with the column's CHECK constraint backing that up at rest.
 func UpdateLogoHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		workspaceUUID, ok := authorizeLogoWrite(w, r)
@@ -36,8 +32,6 @@ func UpdateLogoHandler() http.HandlerFunc {
 			return
 		}
 
-		// The body is already capped by LimitLogoBody, which the route wraps
-		// around this handler.
 		var req updateLogoRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -67,10 +61,9 @@ func UpdateLogoHandler() http.HandlerFunc {
 	}
 }
 
-// LimitLogoBody caps the request body at MaxLogoRequestBytes before anything
-// downstream reads it. It wraps the route rather than living inside the handler
-// because the membership middleware buffers the body whole when the request
-// carries no X-Workspace-Id header, which is above the handler in the chain.
+// LimitLogoBody caps the request body at MaxLogoRequestBytes. It wraps the route
+// rather than living in the handler because the membership middleware, which sits
+// above, buffers the body whole when there is no X-Workspace-Id header.
 func LimitLogoBody(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, MaxLogoRequestBytes)
@@ -78,15 +71,14 @@ func LimitLogoBody(h http.Handler) http.Handler {
 	})
 }
 
-// authorizeLogoWrite gates the logo endpoint on the same permission the sync
-// path required for a workspace write: owner, or workspace/settings.write.
+// authorizeLogoWrite gates the endpoint on the same permission the sync path
+// required for a workspace write: owner, or workspace/settings.write.
 func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (db_types.JSONNullUUID, bool) {
 	a := authz.ActorOf(r)
 
-	// The actor's permissions were compiled for the workspace the membership
-	// middleware resolved, so a path id naming a different workspace would be
-	// checked against the wrong set. Requiring them to match keeps the id in the
-	// route honest rather than decorative.
+	// Permissions were compiled for the workspace the membership middleware
+	// resolved, so a path id naming a different one would be checked against the
+	// wrong set.
 	if id := r.PathValue("id"); id != a.WorkspaceID {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return db_types.JSONNullUUID{}, false

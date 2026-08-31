@@ -10,8 +10,7 @@ import (
 	"testing"
 )
 
-// pngOf builds a valid PNG of the given size, so a test can vary exactly one
-// property of the input at a time.
+// pngOf builds a valid PNG of the given size, so a test can vary one property.
 func pngOf(t *testing.T, w, h int) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -41,7 +40,6 @@ func TestNormalizeLogo_AcceptsA128SquarePNG(t *testing.T) {
 		t.Fatalf("output %d bytes exceeds the stored cap %d", len(out), MaxLogoBase64Bytes)
 	}
 
-	// The output must be our encoder's, decodable and still the right shape.
 	raw, err := base64.StdEncoding.DecodeString(out)
 	if err != nil {
 		t.Fatalf("output is not valid base64: %v", err)
@@ -55,8 +53,8 @@ func TestNormalizeLogo_AcceptsA128SquarePNG(t *testing.T) {
 	}
 }
 
-// A worst-case logo — every pixel different, so the PNG barely compresses — must
-// still fit the cap, or the endpoint would reject images honest users upload.
+// A worst-case logo — every pixel different, so it barely compresses — must still
+// fit the cap, or the endpoint would reject images honest users upload.
 func TestNormalizeLogo_NoisyImageFitsTheCap(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, LogoSize, LogoSize))
 	seed := uint32(1)
@@ -106,10 +104,9 @@ func TestNormalizeLogo_StripsMetadataAndTrailingBytes(t *testing.T) {
 }
 
 func TestNormalizeLogo_Rejects(t *testing.T) {
-	// A header claiming an enormous image: DecodeConfig must reject it on
-	// dimensions before Decode ever allocates a pixel buffer for it.
+	// A header claiming 0x10000 x 0x10000 in IHDR: DecodeConfig must reject it on
+	// dimensions before Decode allocates a pixel buffer.
 	bomb := pngOf(t, 1, 1)
-	// 0x00010000 x 0x00010000 written into IHDR's width/height fields.
 	copy(bomb[16:24], []byte{0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00})
 
 	jpegLike := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}

@@ -52,8 +52,8 @@ func Register(mux *http.ServeMux) {
 	mux.Handle("POST /workspaces", authenticated(limited(60, workspacehandler.CreateHandler())))
 	mux.Handle("DELETE /workspaces/{id}", authenticated(member(limited(30, workspacehandler.DeleteHandler()))))
 
-	// This is the only write path for workspace.logo: it validates and re-encodes
-	// the image, which the sync commit path cannot do.
+	// The only write path for workspace.logo: it re-encodes the image, which the
+	// sync commit path cannot do.
 	mux.Handle("PUT /workspaces/{id}/logo", authenticated(workspacehandler.LimitLogoBody(member(limited(10, workspacehandler.UpdateLogoHandler())))))
 
 	mux.Handle("GET /users/search", authenticated(member(limited(120, workspacehandler.SearchUserHandler()))))

@@ -59,7 +59,6 @@ func TestLogo_UploadStoresReEncodedPNG(t *testing.T) {
 	require.Equal(t, *body.Logo, stored)
 	require.True(t, len(stored) <= workspace.MaxLogoBase64Bytes)
 
-	// What is stored decodes as a PNG of exactly the expected shape.
 	raw, err := base64.StdEncoding.DecodeString(stored)
 	require.NoError(t, err)
 	cfg, err := png.DecodeConfig(bytes.NewReader(raw))

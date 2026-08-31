@@ -23,8 +23,7 @@
 	);
 	const options = $derived<SelectOption[]>(workspaces.map((w) => ({ value: w.id, label: w.name })));
 
-	// SelectOption carries only a value and a label, so the logo is looked up by
-	// id from the row the option came from. Keeps the shared Select untouched.
+	// SelectOption carries only a value and a label, so the logo is looked up by id.
 	const logoById = $derived(new Map(workspaces.map((w) => [w.id, logoSrc(w.logo)])));
 
 	async function load() {
@@ -56,8 +55,7 @@
 	}
 
 	$effect(() => {
-		// Re-list whenever the workspace graph changes, so a rename or a logo
-		// saved in Settings shows up here without remounting the button.
+		// Re-list on graph changes, so a rename or logo saved in Settings shows here.
 		void $workspaceGraphStore?.name;
 		void $workspaceGraphStore?.logo;
 		load();
