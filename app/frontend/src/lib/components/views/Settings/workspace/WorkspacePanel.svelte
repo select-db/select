@@ -214,17 +214,17 @@
 	.workspace-panel {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-sm-md);
+		gap: var(--space-md);
 		max-width: 480px;
 		height: 100%;
 	}
 	.section {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-sm);
+		gap: var(--space-md);
 	}
 	.space.x.y {
-		padding: var(--space-sm-md);
+		padding: var(--space-md);
 	}
 	.section-title {
 		font-size: var(--fs-xs);
@@ -235,7 +235,7 @@
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-xs);
+		gap: var(--space-sm);
 		max-width: 275px;
 	}
 	.field-label {
@@ -245,7 +245,7 @@
 	.identity {
 		display: flex;
 		align-items: flex-end;
-		gap: var(--space-sm-md);
+		gap: var(--space-md);
 	}
 	.name-field {
 		display: flex;
@@ -289,12 +289,12 @@
 		display: none;
 	}
 	.actions {
-		margin-top: var(--space-xs);
+		margin-top: var(--space-sm);
 		display: flex;
-		gap: var(--space-xs);
+		gap: var(--space-sm);
 	}
 	.danger {
-		margin: var(--space-sm-md) var(--space-sm-md) var(--space-sm-md) var(--space-sm-md);
+		margin: var(--space-md);
 		border: var(--border);
 		background-color: var(--gray-400);
 		border-radius: var(--br-xs);
