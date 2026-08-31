@@ -14,7 +14,8 @@
 		RemoveLogo
 	} from '$lib/bindings/selectDb/internal/workspace/workspace';
 	import Avatar from '$lib/system/Avatar/Avatar.svelte';
-	import { fileToLogoBase64, logoSrc, LOGO_ACCEPT, LOGO_SIZE } from '$lib/utils/workspaceLogo';
+	import Icon from '$lib/system/Icon/Icon.svelte';
+	import { fileToLogoBase64, logoSrc, LOGO_ACCEPT } from '$lib/utils/workspaceLogo';
 	import {
 		Logout,
 		UpdateWorkspaceExecutionLimits
@@ -49,11 +50,6 @@
 			return;
 		}
 		stagedLogo = base64;
-	}
-
-	function clearLogo() {
-		logoError = '';
-		stagedLogo = currentLogo ? null : undefined;
 	}
 
 	// Sends the staged logo, if any. The server validates and re-encodes it, so
@@ -166,35 +162,29 @@
 
 <div class="workspace-panel">
 	<div class="section space x y">
-		<p class="section-title">Workspace name</p>
-		<div class="field">
-			<Input bind:value={name} placeholder="My Workspace" />
-		</div>
-		<div></div>
-		<p class="section-title">Workspace logo</p>
-		<div class="logo-field">
-			<Avatar src={logoSrc(previewLogo)} {name} size={48} shape="rounded" />
-			<div class="logo-actions">
-				<div class="actions">
-					<Button
-						content={previewLogo ? 'Replace' : 'Upload'}
-						emphasis="low"
-						size="sm"
-						onclick={() => fileInput?.click()}
-					/>
-					{#if previewLogo}
-						<Button content="Remove" emphasis="low" size="sm" onclick={clearLogo} />
-					{/if}
+		<div class="identity">
+			<div class="logo-picker">
+				<Avatar src={logoSrc(previewLogo)} {name} size={56} shape="rounded" />
+				<button
+					class="logo-edit"
+					type="button"
+					title={previewLogo ? 'Replace logo' : 'Upload logo'}
+					aria-label={previewLogo ? 'Replace workspace logo' : 'Upload workspace logo'}
+					onclick={() => fileInput?.click()}
+				>
+					<Icon icon="edit" size={12} stroke="var(--gray-1000)" />
+				</button>
+			</div>
+			<div class="name-field">
+				<p class="section-title">Workspace name</p>
+				<div class="field">
+					<Input bind:value={name} placeholder="My Workspace" />
 				</div>
-				{#if logoError}
-					<span class="logo-error">{logoError}</span>
-				{:else}
-					<span class="field-label">
-						PNG, JPEG or WebP. Cropped to {LOGO_SIZE}&times;{LOGO_SIZE}.
-					</span>
-				{/if}
 			</div>
 		</div>
+		{#if logoError}
+			<span class="logo-error">{logoError}</span>
+		{/if}
 		<input
 			bind:this={fileInput}
 			class="logo-input"
@@ -256,15 +246,44 @@
 		font-size: var(--fs-xs);
 		color: var(--gray-800);
 	}
-	.logo-field {
+	.identity {
 		display: flex;
-		align-items: center;
+		align-items: flex-end;
 		gap: var(--space-sm-md);
 	}
-	.logo-actions {
+	.name-field {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-xs);
+		gap: var(--space-sm);
+	}
+	.logo-picker {
+		position: relative;
+		flex-shrink: 0;
+		line-height: 0;
+	}
+	/* The edit affordance stays out of the way until the logo is hovered — or the
+	   button is focused, so it is still reachable from the keyboard. */
+	.logo-edit {
+		position: absolute;
+		top: -6px;
+		right: -6px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 3px;
+		border: var(--border);
+		border-radius: 50%;
+		background-color: var(--gray-300);
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.1s ease-in-out;
+	}
+	.logo-picker:hover .logo-edit,
+	.logo-edit:focus-visible {
+		opacity: 1;
+	}
+	.logo-edit:hover {
+		background-color: var(--gray-400);
 	}
 	.logo-error {
 		font-size: var(--fs-xs);
