@@ -18,7 +18,8 @@
 	import {
 		buildVisibilityIndex,
 		updateScrollWindow,
-		fsVisibilityIndexStore
+		fsVisibilityIndexStore,
+		ROW_HEIGHT
 	} from './Files/helpers/visibilityStore';
 	import { hiddenChildrenStore } from './Files/helpers/childVisibilityStore';
 
@@ -27,8 +28,6 @@
 	let firstItemParentIds: string | null = null;
 
 	let ticking = false;
-
-	const ITEM_HEIGHT = 30;
 
 	// Focus the scroll container whenever an item is clicked in the panel
 	$effect(() => {
@@ -47,8 +46,8 @@
 
 	const scrollToIndex = (index: number) => {
 		if (!scrollContainer) return;
-		const top = index * ITEM_HEIGHT;
-		const bottom = top + ITEM_HEIGHT;
+		const top = index * ROW_HEIGHT;
+		const bottom = top + ROW_HEIGHT;
 		if (top < scrollContainer.scrollTop) {
 			scrollContainer.scrollTop = top;
 		} else if (bottom > scrollContainer.scrollTop + scrollContainer.clientHeight) {

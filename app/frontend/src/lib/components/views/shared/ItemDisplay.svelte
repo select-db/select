@@ -12,7 +12,10 @@
 	import ItemIcon from './ItemIcon.svelte';
 	import ItemName from './ItemName.svelte';
 	import { expandableItemTypes } from './expandableItemTypes';
-	import { visibleIdsStore } from '$lib/components/views/FileSystem/Files/helpers/visibilityStore';
+	import {
+		visibleIdsStore,
+		ROW_HEIGHT
+	} from '$lib/components/views/FileSystem/Files/helpers/visibilityStore';
 	import ChildVisibilityBadge from '$lib/components/views/FileSystem/Files/ChildVisibilityBadge.svelte';
 	import type * as graph from '$lib/wails/graph';
 
@@ -105,7 +108,12 @@
 </script>
 
 {#if visible}
-	<Contextable {options} metadata={item} direction="right" style="height: 32px; display: flex;">
+	<Contextable
+		{options}
+		metadata={item}
+		direction="right"
+		style="height: {ROW_HEIGHT}px; display: flex;"
+	>
 		{@const showActions = !($renamingItemIdStore === item.id) && actions && actions.length > 0}
 
 		<div
@@ -187,7 +195,12 @@
 		</div>
 	</Contextable>
 {:else}
-	<div class="item-placeholder" data-id={item.id} data-parent-ids={parentIds.join(',')}></div>
+	<div
+		class="item-placeholder"
+		style="height: {ROW_HEIGHT}px;"
+		data-id={item.id}
+		data-parent-ids={parentIds.join(',')}
+	></div>
 {/if}
 
 <style>
@@ -196,7 +209,7 @@
 		padding-left: var(--space-sm-md);
 
 		width: 100%;
-		height: 32px;
+		height: 100%;
 		min-width: fit-content;
 		display: inline-flex;
 		align-items: stretch;
@@ -320,9 +333,6 @@
 		}
 	}
 
-	.item-placeholder {
-		height: 32px;
-	}
 	.item .indicators-wrapper {
 		position: absolute;
 		right: 100%;

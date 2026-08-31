@@ -1,7 +1,18 @@
 import { writable, derived } from 'svelte/store';
 import type * as graph from '$lib/wails/graph';
 
-const ITEM_HEIGHT = 30;
+/**
+ * Height of one tree row, in pixels.
+ *
+ * The windowing here is index-based: it turns a scroll offset into a row index
+ * by dividing by this. ItemDisplay renders both the row and its placeholder at
+ * this height, so the two must agree — a row taller than the constant makes the
+ * computed index run ahead of the real one, and once that drift exceeds
+ * OVERSCAN the window no longer covers the viewport and the tree renders blank.
+ * That is why the number lives here and is read by the components rather than
+ * written into their stylesheets.
+ */
+export const ROW_HEIGHT = 32;
 const OVERSCAN = 50;
 
 type Context = 'fs' | 'search' | 'git';
@@ -139,8 +150,8 @@ export function buildVisibilityIndex(
 }
 
 export function updateScrollWindow(ctx: Context, scrollTop: number, viewportHeight: number): void {
-	const start = Math.max(0, ((scrollTop / ITEM_HEIGHT) | 0) - OVERSCAN);
-	const end = start + ((viewportHeight / ITEM_HEIGHT) | 0) + OVERSCAN * 2 + 1;
+	const start = Math.max(0, ((scrollTop / ROW_HEIGHT) | 0) - OVERSCAN);
+	const end = start + ((viewportHeight / ROW_HEIGHT) | 0) + OVERSCAN * 2 + 1;
 
 	contextStatesStore.update((states) => {
 		const current = states.get(ctx)!;
