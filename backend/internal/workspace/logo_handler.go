@@ -8,7 +8,6 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
-	"backend/internal/audit"
 	"backend/internal/authz"
 
 	core "github.com/selectDb/dialect/core"
@@ -32,14 +31,13 @@ type logoResponse struct {
 // stored logo has been through the checks below.
 func UpdateLogoHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a, workspaceUUID, ok := authorizeLogoWrite(w, r)
+		workspaceUUID, ok := authorizeLogoWrite(w, r)
 		if !ok {
 			return
 		}
 
-		// The body is already capped at MaxLogoRequestBytes by the route (see
-		// internal/api/router.go): the cap has to sit above the membership
-		// middleware, which buffers the body itself.
+		// The body is already capped by LimitLogoBody, which the route wraps
+		// around this handler.
 		var req updateLogoRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -64,20 +62,25 @@ func UpdateLogoHandler() http.HandlerFunc {
 			return
 		}
 
-		audit.EmitAction(r.Context(), audit.WorkspaceLogoUpdated, audit.Record{
-			WorkspaceID: a.WorkspaceID,
-			TargetID:    a.WorkspaceID,
-			Status:      audit.StatusSuccess,
-		})
-
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(logoResponse{Logo: logo})
 	}
 }
 
+// LimitLogoBody caps the request body at MaxLogoRequestBytes before anything
+// downstream reads it. It wraps the route rather than living inside the handler
+// because the membership middleware buffers the body whole when the request
+// carries no X-Workspace-Id header, which is above the handler in the chain.
+func LimitLogoBody(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, MaxLogoRequestBytes)
+		h.ServeHTTP(w, r)
+	})
+}
+
 // authorizeLogoWrite gates the logo endpoint on the same permission the sync
 // path required for a workspace write: owner, or workspace/settings.write.
-func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (authz.Actor, db_types.JSONNullUUID, bool) {
+func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (db_types.JSONNullUUID, bool) {
 	a := authz.ActorOf(r)
 
 	// The actor's permissions were compiled for the workspace the membership
@@ -85,21 +88,19 @@ func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (authz.Actor, db
 	// checked against the wrong set. Requiring them to match keeps the id in the
 	// route honest rather than decorative.
 	if id := r.PathValue("id"); id != a.WorkspaceID {
-		audit.EmitDenied(r.Context(), audit.WorkspaceLogoUpdated, a.WorkspaceID, id)
 		http.Error(w, "forbidden", http.StatusForbidden)
-		return a, db_types.JSONNullUUID{}, false
+		return db_types.JSONNullUUID{}, false
 	}
 
 	if !a.IsOwner() && !a.Can(core.ActionWorkspaceSettingsWrite) {
-		audit.EmitDenied(r.Context(), audit.WorkspaceLogoUpdated, a.WorkspaceID, a.WorkspaceID)
 		http.Error(w, "forbidden", http.StatusForbidden)
-		return a, db_types.JSONNullUUID{}, false
+		return db_types.JSONNullUUID{}, false
 	}
 
 	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(a.WorkspaceID)
 	if err != nil {
 		http.Error(w, "invalid workspace id", http.StatusInternalServerError)
-		return a, db_types.JSONNullUUID{}, false
+		return db_types.JSONNullUUID{}, false
 	}
-	return a, workspaceUUID, true
+	return workspaceUUID, true
 }
