@@ -153,8 +153,10 @@ func (d *Dialect) Name() string {
 	return "sqlite"
 }
 
+// OpenDB opens a SQLite database in defensive mode unless the DSN opts out.
+// See withDefensiveMode for what that covers and what it does not.
 func (d *Dialect) OpenDB(dsn string) (*sql.DB, error) {
-	return sql.Open("sqlite3", dsn)
+	return sql.Open("sqlite3", withDefensiveMode(dsn))
 }
 
 // GetTables, GetViews, GetIndexes, GetTriggers, and GetStats are implemented in schema.go
