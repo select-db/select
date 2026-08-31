@@ -2,7 +2,10 @@ package system
 
 import (
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"os"
 
@@ -232,5 +235,114 @@ func TestHandleFSEvent_FileInsert(t *testing.T) {
 	}
 	if payload.FolderID == nil || *payload.FolderID != fsCtx.URI("") {
 		t.Errorf("payload.folder_id mismatch: got %v want %v", payload.FolderID, fsCtx.URI(""))
+	}
+}
+
+// watchedPaths returns the watcher's registrations that live under root.
+func watchedPaths(t *testing.T, watcher *fsnotify.Watcher, root string) []string {
+	t.Helper()
+
+	var paths []string
+	for _, p := range watcher.WatchList() {
+		if p == root || strings.HasPrefix(p, root+string(os.PathSeparator)) {
+			paths = append(paths, p)
+		}
+	}
+	slices.Sort(paths)
+	return paths
+}
+
+// waitForEvent drains events until one names path, or the timeout expires.
+func waitForEvent(t *testing.T, watcher *fsnotify.Watcher, path string, timeout time.Duration) bool {
+	t.Helper()
+
+	deadline := time.After(timeout)
+	for {
+		select {
+		case ev, ok := <-watcher.Events:
+			if !ok {
+				return false
+			}
+			if ev.Name == path {
+				return true
+			}
+		case <-deadline:
+			return false
+		}
+	}
+}
+
+// A renamed directory keeps its watch, but the watcher goes on reporting it
+// under the old path, so every registration below it goes stale.
+func TestResyncWatches_ReplacesStalePathsAfterRename(t *testing.T) {
+	_, workspaceRoot := newTestWorkspaceFS(t)
+
+	oldDir := filepath.Join(workspaceRoot, "db-e731d451")
+	if err := os.MkdirAll(filepath.Join(oldDir, "sub", "deep"), 0o700); err != nil {
+		t.Fatalf("mkdir db dirs: %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("new watcher: %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	addWatches(watcher, workspaceRoot)
+
+	newDir := filepath.Join(workspaceRoot, "analytics")
+	if err := os.Rename(oldDir, newDir); err != nil {
+		t.Fatalf("rename db dir: %v", err)
+	}
+
+	resyncWatches(watcher, workspaceRoot)
+
+	want := []string{
+		workspaceRoot,
+		newDir,
+		filepath.Join(newDir, "sub"),
+		filepath.Join(newDir, "sub", "deep"),
+	}
+	slices.Sort(want)
+
+	got := watchedPaths(t, watcher, workspaceRoot)
+	if !slices.Equal(got, want) {
+		t.Fatalf("watch list mismatch after rename:\n got %v\nwant %v", got, want)
+	}
+}
+
+// Re-adding on its own is not enough: the old and new paths are the same
+// directory, so the stale registration has to be dropped first or events keep
+// arriving under the pre-rename path.
+func TestResyncWatches_EventsCarryNewPathAfterRename(t *testing.T) {
+	_, workspaceRoot := newTestWorkspaceFS(t)
+
+	oldDir := filepath.Join(workspaceRoot, "db-e731d451")
+	if err := os.MkdirAll(filepath.Join(oldDir, "sub"), 0o700); err != nil {
+		t.Fatalf("mkdir db dirs: %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("new watcher: %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	addWatches(watcher, workspaceRoot)
+
+	newDir := filepath.Join(workspaceRoot, "analytics")
+	if err := os.Rename(oldDir, newDir); err != nil {
+		t.Fatalf("rename db dir: %v", err)
+	}
+
+	resyncWatches(watcher, workspaceRoot)
+
+	created := filepath.Join(newDir, "sub", "query.sql")
+	if err := os.WriteFile(created, []byte("SELECT 1;"), 0o600); err != nil {
+		t.Fatalf("write file in renamed dir: %v", err)
+	}
+
+	if !waitForEvent(t, watcher, created, 3*time.Second) {
+		t.Fatalf("no event naming %q: the watch is still reporting the pre-rename path", created)
 	}
 }
