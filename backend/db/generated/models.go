@@ -177,44 +177,6 @@ type AuditEventAuthDefault struct {
 	DeletedAt     db_types.JSONNullTime
 }
 
-type AuditEventAuthP20260201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20260301 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
 type AuditEventAuthP20260401 struct {
 	ID            db_types.JSONNullUUID
 	WorkspaceID   db_types.JSONNullUUID
@@ -348,6 +310,44 @@ type AuditEventAuthP20261001 struct {
 	DeletedAt     db_types.JSONNullTime
 }
 
+type AuditEventAuthP20261101 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
+type AuditEventAuthP20261201 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
 type AuditEventDatasource struct {
 	ID            db_types.JSONNullUUID
 	WorkspaceID   db_types.JSONNullUUID
@@ -368,44 +368,6 @@ type AuditEventDatasource struct {
 }
 
 type AuditEventDatasourceDefault struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260301 struct {
 	ID            db_types.JSONNullUUID
 	WorkspaceID   db_types.JSONNullUUID
 	OccurredAt    db_types.JSONNullTime
@@ -557,6 +519,44 @@ type AuditEventDatasourceP20261001 struct {
 	DeletedAt     db_types.JSONNullTime
 }
 
+type AuditEventDatasourceP20261101 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
+type AuditEventDatasourceP20261201 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
 type AuditEventIam struct {
 	ID            db_types.JSONNullUUID
 	WorkspaceID   db_types.JSONNullUUID
@@ -577,44 +577,6 @@ type AuditEventIam struct {
 }
 
 type AuditEventIamDefault struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260301 struct {
 	ID            db_types.JSONNullUUID
 	WorkspaceID   db_types.JSONNullUUID
 	OccurredAt    db_types.JSONNullTime
@@ -766,6 +728,44 @@ type AuditEventIamP20261001 struct {
 	DeletedAt     db_types.JSONNullTime
 }
 
+type AuditEventIamP20261101 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
+type AuditEventIamP20261201 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
 type AuditEventQuery struct {
 	ID            db_types.JSONNullUUID
 	WorkspaceID   db_types.JSONNullUUID
@@ -786,44 +786,6 @@ type AuditEventQuery struct {
 }
 
 type AuditEventQueryDefault struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260301 struct {
 	ID            db_types.JSONNullUUID
 	WorkspaceID   db_types.JSONNullUUID
 	OccurredAt    db_types.JSONNullTime
@@ -975,6 +937,44 @@ type AuditEventQueryP20261001 struct {
 	DeletedAt     db_types.JSONNullTime
 }
 
+type AuditEventQueryP20261101 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
+type AuditEventQueryP20261201 struct {
+	ID            db_types.JSONNullUUID
+	WorkspaceID   db_types.JSONNullUUID
+	OccurredAt    db_types.JSONNullTime
+	RecordedAt    db_types.JSONNullTime
+	Domain        db_types.JSONNullString
+	Action        db_types.JSONNullString
+	PrincipalHash []byte
+	PrincipalID   db_types.JSONNullUUID
+	PrincipalType db_types.JSONNullString
+	TargetType    db_types.JSONNullString
+	TargetID      db_types.JSONNullUUID
+	TargetLabel   db_types.JSONNullString
+	Status        db_types.JSONNullString
+	Payload       pqtype.NullRawMessage
+	ClientIp      db_types.JSONNullInet
+	DeletedAt     db_types.JSONNullTime
+}
+
 type AuditOutbox struct {
 	ID         db_types.JSONNullInt64
 	EventJson  pqtype.NullRawMessage
@@ -1022,34 +1022,37 @@ type GooseDbVersion struct {
 }
 
 type PartmanPartConfig struct {
-	ParentTable              db_types.JSONNullString
-	Control                  db_types.JSONNullString
-	TimeEncoder              db_types.JSONNullString
-	TimeDecoder              db_types.JSONNullString
-	PartitionInterval        db_types.JSONNullString
-	PartitionType            db_types.JSONNullString
-	Premake                  db_types.JSONNullInt64
-	AutomaticMaintenance     db_types.JSONNullString
-	TemplateTable            db_types.JSONNullString
-	Retention                db_types.JSONNullString
-	RetentionSchema          db_types.JSONNullString
-	RetentionKeepIndex       db_types.JSONNullBool
-	RetentionKeepTable       db_types.JSONNullBool
-	Epoch                    db_types.JSONNullString
-	ConstraintCols           interface{}
-	OptimizeConstraint       db_types.JSONNullInt64
-	InfiniteTimePartitions   db_types.JSONNullBool
-	DatetimeString           db_types.JSONNullString
-	Jobmon                   db_types.JSONNullBool
-	SubPartitionSetFull      db_types.JSONNullBool
-	UndoInProgress           db_types.JSONNullBool
-	InheritPrivileges        db_types.JSONNullBool
-	ConstraintValid          db_types.JSONNullBool
-	IgnoreDefaultData        db_types.JSONNullBool
-	DateTruncInterval        db_types.JSONNullString
-	MaintenanceOrder         db_types.JSONNullInt64
-	RetentionKeepPublication db_types.JSONNullBool
-	MaintenanceLastRun       db_types.JSONNullTime
+	ParentTable                 db_types.JSONNullString
+	Control                     db_types.JSONNullString
+	TimeEncoder                 db_types.JSONNullString
+	TimeDecoder                 db_types.JSONNullString
+	PartitionInterval           db_types.JSONNullString
+	PartitionType               db_types.JSONNullString
+	Premake                     db_types.JSONNullInt64
+	AutomaticMaintenance        db_types.JSONNullString
+	TemplateTable               db_types.JSONNullString
+	Retention                   db_types.JSONNullString
+	RetentionSchema             db_types.JSONNullString
+	RetentionKeepIndex          db_types.JSONNullBool
+	RetentionKeepTable          db_types.JSONNullBool
+	Epoch                       db_types.JSONNullString
+	ConstraintCols              interface{}
+	OptimizeConstraint          db_types.JSONNullInt64
+	InfiniteTimePartitions      db_types.JSONNullBool
+	DatetimeString              db_types.JSONNullString
+	Jobmon                      db_types.JSONNullBool
+	SubPartitionSetFull         db_types.JSONNullBool
+	UndoInProgress              db_types.JSONNullBool
+	InheritPrivileges           db_types.JSONNullBool
+	ConstraintValid             db_types.JSONNullBool
+	IgnoreDefaultData           db_types.JSONNullBool
+	DateTruncInterval           db_types.JSONNullString
+	MaintenanceOrder            db_types.JSONNullInt64
+	RetentionKeepPublication    db_types.JSONNullBool
+	MaintenanceLastRun          db_types.JSONNullTime
+	DetachBeforeDrop            db_types.JSONNullBool
+	MaintenanceRole             db_types.JSONNullString
+	AsyncPartitioningInProgress db_types.JSONNullString
 }
 
 type PartmanPartConfigSub struct {
@@ -1079,6 +1082,8 @@ type PartmanPartConfigSub struct {
 	SubMaintenanceOrder         db_types.JSONNullInt64
 	SubRetentionKeepPublication db_types.JSONNullBool
 	SubControlNotNull           db_types.JSONNullBool
+	SubDetachBeforeDrop         db_types.JSONNullBool
+	SubMaintenanceRole          db_types.JSONNullString
 }
 
 type PartmanTemplateAuditEventAuth struct {
