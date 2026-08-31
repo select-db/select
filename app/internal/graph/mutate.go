@@ -105,8 +105,6 @@ func (g *Graph) handleUpdate(objectID string, dto interface{}) error {
 		assignNonZero(target, dto)
 	}
 
-	FindNodesByIds(g.WorkspaceGraph, []string{objectID})
-
 	return nil
 }
 

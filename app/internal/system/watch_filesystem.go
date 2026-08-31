@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,7 +66,14 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 	defer func() { _ = watcher.Close() }()
 
 	// Watch all existing dirs; new ones are added dynamically on Create events.
+	//
+	// One watch per directory, so a workspace with more folders than the
+	// platform's watch limit (inotify's max_user_watches, commonly 8192) gets
+	// refusals partway through the walk. Those folders then go silent: no
+	// mutation, no graph update, nothing in the UI to say why. The count is
+	// logged once rather than per directory.
 	addWatches := func(root string) {
+		refused := 0
 		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
@@ -74,10 +82,15 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 				if d.Name() == ".git" {
 					return fs.SkipDir
 				}
-				_ = watcher.Add(p)
+				if addErr := watcher.Add(p); addErr != nil {
+					refused++
+				}
 			}
 			return nil
 		})
+		if refused > 0 {
+			log.Printf("[watcher] %d directories under %s could not be watched (platform watch limit?); changes there will not reach the workspace graph", refused, root)
+		}
 	}
 
 	addWatches(fsCtx.WorkspaceRoot)
