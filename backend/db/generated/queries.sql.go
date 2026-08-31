@@ -1277,13 +1277,14 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, dollar_1 []string) ([]GetUs
 }
 
 const getWorkspaceByID = `-- name: GetWorkspaceByID :one
-SELECT id, name, git_remote_url, owner_id, updated_at, deleted_at FROM app.workspace WHERE id = $1
+SELECT id, name, git_remote_url, logo, owner_id, updated_at, deleted_at FROM app.workspace WHERE id = $1
 `
 
 type GetWorkspaceByIDRow struct {
 	ID           db_types.JSONNullUUID
 	Name         db_types.JSONNullString
 	GitRemoteUrl db_types.JSONNullString
+	Logo         db_types.JSONNullString
 	OwnerID      db_types.JSONNullUUID
 	UpdatedAt    db_types.JSONNullTime
 	DeletedAt    db_types.JSONNullTime
@@ -1296,6 +1297,7 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id db_types.JSONNullUUID
 		&i.ID,
 		&i.Name,
 		&i.GitRemoteUrl,
+		&i.Logo,
 		&i.OwnerID,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1407,7 +1409,7 @@ func (q *Queries) GetWorkspaceToUsersForUserSince(ctx context.Context, arg GetWo
 }
 
 const getWorkspacesForUserSince = `-- name: GetWorkspacesForUserSince :many
-SELECT w.id, w.name, w.git_remote_url, w.owner_id, w.updated_at, w.deleted_at
+SELECT w.id, w.name, w.git_remote_url, w.logo, w.owner_id, w.updated_at, w.deleted_at
 FROM app.workspace w
 INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = w.id AND wtu.user_id = $1
 WHERE w.updated_at > $2
@@ -1422,6 +1424,7 @@ type GetWorkspacesForUserSinceRow struct {
 	ID           db_types.JSONNullUUID
 	Name         db_types.JSONNullString
 	GitRemoteUrl db_types.JSONNullString
+	Logo         db_types.JSONNullString
 	OwnerID      db_types.JSONNullUUID
 	UpdatedAt    db_types.JSONNullTime
 	DeletedAt    db_types.JSONNullTime
@@ -1440,6 +1443,7 @@ func (q *Queries) GetWorkspacesForUserSince(ctx context.Context, arg GetWorkspac
 			&i.ID,
 			&i.Name,
 			&i.GitRemoteUrl,
+			&i.Logo,
 			&i.OwnerID,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1962,6 +1966,23 @@ type UpdateUserIdentityEmailParams struct {
 
 func (q *Queries) UpdateUserIdentityEmail(ctx context.Context, arg UpdateUserIdentityEmailParams) error {
 	_, err := q.db.ExecContext(ctx, updateUserIdentityEmail, arg.Provider, arg.ProviderUserID, arg.Email)
+	return err
+}
+
+const updateWorkspaceLogo = `-- name: UpdateWorkspaceLogo :exec
+UPDATE app.workspace
+SET logo = $2,
+    updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type UpdateWorkspaceLogoParams struct {
+	ID   db_types.JSONNullUUID
+	Logo db_types.JSONNullString
+}
+
+func (q *Queries) UpdateWorkspaceLogo(ctx context.Context, arg UpdateWorkspaceLogoParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceLogo, arg.ID, arg.Logo)
 	return err
 }
 

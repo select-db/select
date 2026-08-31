@@ -44,6 +44,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 				ID:           row.ID.String(),
 				Name:         row.Name.ValueOrEmpty(),
 				GitRemoteURL: row.GitRemoteUrl.Ptr(),
+				Logo:         row.Logo.Ptr(),
 				UpdatedAt:    row.UpdatedAt.ValueOrZero(),
 			}
 			if row.OwnerID.Valid {
@@ -73,6 +74,9 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 					}
 				}
 			}
+			// logo is deliberately absent here and from UpsertWorkspace's column
+			// list, so no commit — forged, replayed or malformed — can reach it and
+			// the existing value survives every upsert. Only the logo endpoint writes it.
 			return generated.UpsertWorkspaceParams{
 				ID:           idUUID,
 				Name:         name,

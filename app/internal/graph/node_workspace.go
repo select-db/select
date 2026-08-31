@@ -13,6 +13,11 @@ type WorkspaceNode struct {
 	Name    string `json:"name"`
 	IsOwner bool   `json:"is_owner"`
 
+	// Logo is the base64 of a 128x128 PNG, empty when unset. Stored bare rather
+	// than as a data URL so a row can never carry its own media type into an
+	// <img src>; the frontend adds the "data:image/png;base64," prefix.
+	Logo string `json:"logo"`
+
 	// Execution limits are team policy stored on the workspace row (synced via
 	// the backend), not in a workspace file.
 	StatementTimeoutMs int `json:"statement_timeout_ms"`

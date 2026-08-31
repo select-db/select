@@ -7,9 +7,13 @@ import (
 )
 
 // WorkspaceWithCurrent is a workspace entry with a current flag for the UI.
+// Logo is the base64 of a 128x128 PNG, empty when the workspace has none; the
+// UI composes the data URL around it so a stored value can never bring its own
+// media type.
 type WorkspaceWithCurrent struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
+	Logo    string `json:"logo"`
 	Current bool   `json:"current"`
 }
 
@@ -32,6 +36,7 @@ func (w *Workspace) ListWorkspacesForCurrentUser() ([]WorkspaceWithCurrent, erro
 		out = append(out, WorkspaceWithCurrent{
 			ID:      r.ID,
 			Name:    r.Name,
+			Logo:    r.Logo.Or(""),
 			Current: r.Current.Valid && r.Current.Bool,
 		})
 	}

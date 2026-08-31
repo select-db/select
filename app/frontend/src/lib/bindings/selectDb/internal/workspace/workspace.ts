@@ -90,6 +90,18 @@ export function SwitchWorkspace(workspaceID: string): $CancellablePromise<void> 
     return $Call.ByID(1184707179, workspaceID);
 }
 
+/**
+ * UpdateLogo uploads a logo, then mirrors what the server stored — the
+ * re-encoded image, not the caller's bytes — into the local database. Teammates
+ * get it on their next pull, since the endpoint bumps updated_at.
+ * 
+ * The local write is untracked (@no-track in the query): the sync path does not
+ * carry the logo column, so a tracked one would queue a commit that never applies.
+ */
+export function UpdateLogo(workspaceID: string, logo: string): $CancellablePromise<void> {
+    return $Call.ByID(3908011900, workspaceID, logo);
+}
+
 export function UpdateName(workspaceID: string, name: string): $CancellablePromise<void> {
     return $Call.ByID(1330736336, workspaceID, name);
 }

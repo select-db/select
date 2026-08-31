@@ -88,11 +88,15 @@ type UserRow struct {
 	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
-// WorkspaceRow is a workspace row for sync.
+// WorkspaceRow is a workspace row for sync. Logo is pull-only: only the logo
+// endpoint writes it, never an applied commit. It carries no omitempty on
+// purpose — a workspace without a logo has to reach clients as an explicit null,
+// or they read the absent key as "keep whatever you have".
 type WorkspaceRow struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
 	GitRemoteURL *string    `json:"git_remote_url"`
+	Logo         *string    `json:"logo"`
 	OwnerID      *string    `json:"owner_id,omitempty"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
