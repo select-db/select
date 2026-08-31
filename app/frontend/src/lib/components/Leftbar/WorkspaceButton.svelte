@@ -69,7 +69,7 @@
 		<Avatar
 			src={option ? (logoById.get(option.value as string) ?? null) : null}
 			name={option?.label}
-			size={16}
+			size={20}
 			shape="rounded"
 		/>
 		<span class="workspace-name">{option?.label ?? 'Workspace'}</span>
@@ -95,7 +95,7 @@
 	.workspace-option {
 		display: flex;
 		align-items: center;
-		gap: var(--space-xs);
+		gap: var(--space-sm);
 		min-width: 0;
 	}
 
