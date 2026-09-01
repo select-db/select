@@ -508,6 +508,14 @@ export class FolderNode {
     "files": (FileNode | null)[];
     "folders": (FolderNode | null)[];
     "db_instances": (DBInstanceNode | null)[];
+
+    /**
+     * Resolved reports whether this folder's files have been read from disk. A
+     * build only lays out the folder skeleton; a folder's files are materialized
+     * when it is first opened (see ResolveFolder), so an unresolved folder with
+     * no files means "not looked at yet", not "empty".
+     */
+    "resolved": boolean;
     "variables"?: { [_ in string]?: string };
     "badges": string[];
 
@@ -537,6 +545,9 @@ export class FolderNode {
         if (!("db_instances" in $$source)) {
             this["db_instances"] = [];
         }
+        if (!("resolved" in $$source)) {
+            this["resolved"] = false;
+        }
         if (!("badges" in $$source)) {
             this["badges"] = [];
         }
@@ -551,8 +562,8 @@ export class FolderNode {
         const $$createField5_0 = $$createType13;
         const $$createField6_0 = $$createType16;
         const $$createField7_0 = $$createType29;
-        const $$createField8_0 = $$createType30;
-        const $$createField9_0 = $$createType0;
+        const $$createField9_0 = $$createType30;
+        const $$createField10_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("files" in $$parsedSource) {
             $$parsedSource["files"] = $$createField5_0($$parsedSource["files"]);
@@ -564,10 +575,10 @@ export class FolderNode {
             $$parsedSource["db_instances"] = $$createField7_0($$parsedSource["db_instances"]);
         }
         if ("variables" in $$parsedSource) {
-            $$parsedSource["variables"] = $$createField8_0($$parsedSource["variables"]);
+            $$parsedSource["variables"] = $$createField9_0($$parsedSource["variables"]);
         }
         if ("badges" in $$parsedSource) {
-            $$parsedSource["badges"] = $$createField9_0($$parsedSource["badges"]);
+            $$parsedSource["badges"] = $$createField10_0($$parsedSource["badges"]);
         }
         return new FolderNode($$parsedSource as Partial<FolderNode>);
     }

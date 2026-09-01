@@ -29,22 +29,35 @@ export function BuildWorkspaceGraphFromFS(fsCtx: $models.WorkspaceFS | null): $C
 }
 
 /**
- * FindDbItemNodeById walks the schema item tree of a DB instance and returns the
- * node with the given ID, or nil if not found.
+ * FileDatabases returns the databases a file is bound to. It answers from the
+ * graph when the file's folder has been resolved, and from the file's sidecar
+ * when it has not, so callers get the same answer either way without pulling
+ * the whole folder into memory.
  */
-export function FindDbItemNodeById(dbInstanceID: string, nodeID: string): $CancellablePromise<$models.DBInstanceItemNode | null> {
-    return $Call.ByID(1698115212, dbInstanceID, nodeID).then(($result: any) => {
+export function FileDatabases(fileURI: string): $CancellablePromise<$models.DatabaseRef[]> {
+    return $Call.ByID(2279693242, fileURI).then(($result: any) => {
         return $$createType1($result);
     });
 }
 
 /**
+ * FindDbItemNodeById walks the schema item tree of a DB instance and returns the
+ * node with the given ID, or nil if not found.
+ */
+export function FindDbItemNodeById(dbInstanceID: string, nodeID: string): $CancellablePromise<$models.DBInstanceItemNode | null> {
+    return $Call.ByID(1698115212, dbInstanceID, nodeID).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
+/**
  * GetDBInstanceNodeByID returns the DBInstanceNode with the given ID from the
- * current WorkspaceGraph, or nil if no such node exists.
+ * current WorkspaceGraph, or nil if no such node exists. A db instance answers
+ * to both its config ID and its URI.
  */
 export function GetDBInstanceNodeByID(ID: string): $CancellablePromise<$models.DBInstanceNode | null> {
     return $Call.ByID(1444826651, ID).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType5($result);
     });
 }
 
@@ -58,10 +71,25 @@ export function GetEnvFilePath(folderURI: string): $CancellablePromise<string> {
 /**
  * GetFileNodeByID returns the FileNode with the given ID from the
  * current WorkspaceGraph, or nil if no such node exists.
+ * 
+ * A file whose folder has never been opened is not in the graph yet, so a miss
+ * resolves the folders along the file's path before giving up. That keeps
+ * callers — a link into a file, a tab restored from the last session — working
+ * without knowing which folders have been opened.
  */
 export function GetFileNodeByID(fileID: string): $CancellablePromise<$models.FileNode | null> {
     return $Call.ByID(793692664, fileID).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType7($result);
+    });
+}
+
+/**
+ * GetFolderNodeByID returns the FolderNode with the given ID from the current
+ * graph, or nil when the ID is unknown or names something else.
+ */
+export function GetFolderNodeByID(id: string): $CancellablePromise<$models.FolderNode | null> {
+    return $Call.ByID(4046279042, id).then(($result: any) => {
+        return $$createType9($result);
     });
 }
 
@@ -87,7 +115,7 @@ export function GetThemeFilePath(): $CancellablePromise<string> {
  */
 export function GetUriSqlFileRefs(uri: string): $CancellablePromise<$models.SqlFileCandidate[]> {
     return $Call.ByID(1615993196, uri).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType11($result);
     });
 }
 
@@ -98,13 +126,20 @@ export function GetUriSqlFileRefs(uri: string): $CancellablePromise<$models.SqlF
  */
 export function GetUriVariables(uri: string): $CancellablePromise<$models.VariableCandidate[]> {
     return $Call.ByID(1674050077, uri).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType13($result);
     });
 }
 
+/**
+ * GetWorkspaceGraph returns the workspace graph, building it on first use.
+ * 
+ * It also guarantees the graph is indexed: WorkspaceGraph is an exported field,
+ * so a graph can be assigned rather than built, and every lookup goes through
+ * the index.
+ */
 export function GetWorkspaceGraph(): $CancellablePromise<$models.WorkspaceNode | null> {
     return $Call.ByID(977516625).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType15($result);
     });
 }
 
@@ -122,7 +157,7 @@ export function InvalidateWorkspaceGraph(): $CancellablePromise<void> {
  */
 export function LoadConfig(): $CancellablePromise<$models.ConfigResponse | null> {
     return $Call.ByID(2766015104).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType17($result);
     });
 }
 
@@ -138,7 +173,7 @@ export function LoadFolderEnvFile(folderNode: $models.FolderNode | null, wfs: $m
  */
 export function LoadWorkspaceLint(): $CancellablePromise<tokenanalyzer$0.LintFile> {
     return $Call.ByID(2616540178).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType19($result);
     });
 }
 
@@ -149,12 +184,22 @@ export function LoadWorkspaceLint(): $CancellablePromise<tokenanalyzer$0.LintFil
  */
 export function LoadWorkspaceTheme(): $CancellablePromise<$models.ThemeVariables | null> {
     return $Call.ByID(716865576).then(($result: any) => {
-        return $$createType17($result);
+        return $$createType21($result);
     });
 }
 
 export function Mutate(commit: generated$0.MutationCommit): $CancellablePromise<void> {
     return $Call.ByID(3885302872, commit);
+}
+
+/**
+ * NodeKind returns what the graph holds under an ID — "file", "folder" or
+ * "db_instance" — and "" when it holds nothing. It answers the question a
+ * filesystem event asks about a path that has just disappeared, where the node
+ * is all that is left to say what it was.
+ */
+export function NodeKind(id: string): $CancellablePromise<string> {
+    return $Call.ByID(3877926180, id);
 }
 
 export function RebuildWorkspaceGraph(): $CancellablePromise<void> {
@@ -173,6 +218,16 @@ export function ResetWorkspaceLint(): $CancellablePromise<void> {
  */
 export function ResetWorkspaceTheme(): $CancellablePromise<void> {
     return $Call.ByID(4215275803);
+}
+
+/**
+ * ResolveFolder reads the files of the folder with the given URI and emits the
+ * updated graph. The frontend calls it when a folder is opened; it is a no-op
+ * for an unknown URI, a folder that is already resolved, or a node that is not
+ * a folder, so callers do not have to check first.
+ */
+export function ResolveFolder(folderURI: string): $CancellablePromise<void> {
+    return $Call.ByID(2843403334, folderURI);
 }
 
 /**
@@ -203,21 +258,25 @@ export function WorkspaceExecutionLimits(): $CancellablePromise<[number, number]
 }
 
 // Private type creation functions
-const $$createType0 = $models.DBInstanceItemNode.createFrom;
-const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = $models.DBInstanceNode.createFrom;
+const $$createType0 = $models.DatabaseRef.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $models.DBInstanceItemNode.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = $models.FileNode.createFrom;
+const $$createType4 = $models.DBInstanceNode.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = $models.SqlFileCandidate.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = $models.VariableCandidate.createFrom;
-const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = $models.WorkspaceNode.createFrom;
-const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = $models.ConfigResponse.createFrom;
-const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = tokenanalyzer$0.LintConfigEntry.createFrom;
-const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = $models.ThemeVariables.createFrom;
+const $$createType6 = $models.FileNode.createFrom;
+const $$createType7 = $Create.Nullable($$createType6);
+const $$createType8 = $models.FolderNode.createFrom;
+const $$createType9 = $Create.Nullable($$createType8);
+const $$createType10 = $models.SqlFileCandidate.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = $models.VariableCandidate.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = $models.WorkspaceNode.createFrom;
+const $$createType15 = $Create.Nullable($$createType14);
+const $$createType16 = $models.ConfigResponse.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = tokenanalyzer$0.LintConfigEntry.createFrom;
+const $$createType19 = $Create.Array($$createType18);
+const $$createType20 = $models.ThemeVariables.createFrom;
+const $$createType21 = $Create.Nullable($$createType20);

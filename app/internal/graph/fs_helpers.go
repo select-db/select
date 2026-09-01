@@ -80,6 +80,25 @@ func (c *WorkspaceFS) URI(rel string) string {
 	return c.RootURI + "/" + filepath.ToSlash(rel)
 }
 
+// Path converts a selectdb:// URI back to an absolute path, and reports whether
+// the URI belongs to this workspace.
+func (c *WorkspaceFS) Path(uri string) (string, bool) {
+	if uri == c.RootURI {
+		return c.WorkspaceRoot, true
+	}
+	rel, ok := strings.CutPrefix(uri, c.RootURI+"/")
+	if !ok || rel == "" {
+		return "", false
+	}
+	path := filepath.Join(c.WorkspaceRoot, filepath.FromSlash(rel))
+	// filepath.Join cleans the path, so a URI carrying ".." cannot escape the
+	// workspace without this check failing.
+	if _, inside := c.Rel(path); !inside {
+		return "", false
+	}
+	return path, true
+}
+
 // ParentURI returns the URI of the parent folder for a given workspace-relative
 // path. For items directly under the workspace root, it returns the root URI.
 func (c *WorkspaceFS) ParentURI(rel string) string {

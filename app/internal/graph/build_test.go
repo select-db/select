@@ -151,12 +151,35 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		subIDs[f.ID] = f
 	}
 
+	// A folder below the root is part of the skeleton, but its files are read
+	// when it is opened, not by the build.
 	folderFileURI := rootURI + "/folder-file-1"
 	if ff, ok := subIDs[folderFileURI]; !ok {
 		t.Errorf("missing folder %q under root", folderFileURI)
 	} else {
+		if ff.Resolved {
+			t.Errorf("folder-file-1 should not be resolved by the build")
+		}
+		if len(ff.Files) != 0 {
+			t.Errorf("folder-file-1 should hold no files before it is opened: %+v", ff.Files)
+		}
+
+		if err := g.ResolveFolder(folderFileURI); err != nil {
+			t.Fatalf("ResolveFolder failed: %v", err)
+		}
+		if !ff.Resolved {
+			t.Errorf("folder-file-1 should be resolved after opening it")
+		}
 		if len(ff.Files) != 1 || ff.Files[0].Name != "file-child.sql" {
 			t.Errorf("folder-file-1 contents mismatch: %+v", ff.Files)
+		}
+
+		// Opening it again must not duplicate what it already holds.
+		if err := g.ResolveFolder(folderFileURI); err != nil {
+			t.Fatalf("second ResolveFolder failed: %v", err)
+		}
+		if len(ff.Files) != 1 {
+			t.Errorf("re-opening folder-file-1 duplicated its files: %+v", ff.Files)
 		}
 	}
 

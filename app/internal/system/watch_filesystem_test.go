@@ -234,3 +234,71 @@ func TestHandleFSEvent_FileInsert(t *testing.T) {
 		t.Errorf("payload.folder_id mismatch: got %v want %v", payload.FolderID, fsCtx.URI(""))
 	}
 }
+
+// A folder nobody has opened reads its own files when it is opened, so file
+// events inside it are dropped rather than turned into mutations. This is what
+// keeps a branch switch from emitting one mutation per file in a workspace the
+// user has barely browsed.
+func TestHandleFSEvent_SkipsFilesInUnopenedFolder(t *testing.T) {
+	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
+
+	unopenedDir := filepath.Join(workspaceRoot, "unopened")
+	if err := os.MkdirAll(unopenedDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	filePath := filepath.Join(unopenedDir, "query.sql")
+	if err := os.WriteFile(filePath, []byte("SELECT 1;"), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	root := &graph.FolderNode{
+		ID:       fsCtx.URI(""),
+		URI:      fsCtx.URI(""),
+		Type:     "folder",
+		Name:     "root",
+		Resolved: true,
+	}
+	root.AddChild(&graph.FolderNode{
+		ID:       fsCtx.URI("unopened"),
+		URI:      fsCtx.URI("unopened"),
+		Type:     "folder",
+		Name:     "unopened",
+		FolderID: fsCtx.URI(""),
+	})
+
+	g := &graph.Graph{
+		WorkspaceGraph: &graph.WorkspaceNode{
+			ID:      fsCtx.WorkspaceID,
+			Type:    "workspace",
+			Folders: []*graph.FolderNode{root},
+		},
+	}
+	if _, err := g.GetWorkspaceGraph(); err != nil {
+		t.Fatalf("index graph: %v", err)
+	}
+
+	var commits []generated.MutationCommit
+	s := &System{
+		Graph: g,
+		emitHook: func(c generated.MutationCommit) {
+			commits = append(commits, c)
+		},
+	}
+
+	s.handleFSEvent(fsnotify.Event{Name: filePath, Op: fsnotify.Create}, "user-1", fsCtx)
+
+	if len(commits) != 0 {
+		t.Fatalf("expected no commits for a file in an unopened folder, got %d: %+v", len(commits), commits)
+	}
+
+	// The same file in the root, which is open, still arrives.
+	rootFile := filepath.Join(workspaceRoot, "query.sql")
+	if err := os.WriteFile(rootFile, []byte("SELECT 1;"), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	s.handleFSEvent(fsnotify.Event{Name: rootFile, Op: fsnotify.Create}, "user-1", fsCtx)
+
+	if len(commits) != 1 {
+		t.Fatalf("expected 1 commit for a file in the open root, got %d", len(commits))
+	}
+}
