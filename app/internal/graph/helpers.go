@@ -2,46 +2,7 @@ package graph
 
 import (
 	"reflect"
-
-	"github.com/selectDb/toolkit"
 )
-
-func FindNodesByIds(root Node, IDs []string) []Node {
-	result := []Node{}
-
-	var dfs func(n Node)
-	dfs = func(n Node) {
-		if toolkit.Intersects(n.GetIDs(), IDs) {
-			result = append(result, n)
-		}
-		for _, child := range n.GetChildren() {
-			dfs(child)
-		}
-	}
-
-	dfs(root)
-	return result
-}
-
-func RemoveNodesByIDs(root Node, IDs []string) bool {
-	targets := FindNodesByIds(root, IDs)
-	if len(targets) == 0 {
-		return false
-	}
-
-	removed := false
-	for _, target := range targets {
-		PIDs := target.GetParentIDs()
-		parents := FindNodesByIds(root, PIDs)
-		for _, parent := range parents {
-			if parent.RemoveChildByIDs(IDs) {
-				removed = true
-			}
-		}
-	}
-
-	return removed
-}
 
 func assignNonZero(target interface{}, src interface{}) {
 	tv := reflect.ValueOf(target).Elem()
@@ -121,41 +82,24 @@ func isZero(v reflect.Value) bool {
 }
 
 // GetDBInstanceNodeByID returns the DBInstanceNode with the given ID from the
-// current WorkspaceGraph, or nil if no such node exists.
+// current WorkspaceGraph, or nil if no such node exists. A db instance answers
+// to both its config ID and its URI.
 func (g *Graph) GetDBInstanceNodeByID(ID string) *DBInstanceNode {
 	g.mu.RLock()
-	root := g.WorkspaceGraph
-	g.mu.RUnlock()
+	defer g.mu.RUnlock()
 
-	if root == nil {
-		return nil
-	}
-
-	for _, n := range root.DBInstances {
-		if n.ID == ID || n.URI == ID {
-			return n
-		}
-	}
-	return nil
+	node, _ := g.lookup(ID).(*DBInstanceNode)
+	return node
 }
 
 // GetFileNodeByID returns the FileNode with the given ID from the
 // current WorkspaceGraph, or nil if no such node exists.
+//
+// A file whose folder has never been opened is not in the graph yet, so a miss
+// resolves the folders along the file's path before giving up. That keeps
+// callers — a link into a file, a tab restored from the last session — working
+// without knowing which folders have been opened.
 func (g *Graph) GetFileNodeByID(fileID string) *FileNode {
-	g.mu.RLock()
-	root := g.WorkspaceGraph
-	g.mu.RUnlock()
-
-	if root == nil {
-		return nil
-	}
-
-	nodes := FindNodesByIds(root, []string{fileID})
-	if len(nodes) == 0 {
-		return nil
-	}
-	if fn, ok := nodes[0].(*FileNode); ok {
-		return fn
-	}
-	return nil
+	node, _ := g.nodeForURI(fileID).(*FileNode)
+	return node
 }

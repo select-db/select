@@ -33,7 +33,7 @@ func TestMutate_InsertRootFile(t *testing.T) {
 		t.Fatalf("mutate failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"file-1"})
+	nodes := g.lookupAll([]string{"file-1"})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -67,7 +67,7 @@ func TestMutate_InsertRootFileWithoutFolderId(t *testing.T) {
 		t.Fatalf("mutate failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"file-1"})
+	nodes := g.lookupAll([]string{"file-1"})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -118,7 +118,7 @@ func TestMutate_InsertFolderFile(t *testing.T) {
 		t.Fatalf("mutate failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"file-1"})
+	nodes := g.lookupAll([]string{"file-1"})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -162,7 +162,7 @@ func TestMutate_UpdateFileName(t *testing.T) {
 		t.Fatalf("mutate update failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"file-1"})
+	nodes := g.lookupAll([]string{"file-1"})
 	file := nodes[0].(*FileNode)
 	if file.Name != "NewName" {
 		t.Errorf("expected Name=NewName, got %s", file.Name)
@@ -199,7 +199,7 @@ func TestMutate_DeleteFile(t *testing.T) {
 		t.Fatalf("mutate delete failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"file-1"})
+	nodes := g.lookupAll([]string{"file-1"})
 	if len(nodes) != 0 {
 		t.Errorf("expected node deleted, still found: %+v", nodes)
 	}
@@ -249,7 +249,7 @@ func TestMutate_UpdateFileResult(t *testing.T) {
 		t.Fatalf("mutate update failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"file-1"})
+	nodes := g.lookupAll([]string{"file-1"})
 	file, ok := nodes[0].(*FileNode)
 	if !ok {
 		t.Fatalf("expected FileNode, got %T", nodes[0])

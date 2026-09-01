@@ -165,8 +165,7 @@ func unescapeValue(s string) string {
 // SQL file refs use same-folder only.
 // Implements sqllang.VarReplacer.
 func (g *Graph) ResolveVariable(varName string, folderID string) (value string, isSqlFile bool, err error) {
-	wsGraph, err := g.GetWorkspaceGraph()
-	if err != nil {
+	if _, err := g.GetWorkspaceGraph(); err != nil {
 		return "", false, fmt.Errorf("workspace graph not initialized: %w", err)
 	}
 
@@ -179,13 +178,8 @@ func (g *Graph) ResolveVariable(varName string, folderID string) (value string, 
 		}
 		visited[currentFolderID] = true
 
-		nodes := FindNodesByIds(wsGraph, []string{currentFolderID})
-		if len(nodes) == 0 {
-			break
-		}
-
-		folder, ok := nodes[0].(*FolderNode)
-		if !ok {
+		folder := g.GetFolderNodeByID(currentFolderID)
+		if folder == nil {
 			break
 		}
 
@@ -217,12 +211,10 @@ func (g *Graph) readSqlFileContentByRefName(folderID string, refName string) (st
 		return "", err
 	}
 
-	nodes := FindNodesByIds(wsGraph, []string{folderID})
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("folder not found")
-	}
-	folder, ok := nodes[0].(*FolderNode)
-	if !ok {
+	// A $ref names a .sql file in the same folder, so the folder has to have
+	// been read from disk before we can look for it.
+	folder := g.folderWithFiles(folderID)
+	if folder == nil {
 		return "", fmt.Errorf("folder not found")
 	}
 
