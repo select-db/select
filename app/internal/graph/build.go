@@ -80,9 +80,13 @@ func (g *Graph) BuildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 }
 
 // buildWorkspaceGraphFromFS populates the in-memory workspace graph purely
-// from the filesystem and associated config/metadata files. It discovers
-// folders, files and db instances under the workspace root and builds the
-// corresponding FolderNode/FileNode/DBInstanceNode tree.
+// from the filesystem and associated config/metadata files. It discovers the
+// folders and db instances under the workspace root and builds the
+// corresponding FolderNode/DBInstanceNode skeleton.
+//
+// Files are not part of the skeleton. Only the root folder and the db instance
+// directories — the two the UI shows without being asked — are resolved here;
+// every other folder reads its files when it is first opened. See resolve.go.
 func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	// Reset DB instances for this workspace graph.
 	g.WorkspaceGraph.DBInstances = []*DBInstanceNode{}
@@ -109,11 +113,14 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 		rootID: rootFolder,
 	}
 	dbInstancesByURI := map[string]*DBInstanceNode{}
+	dbInstancePaths := map[string]*DBInstanceNode{}
 
 	// If the workspace root does not exist yet, we still expose an empty root.
 	if _, err := os.Stat(workspaceRoot); err != nil {
 		if os.IsNotExist(err) {
+			rootFolder.Resolved = true
 			g.WorkspaceGraph.Folders = []*FolderNode{rootFolder}
+			g.ensureIndex()
 			return nil
 		}
 		return fmt.Errorf("stat workspace root: %w", err)
@@ -191,6 +198,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 				}
 
 				dbInstancesByURI[normalizeDirURI(dbURI)] = node
+				dbInstancePaths[cpath] = node
 				parentFolder.DBInstances = append(parentFolder.DBInstances, node)
 				g.WorkspaceGraph.DBInstances = append(g.WorkspaceGraph.DBInstances, node)
 
@@ -233,46 +241,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 			return nil
 		}
 
-		// Regular file.
-		name := d.Name()
-
-		// Skip internal/config files that are not user-facing.
-		if IsInternalWorkspaceFile(name) {
-			return nil
-		}
-
-		parentURI := fsCtx.ParentURI(relSlash)
-		parentFolder := g.getOrCreateParentFolder(foldersByID, parentURI, fsCtx)
-
-		fileURI := fsCtx.URI(relSlash)
-
-		var databases []DatabaseRef
-		metaPath := cpath + ".metadata.json"
-		if meta, metaErr := ReadFileMetadata(metaPath); metaErr == nil && len(meta.Databases) > 0 {
-			databases = meta.Databases
-		}
-
-		node := &FileNode{
-			ID:   fileURI,
-			URI:  fileURI,
-			Type: "file",
-
-			Name: name,
-
-			FolderID:       parentURI,
-			Databases:      databases,
-			QueryResults:   nil,
-			PlanResults:    nil,
-			ExplainResults: nil,
-		}
-
-		// Attach to parent database instance or folder
-		if parentDB, ok := dbInstancesByURI[normalizeDirURI(parentURI)]; ok {
-			parentDB.Files = append(parentDB.Files, node)
-		} else if parentFolder != nil {
-			parentFolder.Files = append(parentFolder.Files, node)
-		}
-
+		// Files belong to whichever folder reads them, not to the skeleton.
 		return nil
 	})
 
@@ -284,6 +253,18 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 
 	sortDBInstancesByName(rootFolder)
 	ensureArrays(g.WorkspaceGraph)
+	g.ensureIndex()
+
+	// The root and the db instances are on screen from the start, so they are
+	// resolved with the build rather than waiting to be opened.
+	if _, err := g.resolveFolder(rootFolder, fsCtx); err != nil {
+		return err
+	}
+	for path, node := range dbInstancePaths {
+		if err := g.materializeFiles(node, path, fsCtx); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

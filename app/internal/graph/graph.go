@@ -13,6 +13,9 @@ type Graph struct {
 	// Invoked without Graph.mu held after a successful BuildWorkspaceGraph.
 	AfterWorkspaceGraphBuild func(ws *WorkspaceNode)
 
+	// ID -> node for the filesystem tree; see index.go. Guarded by mu.
+	index nodeIndex
+
 	mu sync.RWMutex
 }
 
@@ -28,4 +31,5 @@ func (g *Graph) InvalidateWorkspaceGraph() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.WorkspaceGraph = nil
+	g.index = nil
 }

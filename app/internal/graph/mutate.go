@@ -34,6 +34,12 @@ func (g *Graph) Mutate(ctx context.Context, commit generated.MutationCommit) err
 		return nil
 	}
 
+	// WorkspaceGraph is an exported field, so a graph can arrive here having
+	// been assigned rather than built. Index it before looking anything up.
+	if g.index == nil {
+		g.ensureIndex()
+	}
+
 	toolkit.Debug("mutation", func() {
 		log.Printf("[mutation] %+v", commit)
 	})
@@ -68,12 +74,10 @@ func (g *Graph) Mutate(ctx context.Context, commit generated.MutationCommit) err
 			return err
 		}
 	case "delete":
-		RemoveNodesByIDs(g.WorkspaceGraph, []string{commit.ObjectID})
+		g.detachByIDs([]string{commit.ObjectID})
 	default:
 		return fmt.Errorf("unknown operation: %s", commit.Operation)
 	}
-
-	ensureArrays(g.WorkspaceGraph)
 
 	commit.Payload = dto
 	desktop.Emit("mutation", commit)
@@ -90,19 +94,29 @@ func (g *Graph) handleInsert(dto interface{}, tableName string) error {
 
 	node := builder(dto)
 
-	parents := FindNodesByIds(g.WorkspaceGraph, node.GetParentIDs())
-	for _, parent := range parents {
-		RemoveNodesByIDs(parent, node.GetIDs())
-		parent.AddChild(node)
+	// A folder the graph already holds keeps its node: the incoming one is an
+	// empty shell built from the event, and swapping it in would drop the
+	// folder's children and the record that it had been read from disk.
+	if _, isFolder := node.(*FolderNode); isFolder {
+		if _, exists := g.lookup(node.GetIDs()[0]).(*FolderNode); exists {
+			return nil
+		}
 	}
+
+	// Otherwise replace rather than duplicate: an insert for an ID the graph
+	// already holds — a file restored by git, a db instance whose config was
+	// rewritten — arrives as an insert, not an update.
+	g.detachByIDs(node.GetIDs())
+	g.attach(node)
+	ensureNodeArrays(node)
+
 	return nil
 }
 
 func (g *Graph) handleUpdate(objectID string, dto interface{}) error {
-	targets := FindNodesByIds(g.WorkspaceGraph, []string{objectID})
-
-	for _, target := range targets {
+	for _, target := range g.lookupAll([]string{objectID}) {
 		assignNonZero(target, dto)
+		ensureNodeArrays(target)
 	}
 
 	return nil

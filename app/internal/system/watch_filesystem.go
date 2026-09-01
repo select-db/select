@@ -275,13 +275,8 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 		return
 	}
 
-	nodes := graph.FindNodesByIds(wsGraph, []string{folderURI})
-	if len(nodes) == 0 {
-		return
-	}
-
-	folderNode, ok := nodes[0].(*graph.FolderNode)
-	if !ok {
+	folderNode := s.Graph.GetFolderNodeByID(folderURI)
+	if folderNode == nil {
 		return
 	}
 
@@ -416,32 +411,22 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 
 // Resolves a node URI to its table name via the current graph.
 func (s *System) inferTableFromGraph(id string) string {
-	ws, err := s.Graph.GetWorkspaceGraph()
-	if err != nil || ws == nil {
+	if s.Graph == nil {
 		return ""
 	}
-
-	nodes := graph.FindNodesByIds(ws, []string{id})
-	if len(nodes) == 0 {
-		return ""
-	}
-
-	switch nodes[0].(type) {
-	case *graph.FileNode:
-		return "file"
-	case *graph.FolderNode:
-		return "folder"
-	case *graph.DBInstanceNode:
-		return "db_instance"
-	default:
-		return ""
-	}
+	return s.Graph.NodeKind(id)
 }
 
-// Emits a file mutation, skipping internal workspace files.
+// Emits a file mutation, skipping internal workspace files and files whose
+// folder has not been opened yet — an unresolved folder reads its files when it
+// is opened, so putting one file in it now would only make it look resolved.
 func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID string, ctx *graph.WorkspaceFS, op string) {
 	name := filepath.Base(filePath)
 	if graph.IsInternalWorkspaceFile(name) {
+		return
+	}
+
+	if !s.parentAcceptsFiles(parentURI) {
 		return
 	}
 
@@ -452,6 +437,22 @@ func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID st
 		FolderID: utils.Ptr(parentURI),
 	}
 	s.emitMutation("file", op, fileURI, payload, ctx.WorkspaceID, userID)
+}
+
+// Reports whether a file event's parent is a container the graph tracks files
+// for: a db instance directory, or a folder that has been resolved. A parent
+// the graph does not know at all (a folder created moments ago, whose own
+// insert is still in flight) is accepted, so its files are not lost.
+func (s *System) parentAcceptsFiles(parentURI string) bool {
+	if s.Graph == nil {
+		return true
+	}
+
+	parent := s.Graph.GetFolderNodeByID(parentURI)
+	if parent == nil {
+		return true
+	}
+	return parent.Resolved
 }
 
 // Handles the directory if it contains db.config.json.
@@ -478,8 +479,12 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 	}
 	s.emitMutation("folder", "insert", dirURI, payload, ctx.WorkspaceID, userID)
 
-	// Scan contents to catch files restored e.g. via git.
-	if scanContents {
+	// Scan contents to catch files restored e.g. via git. A folder nobody has
+	// opened is skipped: it reads its own contents when it is opened, so
+	// walking it here would only pull a subtree into memory that nothing is
+	// showing — which is what made a branch switch in a large workspace emit
+	// one mutation per file.
+	if scanContents && s.parentAcceptsFiles(dirURI) {
 		s.scanFolderContents(dirPath, dirURI, userID, ctx)
 	}
 }

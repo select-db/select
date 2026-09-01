@@ -32,7 +32,7 @@ func TestMutate_InsertRootFileFolder(t *testing.T) {
 		t.Fatalf("mutate insert failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"folder-1"})
+	nodes := g.lookupAll([]string{"folder-1"})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -66,7 +66,7 @@ func TestMutate_InsertRootDbInstanceFolder(t *testing.T) {
 		t.Fatalf("mutate insert failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"folder-1"})
+	nodes := g.lookupAll([]string{"folder-1"})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -105,7 +105,7 @@ func TestMutate_InsertRootFolderWithoutFolderId(t *testing.T) {
 		t.Fatalf("mutate insert failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"folder-1"})
+	nodes := g.lookupAll([]string{"folder-1"})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -148,7 +148,7 @@ func TestMutate_InsertNestedFolder(t *testing.T) {
 		t.Fatalf("mutate insert failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"folder-2"})
+	nodes := g.lookupAll([]string{"folder-2"})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
@@ -187,7 +187,7 @@ func TestMutate_UpdateFolderName(t *testing.T) {
 		t.Fatalf("mutate update failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"folder-1"})
+	nodes := g.lookupAll([]string{"folder-1"})
 	folder := nodes[0].(*FolderNode)
 	if folder.Name != "NewFolder" {
 		t.Errorf("expected Name=NewFolder, got %s", folder.Name)
@@ -224,7 +224,7 @@ func TestMutate_DeleteFolder(t *testing.T) {
 		t.Fatalf("mutate delete failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"folder-1"})
+	nodes := g.lookupAll([]string{"folder-1"})
 	if len(nodes) != 0 {
 		t.Errorf("expected node deleted, still found: %+v", nodes)
 	}

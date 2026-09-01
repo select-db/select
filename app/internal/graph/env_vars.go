@@ -30,19 +30,13 @@ type SqlFileCandidate struct {
 // take precedence over parent folder variables.
 func (g *Graph) GetUriVariables(uri string) ([]VariableCandidate, error) {
 	// Get the workspace graph
-	wsGraph, err := g.GetWorkspaceGraph()
-	if err != nil {
+	if _, err := g.GetWorkspaceGraph(); err != nil {
 		return nil, err
 	}
 
 	// Find the node to get its folder ID
-	nodes := FindNodesByIds(wsGraph, []string{uri})
-	if len(nodes) == 0 {
-		return []VariableCandidate{}, nil
-	}
-
 	var folderID string
-	switch node := nodes[0].(type) {
+	switch node := g.nodeForURI(uri).(type) {
 	case *FileNode:
 		folderID = node.FolderID
 	case *FolderNode:
@@ -68,13 +62,8 @@ func (g *Graph) GetUriVariables(uri string) ([]VariableCandidate, error) {
 		visited[currentFolderID] = true
 
 		// Find folder node
-		folderNodes := FindNodesByIds(wsGraph, []string{currentFolderID})
-		if len(folderNodes) == 0 {
-			break
-		}
-
-		folder, ok := folderNodes[0].(*FolderNode)
-		if !ok {
+		folder := g.GetFolderNodeByID(currentFolderID)
+		if folder == nil {
 			break
 		}
 
@@ -126,13 +115,8 @@ func (g *Graph) GetUriSqlFileRefs(uri string) ([]SqlFileCandidate, error) {
 		return nil, err
 	}
 
-	nodes := FindNodesByIds(wsGraph, []string{uri})
-	if len(nodes) == 0 {
-		return []SqlFileCandidate{}, nil
-	}
-
 	var folderID string
-	switch node := nodes[0].(type) {
+	switch node := g.nodeForURI(uri).(type) {
 	case *FileNode:
 		folderID = node.FolderID
 	case *FolderNode:
@@ -143,12 +127,10 @@ func (g *Graph) GetUriSqlFileRefs(uri string) ([]SqlFileCandidate, error) {
 		return []SqlFileCandidate{}, nil
 	}
 
-	folderNodes := FindNodesByIds(wsGraph, []string{folderID})
-	if len(folderNodes) == 0 {
-		return []SqlFileCandidate{}, nil
-	}
-	folder, ok := folderNodes[0].(*FolderNode)
-	if !ok {
+	// The candidates are the folder's own .sql files, so it has to have been
+	// read from disk.
+	folder := g.folderWithFiles(folderID)
+	if folder == nil {
 		return []SqlFileCandidate{}, nil
 	}
 

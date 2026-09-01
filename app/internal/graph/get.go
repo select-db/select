@@ -20,39 +20,41 @@ func (g *Graph) FindDbItemNodeById(dbInstanceID, nodeID string) *DBInstanceItemN
 	return nil
 }
 
+// GetWorkspaceGraph returns the workspace graph, building it on first use.
+//
+// It also guarantees the graph is indexed: WorkspaceGraph is an exported field,
+// so a graph can be assigned rather than built, and every lookup goes through
+// the index.
 func (g *Graph) GetWorkspaceGraph() (*WorkspaceNode, error) {
 	g.mu.RLock()
-	
-	if g.WorkspaceGraph != nil {
+	if g.WorkspaceGraph != nil && g.index != nil {
 		defer g.mu.RUnlock()
 		return g.WorkspaceGraph, nil
 	}
-	
 	g.mu.RUnlock()
 
 	g.mu.Lock()
 
-	if g.WorkspaceGraph == nil {
+	built := false
+	switch {
+	case g.WorkspaceGraph == nil:
 		if err := g.BuildWorkspaceGraph(); err != nil {
 			g.mu.Unlock()
 			return nil, err
 		}
-		
-		wg := g.WorkspaceGraph
-		
-		g.mu.Unlock()
-		
-		onGraphBuilt := g.AfterWorkspaceGraphBuild
-		if onGraphBuilt != nil {
-			onGraphBuilt(wg)
-		}
-
-		return wg, nil
+		built = true
+	case g.index == nil:
+		g.ensureIndex()
 	}
-	
+
 	wg := g.WorkspaceGraph
+	onGraphBuilt := g.AfterWorkspaceGraphBuild
 
 	g.mu.Unlock()
-	
+
+	if built && onGraphBuilt != nil {
+		onGraphBuilt(wg)
+	}
+
 	return wg, nil
 }

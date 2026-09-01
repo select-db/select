@@ -30,9 +30,9 @@ func TestMutate_InsertDbInstance(t *testing.T) {
 		t.Fatalf("mutate insert failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"db-1"})
-	if len(nodes) != 2 {
-		t.Fatalf("expected 2 nodes, got %d", len(nodes))
+	nodes := g.lookupAll([]string{"db-1"})
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
 	if _, ok := nodes[0].(*DBInstanceNode); !ok {
 		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
@@ -61,9 +61,9 @@ func TestMutate_InsertDbInstanceWithoutDSN(t *testing.T) {
 		t.Fatalf("mutate insert failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"db-1"})
-	if len(nodes) != 2 {
-		t.Fatalf("expected 2 nodes, got %d", len(nodes))
+	nodes := g.lookupAll([]string{"db-1"})
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
 	if _, ok := nodes[0].(*DBInstanceNode); !ok {
 		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
@@ -93,9 +93,9 @@ func TestMutate_InsertDbInstanceWithoutFolderId(t *testing.T) {
 		t.Fatalf("mutate insert failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"db-1"})
-	if len(nodes) != 2 {
-		t.Fatalf("expected 2 nodes, got %d", len(nodes))
+	nodes := g.lookupAll([]string{"db-1"})
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
 	if _, ok := nodes[0].(*DBInstanceNode); !ok {
 		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
@@ -145,15 +145,15 @@ func TestMutate_InsertFolderDbInstance(t *testing.T) {
 		t.Fatalf("mutate failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"db-1"})
-	if len(nodes) != 2 {
-		t.Fatalf("expected 2 nodes, got %d", len(nodes))
+	nodes := g.lookupAll([]string{"db-1"})
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
 	db, ok := nodes[0].(*DBInstanceNode)
 	if !ok {
 		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
 	}
-	nodes = FindNodesByIds(g.WorkspaceGraph, []string{db.FolderID})
+	nodes = g.lookupAll([]string{db.FolderID})
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 parent folder node, got %d", len(nodes))
 	}
@@ -200,7 +200,7 @@ func TestMutate_UpdateDbInstanceName(t *testing.T) {
 		t.Fatalf("mutate update failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"db-1"})
+	nodes := g.lookupAll([]string{"db-1"})
 	db := nodes[0].(*DBInstanceNode)
 	if db.Name != "NewDB" {
 		t.Errorf("expected Name=NewDB, got %s", db.Name)
@@ -239,7 +239,7 @@ func TestMutate_DeleteDbInstance(t *testing.T) {
 		t.Fatalf("mutate delete failed: %v", err)
 	}
 
-	nodes := FindNodesByIds(g.WorkspaceGraph, []string{"db-1"})
+	nodes := g.lookupAll([]string{"db-1"})
 	if len(nodes) != 0 {
 		t.Errorf("expected 0 nodes after delete, got %d", len(nodes))
 	}
