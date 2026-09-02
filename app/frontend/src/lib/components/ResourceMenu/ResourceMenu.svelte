@@ -3,8 +3,7 @@
 	import ItemIcon from '$lib/components/views/shared/ItemIcon.svelte';
 	import type { MenuOption } from '$lib/system/Menu/Menu.types';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { queryWorkspaceFiles } from '$lib/utils/graph/fileQuery';
-	import { newFileNode, type FileNode } from '$lib/wails/graph';
+	import { FindFiles, newFileNode, type FileNode } from '$lib/wails/graph';
 	import { layoutStore } from '$lib/components/Layout/layoutStore';
 	import { recentItemsStore } from '$lib/stores/recentItemsStore';
 	import { debounce } from '$lib/utils/debounce';
@@ -33,6 +32,9 @@
 		searchQuery = $bindable('')
 	}: ResourceMenuProps = $props();
 
+	/** Enough rows for the menu to rank; it shows the best MAX_RESOURCE_MENU_OPTIONS. */
+	const FILE_RESULT_LIMIT = 200;
+
 	const selectedSet = $derived(new Set(selectedIds));
 
 	let debouncedQuery = $state('');
@@ -46,22 +48,27 @@
 	});
 
 	// Files are asked for rather than read off the graph, which only holds the
-	// folders that have been opened. Each query supersedes the one before it, so
-	// what the backend is still walking for a stale keystroke is cancelled.
+	// folders that have been opened. Each keystroke supersedes the one before
+	// it, cancelling the walk the backend is still doing for it.
 	let queriedFiles = $state<FileNode[]>([]);
 
 	$effect(() => {
-		if (!types.includes('file')) return;
+		const pattern = debouncedQuery.trim();
+		if (!types.includes('file') || !pattern) {
+			queriedFiles = [];
+			return;
+		}
 
-		const query = queryWorkspaceFiles(debouncedQuery, (files) => {
-			queriedFiles = files;
-		});
+		const query = FindFiles({ pattern, limit: FILE_RESULT_LIMIT });
+		// A cancelled or failed query leaves the rows already shown alone rather
+		// than blanking the menu under the cursor.
+		query.then((files) => (queriedFiles = files)).catch(() => {});
 		return () => query.cancel();
 	});
 
 	// Before anything is typed there is nothing to match on, so the menu offers
-	// what was open recently — the files, that is; open tabs and databases come
-	// from the graph and the layout below.
+	// what was opened recently — the files, that is; tabs and databases come
+	// from the layout and the graph below.
 	const recentFiles = $derived.by(() => {
 		if (debouncedQuery.trim() !== '') return [];
 		return $recentItemsStore

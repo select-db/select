@@ -22,13 +22,14 @@ function dbItemTypePriority(opt: ResourceMenuOption): number {
 }
 
 /**
- * Options from the workspace: db instances and their schema items come from the
- * graph, files from `files`.
+ * Options from the workspace: the databases and their schema items off the
+ * graph, which lists every instance whatever folder it sits in, and the files
+ * from `files`.
  *
- * Files are passed in rather than read off the graph because the graph only
- * holds the folders that have been opened, and a picker is asked about the
- * whole workspace — so its files come from a query, or from what was open
- * recently before anything is typed.
+ * Files are passed in rather than read off the graph because the graph holds
+ * only the folders that have been opened, and a picker is asked about the whole
+ * workspace — so its files come from a query, or from what was opened recently
+ * before anything is typed.
  */
 export function flattenWorkspaceGraph(
 	workspace: graph.WorkspaceNode | undefined,
@@ -39,50 +40,27 @@ export function flattenWorkspaceGraph(
 
 	const options: ResourceMenuOption[] = [];
 
-	const pushFile = (file: graph.FileNode) => {
-		options.push({
-			id: file.id,
-			label: file.name,
-			type: 'file',
-			uri: file.uri,
-			node: file,
-			folderId: file.folder_id
-		});
-	};
-
-	const processDbInstance = (db: graph.DBInstanceNode) => {
-		if (types.includes('db_instance')) {
+	if (types.includes('file')) {
+		for (const file of files) {
 			options.push({
-				id: db.id,
-				label: db.name,
-				type: 'db_instance',
-				uri: db.uri,
-				node: db
+				id: file.id,
+				label: file.name,
+				type: 'file',
+				uri: file.uri,
+				node: file,
+				folderId: file.folder_id
 			});
 		}
+	}
 
+	for (const db of workspace.db_instances) {
+		if (types.includes('db_instance')) {
+			options.push({ id: db.id, label: db.name, type: 'db_instance', uri: db.uri, node: db });
+		}
 		if (types.includes('db_item') && db.children) {
 			collectDbItems(db.children, options);
 		}
-
-		for (const subFolder of db.folders) processFolder(subFolder);
-	};
-
-	const processFolder = (folder: graph.FolderNode) => {
-		for (const db of folder.db_instances) processDbInstance(db);
-
-		for (const subFolder of folder.folders) processFolder(subFolder);
-	};
-
-	if (types.includes('file')) {
-		for (const file of files) pushFile(file);
 	}
-
-	for (const folder of workspace.folders) {
-		processFolder(folder);
-	}
-
-	for (const db of workspace.db_instances) processDbInstance(db);
 
 	return options;
 }
