@@ -302,3 +302,68 @@ func TestHandleFSEvent_SkipsFilesInUnopenedFolder(t *testing.T) {
 		t.Fatalf("expected 1 commit for a file in the open root, got %d", len(commits))
 	}
 }
+
+// A deleted path cannot be stat-ed, so the graph decides what it was. It knows
+// every folder, but a file only once its folder has been opened — so a file
+// deleted in a folder nobody opened must still be reported as a file, or the
+// frontend never closes the tab that was open on it.
+func TestHandleFSEvent_DeleteReportsAFileAsAFile(t *testing.T) {
+	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
+
+	root := &graph.FolderNode{
+		ID:       fsCtx.URI(""),
+		URI:      fsCtx.URI(""),
+		Type:     "folder",
+		Name:     "root",
+		Resolved: true,
+	}
+	unopened := &graph.FolderNode{
+		ID:       fsCtx.URI("unopened"),
+		URI:      fsCtx.URI("unopened"),
+		Type:     "folder",
+		Name:     "unopened",
+		FolderID: fsCtx.URI(""),
+	}
+	root.AddChild(unopened)
+
+	g := &graph.Graph{
+		WorkspaceGraph: &graph.WorkspaceNode{
+			ID:      fsCtx.WorkspaceID,
+			Type:    "workspace",
+			Folders: []*graph.FolderNode{root},
+		},
+	}
+	if _, err := g.GetWorkspaceGraph(); err != nil {
+		t.Fatalf("index graph: %v", err)
+	}
+
+	var commits []generated.MutationCommit
+	s := &System{
+		Graph: g,
+		emitHook: func(c generated.MutationCommit) {
+			commits = append(commits, c)
+		},
+	}
+
+	// Nothing on disk: both paths are already gone, as they are for a delete.
+	gone := filepath.Join(workspaceRoot, "unopened", "query.sql")
+	s.handleFSEvent(fsnotify.Event{Name: gone, Op: fsnotify.Remove}, "user-1", fsCtx)
+
+	if len(commits) != 1 {
+		t.Fatalf("expected 1 commit, got %d", len(commits))
+	}
+	if commits[0].TableName != "file" || commits[0].Operation != "delete" {
+		t.Errorf("expected a file delete, got %s %s", commits[0].Operation, commits[0].TableName)
+	}
+	if commits[0].ObjectID != fsCtx.URI("unopened/query.sql") {
+		t.Errorf("ObjectID mismatch: %q", commits[0].ObjectID)
+	}
+
+	// A folder the graph does know is still reported as a folder.
+	commits = nil
+	s.handleFSEvent(fsnotify.Event{Name: filepath.Join(workspaceRoot, "unopened"), Op: fsnotify.Remove}, "user-1", fsCtx)
+
+	if len(commits) != 1 || commits[0].TableName != "folder" {
+		t.Fatalf("expected a folder delete, got %+v", commits)
+	}
+}
