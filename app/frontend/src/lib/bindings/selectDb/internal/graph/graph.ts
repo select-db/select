@@ -152,12 +152,27 @@ export function InvalidateWorkspaceGraph(): $CancellablePromise<void> {
 }
 
 /**
+ * ListWorkspaceFiles returns a node for every file in the workspace, without
+ * adding any of them to the graph.
+ * 
+ * The graph holds the files of the folders that have been opened, which is what
+ * the tree shows. A picker is the other case: it searches the whole workspace by
+ * name, so it needs every file whether or not its folder has been opened. This
+ * walks for them and leaves the graph as it is.
+ */
+export function ListWorkspaceFiles(): $CancellablePromise<($models.FileNode | null)[]> {
+    return $Call.ByID(1349016154).then(($result: any) => {
+        return $$createType16($result);
+    });
+}
+
+/**
  * LoadConfig returns the merged personal config: built-in defaults overlaid with
  * the per-user .config (keybindings and editor snippets).
  */
 export function LoadConfig(): $CancellablePromise<$models.ConfigResponse | null> {
     return $Call.ByID(2766015104).then(($result: any) => {
-        return $$createType17($result);
+        return $$createType18($result);
     });
 }
 
@@ -173,7 +188,7 @@ export function LoadFolderEnvFile(folderNode: $models.FolderNode | null, wfs: $m
  */
 export function LoadWorkspaceLint(): $CancellablePromise<tokenanalyzer$0.LintFile> {
     return $Call.ByID(2616540178).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType20($result);
     });
 }
 
@@ -184,7 +199,7 @@ export function LoadWorkspaceLint(): $CancellablePromise<tokenanalyzer$0.LintFil
  */
 export function LoadWorkspaceTheme(): $CancellablePromise<$models.ThemeVariables | null> {
     return $Call.ByID(716865576).then(($result: any) => {
-        return $$createType21($result);
+        return $$createType22($result);
     });
 }
 
@@ -221,13 +236,20 @@ export function ResetWorkspaceTheme(): $CancellablePromise<void> {
 }
 
 /**
- * ResolveFolder reads the files of the folder with the given URI and emits the
- * updated graph. The frontend calls it when a folder is opened; it is a no-op
- * for an unknown URI, a folder that is already resolved, or a node that is not
- * a folder, so callers do not have to check first.
+ * ResolveFolder reads the files of the folder with the given URI, emits the
+ * updated graph, and returns the folder. The frontend calls it when a folder is
+ * opened; it is a no-op for a folder that is already resolved, and returns nil
+ * for an unknown URI or a node that is not a folder, so callers do not have to
+ * check first.
+ * 
+ * The folder comes back rather than only reaching the caller through the graph
+ * event, because a caller that acts on what is in a folder — naming a new file
+ * so it does not land on an existing one — needs it before the next render.
  */
-export function ResolveFolder(folderURI: string): $CancellablePromise<void> {
-    return $Call.ByID(2843403334, folderURI);
+export function ResolveFolder(folderURI: string): $CancellablePromise<$models.FolderNode | null> {
+    return $Call.ByID(2843403334, folderURI).then(($result: any) => {
+        return $$createType9($result);
+    });
 }
 
 /**
@@ -274,9 +296,10 @@ const $$createType12 = $models.VariableCandidate.createFrom;
 const $$createType13 = $Create.Array($$createType12);
 const $$createType14 = $models.WorkspaceNode.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = $models.ConfigResponse.createFrom;
-const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = tokenanalyzer$0.LintConfigEntry.createFrom;
-const $$createType19 = $Create.Array($$createType18);
-const $$createType20 = $models.ThemeVariables.createFrom;
-const $$createType21 = $Create.Nullable($$createType20);
+const $$createType16 = $Create.Array($$createType7);
+const $$createType17 = $models.ConfigResponse.createFrom;
+const $$createType18 = $Create.Nullable($$createType17);
+const $$createType19 = tokenanalyzer$0.LintConfigEntry.createFrom;
+const $$createType20 = $Create.Array($$createType19);
+const $$createType21 = $models.ThemeVariables.createFrom;
+const $$createType22 = $Create.Nullable($$createType21);
