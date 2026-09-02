@@ -499,6 +499,73 @@ export class FileNode {
     }
 }
 
+/**
+ * FileQuery selects files by name. The zero value matches every file in the
+ * workspace, capped at DefaultFileQueryLimit.
+ */
+export class FileQuery {
+    /**
+     * Pattern is matched case-insensitively against the file name, and failing
+     * that against its path. Empty matches everything.
+     */
+    "pattern": string;
+
+    /**
+     * FolderURI limits the search to one folder and everything below it. Empty
+     * searches the whole workspace.
+     */
+    "folderURI": string;
+
+    /**
+     * Extensions limits the search to these file extensions, ".sql" style.
+     */
+    "extensions": string[];
+
+    /**
+     * Depth limits how far below the scope the search goes: 0 is the whole
+     * subtree, 1 the scope's own files and no deeper.
+     */
+    "depth": number;
+
+    /**
+     * Limit caps how many files come back. Zero means DefaultFileQueryLimit.
+     */
+    "limit": number;
+
+    /** Creates a new FileQuery instance. */
+    constructor($$source: Partial<FileQuery> = {}) {
+        if (!("pattern" in $$source)) {
+            this["pattern"] = "";
+        }
+        if (!("folderURI" in $$source)) {
+            this["folderURI"] = "";
+        }
+        if (!("extensions" in $$source)) {
+            this["extensions"] = [];
+        }
+        if (!("depth" in $$source)) {
+            this["depth"] = 0;
+        }
+        if (!("limit" in $$source)) {
+            this["limit"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileQuery instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FileQuery {
+        const $$createField2_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("extensions" in $$parsedSource) {
+            $$parsedSource["extensions"] = $$createField2_0($$parsedSource["extensions"]);
+        }
+        return new FileQuery($$parsedSource as Partial<FileQuery>);
+    }
+}
+
 export class FolderNode {
     "id": string;
     "uri": string;

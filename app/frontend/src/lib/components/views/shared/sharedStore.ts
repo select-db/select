@@ -2,7 +2,6 @@ import type * as generated from '$lib/bindings/selectDb/internal/db/generated/mo
 import type * as graph from '$lib/wails/graph';
 import { EventsOn } from '$lib/wails/events';
 import { resolveFolderContents } from '$lib/utils/graph/resolveFolder';
-import { invalidateWorkspaceFiles } from '$lib/utils/graph/workspaceFiles';
 import { writable } from 'svelte/store';
 import {
 	createDatabase,
@@ -58,12 +57,6 @@ EventsOn('mutation', (commit: generated.MutationCommit) => {
 	createDatabase(commit);
 	updateDatabase(commit);
 	deleteDatabase(commit);
-
-	// The picker's file list is a snapshot of the workspace, so a file or
-	// folder appearing or disappearing makes it stale.
-	if (commit.table_name === 'file' || commit.table_name === 'folder') {
-		if (commit.operation !== 'update') invalidateWorkspaceFiles();
-	}
 });
 
 /**

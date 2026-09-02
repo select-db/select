@@ -42,3 +42,21 @@ test('reads a folder from disk the first time it is opened', async ({ page, requ
 	expect(afterOpening?.resolved).toBe(true);
 	expect(afterOpening?.files.map((file) => file.name)).toEqual(['hello.sql']);
 });
+
+test('finds a file in a folder that has never been opened', async ({ page, signIn }) => {
+	await page.goto('/');
+	await signIn();
+	await expect(page.getByText('queries')).toBeVisible();
+
+	// `queries/nested/b.sql` is two folders deep and nothing has opened either of
+	// them, so it is not in the graph the app is holding — the picker asks the
+	// backend for it.
+	await page.locator('.search button').click();
+	await page.getByPlaceholder('Search workspace...').fill('b.sql');
+
+	const result = page.getByRole('menuitem').filter({ hasText: 'b.sql' });
+	await expect(result).toBeVisible();
+
+	await result.click();
+	await expect(page.locator('.tab').filter({ hasText: 'b.sql' })).toBeVisible();
+});

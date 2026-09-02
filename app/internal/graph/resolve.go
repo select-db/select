@@ -15,7 +15,6 @@ package graph
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,60 +151,6 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	return folder, nil
 }
 
-// ListWorkspaceFiles returns a node for every file in the workspace, without
-// adding any of them to the graph.
-//
-// The graph holds the files of the folders that have been opened, which is what
-// the tree shows. A picker is the other case: it searches the whole workspace by
-// name, so it needs every file whether or not its folder has been opened. This
-// walks for them and leaves the graph as it is.
-func (g *Graph) ListWorkspaceFiles() ([]*FileNode, error) {
-	g.mu.RLock()
-	if g.WorkspaceGraph == nil {
-		g.mu.RUnlock()
-		return []*FileNode{}, nil
-	}
-	workspaceID := g.WorkspaceGraph.ID
-	g.mu.RUnlock()
-
-	fsCtx, err := NewWorkspaceFS(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	files := []*FileNode{}
-	err = filepath.WalkDir(fsCtx.WorkspaceRoot, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-
-		relSlash, ok := fsCtx.Rel(path)
-		if !ok {
-			return nil
-		}
-		relSlash = filepath.ToSlash(filepath.Clean(relSlash))
-
-		if IsInternalWorkspacePath(relSlash) {
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-
-		if d.IsDir() || IsInternalWorkspaceFile(d.Name()) {
-			return nil
-		}
-
-		files = append(files, newFSFileNode(path, fsCtx.URI(relSlash), fsCtx.ParentURI(relSlash), d.Name()))
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("walk workspace for files: %w", err)
-	}
-
-	return files, nil
-}
-
 // resolveAlongPath resolves every folder between the workspace root and the
 // given URI, so that a node nobody has browsed to can still be found by ID.
 // Callers hold g.mu.
@@ -250,25 +195,6 @@ func (g *Graph) nodeForURI(uri string) Node {
 	g.resolveAlongPath(uri, fsCtx)
 
 	return g.lookup(uri)
-}
-
-// folderWithFiles returns the folder with the given ID, having read its files
-// from disk. For callers that need what is *in* a folder rather than where it
-// sits, which an unresolved folder cannot answer.
-func (g *Graph) folderWithFiles(folderID string) *FolderNode {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	folder, ok := g.lookup(folderID).(*FolderNode)
-	if !ok {
-		return nil
-	}
-
-	if fsCtx, err := g.workspaceFS(); err == nil {
-		_, _ = g.resolveFolder(folder, fsCtx)
-	}
-
-	return folder
 }
 
 // FileDatabases returns the databases a file is bound to. It answers from the

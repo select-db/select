@@ -3,7 +3,8 @@
 	import ItemIcon from '$lib/components/views/shared/ItemIcon.svelte';
 	import type { MenuOption } from '$lib/system/Menu/Menu.types';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { loadWorkspaceFiles, workspaceFilesStore } from '$lib/utils/graph/workspaceFiles';
+	import { queryWorkspaceFiles } from '$lib/utils/graph/fileQuery';
+	import { newFileNode, type FileNode } from '$lib/wails/graph';
 	import { layoutStore } from '$lib/components/Layout/layoutStore';
 	import { recentItemsStore } from '$lib/stores/recentItemsStore';
 	import { debounce } from '$lib/utils/debounce';
@@ -44,15 +45,39 @@
 		updateDebouncedQuery(searchQuery);
 	});
 
-	// Files are listed by the backend rather than read off the graph, which only
-	// holds the folders that have been opened. The list is fetched the first
-	// time a menu that offers files is shown.
+	// Files are asked for rather than read off the graph, which only holds the
+	// folders that have been opened. Each query supersedes the one before it, so
+	// what the backend is still walking for a stale keystroke is cancelled.
+	let queriedFiles = $state<FileNode[]>([]);
+
 	$effect(() => {
-		if (types.includes('file')) void loadWorkspaceFiles();
+		if (!types.includes('file')) return;
+
+		const query = queryWorkspaceFiles(debouncedQuery, (files) => {
+			queriedFiles = files;
+		});
+		return () => query.cancel();
+	});
+
+	// Before anything is typed there is nothing to match on, so the menu offers
+	// what was open recently — the files, that is; open tabs and databases come
+	// from the graph and the layout below.
+	const recentFiles = $derived.by(() => {
+		if (debouncedQuery.trim() !== '') return [];
+		return $recentItemsStore
+			.filter((item) => item.type === 'file')
+			.map((item) =>
+				newFileNode({
+					id: item.id,
+					uri: item.uri,
+					name: item.name,
+					folder_id: item.folderId ?? ''
+				})
+			);
 	});
 
 	const graphOptions = $derived(
-		flattenWorkspaceGraph($workspaceGraphStore, types, $workspaceFilesStore)
+		flattenWorkspaceGraph($workspaceGraphStore, types, [...recentFiles, ...queriedFiles])
 	);
 	const tabOptions = $derived(getOpenTabOptions($layoutStore.root, types));
 

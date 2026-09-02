@@ -51,13 +51,25 @@ export function FindDbItemNodeById(dbInstanceID: string, nodeID: string): $Cance
 }
 
 /**
+ * FindFiles returns the files matching a query, best matches first.
+ * 
+ * It reads the filesystem rather than the graph, so it sees files in folders
+ * that have never been opened, and it adds nothing to the graph.
+ */
+export function FindFiles(q: $models.FileQuery): $CancellablePromise<($models.FileNode | null)[]> {
+    return $Call.ByID(2629348860, q).then(($result: any) => {
+        return $$createType6($result);
+    });
+}
+
+/**
  * GetDBInstanceNodeByID returns the DBInstanceNode with the given ID from the
  * current WorkspaceGraph, or nil if no such node exists. A db instance answers
  * to both its config ID and its URI.
  */
 export function GetDBInstanceNodeByID(ID: string): $CancellablePromise<$models.DBInstanceNode | null> {
     return $Call.ByID(1444826651, ID).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType8($result);
     });
 }
 
@@ -79,7 +91,7 @@ export function GetEnvFilePath(folderURI: string): $CancellablePromise<string> {
  */
 export function GetFileNodeByID(fileID: string): $CancellablePromise<$models.FileNode | null> {
     return $Call.ByID(793692664, fileID).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType5($result);
     });
 }
 
@@ -89,7 +101,7 @@ export function GetFileNodeByID(fileID: string): $CancellablePromise<$models.Fil
  */
 export function GetFolderNodeByID(id: string): $CancellablePromise<$models.FolderNode | null> {
     return $Call.ByID(4046279042, id).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType10($result);
     });
 }
 
@@ -115,7 +127,7 @@ export function GetThemeFilePath(): $CancellablePromise<string> {
  */
 export function GetUriSqlFileRefs(uri: string): $CancellablePromise<$models.SqlFileCandidate[]> {
     return $Call.ByID(1615993196, uri).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType12($result);
     });
 }
 
@@ -126,7 +138,7 @@ export function GetUriSqlFileRefs(uri: string): $CancellablePromise<$models.SqlF
  */
 export function GetUriVariables(uri: string): $CancellablePromise<$models.VariableCandidate[]> {
     return $Call.ByID(1674050077, uri).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType14($result);
     });
 }
 
@@ -139,7 +151,7 @@ export function GetUriVariables(uri: string): $CancellablePromise<$models.Variab
  */
 export function GetWorkspaceGraph(): $CancellablePromise<$models.WorkspaceNode | null> {
     return $Call.ByID(977516625).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType16($result);
     });
 }
 
@@ -149,21 +161,6 @@ export function GetWorkspaceGraph(): $CancellablePromise<$models.WorkspaceNode |
  */
 export function InvalidateWorkspaceGraph(): $CancellablePromise<void> {
     return $Call.ByID(44666656);
-}
-
-/**
- * ListWorkspaceFiles returns a node for every file in the workspace, without
- * adding any of them to the graph.
- * 
- * The graph holds the files of the folders that have been opened, which is what
- * the tree shows. A picker is the other case: it searches the whole workspace by
- * name, so it needs every file whether or not its folder has been opened. This
- * walks for them and leaves the graph as it is.
- */
-export function ListWorkspaceFiles(): $CancellablePromise<($models.FileNode | null)[]> {
-    return $Call.ByID(1349016154).then(($result: any) => {
-        return $$createType16($result);
-    });
 }
 
 /**
@@ -248,7 +245,7 @@ export function ResetWorkspaceTheme(): $CancellablePromise<void> {
  */
 export function ResolveFolder(folderURI: string): $CancellablePromise<$models.FolderNode | null> {
     return $Call.ByID(2843403334, folderURI).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType10($result);
     });
 }
 
@@ -284,19 +281,19 @@ const $$createType0 = $models.DatabaseRef.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $models.DBInstanceItemNode.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = $models.DBInstanceNode.createFrom;
+const $$createType4 = $models.FileNode.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = $models.FileNode.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);
-const $$createType8 = $models.FolderNode.createFrom;
-const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = $models.SqlFileCandidate.createFrom;
-const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = $models.VariableCandidate.createFrom;
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = $models.WorkspaceNode.createFrom;
-const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = $Create.Array($$createType7);
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = $models.DBInstanceNode.createFrom;
+const $$createType8 = $Create.Nullable($$createType7);
+const $$createType9 = $models.FolderNode.createFrom;
+const $$createType10 = $Create.Nullable($$createType9);
+const $$createType11 = $models.SqlFileCandidate.createFrom;
+const $$createType12 = $Create.Array($$createType11);
+const $$createType13 = $models.VariableCandidate.createFrom;
+const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = $models.WorkspaceNode.createFrom;
+const $$createType16 = $Create.Nullable($$createType15);
 const $$createType17 = $models.ConfigResponse.createFrom;
 const $$createType18 = $Create.Nullable($$createType17);
 const $$createType19 = tokenanalyzer$0.LintConfigEntry.createFrom;

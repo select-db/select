@@ -36,6 +36,7 @@ export type ColumnMetadata = NonNullItems<models.ColumnMetadata>;
 export type ExplainNode = NonNullItems<coreModels.ExplainNode>;
 export type ResolveResult = NonNullItems<sqlLangModels.ResolveResult>;
 export type SearchResultWithNodes = NonNullItems<searchModels.SearchResultWithNodes>;
+export type FileQuery = models.FileQuery;
 
 export const GetWorkspaceGraph = async (): Promise<WorkspaceNode | null> =>
 	stripNullItems(await graphService.GetWorkspaceGraph());
@@ -58,9 +59,13 @@ export const GetFileNodeByID = async (fileID: string): Promise<FileNode | null> 
 export const ResolveFolder = async (folderURI: string): Promise<FolderNode | null> =>
 	stripNullItems(await graphService.ResolveFolder(folderURI));
 
-/** Every file in the workspace, for pickers that search beyond the tree. */
-export const ListWorkspaceFiles = async (): Promise<FileNode[]> =>
-	stripNullItems(await graphService.ListWorkspaceFiles());
+/**
+ * Files matching a query, best matches first. Reads the workspace rather than
+ * the graph, so it answers for folders that have never been opened, and the
+ * promise is cancellable: a superseded keystroke stops the walk behind it.
+ */
+export const FindFiles = (query: Partial<FileQuery>) =>
+	graphService.FindFiles(new models.FileQuery(query)).then(stripNullItems);
 
 export const FindDbItemNodeById = async (
 	dbInstanceID: string,
