@@ -51,6 +51,17 @@ export const SearchWithNodes = async (
 export const GetFileNodeByID = async (fileID: string): Promise<FileNode | null> =>
 	stripNullItems(await graphService.GetFileNodeByID(fileID));
 
+/**
+ * Reads a folder's files, for the folders the graph has not read yet. Returns
+ * null for a URI that is not a folder in this workspace.
+ */
+export const ResolveFolder = async (folderURI: string): Promise<FolderNode | null> =>
+	stripNullItems(await graphService.ResolveFolder(folderURI));
+
+/** Every file in the workspace, for pickers that search beyond the tree. */
+export const ListWorkspaceFiles = async (): Promise<FileNode[]> =>
+	stripNullItems(await graphService.ListWorkspaceFiles());
+
 export const FindDbItemNodeById = async (
 	dbInstanceID: string,
 	nodeID: string

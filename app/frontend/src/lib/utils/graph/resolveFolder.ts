@@ -1,4 +1,4 @@
-import { ResolveFolder } from '$lib/bindings/selectDb/internal/graph/graph';
+import { ResolveFolder } from '$lib/wails/graph';
 
 /**
  * A workspace graph carries the folders of a workspace but only the files of

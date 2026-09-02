@@ -164,7 +164,7 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 			t.Errorf("folder-file-1 should hold no files before it is opened: %+v", ff.Files)
 		}
 
-		if err := g.ResolveFolder(folderFileURI); err != nil {
+		if _, err := g.ResolveFolder(folderFileURI); err != nil {
 			t.Fatalf("ResolveFolder failed: %v", err)
 		}
 		if !ff.Resolved {
@@ -175,7 +175,7 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		}
 
 		// Opening it again must not duplicate what it already holds.
-		if err := g.ResolveFolder(folderFileURI); err != nil {
+		if _, err := g.ResolveFolder(folderFileURI); err != nil {
 			t.Fatalf("second ResolveFolder failed: %v", err)
 		}
 		if len(ff.Files) != 1 {
@@ -216,5 +216,68 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		if !names["schema.sql"] || !names["init.sql"] {
 			t.Errorf("db instance files missing schema.sql or init.sql: %+v", db.Files)
 		}
+	}
+}
+
+// A picker searches the whole workspace by name, so it needs every file, not
+// just the ones in folders that have been opened.
+func TestListWorkspaceFiles_SeesUnopenedFolders(t *testing.T) {
+	_, restore := withTempAppDataDir(t)
+	defer restore()
+
+	const workspaceID = "ws-list"
+	serverRoot, err := server.CurrentServerRoot()
+	if err != nil {
+		t.Fatalf("CurrentServerRoot: %v", err)
+	}
+	workspaceRoot := filepath.Join(serverRoot, "workspaces", workspaceID)
+
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, "unopened", "deeper"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	for _, rel := range []string{"root.sql", "unopened/child.sql", "unopened/deeper/deep.sql"} {
+		if err := os.WriteFile(filepath.Join(workspaceRoot, filepath.FromSlash(rel)), []byte("SELECT 1;"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+	// Sidecars and other internal files are not user-facing files.
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "root.sql.metadata.json"), []byte(`{"databases":[{"id":"db-1","name":"DB1"}]}`), 0o600); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+
+	g := &Graph{WorkspaceGraph: &WorkspaceNode{ID: workspaceID, Type: "workspace"}}
+	fsCtx := NewWorkspaceFSFromRoot(workspaceID, workspaceRoot)
+	if err := g.buildWorkspaceGraphFromFS(fsCtx); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	files, err := g.ListWorkspaceFiles()
+	if err != nil {
+		t.Fatalf("ListWorkspaceFiles: %v", err)
+	}
+
+	byURI := map[string]*FileNode{}
+	for _, f := range files {
+		byURI[f.URI] = f
+	}
+	if len(byURI) != 3 {
+		t.Fatalf("expected 3 files, got %d: %+v", len(byURI), byURI)
+	}
+	for _, rel := range []string{"root.sql", "unopened/child.sql", "unopened/deeper/deep.sql"} {
+		if byURI[fsCtx.URI(rel)] == nil {
+			t.Errorf("missing %s from the listing", rel)
+		}
+	}
+
+	// The databases a file is bound to travel with it, so opening one from a
+	// picker binds it the same way opening it from the tree does.
+	root := byURI[fsCtx.URI("root.sql")]
+	if root == nil || len(root.Databases) != 1 || root.Databases[0].ID != "db-1" {
+		t.Errorf("listing dropped the file's databases: %+v", root)
+	}
+
+	// Listing must not pull the walked folders into the graph.
+	if folder, _ := g.lookup(fsCtx.URI("unopened")).(*FolderNode); folder == nil || folder.Resolved {
+		t.Errorf("listing should leave unopened folders alone, got %+v", folder)
 	}
 }
