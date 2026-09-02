@@ -1,5 +1,10 @@
 import type * as graph from '$lib/wails/graph';
-import { getTabLabel, type Tab, type TabGroup, type SplitContainer } from '$lib/components/Layout/layoutStore';
+import {
+	getTabLabel,
+	type Tab,
+	type TabGroup,
+	type SplitContainer
+} from '$lib/components/Layout/layoutStore';
 import type { ResourceType, ResourceMenuOption, ResourceSearchScope } from './types';
 import type { RecentItem } from '$lib/stores/recentItemsStore';
 import { resourceOptionInSearchScope } from './resourceMenuScope';
@@ -16,14 +21,24 @@ function dbItemTypePriority(opt: ResourceMenuOption): number {
 	return 2;
 }
 
-// TODO: refacto with back (or front) btree index ?
+/**
+ * Options from the workspace: db instances and their schema items come from the
+ * graph, files from `workspaceFiles`.
+ *
+ * Files are listed separately because the graph only holds the files of the
+ * folders that have been opened, and a picker searches the whole workspace.
+ * When the list has not loaded yet, the graph's own files stand in so the menu
+ * is never empty while it arrives.
+ */
 export function flattenWorkspaceGraph(
 	workspace: graph.WorkspaceNode | undefined,
-	types: ResourceType[]
+	types: ResourceType[],
+	workspaceFiles: graph.FileNode[] = []
 ): ResourceMenuOption[] {
 	if (!workspace) return [];
 
 	const options: ResourceMenuOption[] = [];
+	const filesFromGraph = workspaceFiles.length === 0;
 
 	const pushFile = (file: graph.FileNode) => {
 		options.push({
@@ -53,14 +68,14 @@ export function flattenWorkspaceGraph(
 
 		// SQL files (and nested folders) can live inside a database, not just in
 		// regular workspace folders — index them too.
-		if (types.includes('file')) {
+		if (types.includes('file') && filesFromGraph) {
 			for (const file of db.files) pushFile(file);
 		}
 		for (const subFolder of db.folders) processFolder(subFolder);
 	};
 
 	const processFolder = (folder: graph.FolderNode) => {
-		if (types.includes('file')) {
+		if (types.includes('file') && filesFromGraph) {
 			for (const file of folder.files) pushFile(file);
 		}
 
@@ -68,6 +83,10 @@ export function flattenWorkspaceGraph(
 
 		for (const subFolder of folder.folders) processFolder(subFolder);
 	};
+
+	if (types.includes('file')) {
+		for (const file of workspaceFiles) pushFile(file);
+	}
 
 	for (const folder of workspace.folders) {
 		processFolder(folder);

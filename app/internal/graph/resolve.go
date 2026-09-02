@@ -15,6 +15,7 @@ package graph
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,23 +114,28 @@ func (g *Graph) workspaceFS() (*WorkspaceFS, error) {
 	return NewWorkspaceFS(g.WorkspaceGraph.ID)
 }
 
-// ResolveFolder reads the files of the folder with the given URI and emits the
-// updated graph. The frontend calls it when a folder is opened; it is a no-op
-// for an unknown URI, a folder that is already resolved, or a node that is not
-// a folder, so callers do not have to check first.
-func (g *Graph) ResolveFolder(folderURI string) error {
+// ResolveFolder reads the files of the folder with the given URI, emits the
+// updated graph, and returns the folder. The frontend calls it when a folder is
+// opened; it is a no-op for a folder that is already resolved, and returns nil
+// for an unknown URI or a node that is not a folder, so callers do not have to
+// check first.
+//
+// The folder comes back rather than only reaching the caller through the graph
+// event, because a caller that acts on what is in a folder — naming a new file
+// so it does not land on an existing one — needs it before the next render.
+func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	g.mu.Lock()
 
 	folder, ok := g.lookup(folderURI).(*FolderNode)
 	if !ok {
 		g.mu.Unlock()
-		return nil
+		return nil, nil
 	}
 
 	fsCtx, err := g.workspaceFS()
 	if err != nil {
 		g.mu.Unlock()
-		return err
+		return nil, err
 	}
 
 	resolved, err := g.resolveFolder(folder, fsCtx)
@@ -137,14 +143,67 @@ func (g *Graph) ResolveFolder(folderURI string) error {
 	g.mu.Unlock()
 
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !resolved {
-		return nil
+	if resolved {
+		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, wsGraph)
 	}
 
-	utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, wsGraph)
-	return nil
+	return folder, nil
+}
+
+// ListWorkspaceFiles returns a node for every file in the workspace, without
+// adding any of them to the graph.
+//
+// The graph holds the files of the folders that have been opened, which is what
+// the tree shows. A picker is the other case: it searches the whole workspace by
+// name, so it needs every file whether or not its folder has been opened. This
+// walks for them and leaves the graph as it is.
+func (g *Graph) ListWorkspaceFiles() ([]*FileNode, error) {
+	g.mu.RLock()
+	if g.WorkspaceGraph == nil {
+		g.mu.RUnlock()
+		return []*FileNode{}, nil
+	}
+	workspaceID := g.WorkspaceGraph.ID
+	g.mu.RUnlock()
+
+	fsCtx, err := NewWorkspaceFS(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	files := []*FileNode{}
+	err = filepath.WalkDir(fsCtx.WorkspaceRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+
+		relSlash, ok := fsCtx.Rel(path)
+		if !ok {
+			return nil
+		}
+		relSlash = filepath.ToSlash(filepath.Clean(relSlash))
+
+		if IsInternalWorkspacePath(relSlash) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		if d.IsDir() || IsInternalWorkspaceFile(d.Name()) {
+			return nil
+		}
+
+		files = append(files, newFSFileNode(path, fsCtx.URI(relSlash), fsCtx.ParentURI(relSlash), d.Name()))
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk workspace for files: %w", err)
+	}
+
+	return files, nil
 }
 
 // resolveAlongPath resolves every folder between the workspace root and the

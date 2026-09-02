@@ -3,6 +3,7 @@
 	import ItemIcon from '$lib/components/views/shared/ItemIcon.svelte';
 	import type { MenuOption } from '$lib/system/Menu/Menu.types';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+	import { loadWorkspaceFiles, workspaceFilesStore } from '$lib/utils/graph/workspaceFiles';
 	import { layoutStore } from '$lib/components/Layout/layoutStore';
 	import { recentItemsStore } from '$lib/stores/recentItemsStore';
 	import { debounce } from '$lib/utils/debounce';
@@ -43,7 +44,16 @@
 		updateDebouncedQuery(searchQuery);
 	});
 
-	const graphOptions = $derived(flattenWorkspaceGraph($workspaceGraphStore, types));
+	// Files are listed by the backend rather than read off the graph, which only
+	// holds the folders that have been opened. The list is fetched the first
+	// time a menu that offers files is shown.
+	$effect(() => {
+		if (types.includes('file')) void loadWorkspaceFiles();
+	});
+
+	const graphOptions = $derived(
+		flattenWorkspaceGraph($workspaceGraphStore, types, $workspaceFilesStore)
+	);
 	const tabOptions = $derived(getOpenTabOptions($layoutStore.root, types));
 
 	const filteredOptions = $derived(
