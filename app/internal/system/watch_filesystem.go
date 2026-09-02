@@ -388,9 +388,15 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 	uri := ctx.URI(relSlash)
 
 	if op == "delete" {
+		// The path is gone, so only the graph can say what it was. It holds
+		// every folder and db instance, but a file only once its folder has
+		// been opened — so a URI it does not know is a file, unless the path is
+		// somehow still there and is a directory. Guessing "folder" from a
+		// failed stat would label a deleted file as a folder, and the frontend
+		// closes a tab on a file delete.
 		table := s.inferTableFromGraph(uri)
 		if table == "" {
-			if isDir || statErr != nil {
+			if isDir {
 				table = "folder"
 			} else {
 				table = "file"
