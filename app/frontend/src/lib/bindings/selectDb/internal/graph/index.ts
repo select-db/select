@@ -16,6 +16,7 @@ export {
     EditorSnippet,
     ExplainResult,
     FileNode,
+    FileQuery,
     FolderNode,
     Keybinding,
     QueryResult,
