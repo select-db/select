@@ -1,17 +1,14 @@
 package graph
 
-// A build lays out the folder skeleton of a workspace — every directory, every
-// db instance — but not its files. Files are the bulk of a workspace (a project
-// with 20k files has ~1k folders) and most of them belong to folders the user
-// never opens in a session, so materializing them all costs a walk that reads a
-// sidecar per file, a node per file, and a copy of all of it in every graph
-// payload sent to the frontend.
+// A build lays out a workspace's folders and db instances but not its files.
+// Files are the bulk of it — 20k files sit in about 1k folders — and most
+// belong to folders nobody opens in a session, yet each one costs a sidecar
+// read, a node, and a place in every graph payload sent to the frontend.
 //
-// Instead a folder's files are read the first time it is opened, and the folder
-// remembers that with FolderNode.Resolved. Lookups that need a file the user
-// has not browsed to — opening one from a link, or from a previous session's
-// tabs — resolve the folders along its path first, so callers never have to
-// know whether a folder has been opened yet.
+// So a folder reads its files the first time it is opened, and remembers that
+// in FolderNode.Resolved. Lookups for a file nobody browsed to — a link, a tab
+// restored from the last session — resolve the folders along its path first, so
+// callers never have to know whether a folder has been opened.
 
 import (
 	"fmt"
@@ -113,15 +110,14 @@ func (g *Graph) workspaceFS() (*WorkspaceFS, error) {
 	return NewWorkspaceFS(g.WorkspaceGraph.ID)
 }
 
-// ResolveFolder reads the files of the folder with the given URI, emits the
-// updated graph, and returns the folder. The frontend calls it when a folder is
-// opened; it is a no-op for a folder that is already resolved, and returns nil
-// for an unknown URI or a node that is not a folder, so callers do not have to
-// check first.
+// ResolveFolder reads a folder's files, emits the updated graph and returns the
+// folder. The frontend calls it when a folder is opened; an already resolved
+// folder is a no-op and anything that is not a folder returns nil, so callers
+// do not have to check first.
 //
-// The folder comes back rather than only reaching the caller through the graph
-// event, because a caller that acts on what is in a folder — naming a new file
-// so it does not land on an existing one — needs it before the next render.
+// The folder comes back rather than only arriving with the graph event because
+// a caller acting on what is in it — naming a new file so it does not land on
+// an existing one — needs it before the next render.
 func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	g.mu.Lock()
 
@@ -152,28 +148,28 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 }
 
 // resolveAlongPath resolves every folder between the workspace root and the
-// given URI, so that a node nobody has browsed to can still be found by ID.
-// Callers hold g.mu.
+// given URI, so a node nobody has browsed to can still be found by ID. Callers
+// hold g.mu.
 func (g *Graph) resolveAlongPath(uri string, fsCtx *WorkspaceFS) {
 	rel, ok := strings.CutPrefix(uri, fsCtx.RootURI)
 	if !ok {
 		return
 	}
 
+	// The last segment is the node itself, not a folder to descend into.
 	segments := strings.Split(strings.Trim(rel, "/"), "/")
 	current := fsCtx.RootURI
-
-	// The last segment is the node itself, not a folder to descend into.
 	for _, segment := range segments[:max(0, len(segments)-1)] {
-		if folder, isFolder := g.lookup(current).(*FolderNode); isFolder {
-			if _, err := g.resolveFolder(folder, fsCtx); err != nil {
-				return
-			}
-		}
+		g.resolveFolderURI(current, fsCtx)
 		current += "/" + segment
 	}
+	g.resolveFolderURI(current, fsCtx)
+}
 
-	if folder, isFolder := g.lookup(current).(*FolderNode); isFolder {
+// resolveFolderURI reads a folder's files when the URI names one, and lets a
+// URI that names anything else pass. Callers hold g.mu.
+func (g *Graph) resolveFolderURI(uri string, fsCtx *WorkspaceFS) {
+	if folder, ok := g.lookup(uri).(*FolderNode); ok {
 		_, _ = g.resolveFolder(folder, fsCtx)
 	}
 }

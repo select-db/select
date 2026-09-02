@@ -10,10 +10,13 @@ import (
 	"selectDb/internal/server"
 )
 
-// queryWorkspace lays out a workspace from a set of relative paths and returns
-// a built graph over it.
+// queryWorkspace lays out a workspace from a set of relative paths in a
+// throwaway app data dir, and returns a built graph over it.
 func queryWorkspace(t *testing.T, workspaceID string, files ...string) (*Graph, *WorkspaceFS) {
 	t.Helper()
+
+	_, restore := withTempAppDataDir(t)
+	t.Cleanup(restore)
 
 	serverRoot, err := server.CurrentServerRoot()
 	if err != nil {
@@ -56,9 +59,6 @@ func queryNames(t *testing.T, g *Graph, q FileQuery) []string {
 }
 
 func TestFindFiles_SeesFoldersNobodyOpened(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	g, fsCtx := queryWorkspace(t, "ws-find",
 		"root.sql", "unopened/child.sql", "unopened/deeper/deep.sql")
 
@@ -74,9 +74,6 @@ func TestFindFiles_SeesFoldersNobodyOpened(t *testing.T) {
 }
 
 func TestFindFiles_RanksByHowWellTheNameMatches(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	g, _ := queryWorkspace(t, "ws-rank",
 		"users.sql",             // exact
 		"users_by_country.sql",  // prefix
@@ -99,9 +96,6 @@ func TestFindFiles_RanksByHowWellTheNameMatches(t *testing.T) {
 }
 
 func TestFindFiles_MatchesCaseInsensitively(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	g, _ := queryWorkspace(t, "ws-case", "Users.SQL")
 
 	if names := queryNames(t, g, FileQuery{Pattern: "users"}); len(names) != 1 {
@@ -110,9 +104,6 @@ func TestFindFiles_MatchesCaseInsensitively(t *testing.T) {
 }
 
 func TestFindFiles_KeepsTheBestWithinTheLimit(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	paths := []string{"report.sql"} // the exact match, written first
 	for i := 0; i < 50; i++ {
 		paths = append(paths, fmt.Sprintf("reporting_%02d.sql", i))
@@ -130,9 +121,6 @@ func TestFindFiles_KeepsTheBestWithinTheLimit(t *testing.T) {
 }
 
 func TestFindFiles_ScopesToAFolderAndADepth(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	g, fsCtx := queryWorkspace(t, "ws-scope",
 		"queries/a.sql", "queries/nested/b.sql", "elsewhere/c.sql")
 
@@ -153,9 +141,6 @@ func TestFindFiles_ScopesToAFolderAndADepth(t *testing.T) {
 }
 
 func TestFindFiles_FiltersByExtensionAndSkipsInternalFiles(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	g, _ := queryWorkspace(t, "ws-ext", "a.sql", "notes.md", "a.sql.metadata.json")
 
 	if names := queryNames(t, g, FileQuery{Extensions: []string{".sql"}}); len(names) != 1 || names[0] != "a.sql" {
@@ -171,9 +156,6 @@ func TestFindFiles_FiltersByExtensionAndSkipsInternalFiles(t *testing.T) {
 }
 
 func TestFindFiles_CarriesTheDatabasesAFileIsBoundTo(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	g, fsCtx := queryWorkspace(t, "ws-meta", "unopened/query.sql")
 	sidecar := filepath.Join(fsCtx.WorkspaceRoot, "unopened", "query.sql.metadata.json")
 	if err := os.WriteFile(sidecar, []byte(`{"databases":[{"id":"db-1","name":"DB1"}]}`), 0o600); err != nil {
@@ -196,9 +178,6 @@ func TestFindFiles_CarriesTheDatabasesAFileIsBoundTo(t *testing.T) {
 }
 
 func TestFindFiles_StopsWhenTheCallerCancels(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
-
 	g, _ := queryWorkspace(t, "ws-cancel", "a.sql", "b.sql")
 
 	ctx, cancel := context.WithCancel(t.Context())

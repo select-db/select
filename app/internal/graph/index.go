@@ -1,30 +1,30 @@
 package graph
 
-// The workspace graph is a tree of pointers, so every lookup by ID was a
-// depth-first walk from the root — one per mutation, per filesystem event, per
-// file opened — and each visit allocated a []Node through GetChildren. At a few
-// thousand files that is milliseconds of walking to answer what is a map
-// lookup, and it is paid under Graph.mu while the UI waits for it.
+// Every lookup by ID used to be a depth-first walk from the root — one per
+// mutation, per filesystem event, per file opened — allocating a []Node per
+// node visited, under Graph.mu while the UI waited for it.
 //
-// nodeIndex keeps the tree addressable by ID. It covers the filesystem tree:
-// folders, files, db instances and the workspace itself. Schema items
-// (DBInstanceItemNode) are deliberately left out — a schema load replaces a db
-// instance's children wholesale without going through the graph package, so an
-// index over them would go stale; the one lookup they need walks a single db
-// instance in FindDbItemNodeById.
+// nodeIndex keeps the filesystem tree addressable instead: folders, files, db
+// instances and the workspace. Schema items are left out, because a schema load
+// replaces a db instance's children without going through this package and the
+// index would go stale; FindDbItemNodeById walks one instance for those.
 //
-// The index lives beside the tree and is maintained by the same operations:
-// filled by a build, updated by the inserts and deletes Mutate applies, and by
-// the files ResolveFolder materializes. It is guarded by Graph.mu, so the
-// unexported helpers below all assume the caller holds it.
+// It is filled by a build and maintained by the inserts and deletes that Mutate
+// and ResolveFolder apply. Graph.mu guards it, so every helper here assumes the
+// caller holds it.
 type nodeIndex map[string]Node
 
 func newNodeIndex() nodeIndex {
 	return make(nodeIndex)
 }
 
-// add registers a node under every ID it answers to. A db instance answers to
-// both its config ID and its URI, and callers look it up by either.
+func isSchemaItem(n Node) bool {
+	_, is := n.(*DBInstanceItemNode)
+	return is
+}
+
+// add registers a node under every ID it answers to — a db instance answers to
+// both its config ID and its URI.
 func (ix nodeIndex) add(n Node) {
 	if n == nil {
 		return
@@ -36,13 +36,8 @@ func (ix nodeIndex) add(n Node) {
 	}
 }
 
-// addSubtree registers a node and everything below it, stopping at schema
-// items, which the index does not cover.
 func (ix nodeIndex) addSubtree(n Node) {
-	if n == nil {
-		return
-	}
-	if _, isItem := n.(*DBInstanceItemNode); isItem {
+	if n == nil || isSchemaItem(n) {
 		return
 	}
 	ix.add(n)
@@ -51,17 +46,13 @@ func (ix nodeIndex) addSubtree(n Node) {
 	}
 }
 
-// removeSubtree unregisters a node and everything below it.
 func (ix nodeIndex) removeSubtree(n Node) {
-	if n == nil {
-		return
-	}
-	if _, isItem := n.(*DBInstanceItemNode); isItem {
+	if n == nil || isSchemaItem(n) {
 		return
 	}
 	for _, id := range n.GetIDs() {
-		// Only drop the entry when it still points at this node: a replaced
-		// node has already claimed the ID.
+		// Only drop an entry still pointing at this node: a replacement has
+		// already claimed the ID.
 		if ix[id] == n {
 			delete(ix, id)
 		}
@@ -71,8 +62,8 @@ func (ix nodeIndex) removeSubtree(n Node) {
 	}
 }
 
-// ensureIndex fills the index from the current graph. Called after a build,
-// which replaces the tree wholesale.
+// ensureIndex fills the index from the current graph, after a build replaces
+// the tree wholesale.
 func (g *Graph) ensureIndex() {
 	g.index = newNodeIndex()
 	g.index.addSubtree(g.WorkspaceGraph)
@@ -86,9 +77,8 @@ func (g *Graph) lookup(id string) Node {
 	return g.index[id]
 }
 
-// lookupAll returns the nodes for the given IDs, skipping IDs the graph does
-// not know. It replaces FindNodesByIds on the hot paths: same result, without
-// the walk.
+// lookupAll returns the nodes for the given IDs, skipping the ones the graph
+// does not know.
 func (g *Graph) lookupAll(ids []string) []Node {
 	nodes := make([]Node, 0, len(ids))
 	for _, id := range ids {
@@ -99,9 +89,8 @@ func (g *Graph) lookupAll(ids []string) []Node {
 	return nodes
 }
 
-// parentsOf returns the nodes a node hangs from. A db instance has two — its
-// folder and the workspace, which keeps a flat list of every instance — and
-// both must be updated when it is added or removed.
+// parentsOf returns the nodes a node hangs from. A db instance has two, its
+// folder and the workspace's flat list, and both move together.
 func (g *Graph) parentsOf(n Node) []Node {
 	return g.lookupAll(n.GetParentIDs())
 }
@@ -140,9 +129,9 @@ func (g *Graph) GetFolderNodeByID(id string) *FolderNode {
 }
 
 // NodeKind returns what the graph holds under an ID — "file", "folder" or
-// "db_instance" — and "" when it holds nothing. It answers the question a
-// filesystem event asks about a path that has just disappeared, where the node
-// is all that is left to say what it was.
+// "db_instance" — and "" when it holds nothing. It is what a filesystem event
+// asks about a path that has just disappeared, the node being all that is left
+// to say what it was.
 func (g *Graph) NodeKind(id string) string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
