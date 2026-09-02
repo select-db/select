@@ -2,6 +2,7 @@ package graph
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -211,17 +212,20 @@ func (g *Graph) readSqlFileContentByRefName(folderID string, refName string) (st
 		return "", err
 	}
 
-	// A $ref names a .sql file in the same folder, so the folder has to have
-	// been read from disk before we can look for it.
-	folder := g.folderWithFiles(folderID)
-	if folder == nil {
-		return "", fmt.Errorf("folder not found")
+	// A $ref names a .sql file in the same folder. Asking for it leaves the
+	// folder as it is, so resolving a variable does not pull a folder nobody
+	// opened into the graph.
+	files, err := g.FindFiles(context.Background(), FileQuery{
+		FolderURI:  folderID,
+		Extensions: []string{".sql"},
+		Depth:      1,
+		Limit:      MaxFileQueryLimit,
+	})
+	if err != nil {
+		return "", err
 	}
 
-	for _, f := range folder.Files {
-		if !strings.HasSuffix(f.Name, ".sql") {
-			continue
-		}
+	for _, f := range files {
 		nameNoExt := strings.TrimSuffix(f.Name, ".sql")
 		if nameNoExt == refName {
 			wfs, err := NewWorkspaceFS(wsGraph.ID)

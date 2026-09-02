@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,11 +128,17 @@ func (g *Graph) GetUriSqlFileRefs(uri string) ([]SqlFileCandidate, error) {
 		return []SqlFileCandidate{}, nil
 	}
 
-	// The candidates are the folder's own .sql files, so it has to have been
-	// read from disk.
-	folder := g.folderWithFiles(folderID)
-	if folder == nil {
-		return []SqlFileCandidate{}, nil
+	// The candidates are the folder's own .sql files. They are asked for rather
+	// than read off the folder, so a folder nobody has opened can still answer
+	// without being pulled into the graph.
+	files, err := g.FindFiles(context.Background(), FileQuery{
+		FolderURI:  folderID,
+		Extensions: []string{".sql"},
+		Depth:      1,
+		Limit:      MaxFileQueryLimit,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	wfs, err := NewWorkspaceFS(wsGraph.ID)
@@ -140,10 +147,7 @@ func (g *Graph) GetUriSqlFileRefs(uri string) ([]SqlFileCandidate, error) {
 	}
 
 	var result []SqlFileCandidate
-	for _, f := range folder.Files {
-		if !strings.HasSuffix(f.Name, ".sql") {
-			continue
-		}
+	for _, f := range files {
 		// Exclude the current file so it is not suggested for itself
 		if f.URI == uri {
 			continue

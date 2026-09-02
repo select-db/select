@@ -23,22 +23,21 @@ function dbItemTypePriority(opt: ResourceMenuOption): number {
 
 /**
  * Options from the workspace: db instances and their schema items come from the
- * graph, files from `workspaceFiles`.
+ * graph, files from `files`.
  *
- * Files are listed separately because the graph only holds the files of the
- * folders that have been opened, and a picker searches the whole workspace.
- * When the list has not loaded yet, the graph's own files stand in so the menu
- * is never empty while it arrives.
+ * Files are passed in rather than read off the graph because the graph only
+ * holds the folders that have been opened, and a picker is asked about the
+ * whole workspace — so its files come from a query, or from what was open
+ * recently before anything is typed.
  */
 export function flattenWorkspaceGraph(
 	workspace: graph.WorkspaceNode | undefined,
 	types: ResourceType[],
-	workspaceFiles: graph.FileNode[] = []
+	files: graph.FileNode[] = []
 ): ResourceMenuOption[] {
 	if (!workspace) return [];
 
 	const options: ResourceMenuOption[] = [];
-	const filesFromGraph = workspaceFiles.length === 0;
 
 	const pushFile = (file: graph.FileNode) => {
 		options.push({
@@ -66,26 +65,17 @@ export function flattenWorkspaceGraph(
 			collectDbItems(db.children, options);
 		}
 
-		// SQL files (and nested folders) can live inside a database, not just in
-		// regular workspace folders — index them too.
-		if (types.includes('file') && filesFromGraph) {
-			for (const file of db.files) pushFile(file);
-		}
 		for (const subFolder of db.folders) processFolder(subFolder);
 	};
 
 	const processFolder = (folder: graph.FolderNode) => {
-		if (types.includes('file') && filesFromGraph) {
-			for (const file of folder.files) pushFile(file);
-		}
-
 		for (const db of folder.db_instances) processDbInstance(db);
 
 		for (const subFolder of folder.folders) processFolder(subFolder);
 	};
 
 	if (types.includes('file')) {
-		for (const file of workspaceFiles) pushFile(file);
+		for (const file of files) pushFile(file);
 	}
 
 	for (const folder of workspace.folders) {
