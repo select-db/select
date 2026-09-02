@@ -2,7 +2,6 @@ package graph
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -212,56 +211,39 @@ func (g *Graph) readSqlFileContentByRefName(folderID string, refName string) (st
 		return "", err
 	}
 
-	// A $ref names a .sql file in the same folder. Asking for it leaves the
-	// folder as it is, so resolving a variable does not pull a folder nobody
-	// opened into the graph.
-	files, err := g.FindFiles(context.Background(), FileQuery{
-		FolderURI:  folderID,
-		Extensions: []string{".sql"},
-		Depth:      1,
-		Limit:      MaxFileQueryLimit,
-	})
+	files, err := g.sqlFilesInFolder(folderID)
+	if err != nil {
+		return "", err
+	}
+
+	wfs, err := NewWorkspaceFS(wsGraph.ID)
 	if err != nil {
 		return "", err
 	}
 
 	for _, f := range files {
-		nameNoExt := strings.TrimSuffix(f.Name, ".sql")
-		if nameNoExt == refName {
-			wfs, err := NewWorkspaceFS(wsGraph.ID)
-			if err != nil {
-				return "", err
-			}
-			rel := strings.TrimPrefix(f.URI, wfs.RootURI+"/")
-			if rel == f.URI {
-				rel = f.URI
-			}
-			fullPath := filepath.Join(wfs.WorkspaceRoot, filepath.FromSlash(rel))
-			data, err := os.ReadFile(fullPath)
-			if err != nil {
-				return "", fmt.Errorf("reading SQL file %s: %w", f.Name, err)
-			}
-			return string(data), nil
+		if strings.TrimSuffix(f.Name, ".sql") != refName {
+			continue
 		}
+
+		path, ok := wfs.Path(f.URI)
+		if !ok {
+			return "", fmt.Errorf("SQL file %s is not in this workspace", f.Name)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("reading SQL file %s: %w", f.Name, err)
+		}
+		return string(data), nil
 	}
 	return "", fmt.Errorf("no SQL file %s.sql in folder", refName)
 }
 
 // LoadFolderEnvFile loads the .env file for a folder and updates its Variables map.
 func (g *Graph) LoadFolderEnvFile(folderNode *FolderNode, wfs *WorkspaceFS) error {
-	rel, ok := wfs.Rel(folderNode.URI)
+	folderPath, ok := wfs.Path(folderNode.URI)
 	if !ok {
-		rel = strings.TrimPrefix(folderNode.URI, wfs.RootURI+"/")
-		if rel == folderNode.URI {
-			rel = ""
-		}
-	}
-
-	var folderPath string
-	if rel == "" || rel == "." {
-		folderPath = wfs.WorkspaceRoot
-	} else {
-		folderPath = filepath.Join(wfs.WorkspaceRoot, filepath.FromSlash(rel))
+		return fmt.Errorf("folder %s is not in this workspace", folderNode.URI)
 	}
 
 	vars, err := ReadEnvFile(filepath.Join(folderPath, ".env"))
@@ -285,16 +267,9 @@ func (g *Graph) GetEnvFilePath(folderURI string) (string, error) {
 		return "", fmt.Errorf("failed to create workspace fs: %w", err)
 	}
 
-	rel := strings.TrimPrefix(folderURI, wfs.RootURI+"/")
-	if rel == folderURI {
-		rel = ""
-	}
-
-	var folderPath string
-	if rel == "" || rel == "." {
-		folderPath = wfs.WorkspaceRoot
-	} else {
-		folderPath = filepath.Join(wfs.WorkspaceRoot, filepath.FromSlash(rel))
+	folderPath, ok := wfs.Path(folderURI)
+	if !ok {
+		return "", fmt.Errorf("folder %s is not in this workspace", folderURI)
 	}
 
 	return filepath.Join(folderPath, ".env"), nil

@@ -505,30 +505,29 @@ export class FileNode {
  */
 export class FileQuery {
     /**
-     * Pattern is matched case-insensitively against the file name, and failing
-     * that against its path. Empty matches everything.
+     * Matched case-insensitively against the file name, and failing that
+     * against its path. Empty matches everything.
      */
     "pattern": string;
 
     /**
-     * FolderURI limits the search to one folder and everything below it. Empty
-     * searches the whole workspace.
+     * Limits the search to one folder and everything below it.
      */
     "folderURI": string;
 
     /**
-     * Extensions limits the search to these file extensions, ".sql" style.
+     * Limits the search to these extensions, ".sql" style.
      */
     "extensions": string[];
 
     /**
-     * Depth limits how far below the scope the search goes: 0 is the whole
-     * subtree, 1 the scope's own files and no deeper.
+     * How far below the scope to go: 0 is the whole subtree, 1 the scope's own
+     * files and no deeper.
      */
     "depth": number;
 
     /**
-     * Limit caps how many files come back. Zero means DefaultFileQueryLimit.
+     * Caps how many files come back. Zero means DefaultFileQueryLimit.
      */
     "limit": number;
 
