@@ -2,48 +2,67 @@ package commands
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 
-	"selectDb/internal/cmd/scripts"
+	"selectDb/internal/db"
+	"selectDb/internal/server"
 )
 
 // Command struct represents the backend logic to execute scripts
+// migrationsSource is where 'new' scaffolds a file, relative to the app module.
+const migrationsSource = "internal/db/migrations"
+
 type Command struct{}
 
 // RunCommand executes the appropriate script based on the provided command type.
 func (c *Command) Run(cmdType string, arg string) (string, error) {
 	validCommands := map[string]bool{
-		"generate":      true,
-		"migrate:up":    true,
-		"migrate:down":  true,
-		"migrate:reset": true,
-		"migrate:new":   true,
+		"generate":       true,
+		"migrate:up":     true,
+		"migrate:down":   true,
+		"migrate:reset":  true,
+		"migrate:status": true,
+		"migrate:new":    true,
 	}
 
-	if !validCommands[os.Args[1]] {
-		log.Fatalf("Invalid command: %v", os.Args[1])
+	if !validCommands[cmdType] {
+		return "", fmt.Errorf("invalid command: %s", cmdType)
 	}
 
-	// Handle goose commands directly in Go
+	// Migrations run against the server the app is currently pointed at, through
+	// the same embedded migrations it applies at startup. internal/cmd/migrate
+	// is the same thing without booting the app, and can target another server.
 	if strings.HasPrefix(cmdType, "migrate:") {
 		migrationCommand := strings.TrimPrefix(cmdType, "migrate:")
 
-		var err error
 		if migrationCommand == "new" {
-			err = scripts.RunGoose("new", arg)
-		} else {
-			err = scripts.RunGoose(migrationCommand)
+			if arg == "" {
+				return "", fmt.Errorf("migrate:new: missing migration name")
+			}
+			if err := db.NewMigration(migrationsSource, arg); err != nil {
+				return "", err
+			}
+			return "migration created", nil
 		}
 
+		domain, err := server.ReadCurrentDomain()
 		if err != nil {
-			return "", fmt.Errorf("goose error: %v", err)
+			return "", err
 		}
-
-		return fmt.Sprintf("goose migration '%s' executed successfully", migrationCommand), nil
+		if domain == "" {
+			return "", fmt.Errorf("no current server to migrate")
+		}
+		dbPath, err := server.ServerDBPath(domain)
+		if err != nil {
+			return "", err
+		}
+		// No schema dump: a shipped binary has no source tree to write into.
+		if err := db.RunGooseAt(dbPath, db.GooseCommand(migrationCommand), ""); err != nil {
+			return "", fmt.Errorf("migrate %s on %s: %w", migrationCommand, domain, err)
+		}
+		return fmt.Sprintf("migrate %s applied to %s", migrationCommand, domain), nil
 	}
 
 	// Get the operating system
