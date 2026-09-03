@@ -26,9 +26,19 @@ permissions:
   contents: read
 
 # Cancel superseded runs for the same PR; never cancel dev/main/tag builds.
+#
+# The branch is baked into the group rather than into cancel-in-progress. An
+# expression there evaluates to the *string* "false" for a push, which is
+# non-empty and so still cancels: 11 of the last 27 dev pushes were cancelled
+# under the previous form, including cfd6c3c, whose cancelled run is how a
+# stale generated file reached dev unchecked (see #176).
+#
+# Giving every non-PR run its own group (run_id is unique per run) means a push
+# to dev/main/a tag shares a group with nothing and can never be superseded,
+# while PR runs still collapse onto one group per ref.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: true
 
 env:
   WAILS_VERSION: v3.0.0-beta.12
@@ -240,6 +250,10 @@ jobs:
         with:
           version: v2.11.4
           working-directory: app
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, in each of these three jobs, so an outage there fails a
+          # build for reasons unrelated to the code — as it did on #174.
+          verify: false
       - name: Dead code check
         run: |
           go install golang.org/x/tools/cmd/deadcode@latest
@@ -270,6 +284,10 @@ jobs:
         with:
           version: v2.11.4
           working-directory: backend
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, in each of these three jobs, so an outage there fails a
+          # build for reasons unrelated to the code — as it did on #174.
+          verify: false
       - name: Dead code check
         run: |
           go install golang.org/x/tools/cmd/deadcode@latest
@@ -300,6 +318,10 @@ jobs:
         with:
           version: v2.11.4
           working-directory: dialect
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, in each of these three jobs, so an outage there fails a
+          # build for reasons unrelated to the code — as it did on #174.
+          verify: false
 
   # ---- Tests ----
   test-app-backend:
