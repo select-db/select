@@ -32,6 +32,43 @@ func classifyFSOp(op fsnotify.Op) (string, bool) {
 	}
 }
 
+// addWatches registers root and every directory below it, skipping .git.
+func addWatches(watcher *fsnotify.Watcher, root string) {
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return fs.SkipDir
+			}
+			_ = watcher.Add(p)
+		}
+		return nil
+	})
+}
+
+// resyncWatches repairs the watch list after a directory was renamed. The
+// watch follows the moved directory, but keeps reporting it under its old
+// path, so events from anywhere inside a renamed folder arrive with stale
+// names and resolve to nodes that no longer exist. Registrations whose path
+// is gone are dropped before re-walking: the old and new paths are the same
+// directory, so re-adding on its own would be a no-op while the stale entry
+// is still registered.
+func resyncWatches(watcher *fsnotify.Watcher, root string) {
+	prefix := root + string(os.PathSeparator)
+	for _, p := range watcher.WatchList() {
+		// Leave watches outside the workspace alone (the per-user config dir).
+		if !strings.HasPrefix(p, prefix) {
+			continue
+		}
+		if _, err := os.Stat(p); err != nil {
+			_ = watcher.Remove(p)
+		}
+	}
+	addWatches(watcher, root)
+}
+
 // Stops any running watcher and starts a new one for workspaceID.
 func (s *System) StartFileWatcher(workspaceID string) {
 	s.mu.Lock()
@@ -65,22 +102,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 	defer func() { _ = watcher.Close() }()
 
 	// Watch all existing dirs; new ones are added dynamically on Create events.
-	addWatches := func(root string) {
-		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return fs.SkipDir
-				}
-				_ = watcher.Add(p)
-			}
-			return nil
-		})
-	}
-
-	addWatches(fsCtx.WorkspaceRoot)
+	addWatches(watcher, fsCtx.WorkspaceRoot)
 
 	// Also watch the per-user config dir so edits to the personal .theme /
 	// .config hot-reload exactly like workspace files. These files live outside
@@ -134,6 +156,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 
 			// Rename: full rebuild (fine-grained derivation is error-prone).
 			if event.Op&fsnotify.Rename != 0 {
+				resyncWatches(watcher, fsCtx.WorkspaceRoot)
 				s.rebuildGraphAndEmit()
 				continue
 			}
