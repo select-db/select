@@ -39,6 +39,26 @@ func openTestPool(t *testing.T, name string) *sql.DB {
 	return db
 }
 
+// getConn and setConn reach the connection cache the way GetOrOpenConn does,
+// without opening anything. Production goes through connCache.GetOrCreate, so
+// these live here rather than in the package: the tests need to place a pool
+// under a key and read it back to exercise the removal paths.
+func getConn(workspaceID, dsn string) (*sql.DB, bool) {
+	value, ok := connCache.Get(hashWorkspaceDSN(workspaceID, dsn))
+	if !ok {
+		return nil, false
+	}
+	return value.(*sql.DB), true
+}
+
+// setConn writes the index after the cache, because replacing an entry fires
+// closeRemovedPool for the old value and that clears the index for this hash.
+func setConn(workspaceID, dsn string, db *sql.DB) {
+	hash := hashWorkspaceDSN(workspaceID, dsn)
+	connCache.Set(hash, db)
+	indexConn(hash, dsn)
+}
+
 func poolIsClosed(db *sql.DB) bool {
 	_, err := db.Exec("select 1")
 	return err == sql.ErrConnDone || (err != nil && err.Error() == "sql: database is closed")

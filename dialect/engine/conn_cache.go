@@ -54,29 +54,11 @@ func closeRemovedPool(hash string, value any) {
 	time.AfterFunc(poolCloseGrace, func() { _ = db.Close() })
 }
 
-// getConn looks up a cached *sql.DB by (workspaceID, dsn). DSN is hashed, never stored verbatim.
-func getConn(workspaceID, dsn string) (*sql.DB, bool) {
-	value, ok := connCache.Get(hashWorkspaceDSN(workspaceID, dsn))
-	if !ok {
-		return nil, false
-	}
-	return value.(*sql.DB), true
-}
-
 // indexConn records hash → dsn so EvictConnsByAddr can find this pool again.
 func indexConn(hash, dsn string) {
 	connHashToDSNMu.Lock()
 	connHashToDSN[hash] = dsn
 	connHashToDSNMu.Unlock()
-}
-
-// setConn stores db under (workspaceID, dsn). The index write follows the cache
-// write, because replacing an entry fires closeRemovedPool for the old value and
-// that clears the index entry for this same hash.
-func setConn(workspaceID, dsn string, db *sql.DB) {
-	hash := hashWorkspaceDSN(workspaceID, dsn)
-	connCache.Set(hash, db)
-	indexConn(hash, dsn)
 }
 
 // applyPoolConfig applies the non-zero fields of cfg; the rest keep Go's defaults.
