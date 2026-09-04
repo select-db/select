@@ -253,8 +253,6 @@
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<div
 							class="tab"
-							data-test="tabs.tab"
-							data-test-value={getTabLabel(tab)}
 							class:active
 							class:dragging={isDragged}
 							draggable="true"

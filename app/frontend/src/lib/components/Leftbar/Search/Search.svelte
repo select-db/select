@@ -8,7 +8,6 @@
 <div class="search">
 	<Button
 		leftIcon="search"
-		ariaLabel="Search workspace"
 		iconSize={15}
 		onclick={() =>
 			modalStore.set({

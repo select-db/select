@@ -77,6 +77,9 @@ var teammates = []teammate{
 	{"e2e-user-marco", "Marco Silva", "marco@example.com", "", GroupAnalyticsID},
 }
 
+// The workspace on disk, paths relative to its root. Also what the product
+// screenshots show. `queries/hello.sql` and `queries/nested/b.sql` are asserted
+// on by specs; leave them be.
 // branchName is the work in progress the source-control view shows.
 const branchName = "feat/cohort-report"
 

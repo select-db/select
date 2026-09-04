@@ -13,9 +13,6 @@ export const testId = (page: Page, name: string, value?: string) =>
 			: `[data-test="${name}"][data-test-value="${value}"]`
 	);
 
-/** One open tab, named by the label it shows. */
-export const tab = (page: Page, label: string) => testId(page, 'tabs.tab', label);
-
 /**
  * Monaco's own DOM, quarantined.
  *
