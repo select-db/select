@@ -15,6 +15,8 @@ proxified connections to PostgreSQL, MySQL, and SQLite.
 ./dev.sh app bindings               regenerate the frontend bindings from Go
 ./dev.sh app test                   Go tests, then the frontend's check and lint
 ./dev.sh app e2e                    the Playwright suite against a server build
+./dev.sh app migrate up|down|reset|status [domain]   the app's SQLite migrations
+./dev.sh app migrate new <name>     scaffold one
 
 ./dev.sh backend start              dev database, migrations, codegen, server
 ./dev.sh backend test               go test ./... (wants the dev database up)

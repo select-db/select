@@ -9,6 +9,11 @@
 #   ./dev.sh app bindings          regenerate the frontend bindings from Go
 #   ./dev.sh app test              Go tests, then the frontend's check and lint
 #   ./dev.sh app e2e               the Playwright suite against a server build
+#   ./dev.sh app migrate up        apply pending migrations to the current server
+#   ./dev.sh app migrate down      roll back the last one
+#   ./dev.sh app migrate reset     roll back every one
+#   ./dev.sh app migrate status    show migration state
+#   ./dev.sh app migrate new <name>  scaffold a migration
 #
 #   ./dev.sh web start             build the site, serve on :3333, rebuild on save
 #   ./dev.sh web build             build the site into web/dist once
@@ -158,6 +163,22 @@ app_test() {
   done_ "app test"
 }
 
+# Every server the app knows has its own SQLite database. up/down/reset/status
+# take an optional domain and otherwise target the current server, which is the
+# one the app would open if you launched it now. `new` writes a file and touches
+# no database at all.
+app_migrate() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    up|down|reset|status|new)
+      step "App — migrate $sub"
+      (cd "$ROOT/app" && CGO_ENABLED=0 go run -tags server ./internal/cmd/migrate "$sub" "$@")
+      done_ "app migrate $sub"
+      ;;
+    *) echo "unknown migrate subcommand: '${sub:-}' (want: up|down|reset|status|new)" >&2; exit 1 ;;
+  esac
+}
+
 app() {
   local sub="${1:-}"; shift || true
   case "$sub" in
@@ -167,7 +188,8 @@ app() {
     bindings) app_task generate:bindings ;;
     test)     app_test ;;
     e2e)      app_task test:e2e ;;
-    *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e)" >&2; exit 1 ;;
+    migrate)  app_migrate "$@" ;;
+    *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e|migrate)" >&2; exit 1 ;;
   esac
 }
 
