@@ -36,10 +36,9 @@ type Options struct {
 	MaxEntries int           // evicts LRU entry on overflow; 0 = unlimited
 	TTL        time.Duration // entry lifetime; 0 = never expire
 
-	// OnRemove is called once for every value that leaves the cache, whatever
-	// took it out: expiry, LRU eviction, Delete, DeleteFunc, or replacement by
-	// Set. It runs with the lock released, so it may block, and must not call
-	// back into this Cache.
+	// OnRemove is called once for every value that leaves the cache — expiry,
+	// LRU eviction, Delete, DeleteFunc or replacement by Set. It runs with the
+	// lock released, so it may block, and must not call back into this Cache.
 	OnRemove func(key string, value any)
 }
 
