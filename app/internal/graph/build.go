@@ -84,9 +84,9 @@ func (g *Graph) BuildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 // folders and db instances under the workspace root and builds the
 // corresponding FolderNode/DBInstanceNode skeleton.
 //
-// Files are not part of the skeleton. Only the root folder and the db instance
-// directories — the two the UI shows without being asked — are resolved here;
-// every other folder reads its files when it is first opened. See resolve.go.
+// Files are not part of the skeleton: only the root folder and the db instance
+// directories are resolved here, every other folder when it is first opened.
+// See resolve.go.
 func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	// Reset DB instances for this workspace graph.
 	g.WorkspaceGraph.DBInstances = []*DBInstanceNode{}

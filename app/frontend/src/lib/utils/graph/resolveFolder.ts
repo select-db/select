@@ -1,19 +1,13 @@
 import { ResolveFolder } from '$lib/wails/graph';
 
-/**
- * Opening a folder in the tree asks the backend to read its files: the graph
- * carries every folder but only the files of the ones that have been opened.
- *
- * Fire-and-forget — the files arrive with the next graph update, like any other
- * change to the workspace — and asked once per folder, since expanding is a
- * frequent gesture and the answer does not change.
- *
- * Only workspace URIs name folders on disk. The search and git panels render
- * trees whose ids ("search::file::…", "git::staged") name results, not
- * directories, and are left alone.
- */
+// The graph carries every folder but only the files of the ones that have been
+// opened, so opening one asks the backend to read it. Fire-and-forget: the files
+// arrive with the next graph update.
+
+/** Only these ids name a folder on disk; "search::…" and "git::…" ids do not. */
 const WORKSPACE_URI_PREFIX = 'selectdb://workspaces/';
 
+/** Folders already asked for. Expanding is frequent, the answer is not. */
 const asked = new Set<string>();
 
 export function resolveFolderContents(id: string) {

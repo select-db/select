@@ -1,16 +1,12 @@
 package graph
 
-// Every lookup by ID used to be a depth-first walk from the root — one per
-// mutation, per filesystem event, per file opened — allocating a []Node per
-// node visited, under Graph.mu while the UI waited for it.
+// nodeIndex maps every ID a node answers to onto the node, so a lookup is a map
+// hit rather than a walk from the root. It holds folders, files, db instances
+// and the workspace, but not schema items: a schema load replaces a db
+// instance's children without going through this package, so an entry for one
+// could outlive its node. FindDbItemNodeById walks a single instance instead.
 //
-// nodeIndex keeps the filesystem tree addressable instead: folders, files, db
-// instances and the workspace. Schema items are left out, because a schema load
-// replaces a db instance's children without going through this package and the
-// index would go stale; FindDbItemNodeById walks one instance for those.
-//
-// It is filled by a build and maintained by the inserts and deletes that Mutate
-// and ResolveFolder apply. Graph.mu guards it, so every helper here assumes the
+// Guarded by Graph.mu, like the graph it indexes: every helper here assumes the
 // caller holds it.
 type nodeIndex map[string]Node
 
@@ -129,9 +125,7 @@ func (g *Graph) GetFolderNodeByID(id string) *FolderNode {
 }
 
 // NodeKind returns what the graph holds under an ID — "file", "folder" or
-// "db_instance" — and "" when it holds nothing. It is what a filesystem event
-// asks about a path that has just disappeared, the node being all that is left
-// to say what it was.
+// "db_instance" — and "" when it holds nothing.
 func (g *Graph) NodeKind(id string) string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()

@@ -1,14 +1,9 @@
 package graph
 
-// A build lays out a workspace's folders and db instances but not its files.
-// Files are the bulk of it — 20k files sit in about 1k folders — and most
-// belong to folders nobody opens in a session, yet each one costs a sidecar
-// read, a node, and a place in every graph payload sent to the frontend.
-//
-// So a folder reads its files the first time it is opened, and remembers that
-// in FolderNode.Resolved. Lookups for a file nobody browsed to — a link, a tab
-// restored from the last session — resolve the folders along its path first, so
-// callers never have to know whether a folder has been opened.
+// A build lays out a workspace's folders and db instances but not its files. A
+// folder reads its files the first time it is opened and records that in
+// FolderNode.Resolved; a lookup by ID resolves the folders along the path first,
+// so callers never have to know whether a folder has been opened.
 
 import (
 	"fmt"
@@ -111,13 +106,9 @@ func (g *Graph) workspaceFS() (*WorkspaceFS, error) {
 }
 
 // ResolveFolder reads a folder's files, emits the updated graph and returns the
-// folder. The frontend calls it when a folder is opened; an already resolved
-// folder is a no-op and anything that is not a folder returns nil, so callers
-// do not have to check first.
-//
-// The folder comes back rather than only arriving with the graph event because
-// a caller acting on what is in it — naming a new file so it does not land on
-// an existing one — needs it before the next render.
+// folder. A resolved folder is a no-op, an ID that names anything else returns
+// nil, and the folder is returned so a caller that acts on its contents does not
+// have to wait for the event.
 func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	g.mu.Lock()
 
@@ -193,10 +184,9 @@ func (g *Graph) nodeForURI(uri string) Node {
 	return g.lookup(uri)
 }
 
-// FileDatabases returns the databases a file is bound to. It answers from the
-// graph when the file's folder has been resolved, and from the file's sidecar
-// when it has not, so callers get the same answer either way without pulling
-// the whole folder into memory.
+// FileDatabases returns the databases a file is bound to: from the node when
+// the file's folder has been resolved, from the file's sidecar when it has not,
+// which answers without resolving the folder.
 func (g *Graph) FileDatabases(fileURI string) []DatabaseRef {
 	g.mu.RLock()
 	node, _ := g.lookup(fileURI).(*FileNode)
