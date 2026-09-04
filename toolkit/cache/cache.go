@@ -12,16 +12,16 @@ type item struct {
 	element *list.Element // position in lru list; front = most recent
 }
 
-// A deletion is an entry that has left the cache, carried out of the lock so
-// OnDelete can run without the cache held.
-type deletion struct {
+// A deletedItem is an item that has left the cache, held by key and value until
+// the lock is released so OnDelete can run without it.
+type deletedItem struct {
 	key   string
 	value any
 }
 
-// inflight is one GetOrCreate call in progress. Waiters block on done, then
-// read value and err; closing done publishes those writes.
-type inflight struct {
+// A creation is one GetOrCreate call in progress for a key. Waiters block on
+// done, then read value and err; closing done publishes those writes.
+type creation struct {
 	done  chan struct{}
 	value any
 	err   error
@@ -48,7 +48,7 @@ type Cache struct {
 	items      map[string]*item
 	expiration map[string]int64     // key → expiry UnixNano; absent means no expiry
 	lru        *list.List           // front = most recently used, back = least recently used
-	creating   map[string]*inflight // keys with a GetOrCreate in progress
+	creating   map[string]*creation // keys with a GetOrCreate in progress
 
 	opts Options
 }
@@ -63,7 +63,7 @@ func New(opts ...Options) *Cache {
 		items:      make(map[string]*item),
 		expiration: make(map[string]int64),
 		lru:        list.New(),
-		creating:   make(map[string]*inflight),
+		creating:   make(map[string]*creation),
 
 		opts: o,
 	}
@@ -103,7 +103,7 @@ func (c *Cache) Get(key string) (any, bool) {
 func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error) {
 	c.mu.Lock()
 
-	var expired deletion
+	var expired deletedItem
 	var wasExpired bool
 	if it, ok := c.items[key]; ok {
 		if !c.expiredLocked(key) {
@@ -112,7 +112,7 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 			c.mu.Unlock()
 			return value, nil
 		}
-		expired, wasExpired = deletion{key, c.deleteLocked(key, it)}, true
+		expired, wasExpired = deletedItem{key, c.deleteLocked(key, it)}, true
 	}
 
 	if waitFor, busy := c.creating[key]; busy {
@@ -124,16 +124,16 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 		return waitFor.value, waitFor.err
 	}
 
-	fl := &inflight{done: make(chan struct{}), err: errCreatePanicked}
-	c.creating[key] = fl
+	pending := &creation{done: make(chan struct{}), err: errCreatePanicked}
+	c.creating[key] = pending
 	c.mu.Unlock()
 	if wasExpired {
 		c.notifyDelete(expired.key, expired.value)
 	}
 
 	// Deferred so a panic in create cannot wedge the key: it is released, then
-	// waiters wake on errCreatePanicked, which fl carries until create returns.
-	defer close(fl.done)
+	// waiters wake on errCreatePanicked, which pending carries until create returns.
+	defer close(pending.done)
 	defer func() {
 		c.mu.Lock()
 		delete(c.creating, key)
@@ -142,12 +142,12 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 
 	created, err := create()
 	if err != nil {
-		fl.value, fl.err = nil, err
+		pending.value, pending.err = nil, err
 		return nil, err
 	}
 
 	c.Set(key, created)
-	fl.value, fl.err = created, nil
+	pending.value, pending.err = created, nil
 	return created, nil
 }
 
@@ -163,11 +163,11 @@ func (c *Cache) Set(key string, value any) {
 		return
 	}
 
-	var victim deletion
+	var victim deletedItem
 	var haveVictim bool
 	if c.fullLocked() {
 		if victimKey, victimItem, ok := c.lruVictimLocked(); ok {
-			victim, haveVictim = deletion{victimKey, c.deleteLocked(victimKey, victimItem)}, true
+			victim, haveVictim = deletedItem{victimKey, c.deleteLocked(victimKey, victimItem)}, true
 		}
 	}
 	c.insertLocked(key, value)
@@ -193,10 +193,10 @@ func (c *Cache) Delete(key string) {
 // DeleteFunc deletes all entries for which fn returns true.
 func (c *Cache) DeleteFunc(fn func(key string) bool) {
 	c.mu.Lock()
-	var deleted []deletion
+	var deleted []deletedItem
 	for key, it := range c.items {
 		if fn(key) {
-			deleted = append(deleted, deletion{key, c.deleteLocked(key, it)})
+			deleted = append(deleted, deletedItem{key, c.deleteLocked(key, it)})
 		}
 	}
 	c.mu.Unlock()
@@ -280,11 +280,11 @@ func (c *Cache) gc(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	for range ticker.C {
 		c.mu.Lock()
-		var deleted []deletion
+		var deleted []deletedItem
 		for key := range c.expiration {
 			if c.expiredLocked(key) {
 				if it, ok := c.items[key]; ok {
-					deleted = append(deleted, deletion{key, c.deleteLocked(key, it)})
+					deleted = append(deleted, deletedItem{key, c.deleteLocked(key, it)})
 				}
 			}
 		}
