@@ -31,10 +31,6 @@ var (
 	// secondary index: hash → DSN for EvictConnsByAddr. SSH-rewritten DSNs are 127.0.0.1:port.
 	connHashToDSN   = make(map[string]string)
 	connHashToDSNMu sync.Mutex
-
-	// connPublishMu serialises publishing a freshly dialed pool into the cache,
-	// so a concurrent double-open closes one pool instead of leaking it.
-	connPublishMu sync.Mutex
 )
 
 // poolCloseGrace is how long closeRemovedPool waits before closing a pool that
@@ -67,15 +63,36 @@ func getConn(workspaceID, dsn string) (*sql.DB, bool) {
 	return value.(*sql.DB), true
 }
 
+// indexConn records hash → dsn so EvictConnsByAddr can find this pool again.
+func indexConn(hash, dsn string) {
+	connHashToDSNMu.Lock()
+	connHashToDSN[hash] = dsn
+	connHashToDSNMu.Unlock()
+}
+
 // setConn stores db under (workspaceID, dsn). The index write follows the cache
 // write, because replacing an entry fires closeRemovedPool for the old value and
 // that clears the index entry for this same hash.
 func setConn(workspaceID, dsn string, db *sql.DB) {
 	hash := hashWorkspaceDSN(workspaceID, dsn)
 	connCache.Set(hash, db)
-	connHashToDSNMu.Lock()
-	connHashToDSN[hash] = dsn
-	connHashToDSNMu.Unlock()
+	indexConn(hash, dsn)
+}
+
+// applyPoolConfig applies the non-zero fields of cfg; the rest keep Go's defaults.
+func applyPoolConfig(db *sql.DB, cfg PoolConfig) {
+	if cfg.MaxOpenConns > 0 {
+		db.SetMaxOpenConns(cfg.MaxOpenConns)
+	}
+	if cfg.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(cfg.MaxIdleConns)
+	}
+	if cfg.ConnMaxLifetime > 0 {
+		db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	}
+	if cfg.ConnMaxIdleTime > 0 {
+		db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	}
 }
 
 // EvictConnsByAddr drops all connections whose DSN contains addr. Called when SSH tunnel dies.
@@ -98,6 +115,7 @@ func EvictConnsByAddr(addr string) {
 
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
+// Concurrent first queries for one datasource share a single open.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
 	if dbType == "sqlite" && ssh != nil {
 		return nil, newConfigError("SSH tunneling is not supported for sqlite")
@@ -150,60 +168,50 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	// Guard off (desktop app): dialing the user's own machine, incl. a local
 	// sqlite file, is the intended use and must not be restricted.
 
-	if db, ok := getConn(workspaceID, dsn); ok {
-		return db, nil
-	}
-
-	dialect := GetDialect(dbType)
-	if dialect == nil {
-		return nil, newConfigErrorf("unsupported database type: %s", dbType)
-	}
-
-	var (
-		db  *sql.DB
-		err error
-	)
-	if guardedDirect {
-		// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
-		db, err = openGuardedDB(dbType, dsn)
-	} else {
-		db, err = dialect.OpenDB(dsn)
-	}
-	if err != nil {
-		return nil, err
-	}
-
 	var cfg PoolConfig
 	if len(pool) > 0 {
 		cfg = pool[0]
 	}
-	if cfg.MaxOpenConns > 0 {
-		db.SetMaxOpenConns(cfg.MaxOpenConns)
-	}
-	if cfg.MaxIdleConns > 0 {
-		db.SetMaxIdleConns(cfg.MaxIdleConns)
-	}
-	if cfg.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	}
-	if cfg.ConnMaxIdleTime > 0 {
-		db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
-	}
+	hash := hashWorkspaceDSN(workspaceID, dsn)
 
-	// Two first-queries against the same datasource can miss the cache together
-	// and both dial. Publish under a lock and re-check, so the loser is closed
-	// here rather than overwritten in the cache and leaked. Only the publish is
-	// serialised, never the dial, which can take seconds through a tunnel.
-	connPublishMu.Lock()
-	if existing, ok := getConn(workspaceID, dsn); ok {
-		connPublishMu.Unlock()
-		// Never handed to a caller, so it can be closed immediately.
-		_ = db.Close()
-		return existing, nil
+	// GetOrCreate opens at most once per key: concurrent first queries for one
+	// datasource share the single open instead of each dialing and discarding
+	// the losers. Worth serialising because the open is a real round trip on
+	// postgres — both paths below Ping — through the SSH tunnel when there is
+	// one. A failure is not cached, so the next caller retries.
+	value, err := connCache.GetOrCreate(hash, func() (any, error) {
+		dialect := GetDialect(dbType)
+		if dialect == nil {
+			return nil, newConfigErrorf("unsupported database type: %s", dbType)
+		}
+
+		var (
+			db  *sql.DB
+			err error
+		)
+		if guardedDirect {
+			// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
+			db, err = openGuardedDB(dbType, dsn)
+		} else {
+			db, err = dialect.OpenDB(dsn)
+		}
+		if err != nil {
+			return nil, err
+		}
+		applyPoolConfig(db, cfg)
+
+		// Indexed from in here so only the caller that opened the pool writes
+		// the index, rather than every cache hit taking that lock. Ordering is
+		// safe even though closeRemovedPool clears this hash: GetOrCreate runs
+		// create only on a miss, so the store that follows displaces no entry
+		// under this key.
+		indexConn(hash, dsn)
+		return db, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	setConn(workspaceID, dsn, db)
-	connPublishMu.Unlock()
-	return db, nil
+	return value.(*sql.DB), nil
 }
 
 // ClearConnCache drops all connection cache entries, closing each pool.

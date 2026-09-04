@@ -2,6 +2,7 @@ package cache
 
 import (
 	"container/list"
+	"errors"
 	"sync"
 	"time"
 )
@@ -20,6 +21,18 @@ type removal struct {
 	value any
 }
 
+// inflight is one GetOrCreate call in progress. Waiters block on done, then read
+// value and err; the channel close is what publishes those writes to them.
+type inflight struct {
+	done  chan struct{}
+	value any
+	err   error
+}
+
+// errCreatePanicked reaches waiters when the create function panicked. The panic
+// itself unwinds through the caller that ran it.
+var errCreatePanicked = errors.New("cache: create panicked")
+
 // Options configures a Cache. Zero values mean no limit / no expiry.
 type Options struct {
 	MaxEntries int           // evicts LRU entry on overflow; 0 = unlimited
@@ -36,8 +49,9 @@ type Cache struct {
 	mu sync.Mutex
 
 	items      map[string]*item
-	expiration map[string]int64 // key → expiry UnixNano; absent means no expiry
-	lru        *list.List       // front = most recently used, back = least recently used
+	expiration map[string]int64     // key → expiry UnixNano; absent means no expiry
+	lru        *list.List           // front = most recently used, back = least recently used
+	creating   map[string]*inflight // keys with a GetOrCreate in progress
 
 	opts Options
 }
@@ -52,6 +66,7 @@ func New(opts ...Options) *Cache {
 		items:      make(map[string]*item),
 		expiration: make(map[string]int64),
 		lru:        list.New(),
+		creating:   make(map[string]*inflight),
 
 		opts: o,
 	}
@@ -64,54 +79,69 @@ func New(opts ...Options) *Cache {
 }
 
 func (c *Cache) Set(key string, value any) {
-	var removed []removal
-
 	c.mu.Lock()
-	if it, ok := c.items[key]; ok {
-		if it.value != value {
-			removed = append(removed, removal{key, it.value})
-		}
-		it.value = value
-		c.lru.MoveToFront(it.element)
-		c.touchLocked(key)
-		c.mu.Unlock()
-		c.notifyRemovals(removed)
-		return
-	}
-
-	if c.opts.MaxEntries > 0 && c.lru.Len() >= c.opts.MaxEntries {
-		removed = c.evictLRULocked(removed)
-	}
-
-	el := c.lru.PushFront(key)
-	c.items[key] = &item{value: value, element: el}
-	c.touchLocked(key)
+	removed := c.setLocked(key, value, nil)
 	c.mu.Unlock()
-
 	c.notifyRemovals(removed)
 }
 
 func (c *Cache) Get(key string) (any, bool) {
 	c.mu.Lock()
+	value, ok, removed := c.getLocked(key, nil)
+	c.mu.Unlock()
+	c.notifyRemovals(removed)
+	return value, ok
+}
 
-	it, ok := c.items[key]
-	if !ok {
-		c.mu.Unlock()
-		return nil, false
-	}
-
-	if exp, hasExp := c.expiration[key]; hasExp && time.Now().UnixNano() > exp {
-		removed := c.removeLocked(key, it, nil)
+// GetOrCreate returns the value for key, calling create at most once across
+// concurrent callers that miss: the first caller runs it, the rest block until
+// it returns and receive the same result. On success the value is stored under
+// key; a failure is passed to the waiters of that one call and not cached, so
+// the next caller retries.
+//
+// create runs with the lock released and must not call back into this Cache.
+func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error) {
+	c.mu.Lock()
+	value, ok, removed := c.getLocked(key, nil)
+	if ok {
 		c.mu.Unlock()
 		c.notifyRemovals(removed)
-		return nil, false
+		return value, nil
+	}
+	if waitFor, busy := c.creating[key]; busy {
+		c.mu.Unlock()
+		c.notifyRemovals(removed)
+		<-waitFor.done
+		return waitFor.value, waitFor.err
+	}
+	fl := &inflight{done: make(chan struct{}), err: errCreatePanicked}
+	c.creating[key] = fl
+	c.mu.Unlock()
+	c.notifyRemovals(removed)
+
+	// Both deferred, so a panic in create cannot wedge every later caller for
+	// this key: the key is released first, then the waiters wake and see
+	// errCreatePanicked, which fl carries until create returns.
+	defer close(fl.done)
+	defer func() {
+		c.mu.Lock()
+		delete(c.creating, key)
+		c.mu.Unlock()
+	}()
+
+	created, err := create()
+	if err != nil {
+		fl.value, fl.err = nil, err
+		return nil, err
 	}
 
-	c.lru.MoveToFront(it.element)
-	c.touchLocked(key)
-	value := it.value
+	c.mu.Lock()
+	stored := c.setLocked(key, created, nil)
 	c.mu.Unlock()
-	return value, true
+	c.notifyRemovals(stored)
+
+	fl.value, fl.err = created, nil
+	return created, nil
 }
 
 func (c *Cache) Delete(key string) {
@@ -135,6 +165,45 @@ func (c *Cache) DeleteFunc(fn func(key string) bool) {
 	}
 	c.mu.Unlock()
 	c.notifyRemovals(removed)
+}
+
+// getLocked returns the live value for key, refreshing its TTL and LRU position.
+// An entry past its expiry is removed instead, and reported through removed.
+// Caller must hold mu.
+func (c *Cache) getLocked(key string, removed []removal) (any, bool, []removal) {
+	it, ok := c.items[key]
+	if !ok {
+		return nil, false, removed
+	}
+	if exp, hasExp := c.expiration[key]; hasExp && time.Now().UnixNano() > exp {
+		return nil, false, c.removeLocked(key, it, removed)
+	}
+	c.lru.MoveToFront(it.element)
+	c.touchLocked(key)
+	return it.value, true, removed
+}
+
+// setLocked stores value under key, appending whatever it displaces to removed:
+// the previous value for this key, or the LRU victim that makes room for it.
+// Caller must hold mu.
+func (c *Cache) setLocked(key string, value any, removed []removal) []removal {
+	if it, ok := c.items[key]; ok {
+		if it.value != value && c.opts.OnRemove != nil {
+			removed = append(removed, removal{key, it.value})
+		}
+		it.value = value
+		c.lru.MoveToFront(it.element)
+		c.touchLocked(key)
+		return removed
+	}
+
+	if c.opts.MaxEntries > 0 && c.lru.Len() >= c.opts.MaxEntries {
+		removed = c.evictLRULocked(removed)
+	}
+
+	c.items[key] = &item{value: value, element: c.lru.PushFront(key)}
+	c.touchLocked(key)
+	return removed
 }
 
 // evictLRULocked removes the least recently used entry — the only removal the
