@@ -47,7 +47,7 @@ var (
 // GetOrCreateTunnel returns a live cached tunnel, dialling via StartSSHTunnel on miss.
 // Key is hash(workspaceID, full SSH identity + remote address) scoped per workspace, 
 // secrets hashed (never stored verbatim). Editing any auth detail changes the key.
-// Dead entries are evicted and their DB connections flushed before redialling.
+// Dead entries are deleted and their DB connections flushed before redialling.
 // Serialised: only one tunnel per key established under concurrent callers.
 func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost string, remotePort int) (Tunnel, error) {
 	addrStr := strings.Join([]string{
@@ -71,7 +71,7 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		tunnelCache.Delete(key)
 		existing.Close()
 		tunnelCacheMu.Unlock()
-		EvictConnsByAddr(addr)
+		DeleteConnsByAddr(addr)
 	} else {
 		tunnelCacheMu.Unlock()
 	}
@@ -94,7 +94,7 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		existing.Close()
 		tunnelCache.Set(key, tunnel)
 		tunnelCacheMu.Unlock()
-		EvictConnsByAddr(addr)
+		DeleteConnsByAddr(addr)
 		return tunnel, nil
 	}
 	tunnelCache.Set(key, tunnel)
@@ -102,7 +102,7 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 	return tunnel, nil
 }
 
-// DeleteTunnel removes the entry for key. No-op if absent.
+// DeleteTunnel deletes the entry for key. No-op if absent.
 func DeleteTunnel(key string) {
 	tunnelCacheMu.Lock()
 	tunnelCache.Delete(key)

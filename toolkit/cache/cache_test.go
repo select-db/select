@@ -90,7 +90,7 @@ func TestTTLReset(t *testing.T) {
 	}
 }
 
-func TestMaxEntriesEvictsLRU(t *testing.T) {
+func TestMaxEntriesDeletesLRU(t *testing.T) {
 	c := New(Options{MaxEntries: 3})
 	c.Set("a", 1)
 	c.Set("b", 2)
@@ -100,11 +100,11 @@ func TestMaxEntriesEvictsLRU(t *testing.T) {
 	c.Get("a")
 	c.Get("b")
 
-	// adding d should evict c (least recently used)
+	// adding d should delete c (least recently used)
 	c.Set("d", 4)
 
 	if _, ok := c.Get("c"); ok {
-		t.Error("c should have been evicted")
+		t.Error("c should have been deleted")
 	}
 	for _, k := range []string{"a", "b", "d"} {
 		if _, ok := c.Get(k); !ok {
@@ -117,9 +117,9 @@ func TestMaxEntriesExact(t *testing.T) {
 	c := New(Options{MaxEntries: 2})
 	c.Set("a", 1)
 	c.Set("b", 2)
-	c.Set("c", 3) // evicts a (LRU)
+	c.Set("c", 3) // deletes a (LRU)
 	if _, ok := c.Get("a"); ok {
-		t.Error("a should have been evicted")
+		t.Error("a should have been deleted")
 	}
 	if l := c.lru.Len(); l != 2 {
 		t.Errorf("expected 2 entries, got %d", l)
@@ -131,9 +131,9 @@ func TestLRUOrderAfterGet(t *testing.T) {
 	c.Set("a", 1)
 	c.Set("b", 2)
 	c.Get("a")    // a is now MRU, b is LRU
-	c.Set("c", 3) // should evict b
+	c.Set("c", 3) // should delete b
 	if _, ok := c.Get("b"); ok {
-		t.Error("b should have been evicted as LRU")
+		t.Error("b should have been deleted as LRU")
 	}
 	if _, ok := c.Get("a"); !ok {
 		t.Error("a should survive")
@@ -165,7 +165,7 @@ func TestNoTTLNeverExpires(t *testing.T) {
 	}
 }
 
-func TestGCRemovesExpired(t *testing.T) {
+func TestGCDeletesExpired(t *testing.T) {
 	// TTL/3 gc interval means gc fires at ~17ms for a 50ms TTL
 	c := New(Options{TTL: 50 * time.Millisecond})
 	c.Set("k", "v")
@@ -177,6 +177,6 @@ func TestGCRemovesExpired(t *testing.T) {
 	c.mu.Unlock()
 
 	if inMap || inExp {
-		t.Fatal("gc should have removed expired entry from internal maps")
+		t.Fatal("gc should have deleted expired entry from internal maps")
 	}
 }

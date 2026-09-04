@@ -43,9 +43,12 @@ tasks:
   install:frontend:
     summary: Installs the frontend dependencies
     dir: frontend
-    sources:
-      - package.json
-      - package-lock.json
+    # `status`, not `sources`: `sources` skips only while Task's checksum cache
+    # survives, which it does not on a CI checkout, so the e2e job installed once
+    # in the workflow and again here. The two cannot be combined -- with `sources`
+    # present Task runs the task on a cold cache even when `status` passes.
+    status:
+      - test -d node_modules && test node_modules -nt package-lock.json
     cmds:
       - npm install
 
