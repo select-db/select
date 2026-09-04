@@ -2,6 +2,7 @@ import * as monaco from 'monaco-editor';
 import { tryCatch } from '$lib/utils/tryCatch';
 import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 import type * as graph from '$lib/wails/graph';
+import { contextAt, textBeforeCursor } from './completionContext';
 
 export type VariableCompletionOptions = {
 	/** When true, suggest SQL files from the same folder as $name. Only enable in SQL file context. */
@@ -26,16 +27,7 @@ export function createVariableCompletionProvider(
 				return { suggestions: [] };
 			}
 
-			const textBeforeCursor = model.getValueInRange({
-				startLineNumber: position.lineNumber,
-				startColumn: Math.max(1, position.column - 20),
-				endLineNumber: position.lineNumber,
-				endColumn: position.column
-			});
-
-			const isVariableContext = textBeforeCursor.match(/\$[A-Za-z0-9_]*$/);
-
-			if (isVariableContext) {
+			if (contextAt(textBeforeCursor(model, position)) === 'variable') {
 				try {
 					const varsPromise = tryCatch(graphApi.GetUriVariables, file.uri);
 					const filesPromise =

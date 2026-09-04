@@ -78,9 +78,11 @@ func ToDialectPermissions(rows []generated.AppPermission) []core.PermissionEntry
 	return out
 }
 
-// Keeps only permissions belonging to workspaceID
+// CompiledForWorkspace keeps only permissions belonging to workspaceID, and
+// makes a database nobody has written a rule for deny-by-default: everything
+// the backend serves runs on our credentials. See core.WithDenyUnmanaged.
 func CompiledForWorkspace(roleIDs []string, workspaceID string) core.CompiledPermissions {
-	return core.Compile(EntriesForWorkspace(roleIDs, workspaceID))
+	return core.Compile(EntriesForWorkspace(roleIDs, workspaceID)).WithDenyUnmanaged()
 }
 
 func CompiledFromRequest(r *http.Request) core.CompiledPermissions {

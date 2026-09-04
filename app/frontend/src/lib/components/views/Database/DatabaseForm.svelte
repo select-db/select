@@ -536,7 +536,7 @@
 							<Icon icon="info" size={12} />
 						</button>
 					</p>
-					<div class="action-wrapper">
+					<div class="action-wrapper" data-test="database.dsn">
 						<Input
 							bind:value={dsnLocal}
 							type="text"

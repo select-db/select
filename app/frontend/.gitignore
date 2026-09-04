@@ -15,3 +15,7 @@ Thumbs.db
 # Playwright (e2e run output)
 /test-results
 /playwright-report
+
+# Local browser pin: points Playwright at a Chromium already on this machine,
+# so the path is only ever right on the machine that wrote it.
+/playwright.pinned.config.ts
