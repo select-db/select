@@ -13,9 +13,7 @@ type item struct {
 }
 
 // A removal is an entry that has left the cache, carried out of the lock so
-// OnRemove can run without the cache held. Removal is the umbrella term here:
-// eviction is one cause of it — the cache picking an LRU victim to stay under
-// MaxEntries — alongside expiry, Delete, DeleteFunc and replacement by Set.
+// OnRemove can run without the cache held.
 type removal struct {
 	key   string
 	value any
