@@ -27,10 +27,6 @@ type creation struct {
 	err   error
 }
 
-// errCreatePanicked reaches waiters when the create function panicked. The panic
-// itself unwinds through the caller that ran it.
-var errCreatePanicked = errors.New("cache: create panicked")
-
 // Options configures a Cache. Zero values mean no limit / no expiry.
 type Options struct {
 	MaxEntries int           // deletes LRU entry on overflow; 0 = unlimited
@@ -124,7 +120,13 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 		return waitFor.value, waitFor.err
 	}
 
-	pending := &creation{done: make(chan struct{}), err: errCreatePanicked}
+	pending := &creation{
+		done: make(chan struct{}),
+		// Held until create returns, so if create panics the waiters get an
+		// error rather than a nil result. The panic unwinds through the caller
+		// that ran it.
+		err: errors.New("cache: create panicked"),
+	}
 	c.creating[key] = pending
 	c.mu.Unlock()
 	if wasExpired {
@@ -132,7 +134,7 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 	}
 
 	// Deferred so a panic in create cannot wedge the key: it is released, then
-	// waiters wake on errCreatePanicked, which pending carries until create returns.
+	// the waiters wake on the error pending was built with.
 	defer close(pending.done)
 	defer func() {
 		c.mu.Lock()
