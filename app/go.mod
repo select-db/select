@@ -16,7 +16,7 @@ require (
 	github.com/selectDb/dialect v0.0.0-00010101000000-000000000000
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.12.1
-	github.com/wailsapp/wails/v3 v3.0.0-beta.12
+	github.com/wailsapp/wails/v3 v3.0.0-beta.16
 	github.com/zalando/go-keyring v0.2.6
 	modernc.org/sqlite v1.57.0
 )
