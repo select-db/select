@@ -19,9 +19,10 @@ type deletedItem struct {
 	value any
 }
 
-// A creation is one GetOrCreate call in progress for a key. Waiters block on
-// done, then read value and err; closing done publishes those writes.
-type creation struct {
+// A call is one GetOrCreate in progress for a key. Waiters block on done, then
+// read value and err; closing done publishes those writes. Named as in
+// golang.org/x/sync/singleflight, which suppresses duplicates the same way.
+type call struct {
 	done  chan struct{}
 	value any
 	err   error
@@ -42,9 +43,9 @@ type Cache struct {
 	mu sync.Mutex
 
 	items      map[string]*item
-	expiration map[string]int64     // key → expiry UnixNano; absent means no expiry
-	lru        *list.List           // front = most recently used, back = least recently used
-	creating   map[string]*creation // keys with a GetOrCreate in progress
+	expiration map[string]int64 // key → expiry UnixNano; absent means no expiry
+	lru        *list.List       // front = most recently used, back = least recently used
+	creating   map[string]*call // keys with a GetOrCreate in progress
 
 	opts Options
 }
@@ -59,7 +60,7 @@ func New(opts ...Options) *Cache {
 		items:      make(map[string]*item),
 		expiration: make(map[string]int64),
 		lru:        list.New(),
-		creating:   make(map[string]*creation),
+		creating:   make(map[string]*call),
 
 		opts: o,
 	}
@@ -120,7 +121,7 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 		return waitFor.value, waitFor.err
 	}
 
-	pending := &creation{
+	pending := &call{
 		done: make(chan struct{}),
 		// Held until create returns, so if create panics the waiters get an
 		// error rather than a nil result. The panic unwinds through the caller
