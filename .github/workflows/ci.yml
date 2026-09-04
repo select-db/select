@@ -237,8 +237,21 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
-      - run: npm ci
+      # --prefer-offline: setup-node above restores ~/.npm and hits on it, but npm
+      # still revalidates cached entries against the registry. That revalidation
+      # is where the runners stall: the same `npm ci` on the same lockfile was
+      # measured at 5s, 2m19s and 7m02s within one hour on 2026-09-04, three of
+      # the slow samples landing on 7m02-7m03 across separate runners -- a fixed
+      # wait being hit, not bandwidth. --prefer-offline serves anything already
+      # cached without asking, and still fetches whatever the cache lacks, so the
+      # lockfile remains the only thing deciding versions. --no-audit/--no-fund
+      # drop two more registry round-trips CI does not read.
+      # The timeout is a guardrail against a true hang, not a budget: it sits
+      # above every measurement, including the pathological one, so a slow day
+      # stays green rather than turning every PR red.
+      - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
+        timeout-minutes: 10
       - run: npm run check
         working-directory: app/frontend
       - run: npm run lint
@@ -460,8 +473,11 @@ jobs:
         if: steps.cache-wails.outputs.cache-hit != 'true'
         run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
-      - run: npm ci
+      # Same flags and guardrail as the frontend quality job above, for the same
+      # reason; see the comment there.
+      - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
+        timeout-minutes: 10
       - run: npx playwright install --with-deps chromium
         working-directory: app/frontend
 
