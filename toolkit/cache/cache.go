@@ -19,8 +19,8 @@ type removal struct {
 	value any
 }
 
-// inflight is one GetOrCreate call in progress. Waiters block on done, then read
-// value and err; the channel close is what publishes those writes to them.
+// inflight is one GetOrCreate call in progress. Waiters block on done, then
+// read value and err; closing done publishes those writes.
 type inflight struct {
 	done  chan struct{}
 	value any
@@ -91,11 +91,8 @@ func (c *Cache) Get(key string) (any, bool) {
 }
 
 // GetOrCreate returns the value for key, calling create at most once across
-// concurrent callers that miss: the first caller runs it, the rest block until
-// it returns and receive the same result. On success the value is stored under
-// key; a failure is passed to the waiters of that one call and not cached, so
-// the next caller retries.
-//
+// concurrent callers that miss: the others block and take the same result.
+// A created value is stored; an error is not, so the next caller retries.
 // create runs with the lock released and must not call back into this Cache.
 func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error) {
 	c.mu.Lock()
@@ -116,9 +113,8 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 	c.mu.Unlock()
 	c.notifyRemovals(removed)
 
-	// Both deferred, so a panic in create cannot wedge every later caller for
-	// this key: the key is released first, then the waiters wake and see
-	// errCreatePanicked, which fl carries until create returns.
+	// Deferred so a panic in create cannot wedge the key: it is released, then
+	// waiters wake on errCreatePanicked, which fl carries until create returns.
 	defer close(fl.done)
 	defer func() {
 		c.mu.Lock()
@@ -231,8 +227,7 @@ func (c *Cache) removeLocked(key string, it *item, removed []removal) []removal 
 }
 
 // notifyRemovals runs OnRemove for entries taken out under the lock. Must be
-// called with the lock released: OnRemove may block (closing a connection pool,
-// say).
+// called with the lock released, since OnRemove may block.
 func (c *Cache) notifyRemovals(removed []removal) {
 	if c.opts.OnRemove == nil {
 		return
