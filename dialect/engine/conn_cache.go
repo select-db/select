@@ -37,12 +37,10 @@ var (
 	connPublishMu sync.Mutex
 )
 
-// poolCloseGrace delays closing a removed pool. An unclosed *sql.DB is never
-// reclaimed — database/sql roots it from its own connectionOpener goroutine —
-// but closing inline would break a caller that took the pool just before it
-// was removed, since Close rejects new queries. It need not cover query duration:
-// Close leaves work in flight alone, closing idle conns at once and in-use ones
-// as they are returned. A var so tests can shorten it.
+// poolCloseGrace is how long closeRemovedPool waits before closing a pool that
+// has left the cache, so a caller that took it just before removal can still
+// start its query. Close does not interrupt queries already in flight. A var so
+// tests can shorten it.
 var poolCloseGrace = 60 * time.Second
 
 // closeRemovedPool releases a pool that has left the cache, for any reason:
