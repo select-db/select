@@ -26,9 +26,19 @@ permissions:
   contents: read
 
 # Cancel superseded runs for the same PR; never cancel dev/main/tag builds.
+#
+# The branch is baked into the group rather than into cancel-in-progress. An
+# expression there evaluates to the *string* "false" for a push, which is
+# non-empty and so still cancels: 11 of the last 27 dev pushes were cancelled
+# under the previous form, including cfd6c3c, whose cancelled run is how a
+# stale generated file reached dev unchecked (see #176).
+#
+# Giving every non-PR run its own group (run_id is unique per run) means a push
+# to dev/main/a tag shares a group with nothing and can never be superseded,
+# while PR runs still collapse onto one group per ref.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: true
 
 env:
   WAILS_VERSION: v3.0.0-beta.12
@@ -45,6 +55,7 @@ jobs:
       go-dialect:      ${{ steps.plan.outputs.go-dialect }}
       frontend:        ${{ steps.plan.outputs.frontend }}
       python:          ${{ steps.plan.outputs.python }}
+      web:             ${{ steps.plan.outputs.web }}
       go-modules:      ${{ steps.plan.outputs.go-modules }}
       desktop:         ${{ steps.plan.outputs.desktop }}
       staging-release: ${{ steps.plan.outputs.staging-release }}
@@ -60,14 +71,14 @@ jobs:
 
           # Raw per-area change flags. Full on push/dispatch/schedule; on PRs we
           # diff the merge against its base (HEAD~1 of the merge commit).
-          frontend=false; app=false; backend=false; dialect=false; toolkit=false; python=false
+          frontend=false; app=false; backend=false; dialect=false; toolkit=false; python=false; web=false
           if [[ "$EVENT" == "push" || "$EVENT" == "workflow_dispatch" || "$EVENT" == "schedule" ]]; then
-            frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
+            frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
           else
             FILES="$(git diff --name-only HEAD~1 HEAD || true)"
             if grep -qE '^(\.github/|\.gitleaks\.toml)' <<<"$FILES"; then
               # Shared infra changed -> run everything to be safe.
-              frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
+              frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
             else
               grep -q '^app/frontend/' <<<"$FILES" && frontend=true || true
               grep -qE '^app/(internal|build)/|^app/(main\.go|Taskfile\.yml|go\.(mod|sum)|\.golangci)' <<<"$FILES" && app=true || true
@@ -75,6 +86,13 @@ jobs:
               { grep '^dialect/' <<<"$FILES" | grep -qv '^dialect/core/tokenanalyzer/python/'; } && dialect=true || true
               grep -q '^dialect/core/tokenanalyzer/python/' <<<"$FILES" && python=true || true
               grep -q '^toolkit/' <<<"$FILES" && toolkit=true || true
+              # The website: its own source, any doc page (they live next to the
+              # code they document), the app theme it takes its colours from,
+              # and the OpenAPI spec behind the API reference.
+              grep -q '^web/' <<<"$FILES" && web=true || true
+              grep -q '\.doc\.md$' <<<"$FILES" && web=true || true
+              grep -q '^app/internal/graph/defaults/user/\.theme$' <<<"$FILES" && web=true || true
+              grep -q '^backend/internal/apigen/gen/openapi\.json$' <<<"$FILES" && web=true || true
             fi
           fi
 
@@ -106,13 +124,14 @@ jobs:
             echo "go-dialect=$go_dialect"
             echo "frontend=$frontend"
             echo "python=$python"
+            echo "web=$web"
             echo "go-modules=[${joined}]"
             echo "desktop=$desktop"
             echo "staging-release=$staging"
             echo "draft-release=$draft"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Plan: go-modules=[${joined}] frontend=$frontend python=$python desktop=$desktop staging=$staging draft=$draft"
+          echo "Plan: go-modules=[${joined}] frontend=$frontend python=$python web=$web desktop=$desktop staging=$staging draft=$draft"
 
   # ---- Security / vulnerability scanning (path-gated matrix) ----
   security:
@@ -240,6 +259,10 @@ jobs:
         with:
           version: v2.11.4
           working-directory: app
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, in each of these three jobs, so an outage there fails a
+          # build for reasons unrelated to the code — as it did on #174.
+          verify: false
       - name: Dead code check
         run: |
           go install golang.org/x/tools/cmd/deadcode@latest
@@ -270,6 +293,10 @@ jobs:
         with:
           version: v2.11.4
           working-directory: backend
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, in each of these three jobs, so an outage there fails a
+          # build for reasons unrelated to the code — as it did on #174.
+          verify: false
       - name: Dead code check
         run: |
           go install golang.org/x/tools/cmd/deadcode@latest
@@ -300,6 +327,10 @@ jobs:
         with:
           version: v2.11.4
           working-directory: dialect
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, in each of these three jobs, so an outage there fails a
+          # build for reasons unrelated to the code — as it did on #174.
+          verify: false
 
   # ---- Tests ----
   test-app-backend:
@@ -446,6 +477,32 @@ jobs:
           path: app/frontend/playwright-report/
           retention-days: 7
 
+  # ---- Website (docs + API reference + marketing) ----
+  website:
+    name: Website
+    needs: [plan]
+    if: needs.plan.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: web/generate/go.mod
+          cache-dependency-path: web/generate/go.sum
+      # The Scalar bundle behind /api/ is fetched once and cached; without this
+      # every run re-downloads it and a bad day upstream fails the build.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/.cache
+          key: web-cache-${{ hashFiles('web/generate/main.go') }}
+          restore-keys: web-cache-
+      # The build is the check. It fails on a broken internal link, a sidebar
+      # entry pointing at a file that does not exist, a marketing page over the
+      # 14 KB brotli budget, or a page fetching from a third-party origin.
+      - run: go run .
+        working-directory: web/generate
+
   # ---- Single required gate: aggregates every PR-relevant job ----
   ci-ok:
     name: CI OK
@@ -463,6 +520,7 @@ jobs:
       - test-dialect
       - test-analyzer
       - e2e-app
+      - website
     runs-on: ubuntu-latest
     steps:
       - name: Verify no required job failed

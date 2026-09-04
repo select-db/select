@@ -261,6 +261,7 @@
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="scrollable no-scrollbar"
+		data-test="tree.panel"
 		bind:this={scrollContainer}
 		use:scrollShadow
 		onscroll={handleScroll}

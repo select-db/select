@@ -1,6 +1,6 @@
 # Query Execution
 
-Run a query with **Cmd+Enter**. SELECT executes the SQL against one or more associated databases and displays results in a table below the editor.
+Run a query with `Cmd+Enter`. SELECT executes the SQL against one or more associated databases and displays results in a table below the editor.
 
 ## Streaming (proxified connections)
 

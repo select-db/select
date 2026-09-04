@@ -1,4 +1,5 @@
-# Local dev database. `./dev.sh db` (and `./dev.sh start`) bring this up.
+# Local dev database. `./dev.sh backend db up` (and `./dev.sh backend start`)
+# bring this up, from the repo root.
 #
 # pg_partman is baked into the image (see Dockerfile.postgres) so the app's
 # audit-partition retention path works. Port 5431 on the host matches the

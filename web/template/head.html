@@ -1,0 +1,38 @@
+{{define "head" -}}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="view-transition" content="same-origin">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>{{.Title}} | SELECT</title>
+  <meta name="description" content="{{.Description}}">
+  <link rel="canonical" href="{{.Canonical}}">
+  <!-- The same page as markdown: what this one was rendered from. A client that
+       would rather read the prose than the page can follow this instead. -->
+  <link rel="alternate" type="text/markdown" href="{{.Markdown}}" title="This page as markdown">
+  {{- if .PrevPage}}
+  <link rel="prefetch" href="{{.PrevPage.Href}}">
+  {{- end}}
+  {{- if .NextPage}}
+  <link rel="prefetch" href="{{.NextPage.Href}}">
+  {{- end}}
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{.Title}} | SELECT">
+  <meta property="og:description" content="{{.Description}}">
+  <meta property="og:url" content="{{.Canonical}}">
+  <meta property="og:site_name" content="SELECT">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{.Title}} | SELECT">
+  <meta name="twitter:description" content="{{.Description}}">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "{{.Title}}",
+    "description": "{{.Description}}",
+    "url": "{{.Canonical}}"
+  }
+  </script>
+  {{.Styles}}
+</head>
+{{- end}}

@@ -234,7 +234,7 @@
 	}
 </script>
 
-<div class="chat">
+<div class="chat" data-test="chat.panel">
 	<div
 		class="messages scrollable"
 		bind:this={messagesEl}

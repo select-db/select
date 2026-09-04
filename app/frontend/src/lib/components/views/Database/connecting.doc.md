@@ -14,11 +14,14 @@ DSN format depends on dialect:
 | MySQL      | `user:password@tcp(host:3306)/dbname?parseTime=true`                    |
 | SQLite     | `file:./local.db` or `/path/to/database.sqlite`                        |
 
-> DSN fields support **environment variables** (`$VAR_NAME`). SELECT resolves them from your workspace `.env` file at connection time, keeping credentials out of config files.
+![The connection form for a PostgreSQL database: dialect, name, the proxy checkbox, the DSN and SSH tunnel modes, and a DSN written from $VAR references.](/shots/dbform.local.light.png)
+
+> [!TIP]
+> DSN fields support **environment variables** (`$VAR_NAME`), resolved from your workspace `.env` at connection time. Write the DSN as `host=$PG_HOST password=$PG_PASS ...` and the password never enters `db.config.json`, which is what makes that file safe to commit.
 
 ## Testing the connection
 
-Hit **Test connection** to validate your setup before saving. SELECT attempts to connect and reports any errors inline.
+Hit **Test connection** to check your setup. SELECT attempts to connect and reports any errors inline. There is no save step: the form writes `db.config.json` once the settings are valid.
 
 ## Configuration storage
 
@@ -34,8 +37,6 @@ workspace/
     db.config.json
 ```
 
-You can organize SQL files and subfolders inside each database folder. The `db.config.json` file is managed by SELECT and updated when you change connection settings in the form.
+You can organize SQL files and subfolders inside each database folder. The `db.config.json` file is managed by SELECT and written as you change connection settings in the form. It holds the DSN exactly as you typed it, so a DSN built from `$VAR` references contains no secrets and belongs in git with the rest of the workspace.
 
-> Keep credentials in `.env` and reference them with `$VAR_NAME` in the DSN so you can safely commit `db.config.json` to git.
-
-For team databases where credentials should not live on individual machines, see [Proxified Connections](/databases/proxified-connections/).
+For team databases where credentials should not live on individual machines, see [Proxified Connections](/docs/databases/proxified-connections/).

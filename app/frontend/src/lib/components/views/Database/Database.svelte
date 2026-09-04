@@ -71,7 +71,7 @@
 	</div>
 {:else}
 	{#key database.id}
-		<div class="wrapper scrollable">
+		<div class="wrapper scrollable" data-test="database.form">
 			<DatabaseForm
 				id={database.id}
 				uri={database.uri}
