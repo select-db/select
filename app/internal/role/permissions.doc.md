@@ -1,6 +1,8 @@
 # Permissions
 
-Permissions control what users can do in a workspace. They are assigned to [roles](/workspace/roles/) at varying levels of granularity.
+Permissions control what users can do in a workspace. They are assigned to [roles](/docs/workspace/roles/) at varying levels of granularity.
+
+![The permission grid for a role: workspace-level rows above, then the database, its schema and its tables, with allow and deny against each action.](/shots/permissions.light.png)
 
 ## Permission levels
 
@@ -53,6 +55,24 @@ Evaluation order:
 5. If neither matches, access is refused (default deny)
 
 This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `DDL` for production databases. A user with both roles cannot run DDL on production.
+
+## Databases nobody has written a rule for
+
+Step 5 is about a database your roles *do* cover. A database that no role in the
+workspace mentions at all is a different case, and the answer depends on who is
+holding the credentials.
+
+| Connection | A database with no rules | Why |
+|------------|--------------------------|-----|
+| **Local** | Allowed | The DSN is yours, on your machine. Refusing here would only be refusing you access to your own database. |
+| **[Proxified](/docs/databases/proxified-connections/)** | Refused | The credentials are held server-side and the query runs on our server. Nothing is granted that a role did not grant. |
+| **[MCP](/docs/workspace/mcp-server/)** | Refused | Same server, same rule. An agent gets what its key's roles name, and nothing else. |
+
+> [!IMPORTANT]
+> Adding a database to a proxified workspace does not make it readable. Until a
+> role carries an allow rule for it, every query against it is refused,
+> including from an API key that can read every other database in the
+> workspace.
 
 ## Scope
 

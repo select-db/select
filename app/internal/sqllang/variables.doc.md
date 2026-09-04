@@ -1,6 +1,6 @@
 # Variables
 
-SELECT supports `$VARIABLE` references in SQL files. Variables are resolved from [`.env` files](/special-files/env/), other SQL files, or prompted from the user at runtime.
+SELECT supports `$VARIABLE` references in SQL files. Variables are resolved from [`.env` files](/docs/workspace-files/env/), other SQL files, or prompted from the user at runtime.
 
 ## Environment variables
 
@@ -38,6 +38,8 @@ SQL file references are expanded recursively, so referenced files can themselves
 
 When a `$VARIABLE` is not found in any `.env` file or SQL file, SELECT prompts you to fill it in before execution. A form appears with one field per unresolved variable.
 
+![The Set variables form over a query, with a row per unresolved name: $STATUS typed as text, $MIN_CENTS typed as an integer, and Cancel and Run below them.](/shots/variables.light.png)
+
 Each variable can be typed:
 
 | Type        | SQL output                      |
@@ -52,4 +54,5 @@ Each variable can be typed:
 
 Runtime variable values are **persisted per file per tab**, so they pre-fill on subsequent runs. This is useful for queries you run repeatedly with different parameters.
 
+> [!TIP]
 > Runtime variables turn any SQL file into a reusable parameterized query without modifying `.env`.

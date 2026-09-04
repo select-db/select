@@ -17,9 +17,22 @@ Once configured, **credentials never leave the server**. Users do not see or rec
 
 <!-- TODO: add fixed IPs so users can allowlist our servers in their firewall rules -->
 
+## Permissions are not optional here
+
+A local connection with no [permission](/docs/workspace/permissions/) rules is
+open: the DSN is yours and you are querying your own database. A proxified one
+is the opposite. The credentials are ours to hold and the query runs on our
+server, so a database that no role grants access to is refused for everyone,
+including the person who added it.
+
+Adding a proxified datasource is therefore two steps: create the connection,
+then give a role an allow rule for it.
+
 ## Connection pool
 
 Proxified connections expose pool tuning:
+
+![The lower half of a proxified connection form: the required host key, the authentication method, and the four pool settings.](/shots/dbform.proxified.light.png)
 
 | Setting               | Default | Description                          |
 |-----------------------|---------|--------------------------------------|
@@ -28,6 +41,7 @@ Proxified connections expose pool tuning:
 | **Conn max lifetime** | 0       | Max reuse time in seconds (0 = none) |
 | **Conn max idle time**| 0       | Max idle time in seconds (0 = none)  |
 
+> [!WARNING]
 > Setting **Max open conns** too high can exhaust your database's connection limit. Start with the default and adjust based on team size.
 
 ## Limitations

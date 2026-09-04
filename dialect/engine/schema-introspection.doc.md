@@ -29,6 +29,7 @@ When the dialect's native CLI tool is available on the machine (`pg_dump` for Po
 
 If the native tool is not available, SELECT queries the database's information schema and system catalogs directly, then reconstructs DDL from the metadata. This covers all object types but may miss some dialect-specific features that only the native tool captures.
 
+> [!NOTE]
 > When using the fallback strategy, a comment is added to the dump output indicating it was reconstructed from catalog queries.
 
 ## Caching
@@ -44,4 +45,6 @@ You can force a refresh from the schema panel. Cached schema dumps are **compres
 
 The sidebar shows the full schema tree for each connected database: schemas, tables, columns, types. Clicking a table reveals its columns, keys, and indexes. This tree is built from the cached metadata and updates when the cache refreshes.
 
-To read a table's rows, **double-click** it, or right-click it and choose **View data**. Either opens a temporary SQL tab already attached to the owning database, prefilled with a `SELECT *` limited to the first 100 rows and executed as the tab opens. The statement is a normal SQL file from there on: edit the `LIMIT`, add a `WHERE`, and re-run with **Cmd+Enter**.
+![The sidebar tree opened from a database down to one table: its five columns with their types, a key on the primary key and a link on the foreign key, and the index below them.](/shots/schema.light.png)
+
+To read a table's rows, **double-click** it, or right-click it and choose **View data**. Either opens a temporary SQL tab already attached to the owning database, prefilled with a `SELECT *` limited to the first 100 rows and executed as the tab opens. The statement is a normal SQL file from there on: edit the `LIMIT`, add a `WHERE`, and re-run with `Cmd+Enter`.
