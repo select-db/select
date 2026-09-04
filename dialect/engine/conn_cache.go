@@ -37,22 +37,12 @@ var (
 	connPublishMu sync.Mutex
 )
 
-// poolCloseGrace delays closing an evicted pool.
-//
-// A *sql.DB that is merely dropped from the cache is never reclaimed: Go's
-// database/sql roots it from its own connectionOpener goroutine, so without an
-// explicit Close the pool, its goroutine and its open sockets to the customer's
-// database survive for the life of the process.
-//
-// Close cannot be immediate, though. It makes the pool reject *new* queries, and
-// a request that fetched this pool microseconds before the eviction has not
-// started its query yet — closing under it would turn a silent leak into a
-// user-visible "sql: database is closed". The grace period covers that window.
-// It does not need to cover query duration: Close never interrupts work in
-// flight, it closes idle connections at once and in-use ones as they are
-// returned, so a streaming query completes normally.
-//
-// A var, not a const, so tests can shorten it.
+// poolCloseGrace delays closing an evicted pool. An unclosed *sql.DB is never
+// reclaimed — database/sql roots it from its own connectionOpener goroutine —
+// but closing inline would break a caller that took the pool just before
+// eviction, since Close rejects new queries. It need not cover query duration:
+// Close leaves work in flight alone, closing idle conns at once and in-use ones
+// as they are returned. A var so tests can shorten it.
 var poolCloseGrace = 60 * time.Second
 
 // closeEvictedPool releases a pool that has left the cache, for any reason:
