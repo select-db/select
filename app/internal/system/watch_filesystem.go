@@ -147,6 +147,12 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 
 			// Rename: full rebuild (fine-grained derivation is error-prone).
 			if event.Op&fsnotify.Rename != 0 {
+				// A watch is registered against a path. A renamed directory
+				// keeps its watch, so its children keep arriving under the old
+				// name — and land in the graph under a folder that no longer
+				// exists, which is to say nowhere. Re-walking registers the new
+				// names; adding a directory that is already watched is a no-op.
+				addWatches(fsCtx.WorkspaceRoot)
 				s.rebuildGraphAndEmit()
 				continue
 			}
