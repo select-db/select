@@ -36,6 +36,8 @@ type Options struct {
 	// OnDelete is called once for every value that leaves the cache — expiry,
 	// LRU overflow, Delete, DeleteFunc or replacement by Set. It runs with the
 	// lock released, so it may block, and must not call back into this Cache.
+	// Setting it requires the cached values to be comparable, since Set has to
+	// tell a replacement from a rewrite of the same value.
 	OnDelete func(key string, value any)
 }
 
@@ -160,7 +162,9 @@ func (c *Cache) Set(key string, value any) {
 	if it, ok := c.items[key]; ok {
 		replaced := c.replaceLocked(key, it, value)
 		c.mu.Unlock()
-		if replaced != value {
+		// OnDelete first: comparing two values of an uncomparable dynamic type
+		// panics, and a cache with no listener has no reason to compare at all.
+		if c.opts.OnDelete != nil && replaced != value {
 			c.notifyDelete(key, replaced)
 		}
 		return

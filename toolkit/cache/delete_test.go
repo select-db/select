@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestOnDeleteFiresForEveryRemovalPath(t *testing.T) {
+func TestOnDeleteFiresForEveryDeletionPath(t *testing.T) {
 	t.Run("LRU overflow", func(t *testing.T) {
 		var got []string
 		c := New(Options{MaxEntries: 2, OnDelete: func(k string, v any) {
@@ -49,6 +49,18 @@ func TestOnDeleteFiresForEveryRemovalPath(t *testing.T) {
 		c.Set("a", "new")
 		if len(got) != 1 || got[0] != "old" {
 			t.Fatalf("want [old], got %v", got)
+		}
+	})
+
+	t.Run("Set over an uncomparable value does not panic", func(t *testing.T) {
+		// dumpCache in dialect/engine stores []byte and re-Sets the same key on
+		// refresh. Comparing two uncomparable values panics, so a cache with no
+		// OnDelete must never reach that comparison.
+		c := New()
+		c.Set("k", []byte("first"))
+		c.Set("k", []byte("second"))
+		if v, ok := c.Get("k"); !ok || string(v.([]byte)) != "second" {
+			t.Fatalf("got %v, %v; want second, true", v, ok)
 		}
 	})
 
