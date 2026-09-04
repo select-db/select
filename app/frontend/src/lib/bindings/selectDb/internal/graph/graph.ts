@@ -29,10 +29,9 @@ export function BuildWorkspaceGraphFromFS(fsCtx: $models.WorkspaceFS | null): $C
 }
 
 /**
- * FileDatabases returns the databases a file is bound to. It answers from the
- * graph when the file's folder has been resolved, and from the file's sidecar
- * when it has not, so callers get the same answer either way without pulling
- * the whole folder into memory.
+ * FileDatabases returns the databases a file is bound to: from the node when
+ * the file's folder has been resolved, from the file's sidecar when it has not,
+ * which answers without resolving the folder.
  */
 export function FileDatabases(fileURI: string): $CancellablePromise<$models.DatabaseRef[]> {
     return $Call.ByID(2279693242, fileURI).then(($result: any) => {
@@ -206,9 +205,7 @@ export function Mutate(commit: generated$0.MutationCommit): $CancellablePromise<
 
 /**
  * NodeKind returns what the graph holds under an ID — "file", "folder" or
- * "db_instance" — and "" when it holds nothing. It is what a filesystem event
- * asks about a path that has just disappeared, the node being all that is left
- * to say what it was.
+ * "db_instance" — and "" when it holds nothing.
  */
 export function NodeKind(id: string): $CancellablePromise<string> {
     return $Call.ByID(3877926180, id);
@@ -234,13 +231,9 @@ export function ResetWorkspaceTheme(): $CancellablePromise<void> {
 
 /**
  * ResolveFolder reads a folder's files, emits the updated graph and returns the
- * folder. The frontend calls it when a folder is opened; an already resolved
- * folder is a no-op and anything that is not a folder returns nil, so callers
- * do not have to check first.
- * 
- * The folder comes back rather than only arriving with the graph event because
- * a caller acting on what is in it — naming a new file so it does not land on
- * an existing one — needs it before the next render.
+ * folder. A resolved folder is a no-op, an ID that names anything else returns
+ * nil, and the folder is returned so a caller that acts on its contents does not
+ * have to wait for the event.
  */
 export function ResolveFolder(folderURI: string): $CancellablePromise<$models.FolderNode | null> {
     return $Call.ByID(2843403334, folderURI).then(($result: any) => {

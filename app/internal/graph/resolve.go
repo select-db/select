@@ -157,6 +157,18 @@ func (g *Graph) resolveAlongPath(uri string, fsCtx *WorkspaceFS) {
 	g.resolveFolderURI(current, fsCtx)
 }
 
+// resolvedFolderURIs lists the folders whose files have been read, so a build
+// can read them again. Callers hold g.mu.
+func (g *Graph) resolvedFolderURIs() []string {
+	uris := make([]string, 0, len(g.index))
+	for id, node := range g.index {
+		if folder, ok := node.(*FolderNode); ok && folder.Resolved && folder.URI == id {
+			uris = append(uris, id)
+		}
+	}
+	return uris
+}
+
 // resolveFolderURI reads a folder's files when the URI names one, and lets a
 // URI that names anything else pass. Callers hold g.mu.
 func (g *Graph) resolveFolderURI(uri string, fsCtx *WorkspaceFS) {

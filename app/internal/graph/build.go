@@ -30,6 +30,12 @@ func (g *Graph) RebuildWorkspaceGraph() error {
 func (g *Graph) BuildWorkspaceGraph() error {
 	ctx := context.Background()
 
+	// A build replaces the tree with a skeleton, and a rebuild is something that
+	// happens under the user rather than to them -- a rename, a branch switch.
+	// Folders they had open have to come back open, or their files vanish from
+	// the tree until each one is clicked again.
+	reopen := g.resolvedFolderURIs()
+
 	user, err := g.Queries.GetCurrentUser(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -68,6 +74,10 @@ func (g *Graph) BuildWorkspaceGraph() error {
 	// the workspace folder, plus sidecar/config files.
 	if err := g.buildWorkspaceGraphFromFS(fsCtx); err != nil {
 		return err
+	}
+
+	for _, uri := range reopen {
+		g.resolveFolderURI(uri, fsCtx)
 	}
 
 	return nil
