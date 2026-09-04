@@ -7,6 +7,9 @@
   <title>{{.Title}} | SELECT</title>
   <meta name="description" content="{{.Description}}">
   <link rel="canonical" href="{{.Canonical}}">
+  <!-- The same page as markdown: what this one was rendered from. A client that
+       would rather read the prose than the page can follow this instead. -->
+  <link rel="alternate" type="text/markdown" href="{{.Markdown}}" title="This page as markdown">
   {{- if .PrevPage}}
   <link rel="prefetch" href="{{.PrevPage.Href}}">
   {{- end}}

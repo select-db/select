@@ -1,6 +1,6 @@
 # SELECT Documentation
 
-Getting Started              : docs/content/introduction.doc.md
+Getting Started              : web/content/introduction.doc.md
 API
   Reference                  : /api/
 Workspace
@@ -27,9 +27,11 @@ SQL
   Graph View                 : app/frontend/src/lib/components/views/File/Table/Graph/graph-view.doc.md
   Inline Editing             : app/frontend/src/lib/components/views/File/Table/inline-editing.doc.md
   Export                     : app/internal/db_client/export.doc.md
-Special Files
+  Lint Rules                 : dialect/core/tokenanalyzer/lint-rules.doc.md
+    .lint File               : app/internal/graph/lint-file.doc.md
+Workspace Files
   .env                       : app/internal/graph/env-file.doc.md
+  .gitignore                 : app/internal/git/gitignore.doc.md
+Personal Files
   .theme                     : app/internal/graph/theme-file.doc.md
   .config                    : app/internal/graph/config-file.doc.md
-  .lint                      : app/internal/graph/lint-file.doc.md
-  .gitignore                 : app/internal/git/gitignore.doc.md

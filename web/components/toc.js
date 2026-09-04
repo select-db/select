@@ -5,6 +5,16 @@ class DocToc extends HTMLElement {
 
     const nav = document.createElement('nav')
     nav.innerHTML = ''
+    nav.setAttribute('aria-label', 'On this page')
+
+    // A real heading, not a ::before: it names the rail for a screen reader as
+    // well as for a reader, and it is the same eyebrow the rest of the site
+    // puts over a column.
+    const label = document.createElement('p')
+    label.className = 'toc-label'
+    label.textContent = 'On this page'
+    nav.appendChild(label)
+
     const ul = document.createElement('ul')
 
     headings.forEach(h => {

@@ -10,10 +10,15 @@
   <div class="layout">
 {{template "sidebar" .}}
     <main class="scrollable">
-      <article class="content selectable">
+{{template "banner" .}}
+      <div class="main-inner">
+{{template "crumbs" .}}
+        <article class="content selectable">
 {{.Content}}
-      </article>
+        </article>
+{{template "page-meta" .}}
 {{template "page-nav" .}}
+      </div>
     </main>
     <doc-toc class="toc"></doc-toc>
   </div>
