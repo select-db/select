@@ -23,13 +23,9 @@ type Options struct {
 	MaxEntries int           // evicts LRU entry on overflow; 0 = unlimited
 	TTL        time.Duration // entry lifetime; 0 = never expire
 
-	// OnEvict, when set, is called once for every value that leaves the cache:
-	// TTL expiry, LRU overflow, Delete, DeleteFunc, or replacement by Set.
-	// Use it for values that own resources the GC cannot reclaim on its own,
-	// such as a *sql.DB whose pool must be closed.
-	//
-	// It runs after the cache lock is released, so it may block, and it must
-	// not call back into the same Cache.
+	// OnEvict is called once for every value that leaves the cache: TTL expiry,
+	// LRU overflow, Delete, DeleteFunc, or replacement by Set. It runs with the
+	// lock released, so it may block, and must not call back into this Cache.
 	OnEvict func(key string, value any)
 }
 
