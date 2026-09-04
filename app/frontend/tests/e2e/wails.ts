@@ -1,4 +1,10 @@
-import { expect, test as base, type APIRequestContext, type Page } from '@playwright/test';
+import {
+	expect,
+	test as base,
+	type APIRequestContext,
+	type Locator,
+	type Page
+} from '@playwright/test';
 
 /**
  * Talking to the Go side the way the app does — over `/wails/runtime`, the
@@ -98,5 +104,30 @@ export const test = base.extend<{
 	]
 });
 
+/**
+ * Signed-in state survives only while a token exists. Tokens live in the OS
+ * keyring, which a headless runner has none of, so the app's 500ms
+ * CheckForLogout poll emits `logout` about half a second in and everything
+ * after runs on a login screen. Answering that one call keeps the session up
+ * without changing the app's behaviour.
+ *
+ * The number is wails' id for the bound method, from the generated
+ * `src/lib/bindings/selectDb/internal/system/system.ts`. Wails derives it from
+ * the method's qualified name, so it is identical across builds and changes
+ * only if System.CheckForLogout is renamed or moved -- at which point every
+ * shot fails on a login screen. Regenerate the bindings and copy the new id.
+ */
+const CHECK_FOR_LOGOUT = 2480583021;
+
+export async function holdSession(page: Page) {
+	await page.route('**/wails/runtime', async (route) => {
+		if ((route.request().postData() ?? '').includes(`"methodID":${CHECK_FOR_LOGOUT}`)) {
+			await route.fulfill({ status: 200, body: '' });
+			return;
+		}
+		await route.continue();
+	});
+}
+
 export { expect };
-export type { Page };
+export type { Locator, Page };
