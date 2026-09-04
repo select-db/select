@@ -1,5 +1,4 @@
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import { clearResolvedFolders } from '$lib/utils/graph/resolveFolder';
 import { GetWorkspaceGraph } from '$lib/wails/graph';
 import type * as graph from '$lib/wails/graph';
 import { writable, get } from 'svelte/store';
@@ -12,7 +11,6 @@ let loading: Promise<graph.WorkspaceNode | null> | null = null;
 export function clearWorkspaceGraphCache() {
 	workspaceGraphStore.set(undefined);
 	loading = null;
-	clearResolvedFolders();
 }
 
 export const initializeWorkspaceGraph = async () => {
