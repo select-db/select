@@ -83,6 +83,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="resizer"
+				data-test="split.resizer"
 				class:vertical={isVertical}
 				class:horizontal={!isVertical}
 				onmousedown={handleResizerMouseDown(i)}

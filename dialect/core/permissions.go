@@ -117,7 +117,14 @@ func (idx CompiledPermissions) IsManaged(dbID string) bool {
 	return idx.denyUnmanaged || idx.managedInstances[dbID]
 }
 
-// WithDenyUnmanaged returns a copy where "no rules on a DB" means deny
+// WithDenyUnmanaged returns a copy where "no rules on a DB" means deny.
+//
+// Without it, a database no role has a rule for is unmanaged and every
+// statement against it passes: the right default for a local connection the
+// developer opened with their own DSN, since refusing there would only be
+// refusing them access to their own database. It is the wrong default the
+// moment the query runs on our server against our credentials, so everything
+// server-side compiles with this set. See authz.CompiledForWorkspace.
 func (idx CompiledPermissions) WithDenyUnmanaged() CompiledPermissions {
 	idx.denyUnmanaged = true
 	return idx

@@ -12,7 +12,8 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.ts,.svelte",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --project=e2e",
+    "shots": "SHOTS=1 playwright test --project=shots"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

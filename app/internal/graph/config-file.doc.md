@@ -1,9 +1,10 @@
 # Config File
 
 `.config` is a **personal** file: it holds your keybindings and editor snippets.
-It is **not** part of any workspace and is never committed to git — it lives in
+It is **not** part of any workspace and is never committed to git. It lives in
 SELECT's per-user config directory and follows you across every workspace.
 
+> [!IMPORTANT]
 > Execution limits (`statement_timeout_ms`, `max_result_size_mb`) are **not** in
 > `.config`. They are workspace-level team policy and are configured in
 > **Settings → Workspace** (see [Execution limits](#execution-limits) below).
@@ -19,7 +20,7 @@ You don't need to find it on disk: open it from **Settings → Config**.
 
 ## Format
 
-```json
+```json .config
 {
   "keybindings": { ... },
   "editor_snippets": [ ... ]
@@ -47,7 +48,7 @@ Each binding has:
 - **command**: the action to trigger
 - **when** (optional): condition for the binding to be active (e.g. `editorFocus`, `!menuFocus`)
 
-```json
+```json .config
 {
   "keybindings": {
     "workbench": [
@@ -73,7 +74,7 @@ Each binding has:
 
 Define custom SQL snippets that appear in autocompletion:
 
-```json
+```json .config
 {
   "editor_snippets": [
     {

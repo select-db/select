@@ -1,0 +1,1248 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SELECT: the SQL client that works like your editor</title>
+  <meta name="description"
+    content="An SQL client shaped like an IDE. Schema-aware completion, real-time linting, and a workspace that is a folder in your repo. PostgreSQL, MySQL, SQLite.">
+  <link rel="canonical" href="https://select-db.com/">
+  <link rel="icon" href="/favicon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="SELECT: the SQL client that works like your editor">
+  <meta property="og:description"
+    content="Schema-aware completion, real-time linting, and a workspace that is a folder in your repo.">
+  <meta property="og:url" content="https://select-db.com/">
+  <!-- The facts on this page, stated once more in a form a machine can read
+     without inferring them from the layout: what the product is, where it
+     runs, and what the two shipping editions cost. Kept in this file, beside
+     the prose it mirrors, so a pricing change and its structured form land in
+     one diff. Enterprise is not listed: it has no price, and an offer without
+     one says less than nothing. -->
+  <script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication",
+"name":"SELECT","applicationCategory":"DeveloperApplication",
+"description":"An SQL client shaped like an IDE. Schema-aware completion, real-time linting, and a workspace that is a folder in your repo.",
+"url":"https://select-db.com/","downloadUrl":"https://select-db.com/download/",
+"operatingSystem":"macOS, Windows, Linux",
+"softwareVersion":"public beta",
+"featureList":["Schema-aware completion","Lint rules committed with your queries","Variables resolved from .env","Git-native file workspaces","Column-level access control","Audit logs for proxified connections","MCP server and API keys"],
+"offers":[
+{"@type":"Offer","name":"Solo","price":"0","priceCurrency":"USD","description":"Free forever, not a trial. The full client, git collaboration through your own remote."},
+{"@type":"Offer","name":"Teams","price":"12","priceCurrency":"USD","description":"Per seat per month, beta price, normally 17. Proxified connections, centralised roles, audit log, MCP and API keys."}]}
+</script>
+  <link rel="alternate" type="text/plain" href="/llms.txt" title="Site index for language models">
+  <!-- Picks the app's own light/dark palette before first paint, from the same
+     localStorage key the docs site writes: a reader who chose dark over there
+     does not get flashed white here. -->
+  <script>
+    document.documentElement.dataset.theme =
+      localStorage.getItem("doc-theme") || (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
+
+    // The screenshots come in a light cut and a dark cut. <picture> art-directs on
+    // width on its own, but its media queries only ever see the system preference,
+    // never a choice made here, so the toggle renames the files itself. They
+    // differ by one word: hero.<framing>.<theme>.png.
+    function paintShots(theme) {
+      document.querySelectorAll("picture[data-shot] source, picture[data-shot] img").forEach(el => {
+        const attr = el.tagName === "IMG" ? "src" : "srcset";
+        const next = el[attr].replace(/\.(light|dark)\.png/, "." + theme + ".png");
+        if (next !== el[attr]) el[attr] = next;
+      });
+    }
+
+    function toggleTheme() {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem("doc-theme", next);
+      paintShots(next);
+    }
+
+    addEventListener("DOMContentLoaded", () => paintShots(document.documentElement.dataset.theme));
+  </script>
+  <style>
+    /*THEME*/
+    :root {
+      --f: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      --m: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --w: 1140px;
+      --s1: .5rem;
+      --s2: 1rem;
+      --s3: 1.5rem;
+      --s4: 2.5rem;
+      --s5: 4.5rem;
+      --t1: .72rem;
+      --t2: .82rem;
+      --t3: 1rem;
+      --t4: 1.5rem;
+      --t5: clamp(2.2rem, 5.2vw, 3.6rem);
+
+      /* The app keeps two tokens outside its .theme file: the border shorthand it
+     derives from --bw and --border-color, and the elevation it puts on
+     buttons. Restated here for the same reason web/theme/base.css restates
+     them. .theme is what this page injects, and those two live in the app's
+     own stylesheet. Without --border every border rule below is invalid and
+     silently dropped, which is how the page ended up flat. */
+      --border: var(--bw) solid var(--border-color);
+    }
+
+    :root[data-theme=light] {
+      --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / .02), 0px 1px 1px 0px lch(80% 0 0 / .02)
+    }
+
+    :root[data-theme=dark] {
+      --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / .06), 0px 1px 1px 0px lch(0% 0 0 / .06)
+    }
+
+    *,
+    ::before,
+    ::after {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--gray-0);
+      color: var(--gray-1000);
+      font: var(--t3)/1.6 var(--f);
+      -webkit-font-smoothing: antialiased
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.15;
+      letter-spacing: -.025em;
+      text-wrap: balance
+    }
+
+    p {
+      margin: 0
+    }
+
+    a {
+      color: var(--red)
+    }
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none
+    }
+
+    /* One hairline frame down the page, like editor panel splits. */
+    .f {
+      max-width: var(--w);
+      margin: 0 auto;
+      padding: 0 var(--s3);
+      border-inline: var(--border)
+    }
+
+    section {
+      border-bottom: var(--border)
+    }
+
+    .k {
+      font: 500 var(--t1)/1.4 var(--m);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--gray-700)
+    }
+
+    .mono {
+      font-family: var(--m)
+    }
+
+    /* header */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--gray-0);
+      border-bottom: var(--border)
+    }
+
+    header .f {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      height: 56px;
+      border-bottom: 0
+    }
+
+    /* The mark and the wordmark the app and the docs use, at the docs' sizes. */
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      color: var(--gray-1000);
+      text-decoration: none
+    }
+
+    .logo img {
+      width: 22px;
+      height: 22px;
+      border-radius: var(--br-xs);
+      display: block
+    }
+
+    .logo-text {
+      height: 18px;
+      color: var(--gray-1000)
+    }
+
+    .beta {
+      font: 700 .58rem/1 var(--m);
+      letter-spacing: .14em;
+      color: var(--orange);
+      border: 1px solid var(--orange);
+      border-radius: var(--br-xs);
+      padding: 2px 4px;
+      vertical-align: 2px
+    }
+
+    nav {
+      margin-left: auto;
+      display: flex;
+      gap: var(--s3)
+    }
+
+    nav a {
+      font: var(--t2)/1 var(--m);
+      color: var(--gray-900);
+      text-decoration: none
+    }
+
+    nav a:hover {
+      color: var(--red)
+    }
+
+    @media (max-width:760px) {
+      nav {
+        display: none
+      }
+    }
+
+    .acts {
+      display: flex;
+      align-items: center;
+      gap: var(--s1)
+    }
+
+    /* Header controls, borrowing the app's button surface: hairline border, the
+   same subtle elevation, the same radius. */
+    .gh,
+    .tt {
+      display: inline-flex;
+      align-items: center;
+      height: 34px;
+      background: var(--gray-100);
+      border: var(--bw) solid var(--border-color-contrast);
+      border-radius: var(--br-sm);
+      box-shadow: var(--shadow-subtle);
+      color: var(--gray-1000)
+    }
+
+    .gh:hover,
+    .tt:hover {
+      border-color: var(--gray-550);
+      background: var(--gray-200)
+    }
+
+    .gh {
+      gap: 7px;
+      padding: 0 11px;
+      font: 500 var(--t2)/1 var(--m);
+      text-decoration: none
+    }
+
+    .gh svg {
+      width: 15px;
+      height: 15px;
+      fill: currentColor
+    }
+
+    /* The count is a second segment, divided rather than spaced, because it is a
+   different fact from the verb next to it. Absent when the build could not
+   read it, which is why the divider hangs off the count and not the label. */
+    .gh b {
+      font-weight: 500;
+      margin-left: 2px;
+      padding-left: 9px;
+      border-left: var(--border);
+      color: var(--gray-800)
+    }
+
+    .tt {
+      width: 34px;
+      justify-content: center;
+      padding: 0;
+      cursor: pointer
+    }
+
+    .tt svg {
+      width: 16px;
+      height: 16px;
+      stroke: var(--gray-900);
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round
+    }
+
+    .tt .icon-dark {
+      display: none
+    }
+
+    :root[data-theme=dark] .tt .icon-light {
+      display: none
+    }
+
+    :root[data-theme=dark] .tt .icon-dark {
+      display: block
+    }
+
+    @media (max-width:520px) {
+
+      .gh b,
+      .gh span {
+        display: none
+      }
+
+      .gh {
+        padding: 0 9px
+      }
+    }
+
+    .btn {
+      display: inline-block;
+      font: 500 var(--t2)/1 var(--m);
+      text-decoration: none;
+      padding: 10px 15px;
+      border-radius: var(--br-sm);
+      border: 1px solid var(--red);
+      background: var(--red);
+      color: #fff;
+      /* Same lift the header buttons and the screenshots carry. */
+      box-shadow: var(--shadow-subtle)
+    }
+
+    /* A black drop shadow cannot read on a near-black page, so dark mode lifts
+       the button with a faint light halo underneath instead. Same intent as
+       --shadow-subtle, inverted for the ground it sits on. */
+    :root[data-theme=dark] .btn {
+      box-shadow: 0 3px 12px -4px lch(100% 0 0 / .25)
+    }
+
+    .btn.g {
+      background: var(--gray-100);
+      color: var(--gray-1000);
+      border-color: var(--gray-550)
+    }
+
+    .btn.g:hover {
+      border-color: var(--red);
+      color: var(--red)
+    }
+
+    .btn.b {
+      font-size: var(--t3);
+      padding: 13px 22px
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--red);
+      outline-offset: 2px
+    }
+
+    /* beta bar */
+    .bar {
+      background: var(--gray-100);
+      border-bottom: var(--border);
+      font: var(--t1)/1 var(--m);
+      color: var(--gray-800)
+    }
+
+    .bar .f {
+      padding-block: 14px;
+      border-bottom: 0
+    }
+
+    /* hero */
+    .hero .f {
+      padding: var(--s5) var(--s3);
+      border-bottom: 0
+    }
+
+    h1 {
+      font-size: var(--t5);
+      font-weight: 700;
+      max-width: 17ch;
+      margin-top: var(--s2)
+    }
+
+    h1 span {
+      color: var(--gray-700)
+    }
+
+    .lede {
+      margin-top: var(--s2);
+      max-width: 56ch;
+      font-size: 1.15rem;
+      color: var(--gray-900)
+    }
+
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--s1);
+      margin-top: var(--s3)
+    }
+
+    .fine {
+      margin-top: var(--s2);
+      font: var(--t1)/1.5 var(--m);
+      color: var(--gray-700)
+    }
+
+    /* product shots, drawn in HTML until the capture pipeline replaces them with
+   real screenshots. No image request, so nothing here can 404 or shift layout. */
+    figure {
+      margin: 0;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: var(--bw) solid var(--border-color-contrast);
+      border-radius: var(--br-md);
+      box-shadow: var(--shadow-subtle);
+      background: var(--gray-200)
+    }
+
+    figcaption {
+      margin-top: var(--s1);
+      font: var(--t1)/1.5 var(--m);
+      color: var(--gray-700)
+    }
+
+    .shot {
+      border: var(--border);
+      border-radius: var(--br-md);
+      background: var(--gray-200);
+      overflow: hidden;
+      font: var(--t2)/1.9 var(--m)
+    }
+
+    .shot .top {
+      display: flex;
+      gap: 10px;
+      padding: 8px 12px;
+      margin: 0;
+      border-bottom: var(--border);
+      background: var(--gray-100);
+      color: var(--gray-700);
+      font-size: var(--t1);
+      line-height: 1.4
+    }
+
+    .shot .top b {
+      margin-left: auto;
+      font-weight: 400;
+      color: var(--gray-800)
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 154px 1fr
+    }
+
+    @media (max-width:640px) {
+      .split {
+        grid-template-columns: 1fr
+      }
+
+      .tree {
+        display: none
+      }
+    }
+
+    .tree {
+      border-right: var(--border);
+      padding: 8px 0;
+      color: var(--gray-800)
+    }
+
+    .tree p {
+      padding: 0 12px;
+      white-space: nowrap
+    }
+
+    .tree .on {
+      background: var(--gray-300);
+      color: var(--red)
+    }
+
+    .tree .mod {
+      color: var(--orange)
+    }
+
+    .code {
+      padding: 8px 0;
+      overflow-x: auto
+    }
+
+    .code p {
+      white-space: pre;
+      padding: 0 12px;
+      color: var(--gray-900)
+    }
+
+    .kw {
+      color: var(--red)
+    }
+
+    .st {
+      color: var(--green)
+    }
+
+    .cm,
+    .dim {
+      color: var(--gray-700)
+    }
+
+    .shot .warn {
+      padding: 8px 12px;
+      margin: 0;
+      max-width: none;
+      border-top: var(--border);
+      color: var(--orange);
+      font-size: var(--t1);
+      line-height: 1.5
+    }
+
+    .rows {
+      border-top: var(--border)
+    }
+
+    .rows li {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 6px 12px;
+      color: var(--gray-900);
+      line-height: 1.6
+    }
+
+    .rows li+li {
+      border-top: var(--border)
+    }
+
+    .rows b {
+      font-weight: 400;
+      color: var(--gray-700);
+      white-space: nowrap
+    }
+
+    .rows .ok {
+      color: var(--green)
+    }
+
+    .rows .no {
+      color: var(--orange)
+    }
+
+    .in1 {
+      padding-left: 26px
+    }
+
+    .in2 {
+      padding-left: 40px
+    }
+
+    .foot {
+      display: flex;
+      gap: 14px;
+      padding: 7px 12px;
+      margin: 0;
+      border-top: var(--border);
+      background: var(--gray-100);
+      color: var(--gray-700);
+      font-size: var(--t1);
+      line-height: 1.4
+    }
+
+    .foot b {
+      margin-left: auto;
+      font-weight: 400
+    }
+
+    /* three pillars */
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr)
+    }
+
+    .cols>* {
+      padding: var(--s4) var(--s3);
+      border-right: var(--border)
+    }
+
+    .cols>*:last-child {
+      border-right: 0
+    }
+
+    @media (max-width:820px) {
+      .cols {
+        grid-template-columns: 1fr
+      }
+
+      .cols>* {
+        border-right: 0;
+        border-bottom: var(--border)
+      }
+
+      .cols>*:last-child {
+        border-bottom: 0
+      }
+    }
+
+    .cols h3 {
+      font-size: 1.1rem;
+      margin: var(--s2) 0 var(--s1)
+    }
+
+    .cols p {
+      color: var(--gray-900);
+      font-size: .95rem
+    }
+
+    .cols ul {
+      margin-top: var(--s2);
+      display: grid;
+      gap: 6px
+    }
+
+    .cols li {
+      font: var(--t2)/1.4 var(--m);
+      color: var(--gray-700)
+    }
+
+    .cols li::before {
+      content: "→ ";
+      color: var(--gray-600)
+    }
+
+    /* the argument */
+    .arg {
+      background: var(--gray-100)
+    }
+
+    .arg .f {
+      padding: var(--s5) var(--s3)
+    }
+
+    .arg h2 {
+      font-size: clamp(1.6rem, 3.4vw, 2.3rem);
+      max-width: 20ch;
+      margin-top: var(--s2)
+    }
+
+    .arg .body {
+      max-width: 60ch;
+      margin-top: var(--s2);
+      display: grid;
+      gap: var(--s2);
+      color: var(--gray-900)
+    }
+
+    .arg b {
+      color: var(--gray-1000)
+    }
+
+    /* feature rows */
+    .row .f {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: var(--s4);
+      align-items: center;
+      padding: var(--s4) var(--s3)
+    }
+
+    @media (max-width:860px) {
+      .row .f {
+        grid-template-columns: 1fr;
+        gap: var(--s3)
+      }
+    }
+
+    .row h3 {
+      font-size: 1.45rem;
+      margin: var(--s1) 0 var(--s1);
+      max-width: 18ch
+    }
+
+    .row p {
+      color: var(--gray-900);
+      max-width: 46ch
+    }
+
+    .row a {
+      display: inline-block;
+      margin-top: var(--s2);
+      font: var(--t2)/1 var(--m);
+      text-decoration: none
+    }
+
+    .row a:hover {
+      text-decoration: underline
+    }
+
+    .row figure {
+      margin: 0
+    }
+
+    /* pricing */
+    .price .f {
+      padding: var(--s4) var(--s3)
+    }
+
+    .tiers {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: var(--s3);
+      border: var(--border);
+      border-radius: var(--br-md);
+      overflow: hidden
+    }
+
+    .tiers>* {
+      padding: var(--s3);
+      border-right: var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px
+    }
+
+    .tiers>*:last-child {
+      border-right: 0
+    }
+
+    .tiers>.mid {
+      background: var(--gray-100)
+    }
+
+    @media (max-width:820px) {
+      .tiers {
+        grid-template-columns: 1fr
+      }
+
+      .tiers>* {
+        border-right: 0;
+        border-bottom: var(--border)
+      }
+
+      .tiers>*:last-child {
+        border-bottom: 0
+      }
+    }
+
+    .tiers h3 {
+      font-size: 1.05rem
+    }
+
+    .amt {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap
+    }
+
+    .amt b {
+      font-size: 1.7rem;
+      letter-spacing: -.03em
+    }
+
+    .amt s,
+    .amt span {
+      font: var(--t1)/1 var(--m);
+      color: var(--gray-700);
+      letter-spacing: .04em
+    }
+
+    .tiers ul {
+      display: grid;
+      gap: 6px
+    }
+
+    .tiers li {
+      font-size: .9rem;
+      color: var(--gray-900);
+      padding-left: 14px;
+      position: relative
+    }
+
+    .tiers li::before {
+      content: "·";
+      position: absolute;
+      left: 4px;
+      color: var(--gray-600)
+    }
+
+    .note {
+      font: var(--t1)/1.5 var(--m);
+      color: var(--gray-700)
+    }
+
+    .tiers .btn {
+      margin-top: auto;
+      text-align: center
+    }
+
+    /* closing */
+    .end .f {
+      padding: var(--s5) var(--s3)
+    }
+
+    .end h2 {
+      font-size: clamp(1.8rem, 4.2vw, 2.8rem);
+      max-width: 16ch
+    }
+
+    /* footer */
+    footer .f {
+      padding: var(--s4) var(--s3) var(--s3);
+      border-bottom: 0
+    }
+
+    .fcols {
+      display: grid;
+      grid-template-columns: 1.6fr repeat(3, 1fr);
+      gap: var(--s3)
+    }
+
+    @media (max-width:820px) {
+      .fcols {
+        grid-template-columns: repeat(2, 1fr)
+      }
+    }
+
+    .fcols h4 {
+      margin: 0 0 10px;
+      font: 500 var(--t1)/1 var(--m);
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: var(--gray-700)
+    }
+
+    .fcols ul {
+      display: grid;
+      gap: 7px
+    }
+
+    .fcols a {
+      font-size: .9rem;
+      color: var(--gray-900);
+      text-decoration: none
+    }
+
+    .fcols a:hover {
+      color: var(--red)
+    }
+
+    .legal {
+      margin-top: var(--s3);
+      padding-top: var(--s2);
+      border-top: var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--s2);
+      justify-content: space-between;
+      font: var(--t1)/1 var(--m);
+      color: var(--gray-700)
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="bar">
+    <div class="f">Public beta · hosted in US East (Virginia) · EU region next</div>
+  </div>
+
+  <header>
+    <div class="f">
+      <a class="logo" href="/"><img src="/logo.png" alt="" width="22" height="22"><svg class="logo-text"
+          viewBox="0 -880 4487 1024" fill="currentColor">
+          <g transform="scale(1, -1)">
+            <path transform="translate(0, 0)"
+              d="M710 525Q710 497 690 478Q671 458 643 458H243Q224 457 211.5 449.5Q199 442 193.0 432.5Q187 423 187 413Q187 403 193.0 393.5Q199 384 211.5 376.5Q224 369 243 368H527Q597 366 642.5 335.5Q688 305 707.5 265.5Q727 226 727 185Q727 145 707.0 105.5Q687 66 642.0 35.5Q597 5 527 5H521Q515 4 509 4H131Q103 4 83.5 23.5Q64 43 64 71Q64 99 84 118Q103 138 131 138H533Q552 137 564.5 145.0Q577 153 583.0 163.5Q589 174 589 185Q589 192 583.0 204.5Q577 217 564.5 225.0Q552 233 533 234H249Q179 236 133.5 266.0Q88 296 68.5 334.5Q49 373 49 413Q49 452 69.0 490.5Q89 529 134.0 559.0Q179 589 249 591H255Q261 592 267 592H643Q671 592 690.5 572.5Q710 553 710 525Z" />
+            <path transform="translate(776, 0)"
+              d="M249 592H295H635Q663 591 681.5 571.0Q700 551 700 523Q695 463 635 458H283Q245 456 220.0 429.0Q195 402 183.5 367.5Q172 333 172 297Q172 261 183.5 226.5Q195 192 220.0 165.0Q245 138 283 136H635Q663 135 681.5 115.0Q700 95 700 67Q699 40 680.5 21.5Q662 3 635 2H268H249Q179 6 133.5 55.5Q88 105 68.5 168.0Q49 231 49 297Q49 363 69.0 426.0Q89 489 134.0 538.5Q179 588 249 592ZM698 301Q698 273 678 254Q659 234 631 234H329Q301 234 281.5 253.5Q262 273 262 301Q262 329 281 349Q301 368 329 368H631Q659 368 678.5 348.5Q698 329 698 301Z" />
+            <path transform="translate(1513, 0)"
+              d="M130 608Q158 608 178.0 589.5Q198 571 199 543V302Q198 261 204.5 226.5Q211 192 236.0 165.0Q261 138 299 136H619Q647 135 665.5 115.0Q684 95 684 67Q683 40 664.5 21.5Q646 3 619 2H265Q195 6 149.5 49.5Q104 93 84 156Q65 219 64 290V543Q65 570 84.0 588.5Q103 607 130 608Z" />
+            <path transform="translate(2229, 0)"
+              d="M249 592H295H635Q663 591 681.5 571.0Q700 551 700 523Q695 463 635 458H283Q245 456 220.0 429.0Q195 402 183.5 367.5Q172 333 172 297Q172 261 183.5 226.5Q195 192 220.0 165.0Q245 138 283 136H635Q663 135 681.5 115.0Q700 95 700 67Q699 40 680.5 21.5Q662 3 635 2H268H249Q179 6 133.5 55.5Q88 105 68.5 168.0Q49 231 49 297Q49 363 69.0 426.0Q89 489 134.0 538.5Q179 588 249 592ZM698 301Q698 273 678 254Q659 234 631 234H329Q301 234 281.5 253.5Q262 273 262 301Q262 329 281 349Q301 368 329 368H631Q659 368 678.5 348.5Q698 329 698 301Z" />
+            <path transform="translate(2966, 0)"
+              d="M291 458Q253 456 227.5 429.0Q202 402 191.0 367.5Q180 333 180 297Q180 261 190.5 226.0Q201 191 227.0 164.5Q253 138 291 136H621Q684 130 690 67Q689 39 669.0 20.5Q649 2 621 2H302H256Q186 6 141.0 55.5Q96 105 76.5 168.0Q57 231 57 297Q57 346 68.0 394.0Q79 442 102.5 485.5Q126 529 165.5 560.0Q205 591 256 592H275H621Q684 586 690 523Q690 495 669.5 476.5Q649 458 621 458Z" />
+            <path transform="translate(3685, 0)"
+              d="M44 525Q44 553 63.5 572.5Q83 592 111 592H693Q721 592 741 573Q760 553 760 525Q760 497 740.5 477.5Q721 458 693 458H470V53Q464 -7 404 -12Q376 -12 355.5 6.5Q335 25 335 53V458H111Q83 458 64 478Q44 497 44 525Z" />
+          </g>
+        </svg><span class="beta">BETA</span></a>
+      <nav>
+        <a href="#pricing">Pricing</a>
+        <a href="/docs/getting-started/">Docs</a>
+        <a href="/api/">API</a>
+      </nav>
+      <div class="acts">
+        <!-- The star count is substituted at build time (see starsMarker in
+           web/generate). Nothing is fetched from the browser: this page makes
+           no third-party request, and the build fails if it starts to. -->
+        <a class="gh" href="https://github.com/select-db/select" rel="noopener">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+          </svg><span>Star</span><!--STARS-->
+        </a>
+        <button class="tt" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg class="icon-light" viewBox="0 0 24 24">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+            <path d="M12 8a4 4 0 1 1 -3.995 4.2l-.005 -.2l.005 -.2a4 4 0 0 1 3.995 -3.8z" />
+            <path d="M12 4a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+            <path d="M17 6a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+            <path d="M19 11a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+            <path d="M17 16a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+            <path d="M12 18a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+            <path d="M7 16a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+            <path d="M5 11a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+            <path d="M7 6a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
+          </svg><svg class="icon-dark" viewBox="0 0 24 24">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+            <path d="M12 5l0 .01" />
+            <path d="M17 7l0 .01" />
+            <path d="M19 12l0 .01" />
+            <path d="M17 17l0 .01" />
+            <path d="M12 19l0 .01" />
+            <path d="M7 17l0 .01" />
+            <path d="M5 12l0 .01" />
+            <path d="M7 7l0 .01" />
+          </svg>
+        </button>
+        <a class="btn" href="/download/">Download</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="hero" style="border-bottom: none;">
+      <div class="f">
+        <h1>The SQL client <span>for devs.</span></h1>
+        <p class="lede">Completion that knows your schema, lint rules your team commits, and <span
+            class="mono">$variables</span> that resolve from your <span class="mono">.env</span>. Your queries stay
+          <span class="mono">.sql</span> files in your repo, not tabs in a tool that owns them.</p>
+        <p class="cta">
+          <a class="btn b" href="/download/">Download for macOS</a>
+          <a class="btn g b" href="/docs/getting-started/">Read the docs</a>
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <div class="f" style="padding-bottom: 22px;">
+        <figure>
+          <picture data-shot>
+            <source media="(min-width:760px) and (prefers-color-scheme:dark)" srcset="/shots/hero.wide.dark.png"
+              width="2160" height="1350">
+            <source media="(min-width:760px)" srcset="/shots/hero.wide.light.png" width="2160" height="1350">
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/hero.narrow.dark.png" width="1290" height="1140">
+            <img src="/shots/hero.narrow.light.png" width="1290" height="1140" fetchpriority="high" decoding="async"
+              alt="A revenue query open in SELECT, run against the warehouse database, with the weekly result grid below it.">
+          </picture>
+        </figure>
+      </div>
+    </section>
+
+                <section id="features">
+                  <div class="f cols">
+                    <div>
+                      <p class="k">01</p>
+                      <h3>An IDE, not a query box</h3>
+                      <p>Completion off the live schema, not a keyword list. Lint that parses your SQL and checks it
+                        against that schema, as you type. Variables that resolve from <span class="mono">.env</span>, so a query is
+                        parameterised like
+                        code instead of edited before every run.</p>
+                      <ul>
+                        <li>tables, columns, types, keys</li>
+                        <li>lint against the real schema</li>
+                        <li>$variables from .env</li>
+                        <li>keyboard-first, ⌘↵ to run</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p class="k">02</p>
+                      <h3>Your workspace is a folder</h3>
+                      <p>Queries are <span class="mono">.sql</span> files on disk with names you chose. Connection
+                        config, lint
+                        rules and themes sit beside them. Git is native, and optional.</p>
+                      <ul>
+                        <li>⌘N to scratch, save when it matters</li>
+                        <li>branch, diff, commit, push</li>
+                        <li>secrets stay in .env</li>
+                        <li>nothing to export, ever</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p class="k">03</p>
+                      <h3>Prod access without the ritual</h3>
+                      <p>You don't have prod access because access is all-or-nothing. Grant a column instead of a
+                        database, keep
+                        credentials off laptops entirely, and let the log answer "who ran that".</p>
+                      <ul>
+                        <li>db · schema · table · column</li>
+                        <li>credentials never on laptops</li>
+                        <li>an audit log, not a guess</li>
+                        <li>API keys for your agents</li>
+                      </ul>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="arg">
+                  <div class="f">
+                    <p class="k">Why SELECT</p>
+                    <h2>Every language in your stack has real tooling. Except SQL.</h2>
+                    <div class="body">
+                      <p>You have completion, go-to-definition, lint on save, a formatter and twenty years of git
+                        history in the editor you already like. Then you open your SQL client, and it is a text area
+                        with a Run button, a connection tree, and a tab called <span class="mono">Script-14.sql</span>
+                        that nobody will ever read again.</p>
+                      <p><b>We do not think that is a missing feature.</b> It is a missing shape. SQL is code. It gets
+                        reviewed, refactored, blamed, reverted and rewritten by whoever picks up the ticket next. It
+                        should live where the rest of the code lives, and be edited by something that understands
+                        it.</p>
+                      <p>The mature clients are not badly built. They are built for someone else. They grew up serving
+                        the person who administers the database, and the developer writing SQL between two commits was
+                        never their customer.</p>
+                      <p><b>We only build for you.</b> Every choice here follows from that: files instead of a
+                        workspace database, git instead of sharing, a keyboard instead of a wizard, one grant instead
+                        of an admin ticket.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="row">
+                  <div class="f">
+                    <div>
+                      <p class="k">01 · The editor</p>
+                      <h3>It knows your schema before you do</h3>
+                      <p>Point it at Postgres, MySQL or SQLite and it introspects the whole schema. Completion is real:
+                        tables, columns, types, keys, not a keyword list. So is the lint: your SQL is parsed and
+                        checked against that schema, so it catches the column that does not exist, the
+                        <span class="mono">id</span> that is ambiguous across two joins, the CTE you stopped using and
+                        the <span class="mono">= NULL</span> that silently matches nothing. Your own rules go in a file
+                        in the repo, scoped by path, so the rule your team agreed on is the rule everyone gets.</p>
+                      <a href="/docs/sql/lint-rules/">Lint rules →</a>
+                    </div>
+                    <figure>
+                      <picture data-shot>
+                        <source media="(prefers-color-scheme:dark)" srcset="/shots/lint.dark.png" width="1468" height="512">
+                        <img src="/shots/lint.light.png" width="1468" height="512" loading="lazy" decoding="async"
+                             alt="A draft query in SELECT with SELECT * underlined, and the workspace lint rule that flagged it: avoid SELECT *, list columns explicitly.">
+                      </picture>
+                    </figure>
+                  </div>
+                </section>
+
+                <section class="row">
+                  <div class="f">
+                    <div>
+                      <p class="k">02 · The workspace</p>
+                      <h3>Review a query like you review code</h3>
+                      <p>The last place your team's SQL lived was a Slack thread. A workspace is a directory: branch it,
+                        diff it,
+                        open a pull request against it. Your teammate's fix arrives the way every other fix arrives, and
+                        <span class="mono">git blame</span> works on it.</p>
+                      <a href="/docs/workspace/git/">Git workspaces →</a>
+                    </div>
+                    <figure>
+                      <picture data-shot>
+                        <source media="(prefers-color-scheme:dark)" srcset="/shots/git.dark.png" width="1880" height="1040">
+                        <img src="/shots/git.light.png" width="1880" height="1040" loading="lazy" decoding="async"
+                             alt="SELECT's source control panel on a feature branch, showing a modified query and its diff against the last commit.">
+                      </picture>
+                    </figure>
+                  </div>
+                </section>
+
+                <section class="row" id="teams">
+                  <div class="f">
+                    <div>
+                      <p class="k">03 · The team</p>
+                      <h3>Stop asking someone for prod</h3>
+                      <p>Five levels (app, database, schema, table, column) and five actions. Read <span
+                          class="mono">orders</span>
+                        on production without ever seeing <span class="mono">customers.email</span>, and without a DSN
+                        on your
+                        laptop. Narrow enough that someone can finally say yes.</p>
+                      <a href="/docs/workspace/permissions/">Permissions &amp; proxified connections →</a>
+                    </div>
+                    <figure>
+                      <picture data-shot>
+                        <source media="(prefers-color-scheme:dark)" srcset="/shots/roles.dark.png" width="2360" height="1240">
+                        <img src="/shots/roles.light.png" width="2360" height="1240" loading="lazy" decoding="async"
+                             alt="A role in SELECT granted read access to a database, with one column, customers.email, denied.">
+                      </picture>
+                    </figure>
+                  </div>
+                </section>
+
+                <section class="row">
+                  <div class="f">
+                    <div>
+                      <p class="k">Agents</p>
+                      <h3>Give your agent a key, not the keys</h3>
+                      <p>You already point Claude Code and Cursor at your repo. Point them at your database the same
+                        way. The MCP
+                        server exposes seven tools and nothing else: no shell, no filesystem. An API key carries roles,
+                        and those
+                        roles are exactly what the model can touch.</p>
+                      <a href="/docs/workspace/mcp-server/">MCP server &amp; API keys →</a>
+                    </div>
+                    <figure>
+                      <picture data-shot>
+                        <source media="(prefers-color-scheme:dark)" srcset="/shots/agent.dark.png" width="1626" height="1462">
+                        <img src="/shots/agent.light.png" width="1626" height="1462" loading="lazy" decoding="async"
+                             alt="SELECT's chat panel, where a query for a customer email column is refused: permission denied for the analyst-readonly role.">
+                      </picture>
+                    </figure>
+                  </div>
+                </section>
+
+                <section class="arg" id="privacy">
+                  <div class="f">
+                    <p class="k">What reaches our servers</p>
+                    <h2>Almost nothing of yours reaches us.</h2>
+                    <div class="body">
+                      <p>Your queries, lint rules and themes are files in your workspace, and our servers have no idea
+                        they exist. Credentials reach us only if you turn on the proxy, encrypted field by field and
+                        never handed back to a client. <b>Keep a connection local and we never see it.</b></p>
+                      <p>What we do hold is what runs through us, a proxied query or an MCP call, plus your roles and
+                        groups, so a grant you make on one machine is enforced on every other.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="price" id="pricing">
+                  <div class="f">
+                    <p class="k">Editions</p>
+                    <h2 style="font-size:1.45rem;margin-top:var(--s2);max-width:30ch">Solo is free forever. Pay when
+                      your team needs
+                      a server between them.</h2>
+                    <div class="tiers">
+                      <div>
+                        <h3>Solo</h3>
+                        <p class="amt"><b>Free</b><span>FOREVER · NOT A TRIAL</span></p>
+                        <ul>
+                          <li>The full client, native, no JVM and no runtime to install</li>
+                          <li>PostgreSQL, MySQL and SQLite</li>
+                          <li>Completion, lint, variables, graph view</li>
+                          <li>Git workspaces, SSH tunnels, AI chat with your own key</li>
+                          <li>Collaborate through your own git remote</li>
+                        </ul>
+                        <a class="btn g" href="/download/">Download</a>
+                      </div>
+                      <div class="mid">
+                        <h3>Teams</h3>
+                        <p class="amt"><b>$12</b><span>/ SEAT / MONTH</span><s>$17</s></p>
+                        <p class="note" style="color:var(--orange)">BETA PRICE</p>
+                        <ul>
+                          <li>Everything in Solo</li>
+                          <li>Proxified connections: credentials off laptops, encrypted server-side</li>
+                          <li>Centralised role-based access, down to a single column</li>
+                          <li>Audit log of every query and grant that runs through the server</li>
+                          <li>MCP server and API keys, bounded by the same roles</li>
+                        </ul>
+                        <p class="note">US East today · EU region next</p>
+                        <a class="btn" href="mailto:sales@select-db.com">Talk to us</a>
+                      </div>
+                      <div>
+                        <h3>Enterprise</h3>
+                        <p class="amt"><b>Talk</b><span>DEDICATED OR ON-PREM</span></p>
+                        <ul>
+                          <li>Everything in Teams</li>
+                          <li>A dedicated instance in the region you need</li>
+                          <li>On-premises deployment</li>
+                          <li>Priority fixes, SLA and a direct line to the maintainers</li>
+                          <li>Security review and procurement support</li>
+                        </ul>
+                        <p class="note">Not shipped yet. We are taking design partners now and building it with them.
+                        </p>
+                        <a class="btn g" href="mailto:sales@select-db.com">Contact us</a>
+                      </div>
+                    </div>
+                    <p class="note" style="margin-top:var(--s2)">Solo is free forever, not a trial. Teams is $12 a
+                      seat at the beta price, and everyone who joins during the beta keeps that price
+                      after it ends.</p>
+                  </div>
+                </section>
+
+                <section class="end">
+                  <div class="f">
+                    <h2>Finally, love writing SQL.</h2>
+                    <p class="lede">SQL was never the problem. The tooling around it was. That is the part we are
+                      trying to fix, and it takes under a minute to find out whether we did.</p>
+                    <p class="cta">
+                      <a class="btn b" href="/download/">Download for macOS</a>
+                      <a class="btn g b" href="/docs/getting-started/">Read the docs</a>
+                    </p>
+                  </div>
+                </section>
+
+  </main>
+
+  <footer>
+    <div class="f">
+      <div class="fcols">
+        <div>
+          <p class="logo">SELECT</p>
+          <p class="note" style="margin-top:10px;max-width:28ch">An SQL client shaped like an IDE. Open source,
+            local-first, git-native.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="/download/">Download</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Docs</h4>
+          <ul>
+            <li><a href="/docs/getting-started/">Getting started</a></li>
+            <li><a href="/docs/databases/connecting/">Connecting</a></li>
+            <li><a href="/docs/workspace/permissions/">Permissions</a></li>
+            <li><a href="/api/">API reference</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Company</h4>
+          <ul>
+            <li><a href="https://github.com/select-db/select">GitHub</a></li>
+            <li><a href="https://github.com/select-db/select/blob/main/SECURITY.md">Security</a></li>
+            <li><a href="mailto:hello@select-db.com">Contact</a></li>
+          </ul>
+        </div>
+      </div>
+      <p class="legal"><span>© 2026 select-db · AGPL-3.0</span><span>PostgreSQL · MySQL · SQLite</span></p>
+    </div>
+  </footer>
+
+</body>
+
+</html>

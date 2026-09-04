@@ -6,7 +6,7 @@ The `.gitignore` file tells git which files to exclude from version control. Pla
 
 One pattern per line. Lines starting with `#` are comments.
 
-```
+```gitignore .gitignore
 # Ignore environment files with secrets
 .env
 
@@ -39,4 +39,5 @@ scratch/
 - Temporary or scratch files you don't want to share
 - Large data exports
 
+> [!TIP]
 > Each subfolder can have its own `.gitignore`. Patterns apply to the folder they live in and all children.

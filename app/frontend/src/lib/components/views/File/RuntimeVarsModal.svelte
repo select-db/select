@@ -45,7 +45,9 @@
 
 	// Notify parent on every change so values can be persisted between modal open/close.
 	$effect(() => {
-		const valSnap = { ...values };
+		const valSnap = Object.fromEntries(
+			Object.entries(values).map(([k, v]) => [k, String(v ?? '')])
+		);
 		const typeSnap = { ...types };
 		onValuesChange?.(valSnap, typeSnap);
 	});
@@ -62,16 +64,27 @@
 		values[name] = checked ? 'true' : 'false';
 	}
 
+	// String(), not a bare .trim(): an input of type number binds a number back,
+	// or null once it is cleared, and neither has .trim(). Calling it on one
+	// threw inside this derivation, which left Run disabled for good -- so an
+	// integer, decimal, date, timestamp or time variable could be typed but
+	// never run.
 	const allFilled = $derived(
 		vars.every((name) => {
 			if (types[name] === 'boolean') return true;
-			return (values[name] ?? '').trim() !== '';
+			return String(values[name] ?? '').trim() !== '';
 		})
 	);
 
 	function submit() {
 		if (!allFilled) return;
-		onSubmit({ ...values }, { ...types });
+		// And back to strings on the way out, for the same reason: everything
+		// downstream of here, from the tab that stores them to the Go side that
+		// substitutes them, is typed as Record<string, string>.
+		onSubmit(
+			Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v ?? '')])),
+			{ ...types }
+		);
 	}
 
 	async function handleRun() {
