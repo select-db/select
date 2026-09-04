@@ -24,7 +24,7 @@ other file.
 
 The file has three sections: **shared** variables (applied in both modes), **light** mode colors, and **dark** mode colors.
 
-```css
+```css .theme
 :root {
   --fs-sm: 0.75rem;
   --fw-normal: 400;
