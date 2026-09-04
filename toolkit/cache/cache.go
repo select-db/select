@@ -11,9 +11,11 @@ type item struct {
 	element *list.Element // position in lru list; front = most recent
 }
 
-// evictedEntry carries a removed entry out of the lock so OnEvict can run
-// without the cache held.
-type evictedEntry struct {
+// A removal is an entry that has left the cache, carried out of the lock so
+// OnRemove can run without the cache held. Removal is the umbrella term here:
+// eviction is one cause of it — the cache picking an LRU victim to stay under
+// MaxEntries — alongside expiry, Delete, DeleteFunc and replacement by Set.
+type removal struct {
 	key   string
 	value any
 }
@@ -23,10 +25,11 @@ type Options struct {
 	MaxEntries int           // evicts LRU entry on overflow; 0 = unlimited
 	TTL        time.Duration // entry lifetime; 0 = never expire
 
-	// OnEvict is called once for every value that leaves the cache: TTL expiry,
-	// LRU overflow, Delete, DeleteFunc, or replacement by Set. It runs with the
-	// lock released, so it may block, and must not call back into this Cache.
-	OnEvict func(key string, value any)
+	// OnRemove is called once for every value that leaves the cache, whatever
+	// took it out: expiry, LRU eviction, Delete, DeleteFunc, or replacement by
+	// Set. It runs with the lock released, so it may block, and must not call
+	// back into this Cache.
+	OnRemove func(key string, value any)
 }
 
 type Cache struct {
@@ -61,23 +64,23 @@ func New(opts ...Options) *Cache {
 }
 
 func (c *Cache) Set(key string, value any) {
-	var evicted []evictedEntry
+	var removed []removal
 
 	c.mu.Lock()
 	if it, ok := c.items[key]; ok {
 		if it.value != value {
-			evicted = append(evicted, evictedEntry{key, it.value})
+			removed = append(removed, removal{key, it.value})
 		}
 		it.value = value
 		c.lru.MoveToFront(it.element)
 		c.touchLocked(key)
 		c.mu.Unlock()
-		c.fireEvictions(evicted)
+		c.notifyRemovals(removed)
 		return
 	}
 
 	if c.opts.MaxEntries > 0 && c.lru.Len() >= c.opts.MaxEntries {
-		evicted = c.evictLocked(evicted)
+		removed = c.evictLRULocked(removed)
 	}
 
 	el := c.lru.PushFront(key)
@@ -85,7 +88,7 @@ func (c *Cache) Set(key string, value any) {
 	c.touchLocked(key)
 	c.mu.Unlock()
 
-	c.fireEvictions(evicted)
+	c.notifyRemovals(removed)
 }
 
 func (c *Cache) Get(key string) (any, bool) {
@@ -98,9 +101,9 @@ func (c *Cache) Get(key string) (any, bool) {
 	}
 
 	if exp, hasExp := c.expiration[key]; hasExp && time.Now().UnixNano() > exp {
-		expired := c.removeLocked(key, it, nil)
+		removed := c.removeLocked(key, it, nil)
 		c.mu.Unlock()
-		c.fireEvictions(expired)
+		c.notifyRemovals(removed)
 		return nil, false
 	}
 
@@ -112,63 +115,64 @@ func (c *Cache) Get(key string) (any, bool) {
 }
 
 func (c *Cache) Delete(key string) {
-	var evicted []evictedEntry
+	var removed []removal
 	c.mu.Lock()
 	if it, ok := c.items[key]; ok {
-		evicted = c.removeLocked(key, it, evicted)
+		removed = c.removeLocked(key, it, removed)
 	}
 	c.mu.Unlock()
-	c.fireEvictions(evicted)
+	c.notifyRemovals(removed)
 }
 
 // DeleteFunc deletes all entries for which fn returns true.
 func (c *Cache) DeleteFunc(fn func(key string) bool) {
-	var evicted []evictedEntry
+	var removed []removal
 	c.mu.Lock()
 	for k, it := range c.items {
 		if fn(k) {
-			evicted = c.removeLocked(k, it, evicted)
+			removed = c.removeLocked(k, it, removed)
 		}
 	}
 	c.mu.Unlock()
-	c.fireEvictions(evicted)
+	c.notifyRemovals(removed)
 }
 
-// evictLocked removes the least recently used entry, appending it to evicted.
-// Caller must hold mu.
-func (c *Cache) evictLocked(evicted []evictedEntry) []evictedEntry {
+// evictLRULocked removes the least recently used entry — the only removal the
+// cache decides on its own to stay under MaxEntries. Caller must hold mu.
+func (c *Cache) evictLRULocked(removed []removal) []removal {
 	el := c.lru.Back()
 	if el == nil {
-		return evicted
+		return removed
 	}
 	key := el.Value.(string)
 	if it, ok := c.items[key]; ok {
-		return c.removeLocked(key, it, evicted)
+		return c.removeLocked(key, it, removed)
 	}
-	return evicted
+	return removed
 }
 
-// removeLocked removes key from map, list, and expiration index, appending the
-// removed value to evicted for the caller to hand to OnEvict after unlocking.
-// Caller must hold mu.
-func (c *Cache) removeLocked(key string, it *item, evicted []evictedEntry) []evictedEntry {
+// removeLocked takes key out of the map, list and expiration index, appending it
+// to removed for the caller to hand to OnRemove after unlocking. Every removal
+// path goes through here. Caller must hold mu.
+func (c *Cache) removeLocked(key string, it *item, removed []removal) []removal {
 	c.lru.Remove(it.element)
 	delete(c.items, key)
 	delete(c.expiration, key)
-	if c.opts.OnEvict != nil {
-		evicted = append(evicted, evictedEntry{key, it.value})
+	if c.opts.OnRemove != nil {
+		removed = append(removed, removal{key, it.value})
 	}
-	return evicted
+	return removed
 }
 
-// fireEvictions runs OnEvict for entries removed under the lock. Must be called
-// with the lock released: OnEvict may block (closing a connection pool, say).
-func (c *Cache) fireEvictions(evicted []evictedEntry) {
-	if c.opts.OnEvict == nil {
+// notifyRemovals runs OnRemove for entries taken out under the lock. Must be
+// called with the lock released: OnRemove may block (closing a connection pool,
+// say).
+func (c *Cache) notifyRemovals(removed []removal) {
+	if c.opts.OnRemove == nil {
 		return
 	}
-	for _, e := range evicted {
-		c.opts.OnEvict(e.key, e.value)
+	for _, r := range removed {
+		c.opts.OnRemove(r.key, r.value)
 	}
 }
 
@@ -184,16 +188,16 @@ func (c *Cache) gc(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	for range ticker.C {
 		now := time.Now().UnixNano()
-		var evicted []evictedEntry
+		var removed []removal
 		c.mu.Lock()
 		for k, exp := range c.expiration {
 			if now > exp {
 				if it, ok := c.items[k]; ok {
-					evicted = c.removeLocked(k, it, evicted)
+					removed = c.removeLocked(k, it, removed)
 				}
 			}
 		}
 		c.mu.Unlock()
-		c.fireEvictions(evicted)
+		c.notifyRemovals(removed)
 	}
 }
