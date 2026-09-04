@@ -205,7 +205,7 @@
 	};
 </script>
 
-<div class="github-panel">
+<div class="github-panel" data-test="git.panel">
 	{#if !workspaceGitStatus}
 		<div class="section space x y">
 			<Loader />

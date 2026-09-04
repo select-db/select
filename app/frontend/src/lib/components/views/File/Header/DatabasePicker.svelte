@@ -28,7 +28,7 @@
 	);
 </script>
 
-<div class="picker">
+<div class="picker" data-test="database.picker">
 	<Select
 		{multiple}
 		value={internalValue}

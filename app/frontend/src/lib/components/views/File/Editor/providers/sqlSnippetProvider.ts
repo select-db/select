@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import * as monaco from 'monaco-editor';
 import { editorSnippetsStore } from '$lib/stores/keybindingsStore';
+import { contextAt, textBeforeCursor } from './completionContext';
 
 /**
  * Provides editor snippets from .config (merged defaults + user) for the SQL editor.
@@ -9,6 +10,14 @@ export function createSqlSnippetProvider(): monaco.languages.CompletionItemProvi
 	return {
 		triggerCharacters: ['.', ' '],
 		provideCompletionItems: (model, position) => {
+			// A snippet writes a statement, so it belongs where one could start.
+			// `.` is a trigger character above, and after one the word below is
+			// empty: the prefix filter then matches every snippet and sortText
+			// pins them over the columns the SQL provider is offering.
+			if (contextAt(textBeforeCursor(model, position)) !== 'open') {
+				return { suggestions: [] };
+			}
+
 			const snippets = get(editorSnippetsStore);
 			const wordUntil = model.getWordUntilPosition(position);
 			const word = wordUntil.word.toLowerCase();
