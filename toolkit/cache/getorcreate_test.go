@@ -194,15 +194,15 @@ func TestGetOrCreateSurvivesAPanickingCreate(t *testing.T) {
 	}
 }
 
-// TestGetOrCreateFiresOnRemoveForAnExpiredEntry: a miss caused by expiry is
-// still a removal, so the old value must be handed to OnRemove before the new
+// TestGetOrCreateFiresOnDeleteForAnExpiredEntry: a miss caused by expiry is
+// still a deletion, so the old value must be handed to OnDelete before the new
 // one is created.
-func TestGetOrCreateFiresOnRemoveForAnExpiredEntry(t *testing.T) {
+func TestGetOrCreateFiresOnDeleteForAnExpiredEntry(t *testing.T) {
 	var mu sync.Mutex
-	var removed []any
-	c := New(Options{TTL: 40 * time.Millisecond, OnRemove: func(_ string, v any) {
+	var deleted []any
+	c := New(Options{TTL: 40 * time.Millisecond, OnDelete: func(_ string, v any) {
 		mu.Lock()
-		removed = append(removed, v)
+		deleted = append(deleted, v)
 		mu.Unlock()
 	}})
 
@@ -216,19 +216,19 @@ func TestGetOrCreateFiresOnRemoveForAnExpiredEntry(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(removed) != 1 || removed[0] != "old" {
-		t.Fatalf("OnRemove saw %v, want [old]", removed)
+	if len(deleted) != 1 || deleted[0] != "old" {
+		t.Fatalf("OnDelete saw %v, want [old]", deleted)
 	}
 }
 
-// TestGetOrCreateEvictsUnderMaxEntries: values it stores are ordinary entries,
+// TestGetOrCreateDeletesUnderMaxEntries: values it stores are ordinary entries,
 // subject to the same LRU bound as Set.
-func TestGetOrCreateEvictsUnderMaxEntries(t *testing.T) {
+func TestGetOrCreateDeletesUnderMaxEntries(t *testing.T) {
 	var mu sync.Mutex
-	var removed []string
-	c := New(Options{MaxEntries: 2, OnRemove: func(k string, _ any) {
+	var deleted []string
+	c := New(Options{MaxEntries: 2, OnDelete: func(k string, _ any) {
 		mu.Lock()
-		removed = append(removed, k)
+		deleted = append(deleted, k)
 		mu.Unlock()
 	}})
 
@@ -240,7 +240,7 @@ func TestGetOrCreateEvictsUnderMaxEntries(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(removed) != 1 || removed[0] != "a" {
-		t.Fatalf("evicted %v, want [a]", removed)
+	if len(deleted) != 1 || deleted[0] != "a" {
+		t.Fatalf("deleted %v, want [a]", deleted)
 	}
 }

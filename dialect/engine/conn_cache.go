@@ -25,23 +25,23 @@ var (
 	connCache = cache.New(cache.Options{
 		MaxEntries: 20_000,
 		TTL:        20 * time.Minute,
-		OnRemove:   closeRemovedPool,
+		OnDelete:   closeDeletedPool,
 	})
 
-	// secondary index: hash → DSN for EvictConnsByAddr. SSH-rewritten DSNs are 127.0.0.1:port.
+	// secondary index: hash → DSN for DeleteConnsByAddr. SSH-rewritten DSNs are 127.0.0.1:port.
 	connHashToDSN   = make(map[string]string)
 	connHashToDSNMu sync.Mutex
 )
 
-// poolCloseGrace is how long closeRemovedPool waits before closing a pool that
-// has left the cache, so a caller that took it just before removal can still
+// poolCloseGrace is how long closeDeletedPool waits before closing a pool that
+// has left the cache, so a caller that took it just before deletion can still
 // start its query. Close does not interrupt queries already in flight. A var so
 // tests can shorten it.
 var poolCloseGrace = 60 * time.Second
 
-// closeRemovedPool prunes the hash → DSN index and closes the pool one
-// poolCloseGrace later. Runs for every removal, via the cache's OnRemove.
-func closeRemovedPool(hash string, value any) {
+// closeDeletedPool prunes the hash → DSN index and closes the pool one
+// poolCloseGrace later. Runs for every deletion, via the cache's OnDelete.
+func closeDeletedPool(hash string, value any) {
 	connHashToDSNMu.Lock()
 	delete(connHashToDSN, hash)
 	connHashToDSNMu.Unlock()
@@ -53,7 +53,7 @@ func closeRemovedPool(hash string, value any) {
 	time.AfterFunc(poolCloseGrace, func() { _ = db.Close() })
 }
 
-// indexConn records hash → dsn so EvictConnsByAddr can find this pool again.
+// indexConn records hash → dsn so DeleteConnsByAddr can find this pool again.
 func indexConn(hash, dsn string) {
 	connHashToDSNMu.Lock()
 	connHashToDSN[hash] = dsn
@@ -76,8 +76,9 @@ func applyPoolConfig(db *sql.DB, cfg PoolConfig) {
 	}
 }
 
-// EvictConnsByAddr drops all connections whose DSN contains addr. Called when SSH tunnel dies.
-func EvictConnsByAddr(addr string) {
+// DeleteConnsByAddr deletes every pool whose DSN contains addr, closing each
+// one through closeDeletedPool. Called when an SSH tunnel dies.
+func DeleteConnsByAddr(addr string) {
 	var toDelete []string
 	connHashToDSNMu.Lock()
 	for hash, dsn := range connHashToDSN {
@@ -87,7 +88,7 @@ func EvictConnsByAddr(addr string) {
 		}
 	}
 	connHashToDSNMu.Unlock()
-	// Delete fires closeRemovedPool, which closes the pool behind the dead
+	// Delete fires closeDeletedPool, which closes the pool behind the dead
 	// tunnel rather than leaving it to linger on a socket that no longer works.
 	for _, hash := range toDelete {
 		connCache.Delete(hash)

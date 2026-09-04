@@ -12,9 +12,9 @@ type item struct {
 	element *list.Element // position in lru list; front = most recent
 }
 
-// A removal is an entry that has left the cache, carried out of the lock so
-// OnRemove can run without the cache held.
-type removal struct {
+// A deletion is an entry that has left the cache, carried out of the lock so
+// OnDelete can run without the cache held.
+type deletion struct {
 	key   string
 	value any
 }
@@ -33,13 +33,13 @@ var errCreatePanicked = errors.New("cache: create panicked")
 
 // Options configures a Cache. Zero values mean no limit / no expiry.
 type Options struct {
-	MaxEntries int           // evicts LRU entry on overflow; 0 = unlimited
+	MaxEntries int           // deletes LRU entry on overflow; 0 = unlimited
 	TTL        time.Duration // entry lifetime; 0 = never expire
 
-	// OnRemove is called once for every value that leaves the cache — expiry,
-	// LRU eviction, Delete, DeleteFunc or replacement by Set. It runs with the
+	// OnDelete is called once for every value that leaves the cache — expiry,
+	// LRU overflow, Delete, DeleteFunc or replacement by Set. It runs with the
 	// lock released, so it may block, and must not call back into this Cache.
-	OnRemove func(key string, value any)
+	OnDelete func(key string, value any)
 }
 
 type Cache struct {
@@ -77,16 +77,16 @@ func New(opts ...Options) *Cache {
 
 func (c *Cache) Set(key string, value any) {
 	c.mu.Lock()
-	removed := c.setLocked(key, value, nil)
+	deleted := c.setLocked(key, value, nil)
 	c.mu.Unlock()
-	c.notifyRemovals(removed)
+	c.notifyDeletions(deleted)
 }
 
 func (c *Cache) Get(key string) (any, bool) {
 	c.mu.Lock()
-	value, ok, removed := c.getLocked(key, nil)
+	value, ok, deleted := c.getLocked(key, nil)
 	c.mu.Unlock()
-	c.notifyRemovals(removed)
+	c.notifyDeletions(deleted)
 	return value, ok
 }
 
@@ -96,22 +96,22 @@ func (c *Cache) Get(key string) (any, bool) {
 // create runs with the lock released and must not call back into this Cache.
 func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error) {
 	c.mu.Lock()
-	value, ok, removed := c.getLocked(key, nil)
+	value, ok, deleted := c.getLocked(key, nil)
 	if ok {
 		c.mu.Unlock()
-		c.notifyRemovals(removed)
+		c.notifyDeletions(deleted)
 		return value, nil
 	}
 	if waitFor, busy := c.creating[key]; busy {
 		c.mu.Unlock()
-		c.notifyRemovals(removed)
+		c.notifyDeletions(deleted)
 		<-waitFor.done
 		return waitFor.value, waitFor.err
 	}
 	fl := &inflight{done: make(chan struct{}), err: errCreatePanicked}
 	c.creating[key] = fl
 	c.mu.Unlock()
-	c.notifyRemovals(removed)
+	c.notifyDeletions(deleted)
 
 	// Deferred so a panic in create cannot wedge the key: it is released, then
 	// waiters wake on errCreatePanicked, which fl carries until create returns.
@@ -131,109 +131,109 @@ func (c *Cache) GetOrCreate(key string, create func() (any, error)) (any, error)
 	c.mu.Lock()
 	stored := c.setLocked(key, created, nil)
 	c.mu.Unlock()
-	c.notifyRemovals(stored)
+	c.notifyDeletions(stored)
 
 	fl.value, fl.err = created, nil
 	return created, nil
 }
 
 func (c *Cache) Delete(key string) {
-	var removed []removal
+	var deleted []deletion
 	c.mu.Lock()
 	if it, ok := c.items[key]; ok {
-		removed = c.removeLocked(key, it, removed)
+		deleted = c.deleteLocked(key, it, deleted)
 	}
 	c.mu.Unlock()
-	c.notifyRemovals(removed)
+	c.notifyDeletions(deleted)
 }
 
 // DeleteFunc deletes all entries for which fn returns true.
 func (c *Cache) DeleteFunc(fn func(key string) bool) {
-	var removed []removal
+	var deleted []deletion
 	c.mu.Lock()
 	for k, it := range c.items {
 		if fn(k) {
-			removed = c.removeLocked(k, it, removed)
+			deleted = c.deleteLocked(k, it, deleted)
 		}
 	}
 	c.mu.Unlock()
-	c.notifyRemovals(removed)
+	c.notifyDeletions(deleted)
 }
 
 // getLocked returns the live value for key, refreshing its TTL and LRU position.
-// An entry past its expiry is removed instead, and reported through removed.
+// An entry past its expiry is deleted instead, and reported through deleted.
 // Caller must hold mu.
-func (c *Cache) getLocked(key string, removed []removal) (any, bool, []removal) {
+func (c *Cache) getLocked(key string, deleted []deletion) (any, bool, []deletion) {
 	it, ok := c.items[key]
 	if !ok {
-		return nil, false, removed
+		return nil, false, deleted
 	}
 	if exp, hasExp := c.expiration[key]; hasExp && time.Now().UnixNano() > exp {
-		return nil, false, c.removeLocked(key, it, removed)
+		return nil, false, c.deleteLocked(key, it, deleted)
 	}
 	c.lru.MoveToFront(it.element)
 	c.touchLocked(key)
-	return it.value, true, removed
+	return it.value, true, deleted
 }
 
-// setLocked stores value under key, appending whatever it displaces to removed:
+// setLocked stores value under key, appending whatever it displaces to deleted:
 // the previous value for this key, or the LRU victim that makes room for it.
 // Caller must hold mu.
-func (c *Cache) setLocked(key string, value any, removed []removal) []removal {
+func (c *Cache) setLocked(key string, value any, deleted []deletion) []deletion {
 	if it, ok := c.items[key]; ok {
-		if it.value != value && c.opts.OnRemove != nil {
-			removed = append(removed, removal{key, it.value})
+		if it.value != value && c.opts.OnDelete != nil {
+			deleted = append(deleted, deletion{key, it.value})
 		}
 		it.value = value
 		c.lru.MoveToFront(it.element)
 		c.touchLocked(key)
-		return removed
+		return deleted
 	}
 
 	if c.opts.MaxEntries > 0 && c.lru.Len() >= c.opts.MaxEntries {
-		removed = c.evictLRULocked(removed)
+		deleted = c.deleteLRULocked(deleted)
 	}
 
 	c.items[key] = &item{value: value, element: c.lru.PushFront(key)}
 	c.touchLocked(key)
-	return removed
+	return deleted
 }
 
-// evictLRULocked removes the least recently used entry — the only removal the
+// deleteLRULocked deletes the least recently used entry — the only deletion the
 // cache decides on its own to stay under MaxEntries. Caller must hold mu.
-func (c *Cache) evictLRULocked(removed []removal) []removal {
+func (c *Cache) deleteLRULocked(deleted []deletion) []deletion {
 	el := c.lru.Back()
 	if el == nil {
-		return removed
+		return deleted
 	}
 	key := el.Value.(string)
 	if it, ok := c.items[key]; ok {
-		return c.removeLocked(key, it, removed)
+		return c.deleteLocked(key, it, deleted)
 	}
-	return removed
+	return deleted
 }
 
-// removeLocked takes key out of the map, list and expiration index, appending it
-// to removed for the caller to hand to OnRemove after unlocking. Every removal
+// deleteLocked takes key out of the map, list and expiration index, appending it
+// to deleted for the caller to hand to OnDelete after unlocking. Every deletion
 // path goes through here. Caller must hold mu.
-func (c *Cache) removeLocked(key string, it *item, removed []removal) []removal {
+func (c *Cache) deleteLocked(key string, it *item, deleted []deletion) []deletion {
 	c.lru.Remove(it.element)
 	delete(c.items, key)
 	delete(c.expiration, key)
-	if c.opts.OnRemove != nil {
-		removed = append(removed, removal{key, it.value})
+	if c.opts.OnDelete != nil {
+		deleted = append(deleted, deletion{key, it.value})
 	}
-	return removed
+	return deleted
 }
 
-// notifyRemovals runs OnRemove for entries taken out under the lock. Must be
-// called with the lock released, since OnRemove may block.
-func (c *Cache) notifyRemovals(removed []removal) {
-	if c.opts.OnRemove == nil {
+// notifyDeletions runs OnDelete for entries taken out under the lock. Must be
+// called with the lock released, since OnDelete may block.
+func (c *Cache) notifyDeletions(deleted []deletion) {
+	if c.opts.OnDelete == nil {
 		return
 	}
-	for _, r := range removed {
-		c.opts.OnRemove(r.key, r.value)
+	for _, r := range deleted {
+		c.opts.OnDelete(r.key, r.value)
 	}
 }
 
@@ -249,16 +249,16 @@ func (c *Cache) gc(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	for range ticker.C {
 		now := time.Now().UnixNano()
-		var removed []removal
+		var deleted []deletion
 		c.mu.Lock()
 		for k, exp := range c.expiration {
 			if now > exp {
 				if it, ok := c.items[k]; ok {
-					removed = c.removeLocked(k, it, removed)
+					deleted = c.deleteLocked(k, it, deleted)
 				}
 			}
 		}
 		c.mu.Unlock()
-		c.notifyRemovals(removed)
+		c.notifyDeletions(deleted)
 	}
 }

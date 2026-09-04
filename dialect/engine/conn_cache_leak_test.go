@@ -42,7 +42,7 @@ func openTestPool(t *testing.T, name string) *sql.DB {
 // getConn and setConn reach the connection cache the way GetOrOpenConn does,
 // without opening anything. Production goes through connCache.GetOrCreate, so
 // these live here rather than in the package: the tests need to place a pool
-// under a key and read it back to exercise the removal paths.
+// under a key and read it back to exercise the deletion paths.
 func getConn(workspaceID, dsn string) (*sql.DB, bool) {
 	value, ok := connCache.Get(hashWorkspaceDSN(workspaceID, dsn))
 	if !ok {
@@ -52,7 +52,7 @@ func getConn(workspaceID, dsn string) (*sql.DB, bool) {
 }
 
 // setConn writes the index after the cache, because replacing an entry fires
-// closeRemovedPool for the old value and that clears the index for this hash.
+// closeDeletedPool for the old value and that clears the index for this hash.
 func setConn(workspaceID, dsn string, db *sql.DB) {
 	hash := hashWorkspaceDSN(workspaceID, dsn)
 	connCache.Set(hash, db)
@@ -64,37 +64,37 @@ func poolIsClosed(db *sql.DB) bool {
 	return err == sql.ErrConnDone || (err != nil && err.Error() == "sql: database is closed")
 }
 
-// TestEvictedPoolIsClosed is the leak regression: a pool dropped from the cache
+// TestDeletedPoolIsClosed is the leak regression: a pool dropped from the cache
 // must actually be closed, not just dereferenced. An unclosed *sql.DB is rooted
 // by its own connectionOpener goroutine, so it is never collected and its
 // sockets to the customer's database stay open for the life of the process.
-func TestEvictedPoolIsClosed(t *testing.T) {
+func TestDeletedPoolIsClosed(t *testing.T) {
 	restore := poolCloseGrace
 	poolCloseGrace = 10 * time.Millisecond
 	defer func() { poolCloseGrace = restore; ClearConnCache() }()
 	ClearConnCache()
 
-	db := openTestPool(t, "evicted")
-	setConn("ws1", "dsn-evicted", db)
+	db := openTestPool(t, "deleted")
+	setConn("ws1", "dsn-deleted", db)
 
 	if poolIsClosed(db) {
 		t.Fatal("pool closed while still cached")
 	}
 
-	connCache.Delete(hashWorkspaceDSN("ws1", "dsn-evicted"))
+	connCache.Delete(hashWorkspaceDSN("ws1", "dsn-deleted"))
 
 	deadline := time.Now().Add(2 * time.Second)
 	for !poolIsClosed(db) {
 		if time.Now().After(deadline) {
-			t.Fatal("evicted pool was never closed: this is the leak")
+			t.Fatal("deleted pool was never closed: this is the leak")
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 }
 
-// TestEvictionClearsDSNIndex: the hash → DSN index is only pruned by
-// EvictConnsByAddr today, so TTL and LRU evictions grew it without bound.
-func TestEvictionClearsDSNIndex(t *testing.T) {
+// TestDeletionClearsDSNIndex: the hash → DSN index is only pruned by
+// DeleteConnsByAddr today, so TTL and LRU deletions grew it without bound.
+func TestDeletionClearsDSNIndex(t *testing.T) {
 	restore := poolCloseGrace
 	poolCloseGrace = 10 * time.Millisecond
 	defer func() { poolCloseGrace = restore; ClearConnCache() }()
@@ -117,7 +117,7 @@ func TestEvictionClearsDSNIndex(t *testing.T) {
 	_, stillThere := connHashToDSN[hash]
 	connHashToDSNMu.Unlock()
 	if stillThere {
-		t.Fatal("index entry survived eviction")
+		t.Fatal("index entry survived deletion")
 	}
 }
 
@@ -150,7 +150,7 @@ func TestReplacingAPoolClosesTheOldOne(t *testing.T) {
 }
 
 // TestGracePeriodProtectsAnInFlightCaller: a request that took the pool out of
-// the cache just before eviction must still be able to start its query.
+// the cache just before deletion must still be able to start its query.
 func TestGracePeriodProtectsAnInFlightCaller(t *testing.T) {
 	restore := poolCloseGrace
 	poolCloseGrace = 750 * time.Millisecond
@@ -163,16 +163,16 @@ func TestGracePeriodProtectsAnInFlightCaller(t *testing.T) {
 	handed, _ := getConn("ws1", "dsn-inflight")
 	connCache.Delete(hashWorkspaceDSN("ws1", "dsn-inflight"))
 
-	// The caller starts its query after the eviction, inside the grace window.
+	// The caller starts its query after the deletion, inside the grace window.
 	time.Sleep(100 * time.Millisecond)
 	if _, err := handed.Exec("select 1"); err != nil {
-		t.Fatalf("in-flight caller was cut off by eviction: %v", err)
+		t.Fatalf("in-flight caller was cut off by deletion: %v", err)
 	}
 }
 
-// TestNoGoroutineLeakAcrossEvictions is the capacity claim: churning pools
+// TestNoGoroutineLeakAcrossDeletions is the capacity claim: churning pools
 // through the cache must not accumulate goroutines.
-func TestNoGoroutineLeakAcrossEvictions(t *testing.T) {
+func TestNoGoroutineLeakAcrossDeletions(t *testing.T) {
 	restore := poolCloseGrace
 	poolCloseGrace = time.Millisecond
 	defer func() { poolCloseGrace = restore; ClearConnCache() }()
@@ -202,11 +202,11 @@ func TestNoGoroutineLeakAcrossEvictions(t *testing.T) {
 	}
 	t.Logf("goroutines %d -> %d after churning %d pools", before, after, pools)
 	if after-before >= pools/4 {
-		t.Fatalf("pools leaked: %d goroutines retained for %d evicted pools", after-before, pools)
+		t.Fatalf("pools leaked: %d goroutines retained for %d deleted pools", after-before, pools)
 	}
 }
 
-func TestConcurrentEvictionIsSafe(t *testing.T) {
+func TestConcurrentDeletionIsSafe(t *testing.T) {
 	restore := poolCloseGrace
 	poolCloseGrace = time.Millisecond
 	defer func() { poolCloseGrace = restore; ClearConnCache() }()
@@ -285,7 +285,7 @@ func TestConcurrentFirstQueriesOpenOnePool(t *testing.T) {
 	}
 
 	// The pool that was opened is the one in the cache, and it is indexed for
-	// EvictConnsByAddr.
+	// DeleteConnsByAddr.
 	cached, ok := getConn("ws1", dsn)
 	if !ok || cached != pools[0] {
 		t.Fatal("the shared pool is not the one left in the cache")
