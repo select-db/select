@@ -43,9 +43,16 @@ tasks:
   install:frontend:
     summary: Installs the frontend dependencies
     dir: frontend
-    sources:
-      - package.json
-      - package-lock.json
+    # `status`, not `sources`: `sources` skips the task only when Task's checksum
+    # cache from a previous run survives, which it never does on a CI checkout, so
+    # the e2e job installed once in the workflow and then again through this task
+    # — and that second `npm install` still re-resolves the tree against the
+    # registry (measured: 7 minutes to report "up to date"). `status` asks the
+    # question that actually matters, and does it from the tree itself. The two
+    # cannot be combined: with `sources` present Task runs the task on a cold
+    # cache even when `status` is satisfied.
+    status:
+      - test -d node_modules && test node_modules -nt package-lock.json
     cmds:
       - npm install
 
