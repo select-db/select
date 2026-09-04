@@ -91,6 +91,7 @@
 
 <!-- svelte-ignore a11y_autofocus -->
 <input
+	aria-label="Name"
 	class={`${$renamingItemIdStore === id ? `showing` : `hidden`} name-input`}
 	onkeydown={(e) => {
 		if ($renamingItemIdStore !== id) return;
