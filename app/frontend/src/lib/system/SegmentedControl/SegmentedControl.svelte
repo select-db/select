@@ -103,6 +103,8 @@
 		class="segment {option.id === value ? 'active' : 'inactive'}"
 		role="radio"
 		aria-checked={option.id === value}
+		data-test="segmented.option"
+		data-test-value={option.id}
 		tabindex="0"
 		onclick={(e) => handleSelect(e, option.id)}
 		onkeydown={(e) => {

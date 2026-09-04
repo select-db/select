@@ -1,3 +1,13 @@
+CREATE INDEX idx_group_to_role_group_id ON group_to_role(group_id);
+
+CREATE INDEX idx_group_to_role_updated_at ON group_to_role(updated_at);
+
+CREATE INDEX idx_group_updated_at ON "group"(updated_at);
+
+CREATE INDEX idx_group_workspace_id ON "group"(workspace_id);
+
+CREATE INDEX idx_history_workspace_created_at ON history(workspace_id, created_at DESC);
+
 CREATE INDEX idx_permission_role_id ON permission(role_id);
 
 CREATE UNIQUE INDEX idx_permission_unique
@@ -7,23 +17,22 @@ CREATE INDEX idx_permission_updated_at ON permission(updated_at);
 
 CREATE INDEX idx_role_updated_at ON role(updated_at);
 
-CREATE INDEX idx_user_to_role_updated_at ON user_to_role(updated_at);
-
-CREATE INDEX idx_user_to_role_user_workspace ON user_to_role(user_id, workspace_id);
-
-CREATE INDEX idx_group_updated_at ON "group"(updated_at);
-
-CREATE INDEX idx_group_workspace_id ON "group"(workspace_id);
+CREATE INDEX idx_user_to_group_group_id ON user_to_group(group_id);
 
 CREATE INDEX idx_user_to_group_updated_at ON user_to_group(updated_at);
 
 CREATE INDEX idx_user_to_group_user_workspace ON user_to_group(user_id, workspace_id);
 
-CREATE INDEX idx_user_to_group_group_id ON user_to_group(group_id);
+CREATE INDEX idx_user_to_role_updated_at ON user_to_role(updated_at);
 
-CREATE INDEX idx_group_to_role_updated_at ON group_to_role(updated_at);
+CREATE INDEX idx_user_to_role_user_workspace ON user_to_role(user_id, workspace_id);
 
-CREATE INDEX idx_group_to_role_group_id ON group_to_role(group_id);
+CREATE TABLE goose_db_version (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		version_id INTEGER NOT NULL,
+		is_applied INTEGER NOT NULL,
+		tstamp TIMESTAMP DEFAULT (datetime('now'))
+	);
 
 CREATE TABLE "group" (
     id           TEXT PRIMARY KEY,
@@ -49,27 +58,6 @@ CREATE TABLE group_to_role (
     FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
 );
 
-CREATE TABLE user_to_group (
-    id           TEXT PRIMARY KEY,
-    user_id      TEXT NOT NULL,
-    group_id     TEXT NOT NULL,
-    workspace_id TEXT NOT NULL,
-    source       TEXT NOT NULL DEFAULT 'local',
-    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at   DATETIME,
-    UNIQUE (user_id, group_id),
-    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
-    FOREIGN KEY (group_id) REFERENCES "group"(id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
-);
-
-CREATE TABLE goose_db_version (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		version_id INTEGER NOT NULL,
-		is_applied INTEGER NOT NULL,
-		tstamp TIMESTAMP DEFAULT (datetime('now'))
-	);
-
 CREATE TABLE history (
     id TEXT PRIMARY KEY,
 
@@ -80,14 +68,8 @@ CREATE TABLE history (
     errors TEXT NOT NULL DEFAULT '[]',
 
     uri TEXT NOT NULL DEFAULT "",
-    dsn TEXT NOT NULL DEFAULT "",
-
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    workspace_id TEXT NOT NULL DEFAULT '',
-    db_instance_id TEXT NOT NULL DEFAULT ''
-);
-
-CREATE INDEX idx_history_workspace_created_at ON history(workspace_id, created_at DESC);
+    dsn TEXT NOT NULL DEFAULT ""
+, created_at DATETIME, workspace_id TEXT NOT NULL DEFAULT '', db_instance_id TEXT NOT NULL DEFAULT '');
 
 CREATE TABLE mutation_commit (
     id TEXT PRIMARY KEY,
@@ -139,6 +121,20 @@ CREATE TABLE user (
     name TEXT
 , email TEXT, avatar_url TEXT);
 
+CREATE TABLE user_to_group (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    group_id     TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    source       TEXT NOT NULL DEFAULT 'local',
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at   DATETIME,
+    UNIQUE (user_id, group_id),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES "group"(id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
 CREATE TABLE user_to_role (
     id           TEXT PRIMARY KEY,
     user_id      TEXT NOT NULL,
@@ -158,7 +154,14 @@ CREATE TABLE workspace (
     git_remote_url TEXT,
 
     last_pulled_at DATETIME
-, owner_id TEXT REFERENCES user(id) ON DELETE SET NULL, statement_timeout_ms INTEGER NOT NULL DEFAULT 30000, max_result_size_mb INTEGER NOT NULL DEFAULT 100, logo TEXT CHECK (logo IS NULL OR (length(logo) <= 98304 AND logo GLOB 'iVBORw0KGgo*' AND logo NOT GLOB '*[^A-Za-z0-9+/=]*')));
+, owner_id TEXT REFERENCES user(id) ON DELETE SET NULL, statement_timeout_ms INTEGER NOT NULL DEFAULT 30000, max_result_size_mb INTEGER NOT NULL DEFAULT 100, logo TEXT CHECK (
+    logo IS NULL
+    OR (
+        length(logo) <= 98304
+        AND logo GLOB 'iVBORw0KGgo*'
+        AND logo NOT GLOB '*[^A-Za-z0-9+/=]*'
+    )
+));
 
 CREATE TABLE workspace_to_user (
     id TEXT PRIMARY KEY,

@@ -121,6 +121,8 @@
 
 		<div
 			class="item"
+			data-test="tree.node"
+			data-test-value={item.name}
 			class:selected={isSelected}
 			class:folder={item.type === 'folder'}
 			class:database={item.type === 'db_instance'}

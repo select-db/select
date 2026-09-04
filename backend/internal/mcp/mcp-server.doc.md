@@ -1,6 +1,6 @@
 # MCP Server
 
-The MCP server lets external LLM clients (Claude Code in VS Code, Cursor, Claude Desktop, …) chat with your [proxified databases](/databases/proxified-connections/). The client connects with an [API key](/workspace/api-keys/), and every database call passes through the same [permission model](/workspace/permissions/) as the app UI.
+The MCP server lets external LLM clients (Claude Code in VS Code, Cursor, Claude Desktop, …) chat with your [proxified databases](/docs/databases/proxified-connections/). The client connects with an [API key](/docs/workspace/api-keys/), and every database call passes through the same [permission model](/docs/workspace/permissions/) as the app UI.
 
 ## What you can do with it
 
@@ -17,7 +17,7 @@ Seven tools, no shell access, no file access. The model is bounded to the dataso
 
 ## Setup
 
-1. **Create an API key** for the workspace and database access you want this client to have. See [API keys](/workspace/api-keys/). Pick the roles carefully: the MCP server has no extra permission layer of its own, so the key's roles are exactly what the LLM can do.
+1. **Create an API key** for the workspace and database access you want this client to have. See [API keys](/docs/workspace/api-keys/). Pick the roles carefully: the MCP server has no extra permission layer of its own, so the key's roles are exactly what the LLM can do.
 2. **Add the server to your client.** For Claude Code in VS Code, run from a terminal:
    ```
    claude mcp add --transport http selectdb https://your-backend/mcp \
@@ -54,7 +54,7 @@ Seven tools, no shell access, no file access. The model is bounded to the dataso
 
 - **One API key, one workspace.** An API key is bound to a single workspace when it's created. To connect to a different workspace, create a new key there and add a second MCP entry (`selectdb-prod`, `selectdb-staging`, …).
 - **Roles decide everything.** A read-only key gets a read-only MCP session because its role lacks `workspace/datasource.execute`. There is no MCP-specific "read-only mode" toggle.
-- **Default-deny on unscoped databases.** Unlike the web UI, which silently allows queries on databases the role has no rules for, MCP refuses them. If the key's role has no explicit allow rules for a database, the LLM cannot query that database, even if other roles in the workspace grant access to it. Add an explicit role entry to grant access.
+- **Default-deny on unscoped databases.** Like every other query that runs on our server, MCP refuses a database no role has written a rule for. If the key's role has no explicit allow rules for a database, the LLM cannot query it, even if other roles in the workspace grant access to it. Add an explicit role entry to grant access. See [Permissions](/docs/workspace/permissions/#databases-nobody-has-written-a-rule-for).
 - **API keys only.** The MCP endpoint refuses user JWTs. If you're a logged-in user wanting to query a database, use the web UI; the MCP path is for headless clients with a pre-shared key.
 
 ## Security notes
@@ -63,4 +63,5 @@ Seven tools, no shell access, no file access. The model is bounded to the dataso
 - The LLM sees DDL, table contents up to the row cap, and query plans. Treat the API key's scope as the privacy boundary: anything the roles can read, the LLM (and the LLM provider) can see.
 - `execute_statement` carries the MCP `destructiveHint` annotation, so clients like Claude Code and Cursor will prompt you to approve each write before it runs. The role on the API key is what ultimately decides whether the write succeeds; the prompt is the human-in-the-loop on top of that.
 
+> [!IMPORTANT]
 > Pair each MCP client with a dedicated, narrowly-scoped API key. If a client only needs to read one database, give its key a role that only grants read on that database, nothing more.

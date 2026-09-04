@@ -94,6 +94,7 @@
 	role="textbox"
 	aria-multiline="true"
 	tabindex="0"
+	aria-label={placeholder}
 	aria-placeholder={placeholder}
 	data-placeholder={placeholder}
 	data-empty={isEmpty}

@@ -136,7 +136,7 @@ func openConn(ctx context.Context, r *http.Request, datasourceID, workspaceID st
 		DB:   dbConn,
 		Meta: meta,
 		// Default-deny: no explicit allow rules = no access
-		Perms: authz.CompiledFromRequest(r).WithDenyUnmanaged(),
+		Perms: authz.CompiledFromRequest(r),
 	}, ds, dialect, nil
 }
 

@@ -39,6 +39,25 @@ execFileSync('go', ['run', '-tags', 'server', './internal/cmd/e2eseed', dataDir]
 
 export default defineConfig({
 	testDir: 'tests/e2e',
+
+	/**
+	 * `e2e` is the suite: specs under tests/e2e, run by `wails3 task test:e2e`
+	 * and by CI.
+	 *
+	 * `shots` writes the website's product screenshots. Each spec sits beside the
+	 * content that shows it. They write into the repo, so CI never selects this
+	 * project; `wails3 task shots` does, and sets SHOTS=1.
+	 */
+	projects: [
+		{ name: 'e2e', testDir: 'tests/e2e', testMatch: /\.spec\.ts$/ },
+		{
+			name: 'shots',
+			testDir: '../..',
+			testMatch: /\.shot\.ts$/,
+			testIgnore: ['**/node_modules/**', '**/build/**', '**/dist/**', '**/.svelte-kit/**']
+		}
+	],
+
 	forbidOnly: !!process.env.CI,
 	// One worker, no retries: every page talks to the same app process, and an
 	// event emitted by one test is broadcast to all of them. Serial keeps that

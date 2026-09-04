@@ -209,10 +209,6 @@
 
 /* Monaco Editor */
 
-:global(.suggest-widget) {
-	z-index: 10 !important;
-}
-
 :global(.monaco-menu) {
 	background-color: var(--gray-0) !important;
 	color: var(--gray-1000) !important;

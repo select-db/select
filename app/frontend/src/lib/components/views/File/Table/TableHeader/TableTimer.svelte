@@ -38,11 +38,11 @@
 
 <div class="wrapper">
 	{#if hasFinalDuration}
-		<p>{formatMs(durationMs ?? 0)}</p>
+		<p data-test="result.duration">{formatMs(durationMs ?? 0)}</p>
 	{:else if loading}
-		<p>{formatMs(elapsedMs)}</p>
+		<p data-test="result.duration">{formatMs(elapsedMs)}</p>
 	{:else}
-		<p class="muted">00:00.000</p>
+		<p class="muted" data-test="result.duration">00:00.000</p>
 	{/if}
 </div>
 

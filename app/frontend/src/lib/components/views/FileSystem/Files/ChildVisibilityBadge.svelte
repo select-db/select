@@ -44,7 +44,12 @@
 {#if expanded}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<p class="child-vis-badge" onclick={openMenu} title="Show/hide children">
+	<p
+		class="child-vis-badge"
+		data-test="tree.visibility-badge"
+		onclick={openMenu}
+		title="Show/hide children"
+	>
 		{visibleCount} of {total}
 	</p>
 {/if}

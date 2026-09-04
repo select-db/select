@@ -144,7 +144,11 @@
 	.layout {
 		display: flex;
 		flex: 1;
-		overflow: hidden;
+		/* clip, not hidden: `hidden` still makes this a scroll container, and a
+		   scrollIntoView from the file tree or the editor leaves it scrolled a
+		   few px sideways with no scrollbar to put it back — the whole app then
+		   sits off-centre until the window is resized. `clip` cannot scroll. */
+		overflow: clip;
 	}
 
 	main {
