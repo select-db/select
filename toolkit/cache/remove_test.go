@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-func TestOnEvictFiresForEveryRemovalPath(t *testing.T) {
+func TestOnRemoveFiresForEveryRemovalPath(t *testing.T) {
 	t.Run("LRU overflow", func(t *testing.T) {
 		var got []string
-		c := New(Options{MaxEntries: 2, OnEvict: func(k string, v any) {
+		c := New(Options{MaxEntries: 2, OnRemove: func(k string, v any) {
 			got = append(got, k+"="+v.(string))
 		}})
 		c.Set("a", "1")
@@ -22,7 +22,7 @@ func TestOnEvictFiresForEveryRemovalPath(t *testing.T) {
 
 	t.Run("Delete", func(t *testing.T) {
 		var got []string
-		c := New(Options{OnEvict: func(k string, v any) { got = append(got, k) }})
+		c := New(Options{OnRemove: func(k string, v any) { got = append(got, k) }})
 		c.Set("a", 1)
 		c.Delete("a")
 		c.Delete("a") // already gone: must not fire twice
@@ -33,7 +33,7 @@ func TestOnEvictFiresForEveryRemovalPath(t *testing.T) {
 
 	t.Run("DeleteFunc", func(t *testing.T) {
 		var got []string
-		c := New(Options{OnEvict: func(k string, v any) { got = append(got, k) }})
+		c := New(Options{OnRemove: func(k string, v any) { got = append(got, k) }})
 		c.Set("a", 1)
 		c.Set("b", 2)
 		c.DeleteFunc(func(string) bool { return true })
@@ -44,7 +44,7 @@ func TestOnEvictFiresForEveryRemovalPath(t *testing.T) {
 
 	t.Run("Set replacing a value", func(t *testing.T) {
 		var got []any
-		c := New(Options{OnEvict: func(k string, v any) { got = append(got, v) }})
+		c := New(Options{OnRemove: func(k string, v any) { got = append(got, v) }})
 		c.Set("a", "old")
 		c.Set("a", "new")
 		if len(got) != 1 || got[0] != "old" {
@@ -54,7 +54,7 @@ func TestOnEvictFiresForEveryRemovalPath(t *testing.T) {
 
 	t.Run("Set with an identical value does not evict", func(t *testing.T) {
 		var got []any
-		c := New(Options{OnEvict: func(k string, v any) { got = append(got, v) }})
+		c := New(Options{OnRemove: func(k string, v any) { got = append(got, v) }})
 		c.Set("a", "same")
 		c.Set("a", "same")
 		if len(got) != 0 {
@@ -65,7 +65,7 @@ func TestOnEvictFiresForEveryRemovalPath(t *testing.T) {
 	t.Run("TTL expiry observed through Get", func(t *testing.T) {
 		var mu sync.Mutex
 		var got []string
-		c := New(Options{TTL: 40 * time.Millisecond, OnEvict: func(k string, v any) {
+		c := New(Options{TTL: 40 * time.Millisecond, OnRemove: func(k string, v any) {
 			mu.Lock()
 			got = append(got, k)
 			mu.Unlock()
@@ -85,7 +85,7 @@ func TestOnEvictFiresForEveryRemovalPath(t *testing.T) {
 	t.Run("TTL expiry via the background sweeper", func(t *testing.T) {
 		var mu sync.Mutex
 		fired := make(chan string, 4)
-		c := New(Options{TTL: 60 * time.Millisecond, OnEvict: func(k string, v any) {
+		c := New(Options{TTL: 60 * time.Millisecond, OnRemove: func(k string, v any) {
 			mu.Lock()
 			defer mu.Unlock()
 			fired <- k
@@ -115,13 +115,13 @@ func TestGetRefreshesTTL(t *testing.T) {
 	}
 }
 
-// TestOnEvictRunsWithoutTheCacheLock: OnEvict does real work (closing a pool),
+// TestOnRemoveRunsWithoutTheCacheLock: OnRemove does real work (closing a pool),
 // so it must not run under the lock.
-func TestOnEvictRunsWithoutTheCacheLock(t *testing.T) {
+func TestOnRemoveRunsWithoutTheCacheLock(t *testing.T) {
 	done := make(chan struct{})
 	var c *Cache
-	c = New(Options{MaxEntries: 1, OnEvict: func(k string, v any) {
-		// Reading the cache from inside OnEvict would deadlock if the lock
+	c = New(Options{MaxEntries: 1, OnRemove: func(k string, v any) {
+		// Reading the cache from inside OnRemove would deadlock if the lock
 		// were still held.
 		_, _ = c.Get("b")
 		close(done)
@@ -131,14 +131,14 @@ func TestOnEvictRunsWithoutTheCacheLock(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("OnEvict deadlocked: it runs while the cache lock is held")
+		t.Fatal("OnRemove deadlocked: it runs while the cache lock is held")
 	}
 }
 
-func TestOnEvictConcurrent(t *testing.T) {
+func TestOnRemoveConcurrent(t *testing.T) {
 	var mu sync.Mutex
 	count := 0
-	c := New(Options{MaxEntries: 8, OnEvict: func(k string, v any) {
+	c := New(Options{MaxEntries: 8, OnRemove: func(k string, v any) {
 		mu.Lock()
 		count++
 		mu.Unlock()

@@ -25,7 +25,7 @@ var (
 	connCache = cache.New(cache.Options{
 		MaxEntries: 20_000,
 		TTL:        20 * time.Minute,
-		OnEvict:    closeEvictedPool,
+		OnRemove:   closeRemovedPool,
 	})
 
 	// secondary index: hash → DSN for EvictConnsByAddr. SSH-rewritten DSNs are 127.0.0.1:port.
@@ -37,18 +37,18 @@ var (
 	connPublishMu sync.Mutex
 )
 
-// poolCloseGrace delays closing an evicted pool. An unclosed *sql.DB is never
+// poolCloseGrace delays closing a removed pool. An unclosed *sql.DB is never
 // reclaimed — database/sql roots it from its own connectionOpener goroutine —
-// but closing inline would break a caller that took the pool just before
-// eviction, since Close rejects new queries. It need not cover query duration:
+// but closing inline would break a caller that took the pool just before it
+// was removed, since Close rejects new queries. It need not cover query duration:
 // Close leaves work in flight alone, closing idle conns at once and in-use ones
 // as they are returned. A var so tests can shorten it.
 var poolCloseGrace = 60 * time.Second
 
-// closeEvictedPool releases a pool that has left the cache, for any reason:
-// idle past the TTL, pushed out by LRU pressure, or dropped with the tunnel it
+// closeRemovedPool releases a pool that has left the cache, for any reason:
+// idle past the TTL, evicted under LRU pressure, or dropped with the tunnel it
 // depended on.
-func closeEvictedPool(hash string, value any) {
+func closeRemovedPool(hash string, value any) {
 	connHashToDSNMu.Lock()
 	delete(connHashToDSN, hash)
 	connHashToDSNMu.Unlock()
@@ -70,7 +70,7 @@ func getConn(workspaceID, dsn string) (*sql.DB, bool) {
 }
 
 // setConn stores db under (workspaceID, dsn). The index write follows the cache
-// write, because replacing an entry fires closeEvictedPool for the old value and
+// write, because replacing an entry fires closeRemovedPool for the old value and
 // that clears the index entry for this same hash.
 func setConn(workspaceID, dsn string, db *sql.DB) {
 	hash := hashWorkspaceDSN(workspaceID, dsn)
@@ -91,7 +91,7 @@ func EvictConnsByAddr(addr string) {
 		}
 	}
 	connHashToDSNMu.Unlock()
-	// Delete fires closeEvictedPool, which closes the pool behind the dead
+	// Delete fires closeRemovedPool, which closes the pool behind the dead
 	// tunnel rather than leaving it to linger on a socket that no longer works.
 	for _, hash := range toDelete {
 		connCache.Delete(hash)
