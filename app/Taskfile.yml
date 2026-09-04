@@ -213,4 +213,18 @@ tasks:
       - install:frontend
     dir: frontend
     cmds:
-      - npx playwright test {{.CLI_ARGS}}
+      - npx playwright test --project=e2e {{.CLI_ARGS}}
+
+  shots:
+    summary: Recaptures the product screenshots the website shows
+    # Same dependencies as the suite above, and for a sharper reason: playwright
+    # only launches build/bin/select-server, it never builds it. A stale binary
+    # does not fail the run, it publishes pictures of the previous build.
+    deps:
+      - build:server
+      - install:frontend
+    dir: frontend
+    env:
+      SHOTS: 1
+    cmds:
+      - npx playwright test --project=shots {{.CLI_ARGS}}

@@ -2,6 +2,8 @@
 
 SELECT can visualize query results as charts. After running a query, switch to the graph view to plot your data.
 
+![A query result plotted as a line chart, with the chart type, axes and series controls beside it.](/shots/graph.light.png)
+
 ## Chart types
 
 Three chart types are available:

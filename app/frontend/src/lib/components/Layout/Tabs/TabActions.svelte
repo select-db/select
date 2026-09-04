@@ -4,7 +4,7 @@
 	import { titlebarSafe } from '$lib/actions/titlebarSafe';
 </script>
 
-<div class="wrapper tab-actions" use:titlebarSafe={'right'}>
+<div class="wrapper tab-actions" data-test="tabs.actions" use:titlebarSafe={'right'}>
 	<Button leftIcon="chat" label="Open Chat" onclick={() => addChatTab()} iconSize={18} />
 	<Button
 		leftIcon="terminal"

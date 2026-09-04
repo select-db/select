@@ -529,7 +529,7 @@
 			{/if}
 		</div>
 	{/if}
-	<div class="editorContainer">
+	<div class="editorContainer" data-test="editor.surface">
 		<div class="editorScale" bind:this={container}></div>
 	</div>
 </div>
@@ -568,10 +568,12 @@
 		--vscode-focusBorder: transparent;
 	}
 
+	/* No z-index here: monaco gives the suggest widget 40 and its own scrollbars
+	   11, and anything below 11 puts the completion list under the editor's
+	   scrollbar. Restyle it, but leave it where monaco stacked it. */
 	:global(.editorContainer .monaco-editor .suggest-widget) {
 		box-shadow: 0 6px 8px 0 var(--shadow) !important;
 		border: var(--border) !important;
-		z-index: 10;
 	}
 
 	/* Hover tooltip (incl. SQL schema markdown): shadow + themed markdown tables */

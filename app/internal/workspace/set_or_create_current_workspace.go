@@ -8,6 +8,7 @@ import (
 	"selectDb/internal/db/generated"
 	"selectDb/internal/fs_provider"
 	"selectDb/internal/graph"
+	"selectDb/internal/sample"
 )
 
 type SetOrCreateCurrentWorkspaceParams struct {
@@ -95,8 +96,12 @@ func (w *Workspace) ensureWorkspaceFolder(workspace generated.Workspace) error {
 	}
 
 	if isNew {
-		if err := graph.SeedDefaultFiles(root); err != nil {
-			return fmt.Errorf("seed default files: %w", err)
+		// The sample workspace, not just the dotfiles: a database with rows in
+		// it and the queries that read them, so the first thing a person sees
+		// is the thing the guide describes. sample.Write seeds the defaults on
+		// its way through.
+		if err := sample.Write(workspace.ID); err != nil {
+			return fmt.Errorf("seed sample workspace: %w", err)
 		}
 	}
 

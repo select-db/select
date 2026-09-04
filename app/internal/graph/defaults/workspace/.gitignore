@@ -1,1 +1,4 @@
-# .env
+# Secrets. SELECT resolves $VARIABLES from this file at runtime, so it never
+# needs to be shared, and committing it shares it.
+.env
+.env.*

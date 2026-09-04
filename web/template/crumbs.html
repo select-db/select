@@ -1,0 +1,11 @@
+{{- define "crumbs"}}
+{{- if .Crumbs}}
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/docs/getting-started/">Docs</a>
+        {{- range .Crumbs}}
+        <span aria-hidden="true">/</span>
+        {{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span>{{.Label}}</span>{{end}}
+        {{- end}}
+      </nav>
+{{- end}}
+{{- end}}

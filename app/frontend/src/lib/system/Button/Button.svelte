@@ -41,7 +41,6 @@
 		rightIcon,
 		iconSize = 22,
 		content,
-		ariaLabel = content,
 		disabled,
 		active = false,
 		emphasis = 'low',
@@ -50,6 +49,12 @@
 		style,
 		classes,
 		label,
+		// Must come after `label`: a destructuring default can only read names
+		// already bound. An icon-only button has no content to name it, and
+		// `label` is only a tooltip — without this it reaches a screen reader, and
+		// getByRole, as an unnamed button. The tooltip is already the words a user
+		// would say.
+		ariaLabel = content ?? label,
 
 		noRadius,
 		noBounce,
