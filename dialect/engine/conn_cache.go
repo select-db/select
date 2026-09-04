@@ -39,9 +39,8 @@ var (
 // tests can shorten it.
 var poolCloseGrace = 60 * time.Second
 
-// closeRemovedPool releases a pool that has left the cache, for any reason:
-// idle past the TTL, evicted under LRU pressure, or dropped with the tunnel it
-// depended on.
+// closeRemovedPool prunes the hash → DSN index and closes the pool one
+// poolCloseGrace later. Runs for every removal, via the cache's OnRemove.
 func closeRemovedPool(hash string, value any) {
 	connHashToDSNMu.Lock()
 	delete(connHashToDSN, hash)
@@ -157,10 +156,7 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	hash := hashWorkspaceDSN(workspaceID, dsn)
 
 	// GetOrCreate opens at most once per key: concurrent first queries for one
-	// datasource share the single open instead of each dialing and discarding
-	// the losers. Worth serialising because the open is a real round trip on
-	// postgres — both paths below Ping — through the SSH tunnel when there is
-	// one. A failure is not cached, so the next caller retries.
+	// datasource share the open rather than each dialing. A failure is not cached.
 	value, err := connCache.GetOrCreate(hash, func() (any, error) {
 		dialect := GetDialect(dbType)
 		if dialect == nil {
@@ -182,11 +178,9 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		}
 		applyPoolConfig(db, cfg)
 
-		// Indexed from in here so only the caller that opened the pool writes
-		// the index, rather than every cache hit taking that lock. Ordering is
-		// safe even though closeRemovedPool clears this hash: GetOrCreate runs
-		// create only on a miss, so the store that follows displaces no entry
-		// under this key.
+		// Indexed here so only the caller that opened writes it, not every cache
+		// hit. Safe before the store: create runs only on a miss, so nothing
+		// under this key is displaced.
 		indexConn(hash, dsn)
 		return db, nil
 	})
