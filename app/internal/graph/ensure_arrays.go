@@ -11,10 +11,10 @@ package graph
 //
 // Nodes are built in a few dozen places, so rather than rely on each of them
 // remembering, they are swept where they enter the graph: the whole tree after
-// a build, and the touched node after a mutation — a node's children were
-// already swept when they themselves entered, so a mutation has no reason to
-// walk the tree again. Nullable single values — a workspace with no user, a
-// node with no metadata — keep their nulls, which mean something.
+// a build, the touched node after a mutation. A node's children were swept when
+// they themselves entered, so a mutation never walks the tree. Nullable single
+// values — a workspace with no user, a node with no metadata — keep their
+// nulls, which mean something.
 
 func ensureArrays(workspace *WorkspaceNode) {
 	if workspace == nil {

@@ -1,13 +1,10 @@
 package graph
 
 // A picker asks about the whole workspace, not the part of it the graph has
-// read, and wants a handful of rows rather than a copy of the project. So it
-// asks a question — pattern, scope, cap — instead of taking a listing.
-//
-// The walk scores names as strings and keeps only the best Limit of them; the
-// nodes, which read a sidecar apiece, are built for the survivors afterwards.
-// A query against a workspace of any size costs one directory walk and at most
-// Limit sidecar reads.
+// read, and wants a bounded number of rows back. The walk here scores names as
+// strings and keeps the best Limit of them in a heap; nodes, which cost a
+// sidecar read apiece, are built only for the survivors. One directory walk and
+// at most Limit sidecar reads, whatever the workspace holds.
 
 import (
 	"container/heap"
@@ -236,8 +233,7 @@ func betterThan(a, b fileMatch) bool {
 }
 
 // fileMatchHeap keeps the best `limit` matches seen so far, worst at the root so
-// a better one can replace it. Bounding here rather than sorting at the end is
-// what keeps a query from building a list the size of the workspace.
+// a better one can replace it.
 type fileMatchHeap struct {
 	limit   int
 	matches []fileMatch

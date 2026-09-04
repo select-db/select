@@ -388,12 +388,12 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 	uri := ctx.URI(relSlash)
 
 	if op == "delete" {
-		// The path is gone, so only the graph can say what it was. It holds
-		// every folder and db instance, but a file only once its folder has
-		// been opened — so a URI it does not know is a file, unless the path is
-		// somehow still there and is a directory. Guessing "folder" from a
-		// failed stat would label a deleted file as a folder, and the frontend
-		// closes a tab on a file delete.
+		// The path is gone, so the graph is all that says what it was: it holds
+		// every folder it has seen, but a file only once its folder has been
+		// opened. An unknown URI is taken for a file — the graph can miss a
+		// folder too (made while the app was down, or never watched), and that
+		// way round costs a tab close for a URI with no tab, where the other
+		// leaves a tab open on a file that is gone.
 		table := s.inferTableFromGraph(uri)
 		if table == "" {
 			if isDir {
@@ -446,9 +446,9 @@ func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID st
 }
 
 // Reports whether a file event's parent is a container the graph tracks files
-// for: a db instance directory, or a folder that has been resolved. A parent
-// the graph does not know at all (a folder created moments ago, whose own
-// insert is still in flight) is accepted, so its files are not lost.
+// for: a db instance directory, or a resolved folder. A parent the graph does
+// not know — a folder whose own insert is still in flight — is accepted, so its
+// files are not lost.
 func (s *System) parentAcceptsFiles(parentURI string) bool {
 	if s.Graph == nil {
 		return true
@@ -485,11 +485,9 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 	}
 	s.emitMutation("folder", "insert", dirURI, payload, ctx.WorkspaceID, userID)
 
-	// Scan contents to catch files restored e.g. via git. A folder nobody has
-	// opened is skipped: it reads its own contents when it is opened, so
-	// walking it here would only pull a subtree into memory that nothing is
-	// showing — which is what made a branch switch in a large workspace emit
-	// one mutation per file.
+	// Scan contents to catch files restored e.g. via git. An unopened folder is
+	// skipped: it reads itself when it is opened, so walking it here would emit
+	// a mutation per file for a subtree nothing is showing.
 	if scanContents && s.parentAcceptsFiles(dirURI) {
 		s.scanFolderContents(dirPath, dirURI, userID, ctx)
 	}

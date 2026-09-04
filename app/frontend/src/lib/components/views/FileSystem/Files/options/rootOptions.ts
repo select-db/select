@@ -47,10 +47,10 @@ export const createFolderInFolder = async (folder: FolderLike) => {
 };
 
 export const createFileInFolder = async (folder: FolderLike) => {
-	// The name has to miss every file already in the folder — writing lands on
-	// an existing file otherwise — and a folder nobody has opened does not carry
-	// its files yet. Reading it first is what makes the name safe; a db instance
-	// (which ResolveFolder does not answer for) always carries its own.
+	// Writing truncates whatever is there, so the name has to miss every file in
+	// the folder, and an unopened folder does not carry its files yet.
+	// ResolveFolder answers for folders only and returns null for a db instance,
+	// which is resolved at build time and carries its own.
 	const resolved = await ResolveFolder(folder.uri);
 	const name = findUniqueFileName(resolved?.files ?? folder.files);
 	const fileUri = `${folder.uri}/${name}`;
