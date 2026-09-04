@@ -139,9 +139,14 @@ jobs:
     needs: [plan]
     if: needs.plan.outputs.go-modules != '[]'
     runs-on: ubuntu-latest
-    # Guardrail: this step set is fast (semgrep is build-free, govulncheck is one
-    # compile). A run that exceeds this is stuck, not working — fail, don't hang.
-    timeout-minutes: 15
+    # Guardrail: the scans are fast (semgrep is build-free, govulncheck is one
+    # compile), so a scan that exceeds its budget is stuck, not working. The
+    # budget sits on the scan steps rather than the job, because the job also
+    # installs GTK/WebKit headers from the Ubuntu mirror: that step has been
+    # measured anywhere from 6s to 13m40s for the same packages, and when it
+    # was slow it consumed a 15-minute job budget and got semgrep cancelled
+    # after govulncheck had finished in 6 seconds.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -161,13 +166,17 @@ jobs:
         run: sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: govulncheck
         working-directory: ${{ matrix.module }}
+        timeout-minutes: 10
         env:
           BUILD_TAGS: ${{ matrix.module == 'app' && 'gtk3' || '' }}
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          # Pinned, not @latest: this is a blocking gate, so the tool that
+          # decides it should not change under us between runs. Bump it here.
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
       - name: semgrep (SAST)
         if: ${{ !cancelled() }}
+        timeout-minutes: 10
         working-directory: ${{ matrix.module }}
         run: |
           # Build-free SAST — replaces gosec, whose whole-program SSA re-compiled
