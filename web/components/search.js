@@ -11,10 +11,16 @@ class DocSearch extends HTMLElement {
     this.dialog.className = 'search-dialog'
     this.dialog.innerHTML = `
       <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
         <input type="text" placeholder="Search docs..." autofocus>
-        <kbd>Esc</kbd>
       </div>
       <ul class="search-results scrollable"></ul>
+      <div class="search-hints">
+        <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> Select</span>
+        <span><kbd>&crarr;</kbd> Open</span>
+        <span><kbd>Esc</kbd> Close</span>
+      </div>
     `
     this.appendChild(this.dialog)
 
@@ -105,9 +111,16 @@ class DocSearch extends HTMLElement {
     this.resultsList.innerHTML = matches.map(m => {
       const title = this.highlightText(m.title, q)
       const excerpt = this.getExcerpt(m.body, q)
+      // The ancestry is what tells two identically named headings apart, so it
+      // is a line of its own rather than a prefix on the title.
+      const path = m.path ? `<div class="result-path">${this.highlightText(m.path, q)}</div>` : ''
       return `<li><a href="${m.href}">
-        <div class="result-title">${title}</div>
-        <div class="result-excerpt">${excerpt}</div>
+        <span class="result-hash" aria-hidden="true">#</span>
+        <span class="result-text">
+          <div class="result-title">${title}</div>
+          ${path}
+          <div class="result-excerpt">${excerpt}</div>
+        </span>
       </a></li>`
     }).join('')
   }

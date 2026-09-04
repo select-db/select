@@ -6,25 +6,29 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"text/template"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"text/template"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/renderer/html"
 )
 
 type SidebarNode struct {
-	Label    string         `json:"label"`
-	Slug     string         `json:"slug"`
-	Path     string         `json:"path,omitempty"`
-	HTMLFile string         `json:"htmlFile,omitempty"`
+	Label    string `json:"label"`
+	Slug     string `json:"slug"`
+	Path     string `json:"path,omitempty"`
+	HTMLFile string `json:"htmlFile,omitempty"`
 	// Href marks a plain link node (a sidebar.txt value that is a URL, e.g.
 	// /api/, rather than a .doc.md). It renders as an external link that opens
 	// in a new tab, not a generated page.
@@ -40,9 +44,21 @@ type PageData struct {
 	Styles      string
 	Scripts     string
 	Canonical   string
-	BaseURL     string
-	PrevPage    *PageLink
-	NextPage    *PageLink
+	// Markdown is the URL of this page's markdown twin: the same URL with the
+	// trailing slash replaced by ".md". Announced in the head as a
+	// rel="alternate", which is how a client that would rather read markdown
+	// than parse a page finds it.
+	Markdown string
+	BaseURL  string
+	PrevPage *PageLink
+	NextPage *PageLink
+	// Crumbs is the trail of sidebar sections above this page, ending with the
+	// page itself. Empty for a page that sits at the top level, where a trail
+	// would only repeat the title below it.
+	Crumbs []PageLink
+	// SourceURL is this page's markdown on GitHub, so every page can offer an
+	// edit link. Empty when the build has no repository to point at.
+	SourceURL string
 }
 
 type PageLink struct {
@@ -50,20 +66,42 @@ type PageLink struct {
 	Href  string
 }
 
+// marketingPage is a hand-written page from web/site, as the rest of the build
+// needs to know it: the URL it ended up at, and the title and description it
+// declares in its own <head>. Read back out of the page rather than configured
+// here, so the sitemap and llms.txt cannot describe it differently from the
+// page itself.
+type marketingPage struct {
+	URL         string
+	Title       string
+	Description string
+}
+
+// A search hit is the section it points at, not the page: Title is the heading
+// itself and Path is what sits above it, so the result can show the leaf and
+// its ancestry as two lines rather than one long chain.
 type SearchEntry struct {
 	Title string `json:"title"`
+	Path  string `json:"path,omitempty"`
 	Href  string `json:"href"`
 	Body  string `json:"body"`
 }
 
 const siteURL = "https://select-db.com"
 
+// sourceURL is where a page's markdown lives on GitHub, so every page can
+// offer an edit link. Pinned to dev, the repo's default branch and the one the
+// published docs are built from -- main lags it and does not have these paths.
+const sourceURL = "https://github.com/select-db/select/blob/dev/"
+
 type buildConfig struct {
 	rootDir       string
-	docsDir       string
+	webDir        string
 	sidebarPath   string
 	templateDir   string
 	cssPath       string
+	basePath      string
+	siteDir       string
 	themePath     string
 	componentsDir string
 	cacheDir      string
@@ -98,7 +136,7 @@ const apiReferencePageTmpl = `<!doctype html>
   <title>Select API Reference</title>
   <link rel="icon" href="/favicon.png" />
   <style>
-%s
+/*THEME*/
     /* --ff lives in docs.css, not .theme; redeclare it here. */
     :root { --ff: system-ui, -apple-system, sans-serif; }
     /* Bind Scalar's tokens to ours. Our color tokens are keyed on
@@ -181,19 +219,40 @@ const apiReferencePageTmpl = `<!doctype html>
 </html>
 `
 
+// themeMarker is the literal the marketing pages carry where the app's theme
+// file is spliced in at build time.
+const themeMarker = "/*THEME*/"
+
+// starsMarker is where a marketing page carries the GitHub star count. The
+// count is read once per build and written in, because the alternative is the
+// page calling api.github.com from the reader's browser: a third-party request
+// on every visit, for a number that changes by the hour. Substituted with
+// nothing when the count cannot be read, so the button degrades to its verb.
+const starsMarker = "<!--STARS-->"
+
+// starsRepo is the repository the header's star button points at and counts.
+const starsRepo = "select-db/select"
+
+// starsMaxAge is how long a cached count is served before the build asks
+// again. Long enough that a watch-mode rebuild never calls out, short enough
+// that a deploy ships a current number.
+const starsMaxAge = 6 * time.Hour
+
 func newBuildConfig(rootDir string) buildConfig {
-	docsDir := filepath.Join(rootDir, "docs")
+	webDir := filepath.Join(rootDir, "web")
 	return buildConfig{
 		rootDir:       rootDir,
-		docsDir:       docsDir,
-		sidebarPath:   filepath.Join(docsDir, "sidebar.txt"),
-		templateDir:   filepath.Join(docsDir, "template"),
-		cssPath:       filepath.Join(docsDir, "docs.css"),
+		webDir:        webDir,
+		sidebarPath:   filepath.Join(webDir, "sidebar.txt"),
+		templateDir:   filepath.Join(webDir, "template"),
+		cssPath:       filepath.Join(webDir, "theme", "docs.css"),
+		basePath:      filepath.Join(webDir, "theme", "base.css"),
 		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", "user", ".theme"),
-		componentsDir: filepath.Join(docsDir, "components"),
-		cacheDir:      filepath.Join(docsDir, ".cache"),
+		componentsDir: filepath.Join(webDir, "components"),
+		cacheDir:      filepath.Join(webDir, ".cache"),
 		openAPIPath:   filepath.Join(rootDir, "backend", "internal", "apigen", "gen", "openapi.json"),
-		outDir:        filepath.Join(docsDir, "site"),
+		siteDir:       filepath.Join(webDir, "site"),
+		outDir:        filepath.Join(webDir, "dist"),
 	}
 }
 
@@ -221,24 +280,11 @@ func main() {
 	go watch(cfg)
 
 	addr := ":" + *port
-	fmt.Printf("serving at http://localhost%s\n", addr)
-	// Read first page from _redirects for root redirect
-	redirectTarget := "/getting-started/"
-	if data, err := os.ReadFile(filepath.Join(cfg.outDir, "_redirects")); err == nil {
-		parts := strings.Fields(string(data))
-		if len(parts) >= 2 {
-			redirectTarget = parts[1]
-		}
-	}
-	fs := http.FileServer(http.Dir(cfg.outDir))
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			http.Redirect(w, r, redirectTarget, http.StatusFound)
-			return
-		}
-		fs.ServeHTTP(w, r)
-	})
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	fmt.Printf("serving http://localhost%s (landing) and http://localhost%s/docs/\n", addr, addr)
+	// Plain file server: `/` is the landing page, an ordinary index.html in the
+	// output root. It used to redirect to the first doc, from when docs were the
+	// whole site.
+	if err := http.ListenAndServe(addr, http.FileServer(http.Dir(cfg.outDir))); err != nil {
 		fatal("server: %v", err)
 	}
 }
@@ -260,12 +306,19 @@ func build(cfg buildConfig) error {
 		return fmt.Errorf("reading .theme: %w", err)
 	}
 
+	baseCSS, err := os.ReadFile(cfg.basePath)
+	if err != nil {
+		return fmt.Errorf("reading base CSS: %w", err)
+	}
+
 	docsCSS, err := os.ReadFile(cfg.cssPath)
 	if err != nil {
 		return fmt.Errorf("reading docs.css: %w", err)
 	}
 
-	combinedCSS := string(themeCSS) + "\n" + string(docsCSS)
+	// App theme (colour tokens) → shared base (scale, reset, typography) →
+	// surface layout. Every surface on the site stacks in this order.
+	combinedCSS := string(themeCSS) + "\n" + string(baseCSS) + "\n" + string(docsCSS)
 	styles := string(`<link rel="stylesheet" href="/style.css">`)
 
 	scriptsContent, err := bundleComponents(cfg.componentsDir)
@@ -281,37 +334,63 @@ func build(cfg buildConfig) error {
 
 	md := goldmark.New(
 		goldmark.WithExtensions(extension.GFM, extension.Typographer),
-		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
+		// WithAttribute lets a block carry a class from the markdown, which is how
+		// the "where to go next" list becomes a grid of cards without any of it
+		// being HTML in the source. Standard goldmark syntax: `{.cards}`.
+		goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithAttribute()),
 		goldmark.WithRendererOptions(html.WithUnsafe()),
+		// GitHub's alert syntax, which the docs already write by hand. See
+		// callout.go.
+		goldmark.WithParserOptions(parser.WithASTTransformers(callouts)),
+		// A fence can name the file it belongs in. See codeblock.go.
+		goldmark.WithRendererOptions(renderer.WithNodeRenderers(codeBlocks)),
+		// A screenshot carries both theme cuts. See image.go.
+		goldmark.WithRendererOptions(renderer.WithNodeRenderers(images)),
+		// A keystroke in a code span renders as keycaps. See kbd.go.
+		goldmark.WithRendererOptions(renderer.WithNodeRenderers(keystrokes)),
 	)
 
-	if err := os.RemoveAll(cfg.outDir); err != nil {
-		return fmt.Errorf("cleaning output dir: %w", err)
+	// Everything below writes into a staging directory that is swapped into
+	// place at the end, because -serve keeps answering requests out of the
+	// served one while a rebuild runs. Emptying it first meant a reload timed
+	// inside a rebuild got a page whose stylesheet, scripts or screenshots did
+	// not exist yet -- and a build that failed halfway left nothing at all.
+	// cfg is a value, so pointing outDir at the staging directory here redirects
+	// every write in this function and nothing outside it.
+	served := cfg.outDir
+	// A fresh directory per build, not a fixed name: `go run .` while `-serve`
+	// is watching is an ordinary thing to do, and two builds sharing one
+	// staging path write over each other and publish whichever finishes last,
+	// half of it missing.
+	staging, err := os.MkdirTemp(filepath.Dir(served), filepath.Base(served)+".staging-")
+	if err != nil {
+		return fmt.Errorf("creating staging dir: %w", err)
 	}
-	if err := os.MkdirAll(cfg.outDir, 0o755); err != nil {
-		return fmt.Errorf("creating output dir: %w", err)
-	}
+	// Harmless once the rename below has moved it; a build that fails anywhere
+	// after this leaves nothing behind, and leaves the served site untouched.
+	defer func() { _ = os.RemoveAll(staging) }()
+	cfg.outDir = staging
 	if err := os.WriteFile(filepath.Join(cfg.outDir, "style.css"), []byte(combinedCSS), 0o644); err != nil {
 		return fmt.Errorf("writing style.css: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(cfg.outDir, "bundle.js"), []byte(scriptsContent), 0o644); err != nil {
 		return fmt.Errorf("writing bundle.js: %w", err)
 	}
-	themeJS, err := os.ReadFile(filepath.Join(cfg.docsDir, "theme.js"))
+	themeJS, err := os.ReadFile(filepath.Join(cfg.webDir, "theme.js"))
 	if err != nil {
 		return fmt.Errorf("reading theme.js: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(cfg.outDir, "theme.js"), themeJS, 0o644); err != nil {
 		return fmt.Errorf("writing theme.js: %w", err)
 	}
-	favicon, err := os.ReadFile(filepath.Join(cfg.docsDir, "favicon.png"))
+	favicon, err := os.ReadFile(filepath.Join(cfg.webDir, "favicon.png"))
 	if err != nil {
 		return fmt.Errorf("reading favicon: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(cfg.outDir, "favicon.png"), favicon, 0o644); err != nil {
 		return fmt.Errorf("writing favicon: %w", err)
 	}
-	logo, err := os.ReadFile(filepath.Join(cfg.docsDir, "logo.png"))
+	logo, err := os.ReadFile(filepath.Join(cfg.webDir, "logo.png"))
 	if err != nil {
 		return fmt.Errorf("reading logo: %w", err)
 	}
@@ -351,9 +430,12 @@ func build(cfg buildConfig) error {
 			Styles:      styles,
 			Scripts:     string(scripts),
 			Canonical:   siteURL + "/" + page.HTMLFile + "/",
+			Markdown:    "/" + page.HTMLFile + ".md",
 			BaseURL:     siteURL,
 			PrevPage:    prev,
 			NextPage:    next,
+			Crumbs:      breadcrumbs(tree, page.HTMLFile),
+			SourceURL:   sourceURL + page.Path,
 		}
 
 		outPath := filepath.Join(cfg.outDir, page.HTMLFile, "index.html")
@@ -371,37 +453,87 @@ func build(cfg buildConfig) error {
 		}
 		f.Close()
 
+		// The markdown twin: the source, verbatim, at the page's URL with ".md"
+		// in place of the trailing slash. It is what the page was rendered from,
+		// so there is nothing to keep in step — and its links are already
+		// absolute site paths, so they work as well in markdown as in HTML.
+		if err := os.WriteFile(filepath.Join(cfg.outDir, page.HTMLFile+".md"), src, 0o644); err != nil {
+			return fmt.Errorf("writing %s.md: %w", page.HTMLFile, err)
+		}
+
 		for _, entry := range buildSearchEntries(string(src), page.Label, "/"+page.HTMLFile+"/") {
 			searchIndex = append(searchIndex, entry)
 		}
 	}
 
-	if len(pages) > 0 {
-		// Cloudflare Pages _redirects file (proper 301 instead of meta refresh)
+	marketing, err := copySitePages(cfg, string(themeCSS), starCount(cfg.cacheDir))
+	if err != nil {
+		return fmt.Errorf("staging marketing pages: %w", err)
+	}
+
+	if err := collectShots(cfg); err != nil {
+		return fmt.Errorf("staging screenshots: %w", err)
+	}
+
+	home := false
+	for _, m := range marketing {
+		if m.URL == "/" {
+			home = true
+		}
+	}
+
+	// Without a homepage the root still redirects into the docs. Once
+	// site/index.html exists it is the root, and the redirect is dropped.
+	if !home && len(pages) > 0 {
 		redirect := fmt.Sprintf("/ /%s/ 301\n", pages[0].HTMLFile)
 		os.WriteFile(filepath.Join(cfg.outDir, "_redirects"), []byte(redirect), 0o644)
 	}
 
 	searchJSON, _ := json.Marshal(searchIndex)
 	os.WriteFile(filepath.Join(cfg.outDir, "search-index.json"), searchJSON, 0o644)
-	writeSitemap(cfg.outDir, pages)
+	writeSitemap(cfg.outDir, pages, marketing)
 	os.WriteFile(filepath.Join(cfg.outDir, "robots.txt"), []byte("User-agent: *\nAllow: /\nSitemap: "+siteURL+"/sitemap.xml\n"), 0o644)
-	writeLLMsTxt(cfg, pages)
-	writeLLMsFullTxt(cfg, pages)
+	writeLLMsTxt(cfg, pages, marketing)
+	writeLLMsFullTxt(cfg, pages, marketing)
 
 	headers := `/*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# The markdown twins and llms.txt are meant to be read in the browser, not
+# downloaded. Without an explicit type a static host serves .md as a download,
+# and nosniff above means the browser will not second-guess it.
+/*.md
+  Content-Type: text/markdown; charset=utf-8
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
 `
 	os.WriteFile(filepath.Join(cfg.outDir, "_headers"), []byte(headers), 0o644)
-
-	fmt.Printf("built %d pages in %s\n", len(pages), cfg.outDir)
 
 	if err := verifyLinks(cfg.outDir); err != nil {
 		return err
 	}
+
+	// Two renames rather than a copy: the served directory is replaced whole,
+	// so a request either gets the previous build or this one.
+	previous := staging + ".previous"
+	if _, err := os.Stat(served); err == nil {
+		if err := os.Rename(served, previous); err != nil {
+			return fmt.Errorf("setting the previous build aside: %w", err)
+		}
+	}
+	if err := os.Rename(staging, served); err != nil {
+		return fmt.Errorf("publishing the build: %w", err)
+	}
+	if err := os.RemoveAll(previous); err != nil {
+		return fmt.Errorf("removing the previous build: %w", err)
+	}
+
+	fmt.Printf("built %d pages in %s\n", len(pages), served)
 
 	return nil
 }
@@ -409,7 +541,7 @@ func build(cfg buildConfig) error {
 // watch polls for file changes and rebuilds when something changes
 func watch(cfg buildConfig) {
 	watchDirs := []string{
-		cfg.docsDir,
+		cfg.webDir,
 	}
 
 	lastMod := time.Now()
@@ -424,7 +556,12 @@ func watch(cfg buildConfig) {
 				if err != nil {
 					return nil
 				}
-				if info.IsDir() && (info.Name() == "site" || info.Name() == "generate") {
+				// dist is what this build writes and .cache is what it downloads:
+				// watching either makes every build trigger the next one. generate
+				// is the builder's own source, which needs a restart, not a
+				// rebuild. site is watched — editing a marketing page is the
+				// commonest reason to be running this at all.
+				if info.IsDir() && (info.Name() == "dist" || info.Name() == ".cache" || info.Name() == "generate") {
 					return filepath.SkipDir
 				}
 				if !info.IsDir() && info.ModTime().After(lastMod) {
@@ -444,10 +581,15 @@ func watch(cfg buildConfig) {
 				if err != nil {
 					return nil
 				}
-				if info.IsDir() && (info.Name() == ".git" || info.Name() == "node_modules" || info.Name() == "site" || info.Name() == "docs") {
+				if info.IsDir() && (info.Name() == ".git" || info.Name() == "node_modules" || info.Name() == "dist" || info.Name() == "web") {
 					return filepath.SkipDir
 				}
-				if strings.HasSuffix(path, ".doc.md") && info.ModTime().After(lastMod) {
+				// .doc.md and the screenshots beside it: both are inputs the
+				// build reads from outside web/, and a recaptured figure is the
+				// commonest reason to want a rebuild after running the shots.
+				isInput := strings.HasSuffix(path, ".doc.md") ||
+					(strings.HasSuffix(path, ".png") && filepath.Base(filepath.Dir(path)) == "shots")
+				if isInput && info.ModTime().After(lastMod) {
 					trigger = path
 					return filepath.SkipAll
 				}
@@ -528,7 +670,10 @@ func parseSidebar(path string) ([]*SidebarNode, error) {
 		stack = append(stack, stackEntry{indent: indent, node: node})
 	}
 
-	computeHTMLPaths(root, "")
+	// Documentation is mounted under /docs/; the root is the marketing site.
+	// Cross-references inside .doc.md files are written with the same prefix,
+	// so moving the docs means updating both this line and those links.
+	computeHTMLPaths(root, "docs")
 	return root, nil
 }
 
@@ -675,10 +820,32 @@ func bundleComponents(dir string) (string, error) {
 	return b.String(), nil
 }
 
-func writeSitemap(outDir string, pages []*SidebarNode) {
+// metaContent pulls one value out of a page's own <head> — the text between an
+// opening and closing literal. Deliberately not a parser: two tags, on pages
+// this repository writes, where a regex over the whole document would be the
+// bigger surprise.
+func metaContent(page []byte, open, close string) string {
+	i := bytes.Index(page, []byte(open))
+	if i < 0 {
+		return ""
+	}
+	rest := page[i+len(open):]
+	j := bytes.Index(rest, []byte(close))
+	if j < 0 {
+		return ""
+	}
+	return strings.TrimSpace(string(rest[:j]))
+}
+
+func writeSitemap(outDir string, pages []*SidebarNode, marketing []marketingPage) {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	b.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
+	// Marketing first: the homepage is the entry point, and a sitemap that
+	// starts at the first doc page reads like the site has no front door.
+	for _, m := range marketing {
+		b.WriteString(fmt.Sprintf("  <url><loc>%s%s</loc></url>\n", siteURL, m.URL))
+	}
 	for _, p := range pages {
 		b.WriteString(fmt.Sprintf("  <url><loc>%s/%s/</loc></url>\n", siteURL, p.HTMLFile))
 	}
@@ -686,26 +853,57 @@ func writeSitemap(outDir string, pages []*SidebarNode) {
 	os.WriteFile(filepath.Join(outDir, "sitemap.xml"), []byte(b.String()), 0o644)
 }
 
-func writeLLMsTxt(cfg buildConfig, pages []*SidebarNode) {
+// tagline is the one-line summary at the top of llms.txt and llms-full.txt.
+// Taken from the homepage's own meta description so there is one sentence
+// describing this product, not two that drift.
+func tagline(marketing []marketingPage) string {
+	for _, m := range marketing {
+		if m.URL == "/" && m.Description != "" {
+			return m.Description
+		}
+	}
+	return "An SQL client shaped like an IDE."
+}
+
+// writeLLMsTxt writes the /llms.txt index: what this site is, and every page on
+// it. Doc entries link to the markdown twin rather than the page — a client
+// following this file wants the prose, not the chrome around it.
+func writeLLMsTxt(cfg buildConfig, pages []*SidebarNode, marketing []marketingPage) {
 	var b strings.Builder
 	b.WriteString("# SELECT\n\n")
-	b.WriteString("> Database management tool for developers who prefer working close to SQL.\n\n")
+	b.WriteString("> " + tagline(marketing) + "\n\n")
+
+	if len(marketing) > 0 {
+		b.WriteString("## Product\n\n")
+		for _, m := range marketing {
+			b.WriteString(fmt.Sprintf("- [%s](%s): %s\n", m.Title, m.URL, m.Description))
+		}
+		b.WriteString("\n")
+	}
+
 	b.WriteString("## Docs\n\n")
 	for _, p := range pages {
 		src, _ := os.ReadFile(filepath.Join(cfg.rootDir, p.Path))
 		desc := extractDescription(string(src))
-		b.WriteString(fmt.Sprintf("- [%s](/%s/): %s\n", p.Label, p.HTMLFile, desc))
+		b.WriteString(fmt.Sprintf("- [%s](/%s.md): %s\n", p.Label, p.HTMLFile, desc))
 	}
+
+	b.WriteString("\n## Optional\n\n")
+	b.WriteString("- [Full documentation, one file](/llms-full.txt): every page above, concatenated.\n")
+	b.WriteString("- [API reference](/api/): the HTTP API, rendered from /openapi.json.\n")
+
 	os.WriteFile(filepath.Join(cfg.outDir, "llms.txt"), []byte(b.String()), 0o644)
 }
 
-func writeLLMsFullTxt(cfg buildConfig, pages []*SidebarNode) {
+func writeLLMsFullTxt(cfg buildConfig, pages []*SidebarNode, marketing []marketingPage) {
 	var b strings.Builder
 	b.WriteString("# SELECT\n\n")
-	b.WriteString("> Database management tool for developers who prefer working close to SQL.\n\n")
+	b.WriteString("> " + tagline(marketing) + "\n\n")
 	for _, p := range pages {
 		src, _ := os.ReadFile(filepath.Join(cfg.rootDir, p.Path))
-		b.WriteString(fmt.Sprintf("---\n\n## %s\n\n", p.Label))
+		// The URL as well as the label: a model quoting this file can then cite
+		// the page it came from rather than the concatenation.
+		b.WriteString(fmt.Sprintf("---\n\n## %s\n\nSource: %s/%s/\n\n", p.Label, siteURL, p.HTMLFile))
 		b.WriteString(string(src))
 		b.WriteString("\n\n")
 	}
@@ -812,10 +1010,10 @@ func buildSearchEntries(md string, pageTitle string, baseHref string) []SearchEn
 				}
 				parts = append(parts, h.text)
 			}
-			title := strings.Join(parts, " > ")
 			anchor := stack[len(stack)-1].slug
 			entries = append(entries, SearchEntry{
-				Title: title,
+				Title: parts[len(parts)-1],
+				Path:  strings.Join(parts[:len(parts)-1], " › "),
 				Href:  baseHref + "#" + anchor,
 				Body:  body,
 			})
@@ -846,7 +1044,8 @@ func buildSearchEntries(md string, pageTitle string, baseHref string) []SearchEn
 
 		if level > 0 {
 			flush()
-			text := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			text := headingAttrs.ReplaceAllString(strings.TrimSpace(strings.TrimLeft(trimmed, "#")), "")
+			text = strings.TrimSpace(text)
 			for len(stack) > 0 && stack[len(stack)-1].level >= level {
 				stack = stack[:len(stack)-1]
 			}
@@ -859,6 +1058,14 @@ func buildSearchEntries(md string, pageTitle string, baseHref string) []SearchEn
 
 	return entries
 }
+
+// goldmark's attribute syntax, which a heading carries to style what follows
+// it (`## Where to go next {.cards}`). The renderer consumes it; this file
+// reads the markdown itself, and without this the braces reached the search
+// index as part of the heading.
+var headingAttrs = regexp.MustCompile(`\s*\{[.#][^}]*\}\s*$`)
+
+var calloutLabelRe = regexp.MustCompile(`\[!(?i:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]`)
 
 var hrefRe = regexp.MustCompile(`href="(/[^"#]*)"`)
 
@@ -932,7 +1139,12 @@ func copyAPIAssets(cfg buildConfig, themeCSS string) error {
 	}
 	// The standalone full-viewport reference page served at /api/ (the sidebar's
 	// "Reference" link opens it in a new tab), themed with the site's tokens.
-	page := fmt.Sprintf(apiReferencePageTmpl, themeCSS)
+	//
+	// Substituted, not Sprintf'd: the template is CSS, CSS is full of percent
+	// signs, and `height: 100%;` reaching a format string came out as
+	// `height: 100%!;(NOVERB)` on the shipped page. The same marker the
+	// marketing pages use, which cannot misread its own content.
+	page := strings.Replace(apiReferencePageTmpl, themeMarker, themeCSS, 1)
 	if err := os.WriteFile(filepath.Join(apiDir, "index.html"), []byte(page), 0o644); err != nil {
 		return err
 	}
@@ -973,6 +1185,156 @@ func ensureScalarBundle(path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+// starCount returns the GitHub star count as the markup the header expects, or
+// "" when it cannot be read — offline, rate-limited, or the repository still
+// private. A build never fails over it: a missing number is a smaller problem
+// than a site that cannot be built on a plane.
+func starCount(cacheDir string) string {
+	cache := filepath.Join(cacheDir, "stars.json")
+
+	if info, err := os.Stat(cache); err == nil && time.Since(info.ModTime()) < starsMaxAge {
+		if n, err := readStars(cache); err == nil {
+			return formatStars(n)
+		}
+	}
+
+	n, err := fetchStars()
+	if err != nil {
+		fmt.Printf("star count unavailable (%v); ", err)
+		// Stale beats absent: a number from this morning is still true enough
+		// for a button, and this is the offline path.
+		if n, err := readStars(cache); err == nil {
+			fmt.Printf("using the cached one\n")
+			return formatStars(n)
+		}
+		fmt.Printf("rendering the button without one\n")
+		return ""
+	}
+
+	if err := os.MkdirAll(cacheDir, 0o755); err == nil {
+		os.WriteFile(cache, []byte(fmt.Sprintf(`{"stargazers_count":%d}`, n)), 0o644)
+	}
+	return formatStars(n)
+}
+
+func fetchStars() (int, error) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("https://api.github.com/repos/" + starsRepo)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	var body struct {
+		Count int `json:"stargazers_count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return 0, err
+	}
+	return body.Count, nil
+}
+
+func readStars(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	var body struct {
+		Count int `json:"stargazers_count"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return 0, err
+	}
+	return body.Count, nil
+}
+
+// formatStars renders the count the way GitHub's own button does: exact below a
+// thousand, one decimal above it.
+func formatStars(n int) string {
+	switch {
+	case n <= 0:
+		return ""
+	case n < 1000:
+		return fmt.Sprintf("<b>%d</b>", n)
+	default:
+		return fmt.Sprintf("<b>%.1fk</b>", float64(n)/1000)
+	}
+}
+
+// collectShots stages every product screenshot into dist/shots.
+//
+// A capture writes its images into a `shots/` directory beside itself, and a
+// spec lives beside the code it photographs -- so they are scattered across the
+// repo the way .doc.md files are, and this walks for them rather than reading
+// one directory. The site serves them from a single flat /shots/, which is what
+// a doc page writes in its markdown, so two files of the same name anywhere in
+// the tree are a collision: the build says which two rather than letting the
+// second quietly win.
+func collectShots(cfg buildConfig) error {
+	skip := map[string]bool{
+		"node_modules": true, "build": true,
+		".svelte-kit": true, ".git": true, "test-results": true,
+	}
+	// The build's own output, in every state it passes through: dist is the
+	// served copy, dist.staging is the one being written, dist.previous is the
+	// one on its way out. Walking into them finds this build's screenshots and
+	// reports them as duplicates of the sources they were copied from.
+	isOutput := func(path, name string) bool {
+		return strings.HasPrefix(name, "dist") && filepath.Dir(path) == cfg.webDir
+	}
+	dst := filepath.Join(cfg.outDir, "shots")
+	from := map[string]string{}
+
+	err := filepath.WalkDir(cfg.rootDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if skip[d.Name()] || isOutput(path, d.Name()) {
+			return fs.SkipDir
+		}
+		if d.Name() != "shots" {
+			return nil
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".png") {
+				continue
+			}
+			src := filepath.Join(path, name)
+			if prev, taken := from[name]; taken {
+				rel := func(p string) string { r, _ := filepath.Rel(cfg.rootDir, p); return r }
+				return fmt.Errorf("two screenshots named %s: %s and %s (the site serves one flat /shots/)", name, rel(prev), rel(src))
+			}
+			from[name] = src
+
+			data, err := os.ReadFile(src)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(dst, 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(dst, name), data, 0o644); err != nil {
+				return err
+			}
+		}
+		return fs.SkipDir
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func copyDir(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -1007,11 +1369,19 @@ func extractDescription(md string) string {
 }
 
 var linkRe = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
-var tableSepRe = regexp.MustCompile(`\|?[-:]+\|[-|:]+\|?`)
+
+// A table's delimiter row. Spaces around the pipes are the usual way these are
+// written and the reason the row used to survive into search excerpts as a run
+// of dashes between two column headings.
+var tableSepRe = regexp.MustCompile(`\|?[\s]*[-:]+[\s]*\|[-|:\s]+\|?`)
 
 func stripMarkdown(s string) string {
 	s = linkRe.ReplaceAllString(s, "$1")
 	s = tableSepRe.ReplaceAllString(s, "")
+	// The label goldmark reads off a callout's first line. It is chrome the
+	// renderer turns into a heading, and in a search excerpt it is noise in
+	// front of the sentence somebody was actually looking for.
+	s = calloutLabelRe.ReplaceAllString(s, "")
 	for _, c := range []string{"#", "*", "`", "|", ">"} {
 		s = strings.ReplaceAll(s, c, "")
 	}
@@ -1042,4 +1412,192 @@ func findRepoRoot() (string, error) {
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// copySitePages copies the hand-written marketing pages from web/site into the
+// build, substituting the app's theme file for the /*THEME*/ marker in each.
+//
+// The marketing pages share the app's colour tokens with the docs and nothing
+// else: no shared template, no shared layout, no generated markup. They are
+// plain HTML with their CSS inline, so a page arrives in one request and, at
+// current size, inside the first TCP congestion window. Keeping the theme a
+// build-time substitution is what stops the site's palette drifting from the
+// product's.
+//
+// Reports the pages it staged, so the sitemap and llms.txt can list the
+// marketing side of the site alongside the docs.
+func copySitePages(cfg buildConfig, themeCSS, stars string) ([]marketingPage, error) {
+	entries, err := os.ReadDir(cfg.siteDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var pages []marketingPage
+	var staged []string
+	for _, e := range entries {
+		name := e.Name()
+
+		if e.IsDir() || !strings.HasSuffix(name, ".html") || strings.HasSuffix(name, ".draft.html") {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(cfg.siteDir, name))
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Contains(src, []byte(themeMarker)) {
+			return nil, fmt.Errorf("%s: missing %s marker (the app theme has nowhere to go)", name, themeMarker)
+		}
+		out := bytes.Replace(src, []byte(themeMarker), []byte(themeCSS), 1)
+		out = bytes.ReplaceAll(out, []byte(starsMarker), []byte(stars))
+
+		// index.html is the site root; any other page gets a directory so its
+		// URL has no extension.
+		dst := filepath.Join(cfg.outDir, name)
+		url := "/"
+		if name != "index.html" {
+			slug := strings.TrimSuffix(name, ".html")
+			dir := filepath.Join(cfg.outDir, slug)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return nil, err
+			}
+			dst = filepath.Join(dir, "index.html")
+			url = "/" + slug + "/"
+		}
+		if err := os.WriteFile(dst, out, 0o644); err != nil {
+			return nil, err
+		}
+		staged = append(staged, dst)
+		pages = append(pages, marketingPage{
+			URL:         url,
+			Title:       metaContent(out, "<title>", "</title>"),
+			Description: metaContent(out, `<meta name="description" content="`, `">`),
+		})
+	}
+
+	if err := checkSiteBudget(cfg, staged); err != nil {
+		return nil, err
+	}
+
+	// Directory order is alphabetical, which puts /download/ ahead of the
+	// homepage. Lead with the front door in every listing that follows.
+	sort.SliceStable(pages, func(i, j int) bool { return pages[i].URL == "/" })
+
+	return pages, nil
+}
+
+// pageBudget is the transfer size a marketing page must fit into, brotli'd.
+//
+// 14 KB is the initial congestion window: ten TCP segments, what a server may
+// send before waiting for the client's first ACK. Under it the document arrives
+// in one round trip; over it costs a second, which on mobile is 50-150ms of a
+// blank screen. It is a wall, not a score — there is nothing to win by shaving
+// a page from 6 KB to 3 KB, and plenty to lose if the copy suffers for it.
+const pageBudget = 14 * 1024
+
+// A page may link anywhere it likes — <a href> and <link rel=canonical> cost
+// nothing. What matters is what the browser must *fetch* to render: media and
+// script sources, stylesheets, CSS imports and url() references.
+var (
+	subresourceRe = regexp.MustCompile(`(?i)(?:\bsrc=|@import\s+|\burl\()\s*["']?((?:https?:)?//[^"')\s>]+)`)
+	linkTagRe     = regexp.MustCompile(`(?is)<link\b[^>]*>`)
+	linkHrefRe    = regexp.MustCompile(`(?i)href=["']((?:https?:)?//[^"'\s>]+)`)
+	// rel values that make the browser open a connection. canonical, alternate,
+	// author and friends are metadata and never fetched.
+	fetchingRelRe = regexp.MustCompile(`(?i)rel=["']?(stylesheet|preload|prefetch|preconnect|dns-prefetch|modulepreload)`)
+)
+
+// externalFetches lists every third-party request a page would make.
+func externalFetches(html string) []string {
+	var out []string
+	for _, m := range subresourceRe.FindAllStringSubmatch(html, -1) {
+		out = append(out, m[1])
+	}
+	for _, tag := range linkTagRe.FindAllString(html, -1) {
+		href := linkHrefRe.FindStringSubmatch(tag)
+		if href != nil && fetchingRelRe.MatchString(tag) {
+			out = append(out, href[1])
+		}
+	}
+	return out
+}
+
+// checkSiteBudget holds the two rules that keep a marketing page fast, both of
+// which regress silently: it must arrive in one round trip, and it must not
+// depend on anyone else's server. Web fonts break both at once.
+func checkSiteBudget(cfg buildConfig, paths []string) error {
+	var problems []string
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		name, _ := filepath.Rel(cfg.outDir, path)
+
+		var buf bytes.Buffer
+		w := brotli.NewWriterLevel(&buf, brotli.BestCompression)
+		if _, err := w.Write(data); err != nil {
+			return err
+		}
+		if err := w.Close(); err != nil {
+			return err
+		}
+		size := buf.Len()
+		if size > pageBudget {
+			problems = append(problems, fmt.Sprintf(
+				"  %s is %.1f KB brotli, over the %d KB budget by %d bytes",
+				name, float64(size)/1024, pageBudget/1024, size-pageBudget))
+			continue
+		}
+		fmt.Printf("  %-24s %5.1f KB brotli  %2d packets  (%d%% of budget)\n",
+			name, float64(size)/1024, (size+1459)/1460, size*100/pageBudget)
+
+		for _, url := range externalFetches(string(data)) {
+			problems = append(problems, fmt.Sprintf(
+				"  %s fetches %s from another origin: inline it or self-host it", name, url))
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("marketing page budget:\n%s", strings.Join(problems, "\n"))
+	}
+	return nil
+}
+
+// breadcrumbs is the trail of sidebar sections above a page, ending with the
+// page itself. A page at the top level gets none: "Docs / Getting Started"
+// above an h1 reading "Getting Started" is furniture, not orientation.
+//
+// The last crumb is the page itself and is not a link; nor is a bare section
+// heading like "Special Files", which has no page of its own to link to.
+func breadcrumbs(tree []*SidebarNode, activePath string) []PageLink {
+	var trail []PageLink
+
+	var walk func(nodes []*SidebarNode, above []PageLink) bool
+	walk = func(nodes []*SidebarNode, above []PageLink) bool {
+		for _, n := range nodes {
+			crumb := PageLink{Label: n.Label}
+			if n.Path != "" {
+				crumb.Href = "/" + n.HTMLFile + "/"
+			}
+			here := append(append([]PageLink{}, above...), crumb)
+
+			if n.HTMLFile == activePath && n.Path != "" {
+				if len(here) > 1 {
+					// The last crumb is where the reader already is.
+					here[len(here)-1].Href = ""
+					trail = here
+				}
+				return true
+			}
+			if walk(n.Children, here) {
+				return true
+			}
+		}
+		return false
+	}
+	walk(tree, nil)
+
+	return trail
 }
