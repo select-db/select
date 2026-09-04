@@ -139,13 +139,9 @@ jobs:
     needs: [plan]
     if: needs.plan.outputs.go-modules != '[]'
     runs-on: ubuntu-latest
-    # Guardrail: the scans are fast (semgrep is build-free, govulncheck is one
-    # compile), so a scan that exceeds its budget is stuck, not working. The
-    # budget sits on the scan steps rather than the job, because the job also
-    # installs GTK/WebKit headers from the Ubuntu mirror: that step has been
-    # measured anywhere from 6s to 13m40s for the same packages, and when it
-    # was slow it consumed a 15-minute job budget and got semgrep cancelled
-    # after govulncheck had finished in 6 seconds.
+    # Budget sits on the scan steps, not the job: the GTK/WebKit apt install
+    # ahead of them measured 6s to 13m40s for the same packages, and at 13m40s
+    # it consumed a 15-minute job budget and cancelled semgrep.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -170,8 +166,7 @@ jobs:
         env:
           BUILD_TAGS: ${{ matrix.module == 'app' && 'gtk3' || '' }}
         run: |
-          # Pinned, not @latest: this is a blocking gate, so the tool that
-          # decides it should not change under us between runs. Bump it here.
+          # Pinned, not @latest: a blocking gate should not change between runs.
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
       - name: semgrep (SAST)
@@ -237,18 +232,12 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
-      # --prefer-offline: setup-node above restores ~/.npm and hits on it, but npm
-      # still revalidates cached entries against the registry. That revalidation
-      # is where the runners stall: the same `npm ci` on the same lockfile was
-      # measured at 5s, 2m19s and 7m02s within one hour on 2026-09-04, three of
-      # the slow samples landing on 7m02-7m03 across separate runners -- a fixed
-      # wait being hit, not bandwidth. --prefer-offline serves anything already
-      # cached without asking, and still fetches whatever the cache lacks, so the
-      # lockfile remains the only thing deciding versions. --no-audit/--no-fund
-      # drop two more registry round-trips CI does not read.
-      # The timeout is a guardrail against a true hang, not a budget: it sits
-      # above every measurement, including the pathological one, so a slow day
-      # stays green rather than turning every PR red.
+      # --prefer-offline: setup-node restores ~/.npm, but npm still revalidates
+      # it against the registry, and that round-trip stalls on these runners --
+      # the same `npm ci` measured 5s to 7m03s within one hour. Cached entries
+      # are served without asking, anything missing is still fetched, so the
+      # lockfile alone decides versions. The timeout bounds a hang: it sits above
+      # every measurement, so a slow day stays green rather than red.
       - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
         timeout-minutes: 10
@@ -473,8 +462,7 @@ jobs:
         if: steps.cache-wails.outputs.cache-hit != 'true'
         run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
-      # Same flags and guardrail as the frontend quality job above, for the same
-      # reason; see the comment there.
+      # Flags and timeout as in the frontend quality job above.
       - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
         timeout-minutes: 10
