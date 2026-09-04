@@ -5,11 +5,27 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/selectDb/dialect/core"
 	_ "modernc.org/sqlite"
 )
+
+// countingDialect wraps a real dialect and counts opens, so a test can assert
+// how many pools were actually dialed rather than how many survived.
+type countingDialect struct {
+	core.SQLDialect
+	opens atomic.Int64
+	delay time.Duration
+}
+
+func (d *countingDialect) OpenDB(dsn string) (*sql.DB, error) {
+	d.opens.Add(1)
+	time.Sleep(d.delay)
+	return d.SQLDialect.OpenDB(dsn)
+}
 
 func openTestPool(t *testing.T, name string) *sql.DB {
 	t.Helper()
@@ -85,9 +101,10 @@ func TestEvictionClearsDSNIndex(t *testing.T) {
 	}
 }
 
-// TestReplacingAPoolClosesTheOldOne covers the double-open race: two first
-// queries for one datasource both dial, and the loser must be closed rather
-// than overwritten in the cache.
+// TestReplacingAPoolClosesTheOldOne: storing a second pool under a live key
+// must close the one it displaces rather than drop the reference. GetOrOpenConn
+// no longer produces that case itself — see TestConcurrentFirstQueriesOpenOnePool
+// — but Set is public and a redial after a tunnel drop lands here.
 func TestReplacingAPoolClosesTheOldOne(t *testing.T) {
 	restore := poolCloseGrace
 	poolCloseGrace = 10 * time.Millisecond
@@ -190,4 +207,89 @@ func TestConcurrentEvictionIsSafe(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// TestConcurrentFirstQueriesOpenOnePool is the singleflight claim: callers that
+// miss together share one open instead of each dialing and discarding the
+// losers. Before, N concurrent first queries meant N dials — N round trips
+// against the customer's database — with N-1 pools closed straight after.
+func TestConcurrentFirstQueriesOpenOnePool(t *testing.T) {
+	restoreGuard := EnforceOutboundGuard
+	restoreGrace := poolCloseGrace
+	EnforceOutboundGuard = false
+	poolCloseGrace = 10 * time.Millisecond
+	defer func() {
+		EnforceOutboundGuard = restoreGuard
+		poolCloseGrace = restoreGrace
+		ClearConnCache()
+	}()
+	ClearConnCache()
+
+	base := GetDialect("sqlite")
+	if base == nil {
+		t.Fatal("sqlite dialect not available")
+	}
+	// Slow enough that every goroutine is inside GetOrOpenConn before the first
+	// open finishes; without singleflight they all dial.
+	counting := &countingDialect{SQLDialect: base, delay: 50 * time.Millisecond}
+	RegisterDialect("sqlite-counting", counting)
+
+	const n = 32
+	dsn := "file:concurrent-open?mode=memory&cache=shared"
+	pools := make([]*sql.DB, n)
+	errs := make([]error, n)
+
+	var start, done sync.WaitGroup
+	start.Add(1)
+	done.Add(n)
+	for i := range n {
+		go func() {
+			defer done.Done()
+			start.Wait()
+			pools[i], errs[i] = GetOrOpenConn("ws1", "sqlite-counting", dsn, nil)
+		}()
+	}
+	start.Done()
+	done.Wait()
+
+	for i := range n {
+		if errs[i] != nil {
+			t.Fatalf("caller %d: %v", i, errs[i])
+		}
+		if pools[i] != pools[0] {
+			t.Fatalf("caller %d got a different pool; all callers must share one", i)
+		}
+	}
+	if opens := counting.opens.Load(); opens != 1 {
+		t.Fatalf("opened %d pools for one datasource, want 1", opens)
+	}
+
+	// The pool that was opened is the one in the cache, and it is indexed for
+	// EvictConnsByAddr.
+	cached, ok := getConn("ws1", dsn)
+	if !ok || cached != pools[0] {
+		t.Fatal("the shared pool is not the one left in the cache")
+	}
+	connHashToDSNMu.Lock()
+	_, indexed := connHashToDSN[hashWorkspaceDSN("ws1", dsn)]
+	connHashToDSNMu.Unlock()
+	if !indexed {
+		t.Fatal("the opened pool was not added to the hash → DSN index")
+	}
+}
+
+// TestFailedOpenIsNotCached: a dial that fails must leave nothing behind, so the
+// next query retries rather than inheriting the failure.
+func TestFailedOpenIsNotCached(t *testing.T) {
+	restoreGuard := EnforceOutboundGuard
+	EnforceOutboundGuard = false
+	defer func() { EnforceOutboundGuard = restoreGuard; ClearConnCache() }()
+	ClearConnCache()
+
+	if _, err := GetOrOpenConn("ws1", "no-such-dialect", "dsn-unopenable", nil); err == nil {
+		t.Fatal("expected an error for an unsupported database type")
+	}
+	if _, ok := getConn("ws1", "dsn-unopenable"); ok {
+		t.Fatal("a failed open was cached")
+	}
 }
