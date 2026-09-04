@@ -139,9 +139,10 @@ jobs:
     needs: [plan]
     if: needs.plan.outputs.go-modules != '[]'
     runs-on: ubuntu-latest
-    # Guardrail: this step set is fast (semgrep is build-free, govulncheck is one
-    # compile). A run that exceeds this is stuck, not working — fail, don't hang.
-    timeout-minutes: 15
+    # Budget sits on the scan steps, not the job: the GTK/WebKit apt install
+    # ahead of them measured 6s to 13m40s for the same packages, and at 13m40s
+    # it consumed a 15-minute job budget and cancelled semgrep.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -161,13 +162,16 @@ jobs:
         run: sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: govulncheck
         working-directory: ${{ matrix.module }}
+        timeout-minutes: 10
         env:
           BUILD_TAGS: ${{ matrix.module == 'app' && 'gtk3' || '' }}
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          # Pinned, not @latest: a blocking gate should not change between runs.
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
       - name: semgrep (SAST)
         if: ${{ !cancelled() }}
+        timeout-minutes: 10
         working-directory: ${{ matrix.module }}
         run: |
           # Build-free SAST — replaces gosec, whose whole-program SSA re-compiled
@@ -228,8 +232,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
-      - run: npm ci
+      # --prefer-offline: setup-node restores ~/.npm, but npm still revalidates
+      # it against the registry, and that round-trip stalls on these runners --
+      # the same `npm ci` measured 5s to 7m03s within one hour. Cached entries
+      # are served without asking, anything missing is still fetched, so the
+      # lockfile alone decides versions. The timeout bounds a hang: it sits above
+      # every measurement, so a slow day stays green rather than red.
+      - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
+        timeout-minutes: 10
       - run: npm run check
         working-directory: app/frontend
       - run: npm run lint
@@ -451,8 +462,10 @@ jobs:
         if: steps.cache-wails.outputs.cache-hit != 'true'
         run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
-      - run: npm ci
+      # Flags and timeout as in the frontend quality job above.
+      - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
+        timeout-minutes: 10
       - run: npx playwright install --with-deps chromium
         working-directory: app/frontend
 

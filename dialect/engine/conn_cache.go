@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/selectDb/toolkit/cache"
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/toolkit/cache"
 )
 
 // PoolConfig tunes the sql.DB connection pool for a proxified datasource.
@@ -22,33 +22,63 @@ type PoolConfig struct {
 
 var (
 	// 20k entries × ~30KB = ~600MB max
-	connCache = cache.New(cache.Options{MaxEntries: 20_000, TTL: 20 * time.Minute})
+	connCache = cache.New(cache.Options{
+		MaxEntries: 20_000,
+		TTL:        20 * time.Minute,
+		OnDelete:   closeDeletedPool,
+	})
 
-	// secondary index: hash → DSN for EvictConnsByAddr. SSH-rewritten DSNs are 127.0.0.1:port.
+	// secondary index: hash → DSN for DeleteConnsByAddr. SSH-rewritten DSNs are 127.0.0.1:port.
 	connHashToDSN   = make(map[string]string)
 	connHashToDSNMu sync.Mutex
 )
 
-// getConn looks up a cached *sql.DB by (workspaceID, dsn). DSN is hashed, never stored verbatim.
-func getConn(workspaceID, dsn string) (*sql.DB, bool) {
-	value, ok := connCache.Get(hashWorkspaceDSN(workspaceID, dsn))
+// poolCloseGrace is how long closeDeletedPool waits before closing a pool that
+// has left the cache, so a caller that took it just before deletion can still
+// start its query. Close does not interrupt queries already in flight. A var so
+// tests can shorten it.
+var poolCloseGrace = 60 * time.Second
+
+// closeDeletedPool prunes the hash → DSN index and closes the pool one
+// poolCloseGrace later. Runs for every deletion, via the cache's OnDelete.
+func closeDeletedPool(hash string, value any) {
+	connHashToDSNMu.Lock()
+	delete(connHashToDSN, hash)
+	connHashToDSNMu.Unlock()
+
+	db, ok := value.(*sql.DB)
 	if !ok {
-		return nil, false
+		return
 	}
-	return value.(*sql.DB), true
+	time.AfterFunc(poolCloseGrace, func() { _ = db.Close() })
 }
 
-// setConn stores db under (workspaceID, dsn).
-func setConn(workspaceID, dsn string, db *sql.DB) {
-	hash := hashWorkspaceDSN(workspaceID, dsn)
-	connCache.Set(hash, db)
+// indexConn records hash → dsn so DeleteConnsByAddr can find this pool again.
+func indexConn(hash, dsn string) {
 	connHashToDSNMu.Lock()
 	connHashToDSN[hash] = dsn
 	connHashToDSNMu.Unlock()
 }
 
-// EvictConnsByAddr drops all connections whose DSN contains addr. Called when SSH tunnel dies.
-func EvictConnsByAddr(addr string) {
+// applyPoolConfig applies the non-zero fields of cfg; the rest keep Go's defaults.
+func applyPoolConfig(db *sql.DB, cfg PoolConfig) {
+	if cfg.MaxOpenConns > 0 {
+		db.SetMaxOpenConns(cfg.MaxOpenConns)
+	}
+	if cfg.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(cfg.MaxIdleConns)
+	}
+	if cfg.ConnMaxLifetime > 0 {
+		db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	}
+	if cfg.ConnMaxIdleTime > 0 {
+		db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	}
+}
+
+// DeleteConnsByAddr deletes every pool whose DSN contains addr, closing each
+// one through closeDeletedPool. Called when an SSH tunnel dies.
+func DeleteConnsByAddr(addr string) {
 	var toDelete []string
 	connHashToDSNMu.Lock()
 	for hash, dsn := range connHashToDSN {
@@ -58,6 +88,8 @@ func EvictConnsByAddr(addr string) {
 		}
 	}
 	connHashToDSNMu.Unlock()
+	// Delete fires closeDeletedPool, which closes the pool behind the dead
+	// tunnel rather than leaving it to linger on a socket that no longer works.
 	for _, hash := range toDelete {
 		connCache.Delete(hash)
 	}
@@ -65,6 +97,7 @@ func EvictConnsByAddr(addr string) {
 
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
+// Concurrent first queries for one datasource share a single open.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
 	if dbType == "sqlite" && ssh != nil {
 		return nil, newConfigError("SSH tunneling is not supported for sqlite")
@@ -117,51 +150,48 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	// Guard off (desktop app): dialing the user's own machine, incl. a local
 	// sqlite file, is the intended use and must not be restricted.
 
-	if db, ok := getConn(workspaceID, dsn); ok {
-		return db, nil
-	}
-
-	dialect := GetDialect(dbType)
-	if dialect == nil {
-		return nil, newConfigErrorf("unsupported database type: %s", dbType)
-	}
-
-	var (
-		db  *sql.DB
-		err error
-	)
-	if guardedDirect {
-		// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
-		db, err = openGuardedDB(dbType, dsn)
-	} else {
-		db, err = dialect.OpenDB(dsn)
-	}
-	if err != nil {
-		return nil, err
-	}
-
 	var cfg PoolConfig
 	if len(pool) > 0 {
 		cfg = pool[0]
 	}
-	if cfg.MaxOpenConns > 0 {
-		db.SetMaxOpenConns(cfg.MaxOpenConns)
-	}
-	if cfg.MaxIdleConns > 0 {
-		db.SetMaxIdleConns(cfg.MaxIdleConns)
-	}
-	if cfg.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	}
-	if cfg.ConnMaxIdleTime > 0 {
-		db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
-	}
+	hash := hashWorkspaceDSN(workspaceID, dsn)
 
-	setConn(workspaceID, dsn, db)
-	return db, nil
+	// GetOrCreate opens at most once per key: concurrent first queries for one
+	// datasource share the open rather than each dialing. A failure is not cached.
+	value, err := connCache.GetOrCreate(hash, func() (any, error) {
+		dialect := GetDialect(dbType)
+		if dialect == nil {
+			return nil, newConfigErrorf("unsupported database type: %s", dbType)
+		}
+
+		var (
+			db  *sql.DB
+			err error
+		)
+		if guardedDirect {
+			// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
+			db, err = openGuardedDB(dbType, dsn)
+		} else {
+			db, err = dialect.OpenDB(dsn)
+		}
+		if err != nil {
+			return nil, err
+		}
+		applyPoolConfig(db, cfg)
+
+		// Indexed here so only the caller that opened writes it, not every cache
+		// hit. Safe before the store: create runs only on a miss, so nothing
+		// under this key is displaced.
+		indexConn(hash, dsn)
+		return db, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.(*sql.DB), nil
 }
 
-// ClearConnCache drops all connection cache entries.
+// ClearConnCache drops all connection cache entries, closing each pool.
 func ClearConnCache() {
 	connCache.DeleteFunc(func(string) bool { return true })
 	connHashToDSNMu.Lock()
