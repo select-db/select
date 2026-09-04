@@ -1,17 +1,8 @@
 import { writable, derived } from 'svelte/store';
 import type * as graph from '$lib/wails/graph';
 
-/**
- * Height of one tree row, in pixels.
- *
- * The windowing here is index-based: it turns a scroll offset into a row index
- * by dividing by this. ItemDisplay renders both the row and its placeholder at
- * this height, so the two must agree — a row taller than the constant makes the
- * computed index run ahead of the real one, and once that drift exceeds
- * OVERSCAN the window no longer covers the viewport and the tree renders blank.
- * That is why the number lives here and is read by the components rather than
- * written into their stylesheets.
- */
+// Read by ItemDisplay too: the windowing divides scroll offsets by it, so a row
+// of another height would put the window somewhere the rows are not.
 export const ROW_HEIGHT = 32;
 const OVERSCAN = 50;
 
