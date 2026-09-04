@@ -18,13 +18,18 @@ notes.txt
 backend/server
 app/selectDb
 
-# Generated docs site
-docs/site/
+# Generated website
+web/dist/
+# Per-build staging directories, renamed into web/dist when a build finishes.
+web/dist.staging-*
 
 # Local release config: SSH_HOST, MINISIGN_SECRET_KEY path, etc.
 .env.release
 
 # Minisign secret keys. The public key (minisign.pub) is committed;
 *.sec
-# docs API-reference build cache (fetched Scalar bundle)
-docs/.cache/
+# Build cache: the fetched Scalar bundle and the GitHub star count
+web/.cache/
+
+# Generator binary (build with: go build ./web/generate)
+web/generate/generate
