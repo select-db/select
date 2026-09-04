@@ -47,7 +47,7 @@
     "dompurify": "^3.4.14",
     "eslint-plugin-svelte": "^3.23.0",
     "highlight.js": "^11.11.1",
-    "katex": "^0.16.28",
+    "katex": "^0.18.5",
     "marked": "^18.0.7",
     "marked-katex-extension": "^5.1.10",
     "monaco-editor": "^0.56.0",
