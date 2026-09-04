@@ -110,8 +110,8 @@ func (g *Graph) folderIDForURI(uri string) string {
 }
 
 // sqlFilesInFolder returns the .sql files a $ref can name: the folder's own,
-// nothing deeper. They are asked for rather than read off the folder node, so a
-// folder nobody has opened answers without being pulled into the graph.
+// nothing deeper. Queried rather than read off the folder node, so an unopened
+// folder answers without being resolved.
 func (g *Graph) sqlFilesInFolder(folderURI string) ([]*FileNode, error) {
 	return g.FindFiles(context.Background(), FileQuery{
 		FolderURI:  folderURI,

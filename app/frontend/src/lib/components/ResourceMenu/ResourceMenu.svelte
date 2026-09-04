@@ -47,9 +47,8 @@
 		updateDebouncedQuery(searchQuery);
 	});
 
-	// Files are asked for rather than read off the graph, which only holds the
-	// folders that have been opened. Each keystroke supersedes the one before
-	// it, cancelling the walk the backend is still doing for it.
+	// Each keystroke supersedes the one before it, cancelling the walk the
+	// backend is still doing for it.
 	let queriedFiles = $state<FileNode[]>([]);
 
 	$effect(() => {
@@ -66,9 +65,8 @@
 		return () => query.cancel();
 	});
 
-	// Before anything is typed there is nothing to match on, so the menu offers
-	// what was opened recently — the files, that is; tabs and databases come
-	// from the layout and the graph below.
+	// Nothing typed, nothing to match on: the file rows are the recently opened
+	// ones instead. Tabs and databases come from the layout and the graph below.
 	const recentFiles = $derived.by(() => {
 		if (debouncedQuery.trim() !== '') return [];
 		return $recentItemsStore
