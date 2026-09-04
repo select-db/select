@@ -14,7 +14,8 @@ Monorepo of Go modules + a Svelte frontend + a Python analyzer:
 | `backend/` | Hosted proxy and sync server (Go) |
 | `dialect/` | Shared SQL engine: per-dialect parsing/introspection + the Python token analyzer (`dialect/core/tokenanalyzer/python`) |
 | `toolkit/` | Small shared Go utilities |
-| `docs/` | Documentation website source |
+| `web/` | select-db.com: the site generator, docs manifest, theme and marketing pages |
+| `docs/` | Internal repo docs (proposals, runbooks) — not published |
 
 ## Prerequisites
 
