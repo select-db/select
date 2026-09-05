@@ -74,6 +74,16 @@ async function keepName(page: Page) {
 	await expect(box).toBeHidden();
 }
 
+/** Finds a file by name in the workspace picker and opens it. */
+async function findInPicker(page: Page, name: string) {
+	await page.keyboard.press('ControlOrMeta+p');
+	await page.getByPlaceholder('Search workspace...').fill(name);
+
+	const hit = page.getByRole('menuitem').filter({ hasText: name });
+	await expect(hit).toBeVisible();
+	await hit.click();
+}
+
 type GraphFolder = { name: string; folders: GraphFolder[] };
 
 /** Whether the graph is holding a folder of that name, at any depth. */
@@ -243,6 +253,91 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 
 	await expect(treeNode(page, '#1.sql')).toHaveCount(0);
 	await expect(treeNode(page, '#2.sql')).toHaveCount(0);
+	await expect(tab(page, '#1.sql')).toHaveCount(0);
+	await expect(tab(page, '#2.sql')).toHaveCount(0);
+
+	// --- Names that have to be refused --------------------------------------
+
+	// A name of nothing but spaces would rename the file onto the folder it
+	// sits in, and a name climbing out of the workspace would put it on the
+	// host filesystem. Both leave the file where it is.
+	for (const refused of ['   ', '../../../escaped.sql']) {
+		await openMenuOn(page, 'weekly.sql');
+		await chooseMenuItem(page, 'Rename...');
+		await renameTo(page, refused);
+		await expect(treeNode(page, 'weekly.sql')).toBeVisible();
+	}
+	await expect(treeNode(page, 'escaped.sql')).toHaveCount(0);
+
+	// --- Renaming and moving a folder ---------------------------------------
+
+	// A folder rename moves everything under it. The rows come back under the
+	// new name, and a file open in a tab is still readable at its new path
+	// rather than pointing at one that no longer exists.
+	await openMenuOn(page, 'reports');
+	await chooseMenuItem(page, 'New folder...');
+	await renameTo(page, 'before');
+	await openMenuOn(page, 'before');
+	await chooseMenuItem(page, 'New file...');
+	await renameTo(page, 'inside.sql');
+	await editor.surface(page).click();
+	await page.keyboard.type('SELECT 3 AS three;');
+	await expect(editor.line(page, 'SELECT 3 AS three;')).toBeVisible();
+
+	await openMenuOn(page, 'before');
+	await chooseMenuItem(page, 'Rename...');
+	await renameTo(page, 'after');
+
+	await expect(treeNode(page, 'after')).toBeVisible();
+	await expect(treeNode(page, 'before')).toHaveCount(0);
+
+	// The file went with the folder: it is still in the workspace, and the tab
+	// open on it still reads it at its new path rather than pointing at one that
+	// no longer exists.
+	//
+	// Asked for rather than looked for in the tree: whether a renamed folder
+	// comes back open or closed depends on whether its files were announced
+	// again on the way, and that is not what this is about.
+	await findInPicker(page, 'inside.sql');
+	await tab(page, 'inside.sql').click();
+	await expect(editor.line(page, 'SELECT 3 AS three;')).toBeVisible();
+
+	// Folders drag like files do.
+	await treeNode(page, 'after').dragTo(treeNode(page, '2026'));
+	await treeNode(page, '2026').click();
+	await expect(treeNode(page, 'after')).toHaveCount(0);
+	await treeNode(page, '2026').click();
+	await expect(treeNode(page, 'after')).toBeVisible();
+
+	// --- Selecting a range ---------------------------------------------------
+
+	// Shift-click takes everything between the two rows, which the menu reports
+	// by offering the batch delete. Nothing is deleted here: these are the
+	// workspace's own files.
+	await treeNode(page, 'top_customers.sql').click();
+	await treeNode(page, 'weekly_revenue.sql').click({ modifiers: ['Shift'] });
+	await openMenuOn(page, 'weekly_revenue.sql');
+	await expect(page.getByRole('menuitem', { name: 'Delete selected' })).toBeVisible();
+	await page.keyboard.press('Escape');
+
+	// And the selection is put back to one row, or every menu after this one is
+	// the batch delete.
+	await treeNode(page, 'reports').click();
+	await treeNode(page, 'reports').click();
+	await treeNode(page, 'reports').click({ modifiers: ['ControlOrMeta'] });
+
+	// --- Files inside a database --------------------------------------------
+
+	// A database is a directory too: files can be made in it, and they are the
+	// database's own rather than the folder's.
+	await openMenuOn(page, 'warehouse');
+	await chooseMenuItem(page, 'New file...');
+	await renameTo(page, 'in-db.sql');
+	await expect(treeNode(page, 'in-db.sql')).toBeVisible();
+
+	await openMenuOn(page, 'in-db.sql');
+	await chooseMenuItem(page, 'Delete');
+	await expect(treeNode(page, 'in-db.sql')).toHaveCount(0);
 
 	// --- What happens without the app ---------------------------------------
 
@@ -265,11 +360,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await expect.poll(() => folderInGraph(request, 'quarterly')).toBe(true);
 	await run('cp', 'cohorts.sql', 'archive/quarterly/b.sql');
 
-	await page.keyboard.press('ControlOrMeta+p');
-	await page.getByPlaceholder('Search workspace...').fill('b.sql');
-	const hit = page.getByRole('menuitem').filter({ hasText: 'b.sql' });
-	await expect(hit).toBeVisible();
-	await hit.click();
+	await findInPicker(page, 'b.sql');
 	await expect(tab(page, 'b.sql')).toBeVisible();
 
 	// A seeded file removed and then restored by git comes back on its own.
