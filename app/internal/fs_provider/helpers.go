@@ -50,6 +50,16 @@ func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
 	return full, nil
 }
 
+// WorkspaceURIPrefix returns the prefix every workspace URI starts with,
+// "selectdb://workspaces/".
+//
+// The frontend has to recognise a workspace URI — to tell a folder on disk from
+// a row in the search or git tree, say. This is how it asks, rather than
+// restating the scheme in TypeScript where it can drift from the Go side.
+func (fsp *FSProvider) WorkspaceURIPrefix() string {
+	return fs_uri.Scheme + fs_uri.WorkspacePrefix
+}
+
 // userOSPathFromURI resolves a selectdb://user/... URI to an absolute path under
 // the per-user config directory. rel is the path portion after the scheme
 // (e.g. "user/.theme"). It guards against path traversal so a crafted URI
