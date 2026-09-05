@@ -216,6 +216,18 @@ const collectGroups = (node: TabGroup | SplitContainer): TabGroup[] => {
 
 export const getAllGroups = (): TabGroup[] => collectGroups(get(layoutStore).root);
 
+/**
+ * The path a tab is pointing at right now.
+ *
+ * A tab id outlives a rename while its uri does not, so anything that acts on a
+ * file later -- a debounced write, most of all -- asks for the path when it acts
+ * rather than remembering the one it started with.
+ */
+export const getTabUri = (tabId: string): string | undefined =>
+	getAllGroups()
+		.flatMap((group) => group.tabs)
+		.find((tab) => tab.id === tabId)?.uri;
+
 export const activeGroupStore = derived(
 	layoutStore,
 	($layout) => collectGroups($layout.root).find((g) => g.id === $layout.activeGroupId) ?? null
@@ -1035,18 +1047,33 @@ export const removeTabByUri = (uri: string) => {
 };
 
 /** Updates open file tabs when a file is renamed so they point at the new URI (keeps tab open). */
+/**
+ * Points open tabs at a renamed path.
+ *
+ * Renaming a folder moves everything under it, so a tab is updated when it is
+ * the renamed file itself or when it sits inside the renamed folder — otherwise
+ * it keeps reading a path that no longer exists, and the file quietly opens a
+ * second time when it is opened again.
+ */
 export const updateFileTabsAfterRename = (oldUri: string, newUri: string, newName: string) => {
+	const insideOld = `${oldUri}/`;
 	const tabsToUpdate = getAllGroups()
 		.flatMap((g) => g.tabs)
-		.filter((t) => t.uri === oldUri && t.file && !t.file.isTemp);
+		.filter((t) => t.file && !t.file.isTemp && (t.uri === oldUri || t.uri.startsWith(insideOld)));
+
 	for (const tab of tabsToUpdate) {
 		const node = tab.file!.node;
+		const uri = tab.uri === oldUri ? newUri : newUri + tab.uri.slice(oldUri.length);
+		// Only the renamed thing takes the new name; a file carried along by a
+		// folder rename keeps its own.
+		const name = tab.uri === oldUri ? newName : node.name;
+
 		updateTab({
 			...tab,
-			uri: newUri,
+			uri,
 			file: {
 				...tab.file!,
-				node: { ...node, id: newUri, uri: newUri, name: newName } as graph.FileNode
+				node: { ...node, id: uri, uri, name } as graph.FileNode
 			}
 		});
 	}

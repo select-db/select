@@ -5,6 +5,7 @@
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import {
 		getTabByNodeId,
+		getTabUri,
 		updateTab,
 		removeTab,
 		activeGroupStore,
@@ -108,7 +109,14 @@
 		contentLoaded = true;
 	}
 
-	const writeToFile = debounce(async (uri: string, content: string) => {
+	// The path is looked up when the write goes out, not when the key was
+	// pressed: a rename in between moves the file, and a write to where it used
+	// to be recreates it there -- an old folder coming back from the dead,
+	// holding the text that belongs to the new one. The tab id is what survives
+	// the rename, so that is what is remembered.
+	const writeToFile = debounce(async (tabId: string, content: string) => {
+		const uri = getTabUri(tabId);
+		if (!uri) return;
 		await must(tryCatch(fs.Write, { uri, content }));
 	}, 200);
 
@@ -127,7 +135,7 @@
 		}
 
 		if (file) {
-			writeToFile(file.uri, content);
+			writeToFile(tab.id, content);
 		}
 	};
 
