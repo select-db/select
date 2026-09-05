@@ -101,48 +101,32 @@ func (g *Graph) FindFiles(ctx context.Context, q FileQuery) ([]*FileNode, error)
 	extensions := lowered(q.Extensions)
 	best := &fileMatchHeap{limit: min(limit, MaxFileQueryLimit)}
 
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
+	err = fsCtx.WalkFrom(root, func(entry Entry) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		relSlash, inWorkspace := fsCtx.Rel(path)
-		if !inWorkspace {
-			return nil
-		}
-		relSlash = filepath.ToSlash(filepath.Clean(relSlash))
-
-		if IsInternalWorkspacePath(relSlash) {
-			if entry.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-
 		if entry.IsDir() {
-			if q.Depth > 0 && path != root && depthBelow(root, path) >= q.Depth {
+			if q.Depth > 0 && depthBelow(root, entry.Path) >= q.Depth {
 				return fs.SkipDir
 			}
 			return nil
 		}
 
 		name := entry.Name()
-		if IsInternalWorkspaceFile(name) || !hasExtension(name, extensions) {
+		if !hasExtension(name, extensions) {
 			return nil
 		}
 
-		score := scoreFileName(name, relSlash, pattern)
+		score := scoreFileName(name, entry.Rel, pattern)
 		if score == scoreNoMatch {
 			return nil
 		}
 
 		best.offer(fileMatch{
-			path:   path,
-			uri:    fsCtx.URI(relSlash),
-			parent: fsCtx.ParentURI(relSlash),
+			path:   entry.Path,
+			uri:    entry.URI(),
+			parent: entry.ParentURI(),
 			name:   name,
 			score:  score,
 		})
@@ -159,7 +143,7 @@ func (g *Graph) FindFiles(ctx context.Context, q FileQuery) ([]*FileNode, error)
 	matches := best.sorted()
 	files := make([]*FileNode, 0, len(matches))
 	for _, m := range matches {
-		files = append(files, newFSFileNode(m.path, m.uri, m.parent, m.name))
+		files = append(files, FileNodeFromDisk(m.path, m.uri, m.parent))
 	}
 
 	return files, nil

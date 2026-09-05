@@ -7,13 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"selectDb/internal/fs_uri"
 	"selectDb/internal/utils"
 )
-
-// userURIPrefix is the path portion prefix for per-user config files, which
-// live outside every server/workspace folder under the per-user app data dir.
-// Example: selectdb://user/.theme ↔ <appDataDir>/user-config/.theme
-const userURIPrefix = "user/"
 
 // GetOSPathFromURI resolves a logical URI to an absolute OS path.
 //
@@ -24,35 +20,31 @@ const userURIPrefix = "user/"
 //   - selectdb://user/...             → joined under the per-user config dir,
 //     for personal files (.theme, .config) that live outside every workspace.
 func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
-	const scheme = "selectdb://"
-
-	if !strings.HasPrefix(URI, scheme) {
-		return "", fmt.Errorf("invalid URI (expected scheme %q): %s", scheme, URI)
+	rel, ok := fs_uri.Rel(URI)
+	if !ok {
+		return "", fmt.Errorf("invalid URI (expected scheme %q and a path): %s", fs_uri.Scheme, URI)
 	}
 
-	rel := strings.TrimPrefix(URI, scheme)
-	if rel == "" {
-		return "", fmt.Errorf("missing path in uri: %s", URI)
-	}
-
-	if strings.HasPrefix(rel, userURIPrefix) {
+	if strings.HasPrefix(rel, fs_uri.UserPrefix) {
 		return userOSPathFromURI(URI, rel)
 	}
 
-	if !strings.HasPrefix(rel, "workspaces/") {
-		return "", fmt.Errorf("invalid URI path (expected to start with %q or %q): %s", "workspaces/", userURIPrefix, URI)
+	if !strings.HasPrefix(rel, fs_uri.WorkspacePrefix) {
+		return "", fmt.Errorf("invalid URI path (expected to start with %q or %q): %s", fs_uri.WorkspacePrefix, fs_uri.UserPrefix, URI)
 	}
 
-	// Normalise and guard against path traversal or absolute paths.
-	rel = filepath.Clean(rel)
-	if filepath.IsAbs(rel) || strings.HasPrefix(rel, "..") {
-		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape root): %s", URI)
-	}
 	if fsp.root == "" {
 		return "", fmt.Errorf("FSProvider root not set (no server selected)")
 	}
-	full := filepath.Join(fsp.root, rel)
-	if err := ensureWithinRoot(fsp.root, full); err != nil {
+
+	full, err := fs_uri.Resolve(fsp.root, rel)
+	if err != nil {
+		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape root): %s", URI)
+	}
+
+	// This path is about to be read or written, so the lexical check is not
+	// enough: a symlink inside the workspace must not lead out of it.
+	if err := fs_uri.EnsureWithin(fsp.root, full); err != nil {
 		return "", fmt.Errorf("invalid URI path (escapes workspace root): %s", URI)
 	}
 	return full, nil
@@ -63,50 +55,24 @@ func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
 // (e.g. "user/.theme"). It guards against path traversal so a crafted URI
 // cannot escape the user config dir.
 func userOSPathFromURI(URI, rel string) (string, error) {
-	sub := strings.TrimPrefix(rel, userURIPrefix)
+	sub := strings.TrimPrefix(rel, fs_uri.UserPrefix)
 	if sub == "" {
 		return "", fmt.Errorf("missing path in uri: %s", URI)
-	}
-
-	sub = filepath.Clean(sub)
-	if filepath.IsAbs(sub) || sub == ".." || strings.HasPrefix(sub, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape user config dir): %s", URI)
 	}
 
 	dir, err := utils.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	full := filepath.Join(dir, sub)
-	if err := ensureWithinRoot(dir, full); err != nil {
+
+	full, err := fs_uri.Resolve(dir, sub)
+	if err != nil {
+		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape user config dir): %s", URI)
+	}
+	if err := fs_uri.EnsureWithin(dir, full); err != nil {
 		return "", fmt.Errorf("invalid URI path (escapes user config dir): %s", URI)
 	}
 	return full, nil
-}
-
-// ensureWithinRoot resolves symlinks on the deepest existing ancestor of full
-// and verifies it stays under root, so a symlink placed inside the workspace
-// (e.g. by a cloned repo) cannot be followed out to the host filesystem.
-func ensureWithinRoot(root, full string) error {
-	realRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		realRoot = root
-	}
-	p := full
-	for {
-		if resolved, rerr := filepath.EvalSymlinks(p); rerr == nil {
-			rel, relErr := filepath.Rel(realRoot, resolved)
-			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("escapes root")
-			}
-			return nil
-		}
-		parent := filepath.Dir(p)
-		if parent == p {
-			return fmt.Errorf("escapes root")
-		}
-		p = parent
-	}
 }
 
 func fileInfoToStat(info fs.FileInfo) FileStat {

@@ -7,71 +7,33 @@ package graph
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"selectDb/internal/utils"
 )
 
-// newFSFileNode builds the file node for a directory entry, reading the sidecar
-// metadata that binds the file to its databases.
-func newFSFileNode(filePath, fileURI, parentURI, name string) *FileNode {
-	var databases []DatabaseRef
-	if meta, err := ReadFileMetadata(filePath + ".metadata.json"); err == nil && len(meta.Databases) > 0 {
-		databases = meta.Databases
-	}
-
-	return &FileNode{
-		ID:   fileURI,
-		URI:  fileURI,
-		Type: "file",
-
-		Name: name,
-
-		FolderID:       parentURI,
-		Databases:      databases,
-		QueryResults:   nil,
-		PlanResults:    nil,
-		ExplainResults: nil,
-	}
-}
-
 // materializeFiles reads dirPath and attaches a node for every user-facing file
 // the container does not already hold. Callers hold g.mu.
 func (g *Graph) materializeFiles(container Node, dirPath string, fsCtx *WorkspaceFS) error {
-	entries, err := os.ReadDir(dirPath)
+	err := fsCtx.ReadDir(dirPath, func(entry Entry) error {
+		if entry.IsDir() {
+			return nil
+		}
+
+		fileURI := entry.URI()
+		if g.lookup(fileURI) != nil {
+			return nil
+		}
+
+		node := FileNodeFromDisk(entry.Path, fileURI, entry.ParentURI())
+		container.AddChild(node)
+		g.index.add(node)
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("read folder %s: %w", dirPath, err)
 	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if IsInternalWorkspaceFile(name) {
-			continue
-		}
-
-		childPath := filepath.Join(dirPath, name)
-		relSlash, ok := fsCtx.Rel(childPath)
-		if !ok || IsInternalWorkspacePath(relSlash) {
-			continue
-		}
-
-		fileURI := fsCtx.URI(relSlash)
-		if g.lookup(fileURI) != nil {
-			continue
-		}
-
-		node := newFSFileNode(childPath, fileURI, fsCtx.ParentURI(relSlash), name)
-		container.AddChild(node)
-		g.index.add(node)
-	}
-
 	return nil
 }
 

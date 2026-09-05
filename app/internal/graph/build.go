@@ -143,47 +143,22 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	// Load .env file for the root folder if it exists
 	_ = g.LoadFolderEnvFile(rootFolder, fsCtx)
 
-	err := filepath.WalkDir(workspaceRoot, func(cpath string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			// Skip entries that cannot be accessed.
-			return nil
-		}
-
-		// Skip the workspace root itself; it's represented by rootFolder.
-		if cpath == workspaceRoot {
-			return nil
-		}
-
-		relSlash, ok := fsCtx.Rel(cpath)
-		if !ok {
-			return nil
-		}
-
-		relSlash = filepath.ToSlash(filepath.Clean(relSlash))
-
-		// Ignore internal workspace paths such as ".git".
-		if IsInternalWorkspacePath(relSlash) {
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-
-		if d.IsDir() {
+	err := fsCtx.Walk(func(entry Entry) error {
+		if entry.IsDir() {
 			// Determine parent folder URI for this directory.
-			parentURI := fsCtx.ParentURI(relSlash) // parent of this directory
+			parentURI := fsCtx.ParentURI(entry.Rel) // parent of this directory
 			parentFolder := g.getOrCreateParentFolder(foldersByID, parentURI, fsCtx)
 
 			// Check if this directory represents a db instance (contains a
 			// db.config.json). In that case, we build a DBInstanceNode and
 			// continue walking to populate its files/folders.
-			if CheckIsDBInstance(cpath) {
-				cfg, readErr := ReadFSDBConfig(filepath.Join(cpath, "db.config.json"))
+			if CheckIsDBInstance(entry.Path) {
+				cfg, readErr := ReadFSDBConfig(filepath.Join(entry.Path, "db.config.json"))
 				if readErr != nil {
 					return fs.SkipDir
 				}
 
-				dbURI := fsCtx.URI(relSlash)
+				dbURI := fsCtx.URI(entry.Rel)
 
 				sshConfig := SSHConfigFromFS(cfg.SSH)
 
@@ -208,7 +183,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 				}
 
 				dbInstancesByURI[normalizeDirURI(dbURI)] = node
-				dbInstancePaths[cpath] = node
+				dbInstancePaths[entry.Path] = node
 				parentFolder.DBInstances = append(parentFolder.DBInstances, node)
 				g.WorkspaceGraph.DBInstances = append(g.WorkspaceGraph.DBInstances, node)
 
@@ -217,7 +192,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 			}
 
 			// Regular folder.
-			folderURI := fsCtx.URI(relSlash)
+			folderURI := fsCtx.URI(entry.Rel)
 			if _, exists := foldersByID[folderURI]; exists {
 				return nil
 			}
@@ -227,7 +202,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 				URI:  folderURI,
 				Type: "folder",
 
-				Name: filepath.Base(relSlash),
+				Name: filepath.Base(entry.Rel),
 
 				FolderID:    parentURI,
 				Files:       []*FileNode{},
