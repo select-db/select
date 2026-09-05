@@ -1,11 +1,9 @@
 import { ResolveFolder } from '$lib/wails/graph';
+import { isWorkspaceUri } from '$lib/utils/graph/workspaceUri';
 
 // The graph carries every folder but only the files of the ones that have been
 // opened, so opening one asks the backend to read it. Fire-and-forget: the files
 // arrive with the next graph update.
-
-/** Only these ids name a folder on disk; "search::…" and "git::…" ids do not. */
-const WORKSPACE_URI_PREFIX = 'selectdb://workspaces/';
 
 /**
  * Folders with a read in flight, so a double click asks once.
@@ -16,8 +14,9 @@ const WORKSPACE_URI_PREFIX = 'selectdb://workspaces/';
  */
 const inFlight = new Set<string>();
 
-export function resolveFolderContents(id: string) {
-	if (!id.startsWith(WORKSPACE_URI_PREFIX) || inFlight.has(id)) return;
+export async function resolveFolderContents(id: string) {
+	// Ids from the search and git trees name results rather than directories.
+	if (!(await isWorkspaceUri(id)) || inFlight.has(id)) return;
 
 	inFlight.add(id);
 	const done = () => inFlight.delete(id);
