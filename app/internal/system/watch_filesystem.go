@@ -487,10 +487,12 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 	}
 	s.emitMutation("folder", "insert", dirURI, payload, ctx.WorkspaceID, userID)
 
-	// Scan contents to catch files restored e.g. via git. An unopened folder is
-	// skipped: it reads itself when it is opened, so walking it here would emit
-	// a mutation per file for a subtree nothing is showing.
-	if scanContents && s.parentAcceptsFiles(dirURI) {
+	// Scan contents to catch what arrived with the directory rather than after
+	// it: a checkout, a clone, a mkdir -p. Its children raise no event of their
+	// own, and the graph holds every folder, so the folders in there have to be
+	// taken now. The files in there are filtered by processFileEntry, which
+	// drops the ones whose folder nobody has opened.
+	if scanContents {
 		s.scanFolderContents(dirPath, dirURI, userID, ctx)
 	}
 }
