@@ -40,9 +40,30 @@ async function openMenuOn(page: Page, name: string) {
 	await treeNode(page, name).click({ button: 'right' });
 }
 
-/** Picks an entry from whichever menu is open. */
+/**
+ * Picks an entry from whichever menu is open.
+ *
+ * Exactly, because the tree's menus carry both "Delete" and "Delete selected":
+ * a loose match on the first would sometimes hit the second and take rows with
+ * it that nobody named.
+ */
 async function chooseMenuItem(page: Page, name: string) {
-	await page.getByRole('menuitem', { name }).click();
+	await page.getByRole('menuitem', { name, exact: true }).click();
+}
+
+/**
+ * Leaves exactly the named rows selected.
+ *
+ * Ctrl-click toggles, so a sequence of them only means what it says from a
+ * known starting point. Clicking a folder sets the selection to that folder --
+ * and toggles it open, hence the second click putting it back -- and
+ * ctrl-clicking it off then leaves nothing selected.
+ */
+async function selectOnly(page: Page, folder: string, ...rows: string[]) {
+	await treeNode(page, folder).click();
+	await treeNode(page, folder).click();
+	await treeNode(page, folder).click({ modifiers: ['ControlOrMeta'] });
+	for (const row of rows) await treeNode(page, row).click({ modifiers: ['ControlOrMeta'] });
 }
 
 const renameBox = (page: Page) => page.getByRole('textbox', { name: 'Name' });
@@ -240,14 +261,86 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await treeNode(page, '2026').click();
 	await expect(treeNode(page, '#2.sql')).toBeVisible();
 
+	// Dropping it back where it already is asks to rename it to its own name.
+	// Nothing moves, nothing is lost, and nothing is said about it.
+	await treeNode(page, '#2.sql').dragTo(treeNode(page, '2026'));
+	await expect(treeNode(page, '#2.sql')).toBeVisible();
+	await tab(page, '#2.sql').click();
+	await expect(editor.line(page, 'SELECT 2 AS two;')).toBeVisible();
+
+	// A drop onto a folder that already has a file of that name is refused, the
+	// same as typing the name would be. Two files called the same thing, one in
+	// each folder:
+	for (const [folder, content] of [
+		['reports', 'SELECT 4 AS four;'],
+		['2026', 'SELECT 5 AS five;']
+	]) {
+		await openMenuOn(page, folder);
+		await chooseMenuItem(page, 'New file...');
+		await renameTo(page, 'twin.sql');
+		await editor.surface(page).click();
+		await page.keyboard.type(content);
+		await expect(editor.line(page, content)).toBeVisible();
+	}
+	await expect(treeNode(page, 'twin.sql')).toHaveCount(2);
+
+	// Closing 2026 leaves one of them on screen, which is the one to drag — and
+	// after the refusal there are still two.
+	await treeNode(page, '2026').click();
+	await expect(treeNode(page, 'twin.sql')).toHaveCount(1);
+	await treeNode(page, 'twin.sql').dragTo(treeNode(page, '2026'));
+	await expect(treeNode(page, 'twin.sql')).toBeVisible();
+
+	// Deleting that one while 2026 is still closed leaves the tree with none of
+	// them on screen, so the one that comes back when 2026 opens is the other.
+	await openMenuOn(page, 'twin.sql');
+	await chooseMenuItem(page, 'Delete');
+	await expect(treeNode(page, 'twin.sql')).toHaveCount(0);
+
+	await treeNode(page, '2026').click();
+	await expect(treeNode(page, 'twin.sql')).toBeVisible();
+	await tab(page, 'twin.sql').click();
+	await expect(editor.line(page, 'SELECT 5 AS five;')).toBeVisible();
+
+	// A database directory is a folder on disk, and takes a drop like one.
+	await treeNode(page, '#1.sql').dragTo(treeNode(page, 'warehouse'));
+	await treeNode(page, 'warehouse').click();
+	await expect(treeNode(page, '#1.sql')).toBeVisible();
+	await treeNode(page, 'warehouse').click();
+	await expect(treeNode(page, '#1.sql')).toHaveCount(0);
+
+	// The empty space below the tree is the workspace root, and takes it back
+	// out again: it stays on screen when the database is closed.
+	await treeNode(page, 'warehouse').click();
+	await treeNode(page, '#1.sql').dragTo(
+		page.getByRole('region', { name: 'File system root drop zone' })
+	);
+	await treeNode(page, 'warehouse').click();
+	await expect(treeNode(page, '#1.sql')).toBeVisible();
+
+	// Several rows selected move together: dragging one of them takes the rest.
+	await selectOnly(page, 'reports', '#1.sql', 'twin.sql');
+	await treeNode(page, '#1.sql').dragTo(treeNode(page, 'reports'));
+
+	await treeNode(page, 'reports').click();
+	await expect(treeNode(page, '#1.sql')).toHaveCount(0);
+	await expect(treeNode(page, 'twin.sql')).toHaveCount(0);
+	await treeNode(page, 'reports').click();
+	await expect(treeNode(page, '#1.sql')).toBeVisible();
+	await expect(treeNode(page, 'twin.sql')).toBeVisible();
+
+	// twin.sql has served its purpose; #1.sql is still needed below. A drag
+	// leaves what it moved selected, so the selection is named again first.
+	await selectOnly(page, '2026', 'twin.sql');
+	await openMenuOn(page, 'twin.sql');
+	await chooseMenuItem(page, 'Delete');
+	await expect(treeNode(page, 'twin.sql')).toHaveCount(0);
+
 	// --- Deleting ------------------------------------------------------------
 
 	// More than one row selected turns the menu into a batch delete, across
-	// folders. Ctrl-click toggles, so the folder clicked above is unselected
-	// first: two rows selected has to mean these two.
-	await treeNode(page, '2026').click({ modifiers: ['ControlOrMeta'] });
-	await treeNode(page, '#1.sql').click({ modifiers: ['ControlOrMeta'] });
-	await treeNode(page, '#2.sql').click({ modifiers: ['ControlOrMeta'] });
+	// folders.
+	await selectOnly(page, '2026', '#1.sql', '#2.sql');
 	await openMenuOn(page, '#2.sql');
 	await chooseMenuItem(page, 'Delete selected');
 
@@ -377,9 +470,16 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await chooseMenuItem(page, 'New Database...');
 	await expect(treeNode(page, 'db #1')).toBeVisible();
 
+	// Databases are listed by name, so the new one lands above the seeded one
+	// and pushes it down. Both are waited for before anything is clicked: acting
+	// while the rows are still moving hits whichever one arrives under the
+	// pointer.
+	await expect(treeNode(page, 'warehouse')).toBeVisible();
+
 	await openMenuOn(page, 'db #1');
 	await chooseMenuItem(page, 'Delete');
 	await expect(treeNode(page, 'db #1')).toHaveCount(0);
+	await expect(treeNode(page, 'warehouse')).toBeVisible();
 
 	// --- Leaving it as it was found -----------------------------------------
 

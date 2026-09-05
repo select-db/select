@@ -56,6 +56,13 @@ func (fsp *FSProvider) Rename(params RenameParams) error {
 		}
 	}
 
+	// Renaming something to where it already is is what dropping a file back
+	// into its own folder asks for. Nothing to do, and nothing to complain
+	// about.
+	if oldPath == newPath {
+		return nil
+	}
+
 	// os.Rename replaces the target without a word, so a rename onto a name
 	// already in the folder -- typed by hand, or produced by dragging a file
 	// where its twin lives -- would destroy the other file.
