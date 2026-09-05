@@ -5,7 +5,8 @@
 	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
 
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
-	import { must, tryCatch } from '$lib/utils/tryCatch';
+	import { tryCatch } from '$lib/utils/tryCatch';
+	import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
 	let {
 		id,
@@ -77,12 +78,18 @@
 
 		if (id === newUri) return;
 
-		await must(
-			tryCatch(fs.Rename, {
-				old_uri: id,
-				new_uri: newUri
-			})
-		);
+		const [, err] = await tryCatch(fs.Rename, {
+			old_uri: id,
+			new_uri: newUri
+		});
+
+		// A refused rename — a name already taken, most often — leaves the file
+		// where it is, so the row has to go back to saying so.
+		if (err) {
+			notifyError(err.message);
+			localName = initialName;
+			return;
+		}
 
 		// Update any open file tabs to point at the new path (keeps tab open)
 		updateFileTabsAfterRename(id, newUri, trimmed);
