@@ -134,10 +134,15 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 			}
 
 			// Track new directories for deeper-level events.
+			//
+			// The whole subtree, not just this level: a directory can arrive
+			// with children already in it — mkdir -p, a checkout, an unzip, a
+			// clone — and those children raise no Create of their own, so
+			// watching only the directory named here leaves them silent.
 			if event.Op&fsnotify.Create != 0 {
 				info, err := os.Stat(event.Name)
 				if err == nil && info.IsDir() {
-					_ = watcher.Add(event.Name)
+					addWatches(event.Name)
 				}
 			}
 
