@@ -21,6 +21,13 @@ func (fsp *FSProvider) Rename(params RenameParams) error {
 		return err
 	}
 
+	// os.Rename replaces the target without a word, so a rename onto a name
+	// already in the folder -- typed by hand, or produced by dragging a file
+	// where its twin lives -- would destroy the other file.
+	if _, err := os.Lstat(newPath); err == nil {
+		return fmt.Errorf("%s already exists", params.NewURI)
+	}
+
 	// Check if oldPath exists
 	if err := createFileIfNotExists(oldPath); err != nil {
 		return fmt.Errorf("ensure file at old path: %w", err)
