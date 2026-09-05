@@ -1,8 +1,9 @@
 package graph
 
 import (
+	"context"
 	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -30,26 +31,13 @@ type SqlFileCandidate struct {
 // take precedence over parent folder variables.
 func (g *Graph) GetUriVariables(uri string) ([]VariableCandidate, error) {
 	// Get the workspace graph
-	wsGraph, err := g.GetWorkspaceGraph()
-	if err != nil {
+	if _, err := g.GetWorkspaceGraph(); err != nil {
 		return nil, err
 	}
 
-	// Find the node to get its folder ID
-	nodes := FindNodesByIds(wsGraph, []string{uri})
-	if len(nodes) == 0 {
-		return []VariableCandidate{}, nil
-	}
-
-	var folderID string
-	switch node := nodes[0].(type) {
-	case *FileNode:
-		folderID = node.FolderID
-	case *FolderNode:
-		folderID = node.ID
-	case *DBInstanceNode:
-		folderID = node.FolderID
-	default:
+	// The folder a URI's variables come from: its own, if it is a folder.
+	folderID := g.folderIDForURI(uri)
+	if folderID == "" {
 		return []VariableCandidate{}, nil
 	}
 
@@ -68,13 +56,8 @@ func (g *Graph) GetUriVariables(uri string) ([]VariableCandidate, error) {
 		visited[currentFolderID] = true
 
 		// Find folder node
-		folderNodes := FindNodesByIds(wsGraph, []string{currentFolderID})
-		if len(folderNodes) == 0 {
-			break
-		}
-
-		folder, ok := folderNodes[0].(*FolderNode)
-		if !ok {
+		folder := g.GetFolderNodeByID(currentFolderID)
+		if folder == nil {
 			break
 		}
 
@@ -106,16 +89,36 @@ func (g *Graph) GetUriVariables(uri string) ([]VariableCandidate, error) {
 		result = append(result, v)
 	}
 
-	// Sort by name for consistent ordering
-	for i := 0; i < len(result)-1; i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[i].Name > result[j].Name {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
+	slices.SortFunc(result, func(a, b VariableCandidate) int { return strings.Compare(a.Name, b.Name) })
 
 	return result, nil
+}
+
+// folderIDForURI returns the folder a URI belongs to — itself, when the URI is
+// a folder — or "" when the graph has nothing under it.
+func (g *Graph) folderIDForURI(uri string) string {
+	switch node := g.nodeForURI(uri).(type) {
+	case *FileNode:
+		return node.FolderID
+	case *FolderNode:
+		return node.ID
+	case *DBInstanceNode:
+		return node.FolderID
+	default:
+		return ""
+	}
+}
+
+// sqlFilesInFolder returns the .sql files a $ref can name: the folder's own,
+// nothing deeper. Queried rather than read off the folder node, so an unopened
+// folder answers without being resolved.
+func (g *Graph) sqlFilesInFolder(folderURI string) ([]*FileNode, error) {
+	return g.FindFiles(context.Background(), FileQuery{
+		FolderURI:  folderURI,
+		Extensions: []string{".sql"},
+		Depth:      1,
+		Limit:      MaxFileQueryLimit,
+	})
 }
 
 // GetUriSqlFileRefs returns SQL files in the same folder as the given URI (same-folder only).
@@ -126,30 +129,14 @@ func (g *Graph) GetUriSqlFileRefs(uri string) ([]SqlFileCandidate, error) {
 		return nil, err
 	}
 
-	nodes := FindNodesByIds(wsGraph, []string{uri})
-	if len(nodes) == 0 {
+	folderID := g.folderIDForURI(uri)
+	if folderID == "" {
 		return []SqlFileCandidate{}, nil
 	}
 
-	var folderID string
-	switch node := nodes[0].(type) {
-	case *FileNode:
-		folderID = node.FolderID
-	case *FolderNode:
-		folderID = node.ID
-	case *DBInstanceNode:
-		folderID = node.FolderID
-	default:
-		return []SqlFileCandidate{}, nil
-	}
-
-	folderNodes := FindNodesByIds(wsGraph, []string{folderID})
-	if len(folderNodes) == 0 {
-		return []SqlFileCandidate{}, nil
-	}
-	folder, ok := folderNodes[0].(*FolderNode)
-	if !ok {
-		return []SqlFileCandidate{}, nil
+	files, err := g.sqlFilesInFolder(folderID)
+	if err != nil {
+		return nil, err
 	}
 
 	wfs, err := NewWorkspaceFS(wsGraph.ID)
@@ -158,46 +145,33 @@ func (g *Graph) GetUriSqlFileRefs(uri string) ([]SqlFileCandidate, error) {
 	}
 
 	var result []SqlFileCandidate
-	for _, f := range folder.Files {
-		if !strings.HasSuffix(f.Name, ".sql") {
-			continue
-		}
+	for _, f := range files {
 		// Exclude the current file so it is not suggested for itself
 		if f.URI == uri {
 			continue
 		}
-		nameNoExt := strings.TrimSuffix(f.Name, ".sql")
-		rel := strings.TrimPrefix(f.URI, wfs.RootURI+"/")
-		if rel == f.URI {
-			rel = f.URI
+		fullPath, ok := wfs.Path(f.URI)
+		if !ok {
+			continue
 		}
-		path := rel
 
 		preview := ""
-		fullPath := filepath.Join(wfs.WorkspaceRoot, filepath.FromSlash(rel))
 		if data, err := os.ReadFile(fullPath); err == nil {
-			preview = string(data)
+			preview = strings.TrimSpace(string(data))
 			if len(preview) > SqlFilePreviewLen {
 				preview = preview[:SqlFilePreviewLen] + "..."
 			}
-			preview = strings.TrimSpace(preview)
 		}
 
 		result = append(result, SqlFileCandidate{
-			Name:    nameNoExt,
-			Path:    path,
+			Name:    strings.TrimSuffix(f.Name, ".sql"),
+			Path:    strings.TrimPrefix(f.URI, wfs.RootURI+"/"),
 			URI:     f.URI,
 			Preview: preview,
 		})
 	}
 
-	// Sort by name
-	for i := 0; i < len(result)-1; i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[i].Name > result[j].Name {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
+	slices.SortFunc(result, func(a, b SqlFileCandidate) int { return strings.Compare(a.Name, b.Name) })
+
 	return result, nil
 }

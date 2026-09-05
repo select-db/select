@@ -13,6 +13,12 @@ export const testId = (page: Page, name: string, value?: string) =>
 			: `[data-test="${name}"][data-test-value="${value}"]`
 	);
 
+/** One row of a tree — file, folder or database — named by what it shows. */
+export const treeNode = (page: Page, name: string) => testId(page, 'tree.node', name);
+
+/** One open tab, named by the label it shows. */
+export const tab = (page: Page, name: string) => testId(page, 'tabs.tab', name);
+
 /**
  * Monaco's own DOM, quarantined.
  *

@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -74,15 +73,12 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 	// logged once rather than per directory.
 	addWatches := func(root string) {
 		refused := 0
-		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return fs.SkipDir
-				}
-				if addErr := watcher.Add(p); addErr != nil {
+		if err := watcher.Add(root); err != nil {
+			refused++
+		}
+		_ = fsCtx.WalkFrom(root, func(entry graph.Entry) error {
+			if entry.IsDir() {
+				if addErr := watcher.Add(entry.Path); addErr != nil {
 					refused++
 				}
 			}
@@ -138,15 +134,26 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 			}
 
 			// Track new directories for deeper-level events.
+			//
+			// The whole subtree, not just this level: a directory can arrive
+			// with children already in it — mkdir -p, a checkout, an unzip, a
+			// clone — and those children raise no Create of their own, so
+			// watching only the directory named here leaves them silent.
 			if event.Op&fsnotify.Create != 0 {
 				info, err := os.Stat(event.Name)
 				if err == nil && info.IsDir() {
-					_ = watcher.Add(event.Name)
+					addWatches(event.Name)
 				}
 			}
 
 			// Rename: full rebuild (fine-grained derivation is error-prone).
 			if event.Op&fsnotify.Rename != 0 {
+				// A watch is registered against a path. A renamed directory
+				// keeps its watch, so its children keep arriving under the old
+				// name — and land in the graph under a folder that no longer
+				// exists, which is to say nowhere. Re-walking registers the new
+				// names; adding a directory that is already watched is a no-op.
+				addWatches(fsCtx.WorkspaceRoot)
 				s.rebuildGraphAndEmit()
 				continue
 			}
@@ -275,13 +282,8 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 		return
 	}
 
-	nodes := graph.FindNodesByIds(wsGraph, []string{folderURI})
-	if len(nodes) == 0 {
-		return
-	}
-
-	folderNode, ok := nodes[0].(*graph.FolderNode)
-	if !ok {
+	folderNode := s.Graph.GetFolderNodeByID(folderURI)
+	if folderNode == nil {
 		return
 	}
 
@@ -393,9 +395,15 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 	uri := ctx.URI(relSlash)
 
 	if op == "delete" {
+		// The path is gone, so the graph is all that says what it was: it holds
+		// every folder it has seen, but a file only once its folder has been
+		// opened. An unknown URI is taken for a file — the graph can miss a
+		// folder too (made while the app was down, or never watched), and that
+		// way round costs a tab close for a URI with no tab, where the other
+		// leaves a tab open on a file that is gone.
 		table := s.inferTableFromGraph(uri)
 		if table == "" {
-			if isDir || statErr != nil {
+			if isDir {
 				table = "folder"
 			} else {
 				table = "file"
@@ -416,42 +424,43 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 
 // Resolves a node URI to its table name via the current graph.
 func (s *System) inferTableFromGraph(id string) string {
-	ws, err := s.Graph.GetWorkspaceGraph()
-	if err != nil || ws == nil {
+	if s.Graph == nil {
 		return ""
 	}
-
-	nodes := graph.FindNodesByIds(ws, []string{id})
-	if len(nodes) == 0 {
-		return ""
-	}
-
-	switch nodes[0].(type) {
-	case *graph.FileNode:
-		return "file"
-	case *graph.FolderNode:
-		return "folder"
-	case *graph.DBInstanceNode:
-		return "db_instance"
-	default:
-		return ""
-	}
+	return s.Graph.NodeKind(id)
 }
 
-// Emits a file mutation, skipping internal workspace files.
+// Emits a file mutation, skipping internal workspace files and files whose
+// folder has not been opened yet — an unresolved folder reads its files when it
+// is opened, so putting one file in it now would only make it look resolved.
 func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID string, ctx *graph.WorkspaceFS, op string) {
 	name := filepath.Base(filePath)
 	if graph.IsInternalWorkspaceFile(name) {
 		return
 	}
 
-	payload := graph.FileDTO{
-		ID:       &fileURI,
-		URI:      &fileURI,
-		Name:     utils.Ptr(name),
-		FolderID: utils.Ptr(parentURI),
+	if !s.parentAcceptsFiles(parentURI) {
+		return
 	}
+
+	payload := graph.FileDTOFromNode(graph.FileNodeFromDisk(filePath, fileURI, parentURI))
 	s.emitMutation("file", op, fileURI, payload, ctx.WorkspaceID, userID)
+}
+
+// Reports whether a file event's parent is a container the graph tracks files
+// for: a db instance directory, or a resolved folder. A parent the graph does
+// not know — a folder whose own insert is still in flight — is accepted, so its
+// files are not lost.
+func (s *System) parentAcceptsFiles(parentURI string) bool {
+	if s.Graph == nil {
+		return true
+	}
+
+	parent := s.Graph.GetFolderNodeByID(parentURI)
+	if parent == nil {
+		return true
+	}
+	return parent.Resolved
 }
 
 // Handles the directory if it contains db.config.json.
@@ -478,7 +487,11 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 	}
 	s.emitMutation("folder", "insert", dirURI, payload, ctx.WorkspaceID, userID)
 
-	// Scan contents to catch files restored e.g. via git.
+	// Scan contents to catch what arrived with the directory rather than after
+	// it: a checkout, a clone, a mkdir -p. Its children raise no event of their
+	// own, and the graph holds every folder, so the folders in there have to be
+	// taken now. The files in there are filtered by processFileEntry, which
+	// drops the ones whose folder nobody has opened.
 	if scanContents {
 		s.scanFolderContents(dirPath, dirURI, userID, ctx)
 	}
@@ -486,27 +499,16 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 
 // Recursively emits insert mutations for all children of a new folder.
 func (s *System) scanFolderContents(folderPath, folderURI string, userID string, ctx *graph.WorkspaceFS) {
-	entries, err := os.ReadDir(folderPath)
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		childPath := filepath.Join(folderPath, entry.Name())
-
-		relSlash, ok := ctx.Rel(childPath)
-		if !ok || graph.IsInternalWorkspacePath(relSlash) {
-			continue
-		}
-
-		childURI := ctx.URI(relSlash)
+	_ = ctx.ReadDir(folderPath, func(entry graph.Entry) error {
+		childURI := entry.URI()
 
 		if entry.IsDir() {
-			s.processDirectoryEntry(childPath, childURI, folderURI, userID, ctx, true)
+			s.processDirectoryEntry(entry.Path, childURI, folderURI, userID, ctx, true)
 		} else {
-			s.processFileEntry(childPath, childURI, folderURI, userID, ctx, "insert")
+			s.processFileEntry(entry.Path, childURI, folderURI, userID, ctx, "insert")
 		}
-	}
+		return nil
+	})
 }
 
 // Sends a MutationCommit to the graph for incremental updates.

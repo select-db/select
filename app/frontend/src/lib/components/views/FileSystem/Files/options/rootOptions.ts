@@ -4,6 +4,8 @@ import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import { expandItem, renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 
+import { ResolveFolder } from '$lib/wails/graph';
+
 import { writeDatabase, writeFile, writeFolder } from './helpers';
 
 const findUniqueFolderName = (folders: graph.FolderNode[]): string => {
@@ -45,7 +47,12 @@ export const createFolderInFolder = async (folder: FolderLike) => {
 };
 
 export const createFileInFolder = async (folder: FolderLike) => {
-	const name = findUniqueFileName(folder.files);
+	// Writing truncates whatever is there, so the name has to miss every file in
+	// the folder, and an unopened folder does not carry its files yet.
+	// ResolveFolder answers for folders only and returns null for a db instance,
+	// which is resolved at build time and carries its own.
+	const resolved = await ResolveFolder(folder.uri);
+	const name = findUniqueFileName(resolved?.files ?? folder.files);
 	const fileUri = `${folder.uri}/${name}`;
 	await writeFile(fileUri);
 	navigateToFile({

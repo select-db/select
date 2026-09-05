@@ -29,6 +29,12 @@ type FolderNode struct {
 	Folders     []*FolderNode     `json:"folders"`
 	DBInstances []*DBInstanceNode `json:"db_instances"`
 
+	// Resolved reports whether this folder's files have been read from disk. A
+	// build only lays out the folder skeleton; a folder's files are materialized
+	// when it is first opened (see ResolveFolder), so an unresolved folder with
+	// no files means "not looked at yet", not "empty".
+	Resolved bool `json:"resolved"`
+
 	Variables map[string]string `json:"variables,omitempty"`
 
 	Badges []string `json:"badges"`

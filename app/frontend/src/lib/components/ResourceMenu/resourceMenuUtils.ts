@@ -1,5 +1,10 @@
 import type * as graph from '$lib/wails/graph';
-import { getTabLabel, type Tab, type TabGroup, type SplitContainer } from '$lib/components/Layout/layoutStore';
+import {
+	getTabLabel,
+	type Tab,
+	type TabGroup,
+	type SplitContainer
+} from '$lib/components/Layout/layoutStore';
 import type { ResourceType, ResourceMenuOption, ResourceSearchScope } from './types';
 import type { RecentItem } from '$lib/stores/recentItemsStore';
 import { resourceOptionInSearchScope } from './resourceMenuScope';
@@ -16,64 +21,44 @@ function dbItemTypePriority(opt: ResourceMenuOption): number {
 	return 2;
 }
 
-// TODO: refacto with back (or front) btree index ?
+/**
+ * Menu options for a workspace: databases and their schema items off
+ * `workspace.db_instances`, which lists every instance whatever folder it sits
+ * in, plus one row per file in `files`.
+ *
+ * Files are a parameter because the graph holds only the folders that have been
+ * opened; the caller passes query results or recents.
+ */
 export function flattenWorkspaceGraph(
 	workspace: graph.WorkspaceNode | undefined,
-	types: ResourceType[]
+	types: ResourceType[],
+	files: graph.FileNode[] = []
 ): ResourceMenuOption[] {
 	if (!workspace) return [];
 
 	const options: ResourceMenuOption[] = [];
 
-	const pushFile = (file: graph.FileNode) => {
-		options.push({
-			id: file.id,
-			label: file.name,
-			type: 'file',
-			uri: file.uri,
-			node: file,
-			folderId: file.folder_id
-		});
-	};
-
-	const processDbInstance = (db: graph.DBInstanceNode) => {
-		if (types.includes('db_instance')) {
+	if (types.includes('file')) {
+		for (const file of files) {
 			options.push({
-				id: db.id,
-				label: db.name,
-				type: 'db_instance',
-				uri: db.uri,
-				node: db
+				id: file.id,
+				label: file.name,
+				type: 'file',
+				uri: file.uri,
+				node: file,
+				folderId: file.folder_id
 			});
 		}
+	}
 
+	for (const db of workspace.db_instances) {
+		if (types.includes('db_instance')) {
+			options.push({ id: db.id, label: db.name, type: 'db_instance', uri: db.uri, node: db });
+		}
 		if (types.includes('db_item') && db.children) {
 			collectDbItems(db.children, options);
 		}
-
-		// SQL files (and nested folders) can live inside a database, not just in
-		// regular workspace folders — index them too.
-		if (types.includes('file')) {
-			for (const file of db.files) pushFile(file);
-		}
-		for (const subFolder of db.folders) processFolder(subFolder);
-	};
-
-	const processFolder = (folder: graph.FolderNode) => {
-		if (types.includes('file')) {
-			for (const file of folder.files) pushFile(file);
-		}
-
-		for (const db of folder.db_instances) processDbInstance(db);
-
-		for (const subFolder of folder.folders) processFolder(subFolder);
-	};
-
-	for (const folder of workspace.folders) {
-		processFolder(folder);
 	}
-
-	for (const db of workspace.db_instances) processDbInstance(db);
 
 	return options;
 }

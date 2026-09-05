@@ -13,6 +13,7 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { loadSchema } from '$lib/utils/query/loadSchema';
 	import type { ResourceMenuOption, ResourceSearchScope } from '$lib/components/ResourceMenu/types';
+	import { GetFileNodeByID } from '$lib/wails/graph';
 	import type * as graph from '$lib/wails/graph';
 	import type { Component } from 'svelte';
 	import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
@@ -93,14 +94,21 @@
 		}
 	});
 
-	function handleSelect(option: ResourceMenuOption) {
+	async function handleSelect(option: ResourceMenuOption) {
 		if (option.type === 'quick_action') {
 			executeQuickAction(option);
 			onClose();
 		} else if (['settings', 'schema', 'chat', 'terminal', 'diff'].includes(option.type)) {
 			focusTab(option.uri);
 			onClose();
-		} else if (option.type === 'file' || option.type === 'temp_file') {
+		} else if (option.type === 'file') {
+			// A row built from a recently opened file carries only what the
+			// recents list remembers, so the file is fetched before it is opened
+			// — otherwise the tab would come up without its databases.
+			const node = (await GetFileNodeByID(option.uri)) ?? (option.node as graph.FileNode);
+			addTab(node);
+			onClose();
+		} else if (option.type === 'temp_file') {
 			addTab(option.node as graph.FileNode);
 			onClose();
 		} else if (option.type === 'db_instance') {
