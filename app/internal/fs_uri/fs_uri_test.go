@@ -1,4 +1,4 @@
-package fs_provider
+package fs_uri
 
 import (
 	"os"
@@ -6,7 +6,8 @@ import (
 	"testing"
 )
 
-func TestEnsureWithinRoot(t *testing.T) {
+// Moved here with EnsureWithin itself, from internal/fs_provider.
+func TestEnsureWithin(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 
@@ -25,8 +26,8 @@ func TestEnsureWithinRoot(t *testing.T) {
 		filepath.Join(root, "ws", "sub", "new.sql"),
 		filepath.Join(root, "ws", "newdir", "f.txt"),
 	} {
-		if err := ensureWithinRoot(root, p); err != nil {
-			t.Errorf("ensureWithinRoot(%q) = %v, want nil", p, err)
+		if err := EnsureWithin(root, p); err != nil {
+			t.Errorf("EnsureWithin(%q) = %v, want nil", p, err)
 		}
 	}
 
@@ -35,8 +36,8 @@ func TestEnsureWithinRoot(t *testing.T) {
 		link,
 		filepath.Join(link, "passwd"),
 	} {
-		if err := ensureWithinRoot(root, p); err == nil {
-			t.Errorf("ensureWithinRoot(%q) = nil, want escape error", p)
+		if err := EnsureWithin(root, p); err == nil {
+			t.Errorf("EnsureWithin(%q) = nil, want escape error", p)
 		}
 	}
 }

@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -74,15 +73,12 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 	// logged once rather than per directory.
 	addWatches := func(root string) {
 		refused := 0
-		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return fs.SkipDir
-				}
-				if addErr := watcher.Add(p); addErr != nil {
+		if err := watcher.Add(root); err != nil {
+			refused++
+		}
+		_ = fsCtx.WalkFrom(root, func(entry graph.Entry) error {
+			if entry.IsDir() {
+				if addErr := watcher.Add(entry.Path); addErr != nil {
 					refused++
 				}
 			}
@@ -442,12 +438,7 @@ func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID st
 		return
 	}
 
-	payload := graph.FileDTO{
-		ID:       &fileURI,
-		URI:      &fileURI,
-		Name:     utils.Ptr(name),
-		FolderID: utils.Ptr(parentURI),
-	}
+	payload := graph.FileDTOFromNode(graph.FileNodeFromDisk(filePath, fileURI, parentURI))
 	s.emitMutation("file", op, fileURI, payload, ctx.WorkspaceID, userID)
 }
 
@@ -501,27 +492,16 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 
 // Recursively emits insert mutations for all children of a new folder.
 func (s *System) scanFolderContents(folderPath, folderURI string, userID string, ctx *graph.WorkspaceFS) {
-	entries, err := os.ReadDir(folderPath)
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		childPath := filepath.Join(folderPath, entry.Name())
-
-		relSlash, ok := ctx.Rel(childPath)
-		if !ok || graph.IsInternalWorkspacePath(relSlash) {
-			continue
-		}
-
-		childURI := ctx.URI(relSlash)
+	_ = ctx.ReadDir(folderPath, func(entry graph.Entry) error {
+		childURI := entry.URI()
 
 		if entry.IsDir() {
-			s.processDirectoryEntry(childPath, childURI, folderURI, userID, ctx, true)
+			s.processDirectoryEntry(entry.Path, childURI, folderURI, userID, ctx, true)
 		} else {
-			s.processFileEntry(childPath, childURI, folderURI, userID, ctx, "insert")
+			s.processFileEntry(entry.Path, childURI, folderURI, userID, ctx, "insert")
 		}
-	}
+		return nil
+	})
 }
 
 // Sends a MutationCommit to the graph for incremental updates.

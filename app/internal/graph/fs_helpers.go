@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"selectDb/internal/fs_uri"
 	"selectDb/internal/server"
 	"selectDb/internal/utils"
 )
@@ -58,7 +59,7 @@ func NewWorkspaceFSFromRoot(workspaceID, workspaceRoot string) *WorkspaceFS {
 	return &WorkspaceFS{
 		WorkspaceID:   workspaceID,
 		WorkspaceRoot: workspaceRoot,
-		RootURI:       fmt.Sprintf("selectdb://workspaces/%s", workspaceID),
+		RootURI:       fs_uri.Scheme + fs_uri.WorkspacePrefix + workspaceID,
 	}
 }
 
@@ -66,7 +67,7 @@ func NewWorkspaceFSFromRoot(workspaceID, workspaceRoot string) *WorkspaceFS {
 // a boolean indicating whether p is inside the workspace.
 func (c *WorkspaceFS) Rel(p string) (string, bool) {
 	rel, err := filepath.Rel(c.WorkspaceRoot, p)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || !fs_uri.Contains(c.WorkspaceRoot, p) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true
@@ -87,16 +88,11 @@ func (c *WorkspaceFS) Path(uri string) (string, bool) {
 		return c.WorkspaceRoot, true
 	}
 	rel, ok := strings.CutPrefix(uri, c.RootURI+"/")
-	if !ok || rel == "" {
+	if !ok {
 		return "", false
 	}
-	path := filepath.Join(c.WorkspaceRoot, filepath.FromSlash(rel))
-	// filepath.Join cleans the path, so a URI carrying ".." cannot escape the
-	// workspace without this check failing.
-	if _, inside := c.Rel(path); !inside {
-		return "", false
-	}
-	return path, true
+	path, err := fs_uri.Resolve(c.WorkspaceRoot, rel)
+	return path, err == nil
 }
 
 // ParentURI returns the URI of the parent folder for a given workspace-relative
