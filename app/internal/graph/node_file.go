@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"path/filepath"
+
 	"selectDb/internal/utils"
 
 	"github.com/selectDb/dialect/core"
@@ -80,6 +82,42 @@ type FileNode struct {
 	PlanResults    map[string]*ExplainResult `json:"planResults,omitempty"`
 	ExplainResults map[string]*ExplainResult `json:"explainResults,omitempty"`
 	Badges         []string                  `json:"badges"`
+}
+
+// FileNodeFromDisk builds the node for a file that exists on disk, reading the
+// sidecar that binds it to its databases.
+//
+// Every path that turns a file into something the app holds goes through here —
+// a folder being read, a query result, the watcher describing a file it saw —
+// so a file cannot arrive with its databases attached by one route and missing
+// by another.
+func FileNodeFromDisk(filePath, fileURI, parentURI string) *FileNode {
+	var databases []DatabaseRef
+	if meta, err := ReadFileMetadata(filePath + ".metadata.json"); err == nil && len(meta.Databases) > 0 {
+		databases = meta.Databases
+	}
+
+	return &FileNode{
+		ID:   fileURI,
+		URI:  fileURI,
+		Type: "file",
+
+		Name: filepath.Base(filePath),
+
+		FolderID:  parentURI,
+		Databases: databases,
+	}
+}
+
+// FileDTOFromNode is the node as the mutation pipeline carries it.
+func FileDTOFromNode(f *FileNode) FileDTO {
+	return FileDTO{
+		ID:        &f.ID,
+		URI:       &f.URI,
+		Name:      &f.Name,
+		FolderID:  &f.FolderID,
+		Databases: &f.Databases,
+	}
 }
 
 func BuildFileNode(f FileDTO) *FileNode {
