@@ -1,6 +1,6 @@
 import { call, expect, holdSession, test, type Locator, type Page } from './wails';
 import type { APIRequestContext } from '@playwright/test';
-import { editor, tab, testId, treeNode } from './selectors';
+import { editor, selectedTreeNodes, tab, testId, treeNode } from './selectors';
 
 /**
  * File management: what a person does to the workspace tree in a session —
@@ -60,10 +60,23 @@ async function chooseMenuItem(page: Page, name: string) {
  * ctrl-clicking it off then leaves nothing selected.
  */
 async function selectOnly(page: Page, folder: string, ...rows: string[]) {
-	await treeNode(page, folder).click();
-	await treeNode(page, folder).click();
-	await treeNode(page, folder).click({ modifiers: ['ControlOrMeta'] });
+	// Repeated until the tree agrees nothing is selected. A click that lands
+	// while the rows are still moving does nothing, and the ctrl-click that was
+	// meant to clear the folder then adds it instead: the ctrl-clicks below
+	// would extend a selection left over from the step before, and a drag takes
+	// everything selected — a database moved into a folder because a click three
+	// steps earlier never registered.
+	await expect
+		.poll(async () => {
+			await treeNode(page, folder).click();
+			await treeNode(page, folder).click();
+			await treeNode(page, folder).click({ modifiers: ['ControlOrMeta'] });
+			return selectedTreeNodes(page).count();
+		})
+		.toBe(0);
+
 	for (const row of rows) await treeNode(page, row).click({ modifiers: ['ControlOrMeta'] });
+	await expect(selectedTreeNodes(page)).toHaveCount(rows.length);
 }
 
 const renameBox = (page: Page) => page.getByRole('textbox', { name: 'Name' });
@@ -109,6 +122,37 @@ async function hoverOver(page: Page, row: Locator) {
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
 }
 
+/**
+ * Drops a row on the workspace root.
+ *
+ * The root's drop zone is the whole scrolling panel, so a drop aimed at its
+ * middle lands on whatever row happens to be there and the file goes into that
+ * folder instead. Below the last row is the part of it that is only the root.
+ */
+async function dropOnRoot(page: Page, row: Locator) {
+	const zone = page.getByRole('region', { name: 'File system root drop zone' });
+	const box = await zone.boundingBox();
+	if (!box) throw new Error('file tree is not on screen');
+
+	await row.dragTo(zone, { targetPosition: { x: 20, y: box.height - 20 } });
+}
+
+/** Whether the workspace root itself holds an entry of that name. */
+async function inWorkspaceRoot(
+	request: APIRequestContext,
+	workspaceId: string,
+	name: string
+): Promise<boolean> {
+	const prefix = await call<string>(request, `${FS}.WorkspaceURIPrefix`);
+
+	try {
+		await call(request, `${FS}.Stat`, `${prefix}${workspaceId}/${name}`);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /** Finds a file by name in the workspace picker and opens it. */
 async function findInPicker(page: Page, name: string) {
 	await page.keyboard.press('ControlOrMeta+p');
@@ -129,6 +173,16 @@ async function folderInGraph(request: APIRequestContext, name: string): Promise<
 		folders.some((folder) => folder.name === name || holds(folder.folders ?? []));
 
 	return holds(workspace.folders ?? []);
+}
+
+/** The names of the databases the graph is holding, in its own order. */
+async function databasesInGraph(request: APIRequestContext): Promise<string[]> {
+	const workspace = await call<{ db_instances: { name: string }[] }>(
+		request,
+		`${GRAPH}.GetWorkspaceGraph`
+	);
+
+	return (workspace.db_instances ?? []).map((db) => db.name);
 }
 
 /**
@@ -326,11 +380,13 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// The empty space below the tree is the workspace root, and takes it back
 	// out again: it stays on screen when the database is closed.
 	await treeNode(page, 'warehouse').click();
-	await treeNode(page, '#1.sql').dragTo(
-		page.getByRole('region', { name: 'File system root drop zone' })
-	);
+	await dropOnRoot(page, treeNode(page, '#1.sql'));
 	await treeNode(page, 'warehouse').click();
 	await expect(treeNode(page, '#1.sql')).toBeVisible();
+
+	// On the root itself, not merely somewhere on screen: a row named the same
+	// can be anywhere in the tree, and this one has just been moved twice.
+	expect(await inWorkspaceRoot(request, workspace.id, '#1.sql')).toBe(true);
 
 	// Several rows selected move together: dragging one of them takes the rest.
 	await selectOnly(page, 'reports', '#1.sql', 'twin.sql');
@@ -342,6 +398,11 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await treeNode(page, 'reports').click();
 	await expect(treeNode(page, '#1.sql')).toBeVisible();
 	await expect(treeNode(page, 'twin.sql')).toBeVisible();
+
+	// And took only those two. The database is a row like any other, and a drag
+	// moves everything selected: it goes along quietly if the selection was
+	// never cleared, and the workspace loses it when the folder is deleted.
+	expect(await inWorkspaceRoot(request, workspace.id, 'warehouse')).toBe(true);
 
 	// twin.sql has served its purpose; #1.sql is still needed below. A drag
 	// leaves what it moved selected, so the selection is named again first.
@@ -524,6 +585,15 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await chooseMenuItem(page, 'Delete');
 	await expect(treeNode(page, 'db #1')).toHaveCount(0);
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
+
+	// And it stays deleted. Its connection form saves on a debounce, so a save
+	// can be in the air when the delete lands: writing it out used to make the
+	// directory again, and the database came back a second later — in the graph,
+	// and in the tree the next time it was read. Waited out rather than polled:
+	// what is being watched for is something arriving late.
+	await page.waitForTimeout(1500);
+	expect(await databasesInGraph(request)).toEqual(['warehouse']);
+	await expect(treeNode(page, 'db #1')).toHaveCount(0);
 
 	// --- Leaving it as it was found -----------------------------------------
 
