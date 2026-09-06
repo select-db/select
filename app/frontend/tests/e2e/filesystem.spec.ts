@@ -1,4 +1,4 @@
-import { call, expect, holdSession, test, type Page } from './wails';
+import { call, expect, holdSession, test, type Locator, type Page } from './wails';
 import type { APIRequestContext } from '@playwright/test';
 import { editor, tab, testId, treeNode } from './selectors';
 
@@ -93,6 +93,20 @@ async function keepName(page: Page) {
 	await expect(box).toBeFocused();
 	await box.press('Escape');
 	await expect(box).toBeHidden();
+}
+
+/**
+ * Moves the pointer onto a row mid-drag.
+ *
+ * In steps, because a browser only treats a press-and-move as a drag once it
+ * has seen the pointer travel, and the row under it only hears about it through
+ * the moves that follow.
+ */
+async function hoverOver(page: Page, row: Locator) {
+	const box = await row.boundingBox();
+	if (!box) throw new Error('row is not on screen');
+
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
 }
 
 /** Finds a file by name in the workspace picker and opens it. */
@@ -401,6 +415,36 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await expect(treeNode(page, 'after')).toHaveCount(0);
 	await treeNode(page, '2026').click();
 	await expect(treeNode(page, 'after')).toBeVisible();
+
+	// A folder cannot be dropped inside itself: the filesystem refuses to move a
+	// directory into its own subtree, and nothing moves or is lost by asking.
+	await treeNode(page, 'reports').dragTo(treeNode(page, 'after'));
+	await expect(treeNode(page, 'reports')).toBeVisible();
+	await expect(treeNode(page, '2026')).toBeVisible();
+	await expect(treeNode(page, 'after')).toBeVisible();
+	await findInPicker(page, 'inside.sql');
+
+	// Holding a dragged file over a closed folder opens it, so the drop can go
+	// to something inside it. Done by hand rather than with dragTo: the point is
+	// the pause in the middle, which a single gesture has no room for.
+	await openMenuOn(page, 'reports');
+	await chooseMenuItem(page, 'New file...');
+	await renameTo(page, 'hover.sql');
+	await treeNode(page, '2026').click();
+	await expect(treeNode(page, 'after')).toHaveCount(0);
+
+	await treeNode(page, 'hover.sql').hover();
+	await page.mouse.down();
+	await hoverOver(page, treeNode(page, '2026'));
+	await expect(treeNode(page, 'after')).toBeVisible();
+	await hoverOver(page, treeNode(page, 'after'));
+	await page.mouse.up();
+
+	await expect(treeNode(page, 'hover.sql')).toBeVisible();
+	await treeNode(page, 'after').click();
+	await expect(treeNode(page, 'hover.sql')).toHaveCount(0);
+	await treeNode(page, 'after').click();
+	await expect(treeNode(page, 'hover.sql')).toBeVisible();
 
 	// --- Selecting a range ---------------------------------------------------
 

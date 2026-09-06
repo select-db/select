@@ -23,7 +23,12 @@
 	} from './Files/helpers/visibilityStore';
 	import { hiddenChildrenStore } from './Files/helpers/childVisibilityStore';
 
-	let scrollContainer: HTMLDivElement;
+	// Reactive because the effect that builds the visibility index bails out
+	// until this is bound: a plain `let` does not re-run it when the binding
+	// lands, and the index then stays empty for that mount — every row a
+	// placeholder, the tree apparently blank. The search and git panels declare
+	// theirs the same way.
+	let scrollContainer: HTMLDivElement | undefined = $state();
 	let firstItem: HTMLElement | null = null;
 	let firstItemParentIds: string | null = null;
 
