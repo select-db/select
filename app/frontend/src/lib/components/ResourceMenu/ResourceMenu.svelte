@@ -8,7 +8,7 @@
 	import { recentItemsStore } from '$lib/stores/recentItemsStore';
 	import { debounce } from '$lib/utils/debounce';
 	import {
-		flattenWorkspaceGraph,
+		resourceMenuOptions,
 		getOpenTabOptions,
 		filterOptions,
 		MAX_RESOURCE_MENU_OPTIONS
@@ -82,7 +82,7 @@
 	});
 
 	const graphOptions = $derived(
-		flattenWorkspaceGraph($workspaceGraphStore, types, [...recentFiles, ...queriedFiles])
+		resourceMenuOptions($workspaceGraphStore, types, [...recentFiles, ...queriedFiles])
 	);
 	const tabOptions = $derived(getOpenTabOptions($layoutStore.root, types));
 

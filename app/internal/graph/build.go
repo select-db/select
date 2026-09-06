@@ -89,14 +89,10 @@ func (g *Graph) BuildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	return g.buildWorkspaceGraphFromFS(fsCtx)
 }
 
-// buildWorkspaceGraphFromFS populates the in-memory workspace graph purely
-// from the filesystem and associated config/metadata files. It discovers the
-// folders and db instances under the workspace root and builds the
-// corresponding FolderNode/DBInstanceNode skeleton.
-//
-// Files are not part of the skeleton: only the root folder and the db instance
-// directories are resolved here, every other folder when it is first opened.
-// See resolve.go.
+// buildWorkspaceGraphFromFS builds the folder and db instance skeleton by
+// walking the workspace root. Files are not part of it: the root folder and the
+// db instance directories are resolved here, every other folder when it is
+// first opened (see resolve.go).
 func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	// Reset DB instances for this workspace graph.
 	g.WorkspaceGraph.DBInstances = []*DBInstanceNode{}

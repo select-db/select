@@ -5,10 +5,9 @@
 //
 //	selectdb://workspaces/<id>/queries/a.sql  ↔  <root>/workspaces/<id>/queries/a.sql
 //
-// Two packages resolve URIs -- fs_provider, to do the syscall a URI asks for,
-// and graph, to find the node a URI names -- and they used to parse and guard
-// them separately. They go through here instead, so the scheme, the traversal
-// guard and the containment rule cannot drift apart.
+// Both packages that resolve URIs go through here -- fs_provider, to do the
+// syscall a URI asks for, and graph, to find the node a URI names -- so the
+// scheme, the traversal guard and the containment rule cannot drift apart.
 package fs_uri
 
 import (

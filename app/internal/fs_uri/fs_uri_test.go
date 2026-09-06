@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// Moved here with EnsureWithin itself, from internal/fs_provider.
 func TestEnsureWithin(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
