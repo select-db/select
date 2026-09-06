@@ -4,6 +4,7 @@
 
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import {
+		getTabById,
 		getTabByNodeId,
 		getTabUri,
 		updateTab,
@@ -114,11 +115,27 @@
 	// to be recreates it there -- an old folder coming back from the dead,
 	// holding the text that belongs to the new one. The tab id is what survives
 	// the rename, so that is what is remembered.
-	const writeToFile = debounce(async (tabId: string, content: string) => {
+	const writeFile = async (tabId: string, content: string) => {
 		const uri = getTabUri(tabId);
 		if (!uri) return;
 		await must(tryCatch(fs.Write, { uri, content }));
-	}, 200);
+	};
+
+	const writeToFile = debounce(writeFile, 200);
+
+	// What the editor was holding for a tab it is being taken off, which is the
+	// one moment a debounced write would be too late: it is addressed by tab id
+	// because the tab is no longer the one on screen.
+	const savePendingChange = (tabId: string, pending: string) => {
+		const target = getTabById(tabId);
+		if (!target?.file) return;
+
+		if (target.file.isTemp) {
+			updateTab({ ...target, file: { ...target.file, content: pending } });
+			return;
+		}
+		void writeFile(tabId, pending);
+	};
 
 	const handleContentChange = (newContent: string) => {
 		content = newContent;
@@ -451,6 +468,7 @@
 				{content}
 				language="sql-custom"
 				onContentChange={handleContentChange}
+				onPendingChange={savePendingChange}
 				errorPosition={currentQueryResult?.errors?.length
 					? (currentQueryResult?.errorPosition ?? undefined)
 					: undefined}
