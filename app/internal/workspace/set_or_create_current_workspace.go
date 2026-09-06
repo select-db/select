@@ -79,20 +79,10 @@ func (w *Workspace) ensureWorkspaceFolder(workspace generated.Workspace) error {
 	_, statErr := os.Stat(root)
 	isNew := os.IsNotExist(statErr)
 
-	placeholderURI := "selectdb://workspaces/" + workspace.ID + "/.selectdb_workspace"
-
-	if err := w.FSProvider.Write(fs_provider.WriteParams{
-		URI:     placeholderURI,
-		Content: "",
+	if err := w.FSProvider.Mkdir(fs_provider.MkdirParams{
+		URI: w.FSProvider.WorkspaceURIPrefix() + workspace.ID,
 	}); err != nil {
 		return fmt.Errorf("ensure workspace root directory: %w", err)
-	}
-
-	if err := w.FSProvider.Delete(fs_provider.DeleteParams{
-		URI:       placeholderURI,
-		Recursive: false,
-	}); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("cleanup workspace placeholder: %w", err)
 	}
 
 	if isNew {
