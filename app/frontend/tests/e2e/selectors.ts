@@ -16,6 +16,10 @@ export const testId = (page: Page, name: string, value?: string) =>
 /** One row of a tree — file, folder or database — named by what it shows. */
 export const treeNode = (page: Page, name: string) => testId(page, 'tree.node', name);
 
+/** The tree rows currently selected, in whichever trees are on screen. */
+export const selectedTreeNodes = (page: Page) =>
+	page.locator('[data-test="tree.node"][data-test-selected="true"]');
+
 /** One open tab, named by the label it shows. */
 export const tab = (page: Page, name: string) => testId(page, 'tabs.tab', name);
 
