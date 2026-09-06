@@ -23,6 +23,13 @@ export const selectedTreeNodes = (page: Page) =>
 /** One open tab, named by the label it shows. */
 export const tab = (page: Page, name: string) => testId(page, 'tabs.tab', name);
 
+/** The tabs on screen, in the order they are laid out. */
+export const tabs = (page: Page) => testId(page, 'tabs.tab');
+
+/** The active tab of each group — one per group, so more than one with a split. */
+export const activeTab = (page: Page) =>
+	page.locator('[data-test="tabs.tab"][data-test-active="true"]');
+
 /**
  * Monaco's own DOM, quarantined.
  *
