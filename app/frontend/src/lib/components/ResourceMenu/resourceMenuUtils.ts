@@ -22,14 +22,13 @@ function dbItemTypePriority(opt: ResourceMenuOption): number {
 }
 
 /**
- * Menu options for a workspace: databases and their schema items off
- * `workspace.db_instances`, which lists every instance whatever folder it sits
- * in, plus one row per file in `files`.
+ * Menu rows for `types`: every instance in `workspace.db_instances` with its
+ * schema items, plus one row per file in `files`.
  *
- * Files are a parameter because the graph holds only the folders that have been
- * opened; the caller passes query results or recents.
+ * Files are a parameter because the graph holds only opened folders; callers
+ * pass query results or recents.
  */
-export function flattenWorkspaceGraph(
+export function resourceMenuOptions(
 	workspace: graph.WorkspaceNode | undefined,
 	types: ResourceType[],
 	files: graph.FileNode[] = []

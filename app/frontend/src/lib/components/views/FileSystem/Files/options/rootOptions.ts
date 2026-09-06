@@ -5,6 +5,7 @@ import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatab
 import { expandItem, renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 
 import { ResolveFolder } from '$lib/wails/graph';
+import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
 import { writeDatabase, writeFile, writeFolder } from './helpers';
 
@@ -47,12 +48,18 @@ export const createFolderInFolder = async (folder: FolderLike) => {
 };
 
 export const createFileInFolder = async (folder: FolderLike) => {
-	// Writing truncates whatever is there, so the name has to miss every file in
-	// the folder, and an unopened folder does not carry its files yet.
-	// ResolveFolder answers for folders only and returns null for a db instance,
-	// which is resolved at build time and carries its own.
-	const resolved = await ResolveFolder(folder.uri);
-	const name = findUniqueFileName(resolved?.files ?? folder.files);
+	// Writing truncates, so the name has to miss every file already in there. A
+	// db instance is resolved at build time and carries its own; a folder's are
+	// read on demand, and a folder that will not resolve is not a folder to
+	// write into.
+	const files =
+		folder.type === 'db_instance' ? folder.files : (await ResolveFolder(folder.uri))?.files;
+	if (!files) {
+		notifyError(`Could not read ${folder.name}`);
+		return;
+	}
+
+	const name = findUniqueFileName(files);
 	const fileUri = `${folder.uri}/${name}`;
 	await writeFile(fileUri);
 	navigateToFile({
