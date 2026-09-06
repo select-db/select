@@ -223,10 +223,13 @@ export const getAllGroups = (): TabGroup[] => collectGroups(get(layoutStore).roo
  * file later -- a debounced write, most of all -- asks for the path when it acts
  * rather than remembering the one it started with.
  */
-export const getTabUri = (tabId: string): string | undefined =>
+export const getTabUri = (tabId: string): string | undefined => getTabById(tabId)?.uri;
+
+/** The tab with this id, wherever it is. */
+export const getTabById = (tabId: string): Tab | undefined =>
 	getAllGroups()
 		.flatMap((group) => group.tabs)
-		.find((tab) => tab.id === tabId)?.uri;
+		.find((tab) => tab.id === tabId);
 
 export const activeGroupStore = derived(
 	layoutStore,
@@ -351,6 +354,20 @@ const updateTabNavigationHistory = (
 	}
 	return { ...navHistory, [groupId]: { history: nextHistory, index: nextHistory.length - 1 } };
 };
+
+/**
+ * Opens a tab beside the group's active one, and records the visit.
+ *
+ * Opening is a visit: the back and forward arrows walk where a group has been,
+ * and a file opened from the tree is somewhere it has been. Only clicking an
+ * already-open tab used to be recorded, which left the arrows dead through a
+ * whole session of opening files.
+ */
+const openTabInGroup = (layout: Layout, groupId: string, tab: Tab): Layout => ({
+	...layout,
+	root: updateGroupById(layout.root, groupId, (group) => insertTabNextToActive(group, tab)),
+	tabNavigationHistory: updateTabNavigationHistory(layout, groupId, tab.id)
+});
 
 export const setActiveTab = (groupId: string, tabId: string) => {
 	layoutStore.update((layout) => {
@@ -528,12 +545,7 @@ export const addTab = (node: graph.FileNode | graph.DBInstanceNode) => {
 				: {})
 	};
 
-	layoutStore.update((layout) => ({
-		...layout,
-		root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-			insertTabNextToActive(groupForUpdate, newTab)
-		)
-	}));
+	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 
 	if (node.type === 'file') {
 		recentItemsStore.addItem({
@@ -564,12 +576,7 @@ export const addSchemaTab = (databaseId?: string, databaseName?: string) => {
 		schema: { databaseId, databaseName }
 	};
 
-	layoutStore.update((layout) => ({
-		...layout,
-		root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-			insertTabNextToActive(groupForUpdate, newTab)
-		)
-	}));
+	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 	syncSelectionAndRecentForActiveTab();
 };
 
@@ -608,12 +615,7 @@ export const openSettingsSection = (section?: string) => {
 		settings: section ? { section } : {}
 	};
 
-	layoutStore.update((layout) => ({
-		...layout,
-		root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-			insertTabNextToActive(groupForUpdate, newTab)
-		)
-	}));
+	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 
 	syncSelectionAndRecentForActiveTab();
 };
@@ -668,12 +670,7 @@ export const addTempFileTab = (
 
 	// Add to current group without splitting
 	if (!split) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-				insertTabNextToActive(groupForUpdate, newTab)
-			)
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		trackRecentTempFile();
 		return;
 	}
@@ -697,7 +694,8 @@ export const addTempFileTab = (
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: true
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 
@@ -750,22 +748,12 @@ export const addDiffTab = (params: AddDiffTabParams) => {
 	};
 
 	if (params.targetGroupId) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, params.targetGroupId!, (groupForUpdate) =>
-				insertTabNextToActive(groupForUpdate, newTab)
-			)
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, params.targetGroupId!, newTab));
 		return;
 	}
 
 	if (!params.split) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-				insertTabNextToActive(groupForUpdate, newTab)
-			)
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		return;
 	}
 
@@ -786,7 +774,8 @@ export const addDiffTab = (params: AddDiffTabParams) => {
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: true
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 };
@@ -805,10 +794,7 @@ export const addTerminalTab = (shell: string = '') => {
 
 	const activeTab = getActiveTab();
 	if (activeTab?.terminal) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (g) => insertTabNextToActive(g, newTab))
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		syncSelectionAndRecentForActiveTab();
 		return;
 	}
@@ -830,7 +816,8 @@ export const addTerminalTab = (shell: string = '') => {
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: false
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 	syncSelectionAndRecentForActiveTab();
@@ -902,10 +889,7 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 	};
 
 	if (activeTab?.chat) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (g) => insertTabNextToActive(g, newTab))
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		syncSelectionAndRecentForActiveTab();
 		return;
 	}
@@ -926,7 +910,8 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: true
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 	syncSelectionAndRecentForActiveTab();
@@ -1159,7 +1144,10 @@ export const splitGroup = (
 		return cleanupLayout({
 			...layout,
 			root: rootWithSplit,
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: movedTab
+				? updateTabNavigationHistory(layout, newGroupId, movedTab.id)
+				: (layout.tabNavigationHistory ?? {})
 		});
 	});
 };

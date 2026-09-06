@@ -108,6 +108,7 @@
 		onclick={handleClick}
 		onmousedown={handleMouseDown}
 		aria-label={ariaLabel}
+		{disabled}
 		{style}
 	>
 		{#if leftIcon}
