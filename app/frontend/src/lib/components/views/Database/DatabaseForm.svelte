@@ -313,12 +313,21 @@
 	};
 
 	const writeConfigFile = async (data: unknown) => {
-		await must(
-			tryCatch(fs.Write, {
-				uri: `${uri}/db.config.json`,
-				content: JSON.stringify(data, null, 2)
-			})
-		);
+		const [, err] = await tryCatch(fs.Write, {
+			uri: `${uri}/db.config.json`,
+			content: JSON.stringify(data, null, 2)
+		});
+		if (!err) return;
+
+		// A save is debounced, so it can land after the database it belongs to
+		// has been deleted. The write refuses to make the folder again — that is
+		// what used to put the row back seconds after it was removed — and there
+		// is nothing to report here: what was being edited is gone on purpose.
+		const [, gone] = await tryCatch(fs.Stat, uri);
+		if (gone) return;
+
+		notifyError(err.message);
+		throw err;
 	};
 
 	const save = async () => {
