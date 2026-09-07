@@ -135,6 +135,15 @@ test('names a database by its directory, and renames the directory with it', asy
 
 	await openMenuOn(page, 'database');
 	await chooseMenuItem(page, 'Rename...');
+	await expect(renameBox(page)).toBeFocused();
+
+	// A database's config is written while its form is open — the form saves on
+	// a debounce — and that arrives as a db_instance update like any other. It
+	// used to close the rename box, so whatever was being typed went nowhere.
+	// Touching the config raises the same update without the wait.
+	await inWorkspace(request, workspace.id, 'touch', 'database/db.config.json');
+	await expect(renameBox(page)).toBeFocused();
+
 	await renameTo(page, 'analytics');
 
 	await expect(treeNode(page, 'analytics')).toBeVisible();

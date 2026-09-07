@@ -3,6 +3,7 @@ package graph
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"selectDb/internal/db/generated"
@@ -10,13 +11,17 @@ import (
 
 // newTestGraphWithWorkspace returns a graph holding an empty workspace, and the
 // WorkspaceFS pointing at that workspace's root on disk.
+//
+// The workspace is named for the test that asked for it. These tests care about
+// directories that should *not* be there, so two of them sharing a workspace
+// root is the difference between passing and failing.
 func newTestGraphWithWorkspace(t *testing.T) (*Graph, *WorkspaceFS) {
 	t.Helper()
 
 	_, restore := withTempAppDataDir(t)
 	t.Cleanup(restore)
 
-	const workspaceID = "ws-1"
+	workspaceID := strings.ReplaceAll(t.Name(), "/", "-")
 
 	fsCtx, err := NewWorkspaceFS(workspaceID)
 	if err != nil {
