@@ -5,7 +5,6 @@
 	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
 
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
-	import { RenameDatabase } from '$lib/bindings/selectDb/internal/graph/graph';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
@@ -76,35 +75,21 @@
 
 		const trimmed = localName.trim();
 
-		// A database is a directory named after itself, so renaming one is not
-		// renaming a path: the backend cleans the name into something a
-		// filesystem will take, and refuses one a sibling already has.
-		if (type === 'db_instance') {
-			const [renamed, dbErr] = await tryCatch(RenameDatabase, { uri, name: trimmed });
-			if (dbErr || !renamed) {
-				notifyError(dbErr?.message ?? `Could not rename ${initialName}`);
-				localName = initialName;
-				return;
-			}
-			// What it ended up called, which is not always what was typed.
-			localName = renamed.name;
-			updateFileTabsAfterRename(uri, renamed.uri, renamed.name);
-			return;
-		}
-
-		// For files and folders, rename the item
-		const lastSlash = id.lastIndexOf('/');
-		const base = lastSlash === -1 ? id : id.slice(0, lastSlash + 1);
+		// Built from the URI rather than the id: a file or folder answers to its
+		// own path, but a database answers to the id in its config, which is not
+		// one.
+		const lastSlash = uri.lastIndexOf('/');
+		const base = lastSlash === -1 ? uri : uri.slice(0, lastSlash + 1);
 		const newUri = `${base}${trimmed}`;
 
-		if (id === newUri) return;
+		if (uri === newUri) return;
 
 		const [, err] = await tryCatch(fs.Rename, {
-			old_uri: id,
+			old_uri: uri,
 			new_uri: newUri
 		});
 
-		// A refused rename — a name already taken, most often — leaves the file
+		// A refused rename -- a name already taken, most often -- leaves the file
 		// where it is, so the row has to go back to saying so.
 		if (err) {
 			notifyError(err.message);
@@ -113,7 +98,7 @@
 		}
 
 		// Update any open file tabs to point at the new path (keeps tab open)
-		updateFileTabsAfterRename(id, newUri, trimmed);
+		updateFileTabsAfterRename(uri, newUri, trimmed);
 	};
 </script>
 

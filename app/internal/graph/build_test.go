@@ -17,8 +17,8 @@ import (
 //
 // XDG_CONFIG_HOME as well as HOME: on Linux os.UserConfigDir reads it first and
 // ignores HOME entirely when it is set, which it is on a GitHub runner. Leaving
-// it alone gives every test in the package the same app data directory — and so
-// the same workspace root — however carefully HOME is pointed elsewhere.
+// it alone gives every test in the package the same app data directory -- and so
+// the same workspace root -- however carefully HOME is pointed elsewhere.
 func withTempAppDataDir(t *testing.T) (string, func()) {
 	t.Helper()
 

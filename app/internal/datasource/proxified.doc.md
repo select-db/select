@@ -11,7 +11,7 @@ Use proxified connections when:
 
 ## Enabling
 
-Check **Proxy connection** in the connection form. The DSN and SSH fields are sent to the server and stored encrypted. The local `db.config.json` only keeps the dialect and the ID — the name is the folder the database lives in, as it is for any database.
+Check **Proxy connection** in the connection form. The DSN and SSH fields are sent to the server and stored encrypted. The local `db.config.json` only keeps the dialect and the ID. The name is the folder the database lives in, as it is for any database.
 
 Once configured, **credentials never leave the server**. Users do not see or receive the DSN or SSH secrets. All database connections are established and maintained on the remote server, and queries are proxied through it.
 

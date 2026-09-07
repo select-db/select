@@ -3,9 +3,9 @@ import type { APIRequestContext } from '@playwright/test';
 import { editor, selectedTreeNodes, tab, testId, treeNode } from './selectors';
 
 /**
- * File management: what a person does to the workspace tree in a session —
+ * File management: what a person does to the workspace tree in a session --
  * make folders, put files in them, name them, bind one to a database, move
- * them, delete them — plus the things that happen to a workspace while the app
+ * them, delete them -- plus the things that happen to a workspace while the app
  * is only watching: a file removed in a terminal, one restored by git, one
  * appearing in a folder nobody has opened.
  *
@@ -16,7 +16,7 @@ import { editor, selectedTreeNodes, tab, testId, treeNode } from './selectors';
  * folder it lands in can be collapsed again to prove it went there.
  *
  * Everything it makes, it removes, so the seeded workspace is unchanged at the
- * end — the same workspace the screenshot suite photographs and the other specs
+ * end -- the same workspace the screenshot suite photographs and the other specs
  * read.
  */
 
@@ -64,7 +64,7 @@ async function selectOnly(page: Page, folder: string, ...rows: string[]) {
 	// while the rows are still moving does nothing, and the ctrl-click that was
 	// meant to clear the folder then adds it instead: the ctrl-clicks below
 	// would extend a selection left over from the step before, and a drag takes
-	// everything selected — a database moved into a folder because a click three
+	// everything selected -- a database moved into a folder because a click three
 	// steps earlier never registered.
 	await expect
 		.poll(async () => {
@@ -85,8 +85,8 @@ const renameBox = (page: Page) => page.getByRole('textbox', { name: 'Name' });
  * Types into the rename box a new file, a new folder and "Rename..." all open,
  * and commits it.
  *
- * The box opens with part of the name selected — up to the extension, so typing
- * keeps it — which is right for a person and ambiguous for a test, hence the
+ * The box opens with part of the name selected -- up to the extension, so typing
+ * keeps it -- which is right for a person and ambiguous for a test, hence the
  * select-all first: what is typed here is the whole new name.
  */
 async function renameTo(page: Page, name: string) {
@@ -255,7 +255,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await expect(page.getByRole('button', { name: 'warehouse' })).toBeVisible();
 
 	// Two more files, keeping the names the app proposes. Each name is unique or
-	// the second would land on the first — FSProvider.Write truncates — and each
+	// the second would land on the first -- FSProvider.Write truncates -- and each
 	// gets its own content, so the rename below can be shown not to move it.
 	const proposed = [
 		{ name: '#1.sql', content: 'SELECT 1 AS one;' },
@@ -276,7 +276,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 
 	// Renaming moves the file on disk. The row takes the new name, the tab
 	// follows the file rather than closing on a path that no longer exists, and
-	// the rest of the workspace stays where it was — a rename rebuilds the whole
+	// the rest of the workspace stays where it was -- a rename rebuilds the whole
 	// graph, and the folders that had been read have to come back read.
 	await openMenuOn(page, 'daily.sql');
 	await chooseMenuItem(page, 'Rename...');
@@ -352,7 +352,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	}
 	await expect(treeNode(page, 'twin.sql')).toHaveCount(2);
 
-	// Closing 2026 leaves one of them on screen, which is the one to drag — and
+	// Closing 2026 leaves one of them on screen, which is the one to drag -- and
 	// after the refusal there are still two.
 	await treeNode(page, '2026').click();
 	await expect(treeNode(page, 'twin.sql')).toHaveCount(1);
@@ -573,7 +573,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// removed like a folder while being a different kind of node.
 	await openTreeMenu(page);
 	await chooseMenuItem(page, 'New Database...');
-	await expect(treeNode(page, 'database')).toBeVisible();
+	await expect(treeNode(page, 'db #1')).toBeVisible();
 
 	// Databases are listed by name, so the new one lands above the seeded one
 	// and pushes it down. Both are waited for before anything is clicked: acting
@@ -581,27 +581,19 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// pointer.
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
 
-	// The name is the directory: a second database cannot have the first's.
-	await openTreeMenu(page);
-	await chooseMenuItem(page, 'New Database...');
-	await expect(treeNode(page, 'database-2')).toBeVisible();
-	await openMenuOn(page, 'database-2');
+	await openMenuOn(page, 'db #1');
 	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'database-2')).toHaveCount(0);
-
-	await openMenuOn(page, 'database');
-	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'database')).toHaveCount(0);
+	await expect(treeNode(page, 'db #1')).toHaveCount(0);
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
 
 	// And it stays deleted. Its connection form saves on a debounce, so a save
 	// can be in the air when the delete lands: writing it out used to make the
-	// directory again, and the database came back a second later — in the graph,
+	// directory again, and the database came back a second later -- in the graph,
 	// and in the tree the next time it was read. Waited out rather than polled:
 	// what is being watched for is something arriving late.
 	await page.waitForTimeout(1500);
 	expect(await databasesInGraph(request)).toEqual(['warehouse']);
-	await expect(treeNode(page, 'database')).toHaveCount(0);
+	await expect(treeNode(page, 'db #1')).toHaveCount(0);
 
 	// --- Leaving it as it was found -----------------------------------------
 

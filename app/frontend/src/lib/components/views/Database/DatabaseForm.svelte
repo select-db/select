@@ -2,7 +2,6 @@
 	import { Ping, ChooseSSHKeyFile } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
-	import { RenameDatabase } from '$lib/bindings/selectDb/internal/graph/graph';
 	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
 	import {
 		DeleteDatasource,
@@ -193,7 +192,7 @@
 	});
 
 	// The name is the directory the database lives in, so what it is called is
-	// not a field to save but the last segment of its URI — no copy of it to
+	// not a field to save but the last segment of its URI -- no copy of it to
 	// keep in step. Changing it is a rename, committed when the field is left
 	// rather than on the autosave: renaming on a 600ms pause would rename the
 	// directory once per word typed.
@@ -206,16 +205,16 @@
 			return;
 		}
 
-		const [renamed, err] = await tryCatch(RenameDatabase, { uri, name: wanted });
-		if (err || !renamed) {
-			notifyError(err?.message ?? `Could not rename ${folderName()}`);
+		const newUri = `${uri.slice(0, uri.lastIndexOf('/') + 1)}${wanted}`;
+
+		const [, err] = await tryCatch(fs.Rename, { old_uri: uri, new_uri: newUri });
+		if (err) {
+			notifyError(err.message);
 			name = folderName();
 			return;
 		}
 
-		// What it ended up called, which is not always what was typed.
-		name = renamed.name;
-		updateFileTabsAfterRename(uri, renamed.uri, renamed.name);
+		updateFileTabsAfterRename(uri, newUri, wanted);
 	};
 
 	const debouncedSave = debounce(async () => await save(), 600);
@@ -347,8 +346,8 @@
 		if (!err) return;
 
 		// A save is debounced, so it can land after the database it belongs to
-		// has been deleted. The write refuses to make the folder again — that is
-		// what used to put the row back seconds after it was removed — and there
+		// has been deleted. The write refuses to make the folder again -- that is
+		// what used to put the row back seconds after it was removed -- and there
 		// is nothing to report here: what was being edited is gone on purpose.
 		const [, gone] = await tryCatch(fs.Stat, uri);
 		if (gone) return;
@@ -571,7 +570,7 @@
 		{#if proxified && remoteLoading}
 			<div class="remote-state">
 				<Loader size={18} />
-				<p>Loading credentials…</p>
+				<p>Loading credentials...</p>
 			</div>
 		{:else if proxified && remoteError}
 			<Alert type={AlertType.Error} message={remoteError} noPulse />
@@ -685,7 +684,7 @@
 									<div class="action-wrapper">
 										<Input
 											bind:value={sshHostKey}
-											placeholder="ssh-ed25519 AAAA…"
+											placeholder="ssh-ed25519 AAAA..."
 											style="flex-grow: 1;"
 											validator={validateHostKey}
 										/>

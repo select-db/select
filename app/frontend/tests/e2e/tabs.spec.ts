@@ -5,8 +5,8 @@ import { activeTab, editor, selectedTreeNodes, tab, tabs, testId, treeNode } fro
 /**
  * Tabs: what the workbench does with them, not what they hold.
  *
- * A tab is a frame around something else — a file, a terminal, a settings page
- * — and each of those has its own spec. What is tested here is the frame: that
+ * A tab is a frame around something else -- a file, a terminal, a settings page
+ * -- and each of those has its own spec. What is tested here is the frame: that
  * opening the same file twice does not open it twice, that closing the active
  * one leaves a sensible tab behind, that the group remembers where it has been,
  * that a tab can be dragged into a split and back out, and that a tab follows
@@ -116,8 +116,8 @@ test('opens one tab per file, and closes them by every route there is', async ({
 	await expect(tabs(page)).toHaveCount(3);
 	await expect(activeTab(page)).toHaveAttribute('data-test-value', 'cohorts.sql');
 
-	// A query that was never a file is a tab too — the plus at the end of the
-	// row makes one — and there is nothing on disk for it: it is written when it
+	// A query that was never a file is a tab too -- the plus at the end of the
+	// row makes one -- and there is nothing on disk for it: it is written when it
 	// is saved somewhere, not before.
 	await page.getByTitle('New SQL file').click();
 	await expect(activeTab(page)).toHaveAttribute('data-test-value', '[temp].sql');
@@ -359,18 +359,18 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 	// the database, the tab showing its connection goes with it.
 	await openTreeMenu(page);
 	await page.getByRole('menuitem', { name: 'New Database...', exact: true }).click();
-	await expect(treeNode(page, 'database')).toBeVisible();
+	await expect(treeNode(page, 'db #1')).toBeVisible();
 
-	await treeNode(page, 'database').click({ button: 'right' });
+	await treeNode(page, 'db #1').click({ button: 'right' });
 	await page.getByRole('menuitem', { name: 'Edit...', exact: true }).click();
-	await expect(tab(page, 'database')).toBeVisible();
+	await expect(tab(page, 'db #1')).toBeVisible();
 
-	await treeNode(page, 'database').click({ button: 'right' });
+	await treeNode(page, 'db #1').click({ button: 'right' });
 	await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
-	await expect(treeNode(page, 'database')).toHaveCount(0);
-	await expect(tab(page, 'database')).toHaveCount(0);
+	await expect(treeNode(page, 'db #1')).toHaveCount(0);
+	await expect(tab(page, 'db #1')).toHaveCount(0);
 
-	// Leaving the workspace as it was found — by name, not with a checkout of
+	// Leaving the workspace as it was found -- by name, not with a checkout of
 	// everything: the seed leaves an edit uncommitted on purpose, and the git
 	// view and the screenshots are of a workspace that has it.
 	await run('git', 'checkout', '--', 'weekly_revenue.sql', 'weekly_revenue.sql.metadata.json');

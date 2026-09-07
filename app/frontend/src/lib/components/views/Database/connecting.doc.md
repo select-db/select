@@ -37,9 +37,9 @@ workspace/
     db.config.json
 ```
 
-The folder name *is* the name: renaming the database renames the folder, and renaming the folder — in SELECT, in a terminal, in a branch someone else pushed — renames the database. There is nowhere else the name is written down, so a diff shows which database changed rather than an identifier you have to look up.
+The folder name *is* the name: renaming the database renames the folder, and renaming the folder, in SELECT or in a terminal or in a branch someone else pushed, renames the database. There is nowhere else the name is written down, so a diff shows which database changed rather than an identifier you have to look up.
 
-A few names cannot be used as typed, because a folder cannot hold them. Slashes and the characters Windows reserves (`\ : * ? " < > |`) become `-`, a leading dot is dropped, and a name a sibling already has is refused rather than silently numbered. Everything else — spaces, capitals, accents — is kept as you wrote it.
+Rename a database from its row in the filesystem panel, or from the **Name** field in its connection form. A database is named on the same terms as a folder, because it is one: a name another entry in the folder already has is refused, and so is a name your filesystem will not take.
 
 You can organize SQL files and subfolders inside each database folder. The `db.config.json` file is managed by SELECT and written as you change connection settings in the form. It holds the DSN exactly as you typed it, so a DSN built from `$VAR` references contains no secrets and belongs in git with the rest of the workspace.
 

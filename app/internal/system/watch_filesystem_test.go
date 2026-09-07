@@ -308,7 +308,7 @@ func TestHandleFSEvent_SkipsFilesInUnopenedFolder(t *testing.T) {
 }
 
 // A deleted path cannot be stat-ed, so the graph decides what it was. It knows
-// every folder, but a file only once its folder has been opened — so a file
+// every folder, but a file only once its folder has been opened -- so a file
 // deleted in a folder nobody opened must still be reported as a file, or the
 // frontend never closes the tab that was open on it.
 func TestHandleFSEvent_DeleteReportsAFileAsAFile(t *testing.T) {

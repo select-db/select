@@ -75,7 +75,7 @@ func addWatches(watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS, root string
 // still watched under its old name, and giving that name up is what frees the
 // directory to be watched again under the new one.
 //
-// Watches outside root are left alone — the per-user config directory is one.
+// Watches outside root are left alone -- the per-user config directory is one.
 func dropStaleWatches(watcher *fsnotify.Watcher, root string) {
 	prefix := root + string(os.PathSeparator)
 	for _, watched := range watcher.WatchList() {
@@ -155,8 +155,8 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 			// Track new directories for deeper-level events.
 			//
 			// The whole subtree, not just this level: a directory can arrive
-			// with children already in it — mkdir -p, a checkout, an unzip, a
-			// clone — and those children raise no Create of their own, so
+			// with children already in it -- mkdir -p, a checkout, an unzip, a
+			// clone -- and those children raise no Create of their own, so
 			// watching only the directory named here leaves them silent.
 			if event.Op&fsnotify.Create != 0 {
 				info, err := os.Stat(event.Name)
@@ -169,7 +169,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 			if event.Op&fsnotify.Rename != 0 {
 				// A watch is registered against a path. A renamed directory
 				// keeps its watch, so its children keep arriving under the old
-				// name — and land in the graph under a folder that no longer
+				// name -- and land in the graph under a folder that no longer
 				// exists, which is to say nowhere.
 				//
 				// Re-walking on its own does not undo that. The old name and
@@ -423,7 +423,7 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 	if op == "delete" {
 		// The path is gone, so the graph is all that says what it was: it holds
 		// every folder it has seen, but a file only once its folder has been
-		// opened. An unknown URI is taken for a file — the graph can miss a
+		// opened. An unknown URI is taken for a file -- the graph can miss a
 		// folder too (made while the app was down, or never watched), and that
 		// way round costs a tab close for a URI with no tab, where the other
 		// leaves a tab open on a file that is gone.
@@ -457,7 +457,7 @@ func (s *System) inferTableFromGraph(id string) string {
 }
 
 // Emits a file mutation, skipping internal workspace files and files whose
-// folder has not been opened yet — an unresolved folder reads its files when it
+// folder has not been opened yet -- an unresolved folder reads its files when it
 // is opened, so putting one file in it now would only make it look resolved.
 func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID string, ctx *graph.WorkspaceFS, op string) {
 	name := filepath.Base(filePath)
@@ -475,7 +475,7 @@ func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID st
 
 // Reports whether a file event's parent is a container the graph tracks files
 // for: a db instance directory, or a resolved folder. A parent the graph does
-// not know — a folder whose own insert is still in flight — is accepted, so its
+// not know -- a folder whose own insert is still in flight -- is accepted, so its
 // files are not lost.
 func (s *System) parentAcceptsFiles(parentURI string) bool {
 	if s.Graph == nil {
