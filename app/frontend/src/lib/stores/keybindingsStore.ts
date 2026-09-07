@@ -3,7 +3,8 @@ import { EventsOn } from '$lib/wails/events';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { notify } from '$lib/system/Notifications/notificationsStore';
 import { AlertType } from '$lib/system/Alert/types';
-import { setContext, type KeybindingsContext } from './keybindingsContextStore';
+import { setOS } from '$lib/utils/platform';
+import type { KeybindingsContext } from './keybindingsContextStore';
 import { GetConfig } from '$lib/bindings/selectDb/internal/system/system';
 import type * as graphModels from '$lib/bindings/selectDb/internal/graph/models';
 import type * as keymapModels from '$lib/bindings/selectDb/internal/keymap/models';
@@ -15,9 +16,9 @@ import type * as keymapModels from '$lib/bindings/selectDb/internal/keymap/model
  * the frontend decides what a modifier means. See internal/keymap.
  */
 export type Keybinding = keymapModels.Binding;
-export type KeybindingProblem = keymapModels.Problem;
+type KeybindingProblem = keymapModels.Problem;
 export type EditorSnippet = graphModels.EditorSnippet;
-export type ConfigData = graphModels.ConfigResponse;
+type ConfigData = graphModels.ConfigResponse;
 
 export const keybindingsStore = writable<Keybinding[]>([]);
 export const editorSnippetsStore = writable<EditorSnippet[]>([]);
@@ -27,10 +28,10 @@ function applyConfig(config: ConfigData | null | undefined): void {
 	if (!config) return;
 	if (config.keybindings) keybindingsStore.set(config.keybindings);
 	if (config.editor_snippets !== undefined) editorSnippetsStore.set(config.editor_snippets);
-	// `os` is a fact about the machine, so it comes from the backend rather than
-	// from sniffing the user agent, and bindings can ask for it: a chord that is
-	// conventional on one platform and taken on another says so in its `when`.
-	if (config.os) setContext('os', config.os);
+	// The platform is a fact about the machine, so it comes from the backend
+	// rather than from sniffing the user agent. Everything that needs it reads
+	// it from there, `when` predicates included.
+	if (config.os) setOS(config.os);
 	reportProblems(config.problems ?? []);
 }
 
@@ -154,7 +155,7 @@ export function chordFromEvent(e: KeyboardEvent): string {
 	return parts.join('+');
 }
 
-export function evaluateWhen(when: string | undefined, context: KeybindingsContext): boolean {
+function evaluateWhen(when: string | undefined, context: KeybindingsContext): boolean {
 	if (!when || when.trim() === '') return true;
 	const [result, err] = tryCatch(() => evaluateTokens(tokenizeWhen(when), context));
 	return err ? false : result;

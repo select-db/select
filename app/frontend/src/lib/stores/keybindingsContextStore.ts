@@ -1,10 +1,11 @@
 import { writable, get } from 'svelte/store';
+import { osStore } from '$lib/utils/platform';
 
 export type KeybindingsContext = {
 	/**
-	 * The platform, from the backend: "macos", "linux" or "windows". A binding
-	 * asks for it when a chord is conventional on one platform and taken on
-	 * another -- `ctrl+-` is Go Back on macOS and zoom out everywhere else.
+	 * The platform, mirrored from `osStore`. A binding asks for it when a chord
+	 * is conventional on one platform and taken on another -- `ctrl+-` is Go
+	 * Back on macOS and zoom out everywhere else.
 	 */
 	os: string;
 	inputFocus: boolean;
@@ -43,3 +44,7 @@ export function getContext(): KeybindingsContext {
 export function resetContext(): void {
 	keybindingsContext.set({ ...defaultContext });
 }
+
+// The platform is not something the app does, so nothing sets it here: it is
+// mirrored from the one place that holds it.
+osStore.subscribe((os) => setContext('os', os));

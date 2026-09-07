@@ -63,45 +63,46 @@ var categoryPrecedence = []string{"menu", "modal", "editor", "workbench"}
 // two bindings on one chord are both kept, and the later one wins, which is how
 // a person overrides a default by writing their own.
 func Resolve(defaults, user Categories, platform Platform) ([]Binding, []Problem) {
+	bindings, problems := resolve(SourceDefaults, defaults, platform)
+	userBindings, userProblems := resolve(SourceUser, user, platform)
+
+	return append(bindings, userBindings...), append(problems, userProblems...)
+}
+
+func resolve(source string, categories Categories, platform Platform) ([]Binding, []Problem) {
 	var bindings []Binding
 	var problems []Problem
 
-	for _, source := range []struct {
-		name       string
-		categories Categories
-	}{
-		{SourceDefaults, defaults},
-		{SourceUser, user},
-	} {
-		for _, category := range orderCategories(source.categories) {
-			for _, written := range source.categories[category] {
-				key := written.Key
-				if source.name == SourceUser {
-					migrated, problem := migrate(written, platform)
-					if problem != nil {
-						problems = append(problems, *problem)
-					}
-					key = migrated
+	for _, category := range orderCategories(categories) {
+		for _, written := range categories[category] {
+			key := written.Key
+			// Only a personal keymap can be old enough to need it; the defaults
+			// ship with the binary that reads them.
+			if source == SourceUser {
+				migrated, problem := migrate(written, platform)
+				if problem != nil {
+					problems = append(problems, *problem)
 				}
-
-				chord, err := Parse(key, platform)
-				if err != nil {
-					problems = append(problems, Problem{
-						Level:   LevelError,
-						Source:  source.name,
-						Key:     written.Key,
-						Command: written.Command,
-						Message: err.Error(),
-					})
-					continue
-				}
-
-				bindings = append(bindings, Binding{
-					Key:     chord.String(),
-					Command: written.Command,
-					When:    written.When,
-				})
+				key = migrated
 			}
+
+			chord, err := Parse(key, platform)
+			if err != nil {
+				problems = append(problems, Problem{
+					Level:   LevelError,
+					Source:  source,
+					Key:     written.Key,
+					Command: written.Command,
+					Message: err.Error(),
+				})
+				continue
+			}
+
+			bindings = append(bindings, Binding{
+				Key:     chord.String(),
+				Command: written.Command,
+				When:    written.When,
+			})
 		}
 	}
 
