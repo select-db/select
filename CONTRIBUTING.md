@@ -19,7 +19,7 @@ Monorepo of Go modules + a Svelte frontend + a Python analyzer:
 
 ## Prerequisites
 
-Go 1.25+ · Node 20+ · [Wails v3](https://v3.wails.io) (desktop) · [uv](https://docs.astral.sh/uv/) (analyzer)
+Go 1.25+ · Node 22+ · [Wails v3](https://v3.wails.io) (desktop) · [uv](https://docs.astral.sh/uv/) (analyzer)
 
 ## Branches
 
