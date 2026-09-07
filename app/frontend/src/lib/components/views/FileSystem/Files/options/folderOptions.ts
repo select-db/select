@@ -5,10 +5,8 @@ import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 
-import { setItemSelection } from '$lib/components/views/shared/sharedStore';
-import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
-
 import { rootOptions } from './rootOptions';
+import { renameOption } from './helpers';
 
 export const getFolderOptions = (ctx: 'fs' | 'git' | 'search' = 'fs'): ContextMenuOption[] => {
 	// For git context, return empty options (placeholder folders shouldn't have context menu)
@@ -16,17 +14,7 @@ export const getFolderOptions = (ctx: 'fs' | 'git' | 'search' = 'fs'): ContextMe
 
 	return [
 		...rootOptions,
-		{
-			label: 'Rename...',
-			action: (onClose, { id }: graph.FolderNode) => {
-				renamingItemIdStore.set(id);
-				// Selecting, not adding: two renames in a row would otherwise leave two
-				// rows selected, and a selection of two turns every row's menu into the
-				// batch delete.
-				setItemSelection([id]);
-				onClose?.();
-			}
-		},
+		renameOption,
 		{
 			label: '',
 			divider: true

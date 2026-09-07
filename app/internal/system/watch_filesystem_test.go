@@ -3,13 +3,13 @@ package system
 import (
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	"os"
 
 	"selectDb/internal/db/generated"
+	"selectDb/internal/fs_uri"
 	"selectDb/internal/graph"
 
 	"github.com/fsnotify/fsnotify"
@@ -378,7 +378,7 @@ func watchedUnder(t *testing.T, watcher *fsnotify.Watcher, root string) []string
 
 	var watched []string
 	for _, path := range watcher.WatchList() {
-		if path == root || strings.HasPrefix(path, root+string(os.PathSeparator)) {
+		if fs_uri.Contains(root, path) {
 			watched = append(watched, path)
 		}
 	}
@@ -429,7 +429,7 @@ func TestDropStaleWatches_LeavesOnlyTheNamesOnDisk(t *testing.T) {
 		t.Fatalf("rename db dir: %v", err)
 	}
 
-	dropStaleWatches(watcher, workspaceRoot)
+	dropStaleWatches(watcher, fsCtx)
 	addWatches(watcher, fsCtx, workspaceRoot)
 
 	want := []string{
@@ -469,7 +469,7 @@ func TestDropStaleWatches_EventsNameTheDirectoryThatExists(t *testing.T) {
 		t.Fatalf("rename db dir: %v", err)
 	}
 
-	dropStaleWatches(watcher, workspaceRoot)
+	dropStaleWatches(watcher, fsCtx)
 	addWatches(watcher, fsCtx, workspaceRoot)
 
 	written := filepath.Join(newDir, "sub", "query.sql")

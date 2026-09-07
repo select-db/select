@@ -6,9 +6,6 @@
 	type InputProps = {
 		value?: string | number;
 		placeholder?: string;
-		/** The field's accessible name. Without one it is unreachable to a
-		 *  screen reader and to getByRole. */
-		ariaLabel?: string;
 		autofocus?: boolean;
 		clearable?: boolean;
 		onkeydown?: (e: KeyboardEvent) => void;
@@ -35,7 +32,6 @@
 	let {
 		value = $bindable(),
 		placeholder,
-		ariaLabel,
 		autofocus,
 		clearable = false,
 		onkeydown,
@@ -96,7 +92,6 @@
 	<input
 		bind:this={inputRef}
 		bind:value
-		aria-label={ariaLabel}
 		{placeholder}
 		{autofocus}
 		{onkeydown}
@@ -124,7 +119,6 @@
 	<!-- svelte-ignore a11y_autofocus -->
 	<textarea
 		bind:value
-		aria-label={ariaLabel}
 		{placeholder}
 		{autofocus}
 		{rows}

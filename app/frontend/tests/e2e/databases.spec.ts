@@ -1,6 +1,6 @@
 import { call, expect, holdSession, test, type Page } from './wails';
 import type { APIRequestContext } from '@playwright/test';
-import { tab, testId, treeNode } from './selectors';
+import { labelledInput, tab, testId, treeNode } from './selectors';
 
 /**
  * A database is a directory named after itself. There is nowhere else its name
@@ -174,7 +174,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	await chooseMenuItem(page, 'Edit...');
 	await expect(tab(page, 'analytics')).toBeVisible();
 
-	const nameField = page.getByRole('textbox', { name: 'Database name' });
+	const nameField = labelledInput(page, 'Name');
 	await nameField.fill('reporting');
 	await nameField.blur();
 

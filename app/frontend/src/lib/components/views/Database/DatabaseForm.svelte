@@ -2,7 +2,8 @@
 	import { Ping, ChooseSSHKeyFile } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
-	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
+	import { renameEntry } from '$lib/components/views/shared/renameEntry';
+	import { DB_CONFIG_FILE } from '$lib/components/views/FileSystem/Files/options/helpers';
 	import {
 		DeleteDatasource,
 		GetDatasource,
@@ -199,22 +200,12 @@
 	const folderName = () => uri.split('/').pop() ?? '';
 
 	const commitName = async () => {
+		if (!uri) return;
+
 		const wanted = name.trim();
-		if (!uri || wanted === folderName()) {
-			name = folderName();
-			return;
-		}
-
-		const newUri = `${uri.slice(0, uri.lastIndexOf('/') + 1)}${wanted}`;
-
-		const [, err] = await tryCatch(fs.Rename, { old_uri: uri, new_uri: newUri });
-		if (err) {
-			notifyError(err.message);
-			name = folderName();
-			return;
-		}
-
-		updateFileTabsAfterRename(uri, newUri, wanted);
+		// Refused, or never a change: the field says what the directory is
+		// called, not what was typed at it.
+		name = (await renameEntry(uri, wanted)) ? wanted : folderName();
 	};
 
 	const debouncedSave = debounce(async () => await save(), 600);
@@ -340,7 +331,7 @@
 
 	const writeConfigFile = async (data: unknown) => {
 		const [, err] = await tryCatch(fs.Write, {
-			uri: `${uri}/db.config.json`,
+			uri: `${uri}/${DB_CONFIG_FILE}`,
 			content: JSON.stringify(data, null, 2)
 		});
 		if (!err) return;
@@ -389,7 +380,7 @@
 			const [, err] = await tryCatch(UpsertDatasource, {
 				id,
 				db_type,
-				name,
+				name: folderName(),
 				dsn: dsnLocal,
 				ssh: JSON.stringify(savedSsh),
 				max_open_conns: maxOpenConns,
@@ -490,7 +481,6 @@
 				<p class="label">Name</p>
 				<Input
 					bind:value={name}
-					ariaLabel="Database name"
 					placeholder="Prod read-only (RDS)"
 					onblur={commitName}
 					onkeydown={(e) => {

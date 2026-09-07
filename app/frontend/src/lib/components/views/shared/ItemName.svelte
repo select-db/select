@@ -2,11 +2,7 @@
 	import { untrack } from 'svelte';
 	import { clickOutside } from '$lib/utils/clickOutside';
 	import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
-	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
-
-	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
-	import { tryCatch } from '$lib/utils/tryCatch';
-	import { notifyError } from '$lib/system/Notifications/notificationsStore';
+	import { renameEntry } from '$lib/components/views/shared/renameEntry';
 
 	let {
 		id,
@@ -17,7 +13,7 @@
 	}: {
 		id: string;
 		/** Where the item is. The same as `id` for a file or folder, but a
-		 *  database answers to its config's id, which is not a path. */
+		 *  database answers to the id in its config, which is not a path. */
 		uri: string;
 		name: string;
 		muted: boolean;
@@ -75,30 +71,11 @@
 
 		const trimmed = localName.trim();
 
-		// Built from the URI rather than the id: a file or folder answers to its
-		// own path, but a database answers to the id in its config, which is not
-		// one.
-		const lastSlash = uri.lastIndexOf('/');
-		const base = lastSlash === -1 ? uri : uri.slice(0, lastSlash + 1);
-		const newUri = `${base}${trimmed}`;
-
-		if (uri === newUri) return;
-
-		const [, err] = await tryCatch(fs.Rename, {
-			old_uri: uri,
-			new_uri: newUri
-		});
-
-		// A refused rename -- a name already taken, most often -- leaves the file
-		// where it is, so the row has to go back to saying so.
-		if (err) {
-			notifyError(err.message);
+		// A refused rename leaves the entry where it is, so the row has to go
+		// back to saying so.
+		if (!(await renameEntry(uri, trimmed))) {
 			localName = initialName;
-			return;
 		}
-
-		// Update any open file tabs to point at the new path (keeps tab open)
-		updateFileTabsAfterRename(uri, newUri, trimmed);
 	};
 </script>
 

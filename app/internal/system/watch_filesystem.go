@@ -75,11 +75,11 @@ func addWatches(watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS, root string
 // still watched under its old name, and giving that name up is what frees the
 // directory to be watched again under the new one.
 //
-// Watches outside root are left alone -- the per-user config directory is one.
-func dropStaleWatches(watcher *fsnotify.Watcher, root string) {
-	prefix := root + string(os.PathSeparator)
+// Watches outside the workspace are left alone -- the per-user config
+// directory is one.
+func dropStaleWatches(watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS) {
 	for _, watched := range watcher.WatchList() {
-		if !strings.HasPrefix(watched, prefix) {
+		if _, inside := fsCtx.Rel(watched); !inside {
 			continue
 		}
 		if _, err := os.Stat(watched); err != nil {
@@ -178,7 +178,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 				// the name it was made under. The names that no longer exist
 				// have to go first; only then does the walk register the new
 				// ones.
-				dropStaleWatches(watcher, fsCtx.WorkspaceRoot)
+				dropStaleWatches(watcher, fsCtx)
 				addWatches(watcher, fsCtx, fsCtx.WorkspaceRoot)
 				s.rebuildGraphAndEmit()
 				continue

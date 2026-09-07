@@ -1,8 +1,26 @@
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+import { renamingItemIdStore, setItemSelection } from '$lib/components/views/shared/sharedStore';
+
+/**
+ * Opens the rename box on a row. Shared by files, folders and databases: all
+ * three rename the same way, and a third copy of this had already drifted.
+ *
+ * Selecting, not adding: two renames in a row would otherwise leave two rows
+ * selected, and a selection of two turns every row's menu into the batch
+ * delete.
+ */
+export const renameOption = {
+	label: 'Rename...',
+	action: (onClose: (() => void) | undefined, { id }: { id: string }) => {
+		renamingItemIdStore.set(id);
+		setItemSelection([id]);
+		onClose?.();
+	}
+};
 
 /** The file that makes a directory a database. */
-const DB_CONFIG_FILE = 'db.config.json';
+export const DB_CONFIG_FILE = 'db.config.json';
 
 export const writeFolder = async (uri: string) => {
 	await must(

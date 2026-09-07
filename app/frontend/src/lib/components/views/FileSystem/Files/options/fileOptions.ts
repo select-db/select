@@ -15,11 +15,11 @@ import { AlertType } from '$lib/system/Alert/types';
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { notify } from '$lib/system/Notifications/notificationsStore';
 
-import { setItemSelection } from '$lib/components/views/shared/sharedStore';
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
-import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
+
 import { loadGitFileStatus, gitFileStatusStore } from '$lib/components/views/Git/gitStore';
 import { uriToGitPath } from '$lib/components/views/Git/helpers';
+import { renameOption } from './helpers';
 
 export const uriToRelativePath = (uri: string): string => {
 	const parts = uri.split('/');
@@ -84,17 +84,7 @@ const fsFileOptions = [
 			onClose();
 		}
 	},
-	{
-		label: 'Rename...',
-		action: (onClose, { id }: graph.FileNode) => {
-			renamingItemIdStore.set(id);
-			// Selecting, not adding: two renames in a row would otherwise leave two
-			// rows selected, and a selection of two turns every row's menu into the
-			// batch delete.
-			setItemSelection([id]);
-			onClose?.();
-		}
-	},
+	renameOption,
 	...fileSystemOptions,
 	{
 		label: '',

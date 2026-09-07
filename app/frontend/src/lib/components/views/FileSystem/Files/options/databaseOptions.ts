@@ -7,9 +7,9 @@ import DatabaseSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfo
 
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
-import { addToItemSelection, renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 import { fileSystemOptions } from './fileOptions';
+import { renameOption } from './helpers';
 import { createFileInFolder, createFolderInFolder } from './rootOptions';
 
 export const databaseOptions = [
@@ -28,14 +28,7 @@ export const databaseOptions = [
 			onClose();
 		}
 	},
-	{
-		label: 'Rename...',
-		action: (onClose, { id }: graph.DBInstanceNode) => {
-			renamingItemIdStore.set(id);
-			addToItemSelection(id);
-			onClose?.();
-		}
-	},
+	renameOption,
 	{
 		label: 'Infos...',
 		action: async (onClose, database: graph.DBInstanceNode) => {
