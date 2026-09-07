@@ -18,7 +18,6 @@ export {
     FileNode,
     FileQuery,
     FolderNode,
-    Keybinding,
     QueryResult,
     SqlFileCandidate,
     ThemeVariables,

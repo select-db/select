@@ -4,15 +4,17 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"selectDb/internal/keymap"
 )
 
-func findKeybinding(cfg []Keybinding, command string) (Keybinding, bool) {
-	for _, kb := range cfg {
+func findKeybinding(bindings []keymap.Binding, command string) (keymap.Binding, bool) {
+	for _, kb := range bindings {
 		if kb.Command == command {
 			return kb, true
 		}
 	}
-	return Keybinding{}, false
+	return keymap.Binding{}, false
 }
 
 func TestLoadConfig_Defaults(t *testing.T) {
@@ -143,5 +145,47 @@ func TestWorkspaceExecutionLimits_UnsetNodeFallsBackToDefaults(t *testing.T) {
 	timeout, size := g.WorkspaceExecutionLimits()
 	if timeout != DefaultStatementTimeoutMs || size != DefaultMaxResultSizeMB {
 		t.Errorf("WorkspaceExecutionLimits = (%d, %d), want defaults (%d, %d)", timeout, size, DefaultStatementTimeoutMs, DefaultMaxResultSizeMB)
+	}
+}
+
+// The defaults ship inside the binary, so a binding in them that cannot be
+// parsed is a keystroke nobody can press and nobody is told about. Resolved for
+// every platform, because each one is somebody's.
+func TestDefaultKeybindingsResolveOnEveryPlatform(t *testing.T) {
+	defaults, err := parseConfig(DefaultUserConfigContent)
+	if err != nil {
+		t.Fatalf("parse default user config: %v", err)
+	}
+
+	for _, platform := range []keymap.Platform{keymap.MacOS, keymap.Linux, keymap.Windows} {
+		bindings, problems := keymap.Resolve(defaults.Keybindings, nil, platform)
+		for _, problem := range problems {
+			t.Errorf("%s: %s %q: %s", platform, problem.Level, problem.Key, problem.Message)
+		}
+		if len(bindings) == 0 {
+			t.Errorf("%s: no default keybindings resolved", platform)
+		}
+	}
+}
+
+// Two defaults on the same chord under the same condition is one of them
+// quietly winning. It is how a shortcut ends up doing something else.
+func TestDefaultKeybindingsDoNotCollide(t *testing.T) {
+	defaults, err := parseConfig(DefaultUserConfigContent)
+	if err != nil {
+		t.Fatalf("parse default user config: %v", err)
+	}
+
+	for _, platform := range []keymap.Platform{keymap.MacOS, keymap.Linux, keymap.Windows} {
+		bindings, _ := keymap.Resolve(defaults.Keybindings, nil, platform)
+
+		seen := make(map[string]string, len(bindings))
+		for _, binding := range bindings {
+			chord := binding.Key + " when " + binding.When
+			if previous, taken := seen[chord]; taken && previous != binding.Command {
+				t.Errorf("%s: %s is bound to both %s and %s", platform, chord, previous, binding.Command)
+			}
+			seen[chord] = binding.Command
+		}
 	}
 }
