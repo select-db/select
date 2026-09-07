@@ -25,17 +25,21 @@ Hit **Test connection** to check your setup. SELECT attempts to connect and repo
 
 ## Configuration storage
 
-Each database lives in its own folder inside the workspace, named `db-<uuid>`. The folder contains a `db.config.json` with the connection settings:
+Each database lives in its own folder inside the workspace, **named after the database**. The folder contains a `db.config.json` with the connection settings:
 
 ```
 workspace/
-  db-e731d451-.../
+  analytics/
     db.config.json
     queries/
       report.sql
-  db-a4f29c10-.../
+  billing-eu/
     db.config.json
 ```
+
+The folder name *is* the name: renaming the database renames the folder, and renaming the folder — in SELECT, in a terminal, in a branch someone else pushed — renames the database. There is nowhere else the name is written down, so a diff shows which database changed rather than an identifier you have to look up.
+
+A few names cannot be used as typed, because a folder cannot hold them. Slashes and the characters Windows reserves (`\ : * ? " < > |`) become `-`, a leading dot is dropped, and a name a sibling already has is refused rather than silently numbered. Everything else — spaces, capitals, accents — is kept as you wrote it.
 
 You can organize SQL files and subfolders inside each database folder. The `db.config.json` file is managed by SELECT and written as you change connection settings in the form. It holds the DSN exactly as you typed it, so a DSN built from `$VAR` references contains no secrets and belongs in git with the rest of the workspace.
 
