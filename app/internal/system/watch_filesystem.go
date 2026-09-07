@@ -131,7 +131,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 				continue
 			}
 
-			if strings.HasSuffix(event.Name, "db.config.json") {
+			if strings.HasSuffix(event.Name, graph.DBConfigFileName) {
 				s.handleDBConfigEvent(event, user.ID, fsCtx)
 				continue
 			}
@@ -494,7 +494,7 @@ func (s *System) checkAndHandleDBInstance(dirPath string, userID string, ctx *gr
 	if !graph.CheckIsDBInstance(dirPath) {
 		return false
 	}
-	s.handleDBConfigEvent(fsnotify.Event{Name: filepath.Join(dirPath, "db.config.json"), Op: fsnotify.Create}, userID, ctx)
+	s.handleDBConfigEvent(fsnotify.Event{Name: filepath.Join(dirPath, graph.DBConfigFileName), Op: fsnotify.Create}, userID, ctx)
 	return true
 }
 

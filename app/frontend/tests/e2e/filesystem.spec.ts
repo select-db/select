@@ -573,7 +573,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// removed like a folder while being a different kind of node.
 	await openTreeMenu(page);
 	await chooseMenuItem(page, 'New Database...');
-	await expect(treeNode(page, 'db #1')).toBeVisible();
+	await expect(treeNode(page, 'database')).toBeVisible();
 
 	// Databases are listed by name, so the new one lands above the seeded one
 	// and pushes it down. Both are waited for before anything is clicked: acting
@@ -581,9 +581,17 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// pointer.
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
 
-	await openMenuOn(page, 'db #1');
+	// The name is the directory: a second database cannot have the first's.
+	await openTreeMenu(page);
+	await chooseMenuItem(page, 'New Database...');
+	await expect(treeNode(page, 'database-2')).toBeVisible();
+	await openMenuOn(page, 'database-2');
 	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'db #1')).toHaveCount(0);
+	await expect(treeNode(page, 'database-2')).toHaveCount(0);
+
+	await openMenuOn(page, 'database');
+	await chooseMenuItem(page, 'Delete');
+	await expect(treeNode(page, 'database')).toHaveCount(0);
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
 
 	// And it stays deleted. Its connection form saves on a debounce, so a save
@@ -593,7 +601,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// what is being watched for is something arriving late.
 	await page.waitForTimeout(1500);
 	expect(await databasesInGraph(request)).toEqual(['warehouse']);
-	await expect(treeNode(page, 'db #1')).toHaveCount(0);
+	await expect(treeNode(page, 'database')).toHaveCount(0);
 
 	// --- Leaving it as it was found -----------------------------------------
 

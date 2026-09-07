@@ -9,6 +9,8 @@ export {
 export {
     ColumnMetadata,
     ConfigResponse,
+    CreateDatabaseParams,
+    CreatedDatabase,
     DBInstanceItemNode,
     DBInstanceNode,
     DBInstanceSSHConfig,

@@ -149,7 +149,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 			// db.config.json). In that case, we build a DBInstanceNode and
 			// continue walking to populate its files/folders.
 			if CheckIsDBInstance(entry.Path) {
-				cfg, readErr := ReadFSDBConfig(filepath.Join(entry.Path, "db.config.json"))
+				cfg, readErr := ReadFSDBConfig(filepath.Join(entry.Path, DBConfigFileName))
 				if readErr != nil {
 					return fs.SkipDir
 				}

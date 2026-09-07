@@ -138,7 +138,7 @@ for (const theme of THEMES) {
 			const form = testId(page, 'database.form');
 			const dsn = testId(page, 'database.dsn').locator('input');
 
-			// A name worth photographing. The app numbers a new database `db #1`,
+			// A name worth photographing. A new database is called `database`,
 			// which tells a reader nothing about what they are looking at.
 			await form.locator('input').first().fill(CREATED);
 
@@ -153,8 +153,8 @@ for (const theme of THEMES) {
 
 			// The name reaches the tab and the tree only once the form's 600ms
 			// autosave has written it. Captured before that, the figure showed
-			// `db #1` in both while the Name field beside them read analytics-prod,
-			// which reads as a form that does not do what it says.
+			// `database` in both while the Name field beside them read
+			// analytics-prod, which reads as a form that does not do what it says.
 			await expect(testId(page, 'tree.node', CREATED)).toBeVisible({ timeout: 15_000 });
 
 			await dismissErrors(page);

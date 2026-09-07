@@ -7,7 +7,7 @@ import { expandItem, renamingItemIdStore } from '$lib/components/views/shared/sh
 import { ResolveFolder } from '$lib/wails/graph';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
-import { writeDatabase, writeFile, writeFolder } from './helpers';
+import { createDatabase, writeFile, writeFolder } from './helpers';
 
 const findUniqueFolderName = (folders: graph.FolderNode[]): string => {
 	const existingNames = new Set(folders.map((f) => f.name));
@@ -27,14 +27,9 @@ const findUniqueFileName = (files: graph.FileNode[]): string => {
 	return `#${counter}.sql`;
 };
 
-const findUniqueDatabaseName = (databases: graph.DBInstanceNode[]): string => {
-	const existingNames = new Set(databases.map((db) => db.name));
-	let counter = 1;
-	while (existingNames.has(`db #${counter}`)) {
-		counter++;
-	}
-	return `db #${counter}`;
-};
+// What a database is called before anyone renames it. The backend numbers it
+// if a sibling already has the name, because the name is the directory.
+const NEW_DATABASE_NAME = 'database';
 
 type FolderLike = graph.FolderNode | graph.DBInstanceNode;
 
@@ -90,14 +85,13 @@ export const rootOptions = [
 	},
 	{
 		label: 'New Database...',
-		action: async (onClose, { uri, id, db_instances }: graph.FolderNode) => {
-			const name = findUniqueDatabaseName(db_instances);
-			const { id: dbId, uri: dbUri } = await writeDatabase(uri, name);
+		action: async (onClose, { uri, id }: graph.FolderNode) => {
+			const created = await createDatabase(uri, NEW_DATABASE_NAME);
 			navigateToDatabase({
-				id: dbId,
-				uri: dbUri,
+				id: created.id,
+				uri: created.uri,
 				type: 'db_instance',
-				name,
+				name: created.name,
 				folder_id: id,
 				children: []
 			} as unknown as graph.DBInstanceNode);

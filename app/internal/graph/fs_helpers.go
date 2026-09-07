@@ -105,6 +105,9 @@ func (c *WorkspaceFS) ParentURI(rel string) string {
 	return c.URI(parentRel)
 }
 
+// DBConfigFileName is the file that makes a directory a database.
+const DBConfigFileName = "db.config.json"
+
 // FSDBConfig mirrors the on-disk db.config.json structure used for
 // filesystem-backed database instances managed by the workspace graph. It is a
 // lightweight version of the fsDBConfig type in node_db_instance.go, kept here
@@ -207,7 +210,7 @@ func IsInternalWorkspaceFile(name string) bool {
 	lower := strings.ToLower(name)
 
 	// Workspace-specific config / sidecar files.
-	if name == "db.config.json" ||
+	if name == DBConfigFileName ||
 		strings.HasSuffix(name, ".metadata.json") ||
 		strings.HasPrefix(name, ".selectdb_") {
 		return true
@@ -248,7 +251,7 @@ func IsInternalWorkspacePath(rel string) bool {
 // CheckIsDBInstance checks if a directory contains a db.config.json file,
 // indicating it's a database instance directory.
 func CheckIsDBInstance(dirPath string) bool {
-	dbConfigPath := filepath.Join(dirPath, "db.config.json")
+	dbConfigPath := filepath.Join(dirPath, DBConfigFileName)
 	_, err := os.Stat(dbConfigPath)
 	return err == nil
 }

@@ -359,16 +359,16 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 	// the database, the tab showing its connection goes with it.
 	await openTreeMenu(page);
 	await page.getByRole('menuitem', { name: 'New Database...', exact: true }).click();
-	await expect(treeNode(page, 'db #1')).toBeVisible();
+	await expect(treeNode(page, 'database')).toBeVisible();
 
-	await treeNode(page, 'db #1').click({ button: 'right' });
+	await treeNode(page, 'database').click({ button: 'right' });
 	await page.getByRole('menuitem', { name: 'Edit...', exact: true }).click();
-	await expect(tab(page, 'db #1')).toBeVisible();
+	await expect(tab(page, 'database')).toBeVisible();
 
-	await treeNode(page, 'db #1').click({ button: 'right' });
+	await treeNode(page, 'database').click({ button: 'right' });
 	await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
-	await expect(treeNode(page, 'db #1')).toHaveCount(0);
-	await expect(tab(page, 'db #1')).toHaveCount(0);
+	await expect(treeNode(page, 'database')).toHaveCount(0);
+	await expect(tab(page, 'database')).toHaveCount(0);
 
 	// Leaving the workspace as it was found — by name, not with a checkout of
 	// everything: the seed leaves an edit uncommitted on purpose, and the git

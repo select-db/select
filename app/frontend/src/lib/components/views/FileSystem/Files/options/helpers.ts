@@ -1,5 +1,7 @@
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+import * as graph from '$lib/bindings/selectDb/internal/graph/graph';
+import type * as models from '$lib/bindings/selectDb/internal/graph/models';
 
 export const writeFolder = async (uri: string) => {
 	await must(
@@ -29,37 +31,19 @@ export const writeFile = async (uri: string) => {
 	);
 };
 
-export const writeDatabase = async (
+export const createDatabase = async (
 	parentUri: string,
-	displayName: string
-): Promise<{ id: string; uri: string }> => {
-	// Generate stable folder name using ID-based format
-	const id = crypto.randomUUID();
-	const stableFolderName = `db-${id}`;
-	const dbUri = `${parentUri}/${stableFolderName}`;
-
-	// Create the folder first
-	await must(
-		tryCatch(fs.Mkdir, {
-			uri: dbUri
+	name: string
+): Promise<models.CreatedDatabase> => {
+	// The directory and its db.config.json are written together in the backend:
+	// picking the name means seeing what the folder already holds, and a
+	// database that exists as a directory but not yet as a config is a folder.
+	const created = await must(
+		tryCatch(graph.CreateDatabase, {
+			folder_uri: parentUri,
+			name
 		})
 	);
-
-	// Write db.config.json with proper content including the display name
-	// The filesystem watcher will detect this and create the DB instance node
-	const config = {
-		id,
-		name: displayName,
-		db_type: 'postgresql',
-		dsn: ''
-	};
-
-	await must(
-		tryCatch(fs.Write, {
-			uri: `${dbUri}/db.config.json`,
-			content: JSON.stringify(config, null, 2)
-		})
-	);
-
-	return { id, uri: dbUri };
+	if (!created) throw new Error(`Could not create ${name}`);
+	return created;
 };

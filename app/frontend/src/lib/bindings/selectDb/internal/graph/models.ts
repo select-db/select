@@ -154,6 +154,69 @@ export class ConfigResponse {
     }
 }
 
+/**
+ * CreateDatabaseParams asks for a database in the folder at FolderURI, named
+ * Name. The name is what the user typed; where it lands is up to us.
+ */
+export class CreateDatabaseParams {
+    "folder_uri": string;
+    "name": string;
+
+    /** Creates a new CreateDatabaseParams instance. */
+    constructor($$source: Partial<CreateDatabaseParams> = {}) {
+        if (!("folder_uri" in $$source)) {
+            this["folder_uri"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CreateDatabaseParams instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CreateDatabaseParams {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CreateDatabaseParams($$parsedSource as Partial<CreateDatabaseParams>);
+    }
+}
+
+/**
+ * CreatedDatabase is where the database went. Name is the directory's name,
+ * which is to say the database's, and may differ from what was asked for: the
+ * filesystem refuses some names, and a sibling may already have this one.
+ */
+export class CreatedDatabase {
+    "id": string;
+    "uri": string;
+    "name": string;
+
+    /** Creates a new CreatedDatabase instance. */
+    constructor($$source: Partial<CreatedDatabase> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("uri" in $$source)) {
+            this["uri"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CreatedDatabase instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CreatedDatabase {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CreatedDatabase($$parsedSource as Partial<CreatedDatabase>);
+    }
+}
+
 export class DBInstanceItemNode {
     "id": string;
     "uri": string;

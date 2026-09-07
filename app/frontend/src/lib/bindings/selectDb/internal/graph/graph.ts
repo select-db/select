@@ -29,13 +29,27 @@ export function BuildWorkspaceGraphFromFS(fsCtx: $models.WorkspaceFS | null): $C
 }
 
 /**
+ * CreateDatabase makes the directory for a new database and writes its config.
+ * 
+ * The directory and the config are written together here rather than from the
+ * frontend, because choosing the name needs to see the directory it is going
+ * into: two databases cannot share a name, and which names are free is only
+ * knowable on disk.
+ */
+export function CreateDatabase(params: $models.CreateDatabaseParams): $CancellablePromise<$models.CreatedDatabase | null> {
+    return $Call.ByID(1582599599, params).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
+/**
  * FileDatabases returns the databases a file is bound to: from the node when
  * the file's folder has been resolved, from the file's sidecar when it has not,
  * which answers without resolving the folder.
  */
 export function FileDatabases(fileURI: string): $CancellablePromise<$models.DatabaseRef[]> {
     return $Call.ByID(2279693242, fileURI).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType3($result);
     });
 }
 
@@ -45,7 +59,7 @@ export function FileDatabases(fileURI: string): $CancellablePromise<$models.Data
  */
 export function FindDbItemNodeById(dbInstanceID: string, nodeID: string): $CancellablePromise<$models.DBInstanceItemNode | null> {
     return $Call.ByID(1698115212, dbInstanceID, nodeID).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType5($result);
     });
 }
 
@@ -57,7 +71,7 @@ export function FindDbItemNodeById(dbInstanceID: string, nodeID: string): $Cance
  */
 export function FindFiles(q: $models.FileQuery): $CancellablePromise<($models.FileNode | null)[]> {
     return $Call.ByID(2629348860, q).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType8($result);
     });
 }
 
@@ -68,7 +82,7 @@ export function FindFiles(q: $models.FileQuery): $CancellablePromise<($models.Fi
  */
 export function GetDBInstanceNodeByID(ID: string): $CancellablePromise<$models.DBInstanceNode | null> {
     return $Call.ByID(1444826651, ID).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType10($result);
     });
 }
 
@@ -90,7 +104,7 @@ export function GetEnvFilePath(folderURI: string): $CancellablePromise<string> {
  */
 export function GetFileNodeByID(fileID: string): $CancellablePromise<$models.FileNode | null> {
     return $Call.ByID(793692664, fileID).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType7($result);
     });
 }
 
@@ -100,7 +114,7 @@ export function GetFileNodeByID(fileID: string): $CancellablePromise<$models.Fil
  */
 export function GetFolderNodeByID(id: string): $CancellablePromise<$models.FolderNode | null> {
     return $Call.ByID(4046279042, id).then(($result: any) => {
-        return $$createType10($result);
+        return $$createType12($result);
     });
 }
 
@@ -126,7 +140,7 @@ export function GetThemeFilePath(): $CancellablePromise<string> {
  */
 export function GetUriSqlFileRefs(uri: string): $CancellablePromise<$models.SqlFileCandidate[]> {
     return $Call.ByID(1615993196, uri).then(($result: any) => {
-        return $$createType12($result);
+        return $$createType14($result);
     });
 }
 
@@ -137,7 +151,7 @@ export function GetUriSqlFileRefs(uri: string): $CancellablePromise<$models.SqlF
  */
 export function GetUriVariables(uri: string): $CancellablePromise<$models.VariableCandidate[]> {
     return $Call.ByID(1674050077, uri).then(($result: any) => {
-        return $$createType14($result);
+        return $$createType16($result);
     });
 }
 
@@ -150,7 +164,7 @@ export function GetUriVariables(uri: string): $CancellablePromise<$models.Variab
  */
 export function GetWorkspaceGraph(): $CancellablePromise<$models.WorkspaceNode | null> {
     return $Call.ByID(977516625).then(($result: any) => {
-        return $$createType16($result);
+        return $$createType18($result);
     });
 }
 
@@ -169,7 +183,7 @@ export function InvalidateWorkspaceGraph(): $CancellablePromise<void> {
  */
 export function LoadConfig(): $CancellablePromise<$models.ConfigResponse | null> {
     return $Call.ByID(2766015104).then(($result: any) => {
-        return $$createType18($result);
+        return $$createType20($result);
     });
 }
 
@@ -185,7 +199,7 @@ export function LoadFolderEnvFile(folderNode: $models.FolderNode | null, wfs: $m
  */
 export function LoadWorkspaceLint(): $CancellablePromise<tokenanalyzer$0.LintFile> {
     return $Call.ByID(2616540178).then(($result: any) => {
-        return $$createType20($result);
+        return $$createType22($result);
     });
 }
 
@@ -196,7 +210,7 @@ export function LoadWorkspaceLint(): $CancellablePromise<tokenanalyzer$0.LintFil
  */
 export function LoadWorkspaceTheme(): $CancellablePromise<$models.ThemeVariables | null> {
     return $Call.ByID(716865576).then(($result: any) => {
-        return $$createType22($result);
+        return $$createType24($result);
     });
 }
 
@@ -238,7 +252,7 @@ export function ResetWorkspaceTheme(): $CancellablePromise<void> {
  */
 export function ResolveFolder(folderURI: string): $CancellablePromise<$models.FolderNode | null> {
     return $Call.ByID(2843403334, folderURI).then(($result: any) => {
-        return $$createType10($result);
+        return $$createType12($result);
     });
 }
 
@@ -270,26 +284,28 @@ export function WorkspaceExecutionLimits(): $CancellablePromise<[number, number]
 }
 
 // Private type creation functions
-const $$createType0 = $models.DatabaseRef.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.DBInstanceItemNode.createFrom;
-const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = $models.FileNode.createFrom;
+const $$createType0 = $models.CreatedDatabase.createFrom;
+const $$createType1 = $Create.Nullable($$createType0);
+const $$createType2 = $models.DatabaseRef.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $models.DBInstanceItemNode.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $models.DBInstanceNode.createFrom;
-const $$createType8 = $Create.Nullable($$createType7);
-const $$createType9 = $models.FolderNode.createFrom;
+const $$createType6 = $models.FileNode.createFrom;
+const $$createType7 = $Create.Nullable($$createType6);
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = $models.DBInstanceNode.createFrom;
 const $$createType10 = $Create.Nullable($$createType9);
-const $$createType11 = $models.SqlFileCandidate.createFrom;
-const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = $models.VariableCandidate.createFrom;
+const $$createType11 = $models.FolderNode.createFrom;
+const $$createType12 = $Create.Nullable($$createType11);
+const $$createType13 = $models.SqlFileCandidate.createFrom;
 const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = $models.WorkspaceNode.createFrom;
-const $$createType16 = $Create.Nullable($$createType15);
-const $$createType17 = $models.ConfigResponse.createFrom;
+const $$createType15 = $models.VariableCandidate.createFrom;
+const $$createType16 = $Create.Array($$createType15);
+const $$createType17 = $models.WorkspaceNode.createFrom;
 const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = tokenanalyzer$0.LintConfigEntry.createFrom;
-const $$createType20 = $Create.Array($$createType19);
-const $$createType21 = $models.ThemeVariables.createFrom;
-const $$createType22 = $Create.Nullable($$createType21);
+const $$createType19 = $models.ConfigResponse.createFrom;
+const $$createType20 = $Create.Nullable($$createType19);
+const $$createType21 = tokenanalyzer$0.LintConfigEntry.createFrom;
+const $$createType22 = $Create.Array($$createType21);
+const $$createType23 = $models.ThemeVariables.createFrom;
+const $$createType24 = $Create.Nullable($$createType23);
