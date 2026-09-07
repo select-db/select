@@ -129,5 +129,75 @@ export async function holdSession(page: Page) {
 	});
 }
 
+/**
+ * The two services a spec asks about the workspace. Qualified Go names, which
+ * is what the runtime dispatches on.
+ */
+export const FS = 'selectDb/internal/fs_provider.FSProvider';
+export const GRAPH = 'selectDb/internal/graph.Graph';
+
+/** The id of the workspace the seed left, which every path below hangs off. */
+export async function workspaceId(request: APIRequestContext): Promise<string> {
+	const workspace = await call<{ id: string }>(request, `${GRAPH}.GetWorkspaceGraph`);
+	return workspace.id;
+}
+
+/**
+ * Runs a command in the workspace root, standing in for everything that changes
+ * a workspace without going through the app: a terminal, a git checkout, an
+ * editor somebody else has open. The app only finds out by watching.
+ */
+export async function inWorkspace(
+	request: APIRequestContext,
+	id: string,
+	command: string,
+	...args: string[]
+) {
+	const result = await call<{ exitCode: number; stderr: string }>(request, `${FS}.ExecuteCommand`, {
+		workspaceId: id,
+		command,
+		args
+	});
+	if (result.exitCode !== 0) {
+		throw new Error(`${command} ${args.join(' ')}: ${result.stderr}`);
+	}
+}
+
+/** Whether the workspace holds an entry at that path, root-relative. */
+export async function existsInWorkspace(
+	request: APIRequestContext,
+	id: string,
+	path: string
+): Promise<boolean> {
+	const prefix = await call<string>(request, `${FS}.WorkspaceURIPrefix`);
+
+	try {
+		await call(request, `${FS}.Stat`, `${prefix}${id}/${path}`);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** Reads a workspace file from disk, through the app's own provider. */
+export async function readWorkspaceFile(
+	request: APIRequestContext,
+	id: string,
+	path: string
+): Promise<string> {
+	const prefix = await call<string>(request, `${FS}.WorkspaceURIPrefix`);
+	return call<string>(request, `${FS}.ReadFile`, { uri: `${prefix}${id}/${path}` });
+}
+
+/** The names of the databases the graph is holding, in its own order. */
+export async function databasesInGraph(request: APIRequestContext): Promise<string[]> {
+	const workspace = await call<{ db_instances: { name: string }[] }>(
+		request,
+		`${GRAPH}.GetWorkspaceGraph`
+	);
+
+	return (workspace.db_instances ?? []).map((db) => db.name);
+}
+
 export { expect };
-export type { Locator, Page };
+export type { APIRequestContext, Locator, Page };
