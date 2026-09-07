@@ -1,6 +1,12 @@
 import { writable, get } from 'svelte/store';
 
 export type KeybindingsContext = {
+	/**
+	 * The platform, from the backend: "macos", "linux" or "windows". A binding
+	 * asks for it when a chord is conventional on one platform and taken on
+	 * another -- `ctrl+-` is Go Back on macOS and zoom out everywhere else.
+	 */
+	os: string;
 	inputFocus: boolean;
 	editorFocus: boolean;
 	menuFocus: boolean;
@@ -11,6 +17,7 @@ export type KeybindingsContext = {
 };
 
 const defaultContext: KeybindingsContext = {
+	os: '',
 	inputFocus: false,
 	editorFocus: false,
 	menuFocus: false,

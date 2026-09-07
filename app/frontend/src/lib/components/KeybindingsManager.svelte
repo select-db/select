@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import {
-		normalizeKey,
+		chordFromEvent,
 		findMatchingKeybinding,
 		initKeybindings
 	} from '$lib/stores/keybindingsStore';
@@ -9,47 +9,58 @@
 	import { executeCommand } from '$lib/stores/commandRegistry';
 
 	let initialized = false;
-	let cmdHeldInMenu = false;
+	/**
+	 * Whether the menu is being walked with the shortcut key held down.
+	 *
+	 * The picker works the way VS Code's does: hold the modifier, tap the key to
+	 * step through, let go to take what is selected. Which modifier that is comes
+	 * from the binding that was matched, not from the platform -- the keymap has
+	 * already decided.
+	 */
+	let steppingThroughMenu = false;
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (!initialized) return;
 
-		const key = normalizeKey(e);
-		if (!key || key === 'shift' || key === 'alt' || key === 'ctrl' || key === 'cmd') {
-			return;
-		}
+		const chord = chordFromEvent(e);
+		if (!chord) return;
 
 		const context = getContext();
 
-		// Track if cmd+p is used for menu navigation (VS Code-style select on release)
-		if (key === 'cmd+p' && context.menuFocus) cmdHeldInMenu = true;
-
-		// Escape closes menu regardless of modifiers (e.g., cmd+escape while navigating with cmd+p)
+		// Escape closes the menu whatever is held with it.
 		if (e.key === 'Escape' && context.menuFocus) {
 			e.preventDefault();
 			e.stopPropagation();
 			executeCommand('menu.close');
-			cmdHeldInMenu = false;
+			steppingThroughMenu = false;
 			return;
 		}
 
-		const keybinding = findMatchingKeybinding(key, context);
+		const keybinding = findMatchingKeybinding(chord, context);
+		if (!keybinding) return;
 
-		if (keybinding) {
-			e.preventDefault();
-			e.stopPropagation();
-			executeCommand(keybinding.command);
+		if (context.menuFocus && keybinding.command === 'menu.selectNext' && (e.metaKey || e.ctrlKey)) {
+			steppingThroughMenu = true;
 		}
+
+		// A binding with no command is an unbinding: the app stands aside and the
+		// keystroke goes on to whoever else wants it -- the editor, the browser,
+		// the window manager.
+		if (!keybinding.command) return;
+
+		e.preventDefault();
+		e.stopPropagation();
+		executeCommand(keybinding.command);
 	}
 
 	function handleKeyup(e: KeyboardEvent) {
 		if (!initialized) return;
 
-		// When cmd is released while navigating menu with cmd+p, confirm selection
-		if ((e.key === 'Meta' || e.key === 'Control') && cmdHeldInMenu) {
+		// Letting the modifier go takes what the menu has landed on.
+		if ((e.key === 'Meta' || e.key === 'Control') && steppingThroughMenu) {
 			const context = getContext();
 			if (context.menuFocus) executeCommand('menu.confirm');
-			cmdHeldInMenu = false;
+			steppingThroughMenu = false;
 		}
 	}
 

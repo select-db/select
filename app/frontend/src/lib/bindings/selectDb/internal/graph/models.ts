@@ -8,6 +8,9 @@ import { Create as $Create } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as core$0 from "../../../github.com/selectDb/dialect/core/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as keymap$0 from "../keymap/models.js";
 
 /**
  * ColumnMetadata contains editability information for a single column
@@ -101,9 +104,16 @@ export class ColumnMetadata {
     }
 }
 
+/**
+ * ConfigResponse is the personal config as the app uses it: keybindings with
+ * their chords parsed and resolved for this platform, in the order they are
+ * matched, plus whatever was wrong with the ones that could not be.
+ */
 export class ConfigResponse {
-    "keybindings": Keybinding[];
+    "keybindings": keymap$0.Binding[];
     "editor_snippets": EditorSnippet[];
+    "problems": keymap$0.Problem[];
+    "os": string;
 
     /** Creates a new ConfigResponse instance. */
     constructor($$source: Partial<ConfigResponse> = {}) {
@@ -112,6 +122,12 @@ export class ConfigResponse {
         }
         if (!("editor_snippets" in $$source)) {
             this["editor_snippets"] = [];
+        }
+        if (!("problems" in $$source)) {
+            this["problems"] = [];
+        }
+        if (!("os" in $$source)) {
+            this["os"] = "";
         }
 
         Object.assign(this, $$source);
@@ -123,12 +139,16 @@ export class ConfigResponse {
     static createFrom($$source: any = {}): ConfigResponse {
         const $$createField0_0 = $$createType3;
         const $$createField1_0 = $$createType5;
+        const $$createField2_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("keybindings" in $$parsedSource) {
             $$parsedSource["keybindings"] = $$createField0_0($$parsedSource["keybindings"]);
         }
         if ("editor_snippets" in $$parsedSource) {
             $$parsedSource["editor_snippets"] = $$createField1_0($$parsedSource["editor_snippets"]);
+        }
+        if ("problems" in $$parsedSource) {
+            $$parsedSource["problems"] = $$createField2_0($$parsedSource["problems"]);
         }
         return new ConfigResponse($$parsedSource as Partial<ConfigResponse>);
     }
@@ -183,7 +203,7 @@ export class DBInstanceItemNode {
      */
     static createFrom($$source: any = {}): DBInstanceItemNode {
         const $$createField5_0 = $$createType0;
-        const $$createField8_0 = $$createType8;
+        const $$createField8_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("badges" in $$parsedSource) {
             $$parsedSource["badges"] = $$createField5_0($$parsedSource["badges"]);
@@ -253,10 +273,10 @@ export class DBInstanceNode {
      * Creates a new DBInstanceNode instance from a string or object.
      */
     static createFrom($$source: any = {}): DBInstanceNode {
-        const $$createField7_0 = $$createType10;
-        const $$createField10_0 = $$createType8;
-        const $$createField11_0 = $$createType13;
-        const $$createField12_0 = $$createType16;
+        const $$createField7_0 = $$createType12;
+        const $$createField10_0 = $$createType10;
+        const $$createField11_0 = $$createType15;
+        const $$createField12_0 = $$createType18;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ssh" in $$parsedSource) {
             $$parsedSource["ssh"] = $$createField7_0($$parsedSource["ssh"]);
@@ -421,7 +441,7 @@ export class ExplainResult {
      * Creates a new ExplainResult instance from a string or object.
      */
     static createFrom($$source: any = {}): ExplainResult {
-        const $$createField1_0 = $$createType18;
+        const $$createField1_0 = $$createType20;
         const $$createField4_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("root" in $$parsedSource) {
@@ -474,10 +494,10 @@ export class FileNode {
      * Creates a new FileNode instance from a string or object.
      */
     static createFrom($$source: any = {}): FileNode {
-        const $$createField5_0 = $$createType20;
-        const $$createField6_0 = $$createType23;
-        const $$createField7_0 = $$createType26;
-        const $$createField8_0 = $$createType26;
+        const $$createField5_0 = $$createType22;
+        const $$createField6_0 = $$createType25;
+        const $$createField7_0 = $$createType28;
+        const $$createField8_0 = $$createType28;
         const $$createField9_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("databases" in $$parsedSource) {
@@ -625,10 +645,10 @@ export class FolderNode {
      * Creates a new FolderNode instance from a string or object.
      */
     static createFrom($$source: any = {}): FolderNode {
-        const $$createField5_0 = $$createType13;
-        const $$createField6_0 = $$createType16;
-        const $$createField7_0 = $$createType29;
-        const $$createField9_0 = $$createType30;
+        const $$createField5_0 = $$createType15;
+        const $$createField6_0 = $$createType18;
+        const $$createField7_0 = $$createType31;
+        const $$createField9_0 = $$createType32;
         const $$createField10_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("files" in $$parsedSource) {
@@ -647,32 +667,6 @@ export class FolderNode {
             $$parsedSource["badges"] = $$createField10_0($$parsedSource["badges"]);
         }
         return new FolderNode($$parsedSource as Partial<FolderNode>);
-    }
-}
-
-export class Keybinding {
-    "key": string;
-    "command": string;
-    "when"?: string;
-
-    /** Creates a new Keybinding instance. */
-    constructor($$source: Partial<Keybinding> = {}) {
-        if (!("key" in $$source)) {
-            this["key"] = "";
-        }
-        if (!("command" in $$source)) {
-            this["command"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Keybinding instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Keybinding {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new Keybinding($$parsedSource as Partial<Keybinding>);
     }
 }
 
@@ -725,10 +719,10 @@ export class QueryResult {
      */
     static createFrom($$source: any = {}): QueryResult {
         const $$createField1_0 = $$createType0;
-        const $$createField2_0 = $$createType32;
+        const $$createField2_0 = $$createType34;
         const $$createField6_0 = $$createType0;
-        const $$createField8_0 = $$createType25;
-        const $$createField13_0 = $$createType34;
+        const $$createField8_0 = $$createType27;
+        const $$createField13_0 = $$createType36;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("columns" in $$parsedSource) {
             $$parsedSource["columns"] = $$createField1_0($$parsedSource["columns"]);
@@ -824,9 +818,9 @@ export class ThemeVariables {
      * Creates a new ThemeVariables instance from a string or object.
      */
     static createFrom($$source: any = {}): ThemeVariables {
-        const $$createField0_0 = $$createType30;
-        const $$createField1_0 = $$createType30;
-        const $$createField2_0 = $$createType30;
+        const $$createField0_0 = $$createType32;
+        const $$createField1_0 = $$createType32;
+        const $$createField2_0 = $$createType32;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("shared" in $$parsedSource) {
             $$parsedSource["shared"] = $$createField0_0($$parsedSource["shared"]);
@@ -1011,9 +1005,9 @@ export class WorkspaceNode {
      * Creates a new WorkspaceNode instance from a string or object.
      */
     static createFrom($$source: any = {}): WorkspaceNode {
-        const $$createField7_0 = $$createType36;
-        const $$createField8_0 = $$createType16;
-        const $$createField9_0 = $$createType29;
+        const $$createField7_0 = $$createType38;
+        const $$createField8_0 = $$createType18;
+        const $$createField9_0 = $$createType31;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user" in $$parsedSource) {
             $$parsedSource["user"] = $$createField7_0($$parsedSource["user"]);
@@ -1031,38 +1025,40 @@ export class WorkspaceNode {
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = Keybinding.createFrom;
+const $$createType2 = keymap$0.Binding.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = EditorSnippet.createFrom;
 const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = DBInstanceItemNode.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = DBInstanceSSHConfig.createFrom;
-const $$createType10 = $Create.Nullable($$createType9);
-const $$createType11 = FileNode.createFrom;
+const $$createType6 = keymap$0.Problem.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = DBInstanceItemNode.createFrom;
+const $$createType9 = $Create.Nullable($$createType8);
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = DBInstanceSSHConfig.createFrom;
 const $$createType12 = $Create.Nullable($$createType11);
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = FolderNode.createFrom;
-const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = core$0.ExplainNode.createFrom;
-const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = DatabaseRef.createFrom;
-const $$createType20 = $Create.Array($$createType19);
-const $$createType21 = QueryResult.createFrom;
-const $$createType22 = $Create.Nullable($$createType21);
-const $$createType23 = $Create.Map($Create.Any, $$createType22);
-const $$createType24 = ExplainResult.createFrom;
-const $$createType25 = $Create.Nullable($$createType24);
-const $$createType26 = $Create.Map($Create.Any, $$createType25);
-const $$createType27 = DBInstanceNode.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = $Create.Array($$createType28);
-const $$createType30 = $Create.Map($Create.Any, $Create.Any);
-const $$createType31 = $Create.Array($Create.Any);
-const $$createType32 = $Create.Array($$createType31);
-const $$createType33 = ColumnMetadata.createFrom;
+const $$createType13 = FileNode.createFrom;
+const $$createType14 = $Create.Nullable($$createType13);
+const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = FolderNode.createFrom;
+const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = $Create.Array($$createType17);
+const $$createType19 = core$0.ExplainNode.createFrom;
+const $$createType20 = $Create.Nullable($$createType19);
+const $$createType21 = DatabaseRef.createFrom;
+const $$createType22 = $Create.Array($$createType21);
+const $$createType23 = QueryResult.createFrom;
+const $$createType24 = $Create.Nullable($$createType23);
+const $$createType25 = $Create.Map($Create.Any, $$createType24);
+const $$createType26 = ExplainResult.createFrom;
+const $$createType27 = $Create.Nullable($$createType26);
+const $$createType28 = $Create.Map($Create.Any, $$createType27);
+const $$createType29 = DBInstanceNode.createFrom;
+const $$createType30 = $Create.Nullable($$createType29);
+const $$createType31 = $Create.Array($$createType30);
+const $$createType32 = $Create.Map($Create.Any, $Create.Any);
+const $$createType33 = $Create.Array($Create.Any);
 const $$createType34 = $Create.Array($$createType33);
-const $$createType35 = UserNode.createFrom;
-const $$createType36 = $Create.Nullable($$createType35);
+const $$createType35 = ColumnMetadata.createFrom;
+const $$createType36 = $Create.Array($$createType35);
+const $$createType37 = UserNode.createFrom;
+const $$createType38 = $Create.Nullable($$createType37);

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"selectDb/internal/keymap"
 )
 
 // DefaultUserConfigContent is the template for the per-user .config file. The
@@ -24,57 +26,35 @@ func GetDefaultUserConfigContent() string {
 	return DefaultUserConfigContent
 }
 
-type Keybinding struct {
-	Key     string `json:"key"`
-	Command string `json:"command"`
-	When    string `json:"when,omitempty"`
-}
-
-type KeybindingsCategories map[string][]Keybinding
-
 type EditorSnippet struct {
 	Prefix      string `json:"prefix"`
 	Body        string `json:"body"`
 	Description string `json:"description,omitempty"`
 }
 
+// Config is a .config file as it is written: keybindings grouped by the part
+// of the app they belong to, and editor snippets. Parsing a binding and
+// deciding which one wins is internal/keymap's; this package reads the files.
 type Config struct {
-	Keybindings    KeybindingsCategories `json:"keybindings"`
-	EditorSnippets []EditorSnippet       `json:"editor_snippets"`
+	Keybindings    keymap.Categories `json:"keybindings"`
+	EditorSnippets []EditorSnippet   `json:"editor_snippets"`
 }
 
+// ConfigResponse is the personal config as the app uses it: keybindings with
+// their chords parsed and resolved for this platform, in the order they are
+// matched, plus whatever was wrong with the ones that could not be.
 type ConfigResponse struct {
-	Keybindings    []Keybinding    `json:"keybindings"`
-	EditorSnippets []EditorSnippet `json:"editor_snippets"`
-}
-
-// Category order for flattening: workbench has precedence, then editor, modal, menu.
-var keybindingCategoryOrder = []string{"workbench", "editor", "modal", "menu"}
-
-// Converts the category-based config to a flat array for runtime matching.
-// Categories are emitted in keybindingCategoryOrder so workbench bindings are matched first.
-func (c KeybindingsCategories) Flatten() []Keybinding {
-	var result []Keybinding
-	seen := make(map[string]bool)
-	for _, cat := range keybindingCategoryOrder {
-		seen[cat] = true
-		if bindings, ok := c[cat]; ok {
-			result = append(result, bindings...)
-		}
-	}
-	for cat, bindings := range c {
-		if !seen[cat] {
-			result = append(result, bindings...)
-		}
-	}
-	return result
+	Keybindings    []keymap.Binding `json:"keybindings"`
+	EditorSnippets []EditorSnippet  `json:"editor_snippets"`
+	Problems       []keymap.Problem `json:"problems"`
+	OS             string           `json:"os"`
 }
 
 // Parses JSON config content into Config.
 func parseConfig(content string) (*Config, error) {
 	if content == "" {
 		return &Config{
-			Keybindings:    KeybindingsCategories{},
+			Keybindings:    keymap.Categories{},
 			EditorSnippets: []EditorSnippet{},
 		}, nil
 	}
@@ -85,7 +65,7 @@ func parseConfig(content string) (*Config, error) {
 	}
 
 	if config.Keybindings == nil {
-		config.Keybindings = KeybindingsCategories{}
+		config.Keybindings = keymap.Categories{}
 	}
 	if config.EditorSnippets == nil {
 		config.EditorSnippets = []EditorSnippet{}
@@ -100,74 +80,13 @@ func ReadConfigFile(path string) (*Config, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &Config{
-				Keybindings:    KeybindingsCategories{},
+				Keybindings:    keymap.Categories{},
 				EditorSnippets: []EditorSnippet{},
 			}, nil
 		}
 		return nil, fmt.Errorf("failed to read .config file: %w", err)
 	}
 	return parseConfig(string(data))
-}
-
-// Merges user overrides on top of defaults per category.
-// User bindings with the same key+when combination replace defaults within each category.
-// User bindings with unique key+when combinations are added.
-// New categories from overrides are added entirely.
-// Editor snippets: defaults first, then overrides; same prefix in overrides replaces the default.
-func mergeConfig(defaults, overrides *Config) *Config {
-	result := &Config{
-		Keybindings:    make(KeybindingsCategories),
-		EditorSnippets: mergeEditorSnippets(defaults.EditorSnippets, overrides.EditorSnippets),
-	}
-
-	// Process all categories from defaults
-	for category, defaultBindings := range defaults.Keybindings {
-		overrideBindings, hasOverrides := overrides.Keybindings[category]
-		if !hasOverrides {
-			result.Keybindings[category] = defaultBindings
-			continue
-		}
-
-		// Build a map of override keys for quick lookup
-		overrideMap := make(map[string]Keybinding)
-		for _, kb := range overrideBindings {
-			key := kb.Key + "|" + kb.When
-			overrideMap[key] = kb
-		}
-
-		// Merge: defaults with overrides replacing where they match
-		merged := make([]Keybinding, 0, len(defaultBindings)+len(overrideBindings))
-		usedOverrides := make(map[string]bool)
-
-		for _, kb := range defaultBindings {
-			key := kb.Key + "|" + kb.When
-			if override, exists := overrideMap[key]; exists {
-				merged = append(merged, override)
-				usedOverrides[key] = true
-			} else {
-				merged = append(merged, kb)
-			}
-		}
-
-		// Add any overrides that weren't replacements (new bindings in category)
-		for _, kb := range overrideBindings {
-			key := kb.Key + "|" + kb.When
-			if !usedOverrides[key] {
-				merged = append(merged, kb)
-			}
-		}
-
-		result.Keybindings[category] = merged
-	}
-
-	// Add any new categories from overrides that don't exist in defaults
-	for category, bindings := range overrides.Keybindings {
-		if _, exists := defaults.Keybindings[category]; !exists {
-			result.Keybindings[category] = bindings
-		}
-	}
-
-	return result
 }
 
 // mergeEditorSnippets merges default and user snippets. User snippet with same prefix overrides.
@@ -205,26 +124,32 @@ func GetUserConfigFilePath() (string, error) {
 	return filepath.Join(dir, ConfigFileName), nil
 }
 
-// LoadConfig returns the merged personal config: built-in defaults overlaid with
-// the per-user .config (keybindings and editor snippets).
+// LoadConfig returns the personal config the app runs on: the built-in
+// defaults, then the per-user .config, with every chord parsed and resolved for
+// this platform and the bindings in the order they are matched.
 func (g *Graph) LoadConfig() (*ConfigResponse, error) {
 	defaults, err := parseConfig(DefaultUserConfigContent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse default user config: %w", err)
 	}
 
-	merged := defaults
-	if userPath, err := GetUserConfigFilePath(); err == nil {
-		userConfig, err := ReadConfigFile(userPath)
+	user := &Config{Keybindings: keymap.Categories{}, EditorSnippets: []EditorSnippet{}}
+	userPath, pathErr := GetUserConfigFilePath()
+	if pathErr == nil {
+		user, err = ReadConfigFile(userPath)
 		if err != nil {
 			return nil, err
 		}
-		merged = mergeConfig(defaults, userConfig)
 	}
 
+	platform := keymap.Current()
+	bindings, problems := keymap.Resolve(defaults.Keybindings, user.Keybindings, platform)
+
 	return &ConfigResponse{
-		Keybindings:    merged.Keybindings.Flatten(),
-		EditorSnippets: merged.EditorSnippets,
+		Keybindings:    bindings,
+		EditorSnippets: mergeEditorSnippets(defaults.EditorSnippets, user.EditorSnippets),
+		Problems:       problems,
+		OS:             string(platform),
 	}, nil
 }
 
