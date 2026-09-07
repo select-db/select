@@ -36,7 +36,7 @@ export function BuildWorkspaceGraphFromFS(fsCtx: $models.WorkspaceFS | null): $C
  * into: two databases cannot share a name, and which names are free is only
  * knowable on disk.
  */
-export function CreateDatabase(params: $models.CreateDatabaseParams): $CancellablePromise<$models.CreatedDatabase | null> {
+export function CreateDatabase(params: $models.CreateDatabaseParams): $CancellablePromise<$models.DatabaseLocation | null> {
     return $Call.ByID(1582599599, params).then(($result: any) => {
         return $$createType1($result);
     });
@@ -231,6 +231,20 @@ export function RebuildWorkspaceGraph(): $CancellablePromise<void> {
 }
 
 /**
+ * RenameDatabase renames a database's directory, which is to say the database.
+ * 
+ * Unlike creation, a taken name is refused rather than numbered. Someone
+ * creating a database did not ask for a particular name; someone renaming one
+ * did, and quietly giving them "analytics-2" answers a question they did not
+ * ask.
+ */
+export function RenameDatabase(params: $models.RenameDatabaseParams): $CancellablePromise<$models.DatabaseLocation | null> {
+    return $Call.ByID(2441345709, params).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
+/**
  * ResetWorkspaceLint writes the default .lint content to the workspace file.
  */
 export function ResetWorkspaceLint(): $CancellablePromise<void> {
@@ -284,7 +298,7 @@ export function WorkspaceExecutionLimits(): $CancellablePromise<[number, number]
 }
 
 // Private type creation functions
-const $$createType0 = $models.CreatedDatabase.createFrom;
+const $$createType0 = $models.DatabaseLocation.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
 const $$createType2 = $models.DatabaseRef.createFrom;
 const $$createType3 = $Create.Array($$createType2);

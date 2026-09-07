@@ -10,11 +10,17 @@ export function updateDatabase(commit: generated.MutationCommit) {
 
 	renamingItemIdStore.set(null);
 
-	// Update the tab with the new database data
+	// Update the tab with the new database data.
+	//
+	// Its URI as well as its node: a database is a directory named after
+	// itself, so a rename moves it, and a tab left holding the old path is a
+	// tab the next open will not recognise as this database — it opens a
+	// second one beside it.
 	const tab = getTabByNodeId(db.id);
 	if (tab && tab.database) {
 		updateTab({
 			...tab,
+			uri: db.uri ?? tab.uri,
 			database: {
 				...tab.database,
 				node: { ...tab.database.node, ...db }

@@ -61,6 +61,10 @@
 		onDragEnd
 	}: DisplayProps<AnyItem> = $props();
 
+	// Where the item is. A file or folder answers to its own path, so its id is
+	// already the URI; a database answers to the id in its config, which is not.
+	const itemUri = () => (item as { uri?: string }).uri ?? item.id;
+
 	// Dim the item if it declares children but has none (empty)
 	const muted = $derived(() => {
 		if (!expandableItemTypes.has(item.type)) return false;
@@ -170,7 +174,13 @@
 				</div>
 				<ItemIcon {item} muted={muted()} />
 				<div class="item-name-wrapper">
-					<ItemName id={item.id} name={item.name} muted={muted()} type={item.type} />
+					<ItemName
+						id={item.id}
+						uri={itemUri()}
+						name={item.name}
+						muted={muted()}
+						type={item.type}
+					/>
 					{#if filterableChildren.length > 0}
 						<ChildVisibilityBadge parentId={item.id} items={filterableChildren} />
 					{/if}

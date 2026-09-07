@@ -2,6 +2,8 @@
 	import { Ping, ChooseSSHKeyFile } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+	import { RenameDatabase } from '$lib/bindings/selectDb/internal/graph/graph';
+	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
 	import {
 		DeleteDatasource,
 		GetDatasource,
@@ -190,11 +192,36 @@
 		mounted = true;
 	});
 
+	// The name is the directory the database lives in, so what it is called is
+	// not a field to save but the last segment of its URI — no copy of it to
+	// keep in step. Changing it is a rename, committed when the field is left
+	// rather than on the autosave: renaming on a 600ms pause would rename the
+	// directory once per word typed.
+	const folderName = () => uri.split('/').pop() ?? '';
+
+	const commitName = async () => {
+		const wanted = name.trim();
+		if (!uri || wanted === folderName()) {
+			name = folderName();
+			return;
+		}
+
+		const [renamed, err] = await tryCatch(RenameDatabase, { uri, name: wanted });
+		if (err || !renamed) {
+			notifyError(err?.message ?? `Could not rename ${folderName()}`);
+			name = folderName();
+			return;
+		}
+
+		// What it ended up called, which is not always what was typed.
+		name = renamed.name;
+		updateFileTabsAfterRename(uri, renamed.uri, renamed.name);
+	};
+
 	const debouncedSave = debounce(async () => await save(), 600);
 
 	$effect(() => {
 		void [
-			name,
 			db_type,
 			dsnLocal,
 			connectionMode,
@@ -462,7 +489,19 @@
 
 			<div class="standalone-input" style="flex: 1">
 				<p class="label">Name</p>
-				<Input bind:value={name} placeholder="Prod read-only (RDS)" />
+				<Input
+					bind:value={name}
+					ariaLabel="Database name"
+					placeholder="Prod read-only (RDS)"
+					onblur={commitName}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+						if (e.key === 'Escape') {
+							name = folderName();
+							(e.currentTarget as HTMLInputElement).blur();
+						}
+					}}
+				/>
 			</div>
 		</div>
 	</div>

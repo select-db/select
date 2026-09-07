@@ -88,8 +88,9 @@ func TestHandleDBConfigEvent_Insert(t *testing.T) {
 	if *payload.ID != "db-1" {
 		t.Errorf("payload.id mismatch: got %v want 'db-1'", payload.ID)
 	}
-	if payload.Name == nil || *payload.Name != "DB1" {
-		t.Errorf("payload.name mismatch: got %v want 'DB1'", payload.Name)
+	// The directory is db1; the config says "DB1" and is not asked.
+	if payload.Name == nil || *payload.Name != "db1" {
+		t.Errorf("payload.name mismatch: got %v want 'db1'", payload.Name)
 	}
 	if payload.FolderID == nil || *payload.FolderID != fsCtx.URI("folder-db-1") {
 		t.Errorf("payload.folder_id mismatch: got %v want %v", payload.FolderID, fsCtx.URI("folder-db-1"))

@@ -183,40 +183,6 @@ export class CreateDatabaseParams {
     }
 }
 
-/**
- * CreatedDatabase is where the database went. Name is the directory's name,
- * which is to say the database's, and may differ from what was asked for: the
- * filesystem refuses some names, and a sibling may already have this one.
- */
-export class CreatedDatabase {
-    "id": string;
-    "uri": string;
-    "name": string;
-
-    /** Creates a new CreatedDatabase instance. */
-    constructor($$source: Partial<CreatedDatabase> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("uri" in $$source)) {
-            this["uri"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CreatedDatabase instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CreatedDatabase {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new CreatedDatabase($$parsedSource as Partial<CreatedDatabase>);
-    }
-}
-
 export class DBInstanceItemNode {
     "id": string;
     "uri": string;
@@ -424,6 +390,40 @@ export class DBInstanceSSHConfig {
     static createFrom($$source: any = {}): DBInstanceSSHConfig {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new DBInstanceSSHConfig($$parsedSource as Partial<DBInstanceSSHConfig>);
+    }
+}
+
+/**
+ * DatabaseLocation is where a database is. Name is the directory's name, which
+ * is to say the database's, and may differ from what was asked for: the
+ * filesystem refuses some names, and a sibling may already have this one.
+ */
+export class DatabaseLocation {
+    "id": string;
+    "uri": string;
+    "name": string;
+
+    /** Creates a new DatabaseLocation instance. */
+    constructor($$source: Partial<DatabaseLocation> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("uri" in $$source)) {
+            this["uri"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DatabaseLocation instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DatabaseLocation {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DatabaseLocation($$parsedSource as Partial<DatabaseLocation>);
     }
 }
 
@@ -803,6 +803,35 @@ export class QueryResult {
             $$parsedSource["columnMetadata"] = $$createField13_0($$parsedSource["columnMetadata"]);
         }
         return new QueryResult($$parsedSource as Partial<QueryResult>);
+    }
+}
+
+/**
+ * RenameDatabaseParams renames the database at URI to Name. The name is what
+ * the user typed; what the directory ends up called is up to us.
+ */
+export class RenameDatabaseParams {
+    "uri": string;
+    "name": string;
+
+    /** Creates a new RenameDatabaseParams instance. */
+    constructor($$source: Partial<RenameDatabaseParams> = {}) {
+        if (!("uri" in $$source)) {
+            this["uri"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RenameDatabaseParams instance from a string or object.
+     */
+    static createFrom($$source: any = {}): RenameDatabaseParams {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RenameDatabaseParams($$parsedSource as Partial<RenameDatabaseParams>);
     }
 }
 

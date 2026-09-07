@@ -267,7 +267,7 @@ func (s *System) handleDBConfigEvent(event fsnotify.Event, userID string, ctx *g
 	payload := graph.DBInstanceDTO{
 		ID:          &cfg.ID,
 		URI:         &dbURI,
-		Name:        utils.Ptr(cfg.Name),
+		Name:        utils.Ptr(filepath.Base(dirPath)),
 		DBType:      utils.Ptr(cfg.DbType),
 		DSN:         utils.Ptr(cfg.DSN),
 		Proxified:   utils.Ptr(cfg.Proxified),

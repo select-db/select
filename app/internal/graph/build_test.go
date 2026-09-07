@@ -196,8 +196,9 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 	db := ws.DBInstances[0]
 
 	expectedDbURI := rootURI + "/folder-db-1/db1"
-	// Name and ID come from db.config.json
-	if db.URI != expectedDbURI || db.Name != "DB1" || db.ID != "db-1" || db.DBType != "sqlite" {
+	// The ID comes from db.config.json. The name is the directory's, and the
+	// "DB1" the config still carries does not get a say.
+	if db.URI != expectedDbURI || db.Name != "db1" || db.ID != "db-1" || db.DBType != "sqlite" {
 		t.Errorf("db instance mismatch: %+v", db)
 	}
 

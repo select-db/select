@@ -6,10 +6,15 @@
 	type InputProps = {
 		value?: string | number;
 		placeholder?: string;
+		/** The field's accessible name. Without one it is unreachable to a
+		 *  screen reader and to getByRole. */
+		ariaLabel?: string;
 		autofocus?: boolean;
 		clearable?: boolean;
 		onkeydown?: (e: KeyboardEvent) => void;
 		oninput?: (e: Event) => void;
+		/** Fired when the field loses focus, after the internal bookkeeping. */
+		onblur?: (e: FocusEvent) => void;
 		onclear?: () => void;
 
 		type?: 'text' | 'number' | 'password' | 'date' | 'time' | 'datetime-local';
@@ -30,10 +35,12 @@
 	let {
 		value = $bindable(),
 		placeholder,
+		ariaLabel,
 		autofocus,
 		clearable = false,
 		onkeydown,
 		oninput,
+		onblur,
 		onclear,
 
 		type = 'text',
@@ -64,8 +71,9 @@
 	export const focus = () => inputRef?.focus();
 
 	const handleFocus = () => setContext('inputFocus', true);
-	const handleBlur = () => {
+	const handleBlur = (e: FocusEvent) => {
 		setContext('inputFocus', false);
+		onblur?.(e);
 	};
 
 	function clear() {
@@ -88,6 +96,7 @@
 	<input
 		bind:this={inputRef}
 		bind:value
+		aria-label={ariaLabel}
 		{placeholder}
 		{autofocus}
 		{onkeydown}
@@ -115,6 +124,7 @@
 	<!-- svelte-ignore a11y_autofocus -->
 	<textarea
 		bind:value
+		aria-label={ariaLabel}
 		{placeholder}
 		{autofocus}
 		{rows}

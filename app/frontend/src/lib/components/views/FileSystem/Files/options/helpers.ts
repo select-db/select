@@ -34,7 +34,7 @@ export const writeFile = async (uri: string) => {
 export const createDatabase = async (
 	parentUri: string,
 	name: string
-): Promise<models.CreatedDatabase> => {
+): Promise<models.DatabaseLocation> => {
 	// The directory and its db.config.json are written together in the backend:
 	// picking the name means seeing what the folder already holds, and a
 	// database that exists as a directory but not yet as a config is a folder.

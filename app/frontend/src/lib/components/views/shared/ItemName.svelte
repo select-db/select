@@ -5,16 +5,21 @@
 	import { updateFileTabsAfterRename } from '$lib/components/Layout/layoutStore';
 
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+	import { RenameDatabase } from '$lib/bindings/selectDb/internal/graph/graph';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
 	let {
 		id,
+		uri,
 		name,
 		muted,
 		type
 	}: {
 		id: string;
+		/** Where the item is. The same as `id` for a file or folder, but a
+		 *  database answers to its config's id, which is not a path. */
+		uri: string;
 		name: string;
 		muted: boolean;
 		type?: string;
@@ -35,7 +40,7 @@
 	// WebKit delivers keyup to the element that has focus at release time, not at press time.
 	let ignoreNextKeyup = false;
 
-	const RENAMABLE_TYPES = new Set(['file', 'folder']);
+	const RENAMABLE_TYPES = new Set(['file', 'folder', 'db_instance']);
 
 	$effect(() => {
 		if ($renamingItemIdStore === id && inputEl) {
@@ -70,6 +75,22 @@
 		}
 
 		const trimmed = localName.trim();
+
+		// A database is a directory named after itself, so renaming one is not
+		// renaming a path: the backend cleans the name into something a
+		// filesystem will take, and refuses one a sibling already has.
+		if (type === 'db_instance') {
+			const [renamed, dbErr] = await tryCatch(RenameDatabase, { uri, name: trimmed });
+			if (dbErr || !renamed) {
+				notifyError(dbErr?.message ?? `Could not rename ${initialName}`);
+				localName = initialName;
+				return;
+			}
+			// What it ended up called, which is not always what was typed.
+			localName = renamed.name;
+			updateFileTabsAfterRename(uri, renamed.uri, renamed.name);
+			return;
+		}
 
 		// For files and folders, rename the item
 		const lastSlash = id.lastIndexOf('/');

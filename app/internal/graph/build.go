@@ -163,7 +163,9 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 					URI:  dbURI,
 					Type: "db_instance",
 
-					Name:      cfg.Name,
+					// The directory's name is the database's. There is nowhere
+					// else it is written down.
+					Name:      entry.Name(),
 					DBType:    cfg.DbType,
 					DSN:       cfg.DSN,
 					Proxified: cfg.Proxified,

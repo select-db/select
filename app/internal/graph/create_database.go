@@ -22,10 +22,10 @@ type CreateDatabaseParams struct {
 	Name      string `json:"name"`
 }
 
-// CreatedDatabase is where the database went. Name is the directory's name,
-// which is to say the database's, and may differ from what was asked for: the
+// DatabaseLocation is where a database is. Name is the directory's name, which
+// is to say the database's, and may differ from what was asked for: the
 // filesystem refuses some names, and a sibling may already have this one.
-type CreatedDatabase struct {
+type DatabaseLocation struct {
 	ID   string `json:"id"`
 	URI  string `json:"uri"`
 	Name string `json:"name"`
@@ -37,7 +37,7 @@ type CreatedDatabase struct {
 // frontend, because choosing the name needs to see the directory it is going
 // into: two databases cannot share a name, and which names are free is only
 // knowable on disk.
-func (g *Graph) CreateDatabase(params CreateDatabaseParams) (*CreatedDatabase, error) {
+func (g *Graph) CreateDatabase(params CreateDatabaseParams) (*DatabaseLocation, error) {
 	wsGraph, err := g.GetWorkspaceGraph()
 	if err != nil {
 		return nil, fmt.Errorf("workspace graph not initialized: %w", err)
@@ -81,7 +81,7 @@ func (g *Graph) CreateDatabase(params CreateDatabaseParams) (*CreatedDatabase, e
 	}
 
 	rel, _ := fsCtx.Rel(dbPath)
-	return &CreatedDatabase{ID: id, URI: fsCtx.URI(rel), Name: folderName}, nil
+	return &DatabaseLocation{ID: id, URI: fsCtx.URI(rel), Name: folderName}, nil
 }
 
 // AvailableFolderName is name, or the first of name-2, name-3 ... that nothing
