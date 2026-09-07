@@ -87,6 +87,24 @@ export function Stat(uri: string): $CancellablePromise<$models.FileStat> {
     });
 }
 
+/**
+ * WorkspaceURIPrefix returns the prefix every workspace URI starts with,
+ * "selectdb://workspaces/".
+ * 
+ * The frontend has to recognise a workspace URI — to tell a folder on disk from
+ * a row in the search or git tree, say. This is how it asks, rather than
+ * restating the scheme in TypeScript where it can drift from the Go side.
+ */
+export function WorkspaceURIPrefix(): $CancellablePromise<string> {
+    return $Call.ByID(178242900);
+}
+
+/**
+ * Write replaces the file at the URI. Its folder must exist: writes are
+ * debounced, so one can land after what it was editing was deleted, and a write
+ * that makes its own folder puts the deleted thing back. Making a file is a
+ * Mkdir and then a Write.
+ */
 export function Write(params: $models.WriteParams): $CancellablePromise<void> {
     return $Call.ByID(2205286156, params);
 }

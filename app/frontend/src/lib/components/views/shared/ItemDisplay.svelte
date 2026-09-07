@@ -67,6 +67,9 @@
 
 		if (item.type === 'folder') {
 			const folder = item as graph.FolderNode;
+			// A folder that has not been opened has not been read from disk, so
+			// holding no files means "unknown", not "empty".
+			if (!folder.resolved) return false;
 			return (
 				folder.files.length === 0 && folder.db_instances.length === 0 && folder.folders.length === 0
 			);
@@ -120,6 +123,7 @@
 			class="item"
 			data-test="tree.node"
 			data-test-value={item.name}
+			data-test-selected={isSelected}
 			class:selected={isSelected}
 			class:folder={item.type === 'folder'}
 			class:database={item.type === 'db_instance'}

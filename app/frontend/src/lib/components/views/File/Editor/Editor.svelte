@@ -99,6 +99,12 @@
 		content?: string;
 		language?: string;
 		onContentChange?: (content: string, panelIndex?: number) => void;
+		/**
+		 * The content of the tab this editor is leaving, when a change was still
+		 * pending on it. Addressed by tab id: by the time it is called the editor
+		 * is already showing another tab.
+		 */
+		onPendingChange?: (tabId: string, content: string) => void;
 
 		errorPosition?: number | null;
 		errorMessage?: string | null;
@@ -112,6 +118,7 @@
 		content = '',
 		language = 'plaintext',
 		onContentChange,
+		onPendingChange,
 		errorPosition = null,
 		errorMessage = null,
 		standalone = false,
@@ -199,7 +206,7 @@
 			.find((t) => t.id === currentTabId);
 	}
 
-	const handleChange = debounce(() => {
+	const emitChange = () => {
 		const ed = getActiveEditor();
 		if (!ed) return;
 
@@ -210,7 +217,27 @@
 
 		if (!onContentChange) return;
 		onContentChange(model.getValue(), isDiffMode ? DIFF_PANEL_MODIFIED : undefined);
-	}, 200);
+	};
+
+	const handleChange = debounce(emitChange, 200);
+
+	/**
+	 * Hands back whatever is only in the model, to the tab it was typed into.
+	 *
+	 * A change is debounced, and only the active tab is rendered: a tab switched
+	 * away from or closed inside that window is about to have its model swapped
+	 * or disposed, and its last keystrokes are nowhere else. A query with no file
+	 * behind it would lose them outright; a file would lose them off the end of
+	 * its last write. Addressed by the id of the tab being shown, since the prop
+	 * may already be the next one.
+	 */
+	const flushPending = () => {
+		if (!editorDirty || !currentTabId) return;
+
+		const pending = getActiveEditor()?.getModel()?.getValue();
+		editorDirty = false;
+		if (pending !== undefined) onPendingChange?.(currentTabId, pending);
+	};
 
 	async function buildModelUri(uri: string, tabId: string): Promise<monaco.Uri> {
 		if (uri.startsWith('selectdb://')) {
@@ -258,6 +285,7 @@
 
 		if (currentTabId && editor && currentTabId !== tabId) {
 			const viewState = editor.saveViewState();
+
 			const oldTab = findOldTab();
 			if (oldTab?.file) {
 				updateTab({
@@ -455,6 +483,7 @@
 		} else {
 			if (!editor) return;
 			if (editorDirty && tabId === currentTabId) return;
+			if (tabId !== currentTabId) flushPending();
 			editorDirty = false;
 			mountContent(content, language, tabId);
 		}
@@ -504,6 +533,8 @@
 	});
 
 	onDestroy(() => {
+		flushPending();
+
 		if (editor && onStateChange) onStateChange(editor.saveViewState() ?? undefined);
 		cursorDisposable?.dispose();
 		selectionDisposable?.dispose();

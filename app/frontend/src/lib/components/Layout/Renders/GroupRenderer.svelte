@@ -98,6 +98,7 @@
 
 		<div
 			class="content"
+			data-test="group.content"
 			bind:this={contentElement}
 			ondragover={handleGroupDragOver}
 			ondragleave={handleGroupDragLeave}

@@ -13,6 +13,23 @@ export const testId = (page: Page, name: string, value?: string) =>
 			: `[data-test="${name}"][data-test-value="${value}"]`
 	);
 
+/** One row of a tree — file, folder or database — named by what it shows. */
+export const treeNode = (page: Page, name: string) => testId(page, 'tree.node', name);
+
+/** The tree rows currently selected, in whichever trees are on screen. */
+export const selectedTreeNodes = (page: Page) =>
+	page.locator('[data-test="tree.node"][data-test-selected="true"]');
+
+/** One open tab, named by the label it shows. */
+export const tab = (page: Page, name: string) => testId(page, 'tabs.tab', name);
+
+/** The tabs on screen, in the order they are laid out. */
+export const tabs = (page: Page) => testId(page, 'tabs.tab');
+
+/** The active tab of each group — one per group, so more than one with a split. */
+export const activeTab = (page: Page) =>
+	page.locator('[data-test="tabs.tab"][data-test-active="true"]');
+
 /**
  * Monaco's own DOM, quarantined.
  *

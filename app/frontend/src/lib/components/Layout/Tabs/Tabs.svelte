@@ -205,6 +205,7 @@
 				size="sm"
 				emphasis="low"
 				leftIcon="arrow-left"
+				ariaLabel="Previous tab"
 				iconSize={20}
 				onclick={() => navigateToPreviousTab(groupId)}
 				disabled={!canNavigateToPreviousTab(groupId)}
@@ -215,6 +216,7 @@
 				size="sm"
 				emphasis="low"
 				leftIcon="arrow-right"
+				ariaLabel="Next tab"
 				iconSize={20}
 				onclick={() => navigateToNextTab(groupId)}
 				disabled={!canNavigateToNextTab(groupId)}
@@ -253,6 +255,9 @@
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<div
 							class="tab"
+							data-test="tabs.tab"
+							data-test-value={getTabLabel(tab)}
+							data-test-active={active}
 							class:active
 							class:dragging={isDragged}
 							draggable="true"
@@ -295,6 +300,7 @@
 								size="sm"
 								emphasis="low"
 								leftIcon="cross"
+								ariaLabel="Close {getTabLabel(tab)}"
 								iconSize={13}
 								onmousedown={() => {
 									cancelNextDrag = true;

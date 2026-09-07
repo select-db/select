@@ -53,11 +53,10 @@ const CREATED = 'analytics-prod';
 async function removeDatabases(page: Page, name: string) {
 	const nodes = testId(page, 'tree.node', name);
 
-	// Deleting can lose a race and has to be repeated. The connection form saves
-	// 600ms after the last change, so a delete issued straight after a capture
-	// can be overtaken by a write that puts db.config.json back, and the row
-	// returns. Retrying the whole delete until the tree has none of them left is
-	// the only outcome worth waiting on.
+	// Deleting is retried rather than waited on: a right-click on a row the tree
+	// is still moving opens the menu on whatever arrives under the pointer, and
+	// the database stays. Retrying the whole delete until the tree has none of
+	// them left is the only outcome worth waiting on.
 	await expect
 		.poll(
 			async () => {

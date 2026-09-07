@@ -229,7 +229,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
       # --prefer-offline: setup-node restores ~/.npm, but npm still revalidates
@@ -443,7 +443,7 @@ jobs:
           cache-dependency-path: app/go.sum
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
@@ -615,7 +615,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
@@ -682,7 +682,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
@@ -751,7 +751,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
@@ -825,7 +825,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 

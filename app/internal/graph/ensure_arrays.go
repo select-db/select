@@ -10,9 +10,11 @@ package graph
 // `"children": null` and the first `for (… of node.children)` throws.
 //
 // Nodes are built in a few dozen places, so rather than rely on each of them
-// remembering, the tree is swept where it enters the graph: after it is built,
-// and after every mutation. Nullable single values — a workspace with no user,
-// a node with no metadata — keep their nulls, which mean something.
+// remembering, they are swept where they enter the graph: the whole tree after
+// a build, the touched node after a mutation. A node's children were swept when
+// they themselves entered, so a mutation never walks the tree. Nullable single
+// values — a workspace with no user, a node with no metadata — keep their
+// nulls, which mean something.
 
 func ensureArrays(workspace *WorkspaceNode) {
 	if workspace == nil {
@@ -34,7 +36,25 @@ func ensureArrays(workspace *WorkspaceNode) {
 	}
 }
 
-func ensureFolderArrays(folder *FolderNode) {
+// ensureNodeArrays sweeps a single node that just entered the graph, plus the
+// schema items an inserted db instance carries with it.
+func ensureNodeArrays(n Node) {
+	switch node := n.(type) {
+	case *FolderNode:
+		ensureFolderOwnArrays(node)
+	case *FileNode:
+		ensureFileArrays(node)
+	case *DBInstanceNode:
+		ensureDBInstanceOwnArrays(node)
+		for _, item := range node.Children {
+			ensureItemArrays(item)
+		}
+	case *DBInstanceItemNode:
+		ensureItemArrays(node)
+	}
+}
+
+func ensureFolderOwnArrays(folder *FolderNode) {
 	if folder == nil {
 		return
 	}
@@ -51,6 +71,14 @@ func ensureFolderArrays(folder *FolderNode) {
 	if folder.Badges == nil {
 		folder.Badges = []string{}
 	}
+}
+
+func ensureFolderArrays(folder *FolderNode) {
+	if folder == nil {
+		return
+	}
+
+	ensureFolderOwnArrays(folder)
 
 	for _, file := range folder.Files {
 		ensureFileArrays(file)
@@ -63,7 +91,7 @@ func ensureFolderArrays(folder *FolderNode) {
 	}
 }
 
-func ensureDBInstanceArrays(dbInstance *DBInstanceNode) {
+func ensureDBInstanceOwnArrays(dbInstance *DBInstanceNode) {
 	if dbInstance == nil {
 		return
 	}
@@ -77,6 +105,14 @@ func ensureDBInstanceArrays(dbInstance *DBInstanceNode) {
 	if dbInstance.Folders == nil {
 		dbInstance.Folders = []*FolderNode{}
 	}
+}
+
+func ensureDBInstanceArrays(dbInstance *DBInstanceNode) {
+	if dbInstance == nil {
+		return
+	}
+
+	ensureDBInstanceOwnArrays(dbInstance)
 
 	for _, item := range dbInstance.Children {
 		ensureItemArrays(item)

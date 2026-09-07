@@ -16,6 +16,14 @@ import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema'
 import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 import { navigateToMatch } from '$lib/components/views/Search/navigateToMatch';
 
+/**
+ * A click that means "select", not "open": shift for a range, and the platform's
+ * own multi-select key -- cmd on macOS, ctrl everywhere else, which is why both
+ * are accepted rather than metaKey alone.
+ */
+const isSelectionClick = (event?: MouseEvent) =>
+	!!(event?.shiftKey || event?.metaKey || event?.ctrlKey);
+
 const handleSpecialClick = (
 	itemId: string,
 	lastClickedId: { current: string | null },
@@ -53,7 +61,7 @@ export const createFolderClickHandler = (
 			return;
 		}
 
-		if (event?.shiftKey || event?.metaKey) {
+		if (isSelectionClick(event)) {
 			handleSpecialClick(folder.id, lastClickedId, event);
 			return;
 		}
@@ -87,7 +95,7 @@ export const createFileClickHandler = (
 			return;
 		}
 
-		if (event?.shiftKey || event?.metaKey) {
+		if (isSelectionClick(event)) {
 			handleSpecialClick(file.id, lastClickedId, event);
 			return;
 		}
@@ -144,7 +152,7 @@ export const createDatabaseClickHandler = (
 			return;
 		}
 
-		if (event?.shiftKey || event?.metaKey) {
+		if (isSelectionClick(event)) {
 			handleSpecialClick(item.id, lastClickedId, event);
 			return;
 		}

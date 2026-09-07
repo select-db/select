@@ -4,6 +4,9 @@ import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import { expandItem, renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 
+import { ResolveFolder } from '$lib/wails/graph';
+import { notifyError } from '$lib/system/Notifications/notificationsStore';
+
 import { writeDatabase, writeFile, writeFolder } from './helpers';
 
 const findUniqueFolderName = (folders: graph.FolderNode[]): string => {
@@ -45,7 +48,18 @@ export const createFolderInFolder = async (folder: FolderLike) => {
 };
 
 export const createFileInFolder = async (folder: FolderLike) => {
-	const name = findUniqueFileName(folder.files);
+	// Writing truncates, so the name has to miss every file already in there. A
+	// db instance is resolved at build time and carries its own; a folder's are
+	// read on demand, and a folder that will not resolve is not a folder to
+	// write into.
+	const files =
+		folder.type === 'db_instance' ? folder.files : (await ResolveFolder(folder.uri))?.files;
+	if (!files) {
+		notifyError(`Could not read ${folder.name}`);
+		return;
+	}
+
+	const name = findUniqueFileName(files);
 	const fileUri = `${folder.uri}/${name}`;
 	await writeFile(fileUri);
 	navigateToFile({

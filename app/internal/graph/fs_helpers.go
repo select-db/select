@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"selectDb/internal/fs_uri"
 	"selectDb/internal/server"
 	"selectDb/internal/utils"
 )
@@ -58,7 +59,7 @@ func NewWorkspaceFSFromRoot(workspaceID, workspaceRoot string) *WorkspaceFS {
 	return &WorkspaceFS{
 		WorkspaceID:   workspaceID,
 		WorkspaceRoot: workspaceRoot,
-		RootURI:       fmt.Sprintf("selectdb://workspaces/%s", workspaceID),
+		RootURI:       fs_uri.Scheme + fs_uri.WorkspacePrefix + workspaceID,
 	}
 }
 
@@ -66,7 +67,7 @@ func NewWorkspaceFSFromRoot(workspaceID, workspaceRoot string) *WorkspaceFS {
 // a boolean indicating whether p is inside the workspace.
 func (c *WorkspaceFS) Rel(p string) (string, bool) {
 	rel, err := filepath.Rel(c.WorkspaceRoot, p)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || !fs_uri.Contains(c.WorkspaceRoot, p) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true
@@ -78,6 +79,20 @@ func (c *WorkspaceFS) URI(rel string) string {
 		return c.RootURI
 	}
 	return c.RootURI + "/" + filepath.ToSlash(rel)
+}
+
+// Path converts a selectdb:// URI back to an absolute path, and reports whether
+// the URI belongs to this workspace.
+func (c *WorkspaceFS) Path(uri string) (string, bool) {
+	if uri == c.RootURI {
+		return c.WorkspaceRoot, true
+	}
+	rel, ok := strings.CutPrefix(uri, c.RootURI+"/")
+	if !ok {
+		return "", false
+	}
+	path, err := fs_uri.Resolve(c.WorkspaceRoot, rel)
+	return path, err == nil
 }
 
 // ParentURI returns the URI of the parent folder for a given workspace-relative

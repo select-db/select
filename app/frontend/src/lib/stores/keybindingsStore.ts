@@ -1,26 +1,24 @@
 import { writable, get } from 'svelte/store';
 import { EventsOn } from '$lib/wails/events';
 import { tryCatch } from '$lib/utils/tryCatch';
-import { isMac } from '$lib/utils/platform';
+import { notify } from '$lib/system/Notifications/notificationsStore';
+import { AlertType } from '$lib/system/Alert/types';
+import { setOS } from '$lib/utils/platform';
 import type { KeybindingsContext } from './keybindingsContextStore';
 import { GetConfig } from '$lib/bindings/selectDb/internal/system/system';
+import type * as graphModels from '$lib/bindings/selectDb/internal/graph/models';
+import type * as keymapModels from '$lib/bindings/selectDb/internal/keymap/models';
 
-export type Keybinding = {
-	key: string;
-	command: string;
-	when?: string;
-};
-
-export type EditorSnippet = {
-	prefix: string;
-	body: string;
-	description?: string;
-};
-
-export type ConfigData = {
-	keybindings: Keybinding[];
-	editor_snippets?: EditorSnippet[];
-};
+/**
+ * The shapes come from the backend rather than being written again here: a
+ * binding arrives with its chord already parsed and resolved for this platform
+ * -- `secondary` turned into the modifier this machine uses -- and nothing in
+ * the frontend decides what a modifier means. See internal/keymap.
+ */
+export type Keybinding = keymapModels.Binding;
+type KeybindingProblem = keymapModels.Problem;
+export type EditorSnippet = graphModels.EditorSnippet;
+type ConfigData = graphModels.ConfigResponse;
 
 export const keybindingsStore = writable<Keybinding[]>([]);
 export const editorSnippetsStore = writable<EditorSnippet[]>([]);
@@ -30,6 +28,42 @@ function applyConfig(config: ConfigData | null | undefined): void {
 	if (!config) return;
 	if (config.keybindings) keybindingsStore.set(config.keybindings);
 	if (config.editor_snippets !== undefined) editorSnippetsStore.set(config.editor_snippets);
+	// The platform is a fact about the machine, so it comes from the backend
+	// rather than from sniffing the user agent. Everything that needs it reads
+	// it from there, `when` predicates included.
+	if (config.os) setOS(config.os);
+	reportProblems(config.problems ?? []);
+}
+
+/**
+ * Says what could not be read.
+ *
+ * A keybinding that fails to parse is invisible otherwise: the key simply never
+ * does anything, which reads as the app ignoring it rather than as a line in a
+ * file to fix.
+ */
+function reportProblems(problems: KeybindingProblem[]): void {
+	const errors = problems.filter((p) => p.level === 'error');
+	if (errors.length) {
+		notify({
+			type: AlertType.Error,
+			message:
+				errors.length === 1
+					? `Keybinding ${errors[0].key}: ${errors[0].message}`
+					: `${errors.length} keybindings could not be read: ${errors.map((p) => p.key).join(', ')}`,
+			duration: 8000,
+			copyable: true
+		});
+	}
+
+	const migrated = problems.filter((p) => p.level === 'migrated');
+	if (migrated.length) {
+		notify({
+			type: AlertType.Default,
+			message: `${migrated.length} keybinding${migrated.length === 1 ? '' : 's'} in your config still say "cmd"; read as "secondary", the shortcut key on this platform`,
+			duration: 8000
+		});
+	}
 }
 
 export async function initKeybindings(): Promise<void> {
@@ -42,61 +76,86 @@ EventsOn('configUpdated', (data: ConfigData) => {
 	configVersionStore.update((v) => v + 1);
 });
 
-export function normalizeKey(e: KeyboardEvent): string {
-	const parts: string[] = [];
+/** Keys named by where they are, for everything that is not a letter. */
+const keyByCode: Record<string, string> = {
+	Minus: '-',
+	Equal: '=',
+	BracketLeft: '[',
+	BracketRight: ']',
+	Backslash: '\\',
+	Semicolon: ';',
+	Quote: "'",
+	Comma: ',',
+	Period: '.',
+	Slash: '/',
+	Backquote: '`',
+	Space: 'space',
+	Enter: 'enter',
+	NumpadEnter: 'enter',
+	Escape: 'escape',
+	Backspace: 'backspace',
+	Delete: 'delete',
+	Tab: 'tab',
+	Home: 'home',
+	End: 'end',
+	PageUp: 'pageup',
+	PageDown: 'pagedown',
+	Insert: 'insert',
+	ArrowUp: 'up',
+	ArrowDown: 'down',
+	ArrowLeft: 'left',
+	ArrowRight: 'right'
+};
 
-	if (e.metaKey && isMac) parts.push('cmd');
-	if (e.ctrlKey && !isMac) parts.push('cmd');
-	if (e.ctrlKey && isMac) parts.push('ctrl');
-	if (e.shiftKey) parts.push('shift');
-	if (e.altKey) parts.push('alt');
+const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta', 'CapsLock']);
 
-	const key = getKey(e);
-	if (!['control', 'meta', 'alt', 'shift'].includes(key)) {
-		parts.push(key);
-	}
-
-	return parts.join('+');
-}
-
-function getKey(e: KeyboardEvent): string {
+/**
+ * The key a keystroke names.
+ *
+ * A letter is what the layout prints -- somebody on AZERTY pressing the key
+ * marked A means A. Everything else is named by where it sits: the digit row
+ * needs shift on AZERTY and the punctuation moves on QWERTZ, so a binding
+ * written once for "-" is answered by the key in the same place on any of them.
+ * Holding alt prints a different character again on macOS, which is the other
+ * reason a letter falls back to its position.
+ */
+function keyFromEvent(e: KeyboardEvent): string {
 	const code = e.code ?? '';
 	const key = e.key ?? '';
 
-	if (code.startsWith('Arrow')) return code.toLowerCase();
-	if (/^F\d+$/.test(code)) return code.toLowerCase();
+	if (modifierKeys.has(key)) return '';
 
-	const codeMap: Record<string, string> = {
-		Space: 'space',
-		Enter: 'enter',
-		Escape: 'escape',
-		Backspace: 'backspace',
-		Delete: 'delete',
-		Tab: 'tab',
-		Home: 'home',
-		End: 'end',
-		PageUp: 'pageup',
-		PageDown: 'pagedown',
-		Insert: 'insert'
-	};
-	if (code in codeMap) return codeMap[code];
-
-	// Use e.key for all printable ASCII so bindings respect the active keyboard layout (AZERTY, QWERTZ, etc.)
-	if (key.length === 1) {
-		const charCode = key.charCodeAt(0);
-		if (charCode >= 0x20 && charCode <= 0x7e) {
-			return key.toLowerCase();
-		}
+	if (/^Key[A-Z]$/.test(code)) {
+		return /^[a-z]$/i.test(key) ? key.toLowerCase() : code.slice(3).toLowerCase();
 	}
-
-	// Fallback for non-printable e.key (unicode from Option+key, dead keys, etc.)
-	if (code.startsWith('Key')) return code.slice(3).toLowerCase();
-	if (code.startsWith('Digit')) return code.slice(5);
+	if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+	if (/^Numpad[0-9]$/.test(code)) return code.slice(6);
+	if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code.toLowerCase();
+	if (code in keyByCode) return keyByCode[code];
 
 	return key.toLowerCase();
 }
 
-export function evaluateWhen(when: string | undefined, context: KeybindingsContext): boolean {
+/**
+ * The keystroke, written the way a binding is: modifiers in a fixed order, then
+ * the key. Matches internal/keymap's canonical form, and is compared to it as a
+ * string -- the two orders are the same list.
+ */
+export function chordFromEvent(e: KeyboardEvent): string {
+	const key = keyFromEvent(e);
+	if (!key) return '';
+
+	const parts: string[] = [];
+	if (e.ctrlKey) parts.push('ctrl');
+	if (e.altKey) parts.push('alt');
+	if (e.shiftKey) parts.push('shift');
+	if (e.metaKey) parts.push('cmd');
+	parts.push(key);
+
+	return parts.join('+');
+}
+
+function evaluateWhen(when: string | undefined, context: KeybindingsContext): boolean {
 	if (!when || when.trim() === '') return true;
 	const [result, err] = tryCatch(() => evaluateTokens(tokenizeWhen(when), context));
 	return err ? false : result;
@@ -268,15 +327,23 @@ function evaluateTokens(tokens: Token[], context: KeybindingsContext): boolean {
 	return parseOr();
 }
 
+/**
+ * The binding a keystroke runs, or null when nothing is bound to it.
+ *
+ * Read from the end: the list arrives in increasing precedence -- the defaults
+ * laid out category by category, then whatever the person wrote themselves --
+ * so the last binding that fits is the one that wins. A binding with no command
+ * is an unbinding, and is returned as one: it stops the search rather than
+ * falling through to the default it was written to take away.
+ */
 export function findMatchingKeybinding(
-	key: string,
+	chord: string,
 	context: KeybindingsContext
 ): Keybinding | null {
 	const keybindings = get(keybindingsStore);
-	for (const kb of keybindings) {
-		if (kb.key === key && evaluateWhen(kb.when, context)) {
-			return kb;
-		}
+	for (let i = keybindings.length - 1; i >= 0; i--) {
+		const kb = keybindings[i];
+		if (kb.key === chord && evaluateWhen(kb.when, context)) return kb;
 	}
 	return null;
 }

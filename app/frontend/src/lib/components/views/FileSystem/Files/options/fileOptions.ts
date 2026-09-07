@@ -8,13 +8,14 @@ import type * as graph from '$lib/wails/graph';
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
+import { osStore } from '$lib/utils/platform';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 
 import { AlertType } from '$lib/system/Alert/types';
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { notify } from '$lib/system/Notifications/notificationsStore';
 
-import { addToItemSelection } from '$lib/components/views/shared/sharedStore';
+import { setItemSelection } from '$lib/components/views/shared/sharedStore';
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 import { loadGitFileStatus, gitFileStatusStore } from '$lib/components/views/Git/gitStore';
@@ -26,10 +27,14 @@ export const uriToRelativePath = (uri: string): string => {
 };
 
 export const getExplorerLabel = () => {
-	const platform = navigator.userAgent.toLowerCase();
-	if (platform.includes('mac')) return 'Reveal in Finder';
-	if (platform.includes('win')) return 'Reveal in File Explorer';
-	return 'Reveal in File Manager';
+	switch (get(osStore)) {
+		case 'macos':
+			return 'Reveal in Finder';
+		case 'windows':
+			return 'Reveal in File Explorer';
+		default:
+			return 'Reveal in File Manager';
+	}
 };
 
 export const fileSystemOptions = [
@@ -83,7 +88,10 @@ const fsFileOptions = [
 		label: 'Rename...',
 		action: (onClose, { id }: graph.FileNode) => {
 			renamingItemIdStore.set(id);
-			addToItemSelection(id);
+			// Selecting, not adding: two renames in a row would otherwise leave two
+			// rows selected, and a selection of two turns every row's menu into the
+			// batch delete.
+			setItemSelection([id]);
 			onClose?.();
 		}
 	},
