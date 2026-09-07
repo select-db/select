@@ -2,7 +2,10 @@ package system
 
 import (
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"os"
 
@@ -365,5 +368,115 @@ func TestHandleFSEvent_DeleteReportsAFileAsAFile(t *testing.T) {
 
 	if len(commits) != 1 || commits[0].TableName != "folder" {
 		t.Fatalf("expected a folder delete, got %+v", commits)
+	}
+}
+
+// watchedUnder returns the watcher's registrations inside root, sorted.
+func watchedUnder(t *testing.T, watcher *fsnotify.Watcher, root string) []string {
+	t.Helper()
+
+	var watched []string
+	for _, path := range watcher.WatchList() {
+		if path == root || strings.HasPrefix(path, root+string(os.PathSeparator)) {
+			watched = append(watched, path)
+		}
+	}
+	slices.Sort(watched)
+	return watched
+}
+
+// awaitEvent drains events until one names path, or the wait runs out.
+func awaitEvent(t *testing.T, watcher *fsnotify.Watcher, path string, wait time.Duration) bool {
+	t.Helper()
+
+	deadline := time.After(wait)
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return false
+			}
+			if event.Name == path {
+				return true
+			}
+		case <-deadline:
+			return false
+		}
+	}
+}
+
+// A renamed directory keeps its watch under the name it was registered with,
+// and so does everything below it.
+func TestDropStaleWatches_LeavesOnlyTheNamesOnDisk(t *testing.T) {
+	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
+
+	oldDir := filepath.Join(workspaceRoot, "db-e731d451")
+	if err := os.MkdirAll(filepath.Join(oldDir, "sub", "deep"), 0o700); err != nil {
+		t.Fatalf("mkdir db dirs: %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("new watcher: %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	addWatches(watcher, fsCtx, workspaceRoot)
+
+	newDir := filepath.Join(workspaceRoot, "analytics")
+	if err := os.Rename(oldDir, newDir); err != nil {
+		t.Fatalf("rename db dir: %v", err)
+	}
+
+	dropStaleWatches(watcher, workspaceRoot)
+	addWatches(watcher, fsCtx, workspaceRoot)
+
+	want := []string{
+		workspaceRoot,
+		newDir,
+		filepath.Join(newDir, "sub"),
+		filepath.Join(newDir, "sub", "deep"),
+	}
+	slices.Sort(want)
+
+	if got := watchedUnder(t, watcher, workspaceRoot); !slices.Equal(got, want) {
+		t.Fatalf("watch list after rename:\n got %v\nwant %v", got, want)
+	}
+}
+
+// The point of dropping them: re-walking alone is a no-op on a directory that
+// is already watched, so without the drop the events keep naming the old path
+// and the graph has nowhere to put them.
+func TestDropStaleWatches_EventsNameTheDirectoryThatExists(t *testing.T) {
+	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
+
+	oldDir := filepath.Join(workspaceRoot, "db-e731d451")
+	if err := os.MkdirAll(filepath.Join(oldDir, "sub"), 0o700); err != nil {
+		t.Fatalf("mkdir db dirs: %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("new watcher: %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	addWatches(watcher, fsCtx, workspaceRoot)
+
+	newDir := filepath.Join(workspaceRoot, "analytics")
+	if err := os.Rename(oldDir, newDir); err != nil {
+		t.Fatalf("rename db dir: %v", err)
+	}
+
+	dropStaleWatches(watcher, workspaceRoot)
+	addWatches(watcher, fsCtx, workspaceRoot)
+
+	written := filepath.Join(newDir, "sub", "query.sql")
+	if err := os.WriteFile(written, []byte("SELECT 1;"), 0o600); err != nil {
+		t.Fatalf("write file in renamed dir: %v", err)
+	}
+
+	if !awaitEvent(t, watcher, written, 3*time.Second) {
+		t.Fatalf("no event named %q: the watch is still reporting the pre-rename path", written)
 	}
 }

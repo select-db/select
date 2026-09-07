@@ -45,6 +45,49 @@ func (s *System) StartFileWatcher(workspaceID string) {
 	go s.watchWorkspace(ctx, workspaceID)
 }
 
+// addWatches registers root and every directory under it.
+//
+// One watch per directory, so a workspace with more folders than the platform's
+// watch limit (inotify's max_user_watches, commonly 8192) gets refusals partway
+// through the walk. Those folders then go silent: no mutation, no graph update,
+// nothing in the UI to say why. The count is logged once rather than per
+// directory.
+func addWatches(watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS, root string) {
+	refused := 0
+	if err := watcher.Add(root); err != nil {
+		refused++
+	}
+	_ = fsCtx.WalkFrom(root, func(entry graph.Entry) error {
+		if entry.IsDir() {
+			if addErr := watcher.Add(entry.Path); addErr != nil {
+				refused++
+			}
+		}
+		return nil
+	})
+	if refused > 0 {
+		log.Printf("[watcher] %d directories under %s could not be watched (platform watch limit?); changes there will not reach the workspace graph", refused, root)
+	}
+}
+
+// dropStaleWatches unregisters the watches under root whose directory is no
+// longer there. Removal is by path, which is the point: a renamed directory is
+// still watched under its old name, and giving that name up is what frees the
+// directory to be watched again under the new one.
+//
+// Watches outside root are left alone — the per-user config directory is one.
+func dropStaleWatches(watcher *fsnotify.Watcher, root string) {
+	prefix := root + string(os.PathSeparator)
+	for _, watched := range watcher.WatchList() {
+		if !strings.HasPrefix(watched, prefix) {
+			continue
+		}
+		if _, err := os.Stat(watched); err != nil {
+			_ = watcher.Remove(watched)
+		}
+	}
+}
+
 func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 	user, err := s.Queries.GetCurrentUser(ctx)
 	if err != nil {
@@ -65,31 +108,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 	defer func() { _ = watcher.Close() }()
 
 	// Watch all existing dirs; new ones are added dynamically on Create events.
-	//
-	// One watch per directory, so a workspace with more folders than the
-	// platform's watch limit (inotify's max_user_watches, commonly 8192) gets
-	// refusals partway through the walk. Those folders then go silent: no
-	// mutation, no graph update, nothing in the UI to say why. The count is
-	// logged once rather than per directory.
-	addWatches := func(root string) {
-		refused := 0
-		if err := watcher.Add(root); err != nil {
-			refused++
-		}
-		_ = fsCtx.WalkFrom(root, func(entry graph.Entry) error {
-			if entry.IsDir() {
-				if addErr := watcher.Add(entry.Path); addErr != nil {
-					refused++
-				}
-			}
-			return nil
-		})
-		if refused > 0 {
-			log.Printf("[watcher] %d directories under %s could not be watched (platform watch limit?); changes there will not reach the workspace graph", refused, root)
-		}
-	}
-
-	addWatches(fsCtx.WorkspaceRoot)
+	addWatches(watcher, fsCtx, fsCtx.WorkspaceRoot)
 
 	// Also watch the per-user config dir so edits to the personal .theme /
 	// .config hot-reload exactly like workspace files. These files live outside
@@ -142,7 +161,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 			if event.Op&fsnotify.Create != 0 {
 				info, err := os.Stat(event.Name)
 				if err == nil && info.IsDir() {
-					addWatches(event.Name)
+					addWatches(watcher, fsCtx, event.Name)
 				}
 			}
 
@@ -151,9 +170,16 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 				// A watch is registered against a path. A renamed directory
 				// keeps its watch, so its children keep arriving under the old
 				// name — and land in the graph under a folder that no longer
-				// exists, which is to say nowhere. Re-walking registers the new
-				// names; adding a directory that is already watched is a no-op.
-				addWatches(fsCtx.WorkspaceRoot)
+				// exists, which is to say nowhere.
+				//
+				// Re-walking on its own does not undo that. The old name and
+				// the new one are the same directory, and adding a directory
+				// that is already watched is a no-op, so the registration keeps
+				// the name it was made under. The names that no longer exist
+				// have to go first; only then does the walk register the new
+				// ones.
+				dropStaleWatches(watcher, fsCtx.WorkspaceRoot)
+				addWatches(watcher, fsCtx, fsCtx.WorkspaceRoot)
 				s.rebuildGraphAndEmit()
 				continue
 			}
