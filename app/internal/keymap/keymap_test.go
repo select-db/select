@@ -1,6 +1,8 @@
 package keymap
 
 import (
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -139,5 +141,38 @@ func TestResolveKeepsUnbindings(t *testing.T) {
 	}
 	if len(bindings) != 2 || bindings[1].Command != "" {
 		t.Fatalf("Resolve = %v, want the unbinding last", keys(bindings))
+	}
+}
+
+// The browser names keys too -- it is the one holding the keystroke -- so the
+// name it produces and the name a binding is written with have to be the same
+// word. They meet here: every name the frontend can emit is parsed, and a name
+// that has drifted apart fails rather than silently matching nothing.
+func TestFrontendKeyNamesAreTheOnesBindingsUse(t *testing.T) {
+	const frontend = "../../frontend/src/lib/stores/keybindingsStore.ts"
+
+	source, err := os.ReadFile(frontend)
+	if err != nil {
+		t.Fatalf("read %s: %v -- if the keymap store moved, point this test at it", frontend, err)
+	}
+
+	table := regexp.MustCompile(`(?s)const keyByCode: Record<string, string> = \{(.*?)\n\};`)
+	block := table.FindSubmatch(source)
+	if block == nil {
+		t.Fatalf("no keyByCode table in %s -- if it was renamed, point this test at it", frontend)
+	}
+
+	// Values are quoted either way round -- "'" has to be, since it is a quote.
+	names := regexp.MustCompile(`:\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")`).
+		FindAllStringSubmatch(string(block[1]), -1)
+	if len(names) < len(namedKeys) {
+		t.Fatalf("found %d key names in the keyByCode table, which cannot be all of them", len(names))
+	}
+
+	for _, match := range names {
+		name := strings.ReplaceAll(match[1]+match[2], `\\`, `\`)
+		if _, err := Parse(name, Linux); err != nil {
+			t.Errorf("the frontend can send %q, which no binding can name: %v", name, err)
+		}
 	}
 }

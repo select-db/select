@@ -163,8 +163,9 @@ export function InvalidateWorkspaceGraph(): $CancellablePromise<void> {
 }
 
 /**
- * LoadConfig returns the merged personal config: built-in defaults overlaid with
- * the per-user .config (keybindings and editor snippets).
+ * LoadConfig returns the personal config the app runs on: the built-in
+ * defaults, then the per-user .config, with every chord parsed and resolved for
+ * this platform and the bindings in the order they are matched.
  */
 export function LoadConfig(): $CancellablePromise<$models.ConfigResponse | null> {
     return $Call.ByID(2766015104).then(($result: any) => {

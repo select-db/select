@@ -8,6 +8,7 @@ import type * as graph from '$lib/wails/graph';
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
+import { osStore } from '$lib/utils/platform';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 
 import { AlertType } from '$lib/system/Alert/types';
@@ -26,10 +27,14 @@ export const uriToRelativePath = (uri: string): string => {
 };
 
 export const getExplorerLabel = () => {
-	const platform = navigator.userAgent.toLowerCase();
-	if (platform.includes('mac')) return 'Reveal in Finder';
-	if (platform.includes('win')) return 'Reveal in File Explorer';
-	return 'Reveal in File Manager';
+	switch (get(osStore)) {
+		case 'macos':
+			return 'Reveal in Finder';
+		case 'windows':
+			return 'Reveal in File Explorer';
+		default:
+			return 'Reveal in File Manager';
+	}
 };
 
 export const fileSystemOptions = [

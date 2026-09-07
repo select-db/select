@@ -19,7 +19,7 @@ package keymap
 
 import (
 	"fmt"
-	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -71,35 +71,38 @@ var modifierAliases = map[string]string{
 	"win":     "cmd",
 }
 
-// keyAliases maps accepted spellings of a key onto its canonical name.
+// namedKeys are the keys that are spelled out rather than printed.
+var namedKeys = map[string]bool{
+	"enter":     true,
+	"escape":    true,
+	"space":     true,
+	"tab":       true,
+	"backspace": true,
+	"delete":    true,
+	"insert":    true,
+	"home":      true,
+	"end":       true,
+	"pageup":    true,
+	"pagedown":  true,
+	"up":        true,
+	"down":      true,
+	"left":      true,
+	"right":     true,
+	"capslock":  true,
+}
+
+// keyAliases maps other spellings of a key onto the name above.
 var keyAliases = map[string]string{
-	"esc":         "escape",
-	"return":      "enter",
-	"del":         "delete",
-	"arrowup":     "up",
-	"arrowdown":   "down",
-	"arrowleft":   "left",
-	"arrowright":  "right",
-	"pgup":        "pageup",
-	"pgdn":        "pagedown",
-	"pagedown":    "pagedown",
-	"pageup":      "pageup",
-	"spacebar":    "space",
-	"escape":      "escape",
-	"enter":       "enter",
-	"delete":      "delete",
-	"backspace":   "backspace",
-	"insert":      "insert",
-	"home":        "home",
-	"end":         "end",
-	"tab":         "tab",
-	"space":       "space",
-	"up":          "up",
-	"down":        "down",
-	"left":        "left",
-	"right":       "right",
-	"capslock":    "capslock",
-	"numpadenter": "numpadenter",
+	"esc":        "escape",
+	"return":     "enter",
+	"del":        "delete",
+	"spacebar":   "space",
+	"pgup":       "pageup",
+	"pgdn":       "pagedown",
+	"arrowup":    "up",
+	"arrowdown":  "down",
+	"arrowleft":  "left",
+	"arrowright": "right",
 }
 
 // punctuation is every key that carries a symbol on an unshifted US layout.
@@ -186,11 +189,14 @@ func parseKey(key, binding string) (string, error) {
 	}
 
 	if canonical, ok := keyAliases[key]; ok {
-		return canonical, nil
+		key = canonical
+	}
+	if namedKeys[key] {
+		return key, nil
 	}
 
 	if len(key) > 1 && key[0] == 'f' {
-		if n, err := parseFunctionKey(key[1:]); err == nil && n >= 1 && n <= 24 {
+		if n, err := strconv.Atoi(key[1:]); err == nil && n >= 1 && n <= 24 {
 			return key, nil
 		}
 	}
@@ -210,48 +216,4 @@ func parseKey(key, binding string) (string, error) {
 	}
 
 	return "", fmt.Errorf("%q: unknown key %q", binding, key)
-}
-
-func parseFunctionKey(digits string) (int, error) {
-	n := 0
-	for _, r := range digits {
-		if r < '0' || r > '9' {
-			return 0, fmt.Errorf("not a number")
-		}
-		n = n*10 + int(r-'0')
-	}
-	if digits == "" {
-		return 0, fmt.Errorf("not a number")
-	}
-	return n, nil
-}
-
-// KeyNames lists every key a binding can name, for documentation and error
-// messages. Sorted, so it reads the same every time.
-func KeyNames() []string {
-	names := make([]string, 0, len(keyAliases)+len(punctuation)+36)
-	seen := map[string]bool{}
-	add := func(name string) {
-		if !seen[name] {
-			seen[name] = true
-			names = append(names, name)
-		}
-	}
-	for _, canonical := range keyAliases {
-		add(canonical)
-	}
-	for _, r := range punctuation {
-		add(string(r))
-	}
-	for r := 'a'; r <= 'z'; r++ {
-		add(string(r))
-	}
-	for r := '0'; r <= '9'; r++ {
-		add(string(r))
-	}
-	for i := 1; i <= 24; i++ {
-		add(fmt.Sprintf("f%d", i))
-	}
-	sort.Strings(names)
-	return names
 }
