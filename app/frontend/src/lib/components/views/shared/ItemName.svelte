@@ -25,26 +25,46 @@
 	let localName = $state(untrack(() => name));
 
 	$effect(() => {
+		// A rename in progress owns the field. The row re-renders for reasons that
+		// have nothing to do with it -- a graph rebuild, a config written by
+		// something else -- and syncing then overwrites what is being typed.
+		if ($renamingItemIdStore === id) return;
+
 		initialName = name;
 		localName = name;
 	});
 
 	let inputEl: HTMLInputElement;
 
-	// Prevents the keyup from the triggering Enter press from immediately closing rename mode.
-	// WebKit delivers keyup to the element that has focus at release time, not at press time.
-	let ignoreNextKeyup = false;
+	// The Enter that opens rename mode is pressed on the menu item, so this input
+	// only ever sees its keyup: WebKit delivers keyup to whatever has focus at
+	// release time, not at press time. An Enter that commits a rename is pressed
+	// here, so its keydown lands here first. Acting only on a keyup whose keydown
+	// this input saw tells the two apart, and keeps telling them apart when the
+	// row re-renders mid-rename -- a one-shot flag was re-armed by that re-render
+	// and swallowed the commit instead, leaving a box no key could close.
+	let pressedHere = false;
+
+	// Focus and selection are placed when the box opens, not again while it stays
+	// open: re-selecting mid-rename puts the caret back and the next keystroke
+	// replaces what was typed.
+	let placed = false;
 
 	const RENAMABLE_TYPES = new Set(['file', 'folder', 'db_instance']);
 
 	$effect(() => {
-		if ($renamingItemIdStore === id && inputEl) {
+		if ($renamingItemIdStore !== id) {
+			placed = false;
+			return;
+		}
+
+		if (inputEl && !placed) {
 			if (type && !RENAMABLE_TYPES.has(type)) {
 				renamingItemIdStore.set(null);
 				return;
 			}
+			placed = true;
 			requestAnimationFrame(() => {
-				ignoreNextKeyup = true;
 				inputEl?.focus();
 
 				const firstDotIndex = localName.indexOf('.');
@@ -88,16 +108,14 @@
 		if (e.key === 'Enter' || e.key === 'Escape') {
 			e.preventDefault();
 			e.stopPropagation();
+			pressedHere = true;
 		}
 	}}
 	onkeyup={async (e) => {
-		if (ignoreNextKeyup && e.key === 'Enter') {
-			ignoreNextKeyup = false;
-			return;
-		}
-		ignoreNextKeyup = false;
 		if ($renamingItemIdStore !== id) return;
 		if (!['Enter', 'Escape'].includes(e.key)) return;
+		if (!pressedHere) return;
+		pressedHere = false;
 		switch (e.key) {
 			case 'Enter':
 				await stopEditing(true);

@@ -79,7 +79,22 @@ test('names a database by its directory, and renames the directory with it', asy
 	// what it is still called.
 	await openMenuOn(page, 'analytics');
 	await chooseMenuItem(page, 'Rename...');
-	await renameTo(page, 'warehouse');
+
+	// Typed here rather than through renameTo, so a config write can land between
+	// the typing and the Enter that commits it. The row re-renders, and the guard
+	// that swallows the Enter opening the box used to be re-armed by that
+	// re-render -- so the Enter below went nowhere and the box could no longer be
+	// committed or closed from the keyboard.
+	const box = renameBox(page);
+	await expect(box).toBeFocused();
+	await box.press('ControlOrMeta+a');
+	await box.fill('warehouse');
+	await inWorkspace(request, id, 'touch', 'spare.sql');
+	await inWorkspace(request, id, 'mv', 'spare.sql', 'spare-moved.sql');
+	await expect(treeNode(page, 'spare-moved.sql')).toBeVisible();
+	await box.press('Enter');
+	await expect(box).toBeHidden();
+
 	await expect(treeNode(page, 'analytics')).toBeVisible();
 	expect(await databasesInGraph(request)).toEqual(['analytics', 'warehouse']);
 
@@ -147,6 +162,9 @@ test('names a database by its directory, and renames the directory with it', asy
 	await expect(tab(page, 'eu-metrics')).toHaveCount(0);
 
 	// --- Leaving it as it was found -----------------------------------------
+
+	await inWorkspace(request, id, 'rm', 'spare-moved.sql');
+	await expect(treeNode(page, 'spare-moved.sql')).toHaveCount(0);
 
 	await openMenuOn(page, 'europe');
 	await chooseMenuItem(page, 'Delete');
