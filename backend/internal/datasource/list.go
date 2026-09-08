@@ -7,19 +7,12 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/internal/authz"
-
-	"github.com/google/uuid"
 )
 
 type listedDatasource struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	DBType string `json:"db_type"`
-
-	// Whether this actor administrates it. The connections screen offers
-	// revoking only where it would be allowed, and the answer is computed here
-	// rather than in the client so both come from the same rule.
-	CanManage bool `json:"can_manage"`
 }
 
 // ListHandler answers what proxified connections this workspace has.
@@ -37,27 +30,24 @@ func ListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
 
-		parsedWorkspaceID, err := uuid.Parse(a.WorkspaceID)
+		workspaceID, err := db_types.NewJSONNullUUIDFromString(a.WorkspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace_id", http.StatusBadRequest)
 			return
 		}
 
-		rows, err := db.Queries.ListDatasourcesByWorkspace(r.Context(), db_types.NewJSONNullUUID(parsedWorkspaceID))
+		rows, err := db.Queries.ListDatasourcesByWorkspace(r.Context(), workspaceID)
 		if err != nil {
 			http.Error(w, "failed to list datasources", http.StatusInternalServerError)
 			return
 		}
 
-		owner := a.IsOwner()
 		out := make([]listedDatasource, 0, len(rows))
 		for _, row := range rows {
-			id := row.ID.UUID.String()
 			out = append(out, listedDatasource{
-				ID:        id,
-				Name:      row.Name.String,
-				DBType:    row.DbType.String,
-				CanManage: owner || a.CanManage(id),
+				ID:     row.ID.UUID.String(),
+				Name:   row.Name.String,
+				DBType: row.DbType.String,
 			})
 		}
 

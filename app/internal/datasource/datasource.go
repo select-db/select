@@ -55,10 +55,9 @@ func (d *Datasource) GetDatasource(id string) (*GetResult, error) {
 // it. No DSN: administrating a connection does not require being handed the
 // credential behind it.
 type ListedDatasource struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	DBType    string `json:"db_type"`
-	CanManage bool   `json:"can_manage"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	DBType string `json:"db_type"`
 }
 
 // ListDatasources returns every proxified connection stored for the workspace,

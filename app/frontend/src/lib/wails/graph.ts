@@ -48,13 +48,7 @@ export const GetDBInstanceNodeByID = async (dbInstanceID: string): Promise<DBIns
 /**
  * The shared connections at or under these entries, id and name, which is what
  * deleting the entries would revoke. Passing no ids asks about the whole
- * workspace.
- *
- * Containment is answered in Go on purpose. Only the graph knows that a node
- * answers to both its config id and its URI, that the workspace keeps a flat
- * list of every database beside the folder tree, and which folders have been
- * read off disk; a walk over the snapshot here would be a second copy of those
- * rules, and one shared database missed by it is a credential left working.
+ * workspace. Containment is answered in Go; see Graph.SharedDatabasesUnder.
  */
 export const SharedDatabasesUnder = async (ids: string[]): Promise<DatabaseRef[]> =>
 	stripNullItems(await graphService.SharedDatabasesUnder(ids));

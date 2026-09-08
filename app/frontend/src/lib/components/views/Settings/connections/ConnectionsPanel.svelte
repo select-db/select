@@ -6,7 +6,8 @@
 	import { AlertType } from '$lib/system/Alert/types';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
-	import { tryCatch } from '$lib/utils/tryCatch';
+	import { must, tryCatch } from '$lib/utils/tryCatch';
+	import { myPermissions } from '$lib/stores/myPermissionsStore';
 	import {
 		ListDatasources,
 		DeleteDatasource
@@ -43,22 +44,20 @@
 	 */
 	let referencedIds = $state<string[]>([]);
 	let loadError = $state<string | null>(null);
-	let loading = $state(true);
 
-	const unreferenced = $derived(connections.filter((c) => !referencedIds.includes(c.id)));
+	const referenced = $derived(new Set(referencedIds));
+	const unreferenced = $derived(connections.filter((c) => !referenced.has(c.id)));
 
 	const load = async () => {
-		loading = true;
 		const [rows, err] = await tryCatch(ListDatasources);
-		const [referenced] = await tryCatch(SharedDatabasesUnder, []);
-		loading = false;
+		const [inWorkspace] = await tryCatch(SharedDatabasesUnder, []);
 		if (err) {
 			loadError = err.message;
 			return;
 		}
 		loadError = null;
 		connections = rows ?? [];
-		referencedIds = (referenced ?? []).map((db) => db.id);
+		referencedIds = (inWorkspace ?? []).map((db) => db.id);
 	};
 
 	$effect(() => {
@@ -74,11 +73,7 @@
 				onCancel: () => modalStore.set(null),
 				onConfirm: async () => {
 					modalStore.set(null);
-					const [, err] = await tryCatch(DeleteDatasource, connection.id);
-					if (err) {
-						loadError = err.message;
-						return;
-					}
+					await must(tryCatch(DeleteDatasource, connection.id));
 					await load();
 				}
 			}
@@ -87,15 +82,11 @@
 </script>
 
 <div class="panel">
-	<div class="header">
-		<div>
-			<p class="title">Connections</p>
-			<p class="hint">
-				Databases whose credentials are stored on the server rather than in this workspace. Revoking
-				one drops those credentials for everyone.
-			</p>
-		</div>
-	</div>
+	<p class="title">Connections</p>
+	<p class="hint">
+		Databases whose credentials are stored on the server rather than in this workspace. Revoking one
+		drops those credentials for everyone.
+	</p>
 
 	{#if unreferenced.length > 0}
 		<div class="notice">
@@ -111,8 +102,6 @@
 		<div class="notice">
 			<Alert type={AlertType.Error} message={loadError} noPulse />
 		</div>
-	{:else if !loading && connections.length === 0}
-		<p class="empty">No shared connections in this workspace.</p>
 	{:else}
 		<div class="table-wrap">
 			<Table
@@ -121,10 +110,15 @@
 				getKey={(c) => c.id}
 				filterValue={(c) => c.name ?? ''}
 				{cell}
+				{empty}
 			/>
 		</div>
 	{/if}
 </div>
+
+{#snippet empty()}
+	No shared connections in this workspace.
+{/snippet}
 
 {#snippet cell(key: string, connection: Connection)}
 	{#if key === 'name'}
@@ -132,7 +126,7 @@
 	{:else if key === 'db_type'}
 		<span class="text-muted">{connection.db_type}</span>
 	{:else if key === 'referenced'}
-		{#if referencedIds.includes(connection.id)}
+		{#if referenced.has(connection.id)}
 			<span class="text-muted">Yes</span>
 		{:else}
 			<span class="orphan">
@@ -141,7 +135,7 @@
 			</span>
 		{/if}
 	{:else if key === 'actions'}
-		{#if connection.can_manage}
+		{#if $myPermissions.canManageDb(connection.id)}
 			<Button content="Revoke" emphasis="low" size="sm" onclick={() => revoke(connection)} />
 		{/if}
 	{/if}
@@ -156,21 +150,13 @@
 		min-height: 0;
 	}
 
-	.header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: var(--space-md);
-	}
-
 	.title {
 		margin: 0;
 		font-weight: 600;
 		color: var(--gray-1000);
 	}
 
-	.hint,
-	.empty {
+	.hint {
 		margin: var(--space-xxs) 0 0;
 		color: var(--gray-700);
 	}

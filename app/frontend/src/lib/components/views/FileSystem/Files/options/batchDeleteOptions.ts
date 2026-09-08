@@ -4,8 +4,7 @@ import { notifyError } from '$lib/system/Notifications/notificationsStore';
 import { selectedItemsStore, clearItemSelection } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { findItemById } from '../helpers/dragHelpers';
-import type * as graph from '$lib/wails/graph';
-import { deleteEntries } from '$lib/components/views/shared/deleteEntries';
+import { deleteEntries, type Entry } from '$lib/components/views/shared/deleteEntries';
 
 export const batchDeleteOptions: ContextMenuOption[] = [
 	{
@@ -15,7 +14,7 @@ export const batchDeleteOptions: ContextMenuOption[] = [
 			const graph = get(workspaceGraphStore);
 			if (!graph) return onClose?.();
 
-			const items: (graph.FileNode | graph.FolderNode | graph.DBInstanceNode)[] = [];
+			const items: Entry[] = [];
 			for (const id of selected) {
 				const item = findItemById(id, [], graph.folders, graph.db_instances);
 				if (item) items.push(item);

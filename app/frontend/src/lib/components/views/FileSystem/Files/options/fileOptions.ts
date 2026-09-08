@@ -5,7 +5,6 @@ import { RevealInExplorer } from '$lib/bindings/selectDb/internal/system/system'
 import { StageFile, UnstageFile, RevertFile } from '$lib/bindings/selectDb/internal/git/git';
 import type * as git from '$lib/bindings/selectDb/internal/git/models';
 import type * as graph from '$lib/wails/graph';
-import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import { osStore } from '$lib/utils/platform';
@@ -16,6 +15,7 @@ import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { notify } from '$lib/system/Notifications/notificationsStore';
 
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
+import { removeEntry } from '$lib/components/views/shared/deleteEntries';
 
 import { loadGitFileStatus, gitFileStatusStore } from '$lib/components/views/Git/gitStore';
 import { uriToGitPath } from '$lib/components/views/Git/helpers';
@@ -92,9 +92,8 @@ const fsFileOptions = [
 	},
 	{
 		label: 'Delete',
-		action: async (onClose, { uri }: graph.FileNode) => {
-			await must(tryCatch(fs.Delete, { uri, recursive: false }));
-			await must(tryCatch(fs.Delete, { uri: uri + '.metadata.json', recursive: false }));
+		action: async (onClose, file: graph.FileNode) => {
+			await removeEntry(file);
 			onClose();
 		}
 	}
@@ -152,9 +151,8 @@ const getGitFileOptions = (file: graph.FileNode): ContextMenuOption[] => {
 	if (file.id.startsWith('git::untracked')) {
 		options.push({
 			label: 'Delete',
-			action: async (onClose, { uri }: graph.FileNode) => {
-				await must(tryCatch(fs.Delete, { uri, recursive: false }));
-				await tryCatch(fs.Delete, { uri: uri + '.metadata.json', recursive: false });
+			action: async (onClose, file: graph.FileNode) => {
+				await removeEntry(file);
 				notify({ type: AlertType.Success, message: 'File deleted' });
 				await loadGitFileStatus();
 				onClose();

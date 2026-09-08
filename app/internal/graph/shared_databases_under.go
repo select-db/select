@@ -23,6 +23,9 @@ func (g *Graph) SharedDatabasesUnder(ids []string) []DatabaseRef {
 	defer g.mu.RUnlock()
 
 	roots := g.lookupAll(ids)
+	// The nil check is load-bearing: a nil *WorkspaceNode put in a Node is not
+	// == nil, so walk would take it for a real node and dereference it. The
+	// graph has no workspace between InvalidateWorkspaceGraph and the rebuild.
 	if len(ids) == 0 && g.WorkspaceGraph != nil {
 		roots = []Node{g.WorkspaceGraph}
 	}

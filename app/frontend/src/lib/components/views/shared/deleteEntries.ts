@@ -10,7 +10,7 @@ import { notifyError } from '$lib/system/Notifications/notificationsStore';
 import { myPermissions } from '$lib/stores/myPermissionsStore';
 import { must, tryCatch } from '$lib/utils/tryCatch';
 
-type Entry = graph.FileNode | graph.FolderNode | graph.DBInstanceNode;
+export type Entry = graph.FileNode | graph.FolderNode | graph.DBInstanceNode;
 
 /**
  * Removes one entry from the workspace, and nothing else.
@@ -47,9 +47,8 @@ export const removeEntry = async (entry: Entry) => {
  * would be announcing something the person can still cancel.
  *
  * The revokes go first, and any refusal abandons the whole delete. A revoke
- * that failed after the directory was gone would leave a credential nobody can
- * see any more, because the id it is stored under lived in the file that was
- * just deleted.
+ * that failed after the directory was gone would strand the credential: see
+ * datasource.ListHandler for why the file is the only thing still naming it.
  */
 export const deleteEntries = async (entries: Entry[], onDeleted?: () => void): Promise<void> => {
 	const shared = await must(
@@ -59,11 +58,7 @@ export const deleteEntries = async (entries: Entry[], onDeleted?: () => void): P
 		)
 	);
 
-	if (shared.length === 0) {
-		for (const entry of entries) await removeEntry(entry);
-		onDeleted?.();
-		return;
-	}
+	if (shared.length === 0) return revokeThenDelete(entries, [], onDeleted);
 
 	// Credentials are administrated, not owned by whoever has the workspace open.
 	// The server refuses this too; refusing here is so the answer arrives before
@@ -72,7 +67,7 @@ export const deleteEntries = async (entries: Entry[], onDeleted?: () => void): P
 	const refused = shared.filter((db) => !canManageDb(db.id));
 	if (refused.length > 0) {
 		notifyError(
-			`${listNames(refused)} ${refused.length === 1 ? 'is a shared connection' : 'are shared connections'}. Ask an admin to delete ${refused.length === 1 ? 'it' : 'them'}, so the stored credentials go too.`
+			`${refused.map((db) => db.name).join(', ')} ${refused.length === 1 ? 'is a shared connection' : 'are shared connections'}. Ask an admin to delete ${refused.length === 1 ? 'it' : 'them'}, so the stored credentials go too.`
 		);
 		return;
 	}
@@ -112,5 +107,3 @@ const revokeThenDelete = async (
 	for (const entry of entries) await removeEntry(entry);
 	onDeleted?.();
 };
-
-const listNames = (dbs: graph.DatabaseRef[]) => dbs.map((db) => db.name).join(', ');

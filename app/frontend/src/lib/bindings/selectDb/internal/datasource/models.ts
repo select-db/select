@@ -59,7 +59,6 @@ export class ListedDatasource {
     "id": string;
     "name": string;
     "db_type": string;
-    "can_manage": boolean;
 
     /** Creates a new ListedDatasource instance. */
     constructor($$source: Partial<ListedDatasource> = {}) {
@@ -71,9 +70,6 @@ export class ListedDatasource {
         }
         if (!("db_type" in $$source)) {
             this["db_type"] = "";
-        }
-        if (!("can_manage" in $$source)) {
-            this["can_manage"] = false;
         }
 
         Object.assign(this, $$source);

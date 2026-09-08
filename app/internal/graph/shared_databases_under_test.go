@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"slices"
 	"sort"
 	"testing"
 )
@@ -14,9 +15,7 @@ import (
 //	  team/
 //	    reports/
 //	      shared-deep  (proxified)
-func sharedGraph(t *testing.T) *Graph {
-	t.Helper()
-
+func sharedGraph() *Graph {
 	g := indexedGraph()
 
 	team := &FolderNode{ID: "team", URI: "team", FolderID: "root"}
@@ -54,18 +53,13 @@ func assertShared(t *testing.T, got []DatabaseRef, want ...string) {
 
 	gotIDs := sharedIDs(got)
 	sort.Strings(want)
-	if len(gotIDs) != len(want) {
+	if !slices.Equal(gotIDs, want) {
 		t.Fatalf("got %v, want %v", gotIDs, want)
-	}
-	for i := range want {
-		if gotIDs[i] != want[i] {
-			t.Fatalf("got %v, want %v", gotIDs, want)
-		}
 	}
 }
 
 func TestSharedDatabasesUnder_FindsWhatADeleteWouldRevoke(t *testing.T) {
-	g := sharedGraph(t)
+	g := sharedGraph()
 
 	// A database names itself, by config id or by URI: the tree hands the
 	// frontend one and the config file the other.
@@ -84,7 +78,7 @@ func TestSharedDatabasesUnder_FindsWhatADeleteWouldRevoke(t *testing.T) {
 }
 
 func TestSharedDatabasesUnder_ReturnsEachDatabaseOnce(t *testing.T) {
-	g := sharedGraph(t)
+	g := sharedGraph()
 
 	// A selection can name a folder and something inside it, and a database
 	// hangs from both its folder and the workspace's flat list. Neither is a
@@ -94,7 +88,7 @@ func TestSharedDatabasesUnder_ReturnsEachDatabaseOnce(t *testing.T) {
 }
 
 func TestSharedDatabasesUnder_SkipsIdsTheGraphDoesNotKnow(t *testing.T) {
-	g := sharedGraph(t)
+	g := sharedGraph()
 
 	// A stale selection must not quietly answer "nothing to revoke" for the
 	// ids that are still real.
@@ -103,7 +97,7 @@ func TestSharedDatabasesUnder_SkipsIdsTheGraphDoesNotKnow(t *testing.T) {
 }
 
 func TestSharedDatabasesUnder_NamesEachDatabase(t *testing.T) {
-	g := sharedGraph(t)
+	g := sharedGraph()
 
 	got := g.SharedDatabasesUnder([]string{"shared-root"})
 	if len(got) != 1 || got[0].Name != "Shared root" {
@@ -112,7 +106,7 @@ func TestSharedDatabasesUnder_NamesEachDatabase(t *testing.T) {
 }
 
 func TestSharedDatabasesUnder_DescendsIntoADatabasesOwnFolders(t *testing.T) {
-	g := sharedGraph(t)
+	g := sharedGraph()
 
 	db, _ := g.lookup("shared-root").(*DBInstanceNode)
 	schema := &DBInstanceItemNode{ID: "public", ParentID: "shared-root"}
