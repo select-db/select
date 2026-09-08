@@ -18,8 +18,7 @@ func findKeybinding(bindings []keymap.Binding, command string) (keymap.Binding, 
 }
 
 func TestLoadConfig_Defaults(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	g := New(nil)
 	cfg, err := g.LoadConfig()
@@ -35,8 +34,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 }
 
 func TestLoadConfig_UserOverridesKeybindingsAndSnippets(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	userDir, err := UserConfigDir()
 	if err != nil {
@@ -70,8 +68,7 @@ func TestLoadConfig_UserOverridesKeybindingsAndSnippets(t *testing.T) {
 }
 
 func TestGetUserConfigFilePath(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	path, err := GetUserConfigFilePath()
 	if err != nil {
@@ -88,8 +85,7 @@ func TestGetUserConfigFilePath(t *testing.T) {
 }
 
 func TestResetUserConfig(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	if err := ResetUserConfig(); err != nil {
 		t.Fatalf("ResetUserConfig: %v", err)

@@ -60,6 +60,7 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 
 	conn, err := dbc.getEngineConn(dbInstance)
 	if err != nil {
+		emitAvailability(dbInstance.ID, err.Error())
 		return nil, fmt.Errorf("failed to open DB: %v", err)
 	}
 

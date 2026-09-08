@@ -98,3 +98,19 @@ shipped build rather than only a test one.
    instead of it.
 3. Repeating? Add `data-test-value`.
 4. Reaching into a library's DOM? Put it in `selectors.ts`.
+
+## Where a helper goes
+
+Three files, and the question that puts a helper in one of them. A spec that
+writes its own copy of one of these gets a gesture with the same name and
+subtly different behaviour, which is how `renameTo` came to assert the box had
+closed in one spec and not in another.
+
+| Question | File | Examples |
+| -------- | ---- | -------- |
+| How do I address this? | `selectors.ts` | `treeNode`, `tab`, `renameBox` |
+| What do I do to the tree? | `tree.ts` | `openTreeMenu`, `chooseMenuItem`, `renameTo` |
+| What do I ask the Go side? | `wails.ts` | `call`, `inWorkspace`, `databasesInGraph` |
+
+Anything used by one spec stays in that spec. Move it here on the second copy,
+not in anticipation of one.

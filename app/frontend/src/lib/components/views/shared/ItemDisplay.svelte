@@ -170,7 +170,13 @@
 				</div>
 				<ItemIcon {item} muted={muted()} />
 				<div class="item-name-wrapper">
-					<ItemName id={item.id} name={item.name} muted={muted()} type={item.type} />
+					<ItemName
+						id={item.id}
+						uri={item.uri}
+						name={item.name}
+						muted={muted()}
+						type={item.type}
+					/>
 					{#if filterableChildren.length > 0}
 						<ChildVisibilityBadge parentId={item.id} items={filterableChildren} />
 					{/if}

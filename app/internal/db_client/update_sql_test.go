@@ -443,8 +443,8 @@ func BenchmarkIsNumericLiteral(b *testing.B) {
 
 func BenchmarkFormatLiteral(b *testing.B) {
 	testCases := []struct {
-		value    string
-		colType  string
+		value   string
+		colType string
 	}{
 		{"42", "INT"},
 		{"hello", "VARCHAR"},

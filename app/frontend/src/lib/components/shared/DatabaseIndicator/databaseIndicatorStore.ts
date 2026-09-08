@@ -1,13 +1,17 @@
 import { EventsOn } from '$lib/wails/events';
 import { get, writable } from 'svelte/store';
 
-export const databaseAvailabilityStore = writable<Set<string>>(new Set());
+/**
+ * What each database was last found to be, by whatever last reached it. A
+ * database missing from the map has not been reached yet, which is not the same
+ * as one that failed, and the indicator shows the two differently.
+ */
+export const databaseAvailabilityStore = writable<Map<string, boolean>>(new Map());
 
 EventsOn('databaseAvailability', (data: { databases: { id: string; error?: string }[] }) => {
-	const set = get(databaseAvailabilityStore);
+	const available = new Map(get(databaseAvailabilityStore));
 	for (const { id, error } of data.databases) {
-		if (error) set.delete(id);
-		else set.add(id);
+		available.set(id, !error);
 	}
-	databaseAvailabilityStore.set(set);
+	databaseAvailabilityStore.set(available);
 });

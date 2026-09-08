@@ -7,8 +7,7 @@ import (
 )
 
 func TestGetThemeFilePath_PointsAtUserDir(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	g := New(nil)
 	path, err := g.GetThemeFilePath()
@@ -26,8 +25,7 @@ func TestGetThemeFilePath_PointsAtUserDir(t *testing.T) {
 }
 
 func TestLoadWorkspaceTheme_UserOverride(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	userDir, err := UserConfigDir()
 	if err != nil {
@@ -55,8 +53,7 @@ func TestLoadWorkspaceTheme_UserOverride(t *testing.T) {
 // TestLoadWorkspaceTheme_IgnoresWorkspaceFile verifies appearance is user-owned:
 // a .theme placed in the workspace root must not affect the loaded theme.
 func TestLoadWorkspaceTheme_IgnoresWorkspaceFile(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	const workspaceID = "ws-theme"
 	g := New(nil)

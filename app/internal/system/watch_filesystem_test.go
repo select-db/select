@@ -2,11 +2,14 @@ package system
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"os"
 
 	"selectDb/internal/db/generated"
+	"selectDb/internal/fs_uri"
 	"selectDb/internal/graph"
 
 	"github.com/fsnotify/fsnotify"
@@ -85,8 +88,9 @@ func TestHandleDBConfigEvent_Insert(t *testing.T) {
 	if *payload.ID != "db-1" {
 		t.Errorf("payload.id mismatch: got %v want 'db-1'", payload.ID)
 	}
-	if payload.Name == nil || *payload.Name != "DB1" {
-		t.Errorf("payload.name mismatch: got %v want 'DB1'", payload.Name)
+	// The directory is db1; the config says "DB1" and is not asked.
+	if payload.Name == nil || *payload.Name != "db1" {
+		t.Errorf("payload.name mismatch: got %v want 'db1'", payload.Name)
 	}
 	if payload.FolderID == nil || *payload.FolderID != fsCtx.URI("folder-db-1") {
 		t.Errorf("payload.folder_id mismatch: got %v want %v", payload.FolderID, fsCtx.URI("folder-db-1"))
@@ -304,7 +308,7 @@ func TestHandleFSEvent_SkipsFilesInUnopenedFolder(t *testing.T) {
 }
 
 // A deleted path cannot be stat-ed, so the graph decides what it was. It knows
-// every folder, but a file only once its folder has been opened — so a file
+// every folder, but a file only once its folder has been opened -- so a file
 // deleted in a folder nobody opened must still be reported as a file, or the
 // frontend never closes the tab that was open on it.
 func TestHandleFSEvent_DeleteReportsAFileAsAFile(t *testing.T) {
@@ -365,5 +369,90 @@ func TestHandleFSEvent_DeleteReportsAFileAsAFile(t *testing.T) {
 
 	if len(commits) != 1 || commits[0].TableName != "folder" {
 		t.Fatalf("expected a folder delete, got %+v", commits)
+	}
+}
+
+// watchedUnder returns the watcher's registrations inside root, sorted.
+func watchedUnder(watcher *fsnotify.Watcher, root string) []string {
+	var watched []string
+	for _, path := range watcher.WatchList() {
+		if fs_uri.Contains(root, path) {
+			watched = append(watched, path)
+		}
+	}
+	slices.Sort(watched)
+	return watched
+}
+
+// awaitEvent drains events until one names path, or the wait runs out.
+func awaitEvent(t *testing.T, watcher *fsnotify.Watcher, path string, wait time.Duration) bool {
+	t.Helper()
+
+	deadline := time.After(wait)
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return false
+			}
+			if event.Name == path {
+				return true
+			}
+		case <-deadline:
+			return false
+		}
+	}
+}
+
+// A renamed directory keeps its watch under the name it was registered with,
+// and so does everything below it. Re-walking alone does not correct that: the
+// old name and the new one are the same directory, so adding it again is a
+// no-op and the stale registration survives. Both halves are asserted on one
+// rename, since the second is the reason the first matters -- events from
+// inside the renamed tree have to name a path the graph can find.
+func TestDropStaleWatches(t *testing.T) {
+	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
+
+	oldDir := filepath.Join(workspaceRoot, "db-e731d451")
+	if err := os.MkdirAll(filepath.Join(oldDir, "sub", "deep"), 0o700); err != nil {
+		t.Fatalf("mkdir db dirs: %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("new watcher: %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	addWatches(watcher, fsCtx, workspaceRoot)
+
+	newDir := filepath.Join(workspaceRoot, "analytics")
+	if err := os.Rename(oldDir, newDir); err != nil {
+		t.Fatalf("rename db dir: %v", err)
+	}
+
+	// The order is the fix: drop what is gone, then re-walk.
+	dropStaleWatches(watcher, fsCtx)
+	addWatches(watcher, fsCtx, workspaceRoot)
+
+	want := []string{
+		workspaceRoot,
+		newDir,
+		filepath.Join(newDir, "sub"),
+		filepath.Join(newDir, "sub", "deep"),
+	}
+	slices.Sort(want)
+
+	if got := watchedUnder(watcher, workspaceRoot); !slices.Equal(got, want) {
+		t.Fatalf("watch list after rename:\n got %v\nwant %v", got, want)
+	}
+
+	written := filepath.Join(newDir, "sub", "query.sql")
+	if err := os.WriteFile(written, []byte("SELECT 1;"), 0o600); err != nil {
+		t.Fatalf("write file in renamed dir: %v", err)
+	}
+
+	if !awaitEvent(t, watcher, written, 3*time.Second) {
+		t.Fatalf("no event named %q: the watch is still reporting the pre-rename path", written)
 	}
 }

@@ -139,12 +139,6 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		listener,
 	)
 
-	desktop.Emit("databaseAvailability", map[string]interface{}{
-		"databases": []map[string]interface{}{
-			{"id": params.DbInstanceID},
-		},
-	})
-
 	return out
 }
 

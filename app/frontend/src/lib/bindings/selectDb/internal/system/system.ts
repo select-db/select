@@ -164,6 +164,11 @@ export function SetZoom(factor: number): $CancellablePromise<number> {
 
 /**
  * Stops any running DB availability watcher and starts a new one.
+ * 
+ * The watcher only decides when to ping. What each ping found reaches the
+ * frontend from Ping itself, along with every other way a database is reached,
+ * so the dot moves the moment anything learns something rather than at the top
+ * of the next sweep.
  */
 export function StartDatabaseWatcher(): $CancellablePromise<void> {
     return $Call.ByID(2903622711);
