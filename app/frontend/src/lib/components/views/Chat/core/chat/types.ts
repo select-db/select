@@ -12,7 +12,13 @@ export type ToolCallState =
 
 export type ToolResultState = 'streaming' | 'complete' | 'error';
 
-export type ChatClientState = 'ready' | 'submitted' | 'streaming' | 'error';
+/**
+ * What the connection is doing right now. A turn that failed is not a state the
+ * client stays in -- the failure is in `error`, which the panel reads; leaving
+ * it here meant "the last turn broke" was indistinguishable from "busy", and
+ * anything gated on the status stayed gated until the next send.
+ */
+export type ChatClientState = 'ready' | 'submitted' | 'streaming';
 
 export interface TextPart {
 	type: 'text';
@@ -90,7 +96,6 @@ export interface AddToolResultParams {
 	toolCallId: string;
 	tool: string;
 	output: unknown;
-	state?: 'output-available' | 'output-error';
 	errorText?: string;
 }
 

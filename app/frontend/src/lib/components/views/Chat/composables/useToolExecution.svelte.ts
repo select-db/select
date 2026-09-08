@@ -119,16 +119,13 @@ const liveCallbacks = new Map<
 	{ approve: () => Promise<void>; deny: () => Promise<void> }
 >();
 
-/** What an executor came back with, ready to be handed to a chat. */
-type ToolOutcome = { output: unknown; state: 'output-available' | 'output-error' };
-
 /**
- * The executor run for a tool call, module-level so one run covers every path
+ * The output of a tool call's run, module-level so one run covers every path
  * that asks for it. An entry lives until its outcome reaches a live chat, so a
  * component destroyed mid-run leaves its run for the instance that replaces it
  * rather than recording into a client nobody reads.
  */
-const runs = new Map<string, Promise<ToolOutcome>>();
+const runs = new Map<string, Promise<unknown>>();
 
 /**
  * One walk of the conversation: the tool calls in it, and the ids that already
@@ -168,13 +165,7 @@ export function useToolExecution(
 		return {
 			toolCallId: tc.id,
 			toolName: tc.name,
-			addToolResult: (output) =>
-				chat.addToolResult({
-					toolCallId: tc.id,
-					tool: tc.name,
-					output,
-					state: 'output-available'
-				})
+			addToolResult: (output) => chat.addToolResult({ toolCallId: tc.id, tool: tc.name, output })
 		};
 	}
 
@@ -182,14 +173,14 @@ export function useToolExecution(
 	 * Waits on `produce` and writes what it gives back to the chat — the one place
 	 * a tool call reaches an end state, whichever of the three paths asked for it.
 	 */
-	async function settle(tc: ToolCallPart, produce: () => Promise<ToolOutcome>): Promise<void> {
+	async function settle(tc: ToolCallPart, produce: () => Promise<unknown>): Promise<void> {
 		// A synchronous latch: two awaiters of the same run both resume before
 		// either has recorded anything, so the result-in-messages check below
 		// cannot stand in for it.
 		if (awaiting.has(tc.id)) return;
 		awaiting.add(tc.id);
 		try {
-			const outcome = await produce();
+			const output = await produce();
 			// This chat is gone — the component was destroyed while the tool ran.
 			// Leave the run for whichever instance takes over, so the result is not
 			// dropped into a client nothing renders.
@@ -197,7 +188,7 @@ export function useToolExecution(
 
 			runs.delete(tc.id);
 			if (scanToolCalls(chat.messages).settled.has(tc.id)) return;
-			await chat.addToolResult({ toolCallId: tc.id, tool: tc.name, ...outcome });
+			await chat.addToolResult({ toolCallId: tc.id, tool: tc.name, output });
 		} finally {
 			awaiting.delete(tc.id);
 		}
@@ -205,10 +196,7 @@ export function useToolExecution(
 
 	/** Ends a call the app cannot run, so the model hears about it and the card stops. */
 	function reportUnrunnable(tc: ToolCallPart, error: string): Promise<void> {
-		return settle(tc, async () => ({
-			output: { error, success: false },
-			state: 'output-error'
-		}));
+		return settle(tc, async () => ({ error, success: false }));
 	}
 
 	/**
@@ -225,9 +213,7 @@ export function useToolExecution(
 			if (started) return started;
 
 			const run = tryCatch(toolExecutors[tc.name], args, buildContext(tc)).then(([result, err]) =>
-				err
-					? ({ output: { error: err.message, success: false }, state: 'output-error' } as const)
-					: ({ output: result, state: 'output-available' } as const)
+				err ? { error: err.message, success: false } : result
 			);
 			runs.set(tc.id, run);
 			return run;
@@ -292,9 +278,9 @@ export function useToolExecution(
 	// onToolCall, or left pending by a conversation restored from a closed tab).
 	//
 	// Held off only while a turn is in flight, so it cannot race the client running
-	// the tools that carry their own execute fn. Anything else is a turn that has
-	// ended, however it ended: a provider that breaks mid-stream still produced the
-	// calls the model asked for, and they still have to run.
+	// the tools that carry their own execute fn. A turn that has ended is fair game
+	// however it ended: a provider that breaks mid-stream still produced the calls
+	// the model asked for, and they still have to run.
 	$effect(() => {
 		if (chat.isLoading) return;
 		const { calls, settled } = scanToolCalls(chat.messages);

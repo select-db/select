@@ -37,6 +37,25 @@ export default ts.config(
 		}
 	},
 	{
+		// The app may not import the test suite. Only the screenshot specs may,
+		// and they sit under src/ so they can live beside what they photograph --
+		// which is what makes this worth enforcing: from the file tree, a spec and
+		// a component look the same, and one stray import would put @playwright/test
+		// in the shipped bundle.
+		files: ['src/**/*.ts', 'src/**/*.svelte'],
+		ignores: ['src/**/*.shot.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{ group: ['**/tests/e2e/*'], message: 'Test-only; import it from a *.shot.ts.' }
+					]
+				}
+			]
+		}
+	},
+	{
 		ignores: [
 			'**/*.svelte.ts',
 			// Wails-generated bindings; do not lint (namespaces, `any`, etc.)
