@@ -1,11 +1,10 @@
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { loadSchema } from '$lib/utils/query/loadSchema';
-import { must, tryCatch } from '$lib/utils/tryCatch';
 import type * as graph from '$lib/wails/graph';
 import DatabaseSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 
-import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+import { deleteEntries } from '$lib/components/views/shared/deleteEntries';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 import { fileSystemOptions } from './fileOptions';
@@ -72,13 +71,8 @@ export const databaseOptions = [
 	},
 	{
 		label: 'Delete',
-		action: async (onClose, { uri }: graph.DBInstanceNode) => {
-			await must(
-				tryCatch(fs.Delete, {
-					uri,
-					recursive: true
-				})
-			);
+		action: async (onClose, database: graph.DBInstanceNode) => {
+			await deleteEntries([database]);
 			onClose();
 		}
 	}

@@ -8,5 +8,6 @@ export {
 
 export {
     GetResult,
+    ListedDatasource,
     UpsertParams
 } from "./models.js";

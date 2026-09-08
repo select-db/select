@@ -7,6 +7,7 @@
 	import GroupsPanel from '$lib/components/views/Settings/groups/GroupsPanel.svelte';
 	import UsersPanel from '$lib/components/views/Settings/users/UsersPanel.svelte';
 	import APIKeysPanel from '$lib/components/views/Settings/api-keys/APIKeysPanel.svelte';
+	import ConnectionsPanel from './connections/ConnectionsPanel.svelte';
 	import UserSettingsEditor from '$lib/components/views/Settings/UserSettingsEditor.svelte';
 	import { activeGroupStore, updateSettingsTab } from '$lib/components/Layout/layoutStore';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
@@ -68,6 +69,8 @@
 			<UsersPanel />
 		{:else if selectedSection === 'api_keys'}
 			<APIKeysPanel />
+		{:else if selectedSection === 'connections'}
+			<ConnectionsPanel />
 		{:else if selectedSection === 'git'}
 			<GitLinkPanel showUnsync />
 		{:else if selectedSection === 'theme'}

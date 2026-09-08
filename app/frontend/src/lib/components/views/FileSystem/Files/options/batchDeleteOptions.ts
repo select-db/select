@@ -5,8 +5,7 @@ import { selectedItemsStore, clearItemSelection } from '$lib/components/views/sh
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { findItemById } from '../helpers/dragHelpers';
 import type * as graph from '$lib/wails/graph';
-import { must, tryCatch } from '$lib/utils/tryCatch';
-import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+import { deleteEntries } from '$lib/components/views/shared/deleteEntries';
 
 export const batchDeleteOptions: ContextMenuOption[] = [
 	{
@@ -16,25 +15,18 @@ export const batchDeleteOptions: ContextMenuOption[] = [
 			const graph = get(workspaceGraphStore);
 			if (!graph) return onClose?.();
 
+			const items: (graph.FileNode | graph.FolderNode | graph.DBInstanceNode)[] = [];
 			for (const id of selected) {
 				const item = findItemById(id, [], graph.folders, graph.db_instances);
-				if (item) await deleteItem(item);
+				if (item) items.push(item);
 			}
 
-			notifyError(`${selected.size} ${selected.size === 1 ? 'item' : 'items'} deleted`);
+			await deleteEntries(items, () =>
+				notifyError(`${selected.size} ${selected.size === 1 ? 'item' : 'items'} deleted`)
+			);
+
 			clearItemSelection();
 			onClose?.();
 		}
 	}
 ];
-
-export const deleteItem = async (
-	item: graph.FileNode | graph.FolderNode | graph.DBInstanceNode
-) => {
-	if (item.type === 'file') {
-		await must(tryCatch(fs.Delete, { uri: item.uri, recursive: false }));
-		await tryCatch(fs.Delete, { uri: item.uri + '.metadata.json', recursive: false });
-	} else {
-		await must(tryCatch(fs.Delete, { uri: item.uri, recursive: true }));
-	}
-};
