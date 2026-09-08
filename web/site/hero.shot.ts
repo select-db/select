@@ -311,12 +311,17 @@ for (const framing of FRAMINGS) {
 				const typed = ' AND o.';
 				await page.keyboard.type(typed, { delay: 60 });
 
-				// Completion comes from the Python analyzer the app shells out to. If
-				// it is missing the popup still opens, with one static snippet in it —
-				// so assert on a real column rather than on the widget, or a run
-				// without the analyzer quietly publishes a picture of the app not
-				// doing the thing the page says it does.
-				await expect(editor.completionItem(page, 'total_cents')).toBeVisible({ timeout: 15_000 });
+				// Completion comes from the Python analyzer the app shells out to. If it
+				// is missing the popup still opens, empty or holding one static snippet
+				// — so assert on a real column rather than on the widget, or a run
+				// without the analyzer quietly publishes a picture of the app not doing
+				// the thing the page says it does. The message is the whole point: what
+				// that run looks like from here is a locator that never resolves, which
+				// says nothing about the analyzer.
+				await expect(
+					editor.completionItem(page, 'total_cents'),
+					'no column completions: build the analyzer first (`uv sync` in dialect/core/tokenanalyzer/python)'
+				).toBeVisible({ timeout: 15_000 });
 
 				// Exactly one predicate, on the line the picture is about. Everything
 				// else in this pass stayed true when a stale reload put a second one

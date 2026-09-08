@@ -49,9 +49,15 @@ const OVERLOADED = 'Overloaded';
 const frame = (payload: object, event?: string) =>
 	`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(payload)}\n\n`;
 
-/** Providers stream tool arguments in fragments, never in one piece. */
+/**
+ * Providers stream tool arguments in fragments, never in one piece — and send
+ * none at all for a call with no input, which is what leaves the app holding an
+ * empty string rather than `{}`.
+ */
 const fragments = (input: object, truncated = false) => {
-	const all = JSON.stringify(input).match(/.{1,7}/g) ?? ['{}'];
+	const json = JSON.stringify(input);
+	if (json === '{}') return [];
+	const all = json.match(/.{1,7}/g) ?? [];
 	return truncated ? all.slice(0, 1) : all;
 };
 

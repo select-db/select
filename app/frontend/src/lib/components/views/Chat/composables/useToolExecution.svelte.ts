@@ -21,8 +21,14 @@ export type OnApprovalRequested = (
 	callbacks: { approve: () => Promise<void>; deny: () => Promise<void> }
 ) => void | Promise<void>;
 
+/**
+ * A provider sends no argument deltas at all for a call with no input, which
+ * leaves the empty string — the same thing the client reads as `{}`. Anything
+ * else that does not parse is a stream that stopped mid-arguments, and throws.
+ */
 function parseArgs(args: unknown): unknown {
-	return typeof args === 'string' ? JSON.parse(args) : args;
+	if (typeof args !== 'string') return args;
+	return args ? JSON.parse(args) : {};
 }
 
 const CANCELLED_OUTPUT = { success: false, cancelled: true } as const;
@@ -301,10 +307,6 @@ export function useToolExecution(
 			// spinning for the rest of the session.
 			if (!toolExecutors[tc.name]) {
 				reportUnrunnable(tc, `Unknown tool: ${tc.name}. It is not available in this app.`);
-				continue;
-			}
-			if (!tc.arguments) {
-				reportUnrunnable(tc, `No arguments were received for ${tc.name}.`);
 				continue;
 			}
 

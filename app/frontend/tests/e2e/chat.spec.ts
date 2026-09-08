@@ -115,6 +115,24 @@ test('a turn cut off mid-arguments settles as a failed call', async ({ page, sig
 	await expectSettled(page, 1);
 });
 
+test('a call that carries no arguments at all still runs', async ({ page, signIn }) => {
+	// A provider sends no argument deltas for a call with no input, which leaves
+	// the empty string. That is `{}`, not a broken stream: the tool runs and says
+	// what it thinks of being given nothing.
+	await stubProvider(page, ANTHROPIC, [
+		{ call: { name: 'execute_query', input: {}, id: 'call_bare' } },
+		{ text: 'It said no.' }
+	]);
+	await openChat(page, signIn);
+	await say(page, 'Run a query.');
+
+	await expect(page.getByText('It said no.')).toBeVisible({ timeout: 20_000 });
+	await expectSettled(page, 1);
+	// The tool's own complaint, not one the app invented on its behalf.
+	await toolCall(page).click();
+	await expect(page.getByText('failed to get DB instance', { exact: false })).toBeVisible();
+});
+
 test('a call to a tool the app does not have settles as a failed call', async ({
 	page,
 	signIn
