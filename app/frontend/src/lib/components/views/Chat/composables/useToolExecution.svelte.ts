@@ -103,7 +103,8 @@ function applyDeniedToolResult(
  * Module-level maps so approval state survives component remounts (e.g. when opening a diff tab
  * reshuffles the layout and destroys/remounts Chat).
  *
- * Tool call IDs are unique UUIDs per invocation, so there is no collision risk across sessions.
+ * Tool call IDs are unique per invocation — a provider that does not send one gets a
+ * generated id — so there is no collision risk across sessions.
  * openedIds: prevents calling onApprovalRequested more than once per tool call.
  */
 const openedIds = new Set<string>();
@@ -116,8 +117,20 @@ const liveCallbacks = new Map<
 	{ approve: () => Promise<void>; deny: () => Promise<void> }
 >();
 
-/** IDs we've already started executing (safety net for tools that never got onToolCall). */
-const executionStartedIds = new Set<string>();
+/** What an executor came back with, ready to be handed to a chat. */
+type ToolOutcome = { output: unknown; state: 'output-available' | 'output-error' };
+
+/**
+ * runs: the executor run for a tool call, keyed by call id, module-level so one run
+ * covers every path that asks for it — the approval callbacks, the direct
+ * approve-and-run, and the safety net below.
+ *
+ * An entry stays until its outcome has been written to a live chat. A component
+ * destroyed mid-run (a tab switch unmounts Chat) leaves its run here rather than
+ * recording into a client nobody reads, and the instance that replaces it adopts
+ * the outcome instead of leaving the call's card spinning for good.
+ */
+const runs = new Map<string, Promise<ToolOutcome>>();
 
 function messageHasToolResultFor(messages: Array<UIMessage>, toolCallId: string): boolean {
 	for (const msg of messages) {
@@ -138,6 +151,14 @@ export function useToolExecution(
 	onApprovalRequestedHandlers?: Record<string, OnApprovalRequested>,
 	stop?: () => Promise<void>
 ) {
+	/** Tool calls this instance is already waiting on, so effect re-runs don't pile up. */
+	const awaiting = new Set<string>();
+	/** False once this component is torn down; a run that settles after that is not ours to record. */
+	let alive = true;
+	$effect(() => () => {
+		alive = false;
+	});
+
 	function buildContext(tc: ToolCallPart): ExecutionContext {
 		return {
 			toolCallId: tc.id,
@@ -152,31 +173,42 @@ export function useToolExecution(
 		};
 	}
 
-	async function runExecutor(tc: ToolCallPart, args: unknown): Promise<void> {
-		// One execution per tool call, whichever path asks for it. Approving flips
-		// the state to 'approval-responded', which is exactly what the safety-net
-		// effect below looks for, and the result is not recorded until this
-		// returns — so both reach the same executor. The second run finds the work
-		// already done (edit_file has consumed its diff session by then) and
-		// reports a failure over the top of the success.
-		if (executionStartedIds.has(tc.id)) return;
-		executionStartedIds.add(tc.id);
-
+	async function execute(tc: ToolCallPart, args: unknown): Promise<ToolOutcome> {
 		const [result, err] = await tryCatch(toolExecutors[tc.name], args, buildContext(tc));
-		if (err) {
-			await chat.addToolResult({
-				toolCallId: tc.id,
-				tool: tc.name,
-				output: { error: err.message, success: false },
-				state: 'output-error'
-			});
-		} else {
-			await chat.addToolResult({
-				toolCallId: tc.id,
-				tool: tc.name,
-				output: result,
-				state: 'output-available'
-			});
+		return err
+			? { output: { error: err.message, success: false }, state: 'output-error' }
+			: { output: result, state: 'output-available' };
+	}
+
+	async function runExecutor(tc: ToolCallPart, args: unknown): Promise<void> {
+		// One execution per tool call. Approving flips the state to
+		// 'approval-responded', which is exactly what the safety-net effect below
+		// looks for, and the result is not recorded until the run settles — so both
+		// paths reach here. The second one waits on the first run rather than
+		// starting its own over the top of it (edit_file has consumed its diff
+		// session by then, and would report a failure over a successful edit).
+		if (awaiting.has(tc.id)) return;
+		awaiting.add(tc.id);
+
+		try {
+			let run = runs.get(tc.id);
+			if (!run) {
+				run = execute(tc, args);
+				runs.set(tc.id, run);
+			}
+
+			const outcome = await run;
+			// This chat is gone — the component was destroyed while the tool ran.
+			// Leave the run for whichever instance takes over, so the result is not
+			// dropped into a client nothing renders.
+			if (!alive) return;
+
+			if (!messageHasToolResultFor(chat.messages, tc.id)) {
+				await chat.addToolResult({ toolCallId: tc.id, tool: tc.name, ...outcome });
+			}
+			runs.delete(tc.id);
+		} finally {
+			awaiting.delete(tc.id);
 		}
 	}
 
@@ -232,7 +264,7 @@ export function useToolExecution(
 			if (tc.output !== undefined) continue;
 			if (messageHasToolResultFor(messages, tc.id)) continue;
 			if (!toolExecutors[tc.name]) continue;
-			if (executionStartedIds.has(tc.id)) continue;
+			if (awaiting.has(tc.id)) continue;
 			if (!tc.arguments) continue;
 
 			const args = parseArgs(tc.arguments);
