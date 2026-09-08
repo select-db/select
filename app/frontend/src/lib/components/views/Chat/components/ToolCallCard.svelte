@@ -50,6 +50,9 @@
 	// to read as an ellipsis, which sits still and looks like a result.
 	const running = $derived(!pending && toolCall.output == null);
 	const statusLabel = $derived(pending ? 'Awaiting approval' : failed ? '✕' : '✓');
+	// What the status slot is saying, for a test to read. A card that says
+	// 'running' after the conversation has moved on is the defect this names.
+	const state = $derived(pending ? 'pending' : running ? 'running' : failed ? 'failed' : 'ok');
 	const isSqlTool = $derived(
 		['execute_query', 'execute_statement', 'plan_query', 'explain_query'].includes(toolCall.name)
 	);
@@ -61,10 +64,16 @@
 	);
 </script>
 
-<div class="tool-card" class:pending>
+<div class="tool-card" class:pending data-test="chat.tool-call" data-test-value={toolCall.name}>
 	<button type="button" class="tool-card-header" onclick={onToggle} aria-expanded={expanded}>
 		<ToolCardTitle {toolCall} />
-		<span class="tool-state" class:success={!failed && toolCall.output != null} class:failed>
+		<span
+			class="tool-state"
+			class:success={!failed && toolCall.output != null}
+			class:failed
+			data-test="chat.tool-state"
+			data-test-value={state}
+		>
 			{#if running}
 				<Loader size={14} />
 			{:else}

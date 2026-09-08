@@ -180,6 +180,23 @@ export function useToolExecution(
 			: { output: result, state: 'output-available' };
 	}
 
+	/** Ends a call the app cannot run, so the model hears about it and the card stops. */
+	async function reportUnrunnable(tc: ToolCallPart, error: string): Promise<void> {
+		if (awaiting.has(tc.id)) return;
+		awaiting.add(tc.id);
+		try {
+			if (messageHasToolResultFor(chat.messages, tc.id)) return;
+			await chat.addToolResult({
+				toolCallId: tc.id,
+				tool: tc.name,
+				output: { error, success: false },
+				state: 'output-error'
+			});
+		} finally {
+			awaiting.delete(tc.id);
+		}
+	}
+
 	async function runExecutor(tc: ToolCallPart, args: unknown): Promise<void> {
 		// One execution per tool call. Approving flips the state to
 		// 'approval-responded', which is exactly what the safety-net effect below
@@ -217,7 +234,12 @@ export function useToolExecution(
 		for (const tc of toolCallParts) {
 			if (tc.state !== 'approval-requested') continue;
 
-			const args = parseArgs(tc.arguments);
+			const [args, parseErr] = tryCatch(parseArgs, tc.arguments);
+			if (parseErr) {
+				// Nothing to show an approval dialog for, and nothing to run.
+				reportUnrunnable(tc, `Arguments for ${tc.name} were not valid JSON; send them again.`);
+				continue;
+			}
 
 			// Always refresh liveCallbacks with the current chat instance so the diff UI
 			// (which may have been opened before a remount) uses the live chat.
@@ -254,20 +276,40 @@ export function useToolExecution(
 	});
 
 	// Safety net: run any tool that has input but no result (e.g. missed by client onToolCall).
-	// Only when status is 'ready' so we don't race with client execution during streaming.
+	//
+	// Held off while a turn is in flight, so this does not race with the client
+	// running the tools that carry their own execute fn. That is what the guard
+	// has to mean — it used to read `status === 'ready'`, and a turn that ended
+	// in a provider error leaves the status on 'error' for good, which froze
+	// every call that turn had already produced. The model asked for them before
+	// the stream broke; they still have to run.
 	$effect(() => {
-		if (chat.status !== 'ready') return;
+		if (chat.isLoading) return;
 		const messages = chat.messages;
 		const toolCallParts = messages.flatMap((m) => m.parts ?? []).filter(isToolCallPart);
 		for (const tc of toolCallParts) {
 			if (tc.state === 'approval-requested') continue;
 			if (tc.output !== undefined) continue;
 			if (messageHasToolResultFor(messages, tc.id)) continue;
-			if (!toolExecutors[tc.name]) continue;
 			if (awaiting.has(tc.id)) continue;
-			if (!tc.arguments) continue;
 
-			const args = parseArgs(tc.arguments);
+			// Everything below is a call this app cannot run. Each one still gets a
+			// result: the model can read it and try something else, and the card
+			// reaches an end state instead of spinning for the rest of the session.
+			if (!toolExecutors[tc.name]) {
+				reportUnrunnable(tc, `Unknown tool: ${tc.name}. It is not available in this app.`);
+				continue;
+			}
+			if (!tc.arguments) {
+				reportUnrunnable(tc, `No arguments were received for ${tc.name}.`);
+				continue;
+			}
+			const [args, parseErr] = tryCatch(parseArgs, tc.arguments);
+			if (parseErr) {
+				reportUnrunnable(tc, `Arguments for ${tc.name} were not valid JSON; send them again.`);
+				continue;
+			}
+
 			runExecutor(tc, args);
 		}
 	});
