@@ -4,14 +4,12 @@ import {
 	hideFileTreeChildren,
 	holdSession,
 	shotsDirFor,
-	stubChatProvider,
-	textTurn,
-	toolCallTurn,
 	THEMES,
 	expect,
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
+import { ANTHROPIC, say, stubProvider, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
 import { testId, editor } from '../../app/frontend/tests/e2e/selectors';
 
 /**
@@ -84,16 +82,23 @@ const FRAMINGS: (Framing & { chat: boolean })[] = [
  * The answer claims nothing the data does not support: `orders.status` and the
  * partial trailing week are both real.
  */
-const TURNS = [
-	toolCallTurn('get_database_schemas', { databaseInstanceId: 'sample-warehouse' }),
-	textTurn(
-		'`orders` has a `status` column, and `refunded` is in it, so this query is ' +
+const TURNS: Turn[] = [
+	{
+		call: {
+			name: 'get_database_schemas',
+			input: { databaseInstanceId: 'sample-warehouse' },
+			id: 'toolu_e2e_1'
+		}
+	},
+	{
+		text:
+			'`orders` has a `status` column, and `refunded` is in it, so this query is ' +
 			'gross revenue, not net. Two fixes worth making:\n\n' +
 			"1. Add `WHERE o.status = 'paid'` to exclude refunds.\n" +
 			'2. The trailing week is partial, so its row is not comparable to the rest.\n\n' +
 			'`order_items` also carries `quantity` and `unit_cents`, if you want units ' +
 			'shifted alongside revenue.'
-	)
+	}
 ];
 
 for (const framing of FRAMINGS) {
@@ -111,7 +116,7 @@ for (const framing of FRAMINGS) {
 			test('a query, its results, and completion over both', async ({ page, signIn }, info) => {
 				await holdSession(page);
 				if (framing.chat) {
-					await stubChatProvider(page, TURNS);
+					await stubProvider(page, ANTHROPIC, TURNS);
 				}
 				await page.goto('/');
 				await signIn();
@@ -258,15 +263,7 @@ for (const framing of FRAMINGS) {
 					// The tab-bar actions carry a tooltip, not an accessible name, so
 					// address the container the markup names: chat first, terminal second.
 					await testId(page, 'tabs.actions').getByRole('button', { name: 'Open Chat' }).click();
-					const prompt = page.getByRole('textbox', { name: 'Type a message...' });
-					await expect(prompt).toBeVisible();
-					await prompt.click();
-					// No delay: this input has no completion to keep up with, and a
-					// keystroke rhythm nothing observes is a second per pass.
-					await page.keyboard.type(
-						'Revenue dipped the week of 2026-02-09. Anything off about this query?'
-					);
-					await page.keyboard.press('Enter');
+					await say(page, 'Revenue dipped the week of 2026-02-09. Anything off about this query?');
 
 					// The tool card is the app running get_database_schemas against the
 					// seeded warehouse; the answer only arrives on the turn after it.
@@ -314,12 +311,17 @@ for (const framing of FRAMINGS) {
 				const typed = ' AND o.';
 				await page.keyboard.type(typed, { delay: 60 });
 
-				// Completion comes from the Python analyzer the app shells out to. If
-				// it is missing the popup still opens, with one static snippet in it —
-				// so assert on a real column rather than on the widget, or a run
-				// without the analyzer quietly publishes a picture of the app not
-				// doing the thing the page says it does.
-				await expect(editor.completionItem(page, 'total_cents')).toBeVisible({ timeout: 15_000 });
+				// Completion comes from the Python analyzer the app shells out to. If it
+				// is missing the popup still opens, empty or holding one static snippet
+				// — so assert on a real column rather than on the widget, or a run
+				// without the analyzer quietly publishes a picture of the app not doing
+				// the thing the page says it does. The message is the whole point: what
+				// that run looks like from here is a locator that never resolves, which
+				// says nothing about the analyzer.
+				await expect(
+					editor.completionItem(page, 'total_cents'),
+					'no column completions: build the analyzer first (`uv sync` in dialect/core/tokenanalyzer/python)'
+				).toBeVisible({ timeout: 15_000 });
 
 				// Exactly one predicate, on the line the picture is about. Everything
 				// else in this pass stayed true when a stale reload put a second one

@@ -129,9 +129,14 @@ export const streamGemini: ProviderStream = async function* (
 		const candidate = e.candidates?.[0];
 		for (const part of candidate?.content?.parts ?? []) {
 			if (part.functionCall) {
-				const id = part.functionCall.id ?? `call_${part.functionCall.name}_${sawToolCall ? '1' : '0'}`;
+				// Gemini sends no call ids, so this one is ours alone and never goes back over
+				// the wire. It still has to be unique for the whole conversation: a per-stream
+				// counter starts over every turn, and the repeat collides with the earlier
+				// call — its result lands on that first card and the new one never resolves.
+				const name = part.functionCall.name ?? '';
+				const id = part.functionCall.id ?? `call_${name}_${crypto.randomUUID()}`;
 				sawToolCall = true;
-				yield { type: 'tool-start', id, name: part.functionCall.name ?? '' };
+				yield { type: 'tool-start', id, name };
 				yield { type: 'tool-args', id, delta: JSON.stringify(part.functionCall.args ?? {}) };
 			} else if (typeof part.text === 'string' && part.text.length > 0) {
 				if (part.thought) yield { type: 'thinking', delta: part.text };

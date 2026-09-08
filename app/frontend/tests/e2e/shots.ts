@@ -8,8 +8,8 @@ import { testId, editor, labelledInput } from './selectors';
  *
  * Everything here drives the real application: the same server-mode build, Go
  * services, bindings and events every other spec drives. Nothing is mocked
- * except the AI provider, which is answered locally rather than faked in the
- * UI.
+ * except the AI provider, which `aiProvider.ts` answers locally rather than
+ * faking in the UI.
  */
 
 // `tests/**` is type-checked by svelte-check, which has no Node types — the app
@@ -47,45 +47,6 @@ export type Theme = (typeof THEMES)[number];
 export function shotsDirFor(specFile: string): string {
 	return `${specFile.slice(0, specFile.lastIndexOf('/'))}/shots`;
 }
-
-/**
- * Answers the AI provider from here. Nothing reaches a real API: no key, no
- * network, no cost, and the same reply on every run, which a live model could
- * never give. The app still requires a key to be present before it will try,
- * and reads it from the workspace .env, where the seed leaves a placeholder.
- *
- * Turns are served in order, so a shot can hand back a tool call first and let
- * the app run it for real before answering.
- */
-export async function stubChatProvider(page: Page, turns: string[]) {
-	let turn = 0;
-	await page.route('https://api.anthropic.com/**', async (route) => {
-		const body = turns[Math.min(turn, turns.length - 1)];
-		turn += 1;
-		await route.fulfill({
-			status: 200,
-			headers: { 'content-type': 'text/event-stream' },
-			body
-		});
-	});
-}
-
-const sse = (type: string, data: object) =>
-	`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
-
-/** An assistant turn that calls one tool, for the app to run for real. */
-export const toolCallTurn = (name: string, input: object, id = 'toolu_e2e_1') =>
-	sse('content_block_start', { index: 0, content_block: { type: 'tool_use', id, name } }) +
-	sse('content_block_delta', {
-		index: 0,
-		delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) }
-	}) +
-	sse('message_delta', { delta: { stop_reason: 'tool_use' } });
-
-/** An assistant turn that just answers. */
-export const textTurn = (text: string) =>
-	sse('content_block_delta', { index: 0, delta: { type: 'text_delta', text } }) +
-	sse('message_delta', { delta: { stop_reason: 'end_turn' } });
 
 /**
  * Fills a labelled input and asserts the value stuck.

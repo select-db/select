@@ -65,6 +65,8 @@ export class ChatClient {
 	private loopRunning = false;
 	/** Whether the most recent streamed turn produced a surviving, usable message. */
 	private lastTurnProductive = false;
+	/** Whether it failed. Per turn, and cleared when the next one starts. */
+	private turnFailed = false;
 	private currentAssistantId: string | null = null;
 
 	private onChunk?: (chunk: StreamChunk) => void;
@@ -205,7 +207,7 @@ export class ChatClient {
 			let idleTurns = 0;
 			for (;;) {
 				const productive = await this.streamOneTurn();
-				if (this.status === 'error') break;
+				if (this.turnFailed) break;
 
 				const last = this.lastAssistant();
 				const toolCalls =
@@ -247,6 +249,7 @@ export class ChatClient {
 	/** Stream a single assistant turn. Returns whether it produced a usable message. */
 	private async streamOneTurn(): Promise<boolean> {
 		this.lastTurnProductive = false;
+		this.turnFailed = false;
 		this.setLoading(true);
 		this.setStatus('submitted');
 		this.setError(undefined);
@@ -263,13 +266,13 @@ export class ChatClient {
 			if (!ac.signal.aborted && (err as Error)?.name !== 'AbortError') {
 				const e = err instanceof Error ? err : new Error(String(err));
 				this.setError(e);
-				this.setStatus('error');
+				this.turnFailed = true;
 				this.onErrorCb?.(e);
 			}
 		} finally {
 			if (this.abortController === ac) this.abortController = null;
 			this.setLoading(false);
-			if (this.status !== 'error') this.setStatus('ready');
+			this.setStatus('ready');
 		}
 
 		return this.lastTurnProductive;
@@ -321,7 +324,7 @@ export class ChatClient {
 				break;
 			case 'error':
 				this.setError(new Error(chunk.message));
-				this.setStatus('error');
+				this.turnFailed = true;
 				this.onErrorCb?.(new Error(chunk.message));
 				break;
 			case 'finish':
@@ -357,7 +360,7 @@ export class ChatClient {
 		// Drop a turn with nothing usable — empty, whitespace-only (e.g. a provider
 		// emitting "\n"), or reasoning-only — so runTurns can re-prompt instead of
 		// leaving the user staring at an empty/thinking-only bubble.
-		if (!hasToolCall && !hasVisibleText && this.status !== 'error') {
+		if (!hasToolCall && !hasVisibleText && !this.turnFailed) {
 			this.messages = this.messages.filter((m) => m.id !== this.currentAssistantId);
 			this.currentAssistantId = null;
 			this.emitMessages();

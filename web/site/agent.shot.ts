@@ -3,14 +3,12 @@ import {
 	shotsEnabled,
 	holdSession,
 	shotsDirFor,
-	stubChatProvider,
-	textTurn,
-	toolCallTurn,
 	THEMES,
 	expect,
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
+import { ANTHROPIC, say, stubProvider, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
 import { testId } from '../../app/frontend/tests/e2e/selectors';
 
 /**
@@ -37,24 +35,33 @@ const FRAMING: Framing = { name: 'agent', width: 1840, height: 820, density: 2 }
  * second call is the picture: the role denies select on customers.email, and
  * the tool says so in the words the app produced.
  */
-const TURNS = [
-	toolCallTurn('get_database_schemas', { databaseInstanceId: 'sample-warehouse' }, 'toolu_e2e_1'),
-	toolCallTurn(
-		'execute_query',
-		{
-			dbInstanceId: 'sample-warehouse',
-			statement: 'SELECT email FROM customers LIMIT 5'
-		},
-		'toolu_e2e_2'
-	),
-	textTurn(
-		'I can see the column, but I cannot read it: `analyst-readonly` denies ' +
+const TURNS: Turn[] = [
+	{
+		call: {
+			name: 'get_database_schemas',
+			input: { databaseInstanceId: 'sample-warehouse' },
+			id: 'toolu_e2e_1'
+		}
+	},
+	{
+		call: {
+			name: 'execute_query',
+			input: {
+				dbInstanceId: 'sample-warehouse',
+				statement: 'SELECT email FROM customers LIMIT 5'
+			},
+			id: 'toolu_e2e_2'
+		}
+	},
+	{
+		text:
+			'I can see the column, but I cannot read it: `analyst-readonly` denies ' +
 			'`select` on `customers.email`, and the query came back refused rather ' +
 			'than empty.\n\n' +
 			'Anything that does not touch it still works. I can group the same orders ' +
 			'by `country_code`, or return customer ids and let you join the addresses ' +
 			'on your side.'
-	)
+	}
 ];
 
 for (const theme of THEMES) {
@@ -66,7 +73,7 @@ for (const theme of THEMES) {
 
 		test('an agent refused the column its role does not grant', async ({ page, signIn }, info) => {
 			await holdSession(page);
-			await stubChatProvider(page, TURNS);
+			await stubProvider(page, ANTHROPIC, TURNS);
 			await page.goto('/');
 			await signIn();
 
@@ -85,11 +92,7 @@ for (const theme of THEMES) {
 			// "New Chat" rather than the tab bar's chat action: that bar only exists
 			// once a file is open, and this picture has no file in it.
 			await page.getByRole('button', { name: 'New Chat' }).click();
-			const prompt = page.getByRole('textbox', { name: 'Type a message...' });
-			await expect(prompt).toBeVisible();
-			await prompt.click();
-			await page.keyboard.type('Which customers order the most? Give me their emails.');
-			await page.keyboard.press('Enter');
+			await say(page, 'Which customers order the most? Give me their emails.');
 
 			await expect(page.getByText('Read database schemas').first()).toBeVisible({
 				timeout: 20_000

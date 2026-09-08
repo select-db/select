@@ -1,7 +1,7 @@
 import {
 	expect,
-	holdSession,
 	inWorkspace,
+	open,
 	readWorkspaceFile,
 	test,
 	workspaceId,
@@ -27,14 +27,6 @@ import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
 /** The seeded files, and the first line each one shows. */
 const WEEKLY = '-- revenue by week, this quarter';
 const COHORTS = '-- Cohort report, first cut.';
-
-/** Signs in and waits for the workspace the seed put there. */
-async function open(page: Page, signIn: () => Promise<void>) {
-	await holdSession(page);
-	await page.goto('/');
-	await signIn();
-	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
-}
 
 /** Opens a file from the tree and waits for its tab. */
 async function openFromTree(page: Page, name: string) {

@@ -1,11 +1,18 @@
 <script lang="ts">
-	import File from '$lib/components/views/File/file.svelte';
-	import Database from '$lib/components/views/Database/Database.svelte';
-	import SchemaTab from '$lib/components/views/Schema/Schema.svelte';
-	import DiffView from '$lib/components/views/Diff/DiffView.svelte';
-	import Terminal from '$lib/components/views/Terminal/Terminal.svelte';
-	import Chat from '$lib/components/views/Chat/Chat.svelte';
-	import Settings from '$lib/components/views/Settings/Settings.svelte';
+	/**
+	 * The views, loaded when a tab of that kind is opened rather than with the
+	 * app. This component is reached from the root layout, so importing them here
+	 * meant every one of them -- and the terminal's xterm, the chat's katex and
+	 * marked, the table's d3 -- was parsed before the window could paint, whether
+	 * or not anything was open.
+	 */
+	const File = () => import('$lib/components/views/File/file.svelte');
+	const Database = () => import('$lib/components/views/Database/Database.svelte');
+	const SchemaTab = () => import('$lib/components/views/Schema/Schema.svelte');
+	const DiffView = () => import('$lib/components/views/Diff/DiffView.svelte');
+	const Terminal = () => import('$lib/components/views/Terminal/Terminal.svelte');
+	const Chat = () => import('$lib/components/views/Chat/Chat.svelte');
+	const Settings = () => import('$lib/components/views/Settings/Settings.svelte');
 	import QuickActions from '$lib/components/QuickActions/QuickActions.svelte';
 
 	import type { TabGroup } from '../layoutStore';
@@ -108,21 +115,21 @@
 				{@const activeTab = group.tabs.find((t) => t.id === group.activeTabId)}
 				{#if activeTab}
 					{#if activeTab.file}
-						<File tab={activeTab} />
+						{#await File() then { default: View }}<View tab={activeTab} />{/await}
 					{:else if activeTab.database}
-						<Database tab={activeTab} />
+						{#await Database() then { default: View }}<View tab={activeTab} />{/await}
 					{:else if activeTab.schema}
-						<SchemaTab tab={activeTab} />
+						{#await SchemaTab() then { default: View }}<View tab={activeTab} />{/await}
 					{:else if activeTab.diff}
-						<DiffView tab={activeTab} />
+						{#await DiffView() then { default: View }}<View tab={activeTab} />{/await}
 					{:else if activeTab.terminal}
-						<Terminal tab={activeTab} />
+						{#await Terminal() then { default: View }}<View tab={activeTab} />{/await}
 					{:else if activeTab.chat}
 						{#key activeTab.id}
-							<Chat tab={activeTab} />
+							{#await Chat() then { default: View }}<View tab={activeTab} />{/await}
 						{/key}
 					{:else if activeTab.settings}
-						<Settings />
+						{#await Settings() then { default: View }}<View />{/await}
 					{/if}
 				{:else}
 					<div class="empty">

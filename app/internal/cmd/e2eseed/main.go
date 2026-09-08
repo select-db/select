@@ -177,8 +177,8 @@ func seed(dataDir string) error {
 		return fmt.Errorf("sample workspace: %w", err)
 	}
 
-	if err := appendChatKey(); err != nil {
-		return fmt.Errorf("chat key: %w", err)
+	if err := appendChatKeys(); err != nil {
+		return fmt.Errorf("chat keys: %w", err)
 	}
 
 	if err := writeAvatars(); err != nil {
@@ -440,11 +440,22 @@ func nullable(v string) db_types.JSONNullString {
 	return db_types.JSONNullString{NullString: sql.NullString{String: v, Valid: v != ""}}
 }
 
-// appendChatKey adds the AI provider key to the workspace .env the sample
-// wrote. It is a placeholder and it is test-only: the capture suite answers the
+// chatKeys are the AI provider keys the chat looks for, one per provider it
+// offers. The suite drives every one of them, and the chat will not call a
+// provider whose key is missing.
+var chatKeys = []string{
+	"ANTHROPIC_API_KEY",
+	"OPENAI_API_KEY",
+	"GEMINI_API_KEY",
+	"OPENROUTER_API_KEY",
+	"XAI_API_KEY",
+}
+
+// appendChatKeys adds the AI provider keys to the workspace .env the sample
+// wrote. They are placeholders and they are test-only: the suite answers every
 // provider's endpoint itself, so nothing in a run reaches a real API, and no
 // workspace a person is given should ship a key at all.
-func appendChatKey() error {
+func appendChatKeys() error {
 	root, err := graph.WorkspaceRootPath(WorkspaceID)
 	if err != nil {
 		return err
@@ -455,9 +466,15 @@ func appendChatKey() error {
 	}
 	defer func() { _ = file.Close() }()
 
-	_, err = file.WriteString("\n# The AI chat reads its provider key from here.\n" +
-		"ANTHROPIC_API_KEY=sk-ant-e2e-placeholder-not-a-real-key\n")
-	return err
+	if _, err := file.WriteString("\n# The AI chat reads its provider keys from here.\n"); err != nil {
+		return err
+	}
+	for _, name := range chatKeys {
+		if _, err := fmt.Fprintf(file, "%s=e2e-placeholder-not-a-real-key\n", name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func initWorkspaceRepo(dataDir string) error {

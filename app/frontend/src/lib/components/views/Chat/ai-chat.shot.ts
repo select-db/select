@@ -3,14 +3,12 @@ import {
 	shotsEnabled,
 	holdSession,
 	shotsDirFor,
-	stubChatProvider,
-	textTurn,
-	toolCallTurn,
 	THEMES,
 	expect,
 	test,
 	type Framing
 } from '../../../../../tests/e2e/shots';
+import { ANTHROPIC, say, stubProvider, type Turn } from '../../../../../tests/e2e/aiProvider';
 import { testId, diffView } from '../../../../../tests/e2e/selectors';
 
 /**
@@ -44,10 +42,10 @@ ORDER BY
   c.created_at DESC;
 `;
 
-const TURNS = [
-	toolCallTurn('read_file', { uri: URI }, 'toolu_e2e_1'),
-	toolCallTurn('edit_file', { uri: URI, content: PROPOSED }, 'toolu_e2e_2'),
-	textTurn('Replaced the star with the three columns the report reads.')
+const TURNS: Turn[] = [
+	{ call: { name: 'read_file', input: { uri: URI }, id: 'toolu_e2e_1' } },
+	{ call: { name: 'edit_file', input: { uri: URI, content: PROPOSED }, id: 'toolu_e2e_2' } },
+	{ text: 'Replaced the star with the three columns the report reads.' }
 ];
 
 for (const theme of THEMES) {
@@ -59,7 +57,7 @@ for (const theme of THEMES) {
 
 		test('an edit proposed as a diff, waiting on approval', async ({ page, signIn }, info) => {
 			await holdSession(page);
-			await stubChatProvider(page, TURNS);
+			await stubProvider(page, ANTHROPIC, TURNS);
 			await page.goto('/');
 			await signIn();
 
@@ -80,20 +78,14 @@ for (const theme of THEMES) {
 
 			// The tab bar's action; the empty state's "New Chat" is gone once a file is open.
 			await page.getByRole('button', { name: 'Open Chat' }).click();
-			const prompt = page.getByRole('textbox', { name: 'Type a message...' });
-			await expect(prompt).toBeVisible();
-			await prompt.click();
-			await page.keyboard.type('This report selects everything. Narrow it to the columns it reads.');
-			await page.keyboard.press('Enter');
+			await say(page, 'This report selects everything. Narrow it to the columns it reads.');
 
 			// Allow/Deny exist only on a diff awaiting approval, and appear twice --
 			// on the diff and in the chat that asked. The figure needs both.
 			await expect(diffView(page).getByRole('button', { name: 'Allow' })).toBeVisible({
 				timeout: 20_000
 			});
-			await expect(
-				testId(page, 'chat.panel').getByRole('button', { name: 'Deny' })
-			).toBeVisible();
+			await expect(testId(page, 'chat.panel').getByRole('button', { name: 'Deny' })).toBeVisible();
 			await expect(diffView(page).getByText('Modified', { exact: true })).toBeVisible();
 
 			await shot(page, shotsDirFor(info.file), `chat.${theme}`, FRAMING);

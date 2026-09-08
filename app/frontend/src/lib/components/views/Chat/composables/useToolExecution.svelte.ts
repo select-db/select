@@ -21,12 +21,14 @@ export type OnApprovalRequested = (
 	callbacks: { approve: () => Promise<void>; deny: () => Promise<void> }
 ) => void | Promise<void>;
 
-function isToolCallPart(p: { type: string }): p is ToolCallPart {
-	return p.type === 'tool-call';
-}
-
+/**
+ * A provider sends no argument deltas at all for a call with no input, which
+ * leaves the empty string — the same thing the client reads as `{}`. Anything
+ * else that does not parse is a stream that stopped mid-arguments, and throws.
+ */
 function parseArgs(args: unknown): unknown {
-	return typeof args === 'string' ? JSON.parse(args) : args;
+	if (typeof args !== 'string') return args;
+	return args ? JSON.parse(args) : {};
 }
 
 const CANCELLED_OUTPUT = { success: false, cancelled: true } as const;
@@ -103,7 +105,8 @@ function applyDeniedToolResult(
  * Module-level maps so approval state survives component remounts (e.g. when opening a diff tab
  * reshuffles the layout and destroys/remounts Chat).
  *
- * Tool call IDs are unique UUIDs per invocation, so there is no collision risk across sessions.
+ * Tool call IDs are unique per invocation — a provider that does not send one gets a
+ * generated id — so there is no collision risk across sessions.
  * openedIds: prevents calling onApprovalRequested more than once per tool call.
  */
 const openedIds = new Set<string>();
@@ -116,20 +119,32 @@ const liveCallbacks = new Map<
 	{ approve: () => Promise<void>; deny: () => Promise<void> }
 >();
 
-/** IDs we've already started executing (safety net for tools that never got onToolCall). */
-const executionStartedIds = new Set<string>();
+/**
+ * The output of a tool call's run, module-level so one run covers every path
+ * that asks for it. An entry lives until its outcome reaches a live chat, so a
+ * component destroyed mid-run leaves its run for the instance that replaces it
+ * rather than recording into a client nobody reads.
+ */
+const runs = new Map<string, Promise<unknown>>();
 
-function messageHasToolResultFor(messages: Array<UIMessage>, toolCallId: string): boolean {
+/**
+ * One walk of the conversation: the tool calls in it, and the ids that already
+ * carry a result. Both effects below want both, and asking per call turned the
+ * scan quadratic in a long conversation.
+ */
+function scanToolCalls(messages: Array<UIMessage>): {
+	calls: ToolCallPart[];
+	settled: Set<string>;
+} {
+	const calls: ToolCallPart[] = [];
+	const settled = new Set<string>();
 	for (const msg of messages) {
-		const parts = msg.parts ?? [];
-		if (
-			parts.some(
-				(p) => p.type === 'tool-result' && (p as { toolCallId: string }).toolCallId === toolCallId
-			)
-		)
-			return true;
+		for (const part of msg.parts ?? []) {
+			if (part.type === 'tool-call') calls.push(part);
+			else if (part.type === 'tool-result') settled.add(part.toolCallId);
+		}
 	}
-	return false;
+	return { calls, settled };
 }
 
 export function useToolExecution(
@@ -138,54 +153,92 @@ export function useToolExecution(
 	onApprovalRequestedHandlers?: Record<string, OnApprovalRequested>,
 	stop?: () => Promise<void>
 ) {
+	/** Tool calls this instance is already waiting on, so effect re-runs don't pile up. */
+	const awaiting = new Set<string>();
+	/** False once this component is torn down; a run that settles after that is not ours to record. */
+	let alive = true;
+	$effect(() => () => {
+		alive = false;
+	});
+
 	function buildContext(tc: ToolCallPart): ExecutionContext {
 		return {
 			toolCallId: tc.id,
 			toolName: tc.name,
-			addToolResult: (output) =>
-				chat.addToolResult({
-					toolCallId: tc.id,
-					tool: tc.name,
-					output,
-					state: 'output-available'
-				})
+			addToolResult: (output) => chat.addToolResult({ toolCallId: tc.id, tool: tc.name, output })
 		};
 	}
 
-	async function runExecutor(tc: ToolCallPart, args: unknown): Promise<void> {
-		// One execution per tool call, whichever path asks for it. Approving flips
-		// the state to 'approval-responded', which is exactly what the safety-net
-		// effect below looks for, and the result is not recorded until this
-		// returns — so both reach the same executor. The second run finds the work
-		// already done (edit_file has consumed its diff session by then) and
-		// reports a failure over the top of the success.
-		if (executionStartedIds.has(tc.id)) return;
-		executionStartedIds.add(tc.id);
+	/**
+	 * Waits on `produce` and writes what it gives back to the chat — the one place
+	 * a tool call reaches an end state, whichever of the three paths asked for it.
+	 */
+	async function settle(tc: ToolCallPart, produce: () => Promise<unknown>): Promise<void> {
+		// A synchronous latch: two awaiters of the same run both resume before
+		// either has recorded anything, so the result-in-messages check below
+		// cannot stand in for it.
+		if (awaiting.has(tc.id)) return;
+		awaiting.add(tc.id);
+		try {
+			const output = await produce();
+			// This chat is gone — the component was destroyed while the tool ran.
+			// Leave the run for whichever instance takes over, so the result is not
+			// dropped into a client nothing renders.
+			if (!alive) return;
 
-		const [result, err] = await tryCatch(toolExecutors[tc.name], args, buildContext(tc));
-		if (err) {
-			await chat.addToolResult({
-				toolCallId: tc.id,
-				tool: tc.name,
-				output: { error: err.message, success: false },
-				state: 'output-error'
-			});
-		} else {
-			await chat.addToolResult({
-				toolCallId: tc.id,
-				tool: tc.name,
-				output: result,
-				state: 'output-available'
-			});
+			runs.delete(tc.id);
+			if (scanToolCalls(chat.messages).settled.has(tc.id)) return;
+			await chat.addToolResult({ toolCallId: tc.id, tool: tc.name, output });
+		} finally {
+			awaiting.delete(tc.id);
 		}
 	}
 
+	/** Ends a call the app cannot run, so the model hears about it and the card stops. */
+	function reportUnrunnable(tc: ToolCallPart, error: string): Promise<void> {
+		return settle(tc, async () => ({ error, success: false }));
+	}
+
+	/**
+	 * One execution per tool call. Approving flips the state to
+	 * 'approval-responded', which is exactly what the safety-net effect below
+	 * looks for, and the result is not recorded until the run settles — so both
+	 * paths reach here. The second one waits on the first run rather than starting
+	 * its own over the top of it (edit_file has consumed its diff session by then,
+	 * and would report a failure over a successful edit).
+	 */
+	function runExecutor(tc: ToolCallPart, args: unknown): Promise<void> {
+		return settle(tc, () => {
+			const started = runs.get(tc.id);
+			if (started) return started;
+
+			const run = tryCatch(toolExecutors[tc.name], args, buildContext(tc)).then(([result, err]) =>
+				err ? { error: err.message, success: false } : result
+			);
+			runs.set(tc.id, run);
+			return run;
+		});
+	}
+
+	/**
+	 * The call's arguments, or null once the call has been ended as unrunnable:
+	 * a stream cut off mid-arguments leaves JSON that never closes.
+	 */
+	function argsFor(tc: ToolCallPart): { args: unknown } | null {
+		const [args, err] = tryCatch(parseArgs, tc.arguments);
+		if (!err) return { args };
+		reportUnrunnable(tc, `Arguments for ${tc.name} were not valid JSON; send them again.`);
+		return null;
+	}
+
 	$effect(() => {
-		const toolCallParts = chat.messages.flatMap((m) => m.parts ?? []).filter(isToolCallPart);
-		for (const tc of toolCallParts) {
+		for (const tc of scanToolCalls(chat.messages).calls) {
 			if (tc.state !== 'approval-requested') continue;
 
-			const args = parseArgs(tc.arguments);
+			// Nothing to show an approval dialog for when the arguments do not parse.
+			const parsed = argsFor(tc);
+			if (!parsed) continue;
+			const { args } = parsed;
 
 			// Always refresh liveCallbacks with the current chat instance so the diff UI
 			// (which may have been opened before a remount) uses the live chat.
@@ -221,22 +274,30 @@ export function useToolExecution(
 		}
 	});
 
-	// Safety net: run any tool that has input but no result (e.g. missed by client onToolCall).
-	// Only when status is 'ready' so we don't race with client execution during streaming.
+	// Safety net: run any tool that has input but no result (e.g. missed by client
+	// onToolCall, or left pending by a conversation restored from a closed tab).
+	//
+	// Held off only while a turn is in flight, so it cannot race the client running
+	// the tools that carry their own execute fn. A turn that has ended is fair game
+	// however it ended: a provider that breaks mid-stream still produced the calls
+	// the model asked for, and they still have to run.
 	$effect(() => {
-		if (chat.status !== 'ready') return;
-		const messages = chat.messages;
-		const toolCallParts = messages.flatMap((m) => m.parts ?? []).filter(isToolCallPart);
-		for (const tc of toolCallParts) {
+		if (chat.isLoading) return;
+		const { calls, settled } = scanToolCalls(chat.messages);
+		for (const tc of calls) {
 			if (tc.state === 'approval-requested') continue;
-			if (tc.output !== undefined) continue;
-			if (messageHasToolResultFor(messages, tc.id)) continue;
-			if (!toolExecutors[tc.name]) continue;
-			if (executionStartedIds.has(tc.id)) continue;
-			if (!tc.arguments) continue;
+			if (tc.output !== undefined || settled.has(tc.id)) continue;
 
-			const args = parseArgs(tc.arguments);
-			runExecutor(tc, args);
+			// A call this app cannot run still gets a result: the model can read it
+			// and try something else, and the card reaches an end state instead of
+			// spinning for the rest of the session.
+			if (!toolExecutors[tc.name]) {
+				reportUnrunnable(tc, `Unknown tool: ${tc.name}. It is not available in this app.`);
+				continue;
+			}
+
+			const parsed = argsFor(tc);
+			if (parsed) runExecutor(tc, parsed.args);
 		}
 	});
 
@@ -252,8 +313,10 @@ export function useToolExecution(
 
 		// No UI open, run directly (e.g. execute_command).
 		// Same pattern: mark approved via setMessages, then addToolResult triggers ONE continuation.
+		const parsed = argsFor(toolCall);
+		if (!parsed) return;
 		chat.setMessages(applyApprovedState(chat.messages, toolCall.id));
-		await runExecutor(toolCall, parseArgs(toolCall.arguments));
+		await runExecutor(toolCall, parsed.args);
 	}
 
 	async function handleDenyToolCall(toolCall: ToolCallPart) {
@@ -280,8 +343,9 @@ export function useToolExecution(
 
 	/** Deny all pending approval tool calls (used when stopping chat or sending new message) */
 	function denyAllPendingApprovals(): void {
-		const toolCallParts = chat.messages.flatMap((m) => m.parts ?? []).filter(isToolCallPart);
-		const pendingApprovals = toolCallParts.filter((tc) => tc.state === 'approval-requested');
+		const pendingApprovals = scanToolCalls(chat.messages).calls.filter(
+			(tc) => tc.state === 'approval-requested'
+		);
 
 		if (pendingApprovals.length === 0) return;
 

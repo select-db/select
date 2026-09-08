@@ -48,6 +48,16 @@ export const tabs = (page: Page) => testId(page, 'tabs.tab');
 export const activeTab = (page: Page) =>
 	page.locator('[data-test="tabs.tab"][data-test-active="true"]');
 
+/** One tool call card in the chat, named by the tool it calls. */
+export const toolCall = (page: Page, name?: string) => testId(page, 'chat.tool-call', name);
+
+/**
+ * The tool cards in whichever state — 'running', 'pending', 'ok' or 'failed'.
+ * 'running' after the conversation has moved on is a call that never finished.
+ */
+export const toolCallsInState = (page: Page, state: 'running' | 'pending' | 'ok' | 'failed') =>
+	testId(page, 'chat.tool-state', state);
+
 /**
  * Monaco's own DOM, quarantined.
  *

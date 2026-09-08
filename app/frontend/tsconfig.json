@@ -11,10 +11,28 @@
 		"strict": true,
 		"moduleResolution": "bundler",
 		"allowImportingTsExtensions": true
-	}
+	},
+	// The generated include, plus the screenshot specs. Those live beside the web
+	// content they illustrate rather than under this app, but they import the
+	// suite's own helpers -- so without them here, a rename in tests/e2e breaks
+	// the shots project and nothing says so until someone captures screenshots.
+	//
+	// Copied from .svelte-kit/tsconfig.json: TypeScript replaces `include`, it
+	// does not merge it.
+	"include": [
+		".svelte-kit/ambient.d.ts",
+		".svelte-kit/non-ambient.d.ts",
+		".svelte-kit/types/**/$types.d.ts",
+		"vite.config.js",
+		"vite.config.ts",
+		"src/**/*.js",
+		"src/**/*.ts",
+		"src/**/*.svelte",
+		"tests/**/*.js",
+		"tests/**/*.ts",
+		"tests/**/*.svelte",
+		"../../web/**/*.shot.ts"
+	]
 	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
 	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
-	//
-	// If you want to overwrite includes/excludes, make sure to copy over the relevant includes/excludes
-	// from the referenced tsconfig.json - TypeScript does not merge them in
 }

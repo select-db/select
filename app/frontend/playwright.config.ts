@@ -59,9 +59,22 @@ export default defineConfig({
 	],
 
 	forbidOnly: !!process.env.CI,
-	// One worker, no retries: every page talks to the same app process, and an
-	// event emitted by one test is broadcast to all of them. Serial keeps that
-	// honest, and a flake stays visible instead of being retried away.
+	/**
+	 * One worker, no retries: every page talks to the same app process, and an
+	 * event emitted by one test is broadcast to all of them. Serial keeps that
+	 * honest, and a flake stays visible instead of being retried away.
+	 *
+	 * Measured rather than assumed, and it is not a tradeoff between speed and
+	 * honesty -- there is no speed to trade. The specs that rewrite the workspace
+	 * cannot overlap with anything (`filesystem` renames weekly_revenue.sql, the
+	 * file every other spec waits for on sign-in), so only the chat suite can be
+	 * spread out, and it is a third of the run. Two workers came out no faster
+	 * than one and flaked; four were slower: four pages against one Go process,
+	 * one connection and one metadata cache contend on exactly what they are
+	 * testing, and a `login` broadcast reaches every page rather than the one
+	 * signing in. Making this parallel means giving each worker its own app and
+	 * its own workspace, not turning a knob here.
+	 */
 	workers: 1,
 	reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
 
