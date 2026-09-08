@@ -17,7 +17,7 @@
 	);
 
 	const allConnected = $derived(
-		ids.length > 0 && ids.every((id) => $databaseAvailabilityStore.has(id))
+		ids.length > 0 && ids.every((id) => $databaseAvailabilityStore.get(id) === true)
 	);
 </script>
 

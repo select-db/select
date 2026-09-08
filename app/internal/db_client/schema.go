@@ -11,7 +11,6 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
-	"selectDb/internal/desktop"
 )
 
 type QuerySchemaParams struct {
@@ -30,6 +29,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 	// Use the DB instance's SSH config (if any) so schema loading respects SSH tunneling and its timeouts.
 	metadata, err := dbc.getCachedMetadata(dbInstance, queryParams.NoCache)
 	if err != nil {
+		EmitAvailability(Availability{ID: dbInstance.ID, Error: err.Error()})
 		return err
 	}
 
@@ -142,11 +142,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 		},
 	})
 
-	desktop.Emit("databaseAvailability", map[string]interface{}{
-		"databases": []map[string]interface{}{
-			{"id": dbInstance.ID},
-		},
-	})
+	EmitAvailability(Availability{ID: dbInstance.ID})
 
 	// Write schema.sql in the background so it doesn't block the UI.
 	// The graph is already updated and the schema tree is visible at this point.

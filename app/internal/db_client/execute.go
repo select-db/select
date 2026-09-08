@@ -60,6 +60,10 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 
 	conn, err := dbc.getEngineConn(dbInstance)
 	if err != nil {
+		// Reported here and not on the statement's own error: this failure is the
+		// connection, so the indicator should show it. A statement that runs and
+		// comes back with a syntax error says nothing about reachability.
+		EmitAvailability(Availability{ID: dbInstance.ID, Error: err.Error()})
 		return nil, fmt.Errorf("failed to open DB: %v", err)
 	}
 

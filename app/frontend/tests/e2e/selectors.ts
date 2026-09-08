@@ -26,6 +26,14 @@ export const treeNode = (page: Page, name: string) => testId(page, 'tree.node', 
 export const renameBox = (page: Page) =>
 	testId(page, 'tree.panel').getByRole('textbox', { name: 'Name' });
 
+/**
+ * The connection dot a database wears, by the database's id.
+ *
+ * Its `data-test-state` is what the app currently believes: "online", "offline",
+ * or "unknown" for one nothing has reached yet.
+ */
+export const dbStatus = (page: Page, id: string) => testId(page, 'db.status', id);
+
 /** The tree rows currently selected, in whichever trees are on screen. */
 export const selectedTreeNodes = (page: Page) =>
 	page.locator('[data-test="tree.node"][data-test-selected="true"]');

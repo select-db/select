@@ -7,8 +7,6 @@ import (
 
 	"selectDb/internal/db_client"
 	"selectDb/internal/graph"
-
-	"selectDb/internal/desktop"
 )
 
 const (
@@ -17,6 +15,11 @@ const (
 )
 
 // Stops any running DB availability watcher and starts a new one.
+//
+// The watcher only decides when to ping. What each ping found reaches the
+// frontend from Ping itself, along with every other way a database is reached,
+// so the dot moves the moment anything learns something rather than at the top
+// of the next sweep.
 func (s *System) StartDatabaseWatcher() {
 	s.mu.Lock()
 	if s.dbWatcherCancel != nil {
@@ -92,18 +95,6 @@ func (s *System) watchDatabases(ctx context.Context) {
 						delete(backoff, r.ID)
 					}
 				}
-
-				databases := make([]map[string]interface{}, 0, len(results))
-				for _, r := range results {
-					entry := map[string]interface{}{"id": r.ID}
-					if r.Error != "" {
-						entry["error"] = r.Error
-					}
-					databases = append(databases, entry)
-				}
-				desktop.Emit("databaseAvailability", map[string]interface{}{
-					"databases": databases,
-				})
 			}
 
 			// Clean up entries for removed databases

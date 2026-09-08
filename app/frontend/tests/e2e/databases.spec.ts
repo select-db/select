@@ -5,9 +5,10 @@ import {
 	holdSession,
 	inWorkspace,
 	test,
-	workspaceId
+	workspaceId,
+	type Page
 } from './wails';
-import { labelledInput, renameBox, tab, treeNode } from './selectors';
+import { dbStatus, labelledInput, renameBox, tab, testId, treeNode } from './selectors';
 import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
 
 /**
@@ -15,17 +16,48 @@ import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
  * is written down, so everything that changes the name changes the directory,
  * and everything that changes the directory changes the name.
  *
- * This is about that one fact: what a database is called when it is made, what
- * renaming it from the tree and from its own form does to the directory, what
- * moving the directory does to the database, and what the name is allowed to
- * be. The rest of what a database does -- connecting, querying -- is elsewhere.
+ * The first scenario is about that one fact: what a database is called when it
+ * is made, what renaming it from the tree and from its own form does to the
+ * directory, what moving the directory does to the database, and what the name
+ * is allowed to be. One scenario rather than a test per gesture, for the same
+ * reason as filesystem.spec.ts: each step is only meaningful on the state the
+ * last left.
  *
- * One scenario rather than a test per gesture, for the same reason as
- * filesystem.spec.ts: each step is only meaningful on the state the last left.
- * What it makes it removes, so the seeded workspace ends as it started.
+ * The second is about the other thing a row says: whether the database answers.
+ *
+ * Both leave the seeded workspace as they found it, so they can run in either
+ * order and beside every other spec.
  */
 
 test.setTimeout(180_000);
+
+/** The id the sample workspace gives its one database (internal/sample). */
+const WAREHOUSE = 'sample-warehouse';
+
+const dsnField = (page: Page) => testId(page, 'database.dsn').locator('input');
+
+/**
+ * The connection dot on the seeded database's row in the file tree.
+ *
+ * Scoped to the tree: the same indicator appears wherever a database is named
+ * -- an open tab, a results table's badge, the database picker -- and the tree
+ * is where the state going stale was noticed.
+ */
+const treeDot = (page: Page) => testId(page, 'tree.panel').locator(dbStatus(page, WAREHOUSE));
+
+/**
+ * Tests the connection from the form and waits for the app to have answered.
+ *
+ * The answer is a notification either way, so waiting for it means what follows
+ * is about what the app did with the result rather than about whether the
+ * result has arrived.
+ */
+async function testConnection(page: Page, expected: 'connected' | 'refused') {
+	await page.getByRole('button', { name: 'Test connection' }).click();
+
+	if (expected === 'connected') await expect(page.getByText('Database connected')).toBeVisible();
+	else await expect(page.getByText('Database connected')).toHaveCount(0);
+}
 
 test('names a database by its directory, and renames the directory with it', async ({
 	page,
@@ -171,5 +203,52 @@ test('names a database by its directory, and renames the directory with it', asy
 	await expect(treeNode(page, 'europe')).toHaveCount(0);
 
 	expect(await databasesInGraph(request)).toEqual(['warehouse']);
+	await expect(treeNode(page, 'warehouse')).toBeVisible();
+});
+
+test('shows what the last attempt to reach a database found', async ({ page, signIn }) => {
+	await holdSession(page);
+	await page.goto('/');
+	await signIn();
+
+	await expect(treeNode(page, 'warehouse')).toBeVisible();
+
+	// The availability watcher pings on its own every few seconds, so the dot
+	// arrives at "online" without anyone asking. That is the state the rest of
+	// this test moves away from and back to.
+	const dot = treeDot(page);
+	await expect(dot).toHaveAttribute('data-test-state', 'online', { timeout: 30_000 });
+
+	await openMenuOn(page, 'warehouse');
+	await chooseMenuItem(page, 'Edit...');
+
+	const dsn = dsnField(page);
+	await expect(dsn).toBeVisible();
+	const seeded = await dsn.inputValue();
+
+	// --- Refused --------------------------------------------------------------
+
+	// A directory that does not exist, so SQLite can neither open a file there
+	// nor create one.
+	await dsn.fill('/nonexistent-directory/warehouse.db');
+	await dsn.blur();
+	await testConnection(page, 'refused');
+
+	// The row is still collapsed. It used to take expanding the database -- whose
+	// schema load was one of the few things that reported -- for the dot to catch
+	// up with what the form had already been told.
+	await expect(dot).toHaveAttribute('data-test-state', 'offline');
+
+	// --- Reachable again ------------------------------------------------------
+
+	await dsn.fill(seeded);
+	await dsn.blur();
+	await testConnection(page, 'connected');
+
+	await expect(dot).toHaveAttribute('data-test-state', 'online');
+
+	// --- Leaving it as it was found -------------------------------------------
+
+	await expect(dsn).toHaveValue(seeded);
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
 });
