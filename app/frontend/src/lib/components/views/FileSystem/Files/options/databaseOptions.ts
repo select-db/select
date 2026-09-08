@@ -9,6 +9,7 @@ import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 import { fileSystemOptions } from './fileOptions';
+import { renameOption } from './helpers';
 import { createFileInFolder, createFolderInFolder } from './rootOptions';
 
 export const databaseOptions = [
@@ -27,6 +28,7 @@ export const databaseOptions = [
 			onClose();
 		}
 	},
+	renameOption,
 	{
 		label: 'Infos...',
 		action: async (onClose, database: graph.DBInstanceNode) => {

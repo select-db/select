@@ -114,7 +114,10 @@ export function LookupForeignKey(params: $models.LookupForeignKeyParams): $Cance
 }
 
 /**
- * Ping checks if the database instance is reachable.
+ * Ping checks if the database instance is reachable, and reports what it found.
+ * 
+ * A ping has no other purpose, so the report is deferred rather than left to
+ * the caller: no return path can be added that forgets to say what it learned.
  */
 export function Ping(params: $models.PingParams): $CancellablePromise<string> {
     return $Call.ByID(1825352989, params);

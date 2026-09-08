@@ -20,8 +20,13 @@ type PingParams struct {
 	NoCache      bool                       `json:"no_cache,omitempty"`
 }
 
-// Ping checks if the database instance is reachable.
-func (dbc *DbClient) Ping(params PingParams) string {
+// Ping checks if the database instance is reachable, and reports what it found.
+//
+// A ping has no other purpose, so the report is deferred rather than left to
+// the caller: no return path can be added that forgets to say what it learned.
+func (dbc *DbClient) Ping(params PingParams) (result string) {
+	defer func() { emitAvailability(params.DbInstanceID, result) }()
+
 	base := dbc.ctx
 	if base == nil {
 		base = context.Background()

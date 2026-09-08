@@ -1,12 +1,20 @@
-import { call, expect, open, test, type Page } from './wails';
-import type { APIRequestContext } from '@playwright/test';
+import {
+	expect,
+	inWorkspace,
+	open,
+	readWorkspaceFile,
+	test,
+	workspaceId,
+	type Page
+} from './wails';
 import { activeTab, editor, selectedTreeNodes, tab, tabs, testId, treeNode } from './selectors';
+import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
 
 /**
  * Tabs: what the workbench does with them, not what they hold.
  *
- * A tab is a frame around something else — a file, a terminal, a settings page
- * — and each of those has its own spec. What is tested here is the frame: that
+ * A tab is a frame around something else -- a file, a terminal, a settings page
+ * -- and each of those has its own spec. What is tested here is the frame: that
  * opening the same file twice does not open it twice, that closing the active
  * one leaves a sensible tab behind, that the group remembers where it has been,
  * that a tab can be dragged into a split and back out, and that a tab follows
@@ -15,9 +23,6 @@ import { activeTab, editor, selectedTreeNodes, tab, tabs, testId, treeNode } fro
  * Where a file's content is asserted it is only ever evidence of which tab is
  * on screen. Nothing here is about the editor.
  */
-
-const FS = 'selectDb/internal/fs_provider.FSProvider';
-const GRAPH = 'selectDb/internal/graph.Graph';
 
 /** The seeded files, and the first line each one shows. */
 const WEEKLY = '-- revenue by week, this quarter';
@@ -29,51 +34,11 @@ async function openFromTree(page: Page, name: string) {
 	await expect(tab(page, name)).toBeVisible();
 }
 
-/** The tree's own context menu, from the empty space below the last row. */
-async function openTreeMenu(page: Page) {
-	const panel = testId(page, 'tree.panel');
-	const box = await panel.boundingBox();
-	if (!box) throw new Error('file tree is not on screen');
-
-	await panel.click({ button: 'right', position: { x: 20, y: box.height - 20 } });
-}
-
 /** Closes a tab through the cross it shows on hover. */
 async function closeTab(page: Page, name: string) {
 	await tab(page, name).hover();
 	await page.getByRole('button', { name: `Close ${name}` }).click();
 	await expect(tab(page, name)).toHaveCount(0);
-}
-
-/**
- * Runs a command in the workspace root, standing in for the things that change
- * a workspace without going through the app.
- */
-async function inWorkspace(
-	request: APIRequestContext,
-	workspaceId: string,
-	command: string,
-	...args: string[]
-) {
-	const result = await call<{ exitCode: number; stderr: string }>(request, `${FS}.ExecuteCommand`, {
-		workspaceId,
-		command,
-		args
-	});
-	if (result.exitCode !== 0) {
-		throw new Error(`${command} ${args.join(' ')}: ${result.stderr}`);
-	}
-}
-
-/** Reads a workspace file from disk, through the app's own provider. */
-async function readWorkspaceFile(request: APIRequestContext, id: string, name: string) {
-	const prefix = await call<string>(request, `${FS}.WorkspaceURIPrefix`);
-	return call<string>(request, `${FS}.ReadFile`, { uri: `${prefix}${id}/${name}` });
-}
-
-async function workspaceId(request: APIRequestContext) {
-	const workspace = await call<{ id: string }>(request, `${GRAPH}.GetWorkspaceGraph`);
-	return workspace.id;
 }
 
 test('opens one tab per file, and closes them by every route there is', async ({
@@ -108,8 +73,8 @@ test('opens one tab per file, and closes them by every route there is', async ({
 	await expect(tabs(page)).toHaveCount(3);
 	await expect(activeTab(page)).toHaveAttribute('data-test-value', 'cohorts.sql');
 
-	// A query that was never a file is a tab too — the plus at the end of the
-	// row makes one — and there is nothing on disk for it: it is written when it
+	// A query that was never a file is a tab too -- the plus at the end of the
+	// row makes one -- and there is nothing on disk for it: it is written when it
 	// is saved somewhere, not before.
 	await page.getByTitle('New SQL file').click();
 	await expect(activeTab(page)).toHaveAttribute('data-test-value', '[temp].sql');
@@ -319,12 +284,9 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 
 	// A rename through the app moves the tab with the file rather than opening a
 	// second tab on the new name.
-	await treeNode(page, 'cohorts.sql').click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Rename...', exact: true }).click();
-	const box = page.getByRole('textbox', { name: 'Name' });
-	await box.press('ControlOrMeta+a');
-	await box.fill('cohorts-2026.sql');
-	await box.press('Enter');
+	await openMenuOn(page, 'cohorts.sql');
+	await chooseMenuItem(page, 'Rename...');
+	await renameTo(page, 'cohorts-2026.sql');
 
 	await expect(tab(page, 'cohorts-2026.sql')).toBeVisible();
 	await expect(tab(page, 'cohorts.sql')).toHaveCount(0);
@@ -350,19 +312,19 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 	// A database is not a file, and its tab goes the same way: the graph loses
 	// the database, the tab showing its connection goes with it.
 	await openTreeMenu(page);
-	await page.getByRole('menuitem', { name: 'New Database...', exact: true }).click();
+	await chooseMenuItem(page, 'New Database...');
 	await expect(treeNode(page, 'db #1')).toBeVisible();
 
-	await treeNode(page, 'db #1').click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Edit...', exact: true }).click();
+	await openMenuOn(page, 'db #1');
+	await chooseMenuItem(page, 'Edit...');
 	await expect(tab(page, 'db #1')).toBeVisible();
 
-	await treeNode(page, 'db #1').click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+	await openMenuOn(page, 'db #1');
+	await chooseMenuItem(page, 'Delete');
 	await expect(treeNode(page, 'db #1')).toHaveCount(0);
 	await expect(tab(page, 'db #1')).toHaveCount(0);
 
-	// Leaving the workspace as it was found — by name, not with a checkout of
+	// Leaving the workspace as it was found -- by name, not with a checkout of
 	// everything: the seed leaves an edit uncommitted on purpose, and the git
 	// view and the screenshots are of a workspace that has it.
 	await run('git', 'checkout', '--', 'weekly_revenue.sql', 'weekly_revenue.sql.metadata.json');

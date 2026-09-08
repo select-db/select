@@ -9,38 +9,35 @@ import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
 import { writeDatabase, writeFile, writeFolder } from './helpers';
 
-const findUniqueFolderName = (folders: graph.FolderNode[]): string => {
-	const existingNames = new Set(folders.map((f) => f.name));
-	let counter = 1;
-	while (existingNames.has(`folder #${counter}`)) {
-		counter++;
-	}
-	return `folder #${counter}`;
-};
-
-const findUniqueFileName = (files: graph.FileNode[]): string => {
-	const existingNames = new Set(files.map((f) => f.name));
-	let counter = 1;
-	while (existingNames.has(`#${counter}.sql`)) {
-		counter++;
-	}
-	return `#${counter}.sql`;
-};
-
-const findUniqueDatabaseName = (databases: graph.DBInstanceNode[]): string => {
-	const existingNames = new Set(databases.map((db) => db.name));
-	let counter = 1;
-	while (existingNames.has(`db #${counter}`)) {
-		counter++;
-	}
-	return `db #${counter}`;
-};
-
 type FolderLike = graph.FolderNode | graph.DBInstanceNode;
 
+/**
+ * Every name the folder is already using, whatever kind of thing is using it.
+ *
+ * One namespace, because a directory has one: a database is a directory now,
+ * so a database named for a folder that is already there does not fail, it
+ * writes a db.config.json into that folder and takes it over.
+ */
+const namesInFolder = (folder: FolderLike): Set<string> =>
+	new Set(
+		[
+			...('folders' in folder ? folder.folders : []),
+			...('files' in folder ? (folder.files ?? []) : []),
+			...('db_instances' in folder ? folder.db_instances : [])
+		].map((entry) => entry.name)
+	);
+
+/** `pattern(1)`, `pattern(2)` ... for the first the folder is not using. */
+const findUniqueName = (taken: Set<string>, pattern: (n: number) => string): string => {
+	let counter = 1;
+	while (taken.has(pattern(counter))) {
+		counter++;
+	}
+	return pattern(counter);
+};
+
 export const createFolderInFolder = async (folder: FolderLike) => {
-	const folders = 'folders' in folder ? folder.folders : [];
-	const name = findUniqueFolderName(folders);
+	const name = findUniqueName(namesInFolder(folder), (n) => `folder #${n}`);
 	const uri = `${folder.uri}/${name}`;
 	await writeFolder(uri);
 	expandItem(folder.id);
@@ -52,14 +49,13 @@ export const createFileInFolder = async (folder: FolderLike) => {
 	// db instance is resolved at build time and carries its own; a folder's are
 	// read on demand, and a folder that will not resolve is not a folder to
 	// write into.
-	const files =
-		folder.type === 'db_instance' ? folder.files : (await ResolveFolder(folder.uri))?.files;
-	if (!files) {
+	const resolved = folder.type === 'db_instance' ? folder : await ResolveFolder(folder.uri);
+	if (!resolved?.files) {
 		notifyError(`Could not read ${folder.name}`);
 		return;
 	}
 
-	const name = findUniqueFileName(files);
+	const name = findUniqueName(namesInFolder(resolved), (n) => `#${n}.sql`);
 	const fileUri = `${folder.uri}/${name}`;
 	await writeFile(fileUri);
 	navigateToFile({
@@ -90,8 +86,9 @@ export const rootOptions = [
 	},
 	{
 		label: 'New Database...',
-		action: async (onClose, { uri, id, db_instances }: graph.FolderNode) => {
-			const name = findUniqueDatabaseName(db_instances);
+		action: async (onClose, folder: graph.FolderNode) => {
+			const { uri, id } = folder;
+			const name = findUniqueName(namesInFolder(folder), (n) => `db #${n}`);
 			const { id: dbId, uri: dbUri } = await writeDatabase(uri, name);
 			navigateToDatabase({
 				id: dbId,

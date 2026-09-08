@@ -1,5 +1,26 @@
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+import { renamingItemIdStore, setItemSelection } from '$lib/components/views/shared/sharedStore';
+
+/**
+ * Opens the rename box on a row. Shared by files, folders and databases: all
+ * three rename the same way, and a third copy of this had already drifted.
+ *
+ * Selecting, not adding: two renames in a row would otherwise leave two rows
+ * selected, and a selection of two turns every row's menu into the batch
+ * delete.
+ */
+export const renameOption = {
+	label: 'Rename...',
+	action: (onClose: (() => void) | undefined, { id }: { id: string }) => {
+		renamingItemIdStore.set(id);
+		setItemSelection([id]);
+		onClose?.();
+	}
+};
+
+/** The file that makes a directory a database. */
+export const DB_CONFIG_FILE = 'db.config.json';
 
 export const writeFolder = async (uri: string) => {
 	await must(
@@ -31,32 +52,25 @@ export const writeFile = async (uri: string) => {
 
 export const writeDatabase = async (
 	parentUri: string,
-	displayName: string
+	name: string
 ): Promise<{ id: string; uri: string }> => {
-	// Generate stable folder name using ID-based format
 	const id = crypto.randomUUID();
-	const stableFolderName = `db-${id}`;
-	const dbUri = `${parentUri}/${stableFolderName}`;
+	const dbUri = `${parentUri}/${name}`;
 
-	// Create the folder first
-	await must(
-		tryCatch(fs.Mkdir, {
-			uri: dbUri
-		})
-	);
+	await must(tryCatch(fs.Mkdir, { uri: dbUri }));
 
-	// Write db.config.json with proper content including the display name
-	// The filesystem watcher will detect this and create the DB instance node
+	// The directory is only a folder until this lands: the watcher reads the
+	// config and turns it into a db instance node.
+	// No name: the directory is the name.
 	const config = {
 		id,
-		name: displayName,
 		db_type: 'postgresql',
 		dsn: ''
 	};
 
 	await must(
 		tryCatch(fs.Write, {
-			uri: `${dbUri}/db.config.json`,
+			uri: `${dbUri}/${DB_CONFIG_FILE}`,
 			content: JSON.stringify(config, null, 2)
 		})
 	);

@@ -34,16 +34,16 @@
 			</div>
 		</div>
 	{:else}
-		{@const isAvailable = $databaseAvailabilityStore.has(id)}
+		{@const reached = $databaseAvailabilityStore.get(id)}
+		{@const state = reached === undefined ? 'unknown' : reached ? 'online' : 'offline'}
 		<div class="icon-wrapper" style={`--indicator-size: ${size}px`}>
 			<div class="dot-wrapper">
 				<Icon icon="db" {size} stroke="var(--gray-800)" />
 				<span
-					class="status-dot {isAvailable === true
-						? 'status-dot--online'
-						: isAvailable === false
-							? 'status-dot--offline'
-							: 'status-dot--unknown'}"
+					class="status-dot status-dot--{state}"
+					data-test="db.status"
+					data-test-value={id}
+					data-test-state={state}
 				></span>
 			</div>
 		</div>
@@ -83,6 +83,12 @@
 
 	.status-dot--offline {
 		background-color: var(--red);
+	}
+
+	/* Nothing has reached this database yet. Neither green nor red would be
+	   true, and the app says so rather than guessing at one of them. */
+	.status-dot--unknown {
+		background-color: var(--gray-700);
 	}
 
 	.error-cross {

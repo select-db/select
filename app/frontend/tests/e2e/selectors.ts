@@ -16,6 +16,24 @@ export const testId = (page: Page, name: string, value?: string) =>
 /** One row of a tree — file, folder or database — named by what it shows. */
 export const treeNode = (page: Page, name: string) => testId(page, 'tree.node', name);
 
+/**
+ * The rename box, wherever in the tree it is open.
+ *
+ * Scoped to the tree on purpose: a database's form has a Name field of its own,
+ * and a spec that renames from the tree while that form is open would otherwise
+ * be holding two textboxes called Name.
+ */
+export const renameBox = (page: Page) =>
+	testId(page, 'tree.panel').getByRole('textbox', { name: 'Name' });
+
+/**
+ * The connection dot a database wears, by the database's id.
+ *
+ * Its `data-test-state` is what the app currently believes: "online", "offline",
+ * or "unknown" for one nothing has reached yet.
+ */
+export const dbStatus = (page: Page, id: string) => testId(page, 'db.status', id);
+
 /** The tree rows currently selected, in whichever trees are on screen. */
 export const selectedTreeNodes = (page: Page) =>
 	page.locator('[data-test="tree.node"][data-test-selected="true"]');

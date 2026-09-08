@@ -15,8 +15,7 @@ import (
 func queryWorkspace(t *testing.T, workspaceID string, files ...string) (*Graph, *WorkspaceFS) {
 	t.Helper()
 
-	_, restore := withTempAppDataDir(t)
-	t.Cleanup(restore)
+	withTempAppDataDir(t)
 
 	serverRoot, err := server.CurrentServerRoot()
 	if err != nil {

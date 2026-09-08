@@ -19,11 +19,11 @@ const (
 )
 
 type ExportParams struct {
-	FileID       string            // temp or disk file identifier
-	Statement    string            // SQL content to execute
+	FileID       string // temp or disk file identifier
+	Statement    string // SQL content to execute
 	DbInstanceID string
 	FolderID     string
-	Format       string            // csv_semicolon | csv_comma | json
+	Format       string // csv_semicolon | csv_comma | json
 	Filename     string
 	RuntimeVars  map[string]string // user-supplied values for unresolved $variables
 }

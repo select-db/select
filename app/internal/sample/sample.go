@@ -200,7 +200,6 @@ func writeDatabase(root string) error {
 	// it is what keeps credentials out of a committed file.
 	config := `{
   "id": "` + WarehouseID + `",
-  "name": "warehouse",
   "db_type": "sqlite",
   "dsn": "$WAREHOUSE_DSN",
   "ssh": {
