@@ -41,18 +41,23 @@
 
 	let { toolCall, expanded, onToggle, onApprove, onDeny }: Props = $props();
 
-	const pending = $derived(toolCall.state === 'approval-requested');
-	const failed = $derived(
-		toolCall.output != null && (toolCall.output as { success?: boolean }).success === false
+	// The one thing the card is saying, which the header then dresses. No output
+	// and nothing to approve means the call is still running — a state that used
+	// to read as an ellipsis, which sits still and looks like a result. It is also
+	// what a test reads: 'running' after the conversation has moved on is a call
+	// the app forgot.
+	const state = $derived(
+		toolCall.state === 'approval-requested'
+			? 'pending'
+			: toolCall.output == null
+				? 'running'
+				: (toolCall.output as { success?: boolean }).success === false
+					? 'failed'
+					: 'ok'
 	);
+	const pending = $derived(state === 'pending');
 	const showBody = $derived(expanded || pending);
-	// No output and nothing to approve means it is still running. That state used
-	// to read as an ellipsis, which sits still and looks like a result.
-	const running = $derived(!pending && toolCall.output == null);
-	const statusLabel = $derived(pending ? 'Awaiting approval' : failed ? '✕' : '✓');
-	// What the status slot is saying, for a test to read. A card that says
-	// 'running' after the conversation has moved on is the defect this names.
-	const state = $derived(pending ? 'pending' : running ? 'running' : failed ? 'failed' : 'ok');
+	const statusLabel = $derived(pending ? 'Awaiting approval' : state === 'failed' ? '✕' : '✓');
 	const isSqlTool = $derived(
 		['execute_query', 'execute_statement', 'plan_query', 'explain_query'].includes(toolCall.name)
 	);
@@ -69,12 +74,12 @@
 		<ToolCardTitle {toolCall} />
 		<span
 			class="tool-state"
-			class:success={!failed && toolCall.output != null}
-			class:failed
+			class:success={state === 'ok'}
+			class:failed={state === 'failed'}
 			data-test="chat.tool-state"
 			data-test-value={state}
 		>
-			{#if running}
+			{#if state === 'running'}
 				<Loader size={14} />
 			{:else}
 				{statusLabel}

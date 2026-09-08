@@ -1,6 +1,6 @@
-import { expect, test, holdSession, type Page } from './wails';
-import { PROVIDERS, chooseModel, stubProvider, type AiProvider, type Turn } from './aiProvider';
-import { toolCall, toolCallsInState, tabs, treeNode } from './selectors';
+import { QUERY_CALL, expect, open, routeWailsMethod, test, type Page } from './wails';
+import { ANTHROPIC, PROVIDERS, chooseModel, say, stubProvider, type Turn } from './aiProvider';
+import { toolCall, toolCallsInState, tabs } from './selectors';
 
 /**
  * The agent's tool calls, run for real against the seeded warehouse.
@@ -20,13 +20,9 @@ import { toolCall, toolCallsInState, tabs, treeNode } from './selectors';
 
 const DB = 'sample-warehouse';
 
-/** wails' id for DbClient.Query, from the generated bindings. */
-const QUERY_CALL = 2964708639;
-
-const queryTurn = (statement: string, id: string, text: string, overloaded = false): Turn => ({
+const queryTurn = (statement: string, id: string, text: string): Turn => ({
 	text,
-	call: { name: 'execute_query', input: { dbInstanceId: DB, statement }, id },
-	overloaded
+	call: { name: 'execute_query', input: { dbInstanceId: DB, statement }, id }
 });
 
 /** Holds every execute_query call open until released, to act while one runs. */
@@ -34,32 +30,18 @@ async function holdQueries(page: Page) {
 	let release!: () => void;
 	const gate = new Promise<void>((resolve) => (release = resolve));
 	let started = 0;
-	await page.route('**/wails/runtime', async (route) => {
-		if (!(route.request().postData() ?? '').includes(`"methodID":${QUERY_CALL}`)) {
-			await route.fallback();
-			return;
-		}
+	await routeWailsMethod(page, QUERY_CALL, async (route) => {
 		started += 1;
 		await gate;
 		await route.continue();
 	});
-	return { release: () => release(), started: () => started };
+	return { release, started: () => started };
 }
 
-async function openChat(page: Page, signIn: () => Promise<void>, model?: string) {
-	await page.goto('/');
-	await signIn();
-	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
+async function openChat(page: Page, signIn: () => Promise<void>, model = ANTHROPIC.model) {
+	await open(page, signIn);
 	await page.getByRole('button', { name: 'New Chat' }).click();
-	if (model) await chooseModel(page, model);
-	await expect(page.getByRole('textbox', { name: 'Type a message...' })).toBeVisible();
-}
-
-async function say(page: Page, message: string) {
-	const prompt = page.getByRole('textbox', { name: 'Type a message...' });
-	await prompt.click();
-	await page.keyboard.type(message);
-	await page.keyboard.press('Enter');
+	await chooseModel(page, model);
 }
 
 /** Every call on screen has finished, whatever it finished as. */
@@ -68,10 +50,9 @@ async function expectSettled(page: Page, count: number) {
 	await expect(toolCallsInState(page, 'running')).toHaveCount(0, { timeout: 20_000 });
 }
 
-for (const provider of PROVIDERS satisfies AiProvider[]) {
+for (const provider of PROVIDERS) {
 	test.describe(provider.model, () => {
 		test('runs the queries a conversation asks for', async ({ page, signIn, consoleErrors }) => {
-			await holdSession(page);
 			await stubProvider(page, provider, [
 				queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Let me count the orders.'),
 				queryTurn('SELECT status FROM orders LIMIT 3', 'call_2', 'And their statuses.'),
@@ -89,9 +70,8 @@ for (const provider of PROVIDERS satisfies AiProvider[]) {
 			// Every provider can stop mid-stream once the tool call is already
 			// complete — Anthropic sends an error event when it is overloaded, the
 			// others an error chunk. The call is good; only the stream broke.
-			await holdSession(page);
 			await stubProvider(page, provider, [
-				queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.', true),
+				{ ...queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'), overloaded: true },
 				{ text: 'Recovered.' }
 			]);
 			await openChat(page, signIn, provider.model);
@@ -102,13 +82,16 @@ for (const provider of PROVIDERS satisfies AiProvider[]) {
 	});
 }
 
-const [anthropic] = PROVIDERS;
-
 test('a second broken turn does not strand either call', async ({ page, signIn }) => {
-	await holdSession(page);
-	await stubProvider(page, anthropic, [
-		queryTurn('SELECT DISTINCT status FROM orders LIMIT 20', 'call_1', 'Let me query them.', true),
-		queryTurn('SELECT COUNT(*) FROM orders', 'call_2', 'Let me try another way.', true),
+	await stubProvider(page, ANTHROPIC, [
+		{
+			...queryTurn('SELECT DISTINCT status FROM orders LIMIT 20', 'call_1', 'Let me query them.'),
+			overloaded: true
+		},
+		{
+			...queryTurn('SELECT COUNT(*) FROM orders', 'call_2', 'Let me try another way.'),
+			overloaded: true
+		},
 		{ text: 'Recovered.' }
 	]);
 	await openChat(page, signIn);
@@ -121,8 +104,7 @@ test('a second broken turn does not strand either call', async ({ page, signIn }
 });
 
 test('a turn cut off mid-arguments settles as a failed call', async ({ page, signIn }) => {
-	await holdSession(page);
-	await stubProvider(page, anthropic, [
+	await stubProvider(page, ANTHROPIC, [
 		{ ...queryTurn('SELECT COUNT(*) FROM orders', 'call_cut', 'Counting.'), truncated: true },
 		{ text: 'Recovered.' }
 	]);
@@ -137,8 +119,7 @@ test('a call to a tool the app does not have settles as a failed call', async ({
 	page,
 	signIn
 }) => {
-	await holdSession(page);
-	await stubProvider(page, anthropic, [
+	await stubProvider(page, ANTHROPIC, [
 		{ call: { name: 'run_migration', input: { name: 'x' }, id: 'call_1' } },
 		{ text: 'No such tool.' }
 	]);
@@ -150,15 +131,8 @@ test('a call to a tool the app does not have settles as a failed call', async ({
 });
 
 test('a query that fails at the transport settles as a failed call', async ({ page, signIn }) => {
-	await holdSession(page);
-	await page.route('**/wails/runtime', async (route) => {
-		if ((route.request().postData() ?? '').includes(`"methodID":${QUERY_CALL}`)) {
-			await route.fulfill({ status: 500, body: 'boom' });
-			return;
-		}
-		await route.fallback();
-	});
-	await stubProvider(page, anthropic, [
+	await routeWailsMethod(page, QUERY_CALL, (route) => route.fulfill({ status: 500, body: 'boom' }));
+	await stubProvider(page, ANTHROPIC, [
 		queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'),
 		{ text: 'That failed.' }
 	]);
@@ -173,9 +147,8 @@ test('a second chat tab does not strand the query the first one started', async 
 	page,
 	signIn
 }) => {
-	await holdSession(page);
 	const gate = await holdQueries(page);
-	await stubProvider(page, anthropic, [
+	await stubProvider(page, ANTHROPIC, [
 		queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'),
 		{ text: 'It came back.' }
 	]);
@@ -198,9 +171,8 @@ test('a second chat tab does not strand the query the first one started', async 
 });
 
 test('a restart with a query still running settles the restored call', async ({ page, signIn }) => {
-	await holdSession(page);
 	const gate = await holdQueries(page);
-	await stubProvider(page, anthropic, [
+	await stubProvider(page, ANTHROPIC, [
 		queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'),
 		{ text: 'It came back.' }
 	]);

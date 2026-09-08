@@ -8,7 +8,7 @@ import {
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
-import { PROVIDERS, stubProvider, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
+import { ANTHROPIC, say, stubProvider, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
 import { testId } from '../../app/frontend/tests/e2e/selectors';
 
 /**
@@ -73,7 +73,7 @@ for (const theme of THEMES) {
 
 		test('an agent refused the column its role does not grant', async ({ page, signIn }, info) => {
 			await holdSession(page);
-			await stubProvider(page, PROVIDERS[0], TURNS);
+			await stubProvider(page, ANTHROPIC, TURNS);
 			await page.goto('/');
 			await signIn();
 
@@ -92,11 +92,7 @@ for (const theme of THEMES) {
 			// "New Chat" rather than the tab bar's chat action: that bar only exists
 			// once a file is open, and this picture has no file in it.
 			await page.getByRole('button', { name: 'New Chat' }).click();
-			const prompt = page.getByRole('textbox', { name: 'Type a message...' });
-			await expect(prompt).toBeVisible();
-			await prompt.click();
-			await page.keyboard.type('Which customers order the most? Give me their emails.');
-			await page.keyboard.press('Enter');
+			await say(page, 'Which customers order the most? Give me their emails.');
 
 			await expect(page.getByText('Read database schemas').first()).toBeVisible({
 				timeout: 20_000

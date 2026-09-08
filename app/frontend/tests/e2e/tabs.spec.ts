@@ -1,4 +1,4 @@
-import { call, expect, holdSession, test, type Page } from './wails';
+import { call, expect, open, test, type Page } from './wails';
 import type { APIRequestContext } from '@playwright/test';
 import { activeTab, editor, selectedTreeNodes, tab, tabs, testId, treeNode } from './selectors';
 
@@ -22,14 +22,6 @@ const GRAPH = 'selectDb/internal/graph.Graph';
 /** The seeded files, and the first line each one shows. */
 const WEEKLY = '-- revenue by week, this quarter';
 const COHORTS = '-- Cohort report, first cut.';
-
-/** Signs in and waits for the workspace the seed put there. */
-async function open(page: Page, signIn: () => Promise<void>) {
-	await holdSession(page);
-	await page.goto('/');
-	await signIn();
-	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
-}
 
 /** Opens a file from the tree and waits for its tab. */
 async function openFromTree(page: Page, name: string) {

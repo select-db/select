@@ -1,4 +1,4 @@
-import { expect, holdSession, test, type Page } from './wails';
+import { expect, open, test } from './wails';
 import { activeTab, tab, tabs, testId, treeNode } from './selectors';
 
 /**
@@ -15,14 +15,6 @@ import { activeTab, tab, tabs, testId, treeNode } from './selectors';
  * here; on macOS the same commands answer to Cmd, and the two rows that differ
  * say so in their `when`.
  */
-
-/** Signs in and waits for the workspace the seed put there. */
-async function open(page: Page, signIn: () => Promise<void>) {
-	await holdSession(page);
-	await page.goto('/');
-	await signIn();
-	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
-}
 
 test('runs the commands the platform’s own chords are bound to', async ({ page, signIn }) => {
 	await open(page, signIn);

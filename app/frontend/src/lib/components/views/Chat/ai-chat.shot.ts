@@ -8,7 +8,7 @@ import {
 	test,
 	type Framing
 } from '../../../../../tests/e2e/shots';
-import { PROVIDERS, stubProvider, type Turn } from '../../../../../tests/e2e/aiProvider';
+import { ANTHROPIC, say, stubProvider, type Turn } from '../../../../../tests/e2e/aiProvider';
 import { testId, diffView } from '../../../../../tests/e2e/selectors';
 
 /**
@@ -57,7 +57,7 @@ for (const theme of THEMES) {
 
 		test('an edit proposed as a diff, waiting on approval', async ({ page, signIn }, info) => {
 			await holdSession(page);
-			await stubProvider(page, PROVIDERS[0], TURNS);
+			await stubProvider(page, ANTHROPIC, TURNS);
 			await page.goto('/');
 			await signIn();
 
@@ -78,13 +78,7 @@ for (const theme of THEMES) {
 
 			// The tab bar's action; the empty state's "New Chat" is gone once a file is open.
 			await page.getByRole('button', { name: 'Open Chat' }).click();
-			const prompt = page.getByRole('textbox', { name: 'Type a message...' });
-			await expect(prompt).toBeVisible();
-			await prompt.click();
-			await page.keyboard.type(
-				'This report selects everything. Narrow it to the columns it reads.'
-			);
-			await page.keyboard.press('Enter');
+			await say(page, 'This report selects everything. Narrow it to the columns it reads.');
 
 			// Allow/Deny exist only on a diff awaiting approval, and appear twice --
 			// on the diff and in the chat that asked. The figure needs both.

@@ -13,6 +13,9 @@ import { expect, type Page } from './wails';
  * only thing that differs between them, and it is exactly what a spec running
  * against all five is there to cover: the app has to end every call the model
  * makes, whichever provider carried it.
+ *
+ * The two controls for talking to a chat live here too, since every spec and
+ * shot that scripts a provider also has to pick one and type at it.
  */
 
 /** One assistant turn, before any provider has had a say in how it looks. */
@@ -160,14 +163,20 @@ export const PROVIDERS: AiProvider[] = [
 	{ model: 'grok-4.6', url: 'https://api.x.ai/**', body: openAiCompatible }
 ];
 
-/** The model a fresh chat starts on: the first option whose provider has a key. */
-export const DEFAULT_MODEL = PROVIDERS[0].model;
+/**
+ * The provider a fresh chat starts on: the first option whose provider has a
+ * key, and so the one a spec gets without asking for it.
+ */
+export const ANTHROPIC = PROVIDERS[0];
 
 /** Answers `provider` with `turns`, in order, repeating the last one. */
 export async function stubProvider(page: Page, provider: AiProvider, turns: Turn[]) {
+	// Rendered up front, so a turn this provider cannot express fails here rather
+	// than inside a route handler, where it would surface as a stalled request.
+	const bodies = turns.map(provider.body);
 	let turn = 0;
 	await page.route(provider.url, async (route) => {
-		const body = provider.body(turns[Math.min(turn, turns.length - 1)]);
+		const body = bodies[Math.min(turn, bodies.length - 1)];
 		turn += 1;
 		await route.fulfill({
 			status: 200,
@@ -177,15 +186,27 @@ export async function stubProvider(page: Page, provider: AiProvider, turns: Turn
 	});
 }
 
+/** The box a person types into, and the only thing naming it. */
+export const prompt = (page: Page) => page.getByRole('textbox', { name: 'Type a message...' });
+
+/** Types a message into the chat and sends it. */
+export async function say(page: Page, message: string) {
+	const box = prompt(page);
+	await expect(box).toBeVisible();
+	await box.click();
+	await page.keyboard.type(message);
+	await page.keyboard.press('Enter');
+}
+
 /**
  * Moves the model picker, which is addressed by the model it is showing —
  * that is its accessible name, and the only thing a person could call it by.
  */
 export async function chooseModel(page: Page, model: string) {
-	await expect(page.getByRole('button', { name: DEFAULT_MODEL })).toBeVisible();
-	if (model === DEFAULT_MODEL) return;
+	await expect(page.getByRole('button', { name: ANTHROPIC.model })).toBeVisible();
+	if (model === ANTHROPIC.model) return;
 
-	await page.getByRole('button', { name: DEFAULT_MODEL }).click();
+	await page.getByRole('button', { name: ANTHROPIC.model }).click();
 	await page.getByRole('menuitem', { name: model, exact: true }).click();
 	await expect(page.getByRole('button', { name: model })).toBeVisible();
 }

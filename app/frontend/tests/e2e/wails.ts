@@ -3,8 +3,10 @@ import {
 	test as base,
 	type APIRequestContext,
 	type Locator,
-	type Page
+	type Page,
+	type Route
 } from '@playwright/test';
+import { treeNode } from './selectors';
 
 /**
  * Talking to the Go side the way the app does — over `/wails/runtime`, the
@@ -111,23 +113,54 @@ export const test = base.extend<{
  * after runs on a login screen. Answering that one call keeps the session up
  * without changing the app's behaviour.
  *
- * The number is wails' id for the bound method, from the generated
- * `src/lib/bindings/selectDb/internal/system/system.ts`. Wails derives it from
- * the method's qualified name, so it is identical across builds and changes
- * only if System.CheckForLogout is renamed or moved -- at which point every
- * shot fails on a login screen. Regenerate the bindings and copy the new id.
+ * The numbers below are wails' ids for bound methods, from the generated
+ * bindings under `src/lib/bindings/`. Wails derives one from the method's
+ * qualified name, so it is identical across builds and changes only if the
+ * method is renamed or moved -- at which point the specs that route it fail.
+ * Regenerate the bindings and copy the new id.
  */
 const CHECK_FOR_LOGOUT = 2480583021;
 
+/** DbClient.Query, for the specs that hold a query open or answer it themselves. */
+export const QUERY_CALL = 2964708639;
+
 export async function holdSession(page: Page) {
+	await routeWailsMethod(page, CHECK_FOR_LOGOUT, (route) =>
+		route.fulfill({ status: 200, body: '' })
+	);
+}
+
+/**
+ * Answers one bound Go method from the test, leaving every other call alone.
+ *
+ * Handlers stack, so more than one of these can be in force at a time: a
+ * non-matching call falls back to whatever was registered before it, and to the
+ * app itself when nothing was.
+ */
+export async function routeWailsMethod(
+	page: Page,
+	methodID: number,
+	handler: (route: Route) => Promise<unknown>
+) {
 	await page.route('**/wails/runtime', async (route) => {
-		if ((route.request().postData() ?? '').includes(`"methodID":${CHECK_FOR_LOGOUT}`)) {
-			await route.fulfill({ status: 200, body: '' });
+		if (!(route.request().postData() ?? '').includes(`"methodID":${methodID}`)) {
+			await route.fallback();
 			return;
 		}
-		await route.continue();
+		await handler(route);
 	});
 }
 
+/**
+ * Signs in and waits for the seeded workspace to be on screen — the state every
+ * spec starts from.
+ */
+export async function open(page: Page, signIn: () => Promise<void>) {
+	await holdSession(page);
+	await page.goto('/');
+	await signIn();
+	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
+}
+
 export { expect };
-export type { Locator, Page };
+export type { Locator, Page, Route };
