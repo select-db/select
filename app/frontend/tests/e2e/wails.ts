@@ -197,15 +197,35 @@ export async function inWorkspace(
 	command: string,
 	...args: string[]
 ) {
-	const result = await call<{ exitCode: number; stderr: string }>(request, `${FS}.ExecuteCommand`, {
-		workspaceId: id,
-		command,
-		args
-	});
-	if (result.exitCode !== 0) {
+	for (let attempt = 0; ; attempt++) {
+		const result = await call<{ exitCode: number; stderr: string }>(
+			request,
+			`${FS}.ExecuteCommand`,
+			{ workspaceId: id, command, args }
+		);
+		if (result.exitCode === 0) return;
+
+		// Every change made here wakes the watcher, which has the app run git of
+		// its own about 200ms later. Two gits in one repository contend for
+		// .git/index.lock, so a git command run beside the app loses that race
+		// sometimes -- rarely on a quiet machine, often on a loaded CI runner.
+		//
+		// Retrying is what git itself prescribes: the lock is held for the length
+		// of one command, not for anything a test could wait on. This is also the
+		// race a person hits running git in a terminal while the app is open, so
+		// treating it as fatal here would be testing something that is not true.
+		if (attempt < GIT_LOCK_RETRIES && result.stderr.includes('index.lock')) {
+			await new Promise((resolve) => setTimeout(resolve, GIT_LOCK_RETRY_MS));
+			continue;
+		}
+
 		throw new Error(`${command} ${args.join(' ')}: ${result.stderr}`);
 	}
 }
+
+/** Long enough to outlast the app's debounced git status, short enough to fail fast. */
+const GIT_LOCK_RETRIES = 20;
+const GIT_LOCK_RETRY_MS = 100;
 
 /**
  * The URI of a root-relative path in a workspace. The prefix is fixed for the
