@@ -7,13 +7,12 @@
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import { tryCatch } from '$lib/utils/tryCatch';
-	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import {
 		ListDatasources,
 		DeleteDatasource
 	} from '$lib/bindings/selectDb/internal/datasource/datasource';
 	import type * as datasource from '$lib/bindings/selectDb/internal/datasource/models';
-	import type * as graph from '$lib/wails/graph';
+	import { SharedDatabasesUnder } from '$lib/wails/graph';
 	import RevokeConnectionModal from '$lib/components/views/Database/RevokeConnectionModal.svelte';
 
 	/**
@@ -36,28 +35,22 @@
 	];
 
 	let connections = $state<Connection[]>([]);
+
+	/**
+	 * The connection ids something in this workspace still points at. The graph
+	 * answers it: it is the only thing that knows what the tree contains, down to
+	 * folders that have never been opened.
+	 */
+	let referencedIds = $state<string[]>([]);
 	let loadError = $state<string | null>(null);
 	let loading = $state(true);
-
-	/** Every proxified database id the workspace files still name. */
-	const referencedIds = $derived.by(() => {
-		const ids: string[] = [];
-		const walk = (folder: { folders?: (graph.FolderNode | null)[]; db_instances?: unknown[] }) => {
-			for (const db of (folder.db_instances ?? []) as (graph.DBInstanceNode | null)[]) {
-				if (db?.proxified) ids.push(db.id);
-			}
-			for (const child of folder.folders ?? []) if (child) walk(child);
-		};
-		const g = $workspaceGraphStore;
-		if (g) walk(g);
-		return ids;
-	});
 
 	const unreferenced = $derived(connections.filter((c) => !referencedIds.includes(c.id)));
 
 	const load = async () => {
 		loading = true;
 		const [rows, err] = await tryCatch(ListDatasources);
+		const [referenced] = await tryCatch(SharedDatabasesUnder, []);
 		loading = false;
 		if (err) {
 			loadError = err.message;
@@ -65,6 +58,7 @@
 		}
 		loadError = null;
 		connections = rows ?? [];
+		referencedIds = (referenced ?? []).map((db) => db.id);
 	};
 
 	$effect(() => {

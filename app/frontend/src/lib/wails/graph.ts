@@ -37,12 +37,27 @@ export type ExplainNode = NonNullItems<coreModels.ExplainNode>;
 export type ResolveResult = NonNullItems<sqlLangModels.ResolveResult>;
 export type SearchResultWithNodes = NonNullItems<searchModels.SearchResultWithNodes>;
 export type FileQuery = models.FileQuery;
+export type DatabaseRef = models.DatabaseRef;
 
 export const GetWorkspaceGraph = async (): Promise<WorkspaceNode | null> =>
 	stripNullItems(await graphService.GetWorkspaceGraph());
 
 export const GetDBInstanceNodeByID = async (dbInstanceID: string): Promise<DBInstanceNode | null> =>
 	stripNullItems(await graphService.GetDBInstanceNodeByID(dbInstanceID));
+
+/**
+ * The shared connections at or under these entries, id and name, which is what
+ * deleting the entries would revoke. Passing no ids asks about the whole
+ * workspace.
+ *
+ * Containment is answered in Go on purpose. Only the graph knows that a node
+ * answers to both its config id and its URI, that the workspace keeps a flat
+ * list of every database beside the folder tree, and which folders have been
+ * read off disk; a walk over the snapshot here would be a second copy of those
+ * rules, and one shared database missed by it is a credential left working.
+ */
+export const SharedDatabasesUnder = async (ids: string[]): Promise<DatabaseRef[]> =>
+	stripNullItems(await graphService.SharedDatabasesUnder(ids));
 
 export const SearchWithNodes = async (
 	params: searchModels.SearchParams

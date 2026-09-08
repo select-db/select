@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 import { DeleteDatasource } from '$lib/bindings/selectDb/internal/datasource/datasource';
-import type * as graph from '$lib/wails/graph';
+import * as graph from '$lib/wails/graph';
 import RevokeConnectionModal from '$lib/components/views/Database/RevokeConnectionModal.svelte';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
@@ -25,21 +25,6 @@ export const removeEntry = async (entry: Entry) => {
 		return;
 	}
 	await must(tryCatch(fs.Delete, { uri: entry.uri, recursive: true }));
-};
-
-/** Every proxified database at or under an entry, however deep. */
-const sharedDatabasesIn = (entry: Entry): graph.DBInstanceNode[] => {
-	if (entry.type === 'db_instance') {
-		const db = entry as graph.DBInstanceNode;
-		return db.proxified ? [db] : [];
-	}
-	if (!('db_instances' in entry)) return [];
-
-	const folder = entry as graph.FolderNode;
-	return [
-		...(folder.db_instances ?? []).filter((db) => db?.proxified),
-		...(folder.folders ?? []).flatMap((child) => (child ? sharedDatabasesIn(child) : []))
-	] as graph.DBInstanceNode[];
 };
 
 /**
@@ -67,7 +52,12 @@ const sharedDatabasesIn = (entry: Entry): graph.DBInstanceNode[] => {
  * just deleted.
  */
 export const deleteEntries = async (entries: Entry[], onDeleted?: () => void): Promise<void> => {
-	const shared = entries.flatMap(sharedDatabasesIn);
+	const shared = await must(
+		tryCatch(
+			graph.SharedDatabasesUnder,
+			entries.map((entry) => entry.id)
+		)
+	);
 
 	if (shared.length === 0) {
 		for (const entry of entries) await removeEntry(entry);
@@ -103,7 +93,7 @@ export const deleteEntries = async (entries: Entry[], onDeleted?: () => void): P
 
 const revokeThenDelete = async (
 	entries: Entry[],
-	shared: graph.DBInstanceNode[],
+	shared: graph.DatabaseRef[],
 	onDeleted?: () => void
 ) => {
 	for (const db of shared) {
@@ -123,4 +113,4 @@ const revokeThenDelete = async (
 	onDeleted?.();
 };
 
-const listNames = (dbs: graph.DBInstanceNode[]) => dbs.map((db) => db.name).join(', ');
+const listNames = (dbs: graph.DatabaseRef[]) => dbs.map((db) => db.name).join(', ');
