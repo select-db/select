@@ -34,30 +34,8 @@ test.setTimeout(180_000);
 /** The id the sample workspace gives its one database (internal/sample). */
 const WAREHOUSE = 'sample-warehouse';
 
-const dsnField = (page: Page) => testId(page, 'database.dsn').locator('input');
-
-/**
- * The connection dot on the seeded database's row in the file tree.
- *
- * Scoped to the tree: the same indicator appears wherever a database is named
- * -- an open tab, a results table's badge, the database picker -- and the tree
- * is where the state going stale was noticed.
- */
-const treeDot = (page: Page) => testId(page, 'tree.panel').locator(dbStatus(page, WAREHOUSE));
-
-/**
- * Tests the connection from the form and waits for the app to have answered.
- *
- * The answer is a notification either way, so waiting for it means what follows
- * is about what the app did with the result rather than about whether the
- * result has arrived.
- */
-async function testConnection(page: Page, expected: 'connected' | 'refused') {
-	await page.getByRole('button', { name: 'Test connection' }).click();
-
-	if (expected === 'connected') await expect(page.getByText('Database connected')).toBeVisible();
-	else await expect(page.getByText('Database connected')).toHaveCount(0);
-}
+const testConnection = (page: Page) =>
+	page.getByRole('button', { name: 'Test connection' }).click();
 
 test('names a database by its directory, and renames the directory with it', async ({
 	page,
@@ -121,9 +99,10 @@ test('names a database by its directory, and renames the directory with it', asy
 	await expect(box).toBeFocused();
 	await box.press('ControlOrMeta+a');
 	await box.fill('warehouse');
-	await inWorkspace(request, id, 'touch', 'spare.sql');
-	await inWorkspace(request, id, 'mv', 'spare.sql', 'spare-moved.sql');
-	await expect(treeNode(page, 'spare-moved.sql')).toBeVisible();
+	await inWorkspace(request, id, 'mv', 'warehouse', 'depot');
+	await expect(treeNode(page, 'depot')).toBeVisible();
+	await inWorkspace(request, id, 'mv', 'depot', 'warehouse');
+	await expect(treeNode(page, 'warehouse')).toBeVisible();
 	await box.press('Enter');
 	await expect(box).toBeHidden();
 
@@ -195,9 +174,6 @@ test('names a database by its directory, and renames the directory with it', asy
 
 	// --- Leaving it as it was found -----------------------------------------
 
-	await inWorkspace(request, id, 'rm', 'spare-moved.sql');
-	await expect(treeNode(page, 'spare-moved.sql')).toHaveCount(0);
-
 	await openMenuOn(page, 'europe');
 	await chooseMenuItem(page, 'Delete');
 	await expect(treeNode(page, 'europe')).toHaveCount(0);
@@ -216,13 +192,15 @@ test('shows what the last attempt to reach a database found', async ({ page, sig
 	// The availability watcher pings on its own every few seconds, so the dot
 	// arrives at "online" without anyone asking. That is the state the rest of
 	// this test moves away from and back to.
-	const dot = treeDot(page);
+	// Scoped to the tree: the same indicator appears wherever a database is named
+	// -- an open tab, a results badge -- and the tree is where it went stale.
+	const dot = testId(page, 'tree.panel').locator(dbStatus(page, WAREHOUSE));
 	await expect(dot).toHaveAttribute('data-test-state', 'online', { timeout: 30_000 });
 
 	await openMenuOn(page, 'warehouse');
 	await chooseMenuItem(page, 'Edit...');
 
-	const dsn = dsnField(page);
+	const dsn = testId(page, 'database.dsn').locator('input');
 	await expect(dsn).toBeVisible();
 	const seeded = await dsn.inputValue();
 
@@ -232,7 +210,7 @@ test('shows what the last attempt to reach a database found', async ({ page, sig
 	// nor create one.
 	await dsn.fill('/nonexistent-directory/warehouse.db');
 	await dsn.blur();
-	await testConnection(page, 'refused');
+	await testConnection(page);
 
 	// The row is still collapsed. It used to take expanding the database -- whose
 	// schema load was one of the few things that reported -- for the dot to catch
@@ -243,7 +221,8 @@ test('shows what the last attempt to reach a database found', async ({ page, sig
 
 	await dsn.fill(seeded);
 	await dsn.blur();
-	await testConnection(page, 'connected');
+	await testConnection(page);
+	await expect(page.getByText('Database connected')).toBeVisible();
 
 	await expect(dot).toHaveAttribute('data-test-state', 'online');
 

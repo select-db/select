@@ -61,9 +61,9 @@ export const writeDatabase = async (
 
 	// The directory is only a folder until this lands: the watcher reads the
 	// config and turns it into a db instance node.
+	// No name: the directory is the name.
 	const config = {
 		id,
-		name,
 		db_type: 'postgresql',
 		dsn: ''
 	};

@@ -139,9 +139,6 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		listener,
 	)
 
-	// The stream started, which took a round trip: the database answered.
-	EmitAvailability(Availability{ID: params.DbInstanceID})
-
 	return out
 }
 

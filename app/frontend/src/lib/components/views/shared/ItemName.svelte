@@ -12,8 +12,7 @@
 		type
 	}: {
 		id: string;
-		/** Where the item is. The same as `id` for a file or folder, but a
-		 *  database answers to the id in its config, which is not a path. */
+		/** Where the item is, which for a database is not its `id`. */
 		uri: string;
 		name: string;
 		muted: boolean;
@@ -35,15 +34,6 @@
 	});
 
 	let inputEl: HTMLInputElement;
-
-	// The Enter that opens rename mode is pressed on the menu item, so this input
-	// only ever sees its keyup: WebKit delivers keyup to whatever has focus at
-	// release time, not at press time. An Enter that commits a rename is pressed
-	// here, so its keydown lands here first. Acting only on a keyup whose keydown
-	// this input saw tells the two apart, and keeps telling them apart when the
-	// row re-renders mid-rename -- a one-shot flag was re-armed by that re-render
-	// and swallowed the commit instead, leaving a box no key could close.
-	let pressedHere = false;
 
 	// Focus and selection are placed when the box opens, not again while it stays
 	// open: re-selecting mid-rename puts the caret back and the next keystroke
@@ -103,27 +93,19 @@
 <input
 	aria-label="Name"
 	class={`${$renamingItemIdStore === id ? `showing` : `hidden`} name-input`}
-	onkeydown={(e) => {
+	onkeydown={async (e) => {
 		if ($renamingItemIdStore !== id) return;
-		if (e.key === 'Enter' || e.key === 'Escape') {
-			e.preventDefault();
-			e.stopPropagation();
-			pressedHere = true;
-		}
-	}}
-	onkeyup={async (e) => {
-		if ($renamingItemIdStore !== id) return;
-		if (!['Enter', 'Escape'].includes(e.key)) return;
-		if (!pressedHere) return;
-		pressedHere = false;
-		switch (e.key) {
-			case 'Enter':
-				await stopEditing(true);
-				break;
-			case 'Escape':
-				await stopEditing(false);
-				break;
-		}
+		if (e.key !== 'Enter' && e.key !== 'Escape') return;
+
+		e.preventDefault();
+		e.stopPropagation();
+
+		// On keydown, not keyup. The Enter that opens rename mode is pressed on
+		// the menu item, so its keydown never reaches this input -- only its
+		// keyup does, since WebKit delivers keyup to whatever has focus at
+		// release time. Committing on keydown tells the two Enters apart with no
+		// state to keep, and nothing to go stale when the row re-renders.
+		await stopEditing(e.key === 'Enter');
 	}}
 	bind:value={localName}
 	bind:this={inputEl}

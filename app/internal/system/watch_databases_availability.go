@@ -32,11 +32,6 @@ func (s *System) StartDatabaseWatcher() {
 	go s.watchDatabases(ctx)
 }
 
-type pingResult struct {
-	ID    string
-	Error string
-}
-
 func (s *System) watchDatabases(ctx context.Context) {
 	backoff := make(map[string]time.Duration)
 	lastPing := make(map[string]time.Time)
@@ -59,7 +54,7 @@ func (s *System) watchDatabases(ctx context.Context) {
 			}
 
 			if len(toCheck) > 0 {
-				results := make([]pingResult, len(toCheck))
+				failures := make([]string, len(toCheck))
 				var wg sync.WaitGroup
 
 				for i, db := range toCheck {
@@ -74,26 +69,27 @@ func (s *System) watchDatabases(ctx context.Context) {
 							Ssh:          db.SSH,
 							Proxified:    db.Proxified,
 						})
-						results[idx] = pingResult{ID: db.ID, Error: result}
+						failures[idx] = result
 					}(i, db)
 				}
 				wg.Wait()
 
-				for _, r := range results {
-					lastPing[r.ID] = now
-					if r.Error != "" {
-						b := backoff[r.ID]
-						if b == 0 {
-							b = pingBaseInterval
-						}
-						b *= 2
-						if b > pingMaxInterval {
-							b = pingMaxInterval
-						}
-						backoff[r.ID] = b
-					} else {
-						delete(backoff, r.ID)
+				for i, db := range toCheck {
+					lastPing[db.ID] = now
+					if failures[i] == "" {
+						delete(backoff, db.ID)
+						continue
 					}
+
+					b := backoff[db.ID]
+					if b == 0 {
+						b = pingBaseInterval
+					}
+					b *= 2
+					if b > pingMaxInterval {
+						b = pingMaxInterval
+					}
+					backoff[db.ID] = b
 				}
 			}
 

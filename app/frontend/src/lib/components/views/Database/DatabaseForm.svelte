@@ -391,14 +391,12 @@
 			if (err) notifyError(err.message);
 			await writeConfigFile({
 				id,
-				name,
 				db_type,
 				proxified
 			});
 		} else {
 			await writeConfigFile({
 				id,
-				name,
 				db_type,
 				dsn: dsnLocal,
 				ssh: savedSsh,
@@ -513,7 +511,6 @@
 							// the credentials from the local config file.
 							await writeConfigFile({
 								id,
-								name,
 								db_type,
 								proxified: checked
 							});

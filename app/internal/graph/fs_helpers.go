@@ -112,9 +112,12 @@ const DBConfigFileName = "db.config.json"
 // filesystem-backed database instances managed by the workspace graph. It is a
 // lightweight version of the fsDBConfig type in node_db_instance.go, kept here
 // to avoid import cycles.
+//
+// The name is deliberately absent: a database is named by the directory it
+// sits in, and a second copy here would be one nothing reads and every rename
+// would leave behind.
 type FSDBConfig struct {
 	ID        string         `json:"id"`
-	Name      string         `json:"name"`
 	DbType    string         `json:"db_type"`
 	DSN       string         `json:"dsn"`
 	SSH       *FSDBSSHConfig `json:"ssh,omitempty"`

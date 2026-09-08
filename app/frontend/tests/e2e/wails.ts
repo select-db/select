@@ -133,7 +133,7 @@ export async function holdSession(page: Page) {
  * The two services a spec asks about the workspace. Qualified Go names, which
  * is what the runtime dispatches on.
  */
-export const FS = 'selectDb/internal/fs_provider.FSProvider';
+const FS = 'selectDb/internal/fs_provider.FSProvider';
 export const GRAPH = 'selectDb/internal/graph.Graph';
 
 /** The id of the workspace the seed left, which every path below hangs off. */
@@ -163,16 +163,26 @@ export async function inWorkspace(
 	}
 }
 
+/**
+ * The URI of a root-relative path in a workspace. The prefix is fixed for the
+ * whole run, and readWorkspaceFile is called inside a poll, so it is fetched
+ * once rather than on every call.
+ */
+let uriPrefix: Promise<string> | null = null;
+
+async function workspaceURI(request: APIRequestContext, id: string, path: string) {
+	uriPrefix ??= call<string>(request, `${FS}.WorkspaceURIPrefix`);
+	return `${await uriPrefix}${id}/${path}`;
+}
+
 /** Whether the workspace holds an entry at that path, root-relative. */
 export async function existsInWorkspace(
 	request: APIRequestContext,
 	id: string,
 	path: string
 ): Promise<boolean> {
-	const prefix = await call<string>(request, `${FS}.WorkspaceURIPrefix`);
-
 	try {
-		await call(request, `${FS}.Stat`, `${prefix}${id}/${path}`);
+		await call(request, `${FS}.Stat`, await workspaceURI(request, id, path));
 		return true;
 	} catch {
 		return false;
@@ -185,8 +195,7 @@ export async function readWorkspaceFile(
 	id: string,
 	path: string
 ): Promise<string> {
-	const prefix = await call<string>(request, `${FS}.WorkspaceURIPrefix`);
-	return call<string>(request, `${FS}.ReadFile`, { uri: `${prefix}${id}/${path}` });
+	return call<string>(request, `${FS}.ReadFile`, { uri: await workspaceURI(request, id, path) });
 }
 
 /** The names of the databases the graph is holding, in its own order. */

@@ -13,29 +13,19 @@ import (
 // withTempAppDataDir configures APP_ENV, HOME and XDG_CONFIG_HOME so that
 // GetAppDataDir points into a test-specific temporary directory, and sets a
 // current server so that WorkspaceRootPath works. It returns the resolved app
-// root and a restore function.
+// root.
 //
 // XDG_CONFIG_HOME as well as HOME: on Linux os.UserConfigDir reads it first and
 // ignores HOME entirely when it is set, which it is on a GitHub runner. Leaving
 // it alone gives every test in the package the same app data directory -- and so
 // the same workspace root -- however carefully HOME is pointed elsewhere.
-func withTempAppDataDir(t *testing.T) (string, func()) {
+func withTempAppDataDir(t *testing.T) string {
 	t.Helper()
 
-	oldHome := os.Getenv("HOME")
-	oldXDG, hadXDG := os.LookupEnv("XDG_CONFIG_HOME")
-	oldEnv := os.Getenv("APP_ENV")
-
 	tempHome := t.TempDir()
-	if err := os.Setenv("HOME", tempHome); err != nil {
-		t.Fatalf("set HOME: %v", err)
-	}
-	if err := os.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config")); err != nil {
-		t.Fatalf("set XDG_CONFIG_HOME: %v", err)
-	}
-	if err := os.Setenv("APP_ENV", "test-build-graph"); err != nil {
-		t.Fatalf("set APP_ENV: %v", err)
-	}
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+	t.Setenv("APP_ENV", "test-build-graph")
 
 	appRoot, err := utils.GetAppDataDir()
 	if err != nil {
@@ -52,25 +42,14 @@ func withTempAppDataDir(t *testing.T) (string, func()) {
 		t.Fatalf("write current server: %v", err)
 	}
 
-	restore := func() {
-		_ = os.Setenv("HOME", oldHome)
-		_ = os.Setenv("APP_ENV", oldEnv)
-		if hadXDG {
-			_ = os.Setenv("XDG_CONFIG_HOME", oldXDG)
-		} else {
-			_ = os.Unsetenv("XDG_CONFIG_HOME")
-		}
-	}
-
-	return appRoot, restore
+	return appRoot
 }
 
 // TestBuildWorkspaceGraphFromFS_SimpleTree verifies that the filesystem-based
 // graph builder correctly discovers folders, files and db instances under the
 // workspace root.
 func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	const workspaceID = "ws-1"
 	rootURI := fmt.Sprintf("selectdb://workspaces/%s", workspaceID)

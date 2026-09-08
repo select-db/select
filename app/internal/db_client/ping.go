@@ -22,18 +22,11 @@ type PingParams struct {
 
 // Ping checks if the database instance is reachable, and reports what it found.
 //
-// The reporting is here rather than in the caller because a ping has no other
-// purpose: whatever asks for one -- the connection form's Test connection
-// button, the availability watcher -- wants the indicator to agree with the
-// answer it gets. Wrapping the body means no return path can be added that
-// forgets to say what it learned.
-func (dbc *DbClient) Ping(params PingParams) string {
-	result := dbc.ping(params)
-	EmitAvailability(Availability{ID: params.DbInstanceID, Error: result})
-	return result
-}
+// A ping has no other purpose, so the report is deferred rather than left to
+// the caller: no return path can be added that forgets to say what it learned.
+func (dbc *DbClient) Ping(params PingParams) (result string) {
+	defer func() { emitAvailability(params.DbInstanceID, result) }()
 
-func (dbc *DbClient) ping(params PingParams) string {
 	base := dbc.ctx
 	if base == nil {
 		base = context.Background()

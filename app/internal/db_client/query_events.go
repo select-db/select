@@ -73,6 +73,11 @@ type queryEventListener struct {
 }
 
 func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.ColumnEditMeta) {
+	// Columns came back, so the database answered. Reported here and not where
+	// the stream is kicked off: Stream returns before any I/O happens, and a
+	// query against an unreachable database would have claimed it was up.
+	emitAvailability(l.dbInstanceID, "")
+
 	// Compute column edit metadata if the engine didn't already populate it.
 	// Done lazily here so the streaming cache exposes it on the very first
 	// Page() call and the started event carries it to the frontend.

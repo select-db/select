@@ -43,15 +43,13 @@ already here. Check for that first. The cost of a new part is not the code, it
 is the second place a rule now lives, and the day the two copies disagree.
 
 A worked example from this repository. Naming a database directory looked like
-it needed Go: picking a free name means reading the folder it is going into.
-So it got two bound service methods, a name sanitiser, a collision resolver,
-and tests for all of it. But `fs_provider.Rename` already refused a name
-another entry in the folder had, already refused one that would leave the
-workspace, and already no-opped a rename to the same place. Deleting the new
-methods and calling `Mkdir`, `Write` and `Rename` took the change from 1386
-added lines to 580, took the generated bindings from 157 changed lines to none,
-and left the behaviour better: one set of naming rules for folders and
-databases rather than two that could drift apart.
+it needed Go: picking a free name means reading the folder it is going into. But
+`fs_provider.Rename` already refused a name another entry in the folder had,
+already refused one that would leave the workspace, and already no-opped a
+rename to the same place. Deleting the new service methods and calling `Mkdir`,
+`Write` and `Rename` halved the change, left the generated bindings untouched,
+and gave folders and databases one set of naming rules rather than two that
+could drift apart.
 
 Before writing a new service method, store, helper or abstraction, ask:
 

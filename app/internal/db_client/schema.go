@@ -29,7 +29,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 	// Use the DB instance's SSH config (if any) so schema loading respects SSH tunneling and its timeouts.
 	metadata, err := dbc.getCachedMetadata(dbInstance, queryParams.NoCache)
 	if err != nil {
-		EmitAvailability(Availability{ID: dbInstance.ID, Error: err.Error()})
+		emitAvailability(dbInstance.ID, err.Error())
 		return err
 	}
 
@@ -142,7 +142,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 		},
 	})
 
-	EmitAvailability(Availability{ID: dbInstance.ID})
+	emitAvailability(dbInstance.ID, "")
 
 	// Write schema.sql in the background so it doesn't block the UI.
 	// The graph is already updated and the schema tree is visible at this point.

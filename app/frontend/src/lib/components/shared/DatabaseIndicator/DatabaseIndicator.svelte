@@ -34,8 +34,8 @@
 			</div>
 		</div>
 	{:else}
-		{@const isAvailable = $databaseAvailabilityStore.get(id)}
-		{@const state = isAvailable === true ? 'online' : isAvailable === false ? 'offline' : 'unknown'}
+		{@const reached = $databaseAvailabilityStore.get(id)}
+		{@const state = reached === undefined ? 'unknown' : reached ? 'online' : 'offline'}
 		<div class="icon-wrapper" style={`--indicator-size: ${size}px`}>
 			<div class="dot-wrapper">
 				<Icon icon="db" {size} stroke="var(--gray-800)" />

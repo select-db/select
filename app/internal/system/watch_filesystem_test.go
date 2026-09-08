@@ -373,9 +373,7 @@ func TestHandleFSEvent_DeleteReportsAFileAsAFile(t *testing.T) {
 }
 
 // watchedUnder returns the watcher's registrations inside root, sorted.
-func watchedUnder(t *testing.T, watcher *fsnotify.Watcher, root string) []string {
-	t.Helper()
-
+func watchedUnder(watcher *fsnotify.Watcher, root string) []string {
 	var watched []string
 	for _, path := range watcher.WatchList() {
 		if fs_uri.Contains(root, path) {
@@ -407,8 +405,12 @@ func awaitEvent(t *testing.T, watcher *fsnotify.Watcher, path string, wait time.
 }
 
 // A renamed directory keeps its watch under the name it was registered with,
-// and so does everything below it.
-func TestDropStaleWatches_LeavesOnlyTheNamesOnDisk(t *testing.T) {
+// and so does everything below it. Re-walking alone does not correct that: the
+// old name and the new one are the same directory, so adding it again is a
+// no-op and the stale registration survives. Both halves are asserted on one
+// rename, since the second is the reason the first matters -- events from
+// inside the renamed tree have to name a path the graph can find.
+func TestDropStaleWatches(t *testing.T) {
 	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
 
 	oldDir := filepath.Join(workspaceRoot, "db-e731d451")
@@ -429,6 +431,7 @@ func TestDropStaleWatches_LeavesOnlyTheNamesOnDisk(t *testing.T) {
 		t.Fatalf("rename db dir: %v", err)
 	}
 
+	// The order is the fix: drop what is gone, then re-walk.
 	dropStaleWatches(watcher, fsCtx)
 	addWatches(watcher, fsCtx, workspaceRoot)
 
@@ -440,37 +443,9 @@ func TestDropStaleWatches_LeavesOnlyTheNamesOnDisk(t *testing.T) {
 	}
 	slices.Sort(want)
 
-	if got := watchedUnder(t, watcher, workspaceRoot); !slices.Equal(got, want) {
+	if got := watchedUnder(watcher, workspaceRoot); !slices.Equal(got, want) {
 		t.Fatalf("watch list after rename:\n got %v\nwant %v", got, want)
 	}
-}
-
-// The point of dropping them: re-walking alone is a no-op on a directory that
-// is already watched, so without the drop the events keep naming the old path
-// and the graph has nowhere to put them.
-func TestDropStaleWatches_EventsNameTheDirectoryThatExists(t *testing.T) {
-	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
-
-	oldDir := filepath.Join(workspaceRoot, "db-e731d451")
-	if err := os.MkdirAll(filepath.Join(oldDir, "sub"), 0o700); err != nil {
-		t.Fatalf("mkdir db dirs: %v", err)
-	}
-
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		t.Fatalf("new watcher: %v", err)
-	}
-	defer func() { _ = watcher.Close() }()
-
-	addWatches(watcher, fsCtx, workspaceRoot)
-
-	newDir := filepath.Join(workspaceRoot, "analytics")
-	if err := os.Rename(oldDir, newDir); err != nil {
-		t.Fatalf("rename db dir: %v", err)
-	}
-
-	dropStaleWatches(watcher, fsCtx)
-	addWatches(watcher, fsCtx, workspaceRoot)
 
 	written := filepath.Join(newDir, "sub", "query.sql")
 	if err := os.WriteFile(written, []byte("SELECT 1;"), 0o600); err != nil {

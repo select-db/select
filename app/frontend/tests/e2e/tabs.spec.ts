@@ -8,7 +8,7 @@ import {
 	type Page
 } from './wails';
 import { activeTab, editor, selectedTreeNodes, tab, tabs, testId, treeNode } from './selectors';
-import { openTreeMenu } from './tree';
+import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
 
 /**
  * Tabs: what the workbench does with them, not what they hold.
@@ -292,12 +292,9 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 
 	// A rename through the app moves the tab with the file rather than opening a
 	// second tab on the new name.
-	await treeNode(page, 'cohorts.sql').click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Rename...', exact: true }).click();
-	const box = page.getByRole('textbox', { name: 'Name' });
-	await box.press('ControlOrMeta+a');
-	await box.fill('cohorts-2026.sql');
-	await box.press('Enter');
+	await openMenuOn(page, 'cohorts.sql');
+	await chooseMenuItem(page, 'Rename...');
+	await renameTo(page, 'cohorts-2026.sql');
 
 	await expect(tab(page, 'cohorts-2026.sql')).toBeVisible();
 	await expect(tab(page, 'cohorts.sql')).toHaveCount(0);
@@ -323,15 +320,15 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 	// A database is not a file, and its tab goes the same way: the graph loses
 	// the database, the tab showing its connection goes with it.
 	await openTreeMenu(page);
-	await page.getByRole('menuitem', { name: 'New Database...', exact: true }).click();
+	await chooseMenuItem(page, 'New Database...');
 	await expect(treeNode(page, 'db #1')).toBeVisible();
 
-	await treeNode(page, 'db #1').click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Edit...', exact: true }).click();
+	await openMenuOn(page, 'db #1');
+	await chooseMenuItem(page, 'Edit...');
 	await expect(tab(page, 'db #1')).toBeVisible();
 
-	await treeNode(page, 'db #1').click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+	await openMenuOn(page, 'db #1');
+	await chooseMenuItem(page, 'Delete');
 	await expect(treeNode(page, 'db #1')).toHaveCount(0);
 	await expect(tab(page, 'db #1')).toHaveCount(0);
 
