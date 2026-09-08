@@ -2,7 +2,6 @@ package middlewares
 
 import (
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"context"
 	"errors"
@@ -15,6 +14,8 @@ import (
 	auth "backend/internal/auth"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/google/uuid"
 )
 
 type contextKey string
@@ -137,7 +138,7 @@ func buildAuthContext(ctx context.Context, userID, name string, claimWorkspaces 
 	if db.Queries == nil {
 		return ctx, errors.New("workspace lookup unavailable")
 	}
-	uid, err := db_types.NewJSONNullUUIDFromString(userID)
+	uid, err := uuid.Parse(userID)
 	if err != nil {
 		return ctx, fmt.Errorf("invalid user id: %w", err)
 	}
@@ -152,10 +153,7 @@ func buildAuthContext(ctx context.Context, userID, name string, claimWorkspaces 
 	}
 	workspaces := make([]auth.WorkspaceClaim, 0, len(ids))
 	for _, u := range ids {
-		if !u.Valid {
-			continue
-		}
-		id := u.UUID.String()
+		id := u.String()
 		c := claimByWS[id] // zero value if the token predates this membership
 		workspaces = append(workspaces, auth.WorkspaceClaim{ID: id, IsOwner: c.IsOwner, Roles: c.Roles})
 	}
@@ -172,33 +170,27 @@ func buildAPIKeyContext(ctx context.Context, token string) (context.Context, err
 	if !ok {
 		return ctx, errors.New("malformed api key")
 	}
-	row, err := db.Queries.GetAPIKeyByPrefix(ctx, db_types.NewJSONNullString(prefix))
+	row, err := db.Queries.GetAPIKeyByPrefix(ctx, prefix)
 	if err != nil {
 		return ctx, errors.New("unknown api key")
 	}
 	// verify before trusting any field on the row
-	if !auth.VerifyAPIKey(token, row.HashedKey.ValueOrEmpty()) {
+	if !auth.VerifyAPIKey(token, row.HashedKey) {
 		return ctx, errors.New("api key mismatch")
 	}
 	if row.ExpiresAt.Valid && row.ExpiresAt.Time.Before(time.Now()) {
 		return ctx, errors.New("api key expired")
 	}
-	if !row.WorkspaceID.Valid {
-		return ctx, errors.New("api key has no workspace")
-	}
-
 	roleRows, err := db.Queries.GetAPIKeyRolesWithNames(ctx, row.ID)
 	if err != nil {
 		return ctx, fmt.Errorf("api key role lookup failed: %w", err)
 	}
 	roles := make([]auth.RoleRef, 0, len(roleRows))
 	for _, rr := range roleRows {
-		if rr.ID.Valid {
-			roles = append(roles, auth.RoleRef{ID: rr.ID.UUID.String(), Name: rr.Name.ValueOrEmpty()})
-		}
+		roles = append(roles, auth.RoleRef{ID: rr.ID.String(), Name: rr.Name})
 	}
 
-	ctx = ContextWithAPIKeyPrincipal(ctx, row.ID.String(), row.Name.ValueOrEmpty(), row.WorkspaceID.String(), roles)
+	ctx = ContextWithAPIKeyPrincipal(ctx, row.ID.String(), row.Name, row.WorkspaceID.String(), roles)
 
 	// fire-and-forget: never block or fail auth on the last-used touch
 	go func() { _ = db.Queries.TouchAPIKeyLastUsed(context.WithoutCancel(ctx), row.ID) }()
@@ -309,19 +301,19 @@ func TryRefreshToken(r *http.Request, refreshToken string, deviceID string, user
 	hashedToken := auth.HashRefreshToken(refreshToken, deviceID)
 
 	// Validate refresh token in DB
-	uid, err := db_types.NewJSONNullUUIDFromString(userID)
+	uid, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse userID: %w", err)
 	}
 	tokenData, err := db.Queries.GetRefreshToken(ctx, generated.GetRefreshTokenParams{
-		HashedToken: db_types.NewJSONNullString(hashedToken),
+		HashedToken: hashedToken,
 		UserID:      uid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to look up refresh token: %w", err)
 	}
 
-	expiresAt := tokenData.ExpiresAt.ValueOrZero()
+	expiresAt := tokenData.ExpiresAt
 	if expiresAt.IsZero() {
 		return nil, errors.New("refresh token expiry time is null")
 	}
@@ -338,7 +330,7 @@ func TryRefreshToken(r *http.Request, refreshToken string, deviceID string, user
 	}
 
 	// Revoke the old refresh token
-	if err := db.Queries.DeleteRefreshToken(ctx, db_types.NewJSONNullString(hashedToken)); err != nil {
+	if err := db.Queries.DeleteRefreshToken(ctx, hashedToken); err != nil {
 		return nil, fmt.Errorf("failed to revoke old refresh token: %w", err)
 	}
 

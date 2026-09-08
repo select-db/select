@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/scope"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time.Time) (bool, *types.RestoredItem, error) {
@@ -29,20 +30,20 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("permission: missing id or workspace_id")
 	}
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("permission: invalid id %q: %w", id, err)
 	}
-	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+	workspaceUUID, err := uuid.Parse(workspaceID)
 	if err != nil {
 		return false, nil, fmt.Errorf("permission: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
 	// role_id is parsed only when present: a partial update may omit it, in
 	// which case the merge keeps the existing value (so the FK isn't re-validated).
-	var roleUUID db_types.JSONNullUUID
+	var roleUUID uuid.UUID
 	if _, present := payload["role_id"]; present {
-		roleUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "role_id"))
+		roleUUID, err = uuid.Parse(utils.MapGetString(payload, "role_id"))
 		if err != nil {
 			return false, nil, fmt.Errorf("permission: invalid role_id: %w", err)
 		}
@@ -61,7 +62,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.GetPermissionByID(ctx, generated.GetPermissionByIDParams{ID: idUUID, WorkspaceID: workspaceUUID})
 		},
 		UpdatedAt: func(row generated.AppPermission) time.Time {
-			return row.UpdatedAt.ValueOrZero()
+			return row.UpdatedAt
 		},
 		DeletedAt: func(row generated.AppPermission) *time.Time {
 			if row.DeletedAt.Valid {
@@ -80,13 +81,13 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return generated.UpsertPermissionParams{
 				ID:           idUUID,
 				WorkspaceID:  workspaceUUID,
-				RoleID:       utils.PatchUUID(payload, "role_id", existing.RoleID, roleUUID),
+				RoleID:       utils.PatchValue(payload, "role_id", existing.RoleID, roleUUID),
 				DbInstanceID: utils.PatchNullStr(payload, "db_instance_id", existing.DbInstanceID),
 				SchemaName:   utils.PatchNullStr(payload, "schema_name", existing.SchemaName),
 				TableName:    utils.PatchNullStr(payload, "table_name", existing.TableName),
 				ColumnName:   utils.PatchNullStr(payload, "column_name", existing.ColumnName),
-				Action:       utils.PatchStr(payload, "action", existing.Action),
-				Effect:       utils.PatchStrDefault(payload, "effect", existing.Effect, "deny"),
+				Action:       utils.PatchValue(payload, "action", existing.Action, utils.MapGetString(payload, "action")),
+				Effect:       utils.PatchStrValueDefault(payload, "effect", existing.Effect, "deny"),
 			}, nil
 		},
 		Upsert: func(ctx context.Context, params generated.UpsertPermissionParams) error {

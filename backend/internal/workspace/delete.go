@@ -4,9 +4,10 @@ import (
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/internal/audit"
 	"backend/internal/middlewares"
+
+	"github.com/google/uuid"
 )
 
 func DeleteHandler() http.HandlerFunc {
@@ -23,13 +24,13 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+		userUUID, err := uuid.Parse(userID)
 		if err != nil {
 			http.Error(w, "invalid user id", http.StatusInternalServerError)
 			return
 		}
 
-		workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		workspaceUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusBadRequest)
 			return

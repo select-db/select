@@ -45,8 +45,8 @@ func TestEmitScope(t *testing.T) {
 	// sqlc by-id query so an out-of-workspace row reads as ErrNoRows.
 	for _, want := range []string{
 		"package scope",
-		"func GroupInWorkspace(ctx context.Context, groupID, workspaceID db_types.JSONNullUUID) (bool, error)",
-		"func RoleInWorkspace(ctx context.Context, roleID, workspaceID db_types.JSONNullUUID) (bool, error)",
+		"func GroupInWorkspace(ctx context.Context, groupID, workspaceID uuid.UUID) (bool, error)",
+		"func RoleInWorkspace(ctx context.Context, roleID, workspaceID uuid.UUID) (bool, error)",
 		"db.Queries.GetRoleByID(ctx, generated.GetRoleByIDParams{ID: roleID, WorkspaceID: workspaceID})",
 		"errors.Is(err, sql.ErrNoRows)",
 	} {

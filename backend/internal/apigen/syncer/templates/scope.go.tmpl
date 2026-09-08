@@ -10,13 +10,14 @@ import (
 	"errors"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
+
+	"github.com/google/uuid"
 )
 {{range .}}
 // {{.Sing}}InWorkspace reports whether {{.Param}} exists and belongs to
 // workspaceID (a workspace-scoped by-id lookup).
-func {{.Sing}}InWorkspace(ctx context.Context, {{.Param}}, workspaceID db_types.JSONNullUUID) (bool, error) {
+func {{.Sing}}InWorkspace(ctx context.Context, {{.Param}}, workspaceID uuid.UUID) (bool, error) {
 	_, err := db.Queries.Get{{.Sing}}ByID(ctx, generated.Get{{.Sing}}ByIDParams{ID: {{.Param}}, WorkspaceID: workspaceID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil

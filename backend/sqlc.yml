@@ -3,7 +3,7 @@ sql:
   - engine: "postgresql"
     queries: "db/generated/all_queries.sql"
     schema:
-      - "db/schema.sql"
+      - "db/migrations"
     gen:
       go:
         out: "db/generated"
@@ -38,6 +38,18 @@ sql:
               go_type: "backend/db/db_types.JSONNullTime"
 
             - db_type: "pg_catalog.timestamptz"
+              nullable: true
+              go_type: "backend/db/db_types.JSONNullTime"
+
+            # Reading the migrations rather than a dump, sqlc sees each type as
+            # the migration wrote it (TIMESTAMPTZ), not the catalog name a dump
+            # spells out. Both spellings map to the same wrapper so the generated
+            # shape does not depend on which one a migration happens to use.
+            - db_type: "timestamptz"
+              nullable: true
+              go_type: "backend/db/db_types.JSONNullTime"
+
+            - db_type: "timestamp"
               nullable: true
               go_type: "backend/db/db_types.JSONNullTime"
 

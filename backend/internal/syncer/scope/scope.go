@@ -12,13 +12,14 @@ import (
 	"errors"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
+
+	"github.com/google/uuid"
 )
 
 // GroupInWorkspace reports whether groupID exists and belongs to
 // workspaceID (a workspace-scoped by-id lookup).
-func GroupInWorkspace(ctx context.Context, groupID, workspaceID db_types.JSONNullUUID) (bool, error) {
+func GroupInWorkspace(ctx context.Context, groupID, workspaceID uuid.UUID) (bool, error) {
 	_, err := db.Queries.GetGroupByID(ctx, generated.GetGroupByIDParams{ID: groupID, WorkspaceID: workspaceID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -31,7 +32,7 @@ func GroupInWorkspace(ctx context.Context, groupID, workspaceID db_types.JSONNul
 
 // RoleInWorkspace reports whether roleID exists and belongs to
 // workspaceID (a workspace-scoped by-id lookup).
-func RoleInWorkspace(ctx context.Context, roleID, workspaceID db_types.JSONNullUUID) (bool, error) {
+func RoleInWorkspace(ctx context.Context, roleID, workspaceID uuid.UUID) (bool, error) {
 	_, err := db.Queries.GetRoleByID(ctx, generated.GetRoleByIDParams{ID: roleID, WorkspaceID: workspaceID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil

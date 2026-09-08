@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 
 	"github.com/selectDb/toolkit/cache"
+
+	"github.com/google/uuid"
 )
 
 // ~310 B/perm × 20 perms/role ≈ 6 KB/role → 15 000 roles ≈ 90 MB worst-case.
@@ -28,7 +29,7 @@ func GetOrLoad(roleID string) ([]generated.AppPermission, error) {
 		return v.([]generated.AppPermission), nil
 	}
 
-	uid, err := db_types.NewJSONNullUUIDFromString(roleID)
+	uid, err := uuid.Parse(roleID)
 	if err != nil {
 		return nil, err
 	}

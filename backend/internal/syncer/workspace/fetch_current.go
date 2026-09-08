@@ -6,8 +6,9 @@ import (
 	"errors"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, error) {
@@ -15,7 +16,7 @@ func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, err
 	if id == "" {
 		id = c.ObjectID
 	}
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, nil
 	}
@@ -28,10 +29,10 @@ func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, err
 	}
 	r := types.WorkspaceRow{
 		ID:           row.ID.String(),
-		Name:         row.Name.ValueOrEmpty(),
+		Name:         row.Name,
 		GitRemoteURL: row.GitRemoteUrl.Ptr(),
 		Logo:         row.Logo.Ptr(),
-		UpdatedAt:    row.UpdatedAt.ValueOrZero(),
+		UpdatedAt:    row.UpdatedAt,
 	}
 	if row.OwnerID.Valid {
 		s := row.OwnerID.String()
@@ -49,6 +50,6 @@ func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, err
 		ObjectID:      id,
 		TableName:     "workspace",
 		ServerPayload: payload,
-		UpdatedAt:     row.UpdatedAt.ValueOrZero(),
+		UpdatedAt:     row.UpdatedAt,
 	}, nil
 }

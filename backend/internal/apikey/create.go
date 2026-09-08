@@ -12,6 +12,8 @@ import (
 	"backend/internal/auth"
 	"backend/internal/authz"
 	"backend/internal/syncer/scope"
+
+	"github.com/google/uuid"
 )
 
 type createRequest struct {
@@ -62,15 +64,15 @@ func CreateHandler() http.HandlerFunc {
 			return
 		}
 
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
 		}
 
-		roleUUIDs := make([]db_types.JSONNullUUID, 0, len(req.RoleIDs))
+		roleUUIDs := make([]uuid.UUID, 0, len(req.RoleIDs))
 		for _, rid := range req.RoleIDs {
-			ru, err := db_types.NewJSONNullUUIDFromString(rid)
+			ru, err := uuid.Parse(rid)
 			if err != nil {
 				http.Error(w, "invalid role id", http.StatusBadRequest)
 				return
@@ -89,7 +91,7 @@ func CreateHandler() http.HandlerFunc {
 
 		plaintext, prefix, hash := auth.GenerateAPIKey()
 
-		createdBy, _ := db_types.NewJSONNullUUIDFromString(userID)
+		createdBy, _ := uuid.Parse(userID)
 		expiresAt := db_types.JSONNullTime{}
 		if expiry != nil {
 			expiresAt = db_types.NewJSONNullTimeFromTime(*expiry)
@@ -105,10 +107,10 @@ func CreateHandler() http.HandlerFunc {
 
 		created, err := q.CreateAPIKey(r.Context(), generated.CreateAPIKeyParams{
 			WorkspaceID: wsUUID,
-			Name:        db_types.NewJSONNullString(name),
-			Prefix:      db_types.NewJSONNullString(prefix),
-			HashedKey:   db_types.NewJSONNullString(hash),
-			CreatedBy:   createdBy,
+			Name:        name,
+			Prefix:      prefix,
+			HashedKey:   hash,
+			CreatedBy:   db_types.NewJSONNullUUID(createdBy),
 			ExpiresAt:   expiresAt,
 		})
 		if err != nil {
@@ -134,12 +136,12 @@ func CreateHandler() http.HandlerFunc {
 			TargetID:    created.ID.String(),
 			TargetLabel: name,
 			Status:      audit.StatusSuccess,
-			Payload:     map[string]any{"prefix": created.Prefix.ValueOrEmpty(), "role_count": len(roleUUIDs)},
+			Payload:     map[string]any{"prefix": created.Prefix, "role_count": len(roleUUIDs)},
 		})
 
 		writeJSON(w, createResponse{
 			ID:     created.ID.String(),
-			Prefix: created.Prefix.ValueOrEmpty(),
+			Prefix: created.Prefix,
 			Key:    plaintext,
 		})
 	}

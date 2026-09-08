@@ -211,7 +211,7 @@ func upsertSnapshot(ctx context.Context, q *generated.Queries, e *Event, seen ma
 	return q.UpsertPrincipalSnapshot(ctx, generated.UpsertPrincipalSnapshotParams{
 		SnapshotHash: h,
 		WorkspaceID:  nullUUID(e.Principal.WorkspaceID),
-		Snapshot:     jsonbRaw(e.Principal.JSON()),
+		Snapshot:     e.Principal.JSON(),
 	})
 }
 
@@ -230,17 +230,17 @@ func insertEvent(ctx context.Context, q *generated.Queries, e *Event) error {
 
 	return q.InsertAuditEvent(ctx, generated.InsertAuditEventParams{
 		WorkspaceID:   nullUUID(e.WorkspaceID),
-		OccurredAt:    db_types.NewJSONNullTimeFromTime(e.OccurredAt),
-		Domain:        nullStr(e.Domain),
-		Action:        nullStr(e.Action),
+		OccurredAt:    e.OccurredAt,
+		Domain:        e.Domain,
+		Action:        e.Action,
 		PrincipalHash: e.Principal.Hash(),
 		PrincipalID:   nullUUID(e.Principal.ID),
 		PrincipalType: nullStr(e.Principal.Type),
 		TargetType:    nullStr(target.Type),
 		TargetID:      nullUUID(target.ID),
 		TargetLabel:   nullStr(target.Label),
-		Status:        nullStr(e.Status),
-		Payload:       jsonbRaw(payload),
+		Status:        e.Status,
+		Payload:       payload,
 		ClientIp:      nullInet(e.ClientIP),
 	})
 }

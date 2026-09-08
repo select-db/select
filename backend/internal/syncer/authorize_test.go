@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func TestSync_EmptyRequest(t *testing.T) {
@@ -127,8 +128,8 @@ func TestAuthorize_OwnerCanCreateRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Confirmed, 1)
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(roleID)
-	wsUUID, _ := db_types.NewJSONNullUUIDFromString(wsID)
+	idUUID, err := uuid.Parse(roleID)
+	wsUUID, _ := uuid.Parse(wsID)
 	require.NoError(t, err)
 	_, err = db.Queries.GetRoleByID(context.Background(), generated.GetRoleByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	assert.NoError(t, err, "role must exist after owner commit")
@@ -156,12 +157,12 @@ func TestAuthorize_OwnerCanUpdateRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Confirmed, 1)
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(roleID)
-	wsUUID, _ := db_types.NewJSONNullUUIDFromString(wsID)
+	idUUID, err := uuid.Parse(roleID)
+	wsUUID, _ := uuid.Parse(wsID)
 	require.NoError(t, err)
 	role, err := db.Queries.GetRoleByID(context.Background(), generated.GetRoleByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)
-	assert.Equal(t, "New Name", role.Name.String)
+	assert.Equal(t, "New Name", role.Name)
 }
 
 func TestAuthorize_OwnerCanDeleteRole(t *testing.T) {
@@ -185,8 +186,8 @@ func TestAuthorize_OwnerCanDeleteRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Confirmed, 1)
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(roleID)
-	wsUUID, _ := db_types.NewJSONNullUUIDFromString(wsID)
+	idUUID, err := uuid.Parse(roleID)
+	wsUUID, _ := uuid.Parse(wsID)
 	require.NoError(t, err)
 	role, err := db.Queries.GetRoleByID(context.Background(), generated.GetRoleByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)
@@ -434,7 +435,7 @@ func TestGroupRoles_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
 	_, err = conn.Exec(`INSERT INTO app.group_to_role (id, group_id, role_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid)`, gtrID, groupID, roleID, wsID)
 	require.NoError(t, err)
 
-	memberUUID, err := db_types.NewJSONNullUUIDFromString(memberID)
+	memberUUID, err := uuid.Parse(memberID)
 	require.NoError(t, err)
 
 	rows, err := db.Queries.GetUserGroupRolesWithNames(ctx, memberUUID)

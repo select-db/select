@@ -12,12 +12,14 @@ import (
 	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/auth"
+
+	"github.com/google/uuid"
 )
 
 func seedUserPlaceholder(t *testing.T, conn *sql.DB, email string) string {
 	t.Helper()
 	id, err := db.Queries.InsertUserPlaceholder(context.Background(), generated.InsertUserPlaceholderParams{
-		Email: db_types.NewJSONNullString(email),
+		Email: email,
 		Name:  db_types.NewJSONNullString(email),
 	})
 	require.NoError(t, err)
@@ -46,22 +48,22 @@ func TestPlaceholderResolution_FoundAndLinked(t *testing.T) {
 	row, err := db.Queries.GetUserByEmailNoIdentity(context.Background(), email)
 	require.NoError(t, err)
 	assert.Equal(t, placeholderID, row.ID.String())
-	assert.Equal(t, email, row.Email.String)
+	assert.Equal(t, email, row.Email)
 
 	// Simulate what pollForAccessToken does when resolving a placeholder
 	err = db.Queries.UpdateUserForLogin(context.Background(), generated.UpdateUserForLoginParams{
 		ID:        row.ID,
 		Name:      db_types.NewJSONNullString("Invited User"),
 		GithubID:  db_types.NewJSONNullInt64(12345),
-		Email:     db_types.NewJSONNullString(email),
+		Email:     email,
 		AvatarUrl: db_types.NewJSONNullString("https://avatars.example.com/12345"),
 	})
 	require.NoError(t, err)
 
 	err = db.Queries.CreateUserIdentity(context.Background(), generated.CreateUserIdentityParams{
 		UserID:         row.ID,
-		Provider:       db_types.NewJSONNullString("github"),
-		ProviderUserID: db_types.NewJSONNullString("12345"),
+		Provider:       "github",
+		ProviderUserID: "12345",
 		Email:          db_types.NewJSONNullString(email),
 	})
 	require.NoError(t, err)
@@ -92,12 +94,12 @@ func TestPlaceholderResolution_NotFoundForRealUser(t *testing.T) {
 	seedUser(t, conn, userID, "Real User")
 
 	// Create identity for this user
-	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	userUUID, err := uuid.Parse(userID)
 	require.NoError(t, err)
 	err = db.Queries.CreateUserIdentity(context.Background(), generated.CreateUserIdentityParams{
 		UserID:         userUUID,
-		Provider:       db_types.NewJSONNullString("github"),
-		ProviderUserID: db_types.NewJSONNullString("99999"),
+		Provider:       "github",
+		ProviderUserID: "99999",
 		Email:          db_types.NewJSONNullString(userID + "@test.local"),
 	})
 	require.NoError(t, err)
@@ -130,15 +132,15 @@ func TestPlaceholderResolution_PreservesWorkspaceMembership(t *testing.T) {
 		ID:        row.ID,
 		Name:      db_types.NewJSONNullString("New Guy"),
 		GithubID:  db_types.NewJSONNullInt64(77777),
-		Email:     db_types.NewJSONNullString(email),
+		Email:     email,
 		AvatarUrl: db_types.NewJSONNullString("https://avatars.example.com/77777"),
 	})
 	require.NoError(t, err)
 
 	err = db.Queries.CreateUserIdentity(context.Background(), generated.CreateUserIdentityParams{
 		UserID:         row.ID,
-		Provider:       db_types.NewJSONNullString("github"),
-		ProviderUserID: db_types.NewJSONNullString("77777"),
+		Provider:       "github",
+		ProviderUserID: "77777",
 		Email:          db_types.NewJSONNullString(email),
 	})
 	require.NoError(t, err)
@@ -148,7 +150,7 @@ func TestPlaceholderResolution_PreservesWorkspaceMembership(t *testing.T) {
 	err = auth.EnsureDefaultWorkspaceForUser(context.Background(), placeholderID)
 	require.NoError(t, err)
 
-	userUUID, err := db_types.NewJSONNullUUIDFromString(placeholderID)
+	userUUID, err := uuid.Parse(placeholderID)
 	require.NoError(t, err)
 	count, err := db.Queries.CountWorkspaceToUserByUserID(context.Background(), userUUID)
 	require.NoError(t, err)
@@ -167,9 +169,9 @@ func TestReactivateWorkspaceToUser(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedWorkspaceToUser(t, conn, wsID, memberID)
 
-	wsUUID, err := db_types.NewJSONNullUUIDFromString(wsID)
+	wsUUID, err := uuid.Parse(wsID)
 	require.NoError(t, err)
-	memberUUID, err := db_types.NewJSONNullUUIDFromString(memberID)
+	memberUUID, err := uuid.Parse(memberID)
 	require.NoError(t, err)
 
 	// Soft-delete the membership
@@ -218,9 +220,9 @@ func TestReactivateWorkspaceToUser_NoSoftDeletedRow(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedWorkspaceToUser(t, conn, wsID, memberID)
 
-	wsUUID, err := db_types.NewJSONNullUUIDFromString(wsID)
+	wsUUID, err := uuid.Parse(wsID)
 	require.NoError(t, err)
-	memberUUID, err := db_types.NewJSONNullUUIDFromString(memberID)
+	memberUUID, err := uuid.Parse(memberID)
 	require.NoError(t, err)
 
 	// Reactivate on an active record: should return ErrNoRows (deleted_at IS NOT NULL doesn't match)
@@ -240,7 +242,7 @@ func TestAddMember_FullFlow(t *testing.T) {
 	seedUser(t, conn, ownerID, "Owner")
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 
-	wsUUID, err := db_types.NewJSONNullUUIDFromString(wsID)
+	wsUUID, err := uuid.Parse(wsID)
 	require.NoError(t, err)
 
 	email := "newmember@example.com"
@@ -254,7 +256,7 @@ func TestAddMember_FullFlow(t *testing.T) {
 
 	// 2. Create placeholder
 	userID, err := db.Queries.InsertUserPlaceholder(context.Background(), generated.InsertUserPlaceholderParams{
-		Email: db_types.NewJSONNullString(email),
+		Email: email,
 		Name:  db_types.NewJSONNullString(email),
 	})
 	require.NoError(t, err)

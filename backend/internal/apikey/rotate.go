@@ -12,6 +12,8 @@ import (
 	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/authz"
+
+	"github.com/google/uuid"
 )
 
 // RotateHandler mints a successor carrying the old key's name, roles, and
@@ -33,12 +35,12 @@ func RotateHandler() http.HandlerFunc {
 		workspaceID := a.WorkspaceID
 		userID := a.UserID
 
-		oldID, err := db_types.NewJSONNullUUIDFromString(r.PathValue("id"))
+		oldID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -63,7 +65,7 @@ func RotateHandler() http.HandlerFunc {
 		}
 
 		plaintext, prefix, hash := auth.GenerateAPIKey()
-		createdBy, _ := db_types.NewJSONNullUUIDFromString(userID)
+		createdBy, _ := uuid.Parse(userID)
 
 		tx, err := db.GetDB().BeginTx(r.Context(), nil)
 		if err != nil {
@@ -76,9 +78,9 @@ func RotateHandler() http.HandlerFunc {
 		created, err := q.CreateAPIKey(r.Context(), generated.CreateAPIKeyParams{
 			WorkspaceID: wsUUID,
 			Name:        old.Name,
-			Prefix:      db_types.NewJSONNullString(prefix),
-			HashedKey:   db_types.NewJSONNullString(hash),
-			CreatedBy:   createdBy,
+			Prefix:      prefix,
+			HashedKey:   hash,
+			CreatedBy:   db_types.NewJSONNullUUID(createdBy),
 			ExpiresAt:   old.ExpiresAt,
 		})
 		if err != nil {
@@ -95,10 +97,10 @@ func RotateHandler() http.HandlerFunc {
 			}
 		}
 		// Mark the old key so the user can tell them apart
-		oldName := old.Name.ValueOrEmpty()
+		oldName := old.Name
 		if err := q.RenameAPIKey(r.Context(), generated.RenameAPIKeyParams{
 			ID:   oldID,
-			Name: db_types.NewJSONNullString(oldName + " (rotated)"),
+			Name: oldName + " (rotated)",
 		}); err != nil {
 			http.Error(w, "failed to rotate api key", http.StatusInternalServerError)
 			return
@@ -119,14 +121,14 @@ func RotateHandler() http.HandlerFunc {
 		audit.EmitAction(r.Context(), audit.APIKeyRotated, audit.Record{
 			WorkspaceID: workspaceID,
 			TargetID:    oldID.String(),
-			TargetLabel: old.Name.ValueOrEmpty(),
+			TargetLabel: old.Name,
 			Status:      audit.StatusSuccess,
 			Payload:     map[string]any{"new_api_key_id": created.ID.String()},
 		})
 
 		writeJSON(w, createResponse{
 			ID:     created.ID.String(),
-			Prefix: created.Prefix.ValueOrEmpty(),
+			Prefix: created.Prefix,
 			Key:    plaintext,
 		})
 	}

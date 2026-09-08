@@ -6,10 +6,11 @@ import (
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/authz"
+
+	"github.com/google/uuid"
 )
 
 func RevokeHandler() http.HandlerFunc {
@@ -27,12 +28,12 @@ func RevokeHandler() http.HandlerFunc {
 		}
 		workspaceID := a.WorkspaceID
 
-		idUUID, err := db_types.NewJSONNullUUIDFromString(r.PathValue("id"))
+		idUUID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return

@@ -7,9 +7,9 @@ import (
 )
 
 // A NOT NULL column with a literal DB default must coalesce to that default in
-// the merge (PatchStrDefault) so a client-omitted value never writes NULL. A
+// the merge (PatchStrValueDefault) so a client-omitted value never loses it. A
 // nullable column keeps PatchNullStr; a NOT NULL column without a default keeps
-// PatchStr.
+// PatchValue, which merges the plain Go value a NOT NULL column now generates.
 func TestEmitGlueCoalescesNotNullDefault(t *testing.T) {
 	tbl := schema.RawTable{
 		Schema: "app", Name: "group", Comment: "@app.sync",
@@ -39,11 +39,11 @@ func TestEmitGlueCoalescesNotNullDefault(t *testing.T) {
 			apply = f.Content
 		}
 	}
-	if !strings.Contains(apply, `utils.PatchStrDefault(payload, "source", existing.Source, "local")`) {
+	if !strings.Contains(apply, `utils.PatchStrValueDefault(payload, "source", existing.Source, "local")`) {
 		t.Errorf("source should coalesce to its default:\n%s", apply)
 	}
-	if !strings.Contains(apply, `utils.PatchStr(payload, "name", existing.Name)`) {
-		t.Errorf("name (NOT NULL, no default) should use PatchStr")
+	if !strings.Contains(apply, `utils.PatchValue(payload, "name", existing.Name, utils.MapGetString(payload, "name"))`) {
+		t.Errorf("name (NOT NULL, no default) should use PatchValue")
 	}
 	if !strings.Contains(apply, `utils.PatchNullStr(payload, "note", existing.Note)`) {
 		t.Errorf("note (nullable) should use PatchNullStr")

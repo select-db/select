@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"backend/db/db_types"
 	"backend/internal/auth"
 )
 
@@ -49,7 +48,7 @@ func NewAccount(t *testing.T, conn *sql.DB) Actor {
 // are seeded at call time (CreateJWT reads them from the DB). Seed first.
 func MintJWT(t *testing.T, userID string) string {
 	t.Helper()
-	uid, err := db_types.NewJSONNullUUIDFromString(userID)
+	uid, err := uuid.Parse(userID)
 	require.NoError(t, err)
 	token, err := auth.CreateJWT(context.Background(), uid)
 	require.NoError(t, err)

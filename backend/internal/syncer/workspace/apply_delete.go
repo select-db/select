@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/internal/audit"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 // ApplyDelete sets deleted_at and updated_at for the workspace identified by the commit.
@@ -20,7 +21,7 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if id == "" {
 		return false, nil, fmt.Errorf("workspace: missing id")
 	}
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("workspace: invalid id %q: %w", id, err)
 	}

@@ -8,17 +8,18 @@ import (
 	"errors"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, error) {
-	idUUID, err := db_types.NewJSONNullUUIDFromString(c.ObjectID)
+	idUUID, err := uuid.Parse(c.ObjectID)
 	if err != nil {
 		return nil, nil
 	}
-	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(c.WorkspaceID)
+	workspaceUUID, err := uuid.Parse(c.WorkspaceID)
 	if err != nil {
 		return nil, nil
 	}
@@ -37,6 +38,6 @@ func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, err
 		ObjectID:      c.ObjectID,
 		TableName:     "user_to_group",
 		ServerPayload: payload,
-		UpdatedAt:     row.UpdatedAt.ValueOrZero(),
+		UpdatedAt:     row.UpdatedAt,
 	}, nil
 }

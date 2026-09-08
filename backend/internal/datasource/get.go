@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/authz"
 
@@ -57,8 +56,8 @@ func GetHandler() http.HandlerFunc {
 		}
 
 		row, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
-			ID:          db_types.NewJSONNullUUID(parsedID),
-			WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
+			ID:          parsedID,
+			WorkspaceID: parsedWorkspaceID,
 		})
 		if err != nil {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -78,13 +77,13 @@ func GetHandler() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(getDatasourceResponse{
-			Name:            row.Name.String,
-			DSN:             maskDSN(row.DbType.String, dsn),
+			Name:            row.Name,
+			DSN:             maskDSN(row.DbType, dsn),
 			SSH:             maskSSH(ssh),
-			MaxOpenConns:    row.MaxOpenConns.Int64,
-			MaxIdleConns:    row.MaxIdleConns.Int64,
-			ConnMaxLifetime: row.ConnMaxLifetime.Int64,
-			ConnMaxIdleTime: row.ConnMaxIdleTime.Int64,
+			MaxOpenConns:    int64(row.MaxOpenConns),
+			MaxIdleConns:    int64(row.MaxIdleConns),
+			ConnMaxLifetime: int64(row.ConnMaxLifetime),
+			ConnMaxIdleTime: int64(row.ConnMaxIdleTime),
 		})
 	}
 }

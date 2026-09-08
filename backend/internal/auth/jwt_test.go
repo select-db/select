@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"backend/db/db_types"
-
 	"github.com/google/uuid"
 )
 
@@ -33,7 +31,7 @@ func TestJWTRoundTripLocalSigner(t *testing.T) {
 	t.Setenv("SELECTDB_KEK", "dev") // force localMode -> in-process signer
 	t.Setenv("PRIVATE_KEY_PATH", path)
 
-	userID := db_types.NewJSONNullUUID(uuid.New())
+	userID := uuid.New()
 	tok, err := CreateJWT(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("CreateJWT: %v", err)
@@ -43,8 +41,8 @@ func TestJWTRoundTripLocalSigner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateJWT: %v", err)
 	}
-	if claims.UserID != userID.UUID.String() {
-		t.Fatalf("sub mismatch: got %q want %q", claims.UserID, userID.UUID.String())
+	if claims.UserID != userID.String() {
+		t.Fatalf("sub mismatch: got %q want %q", claims.UserID, userID.String())
 	}
 }
 
@@ -63,7 +61,7 @@ func TestJWTRejectsTampered(t *testing.T) {
 	t.Setenv("SELECTDB_KEK", "dev")
 	t.Setenv("PRIVATE_KEY_PATH", path)
 
-	tok, err := CreateJWT(context.Background(), db_types.NewJSONNullUUID(uuid.New()))
+	tok, err := CreateJWT(context.Background(), uuid.New())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,8 +5,9 @@ import (
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/internal/authz"
+
+	"github.com/google/uuid"
 )
 
 type listedDatasource struct {
@@ -30,7 +31,7 @@ func ListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := authz.ActorOf(r)
 
-		workspaceID, err := db_types.NewJSONNullUUIDFromString(a.WorkspaceID)
+		workspaceID, err := uuid.Parse(a.WorkspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace_id", http.StatusBadRequest)
 			return
@@ -45,9 +46,9 @@ func ListHandler() http.HandlerFunc {
 		out := make([]listedDatasource, 0, len(rows))
 		for _, row := range rows {
 			out = append(out, listedDatasource{
-				ID:     row.ID.UUID.String(),
-				Name:   row.Name.String,
-				DBType: row.DbType.String,
+				ID:     row.ID.String(),
+				Name:   row.Name,
+				DBType: row.DbType,
 			})
 		}
 

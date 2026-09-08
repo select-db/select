@@ -77,4 +77,3 @@ func EmitAPICapabilities(entities []schema.Entity) ([]byte, error) {
 	}
 	return json.MarshalIndent(caps, "", "  ")
 }
-

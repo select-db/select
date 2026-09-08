@@ -20,7 +20,7 @@ func EnsureDefaultWorkspaceForUser(ctx context.Context, userID string) error {
 		return nil
 	}
 
-	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return err
 	}
@@ -30,12 +30,12 @@ func EnsureDefaultWorkspaceForUser(ctx context.Context, userID string) error {
 		return err
 	}
 
-	workspaceID := db_types.NewJSONNullUUID(uuid.New())
-	wtuID := db_types.NewJSONNullUUID(uuid.New())
+	workspaceID := uuid.New()
+	wtuID := uuid.New()
 
 	if err := db.Queries.InsertDefaultWorkspace(ctx, generated.InsertDefaultWorkspaceParams{
 		ID:      workspaceID,
-		OwnerID: userUUID,
+		OwnerID: db_types.NewJSONNullUUID(userUUID),
 	}); err != nil {
 		return err
 	}

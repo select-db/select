@@ -7,20 +7,21 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]types.UserToRoleRow, error) {
-	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := db.Queries.GetUserToRolesForUserSince(ctx, generated.GetUserToRolesForUserSinceParams{
 		UserID:    userUUID,
-		UpdatedAt: db_types.NewJSONNullTimeFromTime(since),
+		UpdatedAt: since,
 	})
 	if err != nil {
 		return nil, err
@@ -39,7 +40,7 @@ func appUserToRoleToTypesRow(row generated.AppUserToRole) types.UserToRoleRow {
 		UserID:      row.UserID.String(),
 		RoleID:      row.RoleID.String(),
 		WorkspaceID: row.WorkspaceID.String(),
-		UpdatedAt:   row.UpdatedAt.ValueOrZero(),
+		UpdatedAt:   row.UpdatedAt,
 	}
 	if row.DeletedAt.Valid {
 		t := row.DeletedAt.ValueOrZero()

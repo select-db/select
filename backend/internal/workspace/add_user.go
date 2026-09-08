@@ -14,6 +14,8 @@ import (
 	"backend/internal/authz"
 
 	core "github.com/selectDb/dialect/core"
+
+	"github.com/google/uuid"
 )
 
 // nameFromEmail extracts a display name from the local part of an email.
@@ -65,14 +67,14 @@ func AddUserHandler() http.HandlerFunc {
 			return
 		}
 
-		workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		workspaceUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
 		}
 
 		// Find existing user by email
-		var userUUID db_types.JSONNullUUID
+		var userUUID uuid.UUID
 		row, err := db.Queries.GetUserByEmail(r.Context(), generated.GetUserByEmailParams{
 			Lower:       email,
 			WorkspaceID: workspaceUUID,
@@ -80,7 +82,7 @@ func AddUserHandler() http.HandlerFunc {
 		if errors.Is(err, sql.ErrNoRows) {
 			// No user with this email: create a placeholder
 			userUUID, err = db.Queries.InsertUserPlaceholder(r.Context(), generated.InsertUserPlaceholderParams{
-				Email: db_types.NewJSONNullString(email),
+				Email: email,
 				Name:  db_types.NewJSONNullString(nameFromEmail(email)),
 			})
 			if err != nil {

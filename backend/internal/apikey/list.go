@@ -6,6 +6,10 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/internal/authz"
+
+	"github.com/google/uuid"
+
+	"time"
 )
 
 type roleRef struct {
@@ -13,15 +17,18 @@ type roleRef struct {
 	Name string `json:"name"`
 }
 
+// The NOT NULL columns are plain Go values now. The wire shape is unchanged:
+// a wrapper around a column that could never be NULL always marshalled the
+// value itself. last_used_at and expires_at really are nullable and keep it.
 type keyEntry struct {
-	ID         db_types.JSONNullUUID   `json:"id"`
-	Name       db_types.JSONNullString `json:"name"`
-	Prefix     db_types.JSONNullString `json:"prefix"`
-	Roles      []roleRef               `json:"roles"`
-	CreatedBy  db_types.JSONNullUUID   `json:"created_by"`
-	CreatedAt  db_types.JSONNullTime   `json:"created_at"`
-	LastUsedAt db_types.JSONNullTime   `json:"last_used_at"`
-	ExpiresAt  db_types.JSONNullTime   `json:"expires_at"`
+	ID         uuid.UUID             `json:"id"`
+	Name       string                `json:"name"`
+	Prefix     string                `json:"prefix"`
+	Roles      []roleRef             `json:"roles"`
+	CreatedBy  db_types.JSONNullUUID `json:"created_by"`
+	CreatedAt  time.Time             `json:"created_at"`
+	LastUsedAt db_types.JSONNullTime `json:"last_used_at"`
+	ExpiresAt  db_types.JSONNullTime `json:"expires_at"`
 }
 
 func ListHandler() http.HandlerFunc {
@@ -36,7 +43,7 @@ func ListHandler() http.HandlerFunc {
 			return
 		}
 		workspaceID := a.WorkspaceID
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -58,7 +65,7 @@ func ListHandler() http.HandlerFunc {
 			id := rr.ApiKeyID.String()
 			rolesByKey[id] = append(rolesByKey[id], roleRef{
 				ID:   rr.RoleID.String(),
-				Name: rr.RoleName.ValueOrEmpty(),
+				Name: rr.RoleName,
 			})
 		}
 

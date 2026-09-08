@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/internal/authz"
 	"backend/internal/datasource"
 
@@ -44,7 +43,7 @@ func toolListDatasources() Tool {
 			if err != nil {
 				return nil, errBadArgument("invalid workspace id")
 			}
-			rows, err := db.Queries.ListDatasourcesByWorkspace(ctx, db_types.NewJSONNullUUID(parsedWS))
+			rows, err := db.Queries.ListDatasourcesByWorkspace(ctx, parsedWS)
 			if err != nil {
 				return nil, errUpstream("could not list datasources: " + err.Error())
 			}
@@ -76,8 +75,8 @@ func toolListDatasources() Tool {
 				}
 				out = append(out, item{
 					ID:          id,
-					Name:        row.Name.String,
-					Dialect:     row.DbType.String,
+					Name:        row.Name,
+					Dialect:     row.DbType,
 					Permissions: combined,
 				})
 			}

@@ -28,7 +28,7 @@ func (l *Logger) LogOutbox(ctx context.Context, e *Event) error {
 	if err != nil {
 		return err
 	}
-	return l.q.InsertAuditOutbox(ctx, jsonbRaw(body))
+	return l.q.InsertAuditOutbox(ctx, body)
 }
 
 func (l *Logger) outboxLoop() {
@@ -87,10 +87,10 @@ func (l *Logger) drainOutboxBatch(ctx context.Context) (int, error) {
 	var ids []int64
 	var events []*Event
 	for _, row := range rows {
-		ids = append(ids, row.ID.Int64) // delete regardless so a poison row can't wedge the queue
+		ids = append(ids, row.ID) // delete regardless so a poison row can't wedge the queue
 		var e Event
-		if err := json.Unmarshal(row.EventJson.RawMessage, &e); err != nil {
-			log.Printf("audit: dropping unparseable outbox row %d: %v", row.ID.Int64, err)
+		if err := json.Unmarshal(row.EventJson, &e); err != nil {
+			log.Printf("audit: dropping unparseable outbox row %d: %v", row.ID, err)
 			continue
 		}
 		events = append(events, &e)

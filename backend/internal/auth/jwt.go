@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -108,7 +110,7 @@ type CustomClaims struct {
 }
 
 // CreateJWT issues a signed access token embedding per-workspace roles/ownership.
-func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error) {
+func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 	signer, err := getSigner()
 	if err != nil {
 		return "", fmt.Errorf("unable to sign JWT: %w", err)
@@ -121,18 +123,14 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 		var workspaceIDs []string
 		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
 			for _, u := range ids {
-				if u.Valid {
-					workspaceIDs = append(workspaceIDs, u.UUID.String())
-				}
+				workspaceIDs = append(workspaceIDs, u.String())
 			}
 		}
 
 		owned := map[string]bool{}
-		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, userID); err == nil {
+		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, db_types.NewJSONNullUUID(userID)); err == nil {
 			for _, u := range ids {
-				if u.Valid {
-					owned[u.UUID.String()] = true
-				}
+				owned[u.String()] = true
 			}
 		}
 
@@ -153,16 +151,12 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 		}
 		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
 			for _, r := range rows {
-				if r.ID.Valid && r.WorkspaceID.Valid {
-					addRole(r.WorkspaceID.UUID.String(), r.ID.UUID.String(), r.Name.ValueOrEmpty())
-				}
+				addRole(r.WorkspaceID.String(), r.ID.String(), r.Name)
 			}
 		}
 		if rows, err := db.Queries.GetUserGroupRolesWithNames(ctx, userID); err == nil {
 			for _, r := range rows {
-				if r.ID.Valid && r.WorkspaceID.Valid {
-					addRole(r.WorkspaceID.UUID.String(), r.ID.UUID.String(), r.Name.ValueOrEmpty())
-				}
+				addRole(r.WorkspaceID.String(), r.ID.String(), r.Name)
 			}
 		}
 
@@ -178,13 +172,13 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 		if u, err := db.Queries.GetUserNameByID(ctx, userID); err == nil {
 			displayName = u.Name.ValueOrEmpty()
 			if displayName == "" {
-				displayName = u.Email.ValueOrEmpty()
+				displayName = u.Email
 			}
 		}
 	}
 
 	claims := CustomClaims{
-		UserID:     userID.UUID.String(),
+		UserID:     userID.String(),
 		Name:       displayName,
 		Workspaces: workspaces,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -202,7 +196,7 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 // Runs in a transaction: insert first, then delete old tokens, so a failed insert
 // does not leave the user with no refresh tokens. ctx is used for DB calls so creation
 // can be cancelled if the client disconnects.
-func CreateRefreshToken(ctx context.Context, userID db_types.JSONNullUUID, deviceID string, issuedIP string) (*string, error) {
+func CreateRefreshToken(ctx context.Context, userID uuid.UUID, deviceID string, issuedIP string) (*string, error) {
 	plainToken := GenerateRandomString(64)
 	expiry := time.Now().Add(refreshTokenTTL)
 	hashedToken := HashRefreshToken(plainToken, deviceID)
@@ -221,8 +215,8 @@ func CreateRefreshToken(ctx context.Context, userID db_types.JSONNullUUID, devic
 	q := db.Queries.WithTx(tx)
 	err = q.CreateRefreshToken(ctx, generated.CreateRefreshTokenParams{
 		UserID:      userID,
-		HashedToken: db_types.NewJSONNullString(hashedToken),
-		ExpiresAt:   db_types.NewJSONNullTimeFromTime(expiry),
+		HashedToken: hashedToken,
+		ExpiresAt:   expiry,
 		IssuedIp:    db_types.NewJSONNullInet(ip),
 	})
 	if err != nil {
@@ -230,7 +224,7 @@ func CreateRefreshToken(ctx context.Context, userID db_types.JSONNullUUID, devic
 	}
 	err = q.DeleteUserRefreshTokensExcept(ctx, generated.DeleteUserRefreshTokensExceptParams{
 		UserID:      userID,
-		HashedToken: db_types.NewJSONNullString(hashedToken),
+		HashedToken: hashedToken,
 	})
 	if err != nil {
 		return nil, err
