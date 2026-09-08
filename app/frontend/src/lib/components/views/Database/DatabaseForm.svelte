@@ -5,12 +5,11 @@
 	import { renameEntry } from '$lib/components/views/shared/renameEntry';
 	import { DB_CONFIG_FILE } from '$lib/components/views/FileSystem/Files/options/helpers';
 	import {
-		DeleteDatasource,
 		GetDatasource,
 		UpsertDatasource
 	} from '$lib/bindings/selectDb/internal/datasource/datasource';
 
-	import { must, tryCatch } from '$lib/utils/tryCatch';
+	import { tryCatch } from '$lib/utils/tryCatch';
 	import { debounce } from '$lib/utils/debounce';
 
 	import { AlertType } from '$lib/system/Alert/types';
@@ -23,6 +22,7 @@
 	import type { Icons } from '$lib/system/Icon/types';
 	import { onMount } from 'svelte';
 	import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';
+	import { revokeConnections } from '$lib/components/views/shared/revokeConnections';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 
 	import VariablePicker from '$lib/components/views/File/Header/VariablePicker.svelte';
@@ -73,6 +73,12 @@
 		folder_id?: string;
 
 		onSuccess?: (saved: SavedDatabaseData) => void;
+	};
+
+	const DIALECT_LABELS: Record<AvailableDatabases, string> = {
+		sqlite: 'SQLite',
+		mysql: 'MySQL',
+		postgresql: 'PostgreSQL'
 	};
 
 	const DIALECT_ICONS: Record<AvailableDatabases, Icons> = {
@@ -141,19 +147,31 @@
 	let remoteError = $state<string | null>(null);
 	let previousDbType = $state(db_type);
 
-	// When switching to a non-networked dialect, clean up proxy and SSH
+	// When switching to a non-networked dialect, clean up proxy and SSH.
+	//
+	// A proxified database is the one case this will not do quietly: the dialect
+	// cannot hold a proxy connection, so the switch would drop the credential the
+	// whole workspace queries through, as a side effect of a dropdown nobody read
+	// as destructive. It sends the person to the checkbox that asks first instead.
 	$effect(() => {
 		if (db_type === previousDbType) return;
-		const wasProxified = proxified;
+		const previous = previousDbType;
+		const target = db_type;
 		previousDbType = db_type;
 
-		if (!isNetworked) {
-			connectionMode = 'dsn';
-			proxified = false;
-			if (wasProxified && id) {
-				tryCatch(DeleteDatasource, id);
-			}
+		if (isNetworked) return;
+
+		if (proxified && id) {
+			previousDbType = previous;
+			db_type = previous;
+			notifyError(
+				`${name || 'This database'} is a shared connection, and ${DIALECT_LABELS[target]} cannot be one. Turn off "Proxy connection" first, which revokes the stored credentials.`
+			);
+			return;
 		}
+
+		connectionMode = 'dsn';
+		proxified = false;
 	});
 	let mounted = $state(false);
 
@@ -456,11 +474,7 @@
 				<Select
 					bind:value={db_type}
 					width={140}
-					options={[
-						{ value: 'sqlite', label: 'SQLite' },
-						{ value: 'mysql', label: 'MySQL' },
-						{ value: 'postgresql', label: 'PostgreSQL' }
-					]}
+					options={Object.entries(DIALECT_LABELS).map(([value, label]) => ({ value, label }))}
 				>
 					{#snippet optionDisplay(option: SelectOption<string> | null)}
 						{#if option}
@@ -515,14 +529,19 @@
 								proxified: checked
 							});
 						} else {
-							// proxified -> local: the real secret lives only on the backend and is
-							// about to be deleted; the form only holds a masked copy (bullets). Clear
-							// the credential fields so the mask can't be persisted to the local config
-							// and the user knowingly re-enters them.
+							// proxified -> local: this drops the credential for everyone, so it asks
+							// first and puts the checkbox back if the answer is no.
+							if (!(await revokeConnections([{ id, name }]))) {
+								proxified = true;
+								return;
+							}
+							// The real secret lived only on the backend and is now gone; the form
+							// holds a masked copy (bullets). Clear the credential fields so the mask
+							// can't be persisted to the local config and the user knowingly
+							// re-enters them.
 							dsnLocal = '';
 							sshPassword = '';
 							sshPrivateKey = '';
-							await must(tryCatch(DeleteDatasource, id));
 						}
 					}}
 					label="Proxified"

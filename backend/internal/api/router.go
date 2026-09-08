@@ -65,6 +65,7 @@ func Register(mux *http.ServeMux) {
 	mux.Handle("POST /apikeys/{id}/rotate", authenticated(member(limited(10, apikeyhandler.RotateHandler()))))
 	mux.Handle("PUT /apikeys/{id}/roles", authenticated(member(limited(30, apikeyhandler.SetRolesHandler()))))
 
+	mux.Handle("GET /datasources", authenticated(member(limited(120, datasourcehandler.ListHandler()))))
 	mux.Handle("GET /datasources/{id}", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
 	mux.Handle("PUT /datasources/{id}", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
 	mux.Handle("DELETE /datasources/{id}", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))

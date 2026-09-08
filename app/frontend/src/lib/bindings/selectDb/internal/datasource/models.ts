@@ -50,6 +50,40 @@ export class GetResult {
     }
 }
 
+/**
+ * ListedDatasource is one proxified connection as the connections screen shows
+ * it. No DSN: administrating a connection does not require being handed the
+ * credential behind it.
+ */
+export class ListedDatasource {
+    "id": string;
+    "name": string;
+    "db_type": string;
+
+    /** Creates a new ListedDatasource instance. */
+    constructor($$source: Partial<ListedDatasource> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("db_type" in $$source)) {
+            this["db_type"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ListedDatasource instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ListedDatasource {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ListedDatasource($$parsedSource as Partial<ListedDatasource>);
+    }
+}
+
 export class UpsertParams {
     "id": string;
     "db_type": string;

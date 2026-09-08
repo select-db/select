@@ -30,11 +30,19 @@ export const permissionKey = (
 export function buildPermissionMap(permissions: Permission[]): PermissionMap {
 	const map = new Map<string, PermissionEntry>();
 	for (const p of permissions) {
+		// On a db-scoped row an absent schema, table or column means "any", which
+		// is what '*' is written as here. Go reads the two as the same thing
+		// (derefWildcard in dialect/core/permissions.go), so a row stored with
+		// NULL rather than '*' has to resolve alike or the app would refuse what
+		// the server allows. App-level rows keep '' -- there the empty db is the
+		// scope, not a wildcard.
+		const dbScoped = p.db_instance_id !== null && p.db_instance_id !== '';
+		const anyScope = dbScoped ? '*' : '';
 		const key = permissionKey(
 			p.db_instance_id ?? '',
-			p.schema_name ?? '',
-			p.table_name ?? '',
-			p.column_name ?? '',
+			p.schema_name ?? anyScope,
+			p.table_name ?? anyScope,
+			p.column_name ?? anyScope,
 			p.action
 		);
 		map.set(key, { id: p.id, effect: p.effect });

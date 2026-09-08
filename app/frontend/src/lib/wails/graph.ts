@@ -37,12 +37,21 @@ export type ExplainNode = NonNullItems<coreModels.ExplainNode>;
 export type ResolveResult = NonNullItems<sqlLangModels.ResolveResult>;
 export type SearchResultWithNodes = NonNullItems<searchModels.SearchResultWithNodes>;
 export type FileQuery = models.FileQuery;
+export type DatabaseRef = models.DatabaseRef;
 
 export const GetWorkspaceGraph = async (): Promise<WorkspaceNode | null> =>
 	stripNullItems(await graphService.GetWorkspaceGraph());
 
 export const GetDBInstanceNodeByID = async (dbInstanceID: string): Promise<DBInstanceNode | null> =>
 	stripNullItems(await graphService.GetDBInstanceNodeByID(dbInstanceID));
+
+/**
+ * The shared connections at or under these entries, id and name, which is what
+ * deleting the entries would revoke. Passing no ids asks about the whole
+ * workspace. Containment is answered in Go; see Graph.SharedDatabasesUnder.
+ */
+export const SharedDatabasesUnder = async (ids: string[]): Promise<DatabaseRef[]> =>
+	stripNullItems(await graphService.SharedDatabasesUnder(ids));
 
 export const SearchWithNodes = async (
 	params: searchModels.SearchParams

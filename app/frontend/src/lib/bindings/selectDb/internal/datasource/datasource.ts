@@ -19,6 +19,22 @@ export function GetDatasource(id: string): $CancellablePromise<$models.GetResult
     });
 }
 
+/**
+ * ListDatasources returns every proxified connection stored for the workspace,
+ * including ones no workspace file names any more.
+ * 
+ * That last case is the reason this exists. The directory naming a connection
+ * is replicated through git, so it can be deleted on another machine, in a
+ * branch, or outside the app, while the credential stays on the server. Without
+ * this list such a connection cannot be seen or revoked, because the id needed
+ * to name it lived in the file that was deleted.
+ */
+export function ListDatasources(): $CancellablePromise<$models.ListedDatasource[]> {
+    return $Call.ByID(3057265278).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
 export function UpsertDatasource(params: $models.UpsertParams): $CancellablePromise<void> {
     return $Call.ByID(3159418018, params);
 }
@@ -26,3 +42,5 @@ export function UpsertDatasource(params: $models.UpsertParams): $CancellableProm
 // Private type creation functions
 const $$createType0 = $models.GetResult.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
+const $$createType2 = $models.ListedDatasource.createFrom;
+const $$createType3 = $Create.Array($$createType2);
