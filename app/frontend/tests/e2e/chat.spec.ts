@@ -1,5 +1,5 @@
 import { expect, test, holdSession, type Page } from './wails';
-import { stubChatProvider, textTurn } from './shots';
+import { PROVIDERS, chooseModel, stubProvider, type AiProvider, type Turn } from './aiProvider';
 import { toolCall, toolCallsInState, tabs, treeNode } from './selectors';
 
 /**
@@ -11,9 +11,11 @@ import { toolCall, toolCallsInState, tabs, treeNode } from './selectors';
  * is a call the app forgot, and the model is told "Tool execution did not
  * complete." for the rest of the session.
  *
- * The turns here are shaped like Anthropic's real stream: a text block first,
- * tool arguments arriving in fragments, and the events that wrap them. Streams
- * do not always end tidily, so several of these cut one short.
+ * The first half runs against every provider, because how a turn arrives is the
+ * only thing that differs between them: Anthropic and the Chat Completions
+ * providers name their calls, Gemini does not, and each reports a broken stream
+ * its own way. The second half is about the app rather than the wire, and runs
+ * once.
  */
 
 const DB = 'sample-warehouse';
@@ -21,41 +23,11 @@ const DB = 'sample-warehouse';
 /** wails' id for DbClient.Query, from the generated bindings. */
 const QUERY_CALL = 2964708639;
 
-const sse = (type: string, data: object) =>
-	`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
-
-/** A turn that thinks out loud and then calls execute_query, args in fragments. */
-function toolTurn(statement: string, id: string, thought: string) {
-	const args = JSON.stringify({ dbInstanceId: DB, statement });
-	const fragments = args.match(/.{1,7}/g) ?? [args];
-	return (
-		sse('message_start', { message: { id: 'msg_1', role: 'assistant', content: [] } }) +
-		sse('content_block_start', { index: 0, content_block: { type: 'text', text: '' } }) +
-		sse('content_block_delta', { index: 0, delta: { type: 'text_delta', text: thought } }) +
-		sse('content_block_stop', { index: 0 }) +
-		sse('ping', {}) +
-		sse('content_block_start', {
-			index: 1,
-			content_block: { type: 'tool_use', id, name: 'execute_query', input: {} }
-		}) +
-		fragments
-			.map((f) =>
-				sse('content_block_delta', {
-					index: 1,
-					delta: { type: 'input_json_delta', partial_json: f }
-				})
-			)
-			.join('') +
-		sse('content_block_stop', { index: 1 }) +
-		sse('message_delta', { delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 1 } }) +
-		sse('message_stop', {})
-	);
-}
-
-/** The same turn, cut off by the error Anthropic sends when it is overloaded. */
-const overloadedAfter = (turn: string) =>
-	turn.replace(sse('message_stop', {}), '') +
-	sse('error', { error: { type: 'overloaded_error', message: 'Overloaded' } });
+const queryTurn = (statement: string, id: string, text: string, overloaded = false): Turn => ({
+	text,
+	call: { name: 'execute_query', input: { dbInstanceId: DB, statement }, id },
+	overloaded
+});
 
 /** Holds every execute_query call open until released, to act while one runs. */
 async function holdQueries(page: Page) {
@@ -74,16 +46,13 @@ async function holdQueries(page: Page) {
 	return { release: () => release(), started: () => started };
 }
 
-async function openChat(page: Page, signIn: () => Promise<void>, message = 'What is in there?') {
+async function openChat(page: Page, signIn: () => Promise<void>, model?: string) {
 	await page.goto('/');
 	await signIn();
 	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
 	await page.getByRole('button', { name: 'New Chat' }).click();
-	const prompt = page.getByRole('textbox', { name: 'Type a message...' });
-	await expect(prompt).toBeVisible();
-	await prompt.click();
-	await page.keyboard.type(message);
-	await page.keyboard.press('Enter');
+	if (model) await chooseModel(page, model);
+	await expect(page.getByRole('textbox', { name: 'Type a message...' })).toBeVisible();
 }
 
 async function say(page: Page, message: string) {
@@ -99,52 +68,51 @@ async function expectSettled(page: Page, count: number) {
 	await expect(toolCallsInState(page, 'running')).toHaveCount(0, { timeout: 20_000 });
 }
 
-test('runs the queries a conversation asks for', async ({ page, signIn, consoleErrors }) => {
+for (const provider of PROVIDERS satisfies AiProvider[]) {
+	test.describe(provider.model, () => {
+		test('runs the queries a conversation asks for', async ({ page, signIn, consoleErrors }) => {
+			await holdSession(page);
+			await stubProvider(page, provider, [
+				queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Let me count the orders.'),
+				queryTurn('SELECT status FROM orders LIMIT 3', 'call_2', 'And their statuses.'),
+				{ text: 'Both came back.' }
+			]);
+			await openChat(page, signIn, provider.model);
+			await say(page, 'What is in there?');
+
+			await expect(page.getByText('Both came back.')).toBeVisible({ timeout: 20_000 });
+			await expectSettled(page, 2);
+			expect(consoleErrors).toEqual([]);
+		});
+
+		test('a broken stream does not strand the call that turn made', async ({ page, signIn }) => {
+			// Every provider can stop mid-stream once the tool call is already
+			// complete — Anthropic sends an error event when it is overloaded, the
+			// others an error chunk. The call is good; only the stream broke.
+			await holdSession(page);
+			await stubProvider(page, provider, [
+				queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.', true),
+				{ text: 'Recovered.' }
+			]);
+			await openChat(page, signIn, provider.model);
+			await say(page, 'How many orders?');
+
+			await expectSettled(page, 1);
+		});
+	});
+}
+
+const [anthropic] = PROVIDERS;
+
+test('a second broken turn does not strand either call', async ({ page, signIn }) => {
 	await holdSession(page);
-	await stubChatProvider(page, [
-		toolTurn('SELECT COUNT(*) FROM orders', 'toolu_1', 'Let me count the orders.'),
-		toolTurn('SELECT status FROM orders LIMIT 3', 'toolu_2', 'And their statuses.'),
-		textTurn('Both came back.')
+	await stubProvider(page, anthropic, [
+		queryTurn('SELECT DISTINCT status FROM orders LIMIT 20', 'call_1', 'Let me query them.', true),
+		queryTurn('SELECT COUNT(*) FROM orders', 'call_2', 'Let me try another way.', true),
+		{ text: 'Recovered.' }
 	]);
 	await openChat(page, signIn);
-
-	await expect(page.getByText('Both came back.')).toBeVisible({ timeout: 20_000 });
-	await expectSettled(page, 2);
-	expect(consoleErrors).toEqual([]);
-});
-
-test('a provider error mid-stream does not strand the call that turn made', async ({
-	page,
-	signIn
-}) => {
-	// Anthropic ends an overloaded stream with an error event, after the tool
-	// call is already complete. The call is good; only the stream broke.
-	await holdSession(page);
-	await stubChatProvider(page, [
-		overloadedAfter(toolTurn('SELECT COUNT(*) FROM orders', 'toolu_1', 'Counting.')),
-		textTurn('Recovered.')
-	]);
-	await openChat(page, signIn);
-
-	await expectSettled(page, 1);
-});
-
-test('a second overloaded turn does not strand either call', async ({ page, signIn }) => {
-	await holdSession(page);
-	await stubChatProvider(page, [
-		overloadedAfter(
-			toolTurn(
-				'SELECT DISTINCT status FROM orders LIMIT 20',
-				'toolu_1',
-				'Let me query the statuses.'
-			)
-		),
-		overloadedAfter(
-			toolTurn('SELECT COUNT(*) FROM orders', 'toolu_2', 'Let me check another way.')
-		),
-		textTurn('Recovered.')
-	]);
-	await openChat(page, signIn, 'What status values exist?');
+	await say(page, 'What status values exist?');
 
 	await expect(toolCall(page)).toHaveCount(1, { timeout: 20_000 });
 	await say(page, 'stuck ?');
@@ -154,17 +122,12 @@ test('a second overloaded turn does not strand either call', async ({ page, sign
 
 test('a turn cut off mid-arguments settles as a failed call', async ({ page, signIn }) => {
 	await holdSession(page);
-	const truncated =
-		sse('content_block_start', {
-			index: 0,
-			content_block: { type: 'tool_use', id: 'toolu_cut', name: 'execute_query' }
-		}) +
-		sse('content_block_delta', {
-			index: 0,
-			delta: { type: 'input_json_delta', partial_json: '{"dbInstanceId":"sample-ware' }
-		});
-	await stubChatProvider(page, [truncated, textTurn('Recovered.')]);
+	await stubProvider(page, anthropic, [
+		{ ...queryTurn('SELECT COUNT(*) FROM orders', 'call_cut', 'Counting.'), truncated: true },
+		{ text: 'Recovered.' }
+	]);
 	await openChat(page, signIn);
+	await say(page, 'How many orders?');
 
 	await expect(toolCallsInState(page, 'failed')).toHaveCount(1, { timeout: 20_000 });
 	await expectSettled(page, 1);
@@ -175,18 +138,12 @@ test('a call to a tool the app does not have settles as a failed call', async ({
 	signIn
 }) => {
 	await holdSession(page);
-	const unknown =
-		sse('content_block_start', {
-			index: 0,
-			content_block: { type: 'tool_use', id: 'toolu_unknown', name: 'run_migration' }
-		}) +
-		sse('content_block_delta', {
-			index: 0,
-			delta: { type: 'input_json_delta', partial_json: '{"name":"x"}' }
-		}) +
-		sse('message_delta', { delta: { stop_reason: 'tool_use' } });
-	await stubChatProvider(page, [unknown, textTurn('No such tool.')]);
+	await stubProvider(page, anthropic, [
+		{ call: { name: 'run_migration', input: { name: 'x' }, id: 'call_1' } },
+		{ text: 'No such tool.' }
+	]);
 	await openChat(page, signIn);
+	await say(page, 'Migrate it.');
 
 	await expect(toolCallsInState(page, 'failed')).toHaveCount(1, { timeout: 20_000 });
 	await expectSettled(page, 1);
@@ -201,11 +158,12 @@ test('a query that fails at the transport settles as a failed call', async ({ pa
 		}
 		await route.fallback();
 	});
-	await stubChatProvider(page, [
-		toolTurn('SELECT COUNT(*) FROM orders', 'toolu_1', 'Counting.'),
-		textTurn('That failed.')
+	await stubProvider(page, anthropic, [
+		queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'),
+		{ text: 'That failed.' }
 	]);
 	await openChat(page, signIn);
+	await say(page, 'How many orders?');
 
 	await expect(page.getByText('That failed.')).toBeVisible({ timeout: 20_000 });
 	await expectSettled(page, 1);
@@ -217,11 +175,12 @@ test('a second chat tab does not strand the query the first one started', async 
 }) => {
 	await holdSession(page);
 	const gate = await holdQueries(page);
-	await stubChatProvider(page, [
-		toolTurn('SELECT COUNT(*) FROM orders', 'toolu_1', 'Counting.'),
-		textTurn('It came back.')
+	await stubProvider(page, anthropic, [
+		queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'),
+		{ text: 'It came back.' }
 	]);
 	await openChat(page, signIn);
+	await say(page, 'How many orders?');
 
 	await expect(toolCall(page)).toHaveCount(1, { timeout: 20_000 });
 	await expect.poll(gate.started).toBeGreaterThan(0);
@@ -241,11 +200,12 @@ test('a second chat tab does not strand the query the first one started', async 
 test('a restart with a query still running settles the restored call', async ({ page, signIn }) => {
 	await holdSession(page);
 	const gate = await holdQueries(page);
-	await stubChatProvider(page, [
-		toolTurn('SELECT COUNT(*) FROM orders', 'toolu_1', 'Counting.'),
-		textTurn('It came back.')
+	await stubProvider(page, anthropic, [
+		queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'),
+		{ text: 'It came back.' }
 	]);
 	await openChat(page, signIn);
+	await say(page, 'How many orders?');
 
 	await expect(toolCall(page)).toHaveCount(1, { timeout: 20_000 });
 	await expect.poll(gate.started).toBeGreaterThan(0);
