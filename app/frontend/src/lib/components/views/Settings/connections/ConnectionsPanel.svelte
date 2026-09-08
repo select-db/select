@@ -1,20 +1,15 @@
 <script lang="ts">
-	import type { Component } from 'svelte';
 	import Table from '$lib/system/Table/Table.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
 	import Alert from '$lib/system/Alert/Alert.svelte';
 	import { AlertType } from '$lib/system/Alert/types';
 	import Icon from '$lib/system/Icon/Icon.svelte';
-	import { modalStore } from '$lib/system/Modal/ModalStore';
-	import { must, tryCatch } from '$lib/utils/tryCatch';
+	import { tryCatch } from '$lib/utils/tryCatch';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
-	import {
-		ListDatasources,
-		DeleteDatasource
-	} from '$lib/bindings/selectDb/internal/datasource/datasource';
+	import { revokeConnections } from '$lib/components/views/shared/revokeConnections';
+	import { ListDatasources } from '$lib/bindings/selectDb/internal/datasource/datasource';
 	import type * as datasource from '$lib/bindings/selectDb/internal/datasource/models';
 	import { SharedDatabasesUnder } from '$lib/wails/graph';
-	import RevokeConnectionModal from '$lib/components/views/Database/RevokeConnectionModal.svelte';
 
 	/**
 	 * The proxified connections this workspace has, whether or not anything in
@@ -64,20 +59,8 @@
 		void load();
 	});
 
-	const revoke = (connection: Connection) => {
-		modalStore.set({
-			content: (() => RevokeConnectionModal) as () => Component,
-			width: 520,
-			props: {
-				names: [connection.name],
-				onCancel: () => modalStore.set(null),
-				onConfirm: async () => {
-					modalStore.set(null);
-					await must(tryCatch(DeleteDatasource, connection.id));
-					await load();
-				}
-			}
-		});
+	const revoke = async (connection: Connection) => {
+		if (await revokeConnections([{ id: connection.id, name: connection.name }])) await load();
 	};
 </script>
 

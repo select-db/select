@@ -6,18 +6,20 @@
 	type Props = {
 		/** The shared connections about to be revoked. Never empty. */
 		names: string[];
+		/** What the person actually asked for. Revoking is the consequence. */
+		verb: 'Delete' | 'Revoke';
 		onConfirm: () => void;
 		onCancel: () => void;
 	};
 
-	let { names, onConfirm, onCancel }: Props = $props();
+	let { names, verb, onConfirm, onCancel }: Props = $props();
 
 	const one = $derived(names.length === 1);
 </script>
 
 <ModalHeader
 	icon="db"
-	title={one ? `Delete ${names[0]}?` : `Delete ${names.length} shared connections?`}
+	title={one ? `${verb} ${names[0]}?` : `${verb} ${names.length} shared connections?`}
 />
 
 <ModalBody>
@@ -31,18 +33,21 @@
 
 	<p class="text">
 		{one ? `${names[0]} is a shared connection` : 'These are shared connections'}. The credentials
-		live on the server rather than in this workspace, so deleting the files here would leave them
-		reachable by everyone else who has access.
+		live on the server rather than in this workspace, so nothing done here alone would stop anyone
+		else who has access from reaching them.
 	</p>
 	<p class="text">
-		Deleting drops those credentials for the whole workspace. Anyone querying stops being able to,
-		and the connection has to be set up again from scratch to come back.
+		This drops those credentials for the whole workspace. Anyone querying stops being able to, and
+		the connection has to be set up again from scratch to come back.
 	</p>
 </ModalBody>
 
 <ModalFooter
 	secondaryAction={{ label: 'Cancel', action: async () => onCancel() }}
-	mainAction={{ label: 'Delete and revoke', action: async () => onConfirm() }}
+	mainAction={{
+		label: verb === 'Delete' ? 'Delete and revoke' : 'Revoke',
+		action: async () => onConfirm()
+	}}
 />
 
 <style>

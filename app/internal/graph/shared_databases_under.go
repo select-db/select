@@ -30,32 +30,23 @@ func (g *Graph) SharedDatabasesUnder(ids []string) []DatabaseRef {
 		roots = []Node{g.WorkspaceGraph}
 	}
 
-	seen := make(map[Node]bool)
+	// A database is reachable more than once -- from its folder, from the
+	// workspace's flat list, and from any overlapping id the caller passed --
+	// and each one must be revoked once.
+	seen := make(map[string]bool)
 	found := make([]DatabaseRef, 0)
 
-	var walk func(n Node)
-	walk = func(n Node) {
-		// A schema item is the one thing not worth descending into: it holds no
-		// database, and a loaded schema is large. index.go leaves them out for
-		// the same reason.
-		if n == nil || seen[n] || isSchemaItem(n) {
-			return
-		}
-		seen[n] = true
-
-		// A database directory can hold folders of its own, so finding one is
-		// not a reason to stop descending.
-		if db, ok := n.(*DBInstanceNode); ok && db.Proxified {
-			found = append(found, DatabaseRef{ID: db.ID, Name: db.Name})
-		}
-
-		for _, child := range n.GetChildren() {
-			walk(child)
-		}
-	}
-
 	for _, root := range roots {
-		walk(root)
+		walkSubtree(root, func(n Node) {
+			// Note this does not stop at a database: one can hold folders of its
+			// own, and a database inside those still needs revoking.
+			db, ok := n.(*DBInstanceNode)
+			if !ok || !db.Proxified || seen[db.ID] {
+				return
+			}
+			seen[db.ID] = true
+			found = append(found, DatabaseRef{ID: db.ID, Name: db.Name})
+		})
 	}
 
 	return found
