@@ -6,7 +6,7 @@ import {
 	type Page,
 	type Route
 } from '@playwright/test';
-import { treeNode } from './selectors';
+import { testId, treeNode } from './selectors';
 
 /**
  * Talking to the Go side the way the app does — over `/wails/runtime`, the
@@ -78,20 +78,31 @@ export const test = base.extend<{
 	 * `login` is the event the frontend's session wall listens for; the Go side
 	 * emits it once it finds a stored token and a current user. Tokens live in
 	 * the OS keyring, which a headless runner has none of, so the suite emits the
-	 * event and lets the app read the seeded database for the rest. The login
-	 * screen giving way is the app confirming it was listening.
+	 * event and lets the app read the seeded database for the rest.
+	 *
+	 * What is waited on is the signed-in shell. Waiting for the login wall first
+	 * and then starting to emit puts one render on the critical path that nothing
+	 * needs: the app is listening before it has painted, so the event can go out
+	 * while it is still coming up. Emitting into the gap costs nothing -- every
+	 * event the suite sends is safe to send twice -- and it took setup from
+	 * ~960ms to ~810ms, most of the difference being the jitter of waiting for a
+	 * paint. What is left is the app's own boot, which is ~660ms to first paint.
+	 *
+	 * The intervals are tighter than the default for the same reason: the first
+	 * emit lands before the app is listening and is dropped, so the retry is on
+	 * the critical path of every test.
 	 */
 	signIn: async ({ page, emit }, use) => {
 		await use(async () => {
-			const loginScreen = page.getByText('Log in with Github');
-			await loginScreen.waitFor();
-
 			await expect
-				.poll(async () => {
-					await emit('login');
-					return loginScreen.isVisible();
-				})
-				.toBe(false);
+				.poll(
+					async () => {
+						await emit('login');
+						return testId(page, 'tree.panel').isVisible();
+					},
+					{ intervals: [30, 30, 60, 100, 200, 400] }
+				)
+				.toBe(true);
 		});
 	},
 
