@@ -44,7 +44,16 @@ export const myPermissions = derived(
 			canAccessDb: (dbId: string, isProxified?: boolean) =>
 				!isProxified ||
 				isOwner ||
-				permissionActions.some((a) => resolve(permMap, dbId, '*', '*', '*', a) === 'allow')
+				permissionActions.some((a) => resolve(permMap, dbId, '*', '*', '*', a) === 'allow'),
+
+			/**
+			 * Whether this person administrates the connection, which is the same
+			 * question the backend asks before it will change or revoke one
+			 * (`Actor.IsOwner() || Actor.CanManage(id)`). Asking it here only
+			 * decides what the UI offers: the server refuses either way.
+			 */
+			canManageDb: (dbId: string) =>
+				isOwner || resolve(permMap, dbId, '*', '*', '*', 'manage') === 'allow'
 		};
 	}
 );

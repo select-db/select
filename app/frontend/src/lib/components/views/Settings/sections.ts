@@ -7,6 +7,7 @@ export type SettingsSectionId =
 	| 'roles'
 	| 'groups'
 	| 'api_keys'
+	| 'connections'
 	| 'theme'
 	| 'config';
 
@@ -29,6 +30,10 @@ export const settingsSections: SettingsSection[] = [
 	{ id: 'roles', label: 'Roles', icon: 'roles', action: 'workspace/roles.manage' },
 	{ id: 'groups', label: 'Groups', icon: 'users', action: 'workspace/groups.manage' },
 	{ id: 'api_keys', label: 'API keys', icon: 'key', action: 'workspace/api-keys.manage' },
+	// No action: a connection is administrated per connection rather than
+	// workspace-wide, so someone who manages one but is not a workspace admin
+	// still belongs here. Each row decides for itself whether it offers Revoke.
+	{ id: 'connections', label: 'Connections', icon: 'db' },
 	{ id: 'theme', label: 'Theme', icon: 'theme' },
 	{ id: 'config', label: 'Config', icon: 'cog' }
 ];

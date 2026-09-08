@@ -81,8 +81,8 @@ func (fsp *FSProvider) Rename(params RenameParams) error {
 	}
 
 	// Handle metadata sidecar
-	oldMetaPath := oldPath + ".metadata.json"
-	newMetaPath := newPath + ".metadata.json"
+	oldMetaPath := oldPath + MetadataFileSuffix
+	newMetaPath := newPath + MetadataFileSuffix
 
 	if strings.HasSuffix(newPath, ".sql") {
 		// Ensure metadata exists at old location, then rename it

@@ -19,6 +19,24 @@ func isSchemaItem(n Node) bool {
 	return is
 }
 
+// walkSubtree visits n and everything below it, skipping schema items and what
+// hangs off them: a schema load replaces a db instance's children without going
+// through this package, and a loaded one is large.
+//
+// The three walkers over the tree share it so that rule is stated once. It does
+// not deduplicate -- a db instance hangs from both its folder and the
+// workspace's flat list, so a walk from the root reaches one twice, and a
+// caller that cares says so itself.
+func walkSubtree(n Node, visit func(Node)) {
+	if n == nil || isSchemaItem(n) {
+		return
+	}
+	visit(n)
+	for _, child := range n.GetChildren() {
+		walkSubtree(child, visit)
+	}
+}
+
 // add registers a node under every ID it answers to — a db instance answers to
 // both its config ID and its URI.
 func (ix nodeIndex) add(n Node) {
@@ -33,29 +51,19 @@ func (ix nodeIndex) add(n Node) {
 }
 
 func (ix nodeIndex) addSubtree(n Node) {
-	if n == nil || isSchemaItem(n) {
-		return
-	}
-	ix.add(n)
-	for _, child := range n.GetChildren() {
-		ix.addSubtree(child)
-	}
+	walkSubtree(n, ix.add)
 }
 
 func (ix nodeIndex) removeSubtree(n Node) {
-	if n == nil || isSchemaItem(n) {
-		return
-	}
-	for _, id := range n.GetIDs() {
-		// Only drop an entry still pointing at this node: a replacement has
-		// already claimed the ID.
-		if ix[id] == n {
-			delete(ix, id)
+	walkSubtree(n, func(node Node) {
+		for _, id := range node.GetIDs() {
+			// Only drop an entry still pointing at this node: a replacement has
+			// already claimed the ID.
+			if ix[id] == node {
+				delete(ix, id)
+			}
 		}
-	}
-	for _, child := range n.GetChildren() {
-		ix.removeSubtree(child)
-	}
+	})
 }
 
 // ensureIndex fills the index from the current graph, after a build replaces
