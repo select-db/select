@@ -7,11 +7,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"backend/db/db_types"
 	"backend/e2e"
 	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/middlewares"
+
+	"github.com/google/uuid"
 )
 
 func TestMain(m *testing.M) { e2e.Run(m) }
@@ -27,7 +28,7 @@ func TestTokenRefreshEmitsUserScopedEvent(t *testing.T) {
 		deviceID = "device-1"
 		ip       = "192.0.2.10"
 	)
-	uid, err := db_types.NewJSONNullUUIDFromString(f.Actor.UserID)
+	uid, err := uuid.Parse(f.Actor.UserID)
 	require.NoError(t, err)
 
 	plain, err := auth.CreateRefreshToken(ctx, uid, deviceID, ip)

@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"backend/db/db_types"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,6 +11,8 @@ import (
 	"sync"
 
 	"github.com/sqlc-dev/pqtype"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -149,7 +150,7 @@ func SameSubnet(ip1 net.IP, ip2 string) bool {
 }
 
 // SendSecurityAlert sends a security alert to the user about IP change (stub)
-func SendSecurityAlert(userID db_types.JSONNullUUID, oldIP net.IP, newIP string) {
+func SendSecurityAlert(userID uuid.UUID, oldIP net.IP, newIP string) {
 	// TODO: implement actual notification (email)
 }
 

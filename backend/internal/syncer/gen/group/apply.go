@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time.Time) (bool, *types.RestoredItem, error) {
@@ -28,11 +29,11 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("group: missing id or workspace_id")
 	}
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("group: invalid id %q: %w", id, err)
 	}
-	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+	workspaceUUID, err := uuid.Parse(workspaceID)
 	if err != nil {
 		return false, nil, fmt.Errorf("group: invalid workspace_id %q: %w", workspaceID, err)
 	}
@@ -43,7 +44,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.GetGroupByID(ctx, generated.GetGroupByIDParams{ID: idUUID, WorkspaceID: workspaceUUID})
 		},
 		UpdatedAt: func(row generated.AppGroup) time.Time {
-			return row.UpdatedAt.ValueOrZero()
+			return row.UpdatedAt
 		},
 		DeletedAt: func(row generated.AppGroup) *time.Time {
 			if row.DeletedAt.Valid {
@@ -62,8 +63,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return generated.UpsertGroupParams{
 				ID:          idUUID,
 				WorkspaceID: workspaceUUID,
-				Name:        utils.PatchStr(payload, "name", existing.Name),
-				Source:      utils.PatchStrDefault(payload, "source", existing.Source, "local"),
+				Name:        utils.PatchValue(payload, "name", existing.Name, utils.MapGetString(payload, "name")),
+				Source:      utils.PatchStrValueDefault(payload, "source", existing.Source, "local"),
 				ExternalID:  utils.PatchNullStr(payload, "external_id", existing.ExternalID),
 			}, nil
 		},

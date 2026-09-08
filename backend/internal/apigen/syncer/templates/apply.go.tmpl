@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"backend/db"
+{{- if .HasNullableFK}}
 	"backend/db/db_types"
+{{- end}}
 	"backend/db/generated"
 {{- if .Audit}}
 	"backend/internal/audit"
@@ -17,6 +19,8 @@ import (
 {{- end}}
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time.Time) (bool, *types.RestoredItem, error) {
@@ -31,11 +35,11 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("{{.Pkg}}: missing id or workspace_id")
 	}
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("{{.Pkg}}: invalid id %q: %w", id, err)
 	}
-	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+	workspaceUUID, err := uuid.Parse(workspaceID)
 	if err != nil {
 		return false, nil, fmt.Errorf("{{.Pkg}}: invalid workspace_id %q: %w", workspaceID, err)
 	}
@@ -43,9 +47,9 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 {{range .FKs -}}
 	// {{.Column}} is parsed only when present: a partial update may omit it, in
 	// which case the merge keeps the existing value (so the FK isn't re-validated).
-	var {{.Var}} db_types.JSONNullUUID
+	var {{.Var}} {{if .Nullable}}db_types.JSONNullUUID{{else}}uuid.UUID{{end}}
 	if _, present := payload[{{printf "%q" .Column}}]; present {
-		{{.Var}}, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, {{printf "%q" .Column}}))
+		{{.Var}}, err = {{if .Nullable}}db_types.NewJSONNullUUIDFromString{{else}}uuid.Parse{{end}}(utils.MapGetString(payload, {{printf "%q" .Column}}))
 		if err != nil {
 			return false, nil, fmt.Errorf("{{.Pkg}}: invalid {{.Column}}: %w", err)
 		}
@@ -67,7 +71,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.Get{{.Sing}}ByID(ctx, generated.Get{{.Sing}}ByIDParams{ {{.PKField}}: idUUID, {{.TenantField}}: workspaceUUID})
 		},
 		UpdatedAt: func(row generated.{{.Model}}) time.Time {
-			return row.{{.CursorField}}.ValueOrZero()
+			return {{.CursorExpr}}
 		},
 		DeletedAt: func(row generated.{{.Model}}) *time.Time {
 			if row.{{.SoftDeleteField}}.Valid {

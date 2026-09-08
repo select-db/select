@@ -264,6 +264,11 @@ migrate() {
 # generate runs the two-phase codegen in order: apigen introspects the live
 # schema and writes the .sql queries + Go glue, then sqlc compiles those .sql
 # files into db/generated (which the glue references).
+#
+# Only the first phase needs the database. sqlc reads db/migrations directly, so
+# db/generated can be regenerated from a clean checkout with nothing running --
+# which is what makes a stale db/generated a reviewable diff rather than
+# something only the person with a live DB can reproduce.
 generate() {
   step "Codegen — apigen (schema → sql + glue)"
   (cd "$ROOT/backend" && go run ./cmd/apigen generate)

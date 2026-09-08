@@ -7,11 +7,12 @@ import (
 	"fmt"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *types.RestoredItem, error) {
@@ -24,11 +25,11 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if id == "" || workspaceID == "" {
 		return false, nil, fmt.Errorf("group: missing id or workspace_id")
 	}
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("group: invalid id %q: %w", id, err)
 	}
-	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+	workspaceUUID, err := uuid.Parse(workspaceID)
 	if err != nil {
 		return false, nil, fmt.Errorf("group: invalid workspace_id %q: %w", workspaceID, err)
 	}

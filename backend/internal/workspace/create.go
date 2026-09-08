@@ -42,19 +42,19 @@ func CreateHandler() http.HandlerFunc {
 			return
 		}
 
-		userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+		userUUID, err := uuid.Parse(userID)
 		if err != nil {
 			http.Error(w, "invalid user id", http.StatusInternalServerError)
 			return
 		}
 
-		workspaceID := db_types.NewJSONNullUUID(uuid.New())
-		wtuID := db_types.NewJSONNullUUID(uuid.New())
+		workspaceID := uuid.New()
+		wtuID := uuid.New()
 
 		if err := db.Queries.UpsertWorkspace(r.Context(), generated.UpsertWorkspaceParams{
 			ID:      workspaceID,
-			Name:    db_types.NewJSONNullString(req.Name),
-			OwnerID: userUUID,
+			Name:    req.Name,
+			OwnerID: db_types.NewJSONNullUUID(userUUID),
 		}); err != nil {
 			http.Error(w, "failed to create workspace", http.StatusInternalServerError)
 			return

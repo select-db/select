@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/authz"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 // applyCommitSideEffects runs the hand-written domain side effects a synced
@@ -39,7 +40,7 @@ func applyCommitSideEffects(ctx context.Context, c types.Commit) {
 	case "group":
 		// Deleting a group removes its members' group-derived roles.
 		if c.Operation == "delete" {
-			if gid, err := db_types.NewJSONNullUUIDFromString(c.ObjectID); err == nil {
+			if gid, err := uuid.Parse(c.ObjectID); err == nil {
 				revokeGroupMembers(ctx, gid)
 			}
 		}
@@ -56,14 +57,14 @@ func applyCommitSideEffects(ctx context.Context, c types.Commit) {
 // touches: from the payload on insert, or by fetching the row on delete (whose
 // payload carries only id + workspace_id). The row survives the soft-delete, so
 // the post-apply fetch still finds it.
-func affectedUserID(ctx context.Context, c types.Commit, payload map[string]any) (db_types.JSONNullUUID, bool) {
+func affectedUserID(ctx context.Context, c types.Commit, payload map[string]any) (uuid.UUID, bool) {
 	if c.Operation != "delete" {
-		uid, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "user_id"))
+		uid, err := uuid.Parse(utils.MapGetString(payload, "user_id"))
 		return uid, err == nil
 	}
 	id, ws, ok := commitRowKey(c, payload)
 	if !ok {
-		return db_types.JSONNullUUID{}, false
+		return uuid.UUID{}, false
 	}
 	switch c.TableName {
 	case "user_to_role":
@@ -73,19 +74,19 @@ func affectedUserID(ctx context.Context, c types.Commit, payload map[string]any)
 		row, err := db.Queries.GetUserToGroupByID(ctx, generated.GetUserToGroupByIDParams{ID: id, WorkspaceID: ws})
 		return row.UserID, err == nil
 	}
-	return db_types.JSONNullUUID{}, false
+	return uuid.UUID{}, false
 }
 
 // affectedGroupID resolves the group a group_to_role commit touches: from the
 // payload on insert, or by fetching the row on delete.
-func affectedGroupID(ctx context.Context, c types.Commit, payload map[string]any) (db_types.JSONNullUUID, bool) {
+func affectedGroupID(ctx context.Context, c types.Commit, payload map[string]any) (uuid.UUID, bool) {
 	if c.Operation != "delete" {
-		gid, err := db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "group_id"))
+		gid, err := uuid.Parse(utils.MapGetString(payload, "group_id"))
 		return gid, err == nil
 	}
 	id, ws, ok := commitRowKey(c, payload)
 	if !ok {
-		return db_types.JSONNullUUID{}, false
+		return uuid.UUID{}, false
 	}
 	row, err := db.Queries.GetGroupToRoleByID(ctx, generated.GetGroupToRoleByIDParams{ID: id, WorkspaceID: ws})
 	return row.GroupID, err == nil
@@ -112,19 +113,19 @@ func affectedRoleID(ctx context.Context, c types.Commit, payload map[string]any)
 
 // commitRowKey parses the (id, workspace_id) that identify the commit's row,
 // taking id from the payload with a fallback to ObjectID (matching ApplyDelete).
-func commitRowKey(c types.Commit, payload map[string]any) (id, ws db_types.JSONNullUUID, ok bool) {
+func commitRowKey(c types.Commit, payload map[string]any) (id, ws uuid.UUID, ok bool) {
 	rawID := utils.MapGetString(payload, "id")
 	if rawID == "" {
 		rawID = c.ObjectID
 	}
-	id, err1 := db_types.NewJSONNullUUIDFromString(rawID)
-	ws, err2 := db_types.NewJSONNullUUIDFromString(c.WorkspaceID)
+	id, err1 := uuid.Parse(rawID)
+	ws, err2 := uuid.Parse(c.WorkspaceID)
 	return id, ws, err1 == nil && err2 == nil
 }
 
 // revokeGroupMembers revokes refresh tokens for every current member of a
 // group. Best-effort, per the file-level contract.
-func revokeGroupMembers(ctx context.Context, groupID db_types.JSONNullUUID) {
+func revokeGroupMembers(ctx context.Context, groupID uuid.UUID) {
 	members, err := db.Queries.GetUserIDsByGroupID(ctx, groupID)
 	if err != nil {
 		return

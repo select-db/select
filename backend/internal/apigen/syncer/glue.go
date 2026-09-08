@@ -50,6 +50,10 @@ type fkItem struct {
 	Var, Column, Pkg string
 	Scoped           bool
 	ScopeFn, Target  string
+	// Nullable decides the parsed local's type: a NOT NULL FK is a plain
+	// uuid.UUID, a nullable one keeps the wrapper so an explicit null stays
+	// distinguishable from an omitted key.
+	Nullable bool
 }
 
 // rowField is one column projected onto the types.<Sing>Row wire struct.
@@ -64,10 +68,16 @@ type glueData struct {
 	Table                        string
 	PKField, TenantField         string
 	CursorField, SoftDeleteField string
-	NeedScope                    bool
-	FKs                          []fkItem
-	Merge                        []kv
-	RowMap                       []kv
+	// CursorExpr reads the cursor column as a plain time.Time; whether that
+	// needs the wrapper's reader depends on the column being nullable.
+	CursorExpr string
+	NeedScope  bool
+	// HasNullableFK gates the db_types import: only a nullable FK still parses
+	// through the wrapper.
+	HasNullableFK bool
+	FKs           []fkItem
+	Merge         []kv
+	RowMap        []kv
 	// Audit: emit an audit.EmitChange on apply/delete. Target is the row id
 	// (AuditDeleteByID) or, for a junction row, an FK read from the payload on
 	// apply and from the fetched pre-delete row on delete. A lifecycle entity
@@ -95,6 +105,12 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		PKField:  codegen.GoField(e.PrimaryKey[0]), TenantField: codegen.GoField(schema.TenantColumn),
 		CursorField: codegen.GoField(schema.CursorColumn), SoftDeleteField: codegen.GoField(schema.SoftDeleteColumn),
 	}
+	d.CursorExpr = "row." + d.CursorField
+	for _, f := range e.Fields {
+		if f.Column == schema.CursorColumn && f.Nullable {
+			d.CursorExpr += ".ValueOrZero()"
+		}
+	}
 
 	// Non-tenant FKs are parsed from the payload (identity, passed through on
 	// insert, never updated on conflict). The parse is conditional on the field
@@ -103,7 +119,7 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		if f.FK == nil || f.Column == schema.TenantColumn {
 			continue
 		}
-		item := fkItem{Var: fkVar(f.Column), Column: f.Column, Pkg: e.Table}
+		item := fkItem{Var: fkVar(f.Column), Column: f.Column, Pkg: e.Table, Nullable: f.Nullable}
 		// Cross-workspace guard: any FK whose target is itself workspace-scoped
 		// must belong to the caller's workspace, else a *.manage holder could
 		// point a write at a row in another workspace (privilege escalation).
@@ -116,6 +132,9 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 			item.Target = f.FK.Table
 			d.NeedScope = true
 		}
+		if item.Nullable {
+			d.HasNullableFK = true
+		}
 		d.FKs = append(d.FKs, item)
 	}
 
@@ -127,8 +146,12 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		case f.IsPK, f.Column == schema.TenantColumn, f.Column == schema.CursorColumn, f.Column == schema.SoftDeleteColumn:
 			continue
 		case f.FK != nil:
+			merge := "utils.PatchValue"
+			if f.Nullable {
+				merge = "utils.PatchUUID"
+			}
 			d.Merge = append(d.Merge, kv{codegen.GoField(f.Column),
-				fmt.Sprintf("utils.PatchUUID(payload, %q, existing.%s, %s)", f.Column, codegen.GoField(f.Column), fkVar(f.Column))})
+				fmt.Sprintf("%s(payload, %q, existing.%s, %s)", merge, f.Column, codegen.GoField(f.Column), fkVar(f.Column))})
 		case f.Patchable:
 			d.Merge = append(d.Merge, kv{codegen.GoField(f.Column), patchExpr(f)})
 		}
@@ -140,7 +163,7 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		if f.Column == schema.SoftDeleteColumn {
 			continue
 		}
-		d.RowMap = append(d.RowMap, kv{codegen.GoField(f.Column), fmt.Sprintf("row.%s.%s()", codegen.GoField(f.Column), accessor(f.Kind))})
+		d.RowMap = append(d.RowMap, kv{codegen.GoField(f.Column), rowExpr(f)})
 	}
 
 	// Audit: the target id is the row's own id, or a junction FK. When it's the
@@ -159,16 +182,23 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 	return d
 }
 
-// accessor is the db_types.JSONNull* reader that yields the plain Go value the
-// types.<Row> field expects.
-func accessor(k schema.Kind) string {
-	switch k {
-	case schema.KindUUID, schema.KindInet:
-		return "String"
-	case schema.KindText:
-		return "ValueOrEmpty"
+// rowExpr reads a column onto its types.<Row> field.
+//
+// A nullable column is a db_types.JSONNull* wrapper and needs its reader; a NOT
+// NULL one is already the plain Go value. uuid and inet are the exceptions that
+// read the same either way, because the wrapper and the plain type both have
+// String().
+func rowExpr(f schema.Field) string {
+	field := "row." + codegen.GoField(f.Column)
+	switch {
+	case f.Kind == schema.KindUUID, f.Kind == schema.KindInet:
+		return field + ".String()"
+	case !f.Nullable:
+		return field
+	case f.Kind == schema.KindText:
+		return field + ".ValueOrEmpty()"
 	default: // time, int, bool
-		return "ValueOrZero"
+		return field + ".ValueOrZero()"
 	}
 }
 
@@ -181,9 +211,9 @@ func patchExpr(f schema.Field) string {
 	case f.Nullable:
 		return fmt.Sprintf("utils.PatchNullStr(payload, %q, existing.%s)", f.Column, codegen.GoField(f.Column))
 	case f.Default != "":
-		return fmt.Sprintf("utils.PatchStrDefault(payload, %q, existing.%s, %q)", f.Column, codegen.GoField(f.Column), f.Default)
+		return fmt.Sprintf("utils.PatchStrValueDefault(payload, %q, existing.%s, %q)", f.Column, codegen.GoField(f.Column), f.Default)
 	default:
-		return fmt.Sprintf("utils.PatchStr(payload, %q, existing.%s)", f.Column, codegen.GoField(f.Column))
+		return fmt.Sprintf("utils.PatchValue(payload, %q, existing.%s, utils.MapGetString(payload, %q))", f.Column, codegen.GoField(f.Column), f.Column)
 	}
 }
 

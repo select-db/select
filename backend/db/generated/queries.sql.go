@@ -7,10 +7,12 @@ package generated
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"backend/db/db_types"
+	"github.com/google/uuid"
 	"github.com/lib/pq"
-	"github.com/sqlc-dev/pqtype"
 )
 
 const addAPIKeyRole = `-- name: AddAPIKeyRole :exec
@@ -20,8 +22,8 @@ ON CONFLICT (api_key_id, role_id) DO NOTHING
 `
 
 type AddAPIKeyRoleParams struct {
-	ApiKeyID db_types.JSONNullUUID
-	RoleID   db_types.JSONNullUUID
+	ApiKeyID uuid.UUID
+	RoleID   uuid.UUID
 }
 
 func (q *Queries) AddAPIKeyRole(ctx context.Context, arg AddAPIKeyRoleParams) error {
@@ -38,7 +40,7 @@ WHERE wtu.user_id = $1
   AND w.deleted_at IS NULL
 `
 
-func (q *Queries) CountWorkspaceToUserByUserID(ctx context.Context, userID db_types.JSONNullUUID) (int64, error) {
+func (q *Queries) CountWorkspaceToUserByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countWorkspaceToUserByUserID, userID)
 	var count int64
 	err := row.Scan(&count)
@@ -60,17 +62,17 @@ RETURNING id, prefix
 `
 
 type CreateAPIKeyParams struct {
-	WorkspaceID db_types.JSONNullUUID
-	Name        db_types.JSONNullString
-	Prefix      db_types.JSONNullString
-	HashedKey   db_types.JSONNullString
+	WorkspaceID uuid.UUID
+	Name        string
+	Prefix      string
+	HashedKey   string
 	CreatedBy   db_types.JSONNullUUID
 	ExpiresAt   db_types.JSONNullTime
 }
 
 type CreateAPIKeyRow struct {
-	ID     db_types.JSONNullUUID
-	Prefix db_types.JSONNullString
+	ID     uuid.UUID
+	Prefix string
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (CreateAPIKeyRow, error) {
@@ -99,9 +101,9 @@ INSERT INTO auth.refresh_token (
 `
 
 type CreateRefreshTokenParams struct {
-	HashedToken db_types.JSONNullString
-	UserID      db_types.JSONNullUUID
-	ExpiresAt   db_types.JSONNullTime
+	HashedToken string
+	UserID      uuid.UUID
+	ExpiresAt   time.Time
 	IssuedIp    db_types.JSONNullInet
 }
 
@@ -122,14 +124,14 @@ RETURNING id, email, name
 `
 
 type CreateUserParams struct {
-	Email    db_types.JSONNullString
+	Email    string
 	Name     db_types.JSONNullString
 	GithubID db_types.JSONNullInt64
 }
 
 type CreateUserRow struct {
-	ID    db_types.JSONNullUUID
-	Email db_types.JSONNullString
+	ID    uuid.UUID
+	Email string
 	Name  db_types.JSONNullString
 }
 
@@ -146,9 +148,9 @@ VALUES ($1, $2, $3, $4)
 `
 
 type CreateUserIdentityParams struct {
-	UserID         db_types.JSONNullUUID
-	Provider       db_types.JSONNullString
-	ProviderUserID db_types.JSONNullString
+	UserID         uuid.UUID
+	Provider       string
+	ProviderUserID string
 	Email          db_types.JSONNullString
 }
 
@@ -166,7 +168,7 @@ const deleteAPIKeyRoles = `-- name: DeleteAPIKeyRoles :exec
 DELETE FROM auth.api_key_to_role WHERE api_key_id = $1
 `
 
-func (q *Queries) DeleteAPIKeyRoles(ctx context.Context, apiKeyID db_types.JSONNullUUID) error {
+func (q *Queries) DeleteAPIKeyRoles(ctx context.Context, apiKeyID uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, deleteAPIKeyRoles, apiKeyID)
 	return err
 }
@@ -175,7 +177,7 @@ const deleteAuditEventsBefore = `-- name: DeleteAuditEventsBefore :execrows
 DELETE FROM audit.event WHERE occurred_at < $1
 `
 
-func (q *Queries) DeleteAuditEventsBefore(ctx context.Context, occurredAt db_types.JSONNullTime) (int64, error) {
+func (q *Queries) DeleteAuditEventsBefore(ctx context.Context, occurredAt time.Time) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteAuditEventsBefore, occurredAt)
 	if err != nil {
 		return 0, err
@@ -200,8 +202,8 @@ WHERE
 `
 
 type DeleteDatasourceParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) DeleteDatasource(ctx context.Context, arg DeleteDatasourceParams) error {
@@ -214,7 +216,7 @@ DELETE FROM auth.refresh_token
 WHERE hashed_token = $1
 `
 
-func (q *Queries) DeleteRefreshToken(ctx context.Context, hashedToken db_types.JSONNullString) error {
+func (q *Queries) DeleteRefreshToken(ctx context.Context, hashedToken string) error {
 	_, err := q.db.ExecContext(ctx, deleteRefreshToken, hashedToken)
 	return err
 }
@@ -224,7 +226,7 @@ DELETE FROM auth.refresh_token
 WHERE user_id = $1
 `
 
-func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID db_types.JSONNullUUID) error {
+func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, deleteUserRefreshTokens, userID)
 	return err
 }
@@ -235,8 +237,8 @@ WHERE user_id = $1 AND hashed_token != $2
 `
 
 type DeleteUserRefreshTokensExceptParams struct {
-	UserID      db_types.JSONNullUUID
-	HashedToken db_types.JSONNullString
+	UserID      uuid.UUID
+	HashedToken string
 }
 
 func (q *Queries) DeleteUserRefreshTokensExcept(ctx context.Context, arg DeleteUserRefreshTokensExceptParams) error {
@@ -254,8 +256,8 @@ SELECT EXISTS (
 `
 
 type ExistsWorkspaceToUserByUserAndWorkspaceParams struct {
-	UserID      db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	UserID      uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) ExistsWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg ExistsWorkspaceToUserByUserAndWorkspaceParams) (bool, error) {
@@ -272,7 +274,7 @@ WHERE id = $1 AND deleted_at IS NULL
 `
 
 type ExpireAPIKeyAtParams struct {
-	ID        db_types.JSONNullUUID
+	ID        uuid.UUID
 	ExpiresAt db_types.JSONNullTime
 }
 
@@ -287,7 +289,7 @@ FROM auth.api_key
 WHERE prefix = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix db_types.JSONNullString) (AuthApiKey, error) {
+func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix string) (AuthApiKey, error) {
 	row := q.db.QueryRowContext(ctx, getAPIKeyByPrefix, prefix)
 	var i AuthApiKey
 	err := row.Scan(
@@ -312,13 +314,13 @@ WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
 `
 
 type GetAPIKeyForWorkspaceParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 type GetAPIKeyForWorkspaceRow struct {
-	ID        db_types.JSONNullUUID
-	Name      db_types.JSONNullString
+	ID        uuid.UUID
+	Name      string
 	ExpiresAt db_types.JSONNullTime
 }
 
@@ -334,15 +336,15 @@ SELECT role_id FROM auth.api_key_to_role
 WHERE api_key_id = $1
 `
 
-func (q *Queries) GetAPIKeyRoleIDs(ctx context.Context, apiKeyID db_types.JSONNullUUID) ([]db_types.JSONNullUUID, error) {
+func (q *Queries) GetAPIKeyRoleIDs(ctx context.Context, apiKeyID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.QueryContext(ctx, getAPIKeyRoleIDs, apiKeyID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []db_types.JSONNullUUID
+	var items []uuid.UUID
 	for rows.Next() {
-		var role_id db_types.JSONNullUUID
+		var role_id uuid.UUID
 		if err := rows.Scan(&role_id); err != nil {
 			return nil, err
 		}
@@ -365,11 +367,11 @@ WHERE atr.api_key_id = $1 AND r.deleted_at IS NULL
 `
 
 type GetAPIKeyRolesWithNamesRow struct {
-	ID   db_types.JSONNullUUID
-	Name db_types.JSONNullString
+	ID   uuid.UUID
+	Name string
 }
 
-func (q *Queries) GetAPIKeyRolesWithNames(ctx context.Context, apiKeyID db_types.JSONNullUUID) ([]GetAPIKeyRolesWithNamesRow, error) {
+func (q *Queries) GetAPIKeyRolesWithNames(ctx context.Context, apiKeyID uuid.UUID) ([]GetAPIKeyRolesWithNamesRow, error) {
 	rows, err := q.db.QueryContext(ctx, getAPIKeyRolesWithNames, apiKeyID)
 	if err != nil {
 		return nil, err
@@ -401,8 +403,8 @@ LIMIT $1
 `
 
 type GetAuditOutboxBatchRow struct {
-	ID        db_types.JSONNullInt64
-	EventJson pqtype.NullRawMessage
+	ID        int64
+	EventJson json.RawMessage
 }
 
 func (q *Queries) GetAuditOutboxBatch(ctx context.Context, limit int32) ([]GetAuditOutboxBatchRow, error) {
@@ -446,19 +448,19 @@ WHERE
 `
 
 type GetDatasourceParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 type GetDatasourceRow struct {
-	DbType          db_types.JSONNullString
-	Name            db_types.JSONNullString
+	DbType          string
+	Name            string
 	EncryptedDsn    []byte
 	EncryptedSsh    []byte
-	MaxOpenConns    db_types.JSONNullInt64
-	MaxIdleConns    db_types.JSONNullInt64
-	ConnMaxLifetime db_types.JSONNullInt64
-	ConnMaxIdleTime db_types.JSONNullInt64
+	MaxOpenConns    int32
+	MaxIdleConns    int32
+	ConnMaxLifetime int32
+	ConnMaxIdleTime int32
 }
 
 func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (GetDatasourceRow, error) {
@@ -484,8 +486,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type GetGroupByIDParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) GetGroupByID(ctx context.Context, arg GetGroupByIDParams) (AppGroup, error) {
@@ -510,8 +512,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type GetGroupToRoleByIDParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) GetGroupToRoleByID(ctx context.Context, arg GetGroupToRoleByIDParams) (AppGroupToRole, error) {
@@ -536,8 +538,8 @@ WHERE r.updated_at > $2
 `
 
 type GetGroupToRolesForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetGroupToRolesForUserSince(ctx context.Context, arg GetGroupToRolesForUserSinceParams) ([]AppGroupToRole, error) {
@@ -578,8 +580,8 @@ WHERE r.updated_at > $2
 `
 
 type GetGroupsForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUserSinceParams) ([]AppGroup, error) {
@@ -618,15 +620,15 @@ SELECT id FROM app.workspace
 WHERE owner_id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetOwnedWorkspaceIDsByUserID(ctx context.Context, ownerID db_types.JSONNullUUID) ([]db_types.JSONNullUUID, error) {
+func (q *Queries) GetOwnedWorkspaceIDsByUserID(ctx context.Context, ownerID db_types.JSONNullUUID) ([]uuid.UUID, error) {
 	rows, err := q.db.QueryContext(ctx, getOwnedWorkspaceIDsByUserID, ownerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []db_types.JSONNullUUID
+	var items []uuid.UUID
 	for rows.Next() {
-		var id db_types.JSONNullUUID
+		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -648,8 +650,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type GetPermissionByIDParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) GetPermissionByID(ctx context.Context, arg GetPermissionByIDParams) (AppPermission, error) {
@@ -677,7 +679,7 @@ FROM app.permission
 WHERE role_id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetPermissionsByRoleID(ctx context.Context, roleID db_types.JSONNullUUID) ([]AppPermission, error) {
+func (q *Queries) GetPermissionsByRoleID(ctx context.Context, roleID uuid.UUID) ([]AppPermission, error) {
 	rows, err := q.db.QueryContext(ctx, getPermissionsByRoleID, roleID)
 	if err != nil {
 		return nil, err
@@ -720,8 +722,8 @@ WHERE r.updated_at > $2
 `
 
 type GetPermissionsForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetPermissionsForUserSince(ctx context.Context, arg GetPermissionsForUserSinceParams) ([]AppPermission, error) {
@@ -765,8 +767,8 @@ WHERE hashed_token = $1 AND user_id = $2
 `
 
 type GetRefreshTokenParams struct {
-	HashedToken db_types.JSONNullString
-	UserID      db_types.JSONNullUUID
+	HashedToken string
+	UserID      uuid.UUID
 }
 
 func (q *Queries) GetRefreshToken(ctx context.Context, arg GetRefreshTokenParams) (AuthRefreshToken, error) {
@@ -789,8 +791,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type GetRoleByIDParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) GetRoleByID(ctx context.Context, arg GetRoleByIDParams) (AppRole, error) {
@@ -811,15 +813,15 @@ SELECT role_id FROM app.user_to_role
 WHERE user_id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetRoleIDsByUserID(ctx context.Context, userID db_types.JSONNullUUID) ([]db_types.JSONNullUUID, error) {
+func (q *Queries) GetRoleIDsByUserID(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.QueryContext(ctx, getRoleIDsByUserID, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []db_types.JSONNullUUID
+	var items []uuid.UUID
 	for rows.Next() {
-		var role_id db_types.JSONNullUUID
+		var role_id uuid.UUID
 		if err := rows.Scan(&role_id); err != nil {
 			return nil, err
 		}
@@ -842,8 +844,8 @@ WHERE r.updated_at > $2
 `
 
 type GetRolesForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetRolesForUserSince(ctx context.Context, arg GetRolesForUserSinceParams) ([]AppRole, error) {
@@ -902,12 +904,12 @@ LIMIT
 
 type GetUserByEmailParams struct {
 	Lower       string
-	WorkspaceID db_types.JSONNullUUID
+	WorkspaceID uuid.UUID
 }
 
 type GetUserByEmailRow struct {
-	ID       db_types.JSONNullUUID
-	Email    db_types.JSONNullString
+	ID       uuid.UUID
+	Email    string
 	Name     db_types.JSONNullString
 	IsMember bool
 }
@@ -933,8 +935,8 @@ LIMIT 1
 `
 
 type GetUserByEmailNoIdentityRow struct {
-	ID    db_types.JSONNullUUID
-	Email db_types.JSONNullString
+	ID    uuid.UUID
+	Email string
 	Name  db_types.JSONNullString
 }
 
@@ -957,13 +959,13 @@ WHERE
 `
 
 type GetUserByProviderIdentityParams struct {
-	Provider       db_types.JSONNullString
-	ProviderUserID db_types.JSONNullString
+	Provider       string
+	ProviderUserID string
 }
 
 type GetUserByProviderIdentityRow struct {
-	ID    db_types.JSONNullUUID
-	Email db_types.JSONNullString
+	ID    uuid.UUID
+	Email string
 	Name  db_types.JSONNullString
 }
 
@@ -984,9 +986,9 @@ WHERE ug.user_id = $1 AND r.deleted_at IS NULL
 `
 
 type GetUserGroupRolesWithNamesRow struct {
-	ID          db_types.JSONNullUUID
-	Name        db_types.JSONNullString
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	Name        string
+	WorkspaceID uuid.UUID
 }
 
 // Roles a user holds indirectly, via group membership: user_to_group -> group_to_role -> role.
@@ -995,7 +997,7 @@ type GetUserGroupRolesWithNamesRow struct {
 // The group's own soft-delete must be honored: deletion is a soft delete and the
 // FK ON DELETE CASCADE only fires on hard deletes, so a deleted group would
 // otherwise keep granting its roles through still-live membership rows.
-func (q *Queries) GetUserGroupRolesWithNames(ctx context.Context, userID db_types.JSONNullUUID) ([]GetUserGroupRolesWithNamesRow, error) {
+func (q *Queries) GetUserGroupRolesWithNames(ctx context.Context, userID uuid.UUID) ([]GetUserGroupRolesWithNamesRow, error) {
 	rows, err := q.db.QueryContext(ctx, getUserGroupRolesWithNames, userID)
 	if err != nil {
 		return nil, err
@@ -1024,15 +1026,15 @@ FROM app.user_to_group
 WHERE group_id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetUserIDsByGroupID(ctx context.Context, groupID db_types.JSONNullUUID) ([]db_types.JSONNullUUID, error) {
+func (q *Queries) GetUserIDsByGroupID(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.QueryContext(ctx, getUserIDsByGroupID, groupID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []db_types.JSONNullUUID
+	var items []uuid.UUID
 	for rows.Next() {
-		var user_id db_types.JSONNullUUID
+		var user_id uuid.UUID
 		if err := rows.Scan(&user_id); err != nil {
 			return nil, err
 		}
@@ -1053,10 +1055,10 @@ SELECT name, email FROM app."user" WHERE id = $1
 
 type GetUserNameByIDRow struct {
 	Name  db_types.JSONNullString
-	Email db_types.JSONNullString
+	Email string
 }
 
-func (q *Queries) GetUserNameByID(ctx context.Context, id db_types.JSONNullUUID) (GetUserNameByIDRow, error) {
+func (q *Queries) GetUserNameByID(ctx context.Context, id uuid.UUID) (GetUserNameByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserNameByID, id)
 	var i GetUserNameByIDRow
 	err := row.Scan(&i.Name, &i.Email)
@@ -1071,12 +1073,12 @@ WHERE utr.user_id = $1 AND utr.deleted_at IS NULL AND r.deleted_at IS NULL
 `
 
 type GetUserRolesWithNamesRow struct {
-	ID          db_types.JSONNullUUID
-	Name        db_types.JSONNullString
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	Name        string
+	WorkspaceID uuid.UUID
 }
 
-func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID db_types.JSONNullUUID) ([]GetUserRolesWithNamesRow, error) {
+func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID uuid.UUID) ([]GetUserRolesWithNamesRow, error) {
 	rows, err := q.db.QueryContext(ctx, getUserRolesWithNames, userID)
 	if err != nil {
 		return nil, err
@@ -1106,8 +1108,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type GetUserToGroupByIDParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) GetUserToGroupByID(ctx context.Context, arg GetUserToGroupByIDParams) (AppUserToGroup, error) {
@@ -1133,8 +1135,8 @@ WHERE r.updated_at > $2
 `
 
 type GetUserToGroupsForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetUserToGroupsForUserSince(ctx context.Context, arg GetUserToGroupsForUserSinceParams) ([]AppUserToGroup, error) {
@@ -1175,8 +1177,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type GetUserToRoleByIDParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) GetUserToRoleByID(ctx context.Context, arg GetUserToRoleByIDParams) (AppUserToRole, error) {
@@ -1201,8 +1203,8 @@ WHERE r.updated_at > $2
 `
 
 type GetUserToRolesForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetUserToRolesForUserSince(ctx context.Context, arg GetUserToRolesForUserSinceParams) ([]AppUserToRole, error) {
@@ -1242,7 +1244,7 @@ WHERE id::text = ANY($1::text[])
 `
 
 type GetUsersByIDsRow struct {
-	ID        db_types.JSONNullUUID
+	ID        uuid.UUID
 	Name      db_types.JSONNullString
 	Email     string
 	AvatarUrl string
@@ -1281,16 +1283,16 @@ SELECT id, name, git_remote_url, logo, owner_id, updated_at, deleted_at FROM app
 `
 
 type GetWorkspaceByIDRow struct {
-	ID           db_types.JSONNullUUID
-	Name         db_types.JSONNullString
+	ID           uuid.UUID
+	Name         string
 	GitRemoteUrl db_types.JSONNullString
 	Logo         db_types.JSONNullString
 	OwnerID      db_types.JSONNullUUID
-	UpdatedAt    db_types.JSONNullTime
+	UpdatedAt    time.Time
 	DeletedAt    db_types.JSONNullTime
 }
 
-func (q *Queries) GetWorkspaceByID(ctx context.Context, id db_types.JSONNullUUID) (GetWorkspaceByIDRow, error) {
+func (q *Queries) GetWorkspaceByID(ctx context.Context, id uuid.UUID) (GetWorkspaceByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getWorkspaceByID, id)
 	var i GetWorkspaceByIDRow
 	err := row.Scan(
@@ -1309,15 +1311,15 @@ const getWorkspaceIDsByUserID = `-- name: GetWorkspaceIDsByUserID :many
 SELECT workspace_id FROM app.workspace_to_user WHERE user_id = $1
 `
 
-func (q *Queries) GetWorkspaceIDsByUserID(ctx context.Context, userID db_types.JSONNullUUID) ([]db_types.JSONNullUUID, error) {
+func (q *Queries) GetWorkspaceIDsByUserID(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.QueryContext(ctx, getWorkspaceIDsByUserID, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []db_types.JSONNullUUID
+	var items []uuid.UUID
 	for rows.Next() {
-		var workspace_id db_types.JSONNullUUID
+		var workspace_id uuid.UUID
 		if err := rows.Scan(&workspace_id); err != nil {
 			return nil, err
 		}
@@ -1336,7 +1338,7 @@ const getWorkspaceOwnerID = `-- name: GetWorkspaceOwnerID :one
 SELECT owner_id FROM app.workspace WHERE id = $1
 `
 
-func (q *Queries) GetWorkspaceOwnerID(ctx context.Context, id db_types.JSONNullUUID) (db_types.JSONNullUUID, error) {
+func (q *Queries) GetWorkspaceOwnerID(ctx context.Context, id uuid.UUID) (db_types.JSONNullUUID, error) {
 	row := q.db.QueryRowContext(ctx, getWorkspaceOwnerID, id)
 	var owner_id db_types.JSONNullUUID
 	err := row.Scan(&owner_id)
@@ -1350,8 +1352,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type GetWorkspaceToUserByIDParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) GetWorkspaceToUserByID(ctx context.Context, arg GetWorkspaceToUserByIDParams) (AppWorkspaceToUser, error) {
@@ -1375,8 +1377,8 @@ WHERE r.updated_at > $2
 `
 
 type GetWorkspaceToUsersForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 func (q *Queries) GetWorkspaceToUsersForUserSince(ctx context.Context, arg GetWorkspaceToUsersForUserSinceParams) ([]AppWorkspaceToUser, error) {
@@ -1416,17 +1418,17 @@ WHERE w.updated_at > $2
 `
 
 type GetWorkspacesForUserSinceParams struct {
-	UserID    db_types.JSONNullUUID
-	UpdatedAt db_types.JSONNullTime
+	UserID    uuid.UUID
+	UpdatedAt time.Time
 }
 
 type GetWorkspacesForUserSinceRow struct {
-	ID           db_types.JSONNullUUID
-	Name         db_types.JSONNullString
+	ID           uuid.UUID
+	Name         string
 	GitRemoteUrl db_types.JSONNullString
 	Logo         db_types.JSONNullString
 	OwnerID      db_types.JSONNullUUID
-	UpdatedAt    db_types.JSONNullTime
+	UpdatedAt    time.Time
 	DeletedAt    db_types.JSONNullTime
 }
 
@@ -1483,17 +1485,17 @@ INSERT INTO audit.event (
 
 type InsertAuditEventParams struct {
 	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
+	OccurredAt    time.Time
+	Domain        string
+	Action        string
 	PrincipalHash []byte
 	PrincipalID   db_types.JSONNullUUID
 	PrincipalType db_types.JSONNullString
 	TargetType    db_types.JSONNullString
 	TargetID      db_types.JSONNullUUID
 	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
+	Status        string
+	Payload       json.RawMessage
 	ClientIp      db_types.JSONNullInet
 }
 
@@ -1520,7 +1522,7 @@ const insertAuditOutbox = `-- name: InsertAuditOutbox :exec
 INSERT INTO audit.outbox (event_json) VALUES ($1)
 `
 
-func (q *Queries) InsertAuditOutbox(ctx context.Context, eventJson pqtype.NullRawMessage) error {
+func (q *Queries) InsertAuditOutbox(ctx context.Context, eventJson json.RawMessage) error {
 	_, err := q.db.ExecContext(ctx, insertAuditOutbox, eventJson)
 	return err
 }
@@ -1531,7 +1533,7 @@ VALUES ($1, 'My Workspace', $2, now())
 `
 
 type InsertDefaultWorkspaceParams struct {
-	ID      db_types.JSONNullUUID
+	ID      uuid.UUID
 	OwnerID db_types.JSONNullUUID
 }
 
@@ -1547,13 +1549,13 @@ RETURNING id
 `
 
 type InsertUserPlaceholderParams struct {
-	Email db_types.JSONNullString
+	Email string
 	Name  db_types.JSONNullString
 }
 
-func (q *Queries) InsertUserPlaceholder(ctx context.Context, arg InsertUserPlaceholderParams) (db_types.JSONNullUUID, error) {
+func (q *Queries) InsertUserPlaceholder(ctx context.Context, arg InsertUserPlaceholderParams) (uuid.UUID, error) {
 	row := q.db.QueryRowContext(ctx, insertUserPlaceholder, arg.Email, arg.Name)
-	var id db_types.JSONNullUUID
+	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -1564,7 +1566,7 @@ VALUES ($1, 'Workspace', now())
 ON CONFLICT (id) DO NOTHING
 `
 
-func (q *Queries) InsertWorkspaceIfNotExists(ctx context.Context, id db_types.JSONNullUUID) error {
+func (q *Queries) InsertWorkspaceIfNotExists(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, insertWorkspaceIfNotExists, id)
 	return err
 }
@@ -1575,9 +1577,9 @@ VALUES ($1, $2, $3, now())
 `
 
 type InsertWorkspaceToUserParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
 }
 
 func (q *Queries) InsertWorkspaceToUser(ctx context.Context, arg InsertWorkspaceToUserParams) error {
@@ -1595,13 +1597,13 @@ RETURNING
 `
 
 type InsertWorkspaceToUserForAddParams struct {
-	WorkspaceID db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
 }
 
-func (q *Queries) InsertWorkspaceToUserForAdd(ctx context.Context, arg InsertWorkspaceToUserForAddParams) (db_types.JSONNullUUID, error) {
+func (q *Queries) InsertWorkspaceToUserForAdd(ctx context.Context, arg InsertWorkspaceToUserForAddParams) (uuid.UUID, error) {
 	row := q.db.QueryRowContext(ctx, insertWorkspaceToUserForAdd, arg.WorkspaceID, arg.UserID)
-	var id db_types.JSONNullUUID
+	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -1615,12 +1617,12 @@ WHERE k.workspace_id = $1 AND k.deleted_at IS NULL AND r.deleted_at IS NULL
 `
 
 type ListAPIKeyRolesByWorkspaceRow struct {
-	ApiKeyID db_types.JSONNullUUID
-	RoleID   db_types.JSONNullUUID
-	RoleName db_types.JSONNullString
+	ApiKeyID uuid.UUID
+	RoleID   uuid.UUID
+	RoleName string
 }
 
-func (q *Queries) ListAPIKeyRolesByWorkspace(ctx context.Context, workspaceID db_types.JSONNullUUID) ([]ListAPIKeyRolesByWorkspaceRow, error) {
+func (q *Queries) ListAPIKeyRolesByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]ListAPIKeyRolesByWorkspaceRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAPIKeyRolesByWorkspace, workspaceID)
 	if err != nil {
 		return nil, err
@@ -1651,16 +1653,16 @@ ORDER BY created_at DESC
 `
 
 type ListAPIKeysByWorkspaceRow struct {
-	ID         db_types.JSONNullUUID
-	Name       db_types.JSONNullString
-	Prefix     db_types.JSONNullString
+	ID         uuid.UUID
+	Name       string
+	Prefix     string
 	CreatedBy  db_types.JSONNullUUID
 	ExpiresAt  db_types.JSONNullTime
 	LastUsedAt db_types.JSONNullTime
-	CreatedAt  db_types.JSONNullTime
+	CreatedAt  time.Time
 }
 
-func (q *Queries) ListAPIKeysByWorkspace(ctx context.Context, workspaceID db_types.JSONNullUUID) ([]ListAPIKeysByWorkspaceRow, error) {
+func (q *Queries) ListAPIKeysByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]ListAPIKeysByWorkspaceRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAPIKeysByWorkspace, workspaceID)
 	if err != nil {
 		return nil, err
@@ -1706,12 +1708,12 @@ ORDER BY
 `
 
 type ListDatasourcesByWorkspaceRow struct {
-	ID     db_types.JSONNullUUID
-	DbType db_types.JSONNullString
-	Name   db_types.JSONNullString
+	ID     uuid.UUID
+	DbType string
+	Name   string
 }
 
-func (q *Queries) ListDatasourcesByWorkspace(ctx context.Context, workspaceID db_types.JSONNullUUID) ([]ListDatasourcesByWorkspaceRow, error) {
+func (q *Queries) ListDatasourcesByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]ListDatasourcesByWorkspaceRow, error) {
 	rows, err := q.db.QueryContext(ctx, listDatasourcesByWorkspace, workspaceID)
 	if err != nil {
 		return nil, err
@@ -1742,13 +1744,13 @@ RETURNING id
 `
 
 type ReactivateWorkspaceToUserParams struct {
-	WorkspaceID db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
 }
 
-func (q *Queries) ReactivateWorkspaceToUser(ctx context.Context, arg ReactivateWorkspaceToUserParams) (db_types.JSONNullUUID, error) {
+func (q *Queries) ReactivateWorkspaceToUser(ctx context.Context, arg ReactivateWorkspaceToUserParams) (uuid.UUID, error) {
 	row := q.db.QueryRowContext(ctx, reactivateWorkspaceToUser, arg.WorkspaceID, arg.UserID)
-	var id db_types.JSONNullUUID
+	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -1759,8 +1761,8 @@ WHERE id = $1 AND deleted_at IS NULL
 `
 
 type RenameAPIKeyParams struct {
-	ID   db_types.JSONNullUUID
-	Name db_types.JSONNullString
+	ID   uuid.UUID
+	Name string
 }
 
 func (q *Queries) RenameAPIKey(ctx context.Context, arg RenameAPIKeyParams) error {
@@ -1773,7 +1775,7 @@ UPDATE auth.api_key SET deleted_at = now()
 WHERE id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) RevokeAPIKey(ctx context.Context, id db_types.JSONNullUUID) error {
+func (q *Queries) RevokeAPIKey(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, revokeAPIKey, id)
 	return err
 }
@@ -1785,8 +1787,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type SetGroupDeletedAtParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) SetGroupDeletedAt(ctx context.Context, arg SetGroupDeletedAtParams) error {
@@ -1801,8 +1803,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type SetGroupToRoleDeletedAtParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) SetGroupToRoleDeletedAt(ctx context.Context, arg SetGroupToRoleDeletedAtParams) error {
@@ -1817,8 +1819,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type SetPermissionDeletedAtParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) SetPermissionDeletedAt(ctx context.Context, arg SetPermissionDeletedAtParams) error {
@@ -1833,8 +1835,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type SetRoleDeletedAtParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) SetRoleDeletedAt(ctx context.Context, arg SetRoleDeletedAtParams) error {
@@ -1849,8 +1851,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type SetUserToGroupDeletedAtParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) SetUserToGroupDeletedAt(ctx context.Context, arg SetUserToGroupDeletedAtParams) error {
@@ -1865,8 +1867,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type SetUserToRoleDeletedAtParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) SetUserToRoleDeletedAt(ctx context.Context, arg SetUserToRoleDeletedAtParams) error {
@@ -1880,7 +1882,7 @@ SET deleted_at = now(), updated_at = now()
 WHERE id = $1
 `
 
-func (q *Queries) SetWorkspaceDeletedAt(ctx context.Context, id db_types.JSONNullUUID) error {
+func (q *Queries) SetWorkspaceDeletedAt(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, setWorkspaceDeletedAt, id)
 	return err
 }
@@ -1892,8 +1894,8 @@ WHERE id = $1 AND workspace_id = $2
 `
 
 type SetWorkspaceToUserDeletedAtParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) SetWorkspaceToUserDeletedAt(ctx context.Context, arg SetWorkspaceToUserDeletedAtParams) error {
@@ -1906,7 +1908,7 @@ UPDATE auth.api_key SET last_used_at = now()
 WHERE id = $1
 `
 
-func (q *Queries) TouchAPIKeyLastUsed(ctx context.Context, id db_types.JSONNullUUID) error {
+func (q *Queries) TouchAPIKeyLastUsed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, touchAPIKeyLastUsed, id)
 	return err
 }
@@ -1918,8 +1920,8 @@ WHERE id = $1
 `
 
 type UpdateUserEmailParams struct {
-	ID    db_types.JSONNullUUID
-	Email db_types.JSONNullString
+	ID    uuid.UUID
+	Email string
 }
 
 func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) error {
@@ -1934,10 +1936,10 @@ WHERE id = $1
 `
 
 type UpdateUserForLoginParams struct {
-	ID        db_types.JSONNullUUID
+	ID        uuid.UUID
 	Name      db_types.JSONNullString
 	GithubID  db_types.JSONNullInt64
-	Email     db_types.JSONNullString
+	Email     string
 	AvatarUrl db_types.JSONNullString
 }
 
@@ -1959,8 +1961,8 @@ WHERE provider = $1 AND provider_user_id = $2
 `
 
 type UpdateUserIdentityEmailParams struct {
-	Provider       db_types.JSONNullString
-	ProviderUserID db_types.JSONNullString
+	Provider       string
+	ProviderUserID string
 	Email          db_types.JSONNullString
 }
 
@@ -1977,7 +1979,7 @@ WHERE id = $1 AND deleted_at IS NULL
 `
 
 type UpdateWorkspaceLogoParams struct {
-	ID   db_types.JSONNullUUID
+	ID   uuid.UUID
 	Logo db_types.JSONNullString
 }
 
@@ -2029,16 +2031,16 @@ SET
 `
 
 type UpsertDatasourceParams struct {
-	ID              db_types.JSONNullUUID
-	WorkspaceID     db_types.JSONNullUUID
-	DbType          db_types.JSONNullString
-	Name            db_types.JSONNullString
+	ID              uuid.UUID
+	WorkspaceID     uuid.UUID
+	DbType          string
+	Name            string
 	EncryptedDsn    []byte
 	EncryptedSsh    []byte
-	MaxOpenConns    db_types.JSONNullInt64
-	MaxIdleConns    db_types.JSONNullInt64
-	ConnMaxLifetime db_types.JSONNullInt64
-	ConnMaxIdleTime db_types.JSONNullInt64
+	MaxOpenConns    int32
+	MaxIdleConns    int32
+	ConnMaxLifetime int32
+	ConnMaxIdleTime int32
 }
 
 func (q *Queries) UpsertDatasource(ctx context.Context, arg UpsertDatasourceParams) error {
@@ -2069,10 +2071,10 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertGroupParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	Name        db_types.JSONNullString
-	Source      db_types.JSONNullString
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Name        string
+	Source      string
 	ExternalID  db_types.JSONNullString
 }
 
@@ -2096,10 +2098,10 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertGroupToRoleParams struct {
-	ID          db_types.JSONNullUUID
-	GroupID     db_types.JSONNullUUID
-	RoleID      db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	GroupID     uuid.UUID
+	RoleID      uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) UpsertGroupToRole(ctx context.Context, arg UpsertGroupToRoleParams) error {
@@ -2127,15 +2129,15 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertPermissionParams struct {
-	ID           db_types.JSONNullUUID
-	RoleID       db_types.JSONNullUUID
-	WorkspaceID  db_types.JSONNullUUID
+	ID           uuid.UUID
+	RoleID       uuid.UUID
+	WorkspaceID  uuid.UUID
 	DbInstanceID db_types.JSONNullString
 	SchemaName   db_types.JSONNullString
 	TableName    db_types.JSONNullString
 	ColumnName   db_types.JSONNullString
-	Action       db_types.JSONNullString
-	Effect       db_types.JSONNullString
+	Action       string
+	Effect       string
 }
 
 func (q *Queries) UpsertPermission(ctx context.Context, arg UpsertPermissionParams) error {
@@ -2162,7 +2164,7 @@ ON CONFLICT (snapshot_hash) DO NOTHING
 type UpsertPrincipalSnapshotParams struct {
 	SnapshotHash []byte
 	WorkspaceID  db_types.JSONNullUUID
-	Snapshot     pqtype.NullRawMessage
+	Snapshot     json.RawMessage
 }
 
 func (q *Queries) UpsertPrincipalSnapshot(ctx context.Context, arg UpsertPrincipalSnapshotParams) error {
@@ -2180,9 +2182,9 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertRoleParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	Name        db_types.JSONNullString
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Name        string
 }
 
 func (q *Queries) UpsertRole(ctx context.Context, arg UpsertRoleParams) error {
@@ -2200,11 +2202,11 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertUserToGroupParams struct {
-	ID          db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
-	GroupID     db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	Source      db_types.JSONNullString
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	GroupID     uuid.UUID
+	WorkspaceID uuid.UUID
+	Source      string
 }
 
 func (q *Queries) UpsertUserToGroup(ctx context.Context, arg UpsertUserToGroupParams) error {
@@ -2227,10 +2229,10 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertUserToRoleParams struct {
-	ID          db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
-	RoleID      db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	RoleID      uuid.UUID
+	WorkspaceID uuid.UUID
 }
 
 func (q *Queries) UpsertUserToRole(ctx context.Context, arg UpsertUserToRoleParams) error {
@@ -2255,8 +2257,8 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertWorkspaceParams struct {
-	ID           db_types.JSONNullUUID
-	Name         db_types.JSONNullString
+	ID           uuid.UUID
+	Name         string
 	GitRemoteUrl db_types.JSONNullString
 	OwnerID      db_types.JSONNullUUID
 }
@@ -2280,9 +2282,9 @@ ON CONFLICT (id) DO UPDATE SET
 `
 
 type UpsertWorkspaceToUserParams struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
 }
 
 func (q *Queries) UpsertWorkspaceToUser(ctx context.Context, arg UpsertWorkspaceToUserParams) error {

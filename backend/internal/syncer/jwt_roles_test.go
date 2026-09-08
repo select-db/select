@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"backend/db/db_types"
 	"backend/internal/auth"
 
 	"github.com/google/uuid"
@@ -108,7 +107,7 @@ func TestCreateJWT_UnionsDirectAndGroupRoles(t *testing.T) {
 	seedUserToGroup(t, conn, newID(), userID, groupID, wsID)
 	seedGroupToRole(t, conn, newID(), groupID, groupRoleID, wsID)
 
-	tok, err := auth.CreateJWT(context.Background(), db_types.NewJSONNullUUID(uuid.MustParse(userID)))
+	tok, err := auth.CreateJWT(context.Background(), uuid.MustParse(userID))
 	require.NoError(t, err)
 
 	_, claims, err := auth.ValidateJWT(tok)
@@ -150,7 +149,7 @@ func TestCreateJWT_DedupesRoleGrantedBothWays(t *testing.T) {
 	seedUserToGroup(t, conn, newID(), userID, groupID, wsID)
 	seedGroupToRole(t, conn, newID(), groupID, roleID, wsID)
 
-	tok, err := auth.CreateJWT(context.Background(), db_types.NewJSONNullUUID(uuid.MustParse(userID)))
+	tok, err := auth.CreateJWT(context.Background(), uuid.MustParse(userID))
 	require.NoError(t, err)
 
 	_, claims, err := auth.ValidateJWT(tok)
@@ -202,7 +201,7 @@ func TestCreateJWT_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
 	_, err = conn.Exec(`UPDATE app."group" SET deleted_at = now() WHERE id = $1::uuid`, groupID)
 	require.NoError(t, err)
 
-	tok, err := auth.CreateJWT(context.Background(), db_types.NewJSONNullUUID(uuid.MustParse(userID)))
+	tok, err := auth.CreateJWT(context.Background(), uuid.MustParse(userID))
 	require.NoError(t, err)
 
 	_, claims, err := auth.ValidateJWT(tok)

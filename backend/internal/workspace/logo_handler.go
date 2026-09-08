@@ -11,6 +11,8 @@ import (
 	"backend/internal/authz"
 
 	core "github.com/selectDb/dialect/core"
+
+	"github.com/google/uuid"
 )
 
 type updateLogoRequest struct {
@@ -73,7 +75,7 @@ func LimitLogoBody(h http.Handler) http.Handler {
 
 // authorizeLogoWrite gates the endpoint on the same permission the sync path
 // required for a workspace write: owner, or workspace/settings.write.
-func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (db_types.JSONNullUUID, bool) {
+func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	a := authz.ActorOf(r)
 
 	// Permissions were compiled for the workspace the membership middleware
@@ -81,18 +83,18 @@ func authorizeLogoWrite(w http.ResponseWriter, r *http.Request) (db_types.JSONNu
 	// wrong set.
 	if id := r.PathValue("id"); id != a.WorkspaceID {
 		http.Error(w, "forbidden", http.StatusForbidden)
-		return db_types.JSONNullUUID{}, false
+		return uuid.UUID{}, false
 	}
 
 	if !a.IsOwner() && !a.Can(core.ActionWorkspaceSettingsWrite) {
 		http.Error(w, "forbidden", http.StatusForbidden)
-		return db_types.JSONNullUUID{}, false
+		return uuid.UUID{}, false
 	}
 
-	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(a.WorkspaceID)
+	workspaceUUID, err := uuid.Parse(a.WorkspaceID)
 	if err != nil {
 		http.Error(w, "invalid workspace id", http.StatusInternalServerError)
-		return db_types.JSONNullUUID{}, false
+		return uuid.UUID{}, false
 	}
 	return workspaceUUID, true
 }

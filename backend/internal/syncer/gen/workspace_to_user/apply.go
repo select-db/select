@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time.Time) (bool, *types.RestoredItem, error) {
@@ -28,20 +29,20 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("workspace_to_user: missing id or workspace_id")
 	}
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("workspace_to_user: invalid id %q: %w", id, err)
 	}
-	workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+	workspaceUUID, err := uuid.Parse(workspaceID)
 	if err != nil {
 		return false, nil, fmt.Errorf("workspace_to_user: invalid workspace_id %q: %w", workspaceID, err)
 	}
 
 	// user_id is parsed only when present: a partial update may omit it, in
 	// which case the merge keeps the existing value (so the FK isn't re-validated).
-	var userUUID db_types.JSONNullUUID
+	var userUUID uuid.UUID
 	if _, present := payload["user_id"]; present {
-		userUUID, err = db_types.NewJSONNullUUIDFromString(utils.MapGetString(payload, "user_id"))
+		userUUID, err = uuid.Parse(utils.MapGetString(payload, "user_id"))
 		if err != nil {
 			return false, nil, fmt.Errorf("workspace_to_user: invalid user_id: %w", err)
 		}
@@ -52,7 +53,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.GetWorkspaceToUserByID(ctx, generated.GetWorkspaceToUserByIDParams{ID: idUUID, WorkspaceID: workspaceUUID})
 		},
 		UpdatedAt: func(row generated.AppWorkspaceToUser) time.Time {
-			return row.UpdatedAt.ValueOrZero()
+			return row.UpdatedAt
 		},
 		DeletedAt: func(row generated.AppWorkspaceToUser) *time.Time {
 			if row.DeletedAt.Valid {
@@ -71,7 +72,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return generated.UpsertWorkspaceToUserParams{
 				ID:          idUUID,
 				WorkspaceID: workspaceUUID,
-				UserID:      utils.PatchUUID(payload, "user_id", existing.UserID, userUUID),
+				UserID:      utils.PatchValue(payload, "user_id", existing.UserID, userUUID),
 			}, nil
 		},
 		Upsert: func(ctx context.Context, params generated.UpsertWorkspaceToUserParams) error {

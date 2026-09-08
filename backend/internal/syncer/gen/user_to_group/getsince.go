@@ -7,20 +7,21 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]types.UserToGroupRow, error) {
-	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := db.Queries.GetUserToGroupsForUserSince(ctx, generated.GetUserToGroupsForUserSinceParams{
 		UserID:    userUUID,
-		UpdatedAt: db_types.NewJSONNullTimeFromTime(since),
+		UpdatedAt: since,
 	})
 	if err != nil {
 		return nil, err
@@ -39,8 +40,8 @@ func appUserToGroupToTypesRow(row generated.AppUserToGroup) types.UserToGroupRow
 		UserID:      row.UserID.String(),
 		GroupID:     row.GroupID.String(),
 		WorkspaceID: row.WorkspaceID.String(),
-		Source:      row.Source.ValueOrEmpty(),
-		UpdatedAt:   row.UpdatedAt.ValueOrZero(),
+		Source:      row.Source,
+		UpdatedAt:   row.UpdatedAt,
 	}
 	if row.DeletedAt.Valid {
 		t := row.DeletedAt.ValueOrZero()

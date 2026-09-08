@@ -1,12 +1,13 @@
 package syncer
 
 import (
-	"backend/db/db_types"
 	"backend/internal/auth"
 	"backend/internal/middlewares"
 	"backend/internal/syncer/types"
 	"encoding/json"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
 func Handler() http.HandlerFunc {
@@ -44,7 +45,7 @@ func Handler() http.HandlerFunc {
 		}
 
 		if needsTokenRefresh {
-			uid, err := db_types.NewJSONNullUUIDFromString(userID)
+			uid, err := uuid.Parse(userID)
 			if err == nil {
 				if token, err := auth.CreateJWT(r.Context(), uid); err == nil {
 					w.Header().Set("X-New-Access-Token", token)

@@ -71,8 +71,8 @@ func ToDialectPermissions(rows []generated.AppPermission) []core.PermissionEntry
 			SchemaName:   p.SchemaName.Ptr(),
 			TableName:    p.TableName.Ptr(),
 			ColumnName:   p.ColumnName.Ptr(),
-			Action:       p.Action.String,
-			Effect:       p.Effect.String,
+			Action:       p.Action,
+			Effect:       p.Effect,
 		})
 	}
 	return out

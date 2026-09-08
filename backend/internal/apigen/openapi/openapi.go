@@ -466,7 +466,6 @@ func typeLabel(f schema.Field) string {
 	return t
 }
 
-
 // filterExamples builds one AND and one OR/NOT example from the entity's first
 // couple of business (non-PK) filterable fields.
 func filterExamples(e schema.Entity) []string {

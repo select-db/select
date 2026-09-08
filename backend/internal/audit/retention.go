@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 	"time"
-
-	"backend/db/db_types"
 )
 
 const retentionSweepInterval = 24 * time.Hour
@@ -62,7 +60,7 @@ func (l *Logger) retentionSweep() {
 	}
 
 	cutoff := time.Now().Add(-l.retention)
-	n, err := l.q.WithTx(tx).DeleteAuditEventsBefore(ctx, db_types.NewJSONNullTimeFromTime(cutoff))
+	n, err := l.q.WithTx(tx).DeleteAuditEventsBefore(ctx, cutoff)
 	if err != nil {
 		log.Printf("audit: retention sweep: %v", err)
 		return

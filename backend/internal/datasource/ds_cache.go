@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 
 	"github.com/google/uuid"
@@ -58,8 +57,8 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	}
 
 	row, err := db.Queries.GetDatasource(ctx, generated.GetDatasourceParams{
-		ID:          db_types.NewJSONNullUUID(parsedID),
-		WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
+		ID:          parsedID,
+		WorkspaceID: parsedWorkspaceID,
 	})
 	if err != nil {
 		return nil, err
@@ -75,14 +74,14 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	}
 
 	ds := &ResolvedDatasource{
-		DBType: row.DbType.String,
-		Name:   row.Name.String,
+		DBType: row.DbType,
+		Name:   row.Name,
 		DSN:    dsn,
 		Pool: engine.PoolConfig{
-			MaxOpenConns:    int(row.MaxOpenConns.Int64),
-			MaxIdleConns:    int(row.MaxIdleConns.Int64),
-			ConnMaxLifetime: time.Duration(row.ConnMaxLifetime.Int64) * time.Second,
-			ConnMaxIdleTime: time.Duration(row.ConnMaxIdleTime.Int64) * time.Second,
+			MaxOpenConns:    int(int64(row.MaxOpenConns)),
+			MaxIdleConns:    int(int64(row.MaxIdleConns)),
+			ConnMaxLifetime: time.Duration(int64(row.ConnMaxLifetime)) * time.Second,
+			ConnMaxIdleTime: time.Duration(int64(row.ConnMaxIdleTime)) * time.Second,
 		},
 	}
 

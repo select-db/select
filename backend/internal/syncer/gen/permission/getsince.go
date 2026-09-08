@@ -7,20 +7,21 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]types.PermissionRow, error) {
-	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := db.Queries.GetPermissionsForUserSince(ctx, generated.GetPermissionsForUserSinceParams{
 		UserID:    userUUID,
-		UpdatedAt: db_types.NewJSONNullTimeFromTime(since),
+		UpdatedAt: since,
 	})
 	if err != nil {
 		return nil, err
@@ -42,9 +43,9 @@ func appPermissionToTypesRow(row generated.AppPermission) types.PermissionRow {
 		SchemaName:   row.SchemaName.ValueOrEmpty(),
 		TableName:    row.TableName.ValueOrEmpty(),
 		ColumnName:   row.ColumnName.ValueOrEmpty(),
-		Action:       row.Action.ValueOrEmpty(),
-		Effect:       row.Effect.ValueOrEmpty(),
-		UpdatedAt:    row.UpdatedAt.ValueOrZero(),
+		Action:       row.Action,
+		Effect:       row.Effect,
+		UpdatedAt:    row.UpdatedAt,
 	}
 	if row.DeletedAt.Valid {
 		t := row.DeletedAt.ValueOrZero()

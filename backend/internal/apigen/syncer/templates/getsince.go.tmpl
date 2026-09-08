@@ -5,20 +5,21 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]{{.RowType}}, error) {
-	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := db.Queries.Get{{.Plur}}ForUserSince(ctx, generated.Get{{.Plur}}ForUserSinceParams{
 		UserID:    userUUID,
-		UpdatedAt: db_types.NewJSONNullTimeFromTime(since),
+		UpdatedAt: since,
 	})
 	if err != nil {
 		return nil, err

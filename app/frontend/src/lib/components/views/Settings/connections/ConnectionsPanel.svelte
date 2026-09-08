@@ -100,7 +100,7 @@
 </div>
 
 {#snippet empty()}
-	No shared connections in this workspace.
+	No shared connections you administrate.
 {/snippet}
 
 {#snippet cell(key: string, connection: Connection)}

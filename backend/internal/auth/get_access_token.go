@@ -19,6 +19,8 @@ import (
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 type PollTokenRequest struct {
@@ -170,7 +172,7 @@ func GetAccessTokenHandler() http.HandlerFunc {
 }
 
 type LoggedUser struct {
-	ID        db_types.JSONNullUUID
+	ID        uuid.UUID
 	Name      db_types.JSONNullString
 	AvatarURL string
 }
@@ -253,21 +255,21 @@ func exchangeDeviceCode(ctx context.Context, deviceCode string) (*LoggedUser, in
 
 		// Look up by github identity (stable across email changes)
 		identityRow, err := db.Queries.GetUserByProviderIdentity(ctx, generated.GetUserByProviderIdentityParams{
-			Provider:       db_types.NewJSONNullString("github"),
-			ProviderUserID: db_types.NewJSONNullString(providerUserID),
+			Provider:       "github",
+			ProviderUserID: providerUserID,
 		})
 		if err == nil {
-			if identityRow.Email.String != githubUser.Email {
+			if identityRow.Email != githubUser.Email {
 				if err := db.Queries.UpdateUserIdentityEmail(ctx, generated.UpdateUserIdentityEmailParams{
-					Provider:       db_types.NewJSONNullString("github"),
-					ProviderUserID: db_types.NewJSONNullString(providerUserID),
+					Provider:       "github",
+					ProviderUserID: providerUserID,
 					Email:          db_types.NewJSONNullString(githubUser.Email),
 				}); err != nil {
 					return nil, 0, fmt.Errorf("failed to update identity email: %w", err)
 				}
 				if err := db.Queries.UpdateUserEmail(ctx, generated.UpdateUserEmailParams{
 					ID:    identityRow.ID,
-					Email: db_types.NewJSONNullString(githubUser.Email),
+					Email: githubUser.Email,
 				}); err != nil {
 					return nil, 0, fmt.Errorf("failed to update user email: %w", err)
 				}
@@ -291,15 +293,15 @@ func exchangeDeviceCode(ctx context.Context, deviceCode string) (*LoggedUser, in
 				ID:        placeholder.ID,
 				Name:      db_types.NewJSONNullString(githubUser.Name),
 				GithubID:  githubID,
-				Email:     db_types.NewJSONNullString(githubUser.Email),
+				Email:     githubUser.Email,
 				AvatarUrl: db_types.NewJSONNullString(avatarURL),
 			}); err != nil {
 				return nil, 0, fmt.Errorf("failed to update placeholder user: %w", err)
 			}
 			if err := db.Queries.CreateUserIdentity(ctx, generated.CreateUserIdentityParams{
 				UserID:         placeholder.ID,
-				Provider:       db_types.NewJSONNullString("github"),
-				ProviderUserID: db_types.NewJSONNullString(providerUserID),
+				Provider:       "github",
+				ProviderUserID: providerUserID,
 				Email:          db_types.NewJSONNullString(githubUser.Email),
 			}); err != nil {
 				return nil, 0, fmt.Errorf("failed to create identity for placeholder user: %w", err)
@@ -315,7 +317,7 @@ func exchangeDeviceCode(ctx context.Context, deviceCode string) (*LoggedUser, in
 
 		// New user
 		created, err := db.Queries.CreateUser(ctx, generated.CreateUserParams{
-			Email:    db_types.NewJSONNullString(githubUser.Email),
+			Email:    githubUser.Email,
 			Name:     db_types.NewJSONNullString(githubUser.Name),
 			GithubID: githubID,
 		})
@@ -324,8 +326,8 @@ func exchangeDeviceCode(ctx context.Context, deviceCode string) (*LoggedUser, in
 		}
 		if err := db.Queries.CreateUserIdentity(ctx, generated.CreateUserIdentityParams{
 			UserID:         created.ID,
-			Provider:       db_types.NewJSONNullString("github"),
-			ProviderUserID: db_types.NewJSONNullString(providerUserID),
+			Provider:       "github",
+			ProviderUserID: providerUserID,
 			Email:          db_types.NewJSONNullString(githubUser.Email),
 		}); err != nil {
 			return nil, 0, fmt.Errorf("failed to create identity for new user: %w", err)

@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/authz"
@@ -41,8 +40,8 @@ func DeleteHandler() http.HandlerFunc {
 		}
 
 		if err := db.Queries.DeleteDatasource(r.Context(), generated.DeleteDatasourceParams{
-			ID:          db_types.NewJSONNullUUID(id),
-			WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
+			ID:          id,
+			WorkspaceID: parsedWorkspaceID,
 		}); err != nil {
 			http.Error(w, "failed to delete datasource", http.StatusInternalServerError)
 			return

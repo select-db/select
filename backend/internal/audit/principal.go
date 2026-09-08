@@ -17,8 +17,8 @@ const (
 // Principal is who acted and what they could do, as of the event. It is
 // content-addressed: identical state hashes equal and is stored once.
 type Principal struct {
-	Type        string                 `json:"type"`           // PrincipalUser | PrincipalAPIKey
-	ID          string                 `json:"id"`             // user id or api-key id
+	Type        string                 `json:"type"` // PrincipalUser | PrincipalAPIKey
+	ID          string                 `json:"id"`   // user id or api-key id
 	Name        string                 `json:"name,omitempty"`
 	WorkspaceID string                 `json:"workspace_id"` // workspace the action occurred in
 	Roles       []Role                 `json:"roles"`

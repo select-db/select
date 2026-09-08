@@ -5,1163 +5,347 @@
 package generated
 
 import (
+	"encoding/json"
+	"time"
+
 	"backend/db/db_types"
-	"github.com/sqlc-dev/pqtype"
+	"github.com/google/uuid"
 )
 
 type AppDatasource struct {
-	ID              db_types.JSONNullUUID
-	WorkspaceID     db_types.JSONNullUUID
-	DbType          db_types.JSONNullString
+	ID              uuid.UUID
+	WorkspaceID     uuid.UUID
+	DbType          string
 	EncryptedDsn    []byte
 	EncryptedSsh    []byte
-	MaxOpenConns    db_types.JSONNullInt64
-	MaxIdleConns    db_types.JSONNullInt64
-	ConnMaxLifetime db_types.JSONNullInt64
-	ConnMaxIdleTime db_types.JSONNullInt64
-	CreatedAt       db_types.JSONNullTime
-	UpdatedAt       db_types.JSONNullTime
-	Name            db_types.JSONNullString
+	MaxOpenConns    int32
+	MaxIdleConns    int32
+	ConnMaxLifetime int32
+	ConnMaxIdleTime int32
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Name            string
 }
 
+// @app.sync @app.api.list|get @app.api.create|update|delete requires groups.manage
 type AppGroup struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	Name        db_types.JSONNullString
-	Source      db_types.JSONNullString
-	ExternalID  db_types.JSONNullString
-	UpdatedAt   db_types.JSONNullTime
-	DeletedAt   db_types.JSONNullTime
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	// Name of the group. @app.sort
+	Name string
+	// Origin of the group (e.g. local or an external provider). @app.api.readonly
+	Source string
+	// Identifier of the group in the external provider, when not local. @app.api.readonly
+	ExternalID db_types.JSONNullString
+	UpdatedAt  time.Time
+	DeletedAt  db_types.JSONNullTime
 }
 
+// @app.sync @app.api.list|get @app.api.create|update|delete requires groups.manage, roles.manage
 type AppGroupToRole struct {
-	ID          db_types.JSONNullUUID
-	GroupID     db_types.JSONNullUUID
-	RoleID      db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	UpdatedAt   db_types.JSONNullTime
+	ID          uuid.UUID
+	GroupID     uuid.UUID
+	RoleID      uuid.UUID
+	WorkspaceID uuid.UUID
+	UpdatedAt   time.Time
 	DeletedAt   db_types.JSONNullTime
 }
 
+// @app.sync @app.api.list|get @app.api.create|update|delete requires roles.manage
 type AppPermission struct {
-	ID           db_types.JSONNullUUID
-	RoleID       db_types.JSONNullUUID
-	WorkspaceID  db_types.JSONNullUUID
+	ID          uuid.UUID
+	RoleID      uuid.UUID
+	WorkspaceID uuid.UUID
+	// Database instance the rule applies to; null = any.
 	DbInstanceID db_types.JSONNullString
-	SchemaName   db_types.JSONNullString
-	TableName    db_types.JSONNullString
-	ColumnName   db_types.JSONNullString
-	Action       db_types.JSONNullString
-	Effect       db_types.JSONNullString
-	UpdatedAt    db_types.JSONNullTime
-	DeletedAt    db_types.JSONNullTime
+	// Schema the rule applies to; null = any.
+	SchemaName db_types.JSONNullString
+	// Table the rule applies to; null = any.
+	TableName db_types.JSONNullString
+	// Column the rule applies to; null = any.
+	ColumnName db_types.JSONNullString
+	// SQL action the rule applies to. @app.values [select, insert, update, delete, ddl, see, manage]
+	Action string
+	// Whether the rule allows or denies the action. @app.values [allow, deny]
+	Effect    string
+	UpdatedAt time.Time
+	DeletedAt db_types.JSONNullTime
 }
 
+// @app.sync @app.api.list|get @app.api.create|update|delete requires roles.manage
 type AppRole struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	Name        db_types.JSONNullString
-	UpdatedAt   db_types.JSONNullTime
-	DeletedAt   db_types.JSONNullTime
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	// Name of the role. @app.sort
+	Name      string
+	UpdatedAt time.Time
+	DeletedAt db_types.JSONNullTime
 }
 
 type AppUser struct {
-	ID        db_types.JSONNullUUID
+	ID        uuid.UUID
 	CreatedAt db_types.JSONNullTime
 	GithubID  db_types.JSONNullInt64
 	Name      db_types.JSONNullString
-	Email     db_types.JSONNullString
+	Email     string
 	AvatarUrl db_types.JSONNullString
 }
 
 type AppUserIdentity struct {
-	ID             db_types.JSONNullUUID
-	UserID         db_types.JSONNullUUID
-	Provider       db_types.JSONNullString
-	ProviderUserID db_types.JSONNullString
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	Provider       string
+	ProviderUserID string
 	Email          db_types.JSONNullString
-	CreatedAt      db_types.JSONNullTime
+	CreatedAt      time.Time
 }
 
+// @app.sync @app.api.list|get @app.api.create|update|delete requires groups.manage
 type AppUserToGroup struct {
-	ID          db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
-	GroupID     db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	Source      db_types.JSONNullString
-	UpdatedAt   db_types.JSONNullTime
-	DeletedAt   db_types.JSONNullTime
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	GroupID     uuid.UUID
+	WorkspaceID uuid.UUID
+	// Origin of the membership (e.g. local or an external provider). @app.api.readonly
+	Source    string
+	UpdatedAt time.Time
+	DeletedAt db_types.JSONNullTime
 }
 
+// @app.sync @app.api.list|get @app.api.create|update|delete requires roles.manage
 type AppUserToRole struct {
-	ID          db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
-	RoleID      db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	UpdatedAt   db_types.JSONNullTime
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	RoleID      uuid.UUID
+	WorkspaceID uuid.UUID
+	UpdatedAt   time.Time
 	DeletedAt   db_types.JSONNullTime
 }
 
 type AppWorkspace struct {
-	ID           db_types.JSONNullUUID
-	Name         db_types.JSONNullString
+	ID           uuid.UUID
+	Name         string
 	GitRemoteUrl db_types.JSONNullString
-	UpdatedAt    db_types.JSONNullTime
+	UpdatedAt    time.Time
 	DeletedAt    db_types.JSONNullTime
 	OwnerID      db_types.JSONNullUUID
 	Logo         db_types.JSONNullString
 }
 
+// @app.sync @app.api.list|get @app.api.create|update|delete requires roles.manage, users.manage
 type AppWorkspaceToUser struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	UserID      db_types.JSONNullUUID
-	UpdatedAt   db_types.JSONNullTime
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
+	UpdatedAt   time.Time
 	DeletedAt   db_types.JSONNullTime
 }
 
+// @app.entity log @app.api.list|get requires audit.read
 type AuditEvent struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
+	// Unique identifier of the event.
+	ID          uuid.UUID
+	WorkspaceID db_types.JSONNullUUID
+	// When the event occurred (event time). @app.sort desc
+	OccurredAt time.Time
+	// When the event was recorded; may lag occurred_at.
+	RecordedAt time.Time
+	// Domain of the action. @app.values [query, iam, datasource]
+	Domain string
+	// Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions.
+	Action string
+	// @app.hide
 	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
+	// Identifier of the principal.
+	PrincipalID db_types.JSONNullUUID
+	// Type of the principal that performed the action. @app.values [user, api_key]
 	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
+	// Type of the target the action was performed on. @app.values [permission, role, user, datasource]
+	TargetType db_types.JSONNullString
+	// Identifier of the target.
+	TargetID db_types.JSONNullUUID
+	// Label of the target at the time of the event.
+	TargetLabel db_types.JSONNullString
+	// Outcome of the action. @app.values [success, error, failure, denied]
+	Status string
+	// Domain-specific details of the event.
+	Payload json.RawMessage
+	// IP address of the client.
+	ClientIp  db_types.JSONNullInet
+	DeletedAt db_types.JSONNullTime
 }
 
 type AuditEventAuth struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
+	// Unique identifier of the event.
+	ID          uuid.UUID
+	WorkspaceID db_types.JSONNullUUID
+	// When the event occurred (event time). @app.sort desc
+	OccurredAt time.Time
+	// When the event was recorded; may lag occurred_at.
+	RecordedAt time.Time
+	// Domain of the action. @app.values [query, iam, datasource]
+	Domain string
+	// Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions.
+	Action string
+	// @app.hide
 	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
+	// Identifier of the principal.
+	PrincipalID db_types.JSONNullUUID
+	// Type of the principal that performed the action. @app.values [user, api_key]
 	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthDefault struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20260401 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20260501 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20260601 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20260701 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20260801 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20260901 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20261001 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20261101 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventAuthP20261201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
+	// Type of the target the action was performed on. @app.values [permission, role, user, datasource]
+	TargetType db_types.JSONNullString
+	// Identifier of the target.
+	TargetID db_types.JSONNullUUID
+	// Label of the target at the time of the event.
+	TargetLabel db_types.JSONNullString
+	// Outcome of the action. @app.values [success, error, failure, denied]
+	Status string
+	// Domain-specific details of the event.
+	Payload          json.RawMessage
+	DurationMs       db_types.JSONNullInt64
+	ReturnedRowCount db_types.JSONNullInt64
+	// IP address of the client.
+	ClientIp db_types.JSONNullInet
 }
 
 type AuditEventDatasource struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
+	// Unique identifier of the event.
+	ID          uuid.UUID
+	WorkspaceID db_types.JSONNullUUID
+	// When the event occurred (event time). @app.sort desc
+	OccurredAt time.Time
+	// When the event was recorded; may lag occurred_at.
+	RecordedAt time.Time
+	// Domain of the action. @app.values [query, iam, datasource]
+	Domain string
+	// Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions.
+	Action string
+	// @app.hide
 	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
+	// Identifier of the principal.
+	PrincipalID db_types.JSONNullUUID
+	// Type of the principal that performed the action. @app.values [user, api_key]
 	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceDefault struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260401 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260501 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260601 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260701 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260801 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20260901 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20261001 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20261101 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventDatasourceP20261201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
+	// Type of the target the action was performed on. @app.values [permission, role, user, datasource]
+	TargetType db_types.JSONNullString
+	// Identifier of the target.
+	TargetID db_types.JSONNullUUID
+	// Label of the target at the time of the event.
+	TargetLabel db_types.JSONNullString
+	// Outcome of the action. @app.values [success, error, failure, denied]
+	Status string
+	// Domain-specific details of the event.
+	Payload          json.RawMessage
+	DurationMs       db_types.JSONNullInt64
+	ReturnedRowCount db_types.JSONNullInt64
+	// IP address of the client.
+	ClientIp db_types.JSONNullInet
 }
 
 type AuditEventIam struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
+	// Unique identifier of the event.
+	ID          uuid.UUID
+	WorkspaceID db_types.JSONNullUUID
+	// When the event occurred (event time). @app.sort desc
+	OccurredAt time.Time
+	// When the event was recorded; may lag occurred_at.
+	RecordedAt time.Time
+	// Domain of the action. @app.values [query, iam, datasource]
+	Domain string
+	// Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions.
+	Action string
+	// @app.hide
 	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
+	// Identifier of the principal.
+	PrincipalID db_types.JSONNullUUID
+	// Type of the principal that performed the action. @app.values [user, api_key]
 	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamDefault struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260401 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260501 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260601 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260701 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260801 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20260901 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20261001 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20261101 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventIamP20261201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
+	// Type of the target the action was performed on. @app.values [permission, role, user, datasource]
+	TargetType db_types.JSONNullString
+	// Identifier of the target.
+	TargetID db_types.JSONNullUUID
+	// Label of the target at the time of the event.
+	TargetLabel db_types.JSONNullString
+	// Outcome of the action. @app.values [success, error, failure, denied]
+	Status string
+	// Domain-specific details of the event.
+	Payload          json.RawMessage
+	DurationMs       db_types.JSONNullInt64
+	ReturnedRowCount db_types.JSONNullInt64
+	// IP address of the client.
+	ClientIp db_types.JSONNullInet
 }
 
 type AuditEventQuery struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
+	// Unique identifier of the event.
+	ID          uuid.UUID
+	WorkspaceID db_types.JSONNullUUID
+	// When the event occurred (event time). @app.sort desc
+	OccurredAt time.Time
+	// When the event was recorded; may lag occurred_at.
+	RecordedAt time.Time
+	// Domain of the action. @app.values [query, iam, datasource]
+	Domain string
+	// Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions.
+	Action string
+	// @app.hide
 	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
+	// Identifier of the principal.
+	PrincipalID db_types.JSONNullUUID
+	// Type of the principal that performed the action. @app.values [user, api_key]
 	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryDefault struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260401 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260501 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260601 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260701 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260801 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20260901 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20261001 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20261101 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
-}
-
-type AuditEventQueryP20261201 struct {
-	ID            db_types.JSONNullUUID
-	WorkspaceID   db_types.JSONNullUUID
-	OccurredAt    db_types.JSONNullTime
-	RecordedAt    db_types.JSONNullTime
-	Domain        db_types.JSONNullString
-	Action        db_types.JSONNullString
-	PrincipalHash []byte
-	PrincipalID   db_types.JSONNullUUID
-	PrincipalType db_types.JSONNullString
-	TargetType    db_types.JSONNullString
-	TargetID      db_types.JSONNullUUID
-	TargetLabel   db_types.JSONNullString
-	Status        db_types.JSONNullString
-	Payload       pqtype.NullRawMessage
-	ClientIp      db_types.JSONNullInet
-	DeletedAt     db_types.JSONNullTime
+	// Type of the target the action was performed on. @app.values [permission, role, user, datasource]
+	TargetType db_types.JSONNullString
+	// Identifier of the target.
+	TargetID db_types.JSONNullUUID
+	// Label of the target at the time of the event.
+	TargetLabel db_types.JSONNullString
+	// Outcome of the action. @app.values [success, error, failure, denied]
+	Status string
+	// Domain-specific details of the event.
+	Payload          json.RawMessage
+	DurationMs       db_types.JSONNullInt64
+	ReturnedRowCount db_types.JSONNullInt64
+	// IP address of the client.
+	ClientIp db_types.JSONNullInet
 }
 
 type AuditOutbox struct {
-	ID         db_types.JSONNullInt64
-	EventJson  pqtype.NullRawMessage
-	EnqueuedAt db_types.JSONNullTime
+	ID         int64
+	EventJson  json.RawMessage
+	EnqueuedAt time.Time
 }
 
 type AuditPrincipalSnapshot struct {
 	SnapshotHash []byte
 	WorkspaceID  db_types.JSONNullUUID
-	Snapshot     pqtype.NullRawMessage
-	CreatedAt    db_types.JSONNullTime
+	Snapshot     json.RawMessage
+	CreatedAt    time.Time
 }
 
 type AuthApiKey struct {
-	ID          db_types.JSONNullUUID
-	WorkspaceID db_types.JSONNullUUID
-	Name        db_types.JSONNullString
-	Prefix      db_types.JSONNullString
-	HashedKey   db_types.JSONNullString
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Name        string
+	Prefix      string
+	HashedKey   string
 	CreatedBy   db_types.JSONNullUUID
 	ExpiresAt   db_types.JSONNullTime
 	LastUsedAt  db_types.JSONNullTime
-	CreatedAt   db_types.JSONNullTime
+	CreatedAt   time.Time
 	DeletedAt   db_types.JSONNullTime
 }
 
 type AuthApiKeyToRole struct {
-	ApiKeyID db_types.JSONNullUUID
-	RoleID   db_types.JSONNullUUID
+	ApiKeyID uuid.UUID
+	RoleID   uuid.UUID
 }
 
 type AuthRefreshToken struct {
-	HashedToken db_types.JSONNullString
-	UserID      db_types.JSONNullUUID
-	ExpiresAt   db_types.JSONNullTime
+	HashedToken string
+	UserID      uuid.UUID
+	ExpiresAt   time.Time
 	CreatedAt   db_types.JSONNullTime
 	IssuedIp    db_types.JSONNullInet
-}
-
-type GooseDbVersion struct {
-	ID        db_types.JSONNullInt64
-	VersionID db_types.JSONNullInt64
-	IsApplied db_types.JSONNullBool
-	Tstamp    db_types.JSONNullTime
-}
-
-type PartmanPartConfig struct {
-	ParentTable                 db_types.JSONNullString
-	Control                     db_types.JSONNullString
-	TimeEncoder                 db_types.JSONNullString
-	TimeDecoder                 db_types.JSONNullString
-	PartitionInterval           db_types.JSONNullString
-	PartitionType               db_types.JSONNullString
-	Premake                     db_types.JSONNullInt64
-	AutomaticMaintenance        db_types.JSONNullString
-	TemplateTable               db_types.JSONNullString
-	Retention                   db_types.JSONNullString
-	RetentionSchema             db_types.JSONNullString
-	RetentionKeepIndex          db_types.JSONNullBool
-	RetentionKeepTable          db_types.JSONNullBool
-	Epoch                       db_types.JSONNullString
-	ConstraintCols              interface{}
-	OptimizeConstraint          db_types.JSONNullInt64
-	InfiniteTimePartitions      db_types.JSONNullBool
-	DatetimeString              db_types.JSONNullString
-	Jobmon                      db_types.JSONNullBool
-	SubPartitionSetFull         db_types.JSONNullBool
-	UndoInProgress              db_types.JSONNullBool
-	InheritPrivileges           db_types.JSONNullBool
-	ConstraintValid             db_types.JSONNullBool
-	IgnoreDefaultData           db_types.JSONNullBool
-	DateTruncInterval           db_types.JSONNullString
-	MaintenanceOrder            db_types.JSONNullInt64
-	RetentionKeepPublication    db_types.JSONNullBool
-	MaintenanceLastRun          db_types.JSONNullTime
-	DetachBeforeDrop            db_types.JSONNullBool
-	MaintenanceRole             db_types.JSONNullString
-	AsyncPartitioningInProgress db_types.JSONNullString
-}
-
-type PartmanPartConfigSub struct {
-	SubParent                   db_types.JSONNullString
-	SubControl                  db_types.JSONNullString
-	SubTimeEncoder              db_types.JSONNullString
-	SubTimeDecoder              db_types.JSONNullString
-	SubPartitionInterval        db_types.JSONNullString
-	SubPartitionType            db_types.JSONNullString
-	SubPremake                  db_types.JSONNullInt64
-	SubAutomaticMaintenance     db_types.JSONNullString
-	SubTemplateTable            db_types.JSONNullString
-	SubRetention                db_types.JSONNullString
-	SubRetentionSchema          db_types.JSONNullString
-	SubRetentionKeepIndex       db_types.JSONNullBool
-	SubRetentionKeepTable       db_types.JSONNullBool
-	SubEpoch                    db_types.JSONNullString
-	SubConstraintCols           interface{}
-	SubOptimizeConstraint       db_types.JSONNullInt64
-	SubInfiniteTimePartitions   db_types.JSONNullBool
-	SubJobmon                   db_types.JSONNullBool
-	SubInheritPrivileges        db_types.JSONNullBool
-	SubConstraintValid          db_types.JSONNullBool
-	SubIgnoreDefaultData        db_types.JSONNullBool
-	SubDefaultTable             db_types.JSONNullBool
-	SubDateTruncInterval        db_types.JSONNullString
-	SubMaintenanceOrder         db_types.JSONNullInt64
-	SubRetentionKeepPublication db_types.JSONNullBool
-	SubControlNotNull           db_types.JSONNullBool
-	SubDetachBeforeDrop         db_types.JSONNullBool
-	SubMaintenanceRole          db_types.JSONNullString
-}
-
-type PartmanTemplateAuditEventAuth struct {
-	ID               db_types.JSONNullUUID
-	WorkspaceID      db_types.JSONNullUUID
-	OccurredAt       db_types.JSONNullTime
-	RecordedAt       db_types.JSONNullTime
-	Domain           db_types.JSONNullString
-	Action           db_types.JSONNullString
-	PrincipalHash    []byte
-	PrincipalID      db_types.JSONNullUUID
-	PrincipalType    db_types.JSONNullString
-	TargetType       db_types.JSONNullString
-	TargetID         db_types.JSONNullUUID
-	TargetLabel      db_types.JSONNullString
-	Status           db_types.JSONNullString
-	Payload          pqtype.NullRawMessage
-	DurationMs       db_types.JSONNullInt64
-	ReturnedRowCount db_types.JSONNullInt64
-	ClientIp         db_types.JSONNullInet
-}
-
-type PartmanTemplateAuditEventDatasource struct {
-	ID               db_types.JSONNullUUID
-	WorkspaceID      db_types.JSONNullUUID
-	OccurredAt       db_types.JSONNullTime
-	RecordedAt       db_types.JSONNullTime
-	Domain           db_types.JSONNullString
-	Action           db_types.JSONNullString
-	PrincipalHash    []byte
-	PrincipalID      db_types.JSONNullUUID
-	PrincipalType    db_types.JSONNullString
-	TargetType       db_types.JSONNullString
-	TargetID         db_types.JSONNullUUID
-	TargetLabel      db_types.JSONNullString
-	Status           db_types.JSONNullString
-	Payload          pqtype.NullRawMessage
-	DurationMs       db_types.JSONNullInt64
-	ReturnedRowCount db_types.JSONNullInt64
-	ClientIp         db_types.JSONNullInet
-}
-
-type PartmanTemplateAuditEventIam struct {
-	ID               db_types.JSONNullUUID
-	WorkspaceID      db_types.JSONNullUUID
-	OccurredAt       db_types.JSONNullTime
-	RecordedAt       db_types.JSONNullTime
-	Domain           db_types.JSONNullString
-	Action           db_types.JSONNullString
-	PrincipalHash    []byte
-	PrincipalID      db_types.JSONNullUUID
-	PrincipalType    db_types.JSONNullString
-	TargetType       db_types.JSONNullString
-	TargetID         db_types.JSONNullUUID
-	TargetLabel      db_types.JSONNullString
-	Status           db_types.JSONNullString
-	Payload          pqtype.NullRawMessage
-	DurationMs       db_types.JSONNullInt64
-	ReturnedRowCount db_types.JSONNullInt64
-	ClientIp         db_types.JSONNullInet
-}
-
-type PartmanTemplateAuditEventQuery struct {
-	ID               db_types.JSONNullUUID
-	WorkspaceID      db_types.JSONNullUUID
-	OccurredAt       db_types.JSONNullTime
-	RecordedAt       db_types.JSONNullTime
-	Domain           db_types.JSONNullString
-	Action           db_types.JSONNullString
-	PrincipalHash    []byte
-	PrincipalID      db_types.JSONNullUUID
-	PrincipalType    db_types.JSONNullString
-	TargetType       db_types.JSONNullString
-	TargetID         db_types.JSONNullUUID
-	TargetLabel      db_types.JSONNullString
-	Status           db_types.JSONNullString
-	Payload          pqtype.NullRawMessage
-	DurationMs       db_types.JSONNullInt64
-	ReturnedRowCount db_types.JSONNullInt64
-	ClientIp         db_types.JSONNullInet
 }

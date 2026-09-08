@@ -11,6 +11,8 @@ import (
 	"backend/internal/syncer/patch"
 	"backend/internal/syncer/types"
 	"backend/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time.Time) (bool, *types.RestoredItem, error) {
@@ -18,7 +20,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 	if id == "" {
 		return false, nil, fmt.Errorf("workspace: missing id")
 	}
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("workspace: invalid id %q: %w", id, err)
 	}
@@ -30,7 +32,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return db.Queries.GetWorkspaceByID(ctx, idUUID)
 		},
 		UpdatedAt: func(row generated.GetWorkspaceByIDRow) time.Time {
-			return row.UpdatedAt.ValueOrZero()
+			return row.UpdatedAt
 		},
 		DeletedAt: func(row generated.GetWorkspaceByIDRow) *time.Time {
 			if row.DeletedAt.Valid {
@@ -42,10 +44,10 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		Restored: func(row generated.GetWorkspaceByIDRow) (interface{}, error) {
 			r := types.WorkspaceRow{
 				ID:           row.ID.String(),
-				Name:         row.Name.ValueOrEmpty(),
+				Name:         row.Name,
 				GitRemoteURL: row.GitRemoteUrl.Ptr(),
 				Logo:         row.Logo.Ptr(),
-				UpdatedAt:    row.UpdatedAt.ValueOrZero(),
+				UpdatedAt:    row.UpdatedAt,
 			}
 			if row.OwnerID.Valid {
 				s := row.OwnerID.String()
@@ -59,9 +61,9 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		},
 		Merge: func(existing generated.GetWorkspaceByIDRow, isNew bool, payload map[string]any) (generated.UpsertWorkspaceParams, error) {
 			oldOwnerID = existing.OwnerID
-			name := utils.PatchStr(payload, "name", existing.Name)
-			if isNew && !name.Valid {
-				name = db_types.NewJSONNullString("My workspace")
+			name := utils.PatchValue(payload, "name", existing.Name, utils.MapGetString(payload, "name"))
+			if isNew && name == "" {
+				name = "My workspace"
 			}
 			// owner_id is immutable through sync: a generic LWW upsert must not
 			// transfer ownership. PatchUUID here would also resolve a present
@@ -69,8 +71,8 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			ownerID := existing.OwnerID
 			if isNew {
 				if oid := utils.MapGetString(payload, "owner_id"); oid != "" {
-					if parsed, err := db_types.NewJSONNullUUIDFromString(oid); err == nil {
-						ownerID = parsed
+					if parsed, err := uuid.Parse(oid); err == nil {
+						ownerID = db_types.NewJSONNullUUID(parsed)
 					}
 				}
 			}
@@ -90,7 +92,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			}
 			// Revoke old owner's tokens so their JWT gets fresh OwnedWorkspaceIDs
 			if oldOwnerID.Valid && (!params.OwnerID.Valid || oldOwnerID.String() != params.OwnerID.String()) {
-				_ = db.Queries.DeleteUserRefreshTokens(ctx, oldOwnerID)
+				_ = db.Queries.DeleteUserRefreshTokens(ctx, oldOwnerID.UUID)
 			}
 			return nil
 		},

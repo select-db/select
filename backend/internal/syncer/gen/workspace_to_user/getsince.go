@@ -7,20 +7,21 @@ import (
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]types.WorkspaceToUserRow, error) {
-	userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := db.Queries.GetWorkspaceToUsersForUserSince(ctx, generated.GetWorkspaceToUsersForUserSinceParams{
 		UserID:    userUUID,
-		UpdatedAt: db_types.NewJSONNullTimeFromTime(since),
+		UpdatedAt: since,
 	})
 	if err != nil {
 		return nil, err
@@ -38,7 +39,7 @@ func appWorkspaceToUserToTypesRow(row generated.AppWorkspaceToUser) types.Worksp
 		ID:          row.ID.String(),
 		WorkspaceID: row.WorkspaceID.String(),
 		UserID:      row.UserID.String(),
-		UpdatedAt:   row.UpdatedAt.ValueOrZero(),
+		UpdatedAt:   row.UpdatedAt,
 	}
 	if row.DeletedAt.Valid {
 		t := row.DeletedAt.ValueOrZero()

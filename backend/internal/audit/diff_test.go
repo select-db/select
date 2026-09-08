@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"backend/db/db_types"
 	"backend/db/generated"
 )
 
@@ -27,8 +26,8 @@ func TestToSnake(t *testing.T) {
 // per-column code, nullable wrappers come out as values (not {Value,Valid}).
 func TestDiffGeneric(t *testing.T) {
 	after := generated.UpsertPermissionParams{
-		Action: db_types.NewJSONNullString("select"),
-		Effect: db_types.NewJSONNullString("allow"),
+		Action: "select",
+		Effect: "allow",
 	}
 
 	// creation: only "after"
@@ -49,7 +48,7 @@ func TestDiffGeneric(t *testing.T) {
 	if _, ok := Diff(nilRow, after)["before"]; ok {
 		t.Fatalf("nil pointer before must be omitted")
 	}
-	updated := Diff(generated.AppPermission{Action: db_types.NewJSONNullString("select")}, after)
+	updated := Diff(generated.AppPermission{Action: "select"}, after)
 	if _, ok := updated["before"].(map[string]any); !ok {
 		t.Fatalf("update diff must include before, got %v", reflect.TypeOf(updated["before"]))
 	}

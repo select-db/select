@@ -8,11 +8,12 @@ import (
 	"strings"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/authz"
 
 	core "github.com/selectDb/dialect/core"
+
+	"github.com/google/uuid"
 )
 
 type searchUserResponse struct {
@@ -40,7 +41,7 @@ func SearchUserHandler() http.HandlerFunc {
 			return
 		}
 
-		workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		workspaceUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -66,7 +67,7 @@ func SearchUserHandler() http.HandlerFunc {
 		resp := searchUserResponse{
 			Found:        true,
 			UserID:       row.ID.String(),
-			Email:        row.Email.String,
+			Email:        row.Email,
 			AlreadyAdded: row.IsMember,
 		}
 		if row.Name.Valid {

@@ -7,11 +7,12 @@ import (
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/authz"
 	"backend/internal/syncer/scope"
+
+	"github.com/google/uuid"
 )
 
 type setRolesRequest struct {
@@ -41,12 +42,12 @@ func SetRolesHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		idUUID, err := db_types.NewJSONNullUUIDFromString(r.PathValue("id"))
+		idUUID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -65,9 +66,9 @@ func SetRolesHandler() http.HandlerFunc {
 			return
 		}
 
-		roleUUIDs := make([]db_types.JSONNullUUID, 0, len(req.RoleIDs))
+		roleUUIDs := make([]uuid.UUID, 0, len(req.RoleIDs))
 		for _, rid := range req.RoleIDs {
-			ru, err := db_types.NewJSONNullUUIDFromString(rid)
+			ru, err := uuid.Parse(rid)
 			if err != nil {
 				http.Error(w, "invalid role id", http.StatusBadRequest)
 				return
