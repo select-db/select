@@ -25,13 +25,8 @@ import (
 	"selectDb/internal/server"
 )
 
-// Both relative to the app module, which is where this is run from. schemaOut
-// is sqlc's input (internal/sqlc.yaml), refreshed after a command that changes
-// the schema.
-const (
-	migrationsSource = "internal/db/migrations"
-	schemaOut        = "internal/db/schema.sql"
-)
+// Relative to the app module, which is where this is run from.
+const migrationsSource = "internal/db/migrations"
 
 func main() {
 	log.SetFlags(0)
@@ -71,7 +66,7 @@ func main() {
 	}
 
 	log.Printf("%s on %s (%s)", command, domain, filepath.Base(dbPath))
-	if err := db.RunGooseAt(dbPath, db.GooseCommand(command), schemaOut); err != nil {
+	if err := db.RunGooseAt(dbPath, db.GooseCommand(command)); err != nil {
 		log.Fatal(err)
 	}
 }

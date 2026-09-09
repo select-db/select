@@ -138,13 +138,13 @@ func TestHistoryCreatedAtRebuild(t *testing.T) {
 
 	// Down rebuilds back to a nullable column, Up rebuilds forward again. The
 	// rows have to come through both copies.
-	if err := RunGooseAt(dbPath, GooseDown, ""); err != nil {
+	if err := RunGooseAt(dbPath, GooseDown); err != nil {
 		t.Fatalf("goose down: %v", err)
 	}
 	if n := countRows(""); n != 3 {
 		t.Errorf("rolling back lost rows: got %d, want 3", n)
 	}
-	if err := RunGooseAt(dbPath, GooseUp, ""); err != nil {
+	if err := RunGooseAt(dbPath, GooseUp); err != nil {
 		t.Fatalf("goose up: %v", err)
 	}
 	if n := countRows(""); n != 3 {
