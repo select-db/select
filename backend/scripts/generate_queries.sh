@@ -36,7 +36,13 @@ fi
 
 # Find all .sql files and combine them into one file
 echo -e "${BOLD}[Generate]${NORMAL} Looking for queries.sql files..."
-if ! find "$ROOT_DIR" -type f \( -name "*_query.sql" -o -name "*_statement.sql" \) -exec sh -c 'cat {} && echo "\n"' \; > "$TEMP_SQL_FILE"; then
+# Sorted, so the concatenation order is the same on every machine. sqlc happens
+# to sort its own output too, but the CI check diffs this file's result against
+# what is committed, and that must not depend on filesystem order.
+if ! find "$ROOT_DIR" -type f \( -name "*_query.sql" -o -name "*_statement.sql" \) | sort | while read -r file; do
+    cat "$file"
+    echo
+done > "$TEMP_SQL_FILE"; then
     echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} Failed to find or concatenate queries.sql files"
     exit 1
 fi

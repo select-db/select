@@ -139,7 +139,7 @@ func GetMyPermissions(queries *generated.Queries) ([]core.PermissionEntry, error
 			ColumnName:   row.ColumnName.Ptr(),
 			Action:       row.Action,
 			Effect:       row.Effect,
-			RoleName:     row.RoleName.String,
+			RoleName:     row.RoleName,
 		})
 	}
 	return out, nil

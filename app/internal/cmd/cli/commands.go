@@ -59,7 +59,7 @@ func (c *Command) Run(cmdType string, arg string) (string, error) {
 			return "", err
 		}
 		// No schema dump: a shipped binary has no source tree to write into.
-		if err := db.RunGooseAt(dbPath, db.GooseCommand(migrationCommand), ""); err != nil {
+		if err := db.RunGooseAt(dbPath, db.GooseCommand(migrationCommand)); err != nil {
 			return "", fmt.Errorf("migrate %s on %s: %w", migrationCommand, domain, err)
 		}
 		return fmt.Sprintf("migrate %s applied to %s", migrationCommand, domain), nil

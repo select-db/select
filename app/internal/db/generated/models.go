@@ -11,13 +11,6 @@ import (
 	"selectDb/internal/db/db_types"
 )
 
-type GooseDbVersion struct {
-	ID        int64        `json:"id"`
-	VersionID int64        `json:"version_id"`
-	IsApplied int64        `json:"is_applied"`
-	Tstamp    sql.NullTime `json:"tstamp"`
-}
-
 type Group struct {
 	ID          string                  `json:"id"`
 	WorkspaceID string                  `json:"workspace_id"`
@@ -44,8 +37,8 @@ type History struct {
 	RowCount     sql.NullInt64 `json:"row_count"`
 	DurationMs   sql.NullInt64 `json:"duration_ms"`
 	Errors       string        `json:"errors"`
-	Uri          interface{}   `json:"uri"`
-	Dsn          interface{}   `json:"dsn"`
+	Uri          string        `json:"uri"`
+	Dsn          string        `json:"dsn"`
 	CreatedAt    time.Time     `json:"created_at"`
 	WorkspaceID  string        `json:"workspace_id"`
 	DbInstanceID string        `json:"db_instance_id"`

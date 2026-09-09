@@ -93,3 +93,4 @@ func TestHistoryMigrationAndQueries(t *testing.T) {
 		t.Fatalf("expected ws-2 to retain 1 row, got %d", len(ws2))
 	}
 }
+

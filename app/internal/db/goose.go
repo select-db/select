@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/pressly/goose/v3"
-
-	"selectDb/internal/cmd/scripts"
 )
 
 // GooseCommand is a migration command applied to one server's database.
@@ -25,13 +23,7 @@ const (
 //
 // Migrations are embedded, not read off disk, so a packaged build and a
 // developer's checkout run byte-identical SQL.
-//
-// schemaOut, when set, is where the resulting schema is written after a
-// command that changes it. sqlc generates the app's queries from that file
-// (internal/sqlc.yaml names it), so it has to follow the migrations or codegen
-// drifts from the database. Only the development command passes a path: the
-// shipped binary migrates a user's database and has no source tree to update.
-func RunGooseAt(dbPath string, cmd GooseCommand, schemaOut string) error {
+func RunGooseAt(dbPath string, cmd GooseCommand) error {
 	conn, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", dbPath, err)
@@ -55,13 +47,7 @@ func RunGooseAt(dbPath string, cmd GooseCommand, schemaOut string) error {
 	default:
 		return fmt.Errorf("unknown migration command %q (want up, down, reset or status)", cmd)
 	}
-	if err != nil || schemaOut == "" {
-		return err
-	}
-	if err := scripts.DumpSchema(conn, schemaOut); err != nil {
-		return fmt.Errorf("dump schema to %s: %w", schemaOut, err)
-	}
-	return nil
+	return err
 }
 
 // NewMigration scaffolds an empty migration in the source tree. It writes a

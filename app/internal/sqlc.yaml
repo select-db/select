@@ -4,7 +4,7 @@ cloud:
 sql:
   - engine: "sqlite"
     queries: "db/generated/all_queries.sql"
-    schema: "db/schema.sql"
+    schema: "db/migrations"
     gen:
       go:
         out: "db/generated"
