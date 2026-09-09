@@ -10,7 +10,7 @@
 	} from '$lib/components/views/shared/sharedStore';
 	import { getActions } from './actions/getActions';
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
-	import { createClickHandlers, createDeferredClickHandlers } from './helpers/clickHandlers';
+	import { createClickHandlers, createClickGestureHandlers } from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
 	import { loadSchema } from '$lib/utils/query/loadSchema';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
@@ -19,7 +19,7 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 	import { get } from 'svelte/store';
-	import { onDestroy, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 
 	let {
 		files,
@@ -120,20 +120,14 @@
 	const runOption = (option: ContextMenuOption | undefined, item: AnyItem) =>
 		option?.action?.(() => {}, item);
 
-	// Items that toggle open on click hold that click back for the double-click
-	// window, so a double-click doesn't expand and collapse them on the way. The
-	// rest act on the first click, where the delay would only feel slow.
-	const {
-		handleClick,
-		handleDoubleClick,
-		cancel: cancelPendingClick
-	} = createDeferredClickHandlers<AnyItem>({
+	// Items that toggle open on click ignore the second click of a double-click,
+	// so a double-click doesn't expand and collapse them on the way to its own
+	// action. The rest keep reacting to every click.
+	const { handleClick, handleDoubleClick } = createClickGestureHandlers<AnyItem>({
 		shouldDefer: (item) => expandableItemTypes.has(item.type) && !!doubleClickOption(item),
 		onClick: clickItem,
 		onDoubleClick: (item) => runOption(doubleClickOption(item), item)
 	});
-
-	onDestroy(cancelPendingClick);
 
 	const isExpanded = (id: string): boolean => {
 		const store = $expandedItemIdsStore;

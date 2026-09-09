@@ -521,13 +521,15 @@
 					onchange={async (checked) => {
 						if (checked) {
 							// local -> proxified: dsnLocal holds the real plaintext DSN from the
-							// local config, so it's safe to push to the backend as-is. Just drop
-							// the credentials from the local config file.
-							await writeConfigFile({
-								id,
-								db_type,
-								proxified: checked
-							});
+							// local config, so it's safe to push to the backend as-is.
+							//
+							// Through save(), not a bare writeConfigFile: the credential has to
+							// reach the server before the local config says it lives there. Writing
+							// the config first left a window, until the debounced save ran, 600ms
+							// later, where the only copy of the DSN was this form's memory, and
+							// where anything reloading the form read `proxified: true` and asked
+							// the server for a datasource it had not been given yet (404).
+							await save();
 						} else {
 							// proxified -> local: this drops the credential for everyone, so it asks
 							// first and puts the checkbox back if the answer is no.
