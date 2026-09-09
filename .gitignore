@@ -33,3 +33,6 @@ web/.cache/
 
 # Generator binary (build with: go build ./web/generate)
 web/generate/generate
+
+# Built by `go build ./internal/cmd/e2eseed`, which drops the binary in app/.
+/app/e2eseed

@@ -56,15 +56,13 @@ func TestLoadWorkspaceTheme_IgnoresWorkspaceFile(t *testing.T) {
 	withTempAppDataDir(t)
 
 	const workspaceID = "ws-theme"
+	openTestWorkspace(t, workspaceID)
 	g := New(nil)
 	g.WorkspaceGraph = &WorkspaceNode{ID: workspaceID, Type: "workspace"}
 
 	wfs, err := NewWorkspaceFS(workspaceID)
 	if err != nil {
 		t.Fatalf("NewWorkspaceFS: %v", err)
-	}
-	if err := os.MkdirAll(wfs.WorkspaceRoot, 0o755); err != nil {
-		t.Fatalf("create workspace root: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(wfs.WorkspaceRoot, ThemeFileName), []byte(":root {\n  --fs-md: 1px;\n}\n"), 0o644); err != nil {
 		t.Fatalf("write workspace theme: %v", err)

@@ -171,6 +171,23 @@ func seed(dataDir string) error {
 		return err
 	}
 
+	// Recorded as the last folder, so every run exercises reopen-on-login.
+	folder := filepath.Join(dataDir, "workspace")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		return fmt.Errorf("create workspace folder: %w", err)
+	}
+	graph.SetOpenWorkspaceRoot(WorkspaceID, folder)
+
+	if err := graph.WriteWorkspaceConfig(folder, domain, WorkspaceID); err != nil {
+		return fmt.Errorf("workspace config: %w", err)
+	}
+	if err := generated.New(handle).UpdateWorkspaceLocalPath(context.Background(), generated.UpdateWorkspaceLocalPathParams{
+		ID:        WorkspaceID,
+		LocalPath: text(folder),
+	}); err != nil {
+		return fmt.Errorf("record workspace folder: %w", err)
+	}
+
 	// The same workspace a real person is given. Everything below is the test
 	// account wrapped around it.
 	if err := sample.Write(WorkspaceID); err != nil {

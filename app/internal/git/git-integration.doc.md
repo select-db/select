@@ -1,6 +1,10 @@
 # Git
 
-A SELECT workspace is a folder on disk. Your SQL files, database configs, themes, and lint rules all live as regular files that you can browse, edit, and back up however you like. Git is entirely optional, you can use SELECT without it.
+A SELECT workspace is a folder on disk, and it is a folder you chose: see
+[Workspace Folder](/docs/workspace/workspace-folder/). Your SQL files, database
+configs and lint rules all live as regular files that you can browse, edit, and
+back up however you like. Git is entirely optional, you can use SELECT without
+it.
 
 When you work with a team, git becomes useful: keep files in sync across members
 and use branches to version your work.
@@ -42,6 +46,9 @@ You can also use the **built-in terminal** (`Ctrl+\``) for any git operation you
 
 A workspace folder contains:
 
+- `select.config.json`, which is what makes the folder a workspace. Commit it:
+  it is how a teammate who clones the repository lands in the right workspace.
+  See [Workspace Folder](/docs/workspace/workspace-folder/)
 - `.sql` files and their `.metadata.json` sidecars
 - `db.config.json` files (credentials should use `$VAR` references, not hardcoded values)
 - `.env` files (add to `.gitignore` if they contain secrets)
