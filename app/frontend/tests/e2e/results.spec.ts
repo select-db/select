@@ -69,9 +69,11 @@ test('columns are sized to the rows that arrived', async ({ page, signIn }) => {
 
 	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/5/, { timeout: 20_000 });
 
-	const narrow = await queryResultTable.header(page, 'id').boundingBox();
-	const wide = await queryResultTable.header(page, 'wide').boundingBox();
+	// Non-optional: a null box means the header never laid out, which is a
+	// different failure from one that laid out at the wrong width.
+	const narrow = (await queryResultTable.header(page, 'id').boundingBox())!;
+	const wide = (await queryResultTable.header(page, 'wide').boundingBox())!;
 
-	expect(narrow?.width).toBe(MIN_AUTO_COLUMN_WIDTH);
-	expect(wide?.width).toBe(MAX_AUTO_COLUMN_WIDTH);
+	expect(narrow.width).toBe(MIN_AUTO_COLUMN_WIDTH);
+	expect(wide.width).toBe(MAX_AUTO_COLUMN_WIDTH);
 });

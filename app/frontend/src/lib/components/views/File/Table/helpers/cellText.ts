@@ -16,6 +16,7 @@ export interface TextMeasurer {
 // 2d context; the widths it produces are only ever a fallback.
 const FALLBACK_CHAR_WIDTH = 7;
 const FALLBACK_CELL_PADDING = 16;
+const fallbackMeasure = (text: string) => text.length * FALLBACK_CHAR_WIDTH;
 
 /**
  * Measure text the way the results table renders it.
@@ -27,10 +28,7 @@ const FALLBACK_CELL_PADDING = 16;
  */
 export function createTextMeasurer(): TextMeasurer {
 	if (typeof document === 'undefined') {
-		return {
-			measure: (text) => text.length * FALLBACK_CHAR_WIDTH,
-			cellPadding: FALLBACK_CELL_PADDING
-		};
+		return { measure: fallbackMeasure, cellPadding: FALLBACK_CELL_PADDING };
 	}
 
 	const probe = document.createElement('span');
@@ -40,23 +38,15 @@ export function createTextMeasurer(): TextMeasurer {
 	probe.style.padding = 'var(--space-sm-md) var(--space-sm)';
 	document.body.appendChild(probe);
 
-	let font: string;
-	let letterSpacing: number;
-	let cellPadding: number;
-	try {
-		const style = getComputedStyle(probe);
-		// The `font` shorthand reads back empty in some engines; build it.
-		font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-		letterSpacing = parseFloat(style.letterSpacing) || 0;
-		cellPadding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
-	} finally {
-		probe.remove();
-	}
+	const style = getComputedStyle(probe);
+	// The `font` shorthand reads back empty in some engines; build it.
+	const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+	const letterSpacing = parseFloat(style.letterSpacing) || 0;
+	const cellPadding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+	probe.remove();
 
 	const ctx = document.createElement('canvas').getContext('2d');
-	if (!ctx) {
-		return { measure: (text) => text.length * FALLBACK_CHAR_WIDTH, cellPadding };
-	}
+	if (!ctx) return { measure: fallbackMeasure, cellPadding };
 	ctx.font = font;
 
 	return {

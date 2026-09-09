@@ -8,6 +8,7 @@
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import CellValueModal from './CellValueModal.svelte';
 	import ForeignKeyPickerModal from './ForeignKeyPickerModal.svelte';
+	import { formatCellValue } from './helpers/cellText';
 
 	export type ForeignKeyContext = {
 		databaseId: string;
@@ -73,7 +74,7 @@
 	]);
 
 	let menuOpen = $state(true);
-	let menuValue = $derived(formatValue(value));
+	let menuValue = $derived(formatCellValue(value));
 	let menuWidth = $state(0);
 
 	// Closing the menu (pick, Escape, or click-away) ends the edit. A pick has
@@ -97,7 +98,7 @@
 		onEdit(picked);
 	}
 
-	let inputValue = $derived(formatValue(value));
+	let inputValue = $derived(formatCellValue(value));
 	let inputElement: HTMLInputElement | null = $state(null);
 	let modalOpen = $state(false);
 
@@ -110,12 +111,6 @@
 			inputElement?.select();
 		});
 	});
-
-	function formatValue(val: unknown): string {
-		if (val === null) return 'NULL';
-		if (val === undefined) return '';
-		return typeof val === 'string' ? val : String(val);
-	}
 
 	function handleInput() {
 		if (!checkEditable()) {
