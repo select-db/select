@@ -1,17 +1,14 @@
+import { clearWorkspaceGraphCache, workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import {
-	clearWorkspaceGraphCache,
-	initializeWorkspaceGraph,
-	workspaceGraphStore
-} from '$lib/utils/graph/workspaceGraphStore';
+	clearFolderState,
+	onFolderClosed,
+	reopenLastFolder
+} from '$lib/components/PageFolder/folderStore';
 import { loadGitStatus } from '$lib/components/views/Git/gitStore';
 import { loadMyPermissions, clearMyPermissions } from '$lib/stores/myPermissionsStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { tryCatch } from '$lib/utils/tryCatch';
-import {
-	CheckForLogin,
-	CheckForLogout,
-	Logout
-} from '$lib/bindings/selectDb/internal/system/system';
+import { CheckForLogin, CheckForLogout } from '$lib/bindings/selectDb/internal/system/system';
 import { EventsOn } from '$lib/wails/events';
 import { stripNullItems, type WorkspaceNode } from '$lib/wails/graph';
 import { writable } from 'svelte/store';
@@ -38,6 +35,12 @@ EventsOn('logout', () => {
 	}
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
+	clearFolderState();
+});
+
+EventsOn('workspaceClosed', () => {
+	if (lastState !== 'loggedin') return;
+	void onFolderClosed();
 });
 
 EventsOn('login', async () => {
@@ -48,16 +51,8 @@ EventsOn('login', async () => {
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
 
-	const [graph, err] = await tryCatch(initializeWorkspaceGraph);
-	if (err) {
-		lastState = 'loggedout';
-		workspaceGraphStore.set(undefined);
-		await tryCatch(Logout);
-		return;
-	}
+	await reopenLastFolder();
 
-	// Set store here so layout sees the graph (init's set can be invisible across async boundary)
-	if (graph) workspaceGraphStore.set(graph);
 	modalStore.set(null);
 	checkSessionInterval = setInterval(() => CheckForLogout(), 500);
 	await Promise.all([loadGitStatus(), loadMyPermissions()]);

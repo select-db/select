@@ -589,6 +589,19 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspace
 	return i, err
 }
 
+const getWorkspaceLocalPath = `-- name: GetWorkspaceLocalPath :one
+SELECT local_path
+FROM workspace
+WHERE id = ?1
+`
+
+func (q *Queries) GetWorkspaceLocalPath(ctx context.Context, id string) (db_types.JSONNullString, error) {
+	row := q.db.QueryRowContext(ctx, getWorkspaceLocalPath, id)
+	var local_path db_types.JSONNullString
+	err := row.Scan(&local_path)
+	return local_path, err
+}
+
 const getWorkspaceOwnerID = `-- name: GetWorkspaceOwnerID :one
 SELECT owner_id FROM workspace WHERE id = ?1
 `

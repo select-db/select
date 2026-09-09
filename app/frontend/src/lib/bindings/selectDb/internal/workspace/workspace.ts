@@ -17,36 +17,54 @@ export function AddUserToWorkspace(email: string): $CancellablePromise<void> {
     return $Call.ByID(2010975648, email);
 }
 
+/**
+ * CloseFolder leaves the user signed in on the no-folder screen. The folder on
+ * disk is untouched.
+ */
+export function CloseFolder(): $CancellablePromise<void> {
+    return $Call.ByID(2005530750);
+}
+
 export function CreateWorkspace(params: $models.CreateWorkspaceParams): $CancellablePromise<generated$0.Workspace> {
     return $Call.ByID(1706524711, params).then(($result: any) => {
         return $$createType0($result);
     });
 }
 
-export function CreateWorkspaceAndReload(name: string): $CancellablePromise<void> {
-    return $Call.ByID(2601939573, name);
-}
-
 /**
- * DeleteWorkspace deletes the workspace on the server then removes its local
- * rows. The folder on disk is left alone: it is the user's own directory, and
- * what makes it a workspace is a config file, not the directory itself.
- * If the deleted workspace was current and ReloadHooks is set, runs switch-or-logout.
+ * DeleteWorkspace removes the workspace on the server, its local rows, and the
+ * select.config.json that named it. The folder is left as it was.
+ * 
+ * A config can outlive its workspace when the delete happened on another
+ * machine; the init screen cleans that up on the next open.
  */
 export function DeleteWorkspace(workspaceID: string): $CancellablePromise<void> {
     return $Call.ByID(1009480846, workspaceID);
 }
 
 /**
- * Ensures the workspace root folder exists on disk
+ * GetLastFolder returns the folder the current user last had open, when it is
+ * still there and still names the same workspace.
  */
-export function EnsureWorkspaceFolderByID(workspaceID: string, $1: string): $CancellablePromise<void> {
-    return $Call.ByID(1961383445, workspaceID, $1);
+export function GetLastFolder(): $CancellablePromise<$models.LastFolder> {
+    return $Call.ByID(1074679738).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
+/**
+ * InitWorkspaceInFolder creates the workspace on the server, writes the config
+ * that names it, and opens it. An empty name defaults to the folder's.
+ */
+export function InitWorkspaceInFolder(path: string, name: string): $CancellablePromise<$models.OpenFolderResult> {
+    return $Call.ByID(1245205774, path, name).then(($result: any) => {
+        return $$createType2($result);
+    });
 }
 
 export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserEntry[]> {
     return $Call.ByID(2078216013).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
@@ -55,32 +73,43 @@ export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserE
  */
 export function ListWorkspacesForCurrentUser(): $CancellablePromise<$models.WorkspaceWithCurrent[]> {
     return $Call.ByID(1919920487).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType6($result);
     });
+}
+
+/**
+ * OpenFolder is the only thing that sets up a workspace: not login, not sync.
+ */
+export function OpenFolder(path: string): $CancellablePromise<$models.OpenFolderResult> {
+    return $Call.ByID(2229533346, path).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
+ * PickFolder returns "" when the user cancels.
+ */
+export function PickFolder(): $CancellablePromise<string> {
+    return $Call.ByID(2753062023);
 }
 
 export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<void> {
     return $Call.ByID(3038059970, userID);
 }
 
+/**
+ * ReopenLastFolder runs after login, so a returning user skips the picker.
+ */
+export function ReopenLastFolder(): $CancellablePromise<$models.OpenFolderResult> {
+    return $Call.ByID(80028743).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
 export function SearchUser(email: string): $CancellablePromise<$models.SearchUserResult | null> {
     return $Call.ByID(2043344285, email).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType8($result);
     });
-}
-
-export function SetOrCreateCurrentWorkspace(params: $models.SetOrCreateCurrentWorkspaceParams): $CancellablePromise<generated$0.Workspace> {
-    return $Call.ByID(3116085253, params).then(($result: any) => {
-        return $$createType0($result);
-    });
-}
-
-/**
- * SwitchWorkspace sets the current workspace for the current user, ensures its folder exists,
- * rebuilds the workspace graph, and emits workspaceGraphUpdated when ReloadHooks is set.
- */
-export function SwitchWorkspace(workspaceID: string): $CancellablePromise<void> {
-    return $Call.ByID(1184707179, workspaceID);
 }
 
 /**
@@ -101,9 +130,11 @@ export function UpdateName(workspaceID: string, name: string): $CancellablePromi
 
 // Private type creation functions
 const $$createType0 = generated$0.Workspace.createFrom;
-const $$createType1 = $models.WorkspaceUserEntry.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $models.WorkspaceWithCurrent.createFrom;
+const $$createType1 = $models.LastFolder.createFrom;
+const $$createType2 = $models.OpenFolderResult.createFrom;
+const $$createType3 = $models.WorkspaceUserEntry.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = $models.SearchUserResult.createFrom;
-const $$createType6 = $Create.Nullable($$createType5);
+const $$createType5 = $models.WorkspaceWithCurrent.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = $models.SearchUserResult.createFrom;
+const $$createType8 = $Create.Nullable($$createType7);

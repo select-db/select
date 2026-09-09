@@ -9,14 +9,9 @@ import (
 	"selectDb/internal/utils"
 )
 
-// Ensurer ensures a workspace folder exists on disk. Optional; set by app wiring.
-type Ensurer interface {
-	EnsureWorkspaceFolderByID(workspaceID, name string) error
-}
-
-// Restore upserts the server-authoritative workspace row, and ensures the
-// workspace folder exists on disk when the workspace is new.
-func Restore(ctx context.Context, queries *generated.Queries, payload map[string]any, ensurer Ensurer) error {
+// Restore upserts the server-authoritative workspace row. It creates nothing on
+// disk: a workspace has no folder here until somebody opens one.
+func Restore(ctx context.Context, queries *generated.Queries, payload map[string]any) error {
 	id := utils.MapGetString(payload, "id")
 	name := utils.MapGetString(payload, "name")
 	if id == "" || name == "" {
@@ -69,10 +64,5 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 		return err
 	}
 
-	if ensurer != nil && !existedBefore {
-		if err := ensurer.EnsureWorkspaceFolderByID(id, name); err != nil {
-			return err
-		}
-	}
 	return nil
 }

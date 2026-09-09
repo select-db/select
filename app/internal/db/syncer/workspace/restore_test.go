@@ -51,7 +51,7 @@ func TestRestore_PreservesLocalLimitsWhenPayloadOmitsThem(t *testing.T) {
 	seedWorkspaceWithLimits(t, q, id, 5000, 50)
 
 	payload := map[string]any{"id": id, "name": "ws"}
-	require.NoError(t, Restore(context.Background(), q, payload, nil))
+	require.NoError(t, Restore(context.Background(), q, payload))
 
 	got, err := q.GetWorkspaceByID(context.Background(), id)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestRestore_AppliesLimitsFromPayload(t *testing.T) {
 		"statement_timeout_ms": float64(8000), // JSON numbers decode to float64
 		"max_result_size_mb":   float64(60),
 	}
-	require.NoError(t, Restore(context.Background(), q, payload, nil))
+	require.NoError(t, Restore(context.Background(), q, payload))
 
 	got, err := q.GetWorkspaceByID(context.Background(), id)
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestRestore_NewWorkspaceUsesDefaults(t *testing.T) {
 	const id = "ws-3"
 
 	payload := map[string]any{"id": id, "name": "ws"}
-	require.NoError(t, Restore(context.Background(), q, payload, nil))
+	require.NoError(t, Restore(context.Background(), q, payload))
 
 	got, err := q.GetWorkspaceByID(context.Background(), id)
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ const testLogo = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8
 
 func restoreWorkspace(t *testing.T, q *generated.Queries, payload map[string]any) generated.GetWorkspaceByIDRow {
 	t.Helper()
-	require.NoError(t, Restore(context.Background(), q, payload, nil))
+	require.NoError(t, Restore(context.Background(), q, payload))
 	row, err := q.GetWorkspaceByID(context.Background(), "ws-1")
 	require.NoError(t, err)
 	return row
@@ -134,6 +134,6 @@ func TestRestore_LogoConstraintRejectsNonPNG(t *testing.T) {
 	err := Restore(context.Background(), q, map[string]any{
 		"id": "ws-1", "name": "ws",
 		"logo": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==",
-	}, nil)
+	})
 	require.Error(t, err, "the local CHECK constraint should refuse a non-PNG logo")
 }
