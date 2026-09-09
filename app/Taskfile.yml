@@ -26,13 +26,6 @@ vars:
 tasks:
   generate:bindings:
     summary: Regenerates the frontend bindings from the bound Go services
-    # Unlike the `status` guards below, this one asserts nothing about the
-    # bindings themselves: it is a caller saying it will use the committed files
-    # as they are, and so needs neither the generator nor the GTK headers its
-    # type check pulls in. CI's e2e job sets it; the app quality job, which has
-    # those headers, is where the bindings are regenerated and diffed.
-    status:
-      - test "$BINDINGS_COMMITTED" = true
     cmds:
       # The generator loads the whole app module, so it needs the same build
       # tags the build uses; without them it would look for the GTK4/WebKitGTK 6
