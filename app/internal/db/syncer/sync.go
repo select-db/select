@@ -18,7 +18,6 @@ import (
 	syncutr "selectDb/internal/db/syncer/user_to_role"
 	syncworkspace "selectDb/internal/db/syncer/workspace"
 	syncwtu "selectDb/internal/db/syncer/workspace_to_user"
-	"selectDb/internal/git"
 )
 
 const pendingCommitsBatchSize = 100
@@ -167,47 +166,7 @@ func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generate
 		}
 	}
 
-	s.reconcileCurrentWorkspaceRepo(ctx)
-
 	return s.updateLastPulledAt(ctx, currentWorkspaceID, res.ServerTime)
-}
-
-// reconcileCurrentWorkspaceRepo makes the current workspace's local repository
-// converge to its server-authoritative git_remote_url. It runs on every sync,
-// so a transient failure simply retries on the next sync instead of leaving the
-// client desynced. Errors are intentionally non-fatal: a temporarily
-// unreachable repo must not block role/permission sync.
-func (s *Syncer) reconcileCurrentWorkspaceRepo(ctx context.Context) {
-	if s.Git == nil {
-		return
-	}
-	wtu, err := s.Queries.GetCurrentWorkspaceToUser(ctx)
-	if err != nil {
-		return
-	}
-	ws, err := s.Queries.GetWorkspaceByID(ctx, wtu.WorkspaceID)
-	if err != nil {
-		return
-	}
-
-	res, err := s.Git.ReconcileWorkspaceRemote(wtu.WorkspaceID, ws.GitRemoteUrl.Ptr())
-	if err != nil {
-		return
-	}
-
-	notable := res.Action == git.ReconcileSwitched ||
-		res.Action == git.ReconcileUnlinked ||
-		(res.Action == git.ReconcileLinked && res.Changed)
-	if !notable {
-		return
-	}
-
-	if res.Changed && s.Graph != nil {
-		_ = s.Graph.RebuildWorkspaceGraph()
-	}
-	if s.EmitWorkspaceRepoChanged != nil {
-		s.EmitWorkspaceRepoChanged(res)
-	}
 }
 
 func (s *Syncer) deleteConfirmed(ctx context.Context, ids []string) error {

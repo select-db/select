@@ -78,17 +78,6 @@ func hasAnyCommits(ctx context.Context, dir string) (bool, error) {
 	return true, nil
 }
 
-// ensureGitRepo initialises a git repository at dir if it is not already one.
-func ensureGitRepo(ctx context.Context, dir string) error {
-	if ok, _ := isGitRepo(ctx, dir); ok {
-		return nil
-	}
-	if err := runGit(ctx, dir, "init"); err != nil {
-		return fmt.Errorf("git init failed: %w", err)
-	}
-	return nil
-}
-
 // remoteDefaultBranch returns the name of the remote's default branch, or ""
 // if the remote has no commits or the default branch cannot be determined.
 func remoteDefaultBranch(ctx context.Context, dir string) (string, error) {

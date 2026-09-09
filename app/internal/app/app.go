@@ -129,7 +129,7 @@ func NewApp() *App {
 	}
 
 	Git := git.New(Queries, FSProvider, Graph)
-	Syncer := syncer.New(Queries, Graph, Workspace, Git)
+	Syncer := syncer.New(Queries, Graph, Workspace)
 	internalDb := db.New(Queries, Syncer)
 	GlobalInterceptor.Db = internalDb
 
@@ -172,10 +172,6 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 	a.Syncer.EmitRolesUpdated = func() {
 		utils.DebouncedEventsEmit("rolesUpdated", 100*time.Millisecond)
 	}
-	a.Syncer.EmitWorkspaceRepoChanged = func(res git.ReconcileResult) {
-		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
-		utils.DebouncedEventsEmit("workspaceRepoChanged", 100*time.Millisecond, res)
-	}
 	a.Workspace.PullFunc = a.Syncer.Pull
 	a.Workspace.ReloadHooks = &workspace.ReloadHooks{
 		BuildWorkspaceGraph: a.Graph.RebuildWorkspaceGraph,
@@ -183,13 +179,6 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 			utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
 		},
 		RunSwitchOrLogout: a.Syncer.RunSwitchOrLogout,
-		ReconcileGitRemote: func(workspaceID string) {
-			ws, err := a.Git.Queries.GetWorkspaceByID(context.Background(), workspaceID)
-			if err != nil {
-				return
-			}
-			_, _ = a.Git.ReconcileWorkspaceRemote(workspaceID, ws.GitRemoteUrl.Ptr())
-		},
 	}
 	a.Git.SetContext(ctx)
 	a.Search.SetContext(ctx)

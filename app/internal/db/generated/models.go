@@ -106,7 +106,6 @@ type UserToRole struct {
 type Workspace struct {
 	ID                 string                  `json:"id"`
 	Name               string                  `json:"name"`
-	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
 	LastPulledAt       sql.NullTime            `json:"last_pulled_at"`
 	OwnerID            db_types.JSONNullString `json:"owner_id"`
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`

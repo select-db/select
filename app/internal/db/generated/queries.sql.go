@@ -106,7 +106,7 @@ const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspace (id, name, owner_id)
 VALUES (?1, ?2, ?3)
 ON CONFLICT (id) DO NOTHING
-RETURNING id, name, git_remote_url, last_pulled_at, owner_id, statement_timeout_ms, max_result_size_mb, logo
+RETURNING id, name, last_pulled_at, owner_id, statement_timeout_ms, max_result_size_mb, logo
 `
 
 type CreateWorkspaceParams struct {
@@ -121,7 +121,6 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.GitRemoteUrl,
 		&i.LastPulledAt,
 		&i.OwnerID,
 		&i.StatementTimeoutMs,
@@ -338,7 +337,7 @@ func (q *Queries) GetCurrentUser(ctx context.Context) (User, error) {
 
 const getCurrentWorkspace = `-- name: GetCurrentWorkspace :one
 SELECT 
-    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
+    w.id, w.name, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
 FROM 
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
@@ -356,7 +355,6 @@ func (q *Queries) GetCurrentWorkspace(ctx context.Context, userID string) (Works
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.GitRemoteUrl,
 		&i.LastPulledAt,
 		&i.OwnerID,
 		&i.StatementTimeoutMs,
@@ -549,7 +547,7 @@ func (q *Queries) GetRoleWorkspaceID(ctx context.Context, id string) (string, er
 }
 
 const getWorkspaceByID = `-- name: GetWorkspaceByID :one
-SELECT id, name, git_remote_url, last_pulled_at, statement_timeout_ms, max_result_size_mb, logo
+SELECT id, name, last_pulled_at, statement_timeout_ms, max_result_size_mb, logo
 FROM workspace
 WHERE id = ?1
 `
@@ -557,7 +555,6 @@ WHERE id = ?1
 type GetWorkspaceByIDRow struct {
 	ID                 string                  `json:"id"`
 	Name               string                  `json:"name"`
-	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
 	LastPulledAt       sql.NullTime            `json:"last_pulled_at"`
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
 	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
@@ -570,7 +567,6 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id string) (GetWorkspace
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.GitRemoteUrl,
 		&i.LastPulledAt,
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
@@ -622,7 +618,7 @@ func (q *Queries) GetWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg 
 
 const getWorkspaceToUserByUserId = `-- name: GetWorkspaceToUserByUserId :one
 SELECT 
-    w.id, w.name, w.git_remote_url, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
+    w.id, w.name, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
 FROM 
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
@@ -639,7 +635,6 @@ func (q *Queries) GetWorkspaceToUserByUserId(ctx context.Context, userID string)
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.GitRemoteUrl,
 		&i.LastPulledAt,
 		&i.OwnerID,
 		&i.StatementTimeoutMs,
@@ -1716,22 +1711,6 @@ func (q *Queries) UpdateWorkspaceExecutionLimits(ctx context.Context, arg Update
 	return err
 }
 
-const updateWorkspaceGitRemote = `-- name: UpdateWorkspaceGitRemote :exec
-UPDATE workspace
-SET git_remote_url = ?1
-WHERE id = ?2
-`
-
-type UpdateWorkspaceGitRemoteParams struct {
-	GitRemoteUrl db_types.JSONNullString `json:"git_remote_url"`
-	ID           string                  `json:"id"`
-}
-
-func (q *Queries) UpdateWorkspaceGitRemote(ctx context.Context, arg UpdateWorkspaceGitRemoteParams) error {
-	_, err := q.db.ExecContext(ctx, updateWorkspaceGitRemote, arg.GitRemoteUrl, arg.ID)
-	return err
-}
-
 const updateWorkspaceLogo = `-- name: UpdateWorkspaceLogo :exec
 ; -- @no-track
 UPDATE workspace
@@ -2023,11 +2002,10 @@ func (q *Queries) UpsertUserToRoleForSync(ctx context.Context, arg UpsertUserToR
 
 const upsertWorkspaceForSync = `-- name: UpsertWorkspaceForSync :exec
 ; -- @no-track
-INSERT INTO workspace (id, name, git_remote_url, owner_id, statement_timeout_ms, max_result_size_mb, logo)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+INSERT INTO workspace (id, name, owner_id, statement_timeout_ms, max_result_size_mb, logo)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
 ON CONFLICT (id) DO UPDATE SET
     name = excluded.name,
-    git_remote_url = excluded.git_remote_url,
     owner_id = excluded.owner_id,
     statement_timeout_ms = excluded.statement_timeout_ms,
     max_result_size_mb = excluded.max_result_size_mb,
@@ -2037,7 +2015,6 @@ ON CONFLICT (id) DO UPDATE SET
 type UpsertWorkspaceForSyncParams struct {
 	ID                 string                  `json:"id"`
 	Name               string                  `json:"name"`
-	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
 	OwnerID            db_types.JSONNullString `json:"owner_id"`
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
 	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
@@ -2048,7 +2025,6 @@ func (q *Queries) UpsertWorkspaceForSync(ctx context.Context, arg UpsertWorkspac
 	_, err := q.db.ExecContext(ctx, upsertWorkspaceForSync,
 		arg.ID,
 		arg.Name,
-		arg.GitRemoteUrl,
 		arg.OwnerID,
 		arg.StatementTimeoutMs,
 		arg.MaxResultSizeMb,

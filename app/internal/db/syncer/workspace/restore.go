@@ -15,17 +15,13 @@ type Ensurer interface {
 }
 
 // Restore upserts the server-authoritative workspace row, and ensures the
-// workspace folder exists on disk when the workspace is new. Materializing the
-// git repository to match git_remote_url is handled separately by the syncer's
-// reconcile pass, which is idempotent and self-healing.
+// workspace folder exists on disk when the workspace is new.
 func Restore(ctx context.Context, queries *generated.Queries, payload map[string]any, ensurer Ensurer) error {
 	id := utils.MapGetString(payload, "id")
 	name := utils.MapGetString(payload, "name")
 	if id == "" || name == "" {
 		return nil
 	}
-	payloadGitRemote := utils.MapGetStringPtr(payload, "git_remote_url")
-
 	existedBefore := true
 	existing, err := queries.GetWorkspaceByID(ctx, id)
 	if err != nil {
@@ -35,10 +31,6 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 		existedBefore = false
 	}
 
-	gitRemote := db_types.JSONNullString{}
-	if payloadGitRemote != nil {
-		gitRemote = db_types.NewJSONNullString(*payloadGitRemote)
-	}
 	ownerID := db_types.JSONNullString{}
 	if oid := utils.MapGetString(payload, "owner_id"); oid != "" {
 		ownerID = db_types.NewJSONNullString(oid)
@@ -69,7 +61,6 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 	if err := queries.UpsertWorkspaceForSync(ctx, generated.UpsertWorkspaceForSyncParams{
 		ID:                 id,
 		Name:               name,
-		GitRemoteUrl:       gitRemote,
 		OwnerID:            ownerID,
 		StatementTimeoutMs: int64(statementTimeoutMs),
 		MaxResultSizeMb:    int64(maxResultSizeMB),

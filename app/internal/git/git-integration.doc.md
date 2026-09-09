@@ -2,17 +2,25 @@
 
 A SELECT workspace is a folder on disk. Your SQL files, database configs, themes, and lint rules all live as regular files that you can browse, edit, and back up however you like. Git is entirely optional, you can use SELECT without it.
 
-When you work with a team, git becomes useful: connect your workspace to a remote repository, keep files in sync across members and use branches to version your work.
+When you work with a team, git becomes useful: keep files in sync across members
+and use branches to version your work.
 
 ![The source control panel beside a diff: a branch, staged and unstaged changes, and the working copy of a query against its last commit.](/shots/git.light.png)
 
 ## Getting started
 
-Three ways to set up a workspace:
+SELECT does not set up git for you. It reads the folder you opened, the same way
+your editor does:
 
 - **No git**: work locally, no setup needed. You can always add git later.
-- **Initialize and publish**: turn the workspace folder into a git repo and push to a remote you provide
-- **Link an existing repo**: connect the workspace to a repo that already exists. If the remote has content, SELECT offers to checkout the remote branch or keep local files
+- **A folder you cloned**: clone the repository yourself, then open that folder.
+  Its remote, its branches and its history are already there.
+- **A folder you want to version**: run `git init` in it, from your shell or from
+  the built-in terminal (`Ctrl+\``). The panel picks it up.
+
+Whoever cloned the folder chose its remote, and `git remote` is where that choice
+lives. SELECT never rewrites it, and never re-materializes your working tree from
+somewhere else.
 
 ## Operations
 
@@ -22,6 +30,9 @@ The git panel exposes standard operations:
 - **Commit**: create a commit from staged changes
 - **Pull**: fetch and merge from origin. Pull with rebase is also available
 - **Push**: push your branch to origin. Force push with lease is available when needed
+
+Push and pull need an `origin`; committing does not. A repository with no remote
+still gets staging, commits, branches and diffs.
 - **Revert**: discard changes to a file or revert all uncommitted changes
 - **Branches**: list branches and switch between them
 
@@ -63,10 +74,10 @@ workspace and sync through the SELECT backend (like roles and permissions):
 
 ## Sync
 
-When a workspace is connected to a remote, changes to users, roles, permissions,
-and workspace settings (including execution limits) are synced through the SELECT
-backend. These are not stored in git but kept in sync across team members through
-the server.
+Changes to users, roles, permissions, and workspace settings (including execution
+limits) are synced through the SELECT backend. These are not stored in git but
+kept in sync across team members through the server, whether or not the folder is
+a repository.
 
 > [!NOTE]
 > Git syncs your **files**. The SELECT backend syncs your **team settings**

@@ -7,16 +7,8 @@ import (
 
 	"selectDb/internal/db/generated"
 	syncworkspace "selectDb/internal/db/syncer/workspace"
-	"selectDb/internal/git"
 	"selectDb/internal/graph"
 )
-
-// WorkspaceRepoReconciler converges the local workspace repository to the
-// workspace's configured git remote (or to "no remote"). Implemented by
-// *git.Git. Optional; set by app wiring.
-type WorkspaceRepoReconciler interface {
-	ReconcileWorkspaceRemote(workspaceID string, desiredURL *string) (git.ReconcileResult, error)
-}
 
 const syncDebounceDelay = 500 * time.Millisecond
 
@@ -36,18 +28,12 @@ type Syncer struct {
 	Graph   *graph.Graph
 
 	Workspace syncworkspace.Ensurer
-	Git       WorkspaceRepoReconciler
 
 	// SwitchOrLogout is optional. When set, applyDeleteRow uses it after switching workspace or when user has no workspaces.
 	SwitchOrLogout SwitchOrLogoutHandler
 
 	// EmitRolesUpdated is optional. When set, called after sync applies role/user_to_role/permission changes.
 	EmitRolesUpdated func()
-
-	// EmitWorkspaceRepoChanged is optional. When set, called after the reconcile
-	// pass materially changes the current workspace's repository so the app can
-	// rebuild the graph and notify the user.
-	EmitWorkspaceRepoChanged func(res git.ReconcileResult)
 
 	// FetchFunc overrides api.Fetch (UT).
 	FetchFunc func(ctx context.Context, method, endpoint string, payload interface{}, headers map[string]string, response interface{}) error
@@ -57,12 +43,11 @@ type Syncer struct {
 	debounceUserID string
 }
 
-func New(Queries *generated.Queries, Graph *graph.Graph, Workspace syncworkspace.Ensurer, Git WorkspaceRepoReconciler) *Syncer {
+func New(Queries *generated.Queries, Graph *graph.Graph, Workspace syncworkspace.Ensurer) *Syncer {
 	return &Syncer{
 		Queries:   Queries,
 		Graph:     Graph,
 		Workspace: Workspace,
-		Git:       Git,
 	}
 }
 
