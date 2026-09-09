@@ -28,6 +28,18 @@ func (q *Queries) ClearCurrentWorkspaceToUser(ctx context.Context) error {
 	return err
 }
 
+const clearWorkspaceLocalPaths = `-- name: ClearWorkspaceLocalPaths :exec
+; -- @no-track
+UPDATE workspace
+SET local_path = NULL
+WHERE local_path IS NOT NULL
+`
+
+func (q *Queries) ClearWorkspaceLocalPaths(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearWorkspaceLocalPaths)
+	return err
+}
+
 const createHistory = `-- name: CreateHistory :one
 ; -- @no-track
 INSERT INTO history (
@@ -106,7 +118,7 @@ const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspace (id, name, owner_id)
 VALUES (?1, ?2, ?3)
 ON CONFLICT (id) DO NOTHING
-RETURNING id, name, last_pulled_at, owner_id, statement_timeout_ms, max_result_size_mb, logo
+RETURNING id, name, last_pulled_at, owner_id, statement_timeout_ms, max_result_size_mb, logo, local_path
 `
 
 type CreateWorkspaceParams struct {
@@ -126,6 +138,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
 		&i.Logo,
+		&i.LocalPath,
 	)
 	return i, err
 }
@@ -337,7 +350,7 @@ func (q *Queries) GetCurrentUser(ctx context.Context) (User, error) {
 
 const getCurrentWorkspace = `-- name: GetCurrentWorkspace :one
 SELECT 
-    w.id, w.name, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
+    w.id, w.name, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo, w.local_path 
 FROM 
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
@@ -360,6 +373,7 @@ func (q *Queries) GetCurrentWorkspace(ctx context.Context, userID string) (Works
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
 		&i.Logo,
+		&i.LocalPath,
 	)
 	return i, err
 }
@@ -618,7 +632,7 @@ func (q *Queries) GetWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg 
 
 const getWorkspaceToUserByUserId = `-- name: GetWorkspaceToUserByUserId :one
 SELECT 
-    w.id, w.name, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo 
+    w.id, w.name, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo, w.local_path 
 FROM 
     workspace w
     LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
@@ -640,6 +654,7 @@ func (q *Queries) GetWorkspaceToUserByUserId(ctx context.Context, userID string)
 		&i.StatementTimeoutMs,
 		&i.MaxResultSizeMb,
 		&i.Logo,
+		&i.LocalPath,
 	)
 	return i, err
 }
@@ -1708,6 +1723,23 @@ type UpdateWorkspaceExecutionLimitsParams struct {
 
 func (q *Queries) UpdateWorkspaceExecutionLimits(ctx context.Context, arg UpdateWorkspaceExecutionLimitsParams) error {
 	_, err := q.db.ExecContext(ctx, updateWorkspaceExecutionLimits, arg.StatementTimeoutMs, arg.MaxResultSizeMb, arg.ID)
+	return err
+}
+
+const updateWorkspaceLocalPath = `-- name: UpdateWorkspaceLocalPath :exec
+; -- @no-track
+UPDATE workspace
+SET local_path = ?1
+WHERE id = ?2
+`
+
+type UpdateWorkspaceLocalPathParams struct {
+	LocalPath db_types.JSONNullString `json:"local_path"`
+	ID        string                  `json:"id"`
+}
+
+func (q *Queries) UpdateWorkspaceLocalPath(ctx context.Context, arg UpdateWorkspaceLocalPathParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceLocalPath, arg.LocalPath, arg.ID)
 	return err
 }
 
