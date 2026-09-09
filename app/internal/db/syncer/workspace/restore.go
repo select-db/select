@@ -9,10 +9,9 @@ import (
 	"selectDb/internal/utils"
 )
 
-// Ensurer ensures a workspace folder exists on disk and can remove it. Optional; set by app wiring.
+// Ensurer ensures a workspace folder exists on disk. Optional; set by app wiring.
 type Ensurer interface {
 	EnsureWorkspaceFolderByID(workspaceID, name string) error
-	RemoveWorkspaceFolderByID(workspaceID string) error
 }
 
 // Restore upserts the server-authoritative workspace row, and ensures the

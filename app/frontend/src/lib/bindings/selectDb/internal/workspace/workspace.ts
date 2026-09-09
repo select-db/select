@@ -28,9 +28,10 @@ export function CreateWorkspaceAndReload(name: string): $CancellablePromise<void
 }
 
 /**
- * DeleteWorkspace deletes the workspace on the server then removes it locally.
+ * DeleteWorkspace deletes the workspace on the server then removes its local
+ * rows. The folder on disk is left alone: it is the user's own directory, and
+ * what makes it a workspace is a config file, not the directory itself.
  * If the deleted workspace was current and ReloadHooks is set, runs switch-or-logout.
- * Returns (loggedOut, nil) when the user had no workspaces left and was logged out, (false, nil) otherwise, or (false, err) on error.
  */
 export function DeleteWorkspace(workspaceID: string): $CancellablePromise<void> {
     return $Call.ByID(1009480846, workspaceID);
@@ -60,14 +61,6 @@ export function ListWorkspacesForCurrentUser(): $CancellablePromise<$models.Work
 
 export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<void> {
     return $Call.ByID(3038059970, userID);
-}
-
-/**
- * RemoveWorkspaceFolderByID deletes the workspace root directory on disk.
- * Safe to call if the folder does not exist (no error).
- */
-export function RemoveWorkspaceFolderByID(workspaceID: string): $CancellablePromise<void> {
-    return $Call.ByID(436077763, workspaceID);
 }
 
 export function SearchUser(email: string): $CancellablePromise<$models.SearchUserResult | null> {

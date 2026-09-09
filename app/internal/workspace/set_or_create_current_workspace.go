@@ -62,38 +62,48 @@ func (w *Workspace) EnsureWorkspaceFolderByID(workspaceID, _ string) error {
 }
 
 // ensureWorkspaceFolder makes sure the workspace root folder exists on the
-// user's filesystem at:
+// user's filesystem, and seeds the sample workspace into it when it is empty.
 //
-//	APP_ROOT/workspaces/<workspace.ID>
+// The seed is gated on emptiness rather than on having just created the
+// directory, because a workspace root is a folder the user chose. Dropping
+// cohorts.sql and a .lint into a repository somebody already has work in would
+// be vandalism; an empty folder is the only one where a sample is a gift
+// rather than a mess.
 //
-// where APP_ROOT is the directory returned by GetAppDataDir().
-// When the directory is created for the first time, the shared workspace default
-// files (.lint, .gitignore, …) are seeded from the embedded defaults. Personal
-// files (.theme, .config) live in the per-user config dir, not the workspace.
+// Personal files (.theme, .config) live in the per-user config dir, not here.
 func (w *Workspace) ensureWorkspaceFolder(workspace generated.Workspace) error {
-	root, err := graph.WorkspaceRootPath(workspace.ID)
-	if err != nil {
-		return fmt.Errorf("resolve workspace root: %w", err)
-	}
-
-	_, statErr := os.Stat(root)
-	isNew := os.IsNotExist(statErr)
-
 	if err := w.FSProvider.Mkdir(fs_provider.MkdirParams{
 		URI: w.FSProvider.WorkspaceURIPrefix() + workspace.ID,
 	}); err != nil {
 		return fmt.Errorf("ensure workspace root directory: %w", err)
 	}
 
-	if isNew {
-		// The sample workspace, not just the dotfiles: a database with rows in
-		// it and the queries that read them, so the first thing a person sees
-		// is the thing the guide describes. sample.Write seeds the defaults on
-		// its way through.
-		if err := sample.Write(workspace.ID); err != nil {
-			return fmt.Errorf("seed sample workspace: %w", err)
-		}
+	root, err := graph.WorkspaceRootPath(workspace.ID)
+	if err != nil {
+		return fmt.Errorf("resolve workspace root: %w", err)
+	}
+
+	empty, err := isEmptyDir(root)
+	if err != nil {
+		return fmt.Errorf("read workspace root: %w", err)
+	}
+	if !empty {
+		return nil
+	}
+
+	if err := sample.Write(workspace.ID); err != nil {
+		return fmt.Errorf("seed sample workspace: %w", err)
 	}
 
 	return nil
+}
+
+// isEmptyDir reports whether dir holds no entries at all, hidden ones included.
+// A directory carrying only a .git is not empty: it is a clone somebody made.
+func isEmptyDir(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	return len(entries) == 0, nil
 }
