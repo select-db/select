@@ -78,10 +78,10 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 		Name:   row.Name,
 		DSN:    dsn,
 		Pool: engine.PoolConfig{
-			MaxOpenConns:    int(int64(row.MaxOpenConns)),
-			MaxIdleConns:    int(int64(row.MaxIdleConns)),
-			ConnMaxLifetime: time.Duration(int64(row.ConnMaxLifetime)) * time.Second,
-			ConnMaxIdleTime: time.Duration(int64(row.ConnMaxIdleTime)) * time.Second,
+			MaxOpenConns:    int(row.MaxOpenConns),
+			MaxIdleConns:    int(row.MaxIdleConns),
+			ConnMaxLifetime: time.Duration(row.ConnMaxLifetime) * time.Second,
+			ConnMaxIdleTime: time.Duration(row.ConnMaxIdleTime) * time.Second,
 		},
 	}
 

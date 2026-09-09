@@ -84,7 +84,7 @@ func TestEmitUserToRoleUniform(t *testing.T) {
 	has(t, apply, `utils.PatchValue(payload, "user_id", existing.UserID, userUUID)`)
 	has(t, apply, `utils.PatchValue(payload, "role_id", existing.RoleID, roleUUID)`)
 	hasNot(t, apply, "utils.PatchNullStr")
-	hasNot(t, apply, "utils.PatchNullStr")
+	hasNot(t, apply, "utils.PatchStrValueDefault")
 
 	sql := sqlByName(t, schema.UserToRoleTable())
 	if _, ok := sql["get_user_to_roles_for_user_since_query.sql"]; !ok {
