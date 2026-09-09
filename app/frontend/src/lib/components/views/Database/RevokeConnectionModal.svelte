@@ -32,11 +32,6 @@
 	{/if}
 
 	<p class="text">
-		{one ? `${names[0]} is a shared connection` : 'These are shared connections'}. The credentials
-		live on the server rather than in this workspace, so nothing done here alone would stop anyone
-		else who has access from reaching them.
-	</p>
-	<p class="text">
 		This drops those credentials for the whole workspace. Anyone querying stops being able to, and
 		the connection has to be set up again from scratch to come back.
 	</p>
@@ -54,6 +49,7 @@
 	.text {
 		margin: 0 0 var(--space-sm);
 		color: var(--gray-1000);
+		white-space: collapse;
 	}
 
 	.names {

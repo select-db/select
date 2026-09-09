@@ -291,25 +291,16 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
 };
 
 /**
- * How long a single click is held before it is acted on, for items that also
- * answer to a double-click. Long enough to swallow a normal double-click, short
- * enough that expanding the item still feels immediate. A double-click slower
- * than this expands the item first, which is the same outcome as before.
- */
-const DOUBLE_CLICK_DELAY_MS = 200;
-
-/**
  * Separates single from double clicks on the same item.
  *
- * A double-click is preceded by two plain clicks, so without this a table
- * visibly expands and collapses again before its data opens. The single-click
- * action is held back for DOUBLE_CLICK_DELAY_MS and dropped when a double-click
- * lands first. Items that opt out of `shouldDefer` keep reacting immediately, so
- * only the ones with a double-click action pay the delay.
- *
- * `cancel` must run on destroy so a pending click cannot fire after unmount.
+ * A double-click arrives as two plain clicks first, and on an item that toggles
+ * open the second one shuts it again -- a table visibly expands and collapses
+ * before its data opens. `detail` counts the clicks the browser has grouped
+ * into the current sequence, so the repeat can simply be dropped: the click
+ * that opens the item still acts immediately, and only the ones that would
+ * undo it are ignored.
  */
-export const createDeferredClickHandlers = <T>({
+export const createClickGestureHandlers = <T>({
 	shouldDefer,
 	onClick,
 	onDoubleClick
@@ -317,32 +308,11 @@ export const createDeferredClickHandlers = <T>({
 	shouldDefer: (item: T) => boolean;
 	onClick: (item: T, event?: MouseEvent) => void;
 	onDoubleClick: (item: T) => void;
-}) => {
-	let pending: ReturnType<typeof setTimeout> | null = null;
-
-	const cancel = () => {
-		if (pending === null) return;
-		clearTimeout(pending);
-		pending = null;
-	};
-
-	return {
-		handleClick: (item: T, event?: MouseEvent) => {
-			if (!shouldDefer(item)) {
-				onClick(item, event);
-				return;
-			}
-
-			cancel();
-			pending = setTimeout(() => {
-				pending = null;
-				onClick(item, event);
-			}, DOUBLE_CLICK_DELAY_MS);
-		},
-		handleDoubleClick: (item: T) => {
-			cancel();
-			onDoubleClick(item);
-		},
-		cancel
-	};
-};
+}) => ({
+	handleClick: (item: T, event?: MouseEvent) => {
+		// No event means a synthetic call, which is a lone click by definition.
+		if (shouldDefer(item) && (event?.detail ?? 1) > 1) return;
+		onClick(item, event);
+	},
+	handleDoubleClick: (item: T) => onDoubleClick(item)
+});

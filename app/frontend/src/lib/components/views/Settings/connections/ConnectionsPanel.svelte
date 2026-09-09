@@ -67,8 +67,8 @@
 <div class="panel">
 	<p class="title">Connections</p>
 	<p class="hint">
-		Databases whose credentials are stored on the server rather than in this workspace. Revoking one
-		drops those credentials for everyone.
+		Databases whose credentials are stored on the server rather than in this workspace. <br
+		/>Revoking one drops those credentials for everyone.
 	</p>
 
 	{#if unreferenced.length > 0}
@@ -129,6 +129,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm);
+		padding: var(--space-md) var(--space-sm);
 		height: 100%;
 		min-height: 0;
 	}

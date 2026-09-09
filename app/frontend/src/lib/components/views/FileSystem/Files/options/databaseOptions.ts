@@ -21,7 +21,6 @@ export const databaseOptions = [
 	},
 	{
 		label: 'Edit...',
-		runOnDoubleClick: true,
 		action: async (onClose, database: graph.DBInstanceNode) => {
 			await navigateToDatabase(database);
 			onClose();
