@@ -4,26 +4,17 @@ import (
 	"context"
 )
 
-// GitWorkspaceStatus describes the Git-level state of a workspace on disk. This is the
-// primary shape that the frontend will consume to decide which CTAs to show
-// (init, publish, link, etc).
+// GitWorkspaceStatus is read off the folder. The app does not configure the
+// repository; whoever cloned it chose the remote.
 type GitWorkspaceStatus struct {
 	GitAvailable bool   `json:"gitAvailable"`
 	IsGitRepo    bool   `json:"isGitRepo"`
 	HasRemote    bool   `json:"hasRemote"`
 	RemoteURL    string `json:"remoteUrl,omitempty"`
-	// ConfiguredRemoteUrl is the workspace's server-authoritative git remote,
-	// read from the DB independently of git availability. When git is missing
-	// this is the only way the UI can tell the user the workspace is supposed
-	// to be linked (and therefore its files cannot sync until git is installed).
-	ConfiguredRemoteUrl string `json:"configuredRemoteUrl,omitempty"`
 }
 
-// GetGitWorkspaceStatus inspects the local filesystem and returns high-level Git status information.
-//
-// It is intentionally conservative: failure to run git commands is treated as
-// "not a git repo" / "no remote" rather than an error, so that the UI can
-// still render and offer init/publish flows.
+// GetGitWorkspaceStatus is intentionally conservative: a failing git command
+// reads as "not a repo" rather than an error, so the panel always renders.
 func (g *Git) GetGitWorkspaceStatus() (*GitWorkspaceStatus, error) {
 	ctx := context.Background()
 
@@ -33,8 +24,6 @@ func (g *Git) GetGitWorkspaceStatus() (*GitWorkspaceStatus, error) {
 		return stat, nil
 	}
 	workspaceID := g.Graph.WorkspaceGraph.ID
-
-	stat.ConfiguredRemoteUrl = g.configuredRemote(ctx, workspaceID)
 
 	root, err := g.workspaceRootPath(workspaceID)
 	if err != nil {
@@ -59,19 +48,4 @@ func (g *Git) GetGitWorkspaceStatus() (*GitWorkspaceStatus, error) {
 	}
 
 	return stat, nil
-}
-
-// configuredRemote reads the workspace's git_remote_url from the DB. It never
-// errors or panics: this status call is intentionally conservative so the UI
-// can always render.
-func (g *Git) configuredRemote(ctx context.Context, workspaceID string) (url string) {
-	defer func() { _ = recover() }()
-	if g.Queries == nil {
-		return ""
-	}
-	ws, err := g.Queries.GetWorkspaceByID(ctx, workspaceID)
-	if err != nil {
-		return ""
-	}
-	return ws.GitRemoteUrl.Or("")
 }

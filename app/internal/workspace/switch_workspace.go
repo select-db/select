@@ -32,9 +32,6 @@ func (w *Workspace) SwitchWorkspace(workspaceID string) error {
 		return fmt.Errorf("ensure workspace folder: %w", err)
 	}
 	if h := w.ReloadHooks; h != nil {
-		if h.ReconcileGitRemote != nil {
-			h.ReconcileGitRemote(workspaceID)
-		}
 		if h.BuildWorkspaceGraph != nil {
 			if err := h.BuildWorkspaceGraph(); err != nil {
 				return fmt.Errorf("build workspace graph: %w", err)

@@ -265,7 +265,6 @@ export class User {
 export class Workspace {
     "id": string;
     "name": string;
-    "git_remote_url": db_types$0.JSONNullString;
     "last_pulled_at": sql$0.NullTime;
     "owner_id": db_types$0.JSONNullString;
     "statement_timeout_ms": number;
@@ -279,9 +278,6 @@ export class Workspace {
         }
         if (!("name" in $$source)) {
             this["name"] = "";
-        }
-        if (!("git_remote_url" in $$source)) {
-            this["git_remote_url"] = null;
         }
         if (!("last_pulled_at" in $$source)) {
             this["last_pulled_at"] = (new sql$0.NullTime());
@@ -306,10 +302,10 @@ export class Workspace {
      * Creates a new Workspace instance from a string or object.
      */
     static createFrom($$source: any = {}): Workspace {
-        const $$createField3_0 = $$createType0;
+        const $$createField2_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("last_pulled_at" in $$parsedSource) {
-            $$parsedSource["last_pulled_at"] = $$createField3_0($$parsedSource["last_pulled_at"]);
+            $$parsedSource["last_pulled_at"] = $$createField2_0($$parsedSource["last_pulled_at"]);
         }
         return new Workspace($$parsedSource as Partial<Workspace>);
     }

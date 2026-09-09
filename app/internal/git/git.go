@@ -16,11 +16,6 @@ type Git struct {
 	Queries    *generated.Queries
 	FSProvider *fs_provider.FSProvider
 	Graph      *graph.Graph
-
-	// Pending state for the two-phase link flow (set by LinkExistingRepo,
-	// consumed by CompleteLinkExistingRepo).
-	pendingLinkWorkspaceID string
-	pendingLinkBranch      string
 }
 
 func New(

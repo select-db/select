@@ -13,9 +13,6 @@ type ReloadHooks struct {
 	BuildWorkspaceGraph       func() error
 	EmitWorkspaceGraphUpdated func()
 	RunSwitchOrLogout         func(ctx context.Context, userID string) bool
-	// ReconcileGitRemote materializes the workspace's git repository to match
-	// its configured remote before the graph is rebuilt. Optional.
-	ReconcileGitRemote func(workspaceID string)
 }
 
 type Workspace struct {

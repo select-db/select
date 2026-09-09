@@ -23,15 +23,6 @@ export function CommitChanges(params: $models.CommitParams): $CancellablePromise
 }
 
 /**
- * CompleteLinkExistingRepo finalises a pending link started by LinkExistingRepo.
- * choice "checkout" replaces local files with the remote branch.
- * choice "keep" leaves local files untouched; the remote is already configured.
- */
-export function CompleteLinkExistingRepo(choice: string): $CancellablePromise<void> {
-    return $Call.ByID(2686222576, choice);
-}
-
-/**
  * GetBranches returns a list of all branches (local and remote).
  */
 export function GetBranches(): $CancellablePromise<$models.BranchInfo[]> {
@@ -62,47 +53,13 @@ export function GetGitFileStatus(): $CancellablePromise<$models.GitFileStatus | 
 }
 
 /**
- * GetGitWorkspaceStatus inspects the local filesystem and returns high-level Git status information.
- * 
- * It is intentionally conservative: failure to run git commands is treated as
- * "not a git repo" / "no remote" rather than an error, so that the UI can
- * still render and offer init/publish flows.
+ * GetGitWorkspaceStatus is intentionally conservative: a failing git command
+ * reads as "not a repo" rather than an error, so the panel always renders.
  */
 export function GetGitWorkspaceStatus(): $CancellablePromise<$models.GitWorkspaceStatus | null> {
     return $Call.ByID(2936111873).then(($result: any) => {
         return $$createType7($result);
     });
-}
-
-/**
- * InitAndPublishRepo performs local git initialization and creates an initial
- * commit for the given workspace. A later iteration will extend this to call
- * the remote backend to actually create the GitHub repo and push.
- */
-export function InitAndPublishRepo(params: $models.InitAndPublishParams): $CancellablePromise<void> {
-    return $Call.ByID(2303337240, params);
-}
-
-/**
- * LinkExistingRepo is the user-facing Wails method. It performs all
- * non-destructive setup (init, remote, persist, fetch) and returns a
- * LinkStatus. When Scenario is "checkout", the frontend shows a choice modal
- * and then calls CompleteLinkExistingRepo with the user's decision.
- */
-export function LinkExistingRepo(params: $models.LinkExistingParams): $CancellablePromise<$models.LinkStatus> {
-    return $Call.ByID(3976444531, params).then(($result: any) => {
-        return $$createType8($result);
-    });
-}
-
-/**
- * LinkExistingRepoForWorkspace configures the local git repository for the
- * given workspace ID to point at an existing remote. It delegates to
- * ReconcileWorkspaceRemote so there is a single, idempotent, self-healing code
- * path for materializing a workspace's repository.
- */
-export function LinkExistingRepoForWorkspace(workspaceID: string, params: $models.LinkExistingParams): $CancellablePromise<void> {
-    return $Call.ByID(1239714551, workspaceID, params);
 }
 
 /**
@@ -134,23 +91,6 @@ export function PushForceWithLease(): $CancellablePromise<void> {
  */
 export function PushWorkspaceRepo(): $CancellablePromise<void> {
     return $Call.ByID(3836615083);
-}
-
-/**
- * ReconcileWorkspaceRemote makes the local workspace repository converge to
- * desiredURL (or to "no remote" when desiredURL is nil). It is idempotent and
- * self-healing, and it never destroys unpushed work: before any switch it
- * snapshots the whole workspace (including .git) to a backup directory.
- * 
- * It does not write the workspace.git_remote_url DB column. That column is
- * owned by the sync layer (UpsertWorkspaceForSync, @no-track) and by the
- * interactive admin actions; writing it here would echo a redundant workspace
- * commit back to the server.
- */
-export function ReconcileWorkspaceRemote(workspaceID: string, desiredURL: string | null): $CancellablePromise<$models.ReconcileResult> {
-    return $Call.ByID(2249883805, workspaceID, desiredURL).then(($result: any) => {
-        return $$createType9($result);
-    });
 }
 
 /**
@@ -205,15 +145,6 @@ export function SwitchBranch(params: $models.SwitchBranchParams): $CancellablePr
 }
 
 /**
- * UnlinkRemote removes the "origin" remote from the workspace's git repository
- * and clears the workspace's stored git_remote_url so the workspace is considered unsynced.
- * The local .git directory and commits are left intact.
- */
-export function UnlinkRemote(): $CancellablePromise<void> {
-    return $Call.ByID(2704809219);
-}
-
-/**
  * UnstageAll unstages all changes.
  */
 export function UnstageAll(): $CancellablePromise<void> {
@@ -236,5 +167,3 @@ const $$createType4 = $models.GitFileStatus.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
 const $$createType6 = $models.GitWorkspaceStatus.createFrom;
 const $$createType7 = $Create.Nullable($$createType6);
-const $$createType8 = $models.LinkStatus.createFrom;
-const $$createType9 = $models.ReconcileResult.createFrom;
