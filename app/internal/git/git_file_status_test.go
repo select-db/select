@@ -83,7 +83,7 @@ func setupTestGitRepo(t *testing.T) (workspaceID string, workspaceRoot string, g
 	git = &Git{
 		ctx:        ctx,
 		Queries:    &generated.Queries{},
-		FSProvider: fs_provider.New(),
+		FSProvider: fs_provider.New(graph.WorkspaceRootPath),
 		Graph:      &graph.Graph{WorkspaceGraph: &graph.WorkspaceNode{ID: workspaceID}},
 	}
 
@@ -114,7 +114,7 @@ func TestGetGitFileStatus_NotGitRepo(t *testing.T) {
 	github := &Git{
 		ctx:        context.Background(),
 		Queries:    &generated.Queries{},
-		FSProvider: fs_provider.New(),
+		FSProvider: fs_provider.New(graph.WorkspaceRootPath),
 		Graph:      &graph.Graph{WorkspaceGraph: &graph.WorkspaceNode{ID: workspaceID}},
 	}
 

@@ -91,14 +91,7 @@ func NewApp() *App {
 	Queries := generated.New(db.NewLiveDB())
 	Graph := graph.New(Queries)
 
-	FSProvider := fs_provider.New()
-	if currentDomain != "" {
-		serverRoot, err := server.ServerRootPath(currentDomain)
-		if err != nil {
-			log.Fatal("Failed to get server root: ", err)
-		}
-		FSProvider.SetRoot(serverRoot)
-	}
+	FSProvider := fs_provider.New(graph.WorkspaceRootPath)
 
 	// Seed the per-user config defaults (.theme, .config keybindings/snippets)
 	// outside every workspace. Existing files are preserved.
@@ -109,8 +102,7 @@ func NewApp() *App {
 	}
 
 	Server := server.New(
-		func(root string) {
-			FSProvider.SetRoot(root)
+		func(_ string) {
 			Graph.InvalidateWorkspaceGraph()
 		},
 		db.RunMigrationsAt,
