@@ -258,7 +258,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
@@ -275,27 +274,6 @@ jobs:
           # linting, in each of these three jobs, so an outage there fails a
           # build for reasons unrelated to the code — as it did on #174.
           verify: false
-      # The bindings are committed, and a signature change that was never
-      # regenerated is a type error nobody sees until runtime. Regenerating and
-      # diffing them belongs on a quality job, as the sqlc check does, and this
-      # one already has the GTK headers the generator's type check needs.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: cache-wails
-        with:
-          path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
-      - name: Install Wails
-        if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
-      - name: Generated bindings are up to date
-        working-directory: app
-        run: |
-          wails3 task generate:bindings
-          git diff --exit-code frontend/src/lib/bindings || {
-            echo "::error::Bindings are stale. Run 'wails3 task generate:bindings' and commit the result."
-            exit 1
-          }
-
       - name: Dead code check
         run: |
           go install golang.org/x/tools/cmd/deadcode@latest
@@ -505,20 +483,23 @@ jobs:
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
+      # Both the wails CLI and the binding generator compile the app's cgo
+      # webview code, so this job needs the GTK3 headers even though the binary
+      # it ends up testing links no GUI toolkit at all. Moving the generator to
+      # a job that already had the headers was tried and reverted: this job
+      # finishes minutes inside the critical path, so the install costs nothing
+      # here, and the jobs that already had them are that critical path.
+      - run: sudo apt-get update && sudo apt-get install -y gcc libgtk-3-dev libwebkit2gtk-4.1-dev
+
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
           key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
-      # Nothing this job runs needs the GTK headers: the binary under test links
-      # no GUI toolkit and the bindings come from the tree. Only compiling the
-      # wails CLI does, so the install pays for them and a cache hit skips both.
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update && sudo apt-get install -y gcc libgtk-3-dev libwebkit2gtk-4.1-dev
-          go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
       # Flags and timeout as in the frontend quality job above.
       - run: npm ci --prefer-offline --no-audit --no-fund
@@ -540,12 +521,19 @@ jobs:
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         working-directory: app/frontend
 
-      # The checked-in bindings are what the suite should be testing against;
-      # regenerating them is the app quality job's business.
       - run: wails3 task test:e2e
         working-directory: app
-        env:
-          BINDINGS_COMMITTED: 'true'
+
+      # The bindings are committed, and building the suite regenerates them, so
+      # a Go signature change that was never regenerated shows up here as a
+      # dirty tree rather than as a type error nobody sees until runtime.
+      - name: Generated bindings are up to date
+        working-directory: app
+        run: |
+          git diff --exit-code frontend/src/lib/bindings || {
+            echo "::error::Bindings are stale. Run 'wails3 task generate:bindings' and commit the result."
+            exit 1
+          }
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
