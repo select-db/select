@@ -4,6 +4,7 @@ Getting Started              : web/content/introduction.doc.md
 API
   Reference                  : /api/
 Workspace
+  Workspace Folder           : app/internal/workspace/workspace-folder.doc.md
   Git                        : app/internal/git/git-integration.doc.md
   Users                      : app/internal/user/users.doc.md
   Roles                      : app/internal/role/roles.doc.md

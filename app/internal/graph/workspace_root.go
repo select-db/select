@@ -2,10 +2,7 @@ package graph
 
 import (
 	"fmt"
-	"path/filepath"
 	"sync"
-
-	"selectDb/internal/server"
 )
 
 // The open workspace and its folder. One window means one open workspace, so
@@ -43,28 +40,18 @@ func OpenWorkspaceRoot() (workspaceID, root string, ok bool) {
 	return openWorkspaceID, openRoot, true
 }
 
-// WorkspaceRootPath returns the absolute filesystem path to the workspace root
-// directory for the given workspace ID.
-//
-// Until the whole app opens folders rather than deriving them, an id that is
-// not the open one falls back to the managed layout this is replacing, so the
-// callers still on that path keep working. That fallback goes away with the
-// managed layout itself.
+// WorkspaceRootPath is the one resolver every package goes through, so nothing
+// can disagree about which directory an id names.
 func WorkspaceRootPath(workspaceID string) (string, error) {
-	if id, root, ok := OpenWorkspaceRoot(); ok && id == workspaceID {
-		return root, nil
+	if workspaceID == "" {
+		return "", fmt.Errorf("no workspace given")
 	}
-	return managedWorkspaceRootPath(workspaceID)
-}
-
-// managedWorkspaceRootPath is the old arithmetic: <server folder>/workspaces/<id>.
-func managedWorkspaceRootPath(workspaceID string) (string, error) {
-	serverRoot, err := server.CurrentServerRoot()
-	if err != nil {
-		return "", err
+	id, root, ok := OpenWorkspaceRoot()
+	if !ok {
+		return "", fmt.Errorf("no workspace folder is open")
 	}
-	if serverRoot == "" {
-		return "", fmt.Errorf("no current server")
+	if id != workspaceID {
+		return "", fmt.Errorf("workspace %s is not the open one", workspaceID)
 	}
-	return filepath.Join(serverRoot, "workspaces", workspaceID), nil
+	return root, nil
 }

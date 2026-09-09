@@ -6,19 +6,17 @@ import (
 	"path/filepath"
 	"testing"
 
-	"selectDb/internal/server"
 	"selectDb/internal/utils"
 )
 
 // withTempAppDataDir configures APP_ENV, HOME and XDG_CONFIG_HOME so that
-// GetAppDataDir points into a test-specific temporary directory, and sets a
-// current server so that WorkspaceRootPath works. It returns the resolved app
-// root.
+// GetAppDataDir points into a test-specific temporary directory. It returns the
+// resolved app root.
 //
 // XDG_CONFIG_HOME as well as HOME: on Linux os.UserConfigDir reads it first and
 // ignores HOME entirely when it is set, which it is on a GitHub runner. Leaving
-// it alone gives every test in the package the same app data directory -- and so
-// the same workspace root -- however carefully HOME is pointed elsewhere.
+// it alone gives every test in the package the same app data directory however
+// carefully HOME is pointed elsewhere.
 func withTempAppDataDir(t *testing.T) string {
 	t.Helper()
 
@@ -31,18 +29,17 @@ func withTempAppDataDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("GetAppDataDir: %v", err)
 	}
-
-	// Set current server so WorkspaceRootPath works (appRoot/<domain>/workspaces/...)
-	const testDomain = "test.local"
-	serverDir := filepath.Join(appRoot, server.DomainToFolderName(testDomain))
-	if err := os.MkdirAll(serverDir, 0o700); err != nil {
-		t.Fatalf("create server dir: %v", err)
-	}
-	if err := server.WriteCurrentDomain(testDomain); err != nil {
-		t.Fatalf("write current server: %v", err)
-	}
-
 	return appRoot
+}
+
+// openTestWorkspace makes a temp folder the open workspace, as opening one does.
+func openTestWorkspace(t *testing.T, workspaceID string) string {
+	t.Helper()
+
+	root := t.TempDir()
+	SetOpenWorkspaceRoot(workspaceID, root)
+	t.Cleanup(ClearOpenWorkspaceRoot)
+	return root
 }
 
 // TestBuildWorkspaceGraphFromFS_SimpleTree verifies that the filesystem-based
@@ -54,11 +51,7 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 	const workspaceID = "ws-1"
 	rootURI := fmt.Sprintf("selectdb://workspaces/%s", workspaceID)
 
-	serverRoot, err := server.CurrentServerRoot()
-	if err != nil {
-		t.Fatalf("CurrentServerRoot: %v", err)
-	}
-	workspaceRoot := filepath.Join(serverRoot, "workspaces", workspaceID)
+	workspaceRoot := openTestWorkspace(t, workspaceID)
 
 	// Layout:
 	//   workspaces/ws-1/

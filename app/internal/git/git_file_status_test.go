@@ -9,63 +9,24 @@ import (
 	"selectDb/internal/db/generated"
 	"selectDb/internal/fs_provider"
 	"selectDb/internal/graph"
-	"selectDb/internal/server"
-	"selectDb/internal/utils"
 )
 
-// setupTempAppDataWithServer sets HOME and APP_ENV to a temp dir and creates a current server.
-// Returns app root and restore function.
-func setupTempAppDataWithServer(t *testing.T) (string, func()) {
+// openWorkspace makes dir the open workspace for the duration of the test.
+func openWorkspace(t *testing.T, workspaceID, dir string) {
 	t.Helper()
-	oldHome := os.Getenv("HOME")
-	oldEnv := os.Getenv("APP_ENV")
-	tempHome := t.TempDir()
-	os.Setenv("HOME", tempHome)
-	os.Setenv("APP_ENV", "test-git")
-	appRoot, err := utils.GetAppDataDir()
-	if err != nil {
-		t.Fatalf("GetAppDataDir: %v", err)
-	}
-	const testDomain = "test.local"
-	serverDir := filepath.Join(appRoot, server.DomainToFolderName(testDomain))
-	if err := os.MkdirAll(serverDir, 0o700); err != nil {
-		t.Fatalf("create server dir: %v", err)
-	}
-	if err := server.WriteCurrentDomain(testDomain); err != nil {
-		t.Fatalf("write current server: %v", err)
-	}
-	restore := func() {
-		_ = os.Setenv("HOME", oldHome)
-		_ = os.Setenv("APP_ENV", oldEnv)
-	}
-	return appRoot, restore
+	graph.SetOpenWorkspaceRoot(workspaceID, dir)
+	t.Cleanup(graph.ClearOpenWorkspaceRoot)
 }
 
-// setupTestGitRepo creates a temporary git repository and returns:
-// - workspaceID: the test workspace ID
-// - workspaceRoot: the absolute path to the workspace root
-// - git: a Git instance configured for testing
-// - cleanup: a function to clean up the temp directory
+// setupTestGitRepo creates a temporary git repository and opens it as the
+// workspace.
 func setupTestGitRepo(t *testing.T) (workspaceID string, workspaceRoot string, git *Git, cleanup func()) {
 	t.Helper()
 
-	_, restoreEnv := setupTempAppDataWithServer(t)
-
-	// Use the actual workspace path resolution mechanism
 	workspaceID = "test-ws-1"
-	var err error
-	workspaceRoot, err = graph.WorkspaceRootPath(workspaceID)
-	if err != nil {
-		restoreEnv()
-		t.Fatalf("failed to get workspace root path: %v", err)
-	}
+	workspaceRoot = t.TempDir()
+	openWorkspace(t, workspaceID, workspaceRoot)
 
-	// Create the workspace directory
-	if err := os.MkdirAll(workspaceRoot, 0o700); err != nil {
-		t.Fatalf("failed to create workspace root: %v", err)
-	}
-
-	// Initialize git repository
 	ctx := context.Background()
 	if err := runGit(ctx, workspaceRoot, "init"); err != nil {
 		t.Fatalf("failed to init git repo: %v", err)
@@ -87,29 +48,12 @@ func setupTestGitRepo(t *testing.T) (workspaceID string, workspaceRoot string, g
 		Graph:      &graph.Graph{WorkspaceGraph: &graph.WorkspaceNode{ID: workspaceID}},
 	}
 
-	cleanup = func() {
-		os.RemoveAll(workspaceRoot)
-		restoreEnv()
-	}
-
-	return workspaceID, workspaceRoot, git, cleanup
+	return workspaceID, workspaceRoot, git, func() {}
 }
 
 func TestGetGitFileStatus_NotGitRepo(t *testing.T) {
-	_, restore := setupTempAppDataWithServer(t)
-	defer restore()
-
 	workspaceID := "test-ws-not-git"
-	workspaceRoot, err := graph.WorkspaceRootPath(workspaceID)
-	if err != nil {
-		t.Fatalf("failed to get workspace root path: %v", err)
-	}
-
-	// Create the directory but don't initialize git
-	if err := os.MkdirAll(workspaceRoot, 0o700); err != nil {
-		t.Fatalf("failed to create workspace root: %v", err)
-	}
-	defer os.RemoveAll(workspaceRoot)
+	openWorkspace(t, workspaceID, t.TempDir())
 
 	github := &Git{
 		ctx:        context.Background(),
@@ -118,7 +62,7 @@ func TestGetGitFileStatus_NotGitRepo(t *testing.T) {
 		Graph:      &graph.Graph{WorkspaceGraph: &graph.WorkspaceNode{ID: workspaceID}},
 	}
 
-	_, err = github.GetGitFileStatus()
+	_, err := github.GetGitFileStatus()
 	if err == nil {
 		t.Fatal("expected error for non-git repository, got nil")
 	}
