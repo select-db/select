@@ -6,6 +6,7 @@ import { isPreviewableDbItem, viewTableData } from '$lib/components/views/shared
 
 const infoOption = {
 	label: 'Infos...',
+	runOnClick: true,
 	action: async (onClose, item: graph.DBInstanceItemNode) => {
 		modalStore.set({
 			content: () => DatabaseSystemInfo,
