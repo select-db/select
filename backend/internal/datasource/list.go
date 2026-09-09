@@ -25,6 +25,11 @@ type listedDatasource struct {
 // connection, let alone revoke it: the id needed to name it lived in the file
 // that was deleted.
 //
+// A row is returned on the same rule its siblings apply per id
+// (Actor.IsOwner() || Actor.CanManage(id)), so the list is what this actor could
+// already fetch one at a time, and revoking is offered exactly where it would be
+// allowed. A member who administrates nothing sees nothing.
+//
 // No secrets, and no DSNs. Administrating a connection does not require being
 // handed the credential behind it.
 func ListHandler() http.HandlerFunc {
@@ -43,10 +48,20 @@ func ListHandler() http.HandlerFunc {
 			return
 		}
 
+		// Actor.CanManage recompiles the actor's permissions on every call, so it
+		// is the wrong shape for a loop: compiled once here, the per-row check is
+		// the map lookup it should be. Same rule -- CanManage is exactly this.
+		owner := a.IsOwner()
+		perms := authz.CompiledFromRequest(r)
+
 		out := make([]listedDatasource, 0, len(rows))
 		for _, row := range rows {
+			id := row.ID.String()
+			if !owner && !perms.CanManage(id) {
+				continue
+			}
 			out = append(out, listedDatasource{
-				ID:     row.ID.String(),
+				ID:     id,
 				Name:   row.Name,
 				DBType: row.DbType,
 			})
