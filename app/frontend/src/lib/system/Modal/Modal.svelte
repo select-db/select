@@ -43,6 +43,7 @@
 		<div class="modal-wrapper" onmousedown={(e) => e.stopPropagation()}>
 			<div
 				class="modal"
+				data-test="modal.panel"
 				role="presentation"
 				style={`width: ${cssSize($modalStore.width, '300px')}; height: ${cssSize($modalStore.height, 'fit-content')};`}
 				onmousedown={(e) => e.stopPropagation()}

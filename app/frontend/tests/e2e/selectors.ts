@@ -38,6 +38,12 @@ export const dbStatus = (page: Page, id: string) => testId(page, 'db.status', id
 export const selectedTreeNodes = (page: Page) =>
 	page.locator('[data-test="tree.node"][data-test-selected="true"]');
 
+/**
+ * The open modal, whatever it holds. Its content is what a spec should assert
+ * on; this only says one is on screen.
+ */
+export const modal = (page: Page) => testId(page, 'modal.panel');
+
 /** One open tab, named by the label it shows. */
 export const tab = (page: Page, name: string) => testId(page, 'tabs.tab', name);
 
