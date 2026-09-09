@@ -27,8 +27,12 @@
 		getColumnWidth as getColumnWidthFn,
 		getVisibleColumnRange,
 		resetColumnState,
+		computeAutoColumnWidths,
+		sampleLoadedRows,
+		MIN_COLUMN_WIDTH,
 		type ColumnState
 	} from './helpers/columnManagement';
+	import { createTextMeasurer, formatCellValue } from './helpers/cellText';
 	import {
 		createInitialLoadingStateFromResult,
 		mergeNewPageIntoState,
@@ -284,7 +288,10 @@
 	// Derived: width for column i from state, with fallback
 	const getColumnWidth = (i: number) => getColumnWidthFn(columnState, i);
 
-	const MIN_COLUMN_WIDTH = 40;
+	// Result this table has already sized its columns for. Sizing happens once
+	// per result: after that the widths are the user's, and a page arriving
+	// mid-scroll must not shift columns out from under the cursor.
+	let autoSizedKey = $state<string | null>(null);
 
 	// Column resize state
 	let resizingColumn = $state<number | null>(null);
@@ -556,15 +563,16 @@
 		dataState = createInitialLoadingStateFromResult(newResult, totalRows);
 		const totalCols = 1 + (newResult.columns?.length ?? 0);
 		const baseColumnState = resetColumnState(totalCols);
-		const restoredWidths =
-			cachedState?.columnWidths?.length === totalCols
-				? cachedState.columnWidths
-				: baseColumnState.columnWidths;
+		const cachedWidths = cachedState?.columnWidths;
+		const hasCachedWidths = cachedWidths?.length === totalCols;
+		const restoredWidths = hasCachedWidths ? cachedWidths : baseColumnState.columnWidths;
 		columnState = {
 			...baseColumnState,
 			pinnedColumnIdx: cachedState?.pinnedColumns ?? baseColumnState.pinnedColumnIdx,
 			columnWidths: restoredWidths
 		};
+		// Widths the user already has for this result win over anything measured.
+		autoSizedKey = hasCachedWidths ? currentKey : null;
 
 		// Pre-load pages needed for cached scroll position
 		const { rowHeight, viewportHeight, scrollContainer } = virtualScrollState;
@@ -652,12 +660,37 @@
 		});
 	});
 
-	// Utility functions
-	const formatCellValue = (value: unknown) => {
-		if (value === null) return 'NULL';
-		if (value === undefined) return '';
-		return typeof value === 'string' ? value : String(value);
-	};
+	// Size every column to the widest value in the first batch of rows, so a
+	// table of short ids stops reserving a fixed 280px a column. Measured rather
+	// than guessed from character counts: the cell font comes from the theme.
+	$effect(() => {
+		const key = dataStateKey;
+		const columns = queryResult?.columns;
+		const rows = dataState.allRows;
+		const streaming = isStreaming;
+		const total = totalRows;
+
+		if (!key || !columns?.length) return;
+		if (untrack(() => autoSizedKey) === key) return;
+
+		const sample = sampleLoadedRows(rows);
+		// Nothing has landed yet: wait, unless the result is settled and empty,
+		// in which case the headers are all there will ever be to measure.
+		if (sample.length === 0 && (streaming || total > 0)) return;
+
+		autoSizedKey = key;
+		untrack(() => {
+			columnState = {
+				...columnState,
+				columnWidths: computeAutoColumnWidths(
+					columns,
+					sample,
+					createTextMeasurer(),
+					getColumnWidth(0)
+				)
+			};
+		});
+	});
 
 	function handleCellClick(e: MouseEvent) {
 		const target = e.target as HTMLElement;
