@@ -26,6 +26,12 @@ vars:
 tasks:
   generate:bindings:
     summary: Regenerates the frontend bindings from the bound Go services
+    # The generated files are committed, so anything that only builds against
+    # them needs neither the generator nor the GTK headers its type check pulls
+    # in. BINDINGS=committed lets CI's e2e job say so; the app quality job, which
+    # has those headers, is where they are regenerated and diffed.
+    status:
+      - test "$BINDINGS" = committed
     cmds:
       # The generator loads the whole app module, so it needs the same build
       # tags the build uses; without them it would look for the GTK4/WebKitGTK 6
