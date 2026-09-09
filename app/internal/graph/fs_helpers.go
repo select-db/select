@@ -26,6 +26,9 @@ type WorkspaceFS struct {
 	WorkspaceID   string
 	WorkspaceRoot string
 	RootURI       string
+
+	// ignore keeps the tree and the watcher out of node_modules and friends.
+	ignore *ignoreMatcher
 }
 
 // NewWorkspaceFS constructs a WorkspaceFS by resolving the workspace root on
@@ -45,6 +48,7 @@ func NewWorkspaceFSFromRoot(workspaceID, workspaceRoot string) *WorkspaceFS {
 		WorkspaceID:   workspaceID,
 		WorkspaceRoot: workspaceRoot,
 		RootURI:       fs_uri.Scheme + fs_uri.WorkspacePrefix + workspaceID,
+		ignore:        newIgnoreMatcher(workspaceRoot),
 	}
 }
 
