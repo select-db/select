@@ -48,16 +48,24 @@ if ! sqlc generate; then
     exit 1
 fi
 
-# A nullable column whose Postgres type has no override in sqlc.yml silently
-# falls back to database/sql's own null types instead of the JSONNull* wrappers
-# the API layer marshals. That is invisible in review and is how db/generated
-# drifted before: the same type can be written two ways (TIMESTAMPTZ and
-# TIMESTAMP WITH TIME ZONE both appear in db/migrations), and an override only
-# matches the spelling it names. Fail loudly instead.
-if grep -q "database/sql" "$GENERATED_TEMP_GO" 2>/dev/null || grep -q "sql\.Null" "${GENERATED_DIR}/models.go"; then
+# A nullable column whose Postgres type has no matching override in sqlc.yml
+# silently falls back to database/sql's own null types instead of the JSONNull*
+# wrappers the API layer marshals. That is invisible in review, and it is how
+# db/generated drifted before.
+#
+# It is easy to hit because sqlc matches db_type against the spelling the column
+# was declared with, and the two ways of writing one type do not normalize to
+# each other: TIMESTAMPTZ stays bare, TIMESTAMP WITH TIME ZONE becomes
+# pg_catalog.timestamptz, and db/migrations uses both. Rather than chase every
+# spelling, fail on the fallback itself -- it catches the whole class, including
+# types with no override at all (numeric, date, int2).
+#
+# Both files are checked: models.go holds the table structs, the queries file
+# holds the row and param structs a join produces, which no table struct covers.
+if grep -n "sql\\.Null" "${GENERATED_DIR}/models.go" "$GENERATED_TEMP_GO"; then
     echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} generated code fell back to database/sql null types."
-    echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} A nullable column's type has no matching override in sqlc.yml:"
-    grep -n "sql\.Null" "${GENERATED_DIR}/models.go" | head -10
+    echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} Add an override for the column types listed above to sqlc.yml."
+    rm -f "$TEMP_SQL_FILE" "$GENERATED_TEMP_GO"
     exit 1
 fi
 

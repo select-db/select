@@ -17,7 +17,7 @@ sql:
               nullable: true
               go_type: "backend/db/db_types.JSONNullUUID"
 
-            - db_type: "varchar"
+            - db_type: "pg_catalog.varchar"
               nullable: true
               go_type: "backend/db/db_types.JSONNullString"
 
@@ -41,15 +41,15 @@ sql:
               nullable: true
               go_type: "backend/db/db_types.JSONNullTime"
 
-            # Reading the migrations rather than a dump, sqlc sees each type as
-            # the migration wrote it (TIMESTAMPTZ), not the catalog name a dump
-            # spells out. Both spellings map to the same wrapper so the generated
-            # shape does not depend on which one a migration happens to use.
+            # sqlc matches db_type literally against how the column was declared,
+            # and the two ways of writing one type do not normalize to each other:
+            # the SQL-standard keyword (TIMESTAMP WITH TIME ZONE) becomes
+            # pg_catalog.timestamptz, the Postgres-native name (TIMESTAMPTZ) stays
+            # bare. db/migrations uses both, so both need an entry. A spelling with
+            # no entry falls back to database/sql's null types instead of these
+            # wrappers, silently -- generate_queries.sh fails on that rather than
+            # leaving it to review.
             - db_type: "timestamptz"
-              nullable: true
-              go_type: "backend/db/db_types.JSONNullTime"
-
-            - db_type: "timestamp"
               nullable: true
               go_type: "backend/db/db_types.JSONNullTime"
 

@@ -323,6 +323,29 @@ jobs:
           echo "No dead code found"
         working-directory: backend
 
+      # db/generated is committed, and it drifted from the schema once already
+      # because regenerating needed a live database nobody had in CI. sqlc reads
+      # db/migrations now, so this job -- which provisions no database -- can
+      # regenerate and diff. Routing it through the script rather than calling
+      # sqlc directly also picks up the script's check for nullable columns that
+      # fell back to database/sql types.
+      #
+      # TERM is load-bearing: the script uses tput, which fails under `set -e`
+      # when TERM is unset, as it is on the runner by default.
+      - name: Generated sqlc output is up to date
+        working-directory: backend
+        env:
+          TERM: xterm
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          ./scripts/generate_queries.sh
+          # The script concatenates the query files in filesystem order; that does
+          # not leak into the diff because sqlc sorts its own output.
+          git diff --exit-code db/generated || {
+            echo "::error::db/generated is stale. Run backend/scripts/generate_queries.sh and commit the result."
+            exit 1
+          }
+
   quality-dialect:
     name: Dialect quality
     needs: [plan]
