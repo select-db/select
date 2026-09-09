@@ -98,6 +98,11 @@ export const editor = {
 export const queryResultTable = {
 	/** The element that scrolls when the table is wider than its pane. */
 	scroller: (page: Page) => page.locator('div.table.scrollable'),
+	/** A column's header cell, named by the column the query selects. */
+	header: (page: Page, column: string) =>
+		page
+			.locator('div.table.scrollable th')
+			.filter({ has: page.getByText(column, { exact: true }) }),
 	cell: (page: Page, row: number, column: number) =>
 		page.locator(`span.text-cell[data-row="${row}"][data-col="${column}"]`),
 	/** A cell holding an uncommitted edit, which the table marks green. */

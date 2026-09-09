@@ -27,15 +27,19 @@ const dataDir = mkdtempSync(join(tmpdir(), 'select-e2e-'));
 // they are in, and its files — without which the app only ever shows a login
 // screen. See `internal/cmd/e2eseed`. This runs here rather than in a
 // globalSetup because Playwright starts `webServer` first, and the app reads
-// all of this while booting.
+// all of this while booting. What that costs is a config Playwright also loads
+// in every worker, hence the guard: only the main process starts `webServer`,
+// so only its `dataDir` is ever read, and an unguarded seed just ran twice.
 // `-tags server` for the same reason the binary under test uses it: without it
 // the build pulls in wails' GUI cgo path and needs GTK headers no headless
 // runner has.
-execFileSync('go', ['run', '-tags', 'server', './internal/cmd/e2eseed', dataDir], {
-	cwd: '..',
-	env: { ...process.env, CGO_ENABLED: '0' },
-	stdio: 'inherit'
-});
+if (process.env.TEST_WORKER_INDEX === undefined) {
+	execFileSync('go', ['run', '-tags', 'server', './internal/cmd/e2eseed', dataDir], {
+		cwd: '..',
+		env: { ...process.env, CGO_ENABLED: '0' },
+		stdio: 'inherit'
+	});
+}
 
 export default defineConfig({
 	testDir: 'tests/e2e',

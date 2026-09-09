@@ -477,9 +477,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
+          # setup-go keys its cache on go.sum alone, so all four app jobs share
+          # one entry and only the first to finish writes it. That winner builds
+          # -tags gtk3 with cgo; this job builds -tags server without it, so
+          # nothing in the shared entry is reusable here and the server binary
+          # compiled from cold on every run. Keep an entry of its own instead.
+          cache: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-e2e-${{ runner.os }}-${{ hashFiles('app/go.sum') }}
+          restore-keys: go-e2e-${{ runner.os }}-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
@@ -488,14 +501,17 @@ jobs:
 
       # Both the wails CLI and the binding generator compile the app's cgo
       # webview code, so this job needs the GTK3 headers even though the binary
-      # it ends up testing links no GUI toolkit at all.
+      # it ends up testing links no GUI toolkit at all. Moving the generator to
+      # a job that already had the headers was tried and reverted: this job
+      # finishes minutes inside the critical path, so the install costs nothing
+      # here, and the jobs that already had them are that critical path.
       - run: sudo apt-get update && sudo apt-get install -y gcc libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
@@ -505,7 +521,20 @@ jobs:
       - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
         timeout-minutes: 10
-      - run: npx playwright install --with-deps chromium
+
+      # The browsers cache, the OS packages behind them do not, so the download
+      # is what gets skipped. --only-shell: the suite sets neither `channel` nor
+      # `headless: false`, so it drives the headless shell, and the 184MB full
+      # Chrome build is a download nothing here ever launches.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache-playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+      - run: npx playwright install-deps chromium
+        working-directory: app/frontend
+      - run: npx playwright install --only-shell chromium
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
         working-directory: app/frontend
 
       - run: wails3 task test:e2e
@@ -648,6 +677,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
@@ -662,7 +692,7 @@ jobs:
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
@@ -715,6 +745,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
@@ -729,7 +760,7 @@ jobs:
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
@@ -784,6 +815,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
@@ -798,7 +830,7 @@ jobs:
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
@@ -858,6 +890,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
@@ -881,7 +914,7 @@ jobs:
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'

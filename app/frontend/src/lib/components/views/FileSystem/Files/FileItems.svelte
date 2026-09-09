@@ -79,7 +79,14 @@
 			return;
 		}
 
-		if (!expandableItemTypes.has(item.type)) return;
+		// A row that does not expand has no other use for a click, so it runs
+		// whichever of its options asks for the gesture -- "Infos..." on a
+		// database item today. Nothing carries the flag in the menu a
+		// multi-selection gets, so a click there stays as inert as it was.
+		if (!expandableItemTypes.has(item.type)) {
+			runOption(clickOption(item), item);
+			return;
+		}
 
 		toggleIsItemExpanded(item.id);
 
@@ -100,10 +107,18 @@
 		return handleDatabaseClick(item as graph.DBInstanceNode, event);
 	};
 
-	// Double-clicking runs the item's runOnDoubleClick option, so the gesture is
-	// declared next to the action itself instead of listed again here.
+	// Clicking and double-clicking run the options that declare the gesture, so
+	// it is written next to the action itself instead of listed again here.
+	const clickOption = (item: AnyItem): ContextMenuOption | undefined =>
+		getOptions(item, ctx).find((option) => option.runOnClick);
+
 	const doubleClickOption = (item: AnyItem): ContextMenuOption | undefined =>
 		getOptions(item, ctx).find((option) => option.runOnDoubleClick);
+
+	// An option is written for a menu, which hands it the callback that closes
+	// itself. Fired from a gesture there is no menu to close.
+	const runOption = (option: ContextMenuOption | undefined, item: AnyItem) =>
+		option?.action?.(() => {}, item);
 
 	// Items that toggle open on click hold that click back for the double-click
 	// window, so a double-click doesn't expand and collapse them on the way. The
@@ -115,7 +130,7 @@
 	} = createDeferredClickHandlers<AnyItem>({
 		shouldDefer: (item) => expandableItemTypes.has(item.type) && !!doubleClickOption(item),
 		onClick: clickItem,
-		onDoubleClick: (item) => doubleClickOption(item)?.action?.(() => {}, item)
+		onDoubleClick: (item) => runOption(doubleClickOption(item), item)
 	});
 
 	onDestroy(cancelPendingClick);
