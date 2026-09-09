@@ -245,7 +245,8 @@ func insertEvent(ctx context.Context, q *generated.Queries, e *Event) error {
 	})
 }
 
-// Converters to the generated params (sqlc types are nullable); empty/zero → NULL.
+// Converters for the params whose columns really are nullable; empty/zero -> NULL.
+// A NOT NULL column takes its plain Go value and needs none of these.
 
 func nullStr(s string) db_types.JSONNullString {
 	if s == "" {
@@ -274,8 +275,4 @@ func nullInet(s string) db_types.JSONNullInet {
 		return db_types.JSONNullInet{}
 	}
 	return db_types.NewJSONNullInet(inet)
-}
-
-func jsonbRaw(b []byte) pqtype.NullRawMessage {
-	return pqtype.NullRawMessage{RawMessage: b, Valid: len(b) > 0}
 }
