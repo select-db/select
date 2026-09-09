@@ -50,10 +50,6 @@ type fkItem struct {
 	Var, Column, Pkg string
 	Scoped           bool
 	ScopeFn, Target  string
-	// Nullable decides the parsed local's type: a NOT NULL FK is a plain
-	// uuid.UUID, a nullable one keeps the wrapper so an explicit null stays
-	// distinguishable from an omitted key.
-	Nullable bool
 }
 
 // rowField is one column projected onto the types.<Sing>Row wire struct.
@@ -68,16 +64,10 @@ type glueData struct {
 	Table                        string
 	PKField, TenantField         string
 	CursorField, SoftDeleteField string
-	// CursorExpr reads the cursor column as a plain time.Time; whether that
-	// needs the wrapper's reader depends on the column being nullable.
-	CursorExpr string
-	NeedScope  bool
-	// HasNullableFK gates the db_types import: only a nullable FK still parses
-	// through the wrapper.
-	HasNullableFK bool
-	FKs           []fkItem
-	Merge         []kv
-	RowMap        []kv
+	NeedScope                    bool
+	FKs                          []fkItem
+	Merge                        []kv
+	RowMap                       []kv
 	// Audit: emit an audit.EmitChange on apply/delete. Target is the row id
 	// (AuditDeleteByID) or, for a junction row, an FK read from the payload on
 	// apply and from the fetched pre-delete row on delete. A lifecycle entity
@@ -105,12 +95,6 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		PKField:  codegen.GoField(e.PrimaryKey[0]), TenantField: codegen.GoField(schema.TenantColumn),
 		CursorField: codegen.GoField(schema.CursorColumn), SoftDeleteField: codegen.GoField(schema.SoftDeleteColumn),
 	}
-	d.CursorExpr = "row." + d.CursorField
-	for _, f := range e.Fields {
-		if f.Column == schema.CursorColumn && f.Nullable {
-			d.CursorExpr += ".ValueOrZero()"
-		}
-	}
 
 	// Non-tenant FKs are parsed from the payload (identity, passed through on
 	// insert, never updated on conflict). The parse is conditional on the field
@@ -119,7 +103,7 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		if f.FK == nil || f.Column == schema.TenantColumn {
 			continue
 		}
-		item := fkItem{Var: fkVar(f.Column), Column: f.Column, Pkg: e.Table, Nullable: f.Nullable}
+		item := fkItem{Var: fkVar(f.Column), Column: f.Column, Pkg: e.Table}
 		// Cross-workspace guard: any FK whose target is itself workspace-scoped
 		// must belong to the caller's workspace, else a *.manage holder could
 		// point a write at a row in another workspace (privilege escalation).
@@ -132,9 +116,6 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 			item.Target = f.FK.Table
 			d.NeedScope = true
 		}
-		if item.Nullable {
-			d.HasNullableFK = true
-		}
 		d.FKs = append(d.FKs, item)
 	}
 
@@ -146,19 +127,16 @@ func newGlueData(e schema.Entity, scoped map[string]bool) glueData {
 		case f.IsPK, f.Column == schema.TenantColumn, f.Column == schema.CursorColumn, f.Column == schema.SoftDeleteColumn:
 			continue
 		case f.FK != nil:
-			merge := "utils.PatchValue"
-			if f.Nullable {
-				merge = "utils.PatchUUID"
-			}
 			d.Merge = append(d.Merge, kv{codegen.GoField(f.Column),
-				fmt.Sprintf("%s(payload, %q, existing.%s, %s)", merge, f.Column, codegen.GoField(f.Column), fkVar(f.Column))})
+				fmt.Sprintf("utils.PatchValue(payload, %q, existing.%s, %s)", f.Column, codegen.GoField(f.Column), fkVar(f.Column))})
 		case f.Patchable:
 			d.Merge = append(d.Merge, kv{codegen.GoField(f.Column), patchExpr(f)})
 		}
 	}
 
 	// Row mapper: every column except soft-delete (a pointer, handled by the
-	// template tail) reads its plain value via the matching accessor.
+	// template tail) reads its plain value; rowExpr adds a wrapper reader only
+	// where the column is nullable.
 	for _, f := range e.Fields {
 		if f.Column == schema.SoftDeleteColumn {
 			continue
@@ -202,10 +180,10 @@ func rowExpr(f schema.Field) string {
 	}
 }
 
-// patchExpr is the merge value for a patchable (non-FK, non-system) text field:
-// PatchNullStr for a nullable column, PatchStrDefault for a NOT NULL column
-// with a DB default (so a client-omitted value falls back to that default
-// instead of writing NULL), PatchStr otherwise.
+// patchExpr is the merge value for a patchable (non-FK, non-system) text field.
+// A nullable column needs the wrapper's three-way answer -- value, explicit
+// NULL, or absent. A NOT NULL column merges by value, and one carrying a DB
+// default must fall back to it rather than writing the zero value over it.
 func patchExpr(f schema.Field) string {
 	switch {
 	case f.Nullable:

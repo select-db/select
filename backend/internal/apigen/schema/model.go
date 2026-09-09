@@ -233,6 +233,18 @@ func lint(e Entity) []error {
 				errs = append(errs, fmt.Errorf("%s: @app.sync but missing convention column %q", e.Name, col))
 			}
 		}
+		// The emitters read these as plain Go values rather than through a
+		// nullable wrapper. Saying so here makes a schema that breaks the
+		// assumption a message at generation time, instead of a branch in the
+		// generator kept alive for a shape no table has.
+		for _, f := range e.Fields {
+			switch {
+			case f.Column == CursorColumn && f.Nullable:
+				errs = append(errs, fmt.Errorf("%s: @app.sync but %q is nullable; the sync cursor must be NOT NULL", e.Name, f.Column))
+			case f.FK != nil && f.Nullable:
+				errs = append(errs, fmt.Errorf("%s: @app.sync but foreign key %q is nullable; the syncer parses FKs as plain uuids", e.Name, f.Column))
+			}
+		}
 	}
 	errs = append(errs, lintSort(e)...)
 	return errs

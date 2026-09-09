@@ -12,7 +12,8 @@ import (
 // Partitions are managed in-DB by pg_partman, triggered by pg_cron. These
 // boot-time helpers verify that setup (Preflight) and self-provision the cron
 // job (EnsureMaintenanceSchedule). Raw SQL throughout: they hit catalog/extension
-// objects (pg_extension, partman.part_config, pg_cron) not in schema.sql, so
+// objects (pg_extension, partman.part_config, pg_cron) the migrations do not
+// describe, so
 // sqlc can't type them.
 
 const (

@@ -2,14 +2,13 @@ package apikey
 
 import (
 	"net/http"
+	"time"
 
 	"backend/db"
 	"backend/db/db_types"
 	"backend/internal/authz"
 
 	"github.com/google/uuid"
-
-	"time"
 )
 
 type roleRef struct {
@@ -17,9 +16,8 @@ type roleRef struct {
 	Name string `json:"name"`
 }
 
-// The NOT NULL columns are plain Go values now. The wire shape is unchanged:
-// a wrapper around a column that could never be NULL always marshalled the
-// value itself. last_used_at and expires_at really are nullable and keep it.
+// keyEntry is the GET /api-keys response shape, so its JSON is API surface:
+// the field types are chosen to marshal, not for convenience.
 type keyEntry struct {
 	ID         uuid.UUID             `json:"id"`
 	Name       string                `json:"name"`
