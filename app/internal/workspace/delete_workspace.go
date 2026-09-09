@@ -7,9 +7,10 @@ import (
 	"selectDb/internal/api"
 )
 
-// DeleteWorkspace deletes the workspace on the server then removes it locally.
+// DeleteWorkspace deletes the workspace on the server then removes its local
+// rows. The folder on disk is left alone: it is the user's own directory, and
+// what makes it a workspace is a config file, not the directory itself.
 // If the deleted workspace was current and ReloadHooks is set, runs switch-or-logout.
-// Returns (loggedOut, nil) when the user had no workspaces left and was logged out, (false, nil) otherwise, or (false, err) on error.
 func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 	ctx := context.Background()
 
@@ -23,10 +24,6 @@ func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 
 	if err := w.Queries.DeleteWorkspaceByID(ctx, workspaceID); err != nil {
 		return fmt.Errorf("delete workspace: %w", err)
-	}
-
-	if err := w.RemoveWorkspaceFolderByID(workspaceID); err != nil {
-		return fmt.Errorf("remove workspace folder: %w", err)
 	}
 
 	return nil

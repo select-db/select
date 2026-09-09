@@ -19,7 +19,6 @@ import (
 	syncworkspace "selectDb/internal/db/syncer/workspace"
 	syncwtu "selectDb/internal/db/syncer/workspace_to_user"
 	"selectDb/internal/git"
-	"selectDb/internal/utils"
 )
 
 const pendingCommitsBatchSize = 100
@@ -338,11 +337,6 @@ func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload m
 	}
 	if err != nil {
 		return err
-	}
-	if tableName == "workspace" && s.Workspace != nil {
-		if workspaceID := utils.MapGetString(payload, "id"); workspaceID != "" {
-			_ = s.Workspace.RemoveWorkspaceFolderByID(workspaceID)
-		}
 	}
 	if wasCurrent && userIDForSwitch != "" && s.SwitchOrLogout != nil {
 		s.runSwitchOrLogout(ctx, userIDForSwitch)
