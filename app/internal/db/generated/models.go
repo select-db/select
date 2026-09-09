@@ -111,6 +111,7 @@ type Workspace struct {
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
 	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
 	Logo               db_types.JSONNullString `json:"logo"`
+	LocalPath          db_types.JSONNullString `json:"local_path"`
 }
 
 type WorkspaceToUser struct {

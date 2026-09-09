@@ -2,13 +2,11 @@ package graph
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"selectDb/internal/fs_uri"
-	"selectDb/internal/server"
 	"selectDb/internal/utils"
 )
 
@@ -28,19 +26,6 @@ type WorkspaceFS struct {
 	WorkspaceID   string
 	WorkspaceRoot string
 	RootURI       string
-}
-
-// WorkspaceRootPath returns the absolute filesystem path to the workspace root
-// directory for the given workspace ID (under the current server folder).
-func WorkspaceRootPath(workspaceID string) (string, error) {
-	serverRoot, err := server.CurrentServerRoot()
-	if err != nil {
-		return "", err
-	}
-	if serverRoot == "" {
-		return "", fmt.Errorf("no current server")
-	}
-	return filepath.Join(serverRoot, "workspaces", workspaceID), nil
 }
 
 // NewWorkspaceFS constructs a WorkspaceFS by resolving the workspace root on
@@ -214,6 +199,7 @@ func IsInternalWorkspaceFile(name string) bool {
 
 	// Workspace-specific config / sidecar files.
 	if name == DBConfigFileName ||
+		name == WorkspaceConfigFileName ||
 		strings.HasSuffix(name, ".metadata.json") ||
 		strings.HasPrefix(name, ".selectdb_") {
 		return true
