@@ -28,7 +28,6 @@
 		getVisibleColumnRange,
 		resetColumnState,
 		computeAutoColumnWidths,
-		sampleLoadedRows,
 		MIN_COLUMN_WIDTH,
 		type ColumnState
 	} from './helpers/columnManagement';
@@ -288,10 +287,31 @@
 	// Derived: width for column i from state, with fallback
 	const getColumnWidth = (i: number) => getColumnWidthFn(columnState, i);
 
-	// Result this table has already sized its columns for. Sizing happens once
-	// per result: after that the widths are the user's, and a page arriving
-	// mid-scroll must not shift columns out from under the cursor.
-	let autoSizedKey = $state<string | null>(null);
+	// Size every column to the widest value in the batch of rows that just
+	// arrived, so a table of short ids stops reserving a fixed 280px a column.
+	// Measured rather than guessed from character counts: the cell font comes
+	// from the theme. Runs once, on the first batch -- after that the widths are
+	// the user's, and a page arriving mid-scroll must not shift columns out from
+	// under the cursor.
+	//
+	// `rows` is the page as the backend sent it, not a slice of dataState: the
+	// row buffer is a `$state` proxy preallocated to the result's row count, and
+	// reading a hundred rows through it allocates a signal per cell touched.
+	function autoSizeColumns(rows: unknown[][] | undefined) {
+		const columns = queryResult?.columns;
+		if (!columnState.widthsPending || !columns?.length) return;
+
+		const sample = rows ?? [];
+		// Nothing has landed yet: wait, unless the result is settled and empty,
+		// in which case the headers are all there will ever be to measure.
+		if (sample.length === 0 && (isStreaming || totalRows > 0)) return;
+
+		columnState = {
+			...columnState,
+			columnWidths: computeAutoColumnWidths(columns, sample, createTextMeasurer()),
+			widthsPending: false
+		};
+	}
 
 	// Column resize state
 	let resizingColumn = $state<number | null>(null);
@@ -310,7 +330,7 @@
 			}
 		}
 		next[resizingColumn] = newW;
-		columnState = { ...columnState, columnWidths: next };
+		columnState = { ...columnState, columnWidths: next, widthsPending: false };
 	}, 16);
 
 	function startResize(columnIndex: number, e: MouseEvent) {
@@ -455,6 +475,7 @@
 		if (pageResult) {
 			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
+			autoSizeColumns(pageResult.rows);
 		}
 	};
 
@@ -550,6 +571,7 @@
 			if (!mergedState) return;
 
 			dataState = mergedState;
+			autoSizeColumns(newResult.rows);
 			return;
 		}
 
@@ -563,16 +585,18 @@
 		dataState = createInitialLoadingStateFromResult(newResult, totalRows);
 		const totalCols = 1 + (newResult.columns?.length ?? 0);
 		const baseColumnState = resetColumnState(totalCols);
-		const cachedWidths = cachedState?.columnWidths;
-		const hasCachedWidths = cachedWidths?.length === totalCols;
-		const restoredWidths = hasCachedWidths ? cachedWidths : baseColumnState.columnWidths;
+		const cachedWidths =
+			cachedState?.columnWidths?.length === totalCols ? cachedState.columnWidths : null;
 		columnState = {
 			...baseColumnState,
 			pinnedColumnIdx: cachedState?.pinnedColumns ?? baseColumnState.pinnedColumnIdx,
-			columnWidths: restoredWidths
+			columnWidths: cachedWidths ?? baseColumnState.columnWidths,
+			// Widths the user already has for this result win over anything measured.
+			widthsPending: cachedWidths === null
 		};
-		// Widths the user already has for this result win over anything measured.
-		autoSizedKey = hasCachedWidths ? currentKey : null;
+		// Size before the first paint where the result came with its rows, so the
+		// table renders once at its final widths rather than snapping after.
+		autoSizeColumns(newResult.rows);
 
 		// Pre-load pages needed for cached scroll position
 		const { rowHeight, viewportHeight, scrollContainer } = virtualScrollState;
@@ -597,6 +621,7 @@
 		if (pageResult) {
 			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
+			autoSizeColumns(pageResult.rows);
 		}
 
 		// Restore scroll position after DOM updates
@@ -654,41 +679,15 @@
 				},
 				totalRows
 			);
-			if (!pageResult) return;
+			// A stream that ended with no rows never returns a page; its headers are
+			// still worth sizing, which autoSizeColumns decides from the row count.
+			if (!pageResult) {
+				autoSizeColumns([]);
+				return;
+			}
 			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
-		});
-	});
-
-	// Size every column to the widest value in the first batch of rows, so a
-	// table of short ids stops reserving a fixed 280px a column. Measured rather
-	// than guessed from character counts: the cell font comes from the theme.
-	$effect(() => {
-		const key = dataStateKey;
-		const columns = queryResult?.columns;
-		const rows = dataState.allRows;
-		const streaming = isStreaming;
-		const total = totalRows;
-
-		if (!key || !columns?.length) return;
-		if (untrack(() => autoSizedKey) === key) return;
-
-		const sample = sampleLoadedRows(rows);
-		// Nothing has landed yet: wait, unless the result is settled and empty,
-		// in which case the headers are all there will ever be to measure.
-		if (sample.length === 0 && (streaming || total > 0)) return;
-
-		autoSizedKey = key;
-		untrack(() => {
-			columnState = {
-				...columnState,
-				columnWidths: computeAutoColumnWidths(
-					columns,
-					sample,
-					createTextMeasurer(),
-					getColumnWidth(0)
-				)
-			};
+			autoSizeColumns(pageResult.rows);
 		});
 	});
 

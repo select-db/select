@@ -3,6 +3,12 @@ import { formatCellValue, type TextMeasurer } from './cellText';
 export interface ColumnState {
 	pinnedColumnIdx: Set<number>;
 	columnWidths: number[];
+	/**
+	 * True while `columnWidths` is still the placeholder every column starts at.
+	 * It turns false the moment the widths become real: measured from the rows,
+	 * restored from a previous visit, or dragged by the user.
+	 */
+	widthsPending: boolean;
 }
 
 export interface ColumnOffsets {
@@ -132,7 +138,9 @@ export function getColumnStyle(state: ColumnState, columnIndex: number, maxColum
 	return styles.get(columnIndex) || 'left: 0;';
 }
 
-export const INDEX_COLUMN_WIDTH = 57;
+const INDEX_COLUMN_WIDTH = 57;
+// What a column shows before its rows have been measured. Visible only while a
+// streaming result has yet to deliver a batch to measure.
 const DEFAULT_COLUMN_WIDTH = 280;
 
 /** Floor for a column dragged by its resize handle. */
@@ -145,7 +153,8 @@ export function resetColumnState(totalColumns?: number): ColumnState {
 			: [];
 	return {
 		pinnedColumnIdx: new Set([0]),
-		columnWidths
+		columnWidths,
+		widthsPending: true
 	};
 }
 
@@ -166,12 +175,9 @@ export const MAX_AUTO_COLUMN_WIDTH = 480;
 /** Narrowest, so a column of one-character values still shows its header. */
 export const MIN_AUTO_COLUMN_WIDTH = 90;
 
-/** How many rows of the first batch to measure. */
-export const AUTO_SIZE_SAMPLE_ROWS = 100;
-
-// allRows is preallocated to the result's row count and filled in page by page,
-// so scanning it for loaded rows has to stop somewhere.
-const AUTO_SIZE_SCAN_LIMIT = 2000;
+// Rows of the batch to measure. Past this the widest value is almost always
+// already found, and every extra row is another measureText call.
+const AUTO_SIZE_SAMPLE_ROWS = 100;
 
 // The pin button and the resize handle sit next to a header's label.
 const HEADER_CONTROLS_WIDTH = 28;
@@ -186,24 +192,6 @@ const MAX_MEASURED_CHARS = 200;
 const SUBPIXEL_SLACK = 2;
 
 /**
- * The first rows that have actually arrived, to measure columns against.
- * Holes are pages that have not loaded yet.
- */
-export function sampleLoadedRows(
-	rows: unknown[][],
-	max = AUTO_SIZE_SAMPLE_ROWS,
-	scanLimit = AUTO_SIZE_SCAN_LIMIT
-): unknown[][] {
-	const sample: unknown[][] = [];
-	const end = Math.min(rows.length, scanLimit);
-	for (let i = 0; i < end && sample.length < max; i++) {
-		const row = rows[i];
-		if (row) sample.push(row);
-	}
-	return sample;
-}
-
-/**
  * Column widths that fit the widest value each column holds in `rows`, clamped
  * to a readable range. The header counts too, so a narrow column of ids is
  * still wide enough to read its name.
@@ -211,20 +199,17 @@ export function sampleLoadedRows(
 export function computeAutoColumnWidths(
 	columns: string[],
 	rows: unknown[][],
-	measurer: TextMeasurer,
-	indexColumnWidth = INDEX_COLUMN_WIDTH
+	measurer: TextMeasurer
 ): number[] {
-	const widths = [indexColumnWidth];
+	const widths = [INDEX_COLUMN_WIDTH];
+	const sample = rows.length > AUTO_SIZE_SAMPLE_ROWS ? rows.slice(0, AUTO_SIZE_SAMPLE_ROWS) : rows;
 
 	for (let col = 0; col < columns.length; col++) {
-		let widest = measurer.measure(columns[col] ?? '') + HEADER_CONTROLS_WIDTH;
+		let widest = measurer.measure(columns[col]) + HEADER_CONTROLS_WIDTH;
 
-		for (const row of rows) {
+		for (const row of sample) {
 			if (widest >= MAX_AUTO_COLUMN_WIDTH) break;
-			const text = formatCellValue(row[col]);
-			const measured = measurer.measure(
-				text.length > MAX_MEASURED_CHARS ? text.slice(0, MAX_MEASURED_CHARS) : text
-			);
+			const measured = measurer.measure(formatCellValue(row[col]).slice(0, MAX_MEASURED_CHARS));
 			if (measured > widest) widest = measured;
 		}
 
