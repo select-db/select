@@ -113,7 +113,7 @@ func NewApp() *App {
 	Group := group.New(Queries)
 	DbClient := db_client.New(Queries, Graph, FSProvider)
 	SqlLang := sqllang.New(Graph, Queries, DbClient.GetMeta, DbClient.InspectStatement)
-	Workspace := workspace.New(Queries, FSProvider)
+	Workspace := workspace.New(Queries, FSProvider, Graph)
 
 	System := system.New(Queries, Graph, DbClient, FSProvider)
 	Graph.AfterWorkspaceGraphBuild = func(ws *graph.WorkspaceNode) {
@@ -121,7 +121,7 @@ func NewApp() *App {
 	}
 
 	Git := git.New(Queries, FSProvider, Graph)
-	Syncer := syncer.New(Queries, Graph, Workspace)
+	Syncer := syncer.New(Queries, Graph)
 	internalDb := db.New(Queries, Syncer)
 	GlobalInterceptor.Db = internalDb
 
@@ -131,7 +131,7 @@ func NewApp() *App {
 		Graph:      Graph,
 
 		System:     System,
-		GithubAuth: auth.New(Queries, Workspace, Syncer),
+		GithubAuth: auth.New(Queries, Syncer),
 		Git:        Git,
 		Search:     search.New(Graph),
 		User:       user.New(Queries),
@@ -160,7 +160,7 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 
 	a.InternalDb.Syncer.SetContext(ctx)
 	a.Syncer.SetContext(ctx)
-	a.Syncer.SwitchOrLogout = &switchOrLogoutHandler{app: a}
+	a.Syncer.CurrentWorkspaceGone = &currentWorkspaceGoneHandler{app: a}
 	a.Syncer.EmitRolesUpdated = func() {
 		utils.DebouncedEventsEmit("rolesUpdated", 100*time.Millisecond)
 	}
@@ -170,7 +170,9 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 		EmitWorkspaceGraphUpdated: func() {
 			utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
 		},
-		RunSwitchOrLogout: a.Syncer.RunSwitchOrLogout,
+		EmitWorkspaceClosed: func() {
+			utils.DebouncedEventsEmit("workspaceClosed", 100*time.Millisecond)
+		},
 	}
 	a.Git.SetContext(ctx)
 	a.Search.SetContext(ctx)

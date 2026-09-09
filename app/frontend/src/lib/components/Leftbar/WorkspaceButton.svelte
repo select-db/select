@@ -1,100 +1,41 @@
 <script lang="ts">
-	import Select from '$lib/system/Select/Select.svelte';
-	import type { SelectOption } from '$lib/system/Select/Select.types';
+	// A workspace is a folder, so switching means picking one.
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { notify } from '$lib/system/Notifications/notificationsStore';
-	import { AlertType } from '$lib/system/Alert/types';
-	import { tryCatch } from '$lib/utils/tryCatch';
-	import {
-		ListWorkspacesForCurrentUser,
-		SwitchWorkspace,
-		CreateWorkspaceAndReload
-	} from '$lib/bindings/selectDb/internal/workspace/workspace';
-	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
-	import type * as workspace from '$lib/bindings/selectDb/internal/workspace/models';
 	import Avatar from '$lib/system/Avatar/Avatar.svelte';
+	import Tooltip from '$lib/system/Tooltip/Tooltip.svelte';
 	import { logoSrc } from '$lib/utils/workspaceLogo';
+	import { folderStore, pickAndOpenFolder } from '$lib/components/PageFolder/folderStore';
 
-	let workspaces = $state<workspace.WorkspaceWithCurrent[]>([]);
-	let loading = $state(true);
-
-	const currentId = $derived(
-		workspaces.find((w) => w.current)?.id ?? $workspaceGraphStore?.id ?? ''
-	);
-	const options = $derived<SelectOption[]>(workspaces.map((w) => ({ value: w.id, label: w.name })));
-
-	// SelectOption carries only a value and a label, so the logo is looked up by id.
-	const logoById = $derived(new Map(workspaces.map((w) => [w.id, logoSrc(w.logo)])));
-
-	async function load() {
-		loading = true;
-		const [list, err] = await tryCatch(ListWorkspacesForCurrentUser);
-		loading = false;
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to load workspaces' });
-			return;
-		}
-		workspaces = list ?? [];
-	}
-
-	async function switchTo(id: string) {
-		if (!id || id === currentId) return;
-		const [, err] = await tryCatch(SwitchWorkspace, id);
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to switch workspace' });
-		}
-	}
-
-	async function createAndSwitch(name: string) {
-		const [, err] = await tryCatch(CreateWorkspaceAndReload, name.trim() || 'New workspace');
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to create workspace' });
-			return;
-		}
-		await Logout();
-	}
-
-	$effect(() => {
-		// Re-list on graph changes, so a rename or logo saved in Settings shows here.
-		void $workspaceGraphStore?.name;
-		void $workspaceGraphStore?.logo;
-		load();
-	});
+	const workspace = $derived($workspaceGraphStore);
+	const folderPath = $derived($folderStore?.path ?? '');
 </script>
 
-{#snippet workspaceOption(option: SelectOption | null)}
-	<span class="workspace-option">
-		<Avatar
-			src={option ? (logoById.get(option.value as string) ?? null) : null}
-			name={option?.label}
-			size={20}
-			shape="rounded"
-		/>
-		<span class="workspace-name">{option?.label ?? 'Workspace'}</span>
-	</span>
-{/snippet}
-
-<Select
-	value={currentId}
-	{options}
-	onchange={(v) => switchTo(v as string)}
-	isLoading={loading}
-	placeholder="Workspace"
-	searchEnabled
-	searchPlaceholder="Search or create workspace..."
-	createOptionLabel={(q) => `Create workspace '${q}'`}
-	onCreate={createAndSwitch}
-	menuWidth={300}
-	emphasis="low"
-	optionDisplay={workspaceOption}
-/>
+<Tooltip text={folderPath || 'Open a folder'} position="bottom" capitalize={false}>
+	<button type="button" class="workspace-button" onclick={pickAndOpenFolder}>
+		<Avatar src={logoSrc(workspace?.logo)} name={workspace?.name} size={20} shape="rounded" />
+		<span class="workspace-name">{workspace?.name ?? 'Open folder'}</span>
+	</button>
+</Tooltip>
 
 <style>
-	.workspace-option {
+	.workspace-button {
 		display: flex;
 		align-items: center;
 		gap: var(--space-sm);
 		min-width: 0;
+		max-width: 100%;
+
+		padding: var(--space-xs) var(--space-sm);
+		border: none;
+		border-radius: var(--radius-sm, 4px);
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+
+	.workspace-button:hover {
+		background-color: var(--gray-100);
 	}
 
 	.workspace-name {

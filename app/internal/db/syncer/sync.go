@@ -160,12 +160,6 @@ func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generate
 		}
 	}
 
-	if !hadCurrentWorkspace {
-		if err := syncwtu.SetFirstAsCurrent(ctx, s.Queries, userID, res.Changes.WorkspaceToUser); err != nil {
-			return err
-		}
-	}
-
 	return s.updateLastPulledAt(ctx, currentWorkspaceID, res.ServerTime)
 }
 
@@ -269,16 +263,15 @@ func (s *Syncer) applyOneRow(ctx context.Context, tableName string, payload map[
 	return s.applyRow(ctx, tableName, payload)
 }
 
-// applyDeleteRow dispatches to the table-specific ApplyDelete and runs switch-or-logout when the deleted row was current.
+// applyDeleteRow closes the open folder when the deleted row was its workspace.
 func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload map[string]any) error {
 	var wasCurrent bool
-	var userIDForSwitch string
 	var err error
 	switch tableName {
 	case "workspace":
-		wasCurrent, userIDForSwitch, err = syncworkspace.ApplyDelete(ctx, s.Queries, payload)
+		wasCurrent, _, err = syncworkspace.ApplyDelete(ctx, s.Queries, payload)
 	case "workspace_to_user":
-		wasCurrent, userIDForSwitch, err = syncwtu.ApplyDelete(ctx, s.Queries, payload)
+		wasCurrent, _, err = syncwtu.ApplyDelete(ctx, s.Queries, payload)
 	case "role":
 		err = syncrole.ApplyDelete(ctx, s.Queries, payload)
 	case "user_to_role":
@@ -297,43 +290,10 @@ func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload m
 	if err != nil {
 		return err
 	}
-	if wasCurrent && userIDForSwitch != "" && s.SwitchOrLogout != nil {
-		s.runSwitchOrLogout(ctx, userIDForSwitch)
+	if wasCurrent && s.CurrentWorkspaceGone != nil {
+		s.CurrentWorkspaceGone.OnCurrentWorkspaceGone()
 	}
 	return nil
-}
-
-// runSwitchOrLogout lists remaining workspaces for the user; if any, sets first as current and notifies; else logs out.
-// Returns true if the user was logged out (no workspaces left).
-func (s *Syncer) runSwitchOrLogout(ctx context.Context, userID string) bool {
-	remaining, err := s.Queries.ListWorkspacesByUserID(ctx, userID)
-	if err != nil || len(remaining) == 0 {
-		if s.SwitchOrLogout != nil {
-			s.SwitchOrLogout.OnLogout()
-		}
-		return true
-	}
-	// Set first remaining as current.
-	if err := s.Queries.ClearCurrentWorkspaceToUser(ctx); err != nil {
-		return false
-	}
-	first := remaining[0]
-	if err := s.Queries.UpdateCurrentWorkspaceToUser(ctx, generated.UpdateCurrentWorkspaceToUserParams{
-		UserID:      userID,
-		WorkspaceID: first.ID,
-	}); err != nil {
-		return false
-	}
-	if s.Workspace != nil {
-		_ = s.Workspace.EnsureWorkspaceFolderByID(first.ID, first.Name)
-	}
-	if s.Graph != nil {
-		_ = s.Graph.RebuildWorkspaceGraph()
-	}
-	if s.SwitchOrLogout != nil {
-		s.SwitchOrLogout.OnAfterWorkspaceSwitch()
-	}
-	return false
 }
 
 // applyRow upserts one server-authoritative row by table name.
@@ -342,7 +302,7 @@ func (s *Syncer) applyRow(ctx context.Context, tableName string, payload map[str
 	case "user":
 		return syncuser.Restore(ctx, s.Queries, payload)
 	case "workspace":
-		return syncworkspace.Restore(ctx, s.Queries, payload, s.Workspace)
+		return syncworkspace.Restore(ctx, s.Queries, payload)
 	case "workspace_to_user":
 		return syncwtu.Restore(ctx, s.Queries, payload)
 	case "role":

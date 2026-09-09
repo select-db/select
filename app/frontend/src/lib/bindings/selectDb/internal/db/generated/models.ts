@@ -270,6 +270,7 @@ export class Workspace {
     "statement_timeout_ms": number;
     "max_result_size_mb": number;
     "logo": db_types$0.JSONNullString;
+    "local_path": db_types$0.JSONNullString;
 
     /** Creates a new Workspace instance. */
     constructor($$source: Partial<Workspace> = {}) {
@@ -293,6 +294,9 @@ export class Workspace {
         }
         if (!("logo" in $$source)) {
             this["logo"] = null;
+        }
+        if (!("local_path" in $$source)) {
+            this["local_path"] = null;
         }
 
         Object.assign(this, $$source);

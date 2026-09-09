@@ -5,14 +5,22 @@ import (
 	"fmt"
 
 	"selectDb/internal/api"
+	"selectDb/internal/graph"
 )
 
-// DeleteWorkspace deletes the workspace on the server then removes its local
-// rows. The folder on disk is left alone: it is the user's own directory, and
-// what makes it a workspace is a config file, not the directory itself.
-// If the deleted workspace was current and ReloadHooks is set, runs switch-or-logout.
+// DeleteWorkspace removes the workspace on the server, its local rows, and the
+// select.config.json that named it. The folder is left as it was.
+//
+// A config can outlive its workspace when the delete happened on another
+// machine; the init screen cleans that up on the next open.
 func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 	ctx := context.Background()
+
+	// Read before deleting the row, since that is where the folder is recorded.
+	folder := ""
+	if p, err := w.Queries.GetWorkspaceLocalPath(ctx, workspaceID); err == nil {
+		folder = p.Or("")
+	}
 
 	if err := api.Fetch(ctx, "DELETE", "workspaces/"+workspaceID, nil, api.WorkspaceHeader(workspaceID), nil); err != nil {
 		return fmt.Errorf("delete workspace on server: %w", err)
@@ -26,5 +34,14 @@ func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 		return fmt.Errorf("delete workspace: %w", err)
 	}
 
+	if folder != "" {
+		if err := graph.RemoveWorkspaceConfig(folder); err != nil {
+			return err
+		}
+	}
+
+	if id, _, ok := graph.OpenWorkspaceRoot(); ok && id == workspaceID {
+		return w.CloseFolder()
+	}
 	return nil
 }

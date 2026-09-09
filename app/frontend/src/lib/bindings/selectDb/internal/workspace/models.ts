@@ -38,6 +38,102 @@ export class CreateWorkspaceParams {
     }
 }
 
+/**
+ * LastFolder is what the no-folder screen offers to reopen.
+ */
+export class LastFolder {
+    "path": string;
+    "name": string;
+
+    /** Creates a new LastFolder instance. */
+    constructor($$source: Partial<LastFolder> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LastFolder instance from a string or object.
+     */
+    static createFrom($$source: any = {}): LastFolder {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LastFolder($$parsedSource as Partial<LastFolder>);
+    }
+}
+
+export class OpenFolderResult {
+    "state": OpenFolderState;
+    "path": string;
+
+    /**
+     * The folder's own name, offered as the workspace name on the init screen.
+     */
+    "suggestedName"?: string;
+
+    /**
+     * Set when the config names a workspace this server does not have, so the
+     * init screen can say so rather than pretend the folder was never one.
+     */
+    "staleWorkspaceId"?: string;
+    "folderServer"?: string;
+    "currentServer"?: string;
+
+    /** Creates a new OpenFolderResult instance. */
+    constructor($$source: Partial<OpenFolderResult> = {}) {
+        if (!("state" in $$source)) {
+            this["state"] = OpenFolderState.$zero;
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OpenFolderResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): OpenFolderResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new OpenFolderResult($$parsedSource as Partial<OpenFolderResult>);
+    }
+}
+
+/**
+ * OpenFolderState is which screen the frontend owes the user next.
+ */
+export enum OpenFolderState {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * Signed in, nothing open.
+     */
+    OpenFolderNone = "no_folder",
+
+    /**
+     * The workspace is set up and the graph is built.
+     */
+    OpenFolderOpened = "opened",
+
+    /**
+     * No config, or one naming a workspace this server does not have.
+     */
+    OpenFolderNeedsInit = "needs_init",
+
+    /**
+     * The workspace lives on another server, whose permissions gate every query.
+     */
+    OpenFolderWrongServer = "wrong_server",
+};
+
 export class SearchUserResult {
     "found": boolean;
     "user_id"?: string;
@@ -66,27 +162,6 @@ export class SearchUserResult {
     static createFrom($$source: any = {}): SearchUserResult {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new SearchUserResult($$parsedSource as Partial<SearchUserResult>);
-    }
-}
-
-export class SetOrCreateCurrentWorkspaceParams {
-    "UserID": string;
-
-    /** Creates a new SetOrCreateCurrentWorkspaceParams instance. */
-    constructor($$source: Partial<SetOrCreateCurrentWorkspaceParams> = {}) {
-        if (!("UserID" in $$source)) {
-            this["UserID"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new SetOrCreateCurrentWorkspaceParams instance from a string or object.
-     */
-    static createFrom($$source: any = {}): SetOrCreateCurrentWorkspaceParams {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new SetOrCreateCurrentWorkspaceParams($$parsedSource as Partial<SetOrCreateCurrentWorkspaceParams>);
     }
 }
 
