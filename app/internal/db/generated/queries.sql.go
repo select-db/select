@@ -60,8 +60,8 @@ RETURNING id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn
 
 type CreateHistoryParams struct {
 	ID           string        `json:"id"`
-	Dsn          interface{}   `json:"dsn"`
-	Uri          interface{}   `json:"uri"`
+	Dsn          string        `json:"dsn"`
+	Uri          string        `json:"uri"`
 	Statement    string        `json:"statement"`
 	AffectedRows sql.NullInt64 `json:"affected_rows"`
 	RowCount     sql.NullInt64 `json:"row_count"`

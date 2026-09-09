@@ -44,8 +44,8 @@ type History struct {
 	RowCount     sql.NullInt64 `json:"row_count"`
 	DurationMs   sql.NullInt64 `json:"duration_ms"`
 	Errors       string        `json:"errors"`
-	Uri          interface{}   `json:"uri"`
-	Dsn          interface{}   `json:"dsn"`
+	Uri          string        `json:"uri"`
+	Dsn          string        `json:"dsn"`
 	CreatedAt    time.Time     `json:"created_at"`
 	WorkspaceID  string        `json:"workspace_id"`
 	DbInstanceID string        `json:"db_instance_id"`

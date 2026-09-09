@@ -58,7 +58,7 @@ CREATE TABLE group_to_role (
     FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
 );
 
-CREATE TABLE history (
+CREATE TABLE "history" (
     id TEXT PRIMARY KEY,
 
     statement TEXT NOT NULL,
@@ -67,9 +67,13 @@ CREATE TABLE history (
     duration_ms INTEGER,
     errors TEXT NOT NULL DEFAULT '[]',
 
-    uri TEXT NOT NULL DEFAULT "",
-    dsn TEXT NOT NULL DEFAULT ""
-, created_at DATETIME, workspace_id TEXT NOT NULL DEFAULT '', db_instance_id TEXT NOT NULL DEFAULT '');
+    uri TEXT NOT NULL DEFAULT '',
+    dsn TEXT NOT NULL DEFAULT '',
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    workspace_id TEXT NOT NULL DEFAULT '',
+    db_instance_id TEXT NOT NULL DEFAULT ''
+);
 
 CREATE TABLE mutation_commit (
     id TEXT PRIMARY KEY,

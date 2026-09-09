@@ -289,22 +289,23 @@ jobs:
           echo "No dead code found"
         working-directory: app
 
-      # The app's db/generated is committed, and its schema.sql is too, so this
-      # needs nothing but sqlc. It caught real drift when it was added: the
-      # committed output predated both a query rename and a nullable column, and
-      # regenerating would have changed the JSON shape of history rows.
+      # Checks the whole chain the app generates through: migrations produce
+      # schema.sql, schema.sql produces db/generated. Both are committed, and
+      # neither step needs a database, so a stale one is a diff here rather than
+      # something only the person with a migrated database would notice.
       #
       # TERM is load-bearing: the script uses tput, which fails under `set -e`
       # when TERM is unset, as it is on the runner by default.
-      - name: Generated sqlc output is up to date
+      - name: Generated schema and sqlc output are up to date
         working-directory: app/internal
         env:
           TERM: xterm
         run: |
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          go run ./cmd/regenschema db/schema.sql
           ./cmd/cli/generate_queries.sh
-          git diff --exit-code db/generated || {
-            echo "::error::app db/generated is stale. Run app/internal/cmd/cli/generate_queries.sh and commit the result."
+          git diff --exit-code db/schema.sql db/generated || {
+            echo "::error::app schema.sql or db/generated is stale. Run app/internal/cmd/regenschema and cmd/cli/generate_queries.sh, then commit."
             exit 1
           }
 
