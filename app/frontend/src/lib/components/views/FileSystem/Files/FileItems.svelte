@@ -13,7 +13,11 @@
 	import { createClickHandlers, createDeferredClickHandlers } from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
 	import { loadSchema } from '$lib/utils/query/loadSchema';
-	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
+	import {
+		expandableItemTypes,
+		isLeafItem
+	} from '$lib/components/views/shared/expandableItemTypes';
+	import { getDatabaseItemOptions } from './options/databaseItemOptions';
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
@@ -62,6 +66,16 @@
 		| graph.DBInstanceItemNode
 		| graph.FileNode;
 
+	// A leaf row has nothing to expand, so its click runs the first option of its
+	// own context menu instead -- "Infos..." for all of them today. Read from
+	// getDatabaseItemOptions rather than getOptions: with several rows selected
+	// getOptions answers with the batch menu, and a plain click must never be a
+	// delete.
+	const openPrimaryOption = (item: graph.DBInstanceItemNode) => {
+		const [primary] = getDatabaseItemOptions(item);
+		primary?.action?.(() => {}, item);
+	};
+
 	// Simple click handler for items inside database (no selection support)
 	const handleSimpleClick = (item: AnyItem) => {
 		if (item.type === 'file') {
@@ -76,6 +90,11 @@
 				}
 			}
 			navigateToFile(file);
+			return;
+		}
+
+		if (isLeafItem(item)) {
+			openPrimaryOption(item as graph.DBInstanceItemNode);
 			return;
 		}
 
