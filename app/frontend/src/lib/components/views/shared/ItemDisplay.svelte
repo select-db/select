@@ -11,7 +11,7 @@
 	} from '$lib/components/views/shared/sharedStore';
 	import ItemIcon from './ItemIcon.svelte';
 	import ItemName from './ItemName.svelte';
-	import { expandableItemTypes, hasChildren } from './expandableItemTypes';
+	import { expandableItemTypes } from './expandableItemTypes';
 	import {
 		visibleIdsStore,
 		ROW_HEIGHT
@@ -75,7 +75,10 @@
 			);
 		}
 
-		return !hasChildren(item);
+		const children = 'children' in item ? item.children : null;
+		const hasChildren = Array.isArray(children) && children.length > 0;
+
+		return !hasChildren;
 	});
 
 	const isSelected = $derived($selectedItemsStore.has(item.id));
