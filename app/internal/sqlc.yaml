@@ -23,3 +23,18 @@ sql:
           # decoded DTO into this field. Newer sqlc otherwise defaults to json.RawMessage.
           - column: "mutation_commit.payload"
             go_type: "selectDb/internal/db/db_types.JSONPayload"
+
+          # history.created_at is nullable in the schema only because SQLite
+          # cannot add a NOT NULL column to an existing table: 00012 adds it
+          # nullable, backfills every row, and every insert since sets it. So the
+          # value is never absent, and typing it time.Time says that.
+          #
+          # Without this it falls back to sql.NullTime, which is not just uglier:
+          # these structs carry json tags, and sql.NullTime marshals as
+          # {"Time":...,"Valid":true} rather than a plain timestamp, so the
+          # fallback would silently change the shape of every history row.
+          #
+          # The truer fix is a NOT NULL rebuild migration; that rewrites a table
+          # in each user's database, so it is a decision on its own.
+          - column: "history.created_at"
+            go_type: "time.Time"

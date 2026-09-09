@@ -974,6 +974,9 @@ FROM permission p
   JOIN role r ON r.id = p.role_id AND r.deleted_at IS NULL
 WHERE p.deleted_at IS NULL
   AND p.workspace_id = ?1
+  -- A user's effective roles: assigned directly (user_to_role) or granted through
+  -- a group they belong to (user_to_group -> group_to_role). The "group" join drops
+  -- roles from a locally-deleted group whose membership rows still linger.
   AND p.role_id IN (
     SELECT utr.role_id FROM user_to_role utr
     WHERE utr.user_id = ?2 AND utr.deleted_at IS NULL
@@ -992,8 +995,8 @@ ORDER BY
 `
 
 type ListMyPermissionsParams struct {
-	UserID      string `json:"user_id"`
 	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
 }
 
 type ListMyPermissionsRow struct {
@@ -1006,7 +1009,7 @@ type ListMyPermissionsRow struct {
 	ColumnName   db_types.JSONNullString `json:"column_name"`
 	Action       string                  `json:"action"`
 	Effect       string                  `json:"effect"`
-	RoleName     db_types.JSONNullString `json:"role_name"`
+	RoleName     string                  `json:"role_name"`
 }
 
 func (q *Queries) ListMyPermissions(ctx context.Context, arg ListMyPermissionsParams) ([]ListMyPermissionsRow, error) {
@@ -1186,51 +1189,6 @@ func (q *Queries) ListRolesByWorkspace(ctx context.Context, workspaceID string) 
 	return items, nil
 }
 
-const listUserRolesByWorkspace = `-- name: ListUserRolesByWorkspace :many
-SELECT utr.user_id, utr.id AS user_to_role_id, r.id AS role_id, r.name AS role_name
-FROM user_to_role utr
-JOIN role r ON r.id = utr.role_id
-WHERE utr.workspace_id = ?1
-  AND utr.deleted_at IS NULL
-  AND r.deleted_at IS NULL
-ORDER BY r.name COLLATE NOCASE
-`
-
-type ListUserRolesByWorkspaceRow struct {
-	UserID       string `json:"user_id"`
-	UserToRoleID string `json:"user_to_role_id"`
-	RoleID       string `json:"role_id"`
-	RoleName     string `json:"role_name"`
-}
-
-func (q *Queries) ListUserRolesByWorkspace(ctx context.Context, workspaceID string) ([]ListUserRolesByWorkspaceRow, error) {
-	rows, err := q.db.QueryContext(ctx, listUserRolesByWorkspace, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUserRolesByWorkspaceRow
-	for rows.Next() {
-		var i ListUserRolesByWorkspaceRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.UserToRoleID,
-			&i.RoleID,
-			&i.RoleName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listUserGroupsByWorkspace = `-- name: ListUserGroupsByWorkspace :many
 SELECT ug.user_id, ug.id AS user_to_group_id, g.id AS group_id, g.name AS group_name
 FROM user_to_group ug
@@ -1262,6 +1220,51 @@ func (q *Queries) ListUserGroupsByWorkspace(ctx context.Context, workspaceID str
 			&i.UserToGroupID,
 			&i.GroupID,
 			&i.GroupName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserRolesByWorkspace = `-- name: ListUserRolesByWorkspace :many
+SELECT utr.user_id, utr.id AS user_to_role_id, r.id AS role_id, r.name AS role_name
+FROM user_to_role utr
+JOIN role r ON r.id = utr.role_id
+WHERE utr.workspace_id = ?1
+  AND utr.deleted_at IS NULL
+  AND r.deleted_at IS NULL
+ORDER BY r.name COLLATE NOCASE
+`
+
+type ListUserRolesByWorkspaceRow struct {
+	UserID       string `json:"user_id"`
+	UserToRoleID string `json:"user_to_role_id"`
+	RoleID       string `json:"role_id"`
+	RoleName     string `json:"role_name"`
+}
+
+func (q *Queries) ListUserRolesByWorkspace(ctx context.Context, workspaceID string) ([]ListUserRolesByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserRolesByWorkspace, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserRolesByWorkspaceRow
+	for rows.Next() {
+		var i ListUserRolesByWorkspaceRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.UserToRoleID,
+			&i.RoleID,
+			&i.RoleName,
 		); err != nil {
 			return nil, err
 		}
