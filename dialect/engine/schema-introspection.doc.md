@@ -47,4 +47,6 @@ The sidebar shows the full schema tree for each connected database: schemas, tab
 
 ![The sidebar tree opened from a database down to one table: its five columns with their types, a key on the primary key and a link on the foreign key, and the index below them.](/shots/schema.light.png)
 
+A row with nothing under it -- a column, a trigger, a function, a setting -- has nothing to open, so a single click on one shows its details instead: the same panel as **Infos...** on its right-click menu, with its type, its flags and where it sits.
+
 To read a table's rows, **double-click** it, or right-click it and choose **View data**. Either opens a temporary SQL tab already attached to the owning database, prefilled with a `SELECT *` limited to the first 100 rows and executed as the tab opens. The statement is a normal SQL file from there on: edit the `LIMIT`, add a `WHERE`, and re-run with `Cmd+Enter`.
