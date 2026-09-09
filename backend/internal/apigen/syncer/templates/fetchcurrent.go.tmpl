@@ -36,6 +36,6 @@ func FetchCurrent(ctx context.Context, c types.Commit) (*types.RestoredItem, err
 		ObjectID:      c.ObjectID,
 		TableName:     {{printf "%q" .Table}},
 		ServerPayload: payload,
-		UpdatedAt:     {{.CursorExpr}},
+		UpdatedAt:     row.{{.CursorField}},
 	}, nil
 }

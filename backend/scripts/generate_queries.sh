@@ -48,6 +48,19 @@ if ! sqlc generate; then
     exit 1
 fi
 
+# A nullable column whose Postgres type has no override in sqlc.yml silently
+# falls back to database/sql's own null types instead of the JSONNull* wrappers
+# the API layer marshals. That is invisible in review and is how db/generated
+# drifted before: the same type can be written two ways (TIMESTAMPTZ and
+# TIMESTAMP WITH TIME ZONE both appear in db/migrations), and an override only
+# matches the spelling it names. Fail loudly instead.
+if grep -q "database/sql" "$GENERATED_TEMP_GO" 2>/dev/null || grep -q "sql\.Null" "${GENERATED_DIR}/models.go"; then
+    echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} generated code fell back to database/sql null types."
+    echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} A nullable column's type has no matching override in sqlc.yml:"
+    grep -n "sql\.Null" "${GENERATED_DIR}/models.go" | head -10
+    exit 1
+fi
+
 # Rename the generated file
 echo -e "${BOLD}[Generate]${NORMAL} Cleaning..."
 if ! mv "$GENERATED_TEMP_GO" "$OUTPUT_SQL_GO"; then
