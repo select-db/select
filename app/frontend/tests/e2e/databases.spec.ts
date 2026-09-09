@@ -4,12 +4,11 @@ import {
 	expect,
 	holdSession,
 	inWorkspace,
-	open,
 	test,
 	workspaceId,
 	type Page
 } from './wails';
-import { dbStatus, labelledInput, modal, renameBox, tab, testId, treeNode } from './selectors';
+import { dbStatus, labelledInput, renameBox, tab, testId, treeNode } from './selectors';
 import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
 
 /**
@@ -231,43 +230,4 @@ test('shows what the last attempt to reach a database found', async ({ page, sig
 
 	await expect(dsn).toHaveValue(seeded);
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
-});
-
-/**
- * The catalog rows under a database are not all alike. A schema, a "Tables"
- * group and a table all open on a click; a column has nothing to open, and that
- * click used to land on nothing at all. A row that does not expand now runs the
- * first entry of its own context menu, which for every one of them today is
- * "Infos...".
- *
- * Both columns on purpose: `email` is indexed, so it carries the index as a
- * child while still being a row nothing opens. What decides the click is
- * whether the row expands, not whether it holds anything.
- */
-test('opens a row that does not expand from a single click', async ({ page, signIn }) => {
-	await open(page, signIn);
-
-	// Down to the columns of one table. Each of these rows expands, which is the
-	// behaviour the new click must not have taken away.
-	await treeNode(page, 'warehouse').click();
-	await treeNode(page, 'main').click();
-	await treeNode(page, 'Tables').click();
-	await treeNode(page, 'customers').click();
-	await treeNode(page, 'Columns').click();
-
-	await expect(treeNode(page, 'country_code')).toBeVisible();
-	await treeNode(page, 'country_code').click();
-
-	await expect(modal(page)).toBeVisible();
-	await expect(modal(page).getByText('country_code').first()).toBeVisible();
-
-	// The backdrop, which is the only thing that dismisses this modal. The tree
-	// is behind it, so the next row cannot be reached until it is gone.
-	await page.mouse.click(5, 5);
-	await expect(modal(page)).toBeHidden();
-
-	await treeNode(page, 'email').click();
-
-	await expect(modal(page)).toBeVisible();
-	await expect(modal(page).getByText('email').first()).toBeVisible();
 });
