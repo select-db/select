@@ -13,32 +13,35 @@ import (
 	"selectDb/internal/server"
 )
 
-// OpenFolderState is which screen the frontend owes the user next.
-type OpenFolderState string
+// WorkspaceStatus is what opening a folder found, and so which screen the
+// frontend owes the user next.
+type WorkspaceStatus string
 
 const (
 	// Signed in, nothing open.
-	OpenFolderNone OpenFolderState = "no_folder"
+	NoFolder WorkspaceStatus = "no_folder"
 
 	// The workspace is set up and the graph is built.
-	OpenFolderOpened OpenFolderState = "opened"
+	Ready WorkspaceStatus = "ready"
 
 	// No config, or one naming a workspace this server does not have.
-	OpenFolderNeedsInit OpenFolderState = "needs_init"
+	NeedsSetup WorkspaceStatus = "needs_setup"
 
 	// The workspace lives on another server, whose permissions gate every query.
-	OpenFolderWrongServer OpenFolderState = "wrong_server"
+	WrongServer WorkspaceStatus = "wrong_server"
 )
 
-type OpenFolderResult struct {
-	State OpenFolderState `json:"state"`
-	Path  string          `json:"path"`
+// FolderState is the status plus whatever its screen needs to say something
+// specific.
+type FolderState struct {
+	Status WorkspaceStatus `json:"status"`
+	Path   string          `json:"path"`
 
-	// The folder's own name, offered as the workspace name on the init screen.
+	// The folder's own name, offered as the workspace name on the setup screen.
 	SuggestedName string `json:"suggestedName,omitempty"`
 
 	// Set when the config names a workspace this server does not have, so the
-	// init screen can say so rather than pretend the folder was never one.
+	// setup screen can say so rather than pretend the folder was never one.
 	StaleWorkspaceID string `json:"staleWorkspaceId,omitempty"`
 
 	FolderServer  string `json:"folderServer,omitempty"`
@@ -51,51 +54,51 @@ func (w *Workspace) PickFolder() (string, error) {
 }
 
 // OpenFolder is the only thing that sets up a workspace: not login, not sync.
-func (w *Workspace) OpenFolder(path string) (OpenFolderResult, error) {
+func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 	folder, err := normalizeFolder(path)
 	if err != nil {
-		return OpenFolderResult{}, err
+		return FolderState{}, err
 	}
 
-	result := OpenFolderResult{Path: folder, SuggestedName: filepath.Base(folder)}
+	result := FolderState{Path: folder, SuggestedName: filepath.Base(folder)}
 
 	currentServer, err := server.ReadCurrentDomain()
 	if err != nil {
-		return OpenFolderResult{}, fmt.Errorf("read current server: %w", err)
+		return FolderState{}, fmt.Errorf("read current server: %w", err)
 	}
 	result.CurrentServer = currentServer
 
 	cfg, err := graph.ReadWorkspaceConfig(folder)
 	if err != nil {
 		if errors.Is(err, graph.ErrNoWorkspaceConfig) {
-			result.State = OpenFolderNeedsInit
+			result.Status = NeedsSetup
 			return result, nil
 		}
 		// Unusable config: reporting it beats overwriting the workspace it named.
-		return OpenFolderResult{}, err
+		return FolderState{}, err
 	}
 
 	if cfg.Server != currentServer {
-		result.State = OpenFolderWrongServer
+		result.Status = WrongServer
 		result.FolderServer = cfg.Server
 		return result, nil
 	}
 
 	known, err := w.workspaceExists(cfg.WorkspaceID)
 	if err != nil {
-		return OpenFolderResult{}, err
+		return FolderState{}, err
 	}
 	if !known {
-		result.State = OpenFolderNeedsInit
+		result.Status = NeedsSetup
 		result.StaleWorkspaceID = cfg.WorkspaceID
 		return result, nil
 	}
 
 	if err := w.adoptFolder(cfg.WorkspaceID, folder); err != nil {
-		return OpenFolderResult{}, err
+		return FolderState{}, err
 	}
 
-	result.State = OpenFolderOpened
+	result.Status = Ready
 	return result, nil
 }
 

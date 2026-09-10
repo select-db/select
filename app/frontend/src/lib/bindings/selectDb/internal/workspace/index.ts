@@ -8,10 +8,10 @@ export {
 
 export {
     CreateWorkspaceParams,
+    FolderState,
     LastFolder,
-    OpenFolderResult,
-    OpenFolderState,
     SearchUserResult,
+    WorkspaceStatus,
     WorkspaceUserEntry,
     WorkspaceUserGroup,
     WorkspaceUserRole

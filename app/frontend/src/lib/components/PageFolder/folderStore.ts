@@ -9,8 +9,8 @@ import {
 	GetLastFolder
 } from '$lib/bindings/selectDb/internal/workspace/workspace';
 import {
-	OpenFolderResult,
-	OpenFolderState,
+	FolderState,
+	WorkspaceStatus,
 	type LastFolder
 } from '$lib/bindings/selectDb/internal/workspace/models';
 import {
@@ -20,13 +20,13 @@ import {
 } from '$lib/utils/graph/workspaceGraphStore';
 
 /** What the app shows between "signed in" and "here are your files". `null` while loading. */
-export const folderStore = writable<OpenFolderResult | null>(null);
+export const folderStore = writable<FolderState | null>(null);
 
 /** The folder offered on the no-folder screen. */
 export const lastFolderStore = writable<LastFolder | null>(null);
 
-function noFolder(): OpenFolderResult {
-	return new OpenFolderResult({ state: OpenFolderState.OpenFolderNone });
+function noFolder(): FolderState {
+	return new FolderState({ status: WorkspaceStatus.NoFolder });
 }
 
 export function clearFolderState() {
@@ -35,11 +35,11 @@ export function clearFolderState() {
 }
 
 /** Puts the app into the state an OpenFolder call reported. */
-export async function showFolderResult(result: OpenFolderResult): Promise<void> {
-	folderStore.set(result);
+export async function showFolderState(state: FolderState): Promise<void> {
+	folderStore.set(state);
 	clearWorkspaceGraphCache();
 
-	if (result.state === OpenFolderState.OpenFolderOpened) {
+	if (state.status === WorkspaceStatus.Ready) {
 		const [graph] = await tryCatch(initializeWorkspaceGraph);
 		if (graph) workspaceGraphStore.set(graph);
 		return;
@@ -59,7 +59,7 @@ export async function openFolder(path: string): Promise<void> {
 		notify({ type: AlertType.Error, message: err?.message ?? 'Could not open that folder' });
 		return;
 	}
-	await showFolderResult(result);
+	await showFolderState(result);
 }
 
 export async function pickAndOpenFolder(): Promise<void> {
@@ -78,20 +78,20 @@ export async function reopenLastFolder(): Promise<void> {
 	if (err) {
 		// No notification: the user did not ask for this, and the no-folder
 		// screen is a fine place to land.
-		await showFolderResult(noFolder());
+		await showFolderState(noFolder());
 		return;
 	}
-	await showFolderResult(result);
+	await showFolderState(result);
 }
 
 /** The backend closed the folder on us, e.g. after a server delete. */
 export async function onFolderClosed(): Promise<void> {
-	if (get(folderStore)?.state === OpenFolderState.OpenFolderOpened) {
+	if (get(folderStore)?.status === WorkspaceStatus.Ready) {
 		notify({
 			type: AlertType.Default,
 			message: 'This workspace is no longer available to you. Your files were left untouched.',
 			duration: 8000
 		});
 	}
-	await showFolderResult(noFolder());
+	await showFolderState(noFolder());
 }

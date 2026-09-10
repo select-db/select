@@ -63,13 +63,13 @@ func (w *Workspace) folderFor(ctx context.Context, workspaceID, remembered strin
 }
 
 // ReopenLastFolder runs after login, so a returning user skips the picker.
-func (w *Workspace) ReopenLastFolder() (OpenFolderResult, error) {
+func (w *Workspace) ReopenLastFolder() (FolderState, error) {
 	last, err := w.GetLastFolder()
 	if err != nil {
-		return OpenFolderResult{}, err
+		return FolderState{}, err
 	}
 	if last.Path == "" {
-		return OpenFolderResult{State: OpenFolderNone}, nil
+		return FolderState{Status: NoFolder}, nil
 	}
 	return w.OpenFolder(last.Path)
 }
