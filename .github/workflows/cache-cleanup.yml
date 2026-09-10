@@ -1,0 +1,33 @@
+name: Cache cleanup
+
+# A run's caches are scoped to the ref that created them, so once a PR closes
+# nothing can ever read them again. They are not free: the repository has a
+# 10GB cache budget and GitHub evicts least-recently-used entries to stay under
+# it, so dead PR caches push out live ones. That is how the golangci-lint and
+# Go build caches came to miss on almost every run, which cost the quality and
+# test jobs minutes each. 31 dead caches held 4.35GB of 9.7GB when this was
+# added.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    name: Drop the closed PR's caches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete caches for this ref
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
+          REPO: ${{ github.repository }}
+        run: |
+          ids=$(gh api "repos/$REPO/actions/caches?ref=$REF&per_page=100" --jq '.actions_caches[].id')
+          [ -z "$ids" ] && { echo "No caches for $REF"; exit 0; }
+          for id in $ids; do
+            gh api --method DELETE "repos/$REPO/actions/caches/$id" --silent && echo "deleted $id"
+          done
