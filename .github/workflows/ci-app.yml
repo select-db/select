@@ -1,0 +1,253 @@
+name: App
+
+# Everything that checks the desktop client: its Go side, its web side, and the
+# end-to-end suite that drives both. Called by ci.yml, which owns the gating.
+#
+# The module is one thing -- `app/` is a Go module with a frontend embedded in
+# it -- so its checks sit in one group rather than being split into an "app
+# backend" and an "app frontend" that exist nowhere else in the repository.
+#
+# The four jobs are independent. Quality and tests read the same code and
+# neither needs the other's result, so chaining them only made the wall clock
+# their sum.
+
+on:
+  workflow_call:
+    inputs:
+      go-app:
+        description: Run the Go legs. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
+      frontend:
+        description: Run the web legs. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # Workflow-level env does not cross a workflow_call boundary, so this is the
+  # copy the e2e job reads. It is the only version this workflow pins.
+  WAILS_VERSION: v3.0.0-beta.12
+
+jobs:
+  backend-quality:
+    name: Backend quality
+    if: inputs.go-app
+    runs-on: ubuntu-latest
+    # Wails v3 binds the webview through cgo, so analysing the app module needs
+    # the GTK3/WebKit2GTK headers the desktop build links against.
+    env:
+      GOFLAGS: -tags=gtk3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
+        with:
+          go-version-file: app/go.mod
+          # Keeps the module cache, which is what setup-go is good at: go.sum
+          # names the modules exactly, so its entry can never be wrong. The
+          # build cache is layered on below, because that one it gets wrong --
+          # keyed on go.sum alone it is written once and then never again
+          # ("Cache hit occurred on the primary key, not saving cache"), so
+          # every later run restored whatever the first writer compiled, under
+          # whichever build tags that job happened to use.
+          cache-dependency-path: app/go.sum
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-app-gtk3-${{ hashFiles('app/go.sum') }}-
+            go-app-gtk3-
+      - uses: ./.github/actions/gtk-deps
+      - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          working-directory: app
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, so an outage there fails a build for reasons unrelated to
+          # the code, as it did on #174.
+          verify: false
+      - uses: ./.github/actions/deadcode
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+      - name: Dead code check
+        run: |
+          # deadcode sets its own -tags, which overrides the one in GOFLAGS, so
+          # the cgo build tag has to be repeated here.
+          # deadcode exits 0 even when it finds dead code; treat any output as failure
+          out=$(deadcode -tags=gtk3 ./...)
+          if [ -n "$out" ]; then
+            echo "$out"
+            echo "::error::Dead code detected"
+            exit 1
+          fi
+          echo "No dead code found"
+        working-directory: app
+
+      # sqlc reads db/migrations, so db/generated is regenerable from committed
+      # sources with no database, and a stale one is a diff here rather than
+      # something only the person with a migrated database would notice.
+      #
+      # TERM is load-bearing: the script uses tput, which fails under `set -e`
+      # when TERM is unset, as it is on the runner by default.
+      - uses: ./.github/actions/sqlc
+      - name: Generated sqlc output is up to date
+        working-directory: app/internal
+        env:
+          TERM: xterm
+        run: |
+          ./cmd/cli/generate_queries.sh
+          git diff --exit-code db/generated || {
+            echo "::error::app db/generated is stale. Run app/internal/cmd/cli/generate_queries.sh and commit the result."
+            exit 1
+          }
+
+  backend-tests:
+    name: Backend tests
+    if: inputs.go-app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: app/go.mod
+          # Module cache from setup-go, build cache below; see the backend
+          # quality job for why its entry is right for one and wrong for the
+          # other.
+          cache-dependency-path: app/go.sum
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-app-gtk3-${{ hashFiles('app/go.sum') }}-
+            go-app-gtk3-
+      - uses: ./.github/actions/gtk-deps
+      - run: go test -tags gtk3 ./internal/...
+        working-directory: app
+      # Saved from the test job only, since it compiles the widest set of
+      # packages, and only on the default branch. A cache written from a PR can
+      # be read back by nothing except that same PR, so saving there would fill
+      # the repository's 10GB budget with entries no other run can use, and
+      # evict the ones every run does use.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.ref == 'refs/heads/dev'
+        with:
+          path: ~/.cache/go-build
+          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+
+  frontend-quality:
+    name: Frontend quality
+    if: inputs.frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: app/frontend/package-lock.json
+      # --prefer-offline: setup-node restores ~/.npm, but npm still revalidates
+      # it against the registry, and that round-trip stalls on these runners --
+      # the same `npm ci` measured 5s to 7m03s within one hour. Cached entries
+      # are served without asking, anything missing is still fetched, so the
+      # lockfile alone decides versions. The timeout bounds a hang: it sits above
+      # every measurement, so a slow day stays green rather than red.
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: app/frontend
+        timeout-minutes: 10
+      - run: npm run check
+        working-directory: app/frontend
+      - run: npm run lint
+        working-directory: app/frontend
+
+  e2e:
+    name: E2E
+    # Either half can break it, so it runs when either half changed.
+    if: inputs.frontend || inputs.go-app
+    runs-on: ubuntu-latest
+    # The suite drives a server-mode build (`-tags server`): the real Go
+    # services and bindings behind an HTTP server instead of a webview, so it
+    # runs under an ordinary browser with no display server in sight.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
+        with:
+          go-version-file: app/go.mod
+          # An entry of its own: this job builds -tags server without cgo, so
+          # nothing the gtk3 jobs compiled is reusable here.
+          cache: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-e2e-${{ runner.os }}-${{ hashFiles('app/go.sum') }}
+          restore-keys: go-e2e-${{ runner.os }}-
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: app/frontend/package-lock.json
+
+      # Both the wails CLI and the binding generator compile the app's cgo
+      # webview code, so this job needs the GTK3 headers even though the binary
+      # it ends up testing links no GUI toolkit at all.
+      - uses: ./.github/actions/gtk-deps
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache-wails
+        with:
+          path: ~/go/bin/wails*
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Install Wails
+        if: steps.cache-wails.outputs.cache-hit != 'true'
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+
+      # Flags and timeout as in the frontend quality job above.
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: app/frontend
+        timeout-minutes: 10
+
+      # The browsers cache, the OS packages behind them do not, so the download
+      # is what gets skipped. --only-shell: the suite sets neither `channel` nor
+      # `headless: false`, so it drives the headless shell, and the 184MB full
+      # Chrome build is a download nothing here ever launches.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache-playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+      - run: npx playwright install-deps chromium
+        working-directory: app/frontend
+      - run: npx playwright install --only-shell chromium
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        working-directory: app/frontend
+
+      - run: wails3 task test:e2e
+        working-directory: app
+
+      # The bindings are committed, and building the suite regenerates them, so
+      # a Go signature change that was never regenerated shows up here as a
+      # dirty tree rather than as a type error nobody sees until runtime.
+      - name: Generated bindings are up to date
+        working-directory: app
+        run: |
+          git diff --exit-code frontend/src/lib/bindings || {
+            echo "::error::Bindings are stale. Run 'wails3 task generate:bindings' and commit the result."
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: playwright-report
+          path: app/frontend/playwright-report/
+          retention-days: 7
