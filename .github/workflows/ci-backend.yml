@@ -1,0 +1,137 @@
+name: Backend
+
+# The hosted server module. Called by ci.yml, which owns the gating.
+#
+# Quality and tests do not depend on each other, for the reason given in
+# ci-app-backend.yml.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
+        with:
+          go-version-file: backend/go.mod
+          # Module cache from setup-go, build cache below; see the app backend
+          # quality job for why its entry is right for one and wrong for the
+          # other.
+          cache-dependency-path: backend/go.sum
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: go-backend-plain-${{ hashFiles('backend/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-backend-plain-${{ hashFiles('backend/go.sum') }}-
+            go-backend-plain-
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          working-directory: backend
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, so an outage there fails a build for reasons unrelated to
+          # the code, as it did on #174.
+          verify: false
+      - uses: ./.github/actions/deadcode
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+      - name: Dead code check
+        run: |
+          # -test: the e2e harness is reachable only from _test.go files, so tests
+          # must be roots or the whole support package reads as dead.
+          # deadcode exits 0 even when it finds dead code; treat any output as failure
+          out=$(deadcode -test ./...)
+          if [ -n "$out" ]; then
+            echo "$out"
+            echo "::error::Dead code detected"
+            exit 1
+          fi
+          echo "No dead code found"
+        working-directory: backend
+
+      # db/generated is committed, and it drifted from the schema once already
+      # because regenerating needed a live database nobody had in CI. sqlc reads
+      # db/migrations now, so this job -- which provisions no database -- can
+      # regenerate and diff. Routing it through the script rather than calling
+      # sqlc directly also picks up the script's check for nullable columns that
+      # fell back to database/sql types.
+      #
+      # TERM is load-bearing: the script uses tput, which fails under `set -e`
+      # when TERM is unset, as it is on the runner by default.
+      - uses: ./.github/actions/sqlc
+      - name: Generated sqlc output is up to date
+        working-directory: backend
+        env:
+          TERM: xterm
+        run: |
+          ./scripts/generate_queries.sh
+          git diff --exit-code db/generated || {
+            echo "::error::db/generated is stale. Run backend/scripts/generate_queries.sh and commit the result."
+            exit 1
+          }
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          # Module cache from setup-go, build cache below; see the app backend
+          # quality job for why its entry is right for one and wrong for the
+          # other.
+          cache-dependency-path: backend/go.sum
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: go-backend-plain-${{ hashFiles('backend/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-backend-plain-${{ hashFiles('backend/go.sum') }}-
+            go-backend-plain-
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.embedded-postgres-go
+          key: embedded-postgres-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
+          restore-keys: embedded-postgres-${{ runner.os }}-
+      # The audit e2e tests run against Postgres 18 + pg_partman so they exercise
+      # the production audit config (real monthly partitions), not the no-partman
+      # DEFAULT-partition fallback. The harness connects via TEST_PG_*; packages
+      # without those env vars fall back to embedded Postgres. Postgres 18 lands
+      # on a non-5432 port (the runner's preinstalled cluster holds 5432), so the
+      # port is derived, not hardcoded.
+      - name: Postgres 18 + pg_partman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-18 postgresql-18-partman
+          sudo pg_createcluster --start 18 main || sudo pg_ctlcluster 18 main start || true
+          PORT=$(pg_lsclusters -h | awk '$1==18 {print $3}')
+          sudo -u postgres psql -p "$PORT" -c "ALTER USER postgres PASSWORD 'postgres';"
+          {
+            echo "TEST_PG_HOST=localhost"
+            echo "TEST_PG_PORT=$PORT"
+            echo "TEST_PG_USER=postgres"
+            echo "TEST_PG_PASSWORD=postgres"
+          } >> "$GITHUB_ENV"
+      - run: go test ./...
+        working-directory: backend
+      # Saved from the test job only, since it compiles the widest set of
+      # packages, and only on the default branch. A cache written from a PR can
+      # be read back by nothing except that same PR, so saving there would fill
+      # the repository's 10GB budget with entries no other run can use, and
+      # evict the ones every run does use.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.ref == 'refs/heads/dev'
+        with:
+          path: ~/.cache/go-build
+          key: go-backend-plain-${{ hashFiles('backend/go.sum') }}-${{ github.run_id }}

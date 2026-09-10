@@ -254,292 +254,29 @@ jobs:
       - run: npm run lint
         working-directory: app/frontend
 
-  quality-app-backend:
-    name: App backend quality
+  # ---- Per-module quality and tests ----
+  # One called workflow per module, so a module's checks sit together in the
+  # run graph and in the tree instead of spread across a flat list of nine.
+  # Gating stays here: `plan` decides, the caller applies, and the called
+  # workflow only knows how to check its module.
+  app-backend:
+    name: App backend
     needs: [plan]
     if: needs.plan.outputs.go-app == 'true'
-    runs-on: ubuntu-latest
-    # Wails v3 binds the webview through cgo, so analysing the app module needs
-    # the GTK3/WebKit2GTK headers the desktop build links against.
-    env:
-      GOFLAGS: -tags=gtk3
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        id: setup-go
-        with:
-          go-version-file: app/go.mod
-          # Keeps the module cache, which is what setup-go is good at: go.sum
-          # names the modules exactly, so its entry can never be wrong. The
-          # build cache is layered on below, because that one it gets wrong --
-          # keyed on go.sum alone it is written once and then never again
-          # ("Cache hit occurred on the primary key, not saving cache"), so
-          # every later run restored whatever the first writer compiled, under
-          # whichever build tags that job happened to use.
-          cache-dependency-path: app/go.sum
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/go-build
-          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            go-app-gtk3-${{ hashFiles('app/go.sum') }}-
-            go-app-gtk3-
-      - uses: ./.github/actions/gtk-deps
-      - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.11.4
-          working-directory: app
-          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
-          # linting, in each of these three jobs, so an outage there fails a
-          # build for reasons unrelated to the code — as it did on #174.
-          verify: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: cache-deadcode
-        with:
-          path: ~/go/bin/deadcode
-          key: deadcode-${{ env.DEADCODE_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
-      - if: steps.cache-deadcode.outputs.cache-hit != 'true'
-        run: go install golang.org/x/tools/cmd/deadcode@${{ env.DEADCODE_VERSION }}
-      - name: Dead code check
-        run: |
-          # deadcode sets its own -tags, which overrides the one in GOFLAGS, so
-          # the cgo build tag has to be repeated here.
-          # deadcode exits 0 even when it finds dead code; treat any output as failure
-          out=$(deadcode -tags=gtk3 ./...)
-          if [ -n "$out" ]; then
-            echo "$out"
-            echo "::error::Dead code detected"
-            exit 1
-          fi
-          echo "No dead code found"
-        working-directory: app
+    uses: ./.github/workflows/ci-app-backend.yml
 
-      # sqlc reads db/migrations, so db/generated is regenerable from committed
-      # sources with no database, and a stale one is a diff here rather than
-      # something only the person with a migrated database would notice.
-      #
-      # TERM is load-bearing: the script uses tput, which fails under `set -e`
-      # when TERM is unset, as it is on the runner by default.
-      - name: Generated sqlc output is up to date
-        working-directory: app/internal
-        env:
-          TERM: xterm
-        run: |
-          curl -sSfL "https://github.com/sqlc-dev/sqlc/releases/download/v${SQLC_VERSION}/sqlc_${SQLC_VERSION}_linux_amd64.tar.gz" -o /tmp/sqlc.tar.gz
-          echo "${SQLC_SHA256}  /tmp/sqlc.tar.gz" | sha256sum -c -
-          sudo tar -xzf /tmp/sqlc.tar.gz -C /usr/local/bin sqlc
-          ./cmd/cli/generate_queries.sh
-          git diff --exit-code db/generated || {
-            echo "::error::app db/generated is stale. Run app/internal/cmd/cli/generate_queries.sh and commit the result."
-            exit 1
-          }
-
-  quality-backend:
-    name: Backend quality
+  backend:
+    name: Backend
     needs: [plan]
     if: needs.plan.outputs.go-backend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        id: setup-go
-        with:
-          go-version-file: backend/go.mod
-          # Module cache from setup-go, build cache below; see the app quality
-          # job for why its entry is right for one and wrong for the other.
-          cache-dependency-path: backend/go.sum
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/go-build
-          key: go-backend-plain-${{ hashFiles('backend/go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            go-backend-plain-${{ hashFiles('backend/go.sum') }}-
-            go-backend-plain-
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.11.4
-          working-directory: backend
-          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
-          # linting, in each of these three jobs, so an outage there fails a
-          # build for reasons unrelated to the code — as it did on #174.
-          verify: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: cache-deadcode
-        with:
-          path: ~/go/bin/deadcode
-          key: deadcode-${{ env.DEADCODE_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
-      - if: steps.cache-deadcode.outputs.cache-hit != 'true'
-        run: go install golang.org/x/tools/cmd/deadcode@${{ env.DEADCODE_VERSION }}
-      - name: Dead code check
-        run: |
-          # -test: the e2e harness is reachable only from _test.go files, so tests
-          # must be roots or the whole support package reads as dead.
-          # deadcode exits 0 even when it finds dead code; treat any output as failure
-          out=$(deadcode -test ./...)
-          if [ -n "$out" ]; then
-            echo "$out"
-            echo "::error::Dead code detected"
-            exit 1
-          fi
-          echo "No dead code found"
-        working-directory: backend
+    uses: ./.github/workflows/ci-backend.yml
 
-      # db/generated is committed, and it drifted from the schema once already
-      # because regenerating needed a live database nobody had in CI. sqlc reads
-      # db/migrations now, so this job -- which provisions no database -- can
-      # regenerate and diff. Routing it through the script rather than calling
-      # sqlc directly also picks up the script's check for nullable columns that
-      # fell back to database/sql types.
-      #
-      # TERM is load-bearing: the script uses tput, which fails under `set -e`
-      # when TERM is unset, as it is on the runner by default.
-      - name: Generated sqlc output is up to date
-        working-directory: backend
-        env:
-          TERM: xterm
-        run: |
-          curl -sSfL "https://github.com/sqlc-dev/sqlc/releases/download/v${SQLC_VERSION}/sqlc_${SQLC_VERSION}_linux_amd64.tar.gz" -o /tmp/sqlc.tar.gz
-          echo "${SQLC_SHA256}  /tmp/sqlc.tar.gz" | sha256sum -c -
-          sudo tar -xzf /tmp/sqlc.tar.gz -C /usr/local/bin sqlc
-          ./scripts/generate_queries.sh
-          git diff --exit-code db/generated || {
-            echo "::error::db/generated is stale. Run backend/scripts/generate_queries.sh and commit the result."
-            exit 1
-          }
-
-  quality-dialect:
-    name: Dialect quality
+  dialect:
+    name: Dialect
     needs: [plan]
     if: needs.plan.outputs.go-dialect == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: dialect/go.mod
-          cache-dependency-path: dialect/go.sum
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.11.4
-          working-directory: dialect
-          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
-          # linting, in each of these three jobs, so an outage there fails a
-          # build for reasons unrelated to the code — as it did on #174.
-          verify: false
+    uses: ./.github/workflows/ci-dialect.yml
 
-  # ---- Tests ----
-  test-app-backend:
-    name: App backend tests
-    # Not gated on the quality job: they read the same code and neither needs
-    # the other's result, so chaining them only made the wall clock their sum.
-    needs: [plan]
-    if: needs.plan.outputs.go-app == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        id: setup-go
-        with:
-          go-version-file: app/go.mod
-          # Module cache from setup-go, build cache below; see the app quality
-          # job for why its entry is right for one and wrong for the other.
-          cache-dependency-path: app/go.sum
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/go-build
-          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            go-app-gtk3-${{ hashFiles('app/go.sum') }}-
-            go-app-gtk3-
-      - uses: ./.github/actions/gtk-deps
-      - run: go test -tags gtk3 ./internal/...
-        working-directory: app
-      # Saved from the test job only, since it compiles the widest set of
-      # packages, and only on the default branch. A cache written from a PR can
-      # be read back by nothing except that same PR, so saving there would fill
-      # the repository's 10GB budget with entries no other run can use, and
-      # evict the ones every run does use.
-      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: github.ref == 'refs/heads/dev'
-        with:
-          path: ~/.cache/go-build
-          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
-
-  test-backend:
-    name: Backend tests
-    # Not gated on the quality job, for the reason given in App backend tests.
-    needs: [plan]
-    if: needs.plan.outputs.go-backend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        id: setup-go
-        with:
-          go-version-file: backend/go.mod
-          # Module cache from setup-go, build cache below; see the app quality
-          # job for why its entry is right for one and wrong for the other.
-          cache-dependency-path: backend/go.sum
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/go-build
-          key: go-backend-plain-${{ hashFiles('backend/go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            go-backend-plain-${{ hashFiles('backend/go.sum') }}-
-            go-backend-plain-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.embedded-postgres-go
-          key: embedded-postgres-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
-          restore-keys: embedded-postgres-${{ runner.os }}-
-      # The audit e2e tests run against Postgres 18 + pg_partman so they exercise
-      # the production audit config (real monthly partitions), not the no-partman
-      # DEFAULT-partition fallback. The harness connects via TEST_PG_*; packages
-      # without those env vars fall back to embedded Postgres. Postgres 18 lands
-      # on a non-5432 port (the runner's preinstalled cluster holds 5432), so the
-      # port is derived, not hardcoded.
-      - name: Postgres 18 + pg_partman
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-common
-          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-          sudo apt-get install -y postgresql-18 postgresql-18-partman
-          sudo pg_createcluster --start 18 main || sudo pg_ctlcluster 18 main start || true
-          PORT=$(pg_lsclusters -h | awk '$1==18 {print $3}')
-          sudo -u postgres psql -p "$PORT" -c "ALTER USER postgres PASSWORD 'postgres';"
-          {
-            echo "TEST_PG_HOST=localhost"
-            echo "TEST_PG_PORT=$PORT"
-            echo "TEST_PG_USER=postgres"
-            echo "TEST_PG_PASSWORD=postgres"
-          } >> "$GITHUB_ENV"
-      - run: go test ./...
-        working-directory: backend
-      # Saved from the test job only, since it compiles the widest set of
-      # packages, and only on the default branch. A cache written from a PR can
-      # be read back by nothing except that same PR, so saving there would fill
-      # the repository's 10GB budget with entries no other run can use, and
-      # evict the ones every run does use.
-      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: github.ref == 'refs/heads/dev'
-        with:
-          path: ~/.cache/go-build
-          key: go-backend-plain-${{ hashFiles('backend/go.sum') }}-${{ github.run_id }}
-
-  test-dialect:
-    name: Dialect tests
-    needs: [plan, quality-dialect]
-    if: needs.plan.outputs.go-dialect == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: dialect/go.mod
-          cache-dependency-path: dialect/go.sum
-      - run: go test ./...
-        working-directory: dialect
 
   test-analyzer:
     name: Analyzer tests
@@ -682,12 +419,9 @@ jobs:
       - security
       - gitleaks
       - quality-frontend
-      - quality-app-backend
-      - quality-backend
-      - quality-dialect
-      - test-app-backend
-      - test-backend
-      - test-dialect
+      - app-backend
+      - backend
+      - dialect
       - test-analyzer
       - e2e-app
       - website

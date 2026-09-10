@@ -1,0 +1,45 @@
+name: Dialect
+
+# The SQL dialect module. Called by ci.yml, which owns the gating.
+#
+# Quality and tests do not depend on each other, for the reason given in
+# ci-app-backend.yml. This pair used to be chained, which made it the second
+# longest path in a run for no reason: 1m12 of lint followed by 1m27 of tests
+# that never needed the lint result.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: dialect/go.mod
+          cache-dependency-path: dialect/go.sum
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          working-directory: dialect
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, so an outage there fails a build for reasons unrelated to
+          # the code, as it did on #174.
+          verify: false
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: dialect/go.mod
+          cache-dependency-path: dialect/go.sum
+      - run: go test ./...
+        working-directory: dialect

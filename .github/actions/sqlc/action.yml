@@ -1,0 +1,21 @@
+name: sqlc
+description: Puts a pinned sqlc on PATH.
+
+# Downloaded, not `go install`ed. Building sqlc from source cost 45s in the
+# backend quality job and 73s in the app's; the release binary takes about one.
+# The version lives here so the two jobs that regenerate queries cannot drift
+# apart on it.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VERSION: 1.31.1
+        SHA256: 497ae4fcdfa64c5b0c311ffe4c2bd991e43991e82e5367792ed78bc2dca27354
+      run: |
+        set -euo pipefail
+        url="https://github.com/sqlc-dev/sqlc/releases/download/v${VERSION}/sqlc_${VERSION}_linux_amd64.tar.gz"
+        curl -sSfL "$url" -o /tmp/sqlc.tar.gz
+        echo "${SHA256}  /tmp/sqlc.tar.gz" | sha256sum -c -
+        sudo tar -xzf /tmp/sqlc.tar.gz -C /usr/local/bin sqlc
