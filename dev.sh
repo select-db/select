@@ -192,6 +192,32 @@ app_migrate() {
   esac
 }
 
+# An interrupted run leaves its server holding the port, and playwright now
+# refuses to start rather than adopting it (see reuseExistingServer in
+# playwright.config.ts). Clearing the leftover here is what keeps that refusal
+# from being a chore: nothing else ever runs this binary, so anything answering
+# to the name is an orphan.
+#
+# By name (`-x`), not by command line (`-f`): a `-f` pattern this script
+# contains matches the shell running the script, and the desktop app is a
+# different binary -- `select` -- that a path match would sweep up with it.
+app_e2e() {
+  if pgrep -x select-server >/dev/null 2>&1; then
+    warn "stopping a select-server left over from an earlier run"
+    pkill -x select-server 2>/dev/null || true
+
+    # Asked first, then insisted on: a server still on the port when playwright
+    # starts is the whole failure this exists to prevent.
+    for _ in $(seq 1 20); do
+      pgrep -x select-server >/dev/null 2>&1 || break
+      sleep 0.25
+    done
+    pkill -9 -x select-server 2>/dev/null || true
+  fi
+
+  app_task test:e2e "$@"
+}
+
 app() {
   local sub="${1:-}"; shift || true
   case "$sub" in
@@ -200,7 +226,7 @@ app() {
     package)  app_task package "$@" ;;
     bindings) app_task generate:bindings "$@" ;;
     test)     app_test ;;
-    e2e)      app_task test:e2e "$@" ;;
+    e2e)      app_e2e "$@" ;;
     migrate)  app_migrate "$@" ;;
     *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e|migrate)" >&2; exit 1 ;;
   esac

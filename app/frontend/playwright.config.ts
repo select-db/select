@@ -90,7 +90,7 @@ export default defineConfig({
 	webServer: {
 		command: `../build/bin/select-server`,
 		url: `http://${HOST}:${PORT}/`,
-		reuseExistingServer: !process.env.CI,
+		reuseExistingServer: !!process.env.E2E_REUSE_SERVER,
 		stdout: 'pipe',
 		stderr: 'pipe',
 		timeout: 60_000,
