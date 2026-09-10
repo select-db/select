@@ -46,13 +46,13 @@ export default ts.config(
 		}
 	},
 	{
-		// The app may not import the test suite. Only the screenshot specs may,
-		// and they sit under src/ so they can live beside what they photograph --
-		// which is what makes this worth enforcing: from the file tree, a spec and
-		// a component look the same, and one stray import would put @playwright/test
-		// in the shipped bundle.
+		// The app may not import the test suite. Only the specs and the screenshot
+		// specs may, and both sit under src/ so they can live beside what they
+		// cover -- which is what makes this worth enforcing: from the file tree, a
+		// spec and a component look the same, and one stray import would put
+		// @playwright/test in the shipped bundle.
 		files: ['src/**/*.ts', 'src/**/*.svelte'],
-		ignores: ['src/**/*.shot.ts'],
+		ignores: ['src/**/*.shot.ts', 'src/**/*.spec.ts'],
 		rules: {
 			'no-restricted-imports': [
 				'error',

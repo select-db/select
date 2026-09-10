@@ -7,9 +7,16 @@ import {
 	test,
 	workspaceId,
 	type Page
-} from './wails';
-import { dbStatus, labelledInput, renameBox, tab, testId, treeRow } from './selectors';
-import { choose, openRowMenu, openRootMenu, renameTo } from './tree';
+} from '../../../../../tests/e2e/wails';
+import {
+	dbStatus,
+	labelledInput,
+	renameBox,
+	tab,
+	testId,
+	treeRow
+} from '../../../../../tests/e2e/selectors';
+import { choose, openRowMenu, openRootMenu, renameTo } from '../../../../../tests/e2e/tree';
 
 /**
  * A database is a directory named after itself. Its name is written down

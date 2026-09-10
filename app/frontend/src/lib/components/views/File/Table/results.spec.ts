@@ -1,11 +1,8 @@
 import type { Page } from '@playwright/test';
 
-import { AFTER_QUERY, expect, open, test } from './wails';
-import { editor, queryResultTable, testId } from './selectors';
-import {
-	MAX_AUTO_COLUMN_WIDTH,
-	MIN_AUTO_COLUMN_WIDTH
-} from '../../src/lib/components/views/File/Table/helpers/columnManagement';
+import { AFTER_QUERY, expect, open, test } from '../../../../../../tests/e2e/wails';
+import { editor, queryResultTable, testId } from '../../../../../../tests/e2e/selectors';
+import { MAX_AUTO_COLUMN_WIDTH, MIN_AUTO_COLUMN_WIDTH } from './helpers/columnManagement';
 
 /**
  * The results table, for two things nothing else here would notice.

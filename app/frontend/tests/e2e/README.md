@@ -6,7 +6,7 @@ component does not quietly break the suite.
 The rule in one line: **address what the user perceives; add a hook only where
 they perceive nothing.**
 
-## Tier 1 — role and accessible name
+## Tier 1: role and accessible name
 
 Anything a person can see and name is addressed by what it is and what it says:
 
@@ -17,8 +17,8 @@ page.getByRole('textbox', { name: 'Message' });
 ```
 
 This is the default. It survives restyling, it breaks when the thing a user
-relies on actually changes, and it fails when the accessible name is missing —
-which is a real defect, not a test problem.
+relies on actually changes, and it fails when the accessible name is missing.
+That is a real defect, not a test problem.
 
 **Do not use `aria-label` as a test hook.** It is read aloud to people using a
 screen reader. Writing `aria-label="chat-input-1"` to please a test makes the
@@ -27,11 +27,11 @@ shows up as a test failure. Give a control the name a user would say, then
 address it by that name.
 
 Related: our `Button` takes `label` for its *tooltip* and a separate
-`ariaLabel`. A button with only `label` has no accessible name — it is
+`ariaLabel`. A button with only `label` has no accessible name, so it is
 unreachable to a screen reader and to `getByRole`. Set `ariaLabel` on icon-only
 buttons; it fixes both at once.
 
-## Tier 2 — `data-test`, for structure with no name
+## Tier 2: `data-test`, for structure with no name
 
 Panels, regions, rows, handles: things a user sees but would not name. Inventing
 an aria-label for them pollutes the accessibility tree with furniture.
@@ -42,7 +42,7 @@ an aria-label for them pollutes the accessibility tree with furniture.
 <p class="child-vis-badge" data-test="tree.visibility-badge">
 ```
 
-**Grammar:** `data-test="<area>.<element>"` — lowercase, dot-separated, area
+**Grammar:** `data-test="<area>.<element>"`, lowercase and dot-separated, area
 first. One level of nesting; if you need two, the area is too broad.
 
 **Identity:** when a hook repeats, carry the instance in a second attribute
@@ -57,7 +57,7 @@ testId('tree.node', 'orders');   // [data-test="tree.node"][data-test-value="ord
 ```
 
 That is what removes the `.first()` / `.last()` / `{ exact: true }` noise from
-the specs — those are a symptom of having no stable hook, not a style.
+the specs. Those are a symptom of having no stable hook, not a style.
 
 ## Never address a styling class
 
@@ -99,18 +99,39 @@ shipped build rather than only a test one.
 3. Repeating? Add `data-test-value`.
 4. Reaching into a library's DOM? Put it in `selectors.ts`.
 
+## Where a spec goes
+
+Beside the component it drives, named for it:
+
+```
+src/lib/components/views/Chat/chat.spec.ts
+src/lib/components/Layout/Tabs/tabs.spec.ts
+```
+
+So what covers a component is visible from its directory rather than from a
+list somewhere else, and a component that moves takes its spec with it. The
+`*.shot.ts` screenshots already sit this way, beside the content they show.
+
+`tests/e2e/` keeps what is shared between specs, plus `bundle.spec.ts`, which
+is about the build rather than any one component.
+
+Specs under `src/` are the only files there allowed to import from
+`tests/e2e/`; eslint enforces the rest, so a stray import cannot pull
+`@playwright/test` into the shipped bundle.
+
 ## Where a helper goes
 
-Three files, and the question that puts a helper in one of them. A spec that
+Four files, and the question that puts a helper in one of them. A spec that
 writes its own copy of one of these gets a gesture with the same name and
 subtly different behaviour, which is how `renameTo` came to assert the box had
 closed in one spec and not in another.
 
 | Question | File | Examples |
 | -------- | ---- | -------- |
-| How do I address this? | `selectors.ts` | `treeNode`, `tab`, `renameBox` |
-| What do I do to the tree? | `tree.ts` | `openTreeMenu`, `chooseMenuItem`, `renameTo` |
-| What do I ask the Go side? | `wails.ts` | `call`, `inWorkspace`, `databasesInGraph` |
+| How do I address this? | `selectors.ts` | `treeRow`, `tab`, `renameBox` |
+| What do I do to the tree? | `tree.ts` | `openRootMenu`, `choose`, `renameTo` |
+| What do I ask the Go side? | `wails.ts` | `call`, `exec`, `onDisk` |
+| What will the model answer? | `aiProvider.ts` | `modelWillReply`, `say` |
 
 Anything used by one spec stays in that spec. Move it here on the second copy,
 not in anticipation of one.
