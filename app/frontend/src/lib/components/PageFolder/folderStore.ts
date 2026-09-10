@@ -34,21 +34,19 @@ export function clearFolderState() {
 	lastFolderStore.set(null);
 }
 
-/** Only the opened state has a workspace behind it; the rest are screens. */
-async function apply(result: OpenFolderResult): Promise<void> {
+/** Puts the app into the state an OpenFolder call reported. */
+export async function showFolderResult(result: OpenFolderResult): Promise<void> {
 	folderStore.set(result);
 	clearWorkspaceGraphCache();
 
-	if (result.state !== OpenFolderState.OpenFolderOpened) {
-		await refreshLastFolder();
+	if (result.state === OpenFolderState.OpenFolderOpened) {
+		const [graph] = await tryCatch(initializeWorkspaceGraph);
+		if (graph) workspaceGraphStore.set(graph);
 		return;
 	}
 
-	const [graph] = await tryCatch(initializeWorkspaceGraph);
-	if (graph) workspaceGraphStore.set(graph);
+	await refreshLastFolder();
 }
-
-export { apply as applyOpenResult };
 
 export async function refreshLastFolder(): Promise<void> {
 	const [last] = await tryCatch(GetLastFolder);
@@ -61,7 +59,7 @@ export async function openFolder(path: string): Promise<void> {
 		notify({ type: AlertType.Error, message: err?.message ?? 'Could not open that folder' });
 		return;
 	}
-	await apply(result);
+	await showFolderResult(result);
 }
 
 export async function pickAndOpenFolder(): Promise<void> {
@@ -80,10 +78,10 @@ export async function reopenLastFolder(): Promise<void> {
 	if (err) {
 		// No notification: the user did not ask for this, and the no-folder
 		// screen is a fine place to land.
-		await apply(noFolder());
+		await showFolderResult(noFolder());
 		return;
 	}
-	await apply(result);
+	await showFolderResult(result);
 }
 
 /** The backend closed the folder on us, e.g. after a server delete. */
@@ -95,5 +93,5 @@ export async function onFolderClosed(): Promise<void> {
 			duration: 8000
 		});
 	}
-	await apply(noFolder());
+	await showFolderResult(noFolder());
 }

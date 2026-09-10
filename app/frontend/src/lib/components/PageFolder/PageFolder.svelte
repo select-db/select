@@ -14,7 +14,7 @@
 		lastFolderStore,
 		openFolder,
 		pickAndOpenFolder,
-		applyOpenResult
+		showFolderResult
 	} from './folderStore';
 
 	const view = $derived($folderStore);
@@ -31,7 +31,7 @@
 			notify({ type: AlertType.Error, message: err?.message ?? 'Could not create the workspace' });
 			return;
 		}
-		await applyOpenResult(result);
+		await showFolderResult(result);
 	}
 </script>
 
