@@ -36,80 +36,87 @@ export type AiProvider = {
 	model: string;
 	/** Which requests to answer. */
 	url: string;
-	/** One turn, in this provider's wire format. */
-	body: (turn: Turn) => string;
+	/** Renders one turn into this provider's wire format. */
+	render: (turn: Turn) => string;
 };
 
 const OVERLOADED = 'Overloaded';
 
-const frame = (payload: object, event?: string) =>
-	`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(payload)}\n\n`;
+/**
+ * One frame of a Server-Sent Events stream, which is how all three formats
+ * arrive: an optional `event:` name, then the payload on a `data:` line.
+ */
+const sseFrame = (payload: object, eventName?: string) =>
+	`${eventName ? `event: ${eventName}\n` : ''}data: ${JSON.stringify(payload)}\n\n`;
 
 /**
- * Providers stream tool arguments in fragments, never in one piece, and send
- * none at all for a call with no input: that is what leaves the app holding an
- * empty string rather than `{}`.
+ * A tool call's arguments as a provider sends them: the JSON cut into small
+ * pieces, never in one go. A call with no input sends nothing at all, which is
+ * what leaves the app holding an empty string rather than `{}`.
  */
-const fragments = (input: object, truncated = false) => {
+const streamedArgs = (input: object, truncated = false) => {
 	const json = JSON.stringify(input);
 	if (json === '{}') return [];
-	const all = json.match(/.{1,7}/g) ?? [];
-	return truncated ? all.slice(0, 1) : all;
+	const pieces = json.match(/.{1,7}/g) ?? [];
+	return truncated ? pieces.slice(0, 1) : pieces;
 };
 
-const anthropic = (turn: Turn): string => {
-	const sse = (type: string, data: object) => frame({ type, ...data }, type);
+/** Anthropic streams typed events, one per content block, around a message. */
+const renderAnthropic = (turn: Turn): string => {
+	const event = (type: string, data: object) => sseFrame({ type, ...data }, type);
 	let index = 0;
-	let out = frame({
+	let out = sseFrame({
 		type: 'message_start',
 		message: { id: 'msg_1', role: 'assistant', content: [] }
 	});
 
 	if (turn.text) {
 		out +=
-			sse('content_block_start', { index, content_block: { type: 'text', text: '' } }) +
-			sse('content_block_delta', { index, delta: { type: 'text_delta', text: turn.text } }) +
-			sse('content_block_stop', { index });
+			event('content_block_start', { index, content_block: { type: 'text', text: '' } }) +
+			event('content_block_delta', { index, delta: { type: 'text_delta', text: turn.text } }) +
+			event('content_block_stop', { index });
 		index += 1;
 	}
 	if (turn.call) {
-		const args = fragments(turn.call.input, turn.truncated);
 		out +=
-			sse('ping', {}) +
-			sse('content_block_start', {
+			event('ping', {}) +
+			event('content_block_start', {
 				index,
 				content_block: { type: 'tool_use', id: turn.call.id, name: turn.call.name, input: {} }
 			}) +
-			args
-				.map((f) =>
-					sse('content_block_delta', {
+			streamedArgs(turn.call.input, turn.truncated)
+				.map((piece) =>
+					event('content_block_delta', {
 						index,
-						delta: { type: 'input_json_delta', partial_json: f }
+						delta: { type: 'input_json_delta', partial_json: piece }
 					})
 				)
 				.join('');
 		if (turn.truncated) return out;
-		out += sse('content_block_stop', { index });
+		out += event('content_block_stop', { index });
 	}
 
 	if (turn.overloaded)
-		return out + sse('error', { error: { type: 'overloaded_error', message: OVERLOADED } });
+		return out + event('error', { error: { type: 'overloaded_error', message: OVERLOADED } });
 
 	return (
 		out +
-		sse('message_delta', { delta: { stop_reason: turn.call ? 'tool_use' : 'end_turn' } }) +
-		sse('message_stop', {})
+		event('message_delta', { delta: { stop_reason: turn.call ? 'tool_use' : 'end_turn' } }) +
+		event('message_stop', {})
 	);
 };
 
-/** The Chat Completions wire format, shared by OpenAI, xAI Grok and OpenRouter. */
-const openAiCompatible = (turn: Turn): string => {
-	const delta = (d: object) => frame({ choices: [{ index: 0, delta: d }] });
+/**
+ * The Chat Completions wire format, shared by OpenAI, xAI Grok and OpenRouter.
+ * It streams chunks, each carrying the delta to add to the message so far.
+ */
+const renderChatCompletions = (turn: Turn): string => {
+	const chunk = (delta: object) => sseFrame({ choices: [{ index: 0, delta }] });
 	let out = '';
 
-	if (turn.text) out += delta({ content: turn.text });
+	if (turn.text) out += chunk({ content: turn.text });
 	if (turn.call) {
-		out += delta({
+		out += chunk({
 			tool_calls: [
 				{
 					index: 0,
@@ -119,17 +126,17 @@ const openAiCompatible = (turn: Turn): string => {
 				}
 			]
 		});
-		out += fragments(turn.call.input, turn.truncated)
-			.map((f) => delta({ tool_calls: [{ index: 0, function: { arguments: f } }] }))
+		out += streamedArgs(turn.call.input, turn.truncated)
+			.map((piece) => chunk({ tool_calls: [{ index: 0, function: { arguments: piece } }] }))
 			.join('');
 		if (turn.truncated) return out;
 	}
 
-	if (turn.overloaded) return out + frame({ error: { message: OVERLOADED } });
+	if (turn.overloaded) return out + sseFrame({ error: { message: OVERLOADED } });
 
 	return (
 		out +
-		frame({
+		sseFrame({
 			choices: [{ index: 0, delta: {}, finish_reason: turn.call ? 'tool_calls' : 'stop' }]
 		}) +
 		'data: [DONE]\n\n'
@@ -141,7 +148,7 @@ const openAiCompatible = (turn: Turn): string => {
  * name, so the ids the app runs on are its own. That is why the case worth
  * running here is a conversation with more than one call.
  */
-const gemini = (turn: Turn): string => {
+const renderGemini = (turn: Turn): string => {
 	if (turn.truncated) {
 		throw new Error('Gemini sends tool arguments already parsed; it cannot cut them short.');
 	}
@@ -149,8 +156,8 @@ const gemini = (turn: Turn): string => {
 		...(turn.text ? [{ text: turn.text }] : []),
 		...(turn.call ? [{ functionCall: { name: turn.call.name, args: turn.call.input } }] : [])
 	];
-	const out = frame({ candidates: [{ content: { parts }, finishReason: 'STOP' }] });
-	return turn.overloaded ? out + frame({ error: { message: OVERLOADED } }) : out;
+	const out = sseFrame({ candidates: [{ content: { parts }, finishReason: 'STOP' }] });
+	return turn.overloaded ? out + sseFrame({ error: { message: OVERLOADED } }) : out;
 };
 
 /**
@@ -158,11 +165,19 @@ const gemini = (turn: Turn): string => {
  * aiConnections, which is the one a person is given by default.
  */
 export const PROVIDERS: AiProvider[] = [
-	{ model: 'claude-sonnet-5', url: 'https://api.anthropic.com/**', body: anthropic },
-	{ model: 'gpt-5.6-sol', url: 'https://api.openai.com/**', body: openAiCompatible },
-	{ model: 'gemini-3.7-flash', url: 'https://generativelanguage.googleapis.com/**', body: gemini },
-	{ model: 'anthropic/claude-sonnet-5', url: 'https://openrouter.ai/**', body: openAiCompatible },
-	{ model: 'grok-4.6', url: 'https://api.x.ai/**', body: openAiCompatible }
+	{ model: 'claude-sonnet-5', url: 'https://api.anthropic.com/**', render: renderAnthropic },
+	{ model: 'gpt-5.6-sol', url: 'https://api.openai.com/**', render: renderChatCompletions },
+	{
+		model: 'gemini-3.7-flash',
+		url: 'https://generativelanguage.googleapis.com/**',
+		render: renderGemini
+	},
+	{
+		model: 'anthropic/claude-sonnet-5',
+		url: 'https://openrouter.ai/**',
+		render: renderChatCompletions
+	},
+	{ model: 'grok-4.6', url: 'https://api.x.ai/**', render: renderChatCompletions }
 ];
 
 /**
@@ -171,15 +186,20 @@ export const PROVIDERS: AiProvider[] = [
  */
 export const ANTHROPIC = PROVIDERS[0];
 
-/** Answers `provider` with `turns`, in order, repeating the last one. */
-export async function stubProvider(page: Page, provider: AiProvider, turns: Turn[]) {
+/**
+ * Sets up what the model will answer, so nothing leaves the machine: the app's
+ * requests to this provider are intercepted, and each one is served the next
+ * turn in the provider's own wire format. Once the turns run out the last one
+ * is repeated, since the app keeps asking until a turn makes no tool call.
+ */
+export async function modelWillReply(page: Page, provider: AiProvider, turns: Turn[]) {
 	// Rendered up front, so a turn this provider cannot express fails here rather
 	// than inside a route handler, where it would surface as a stalled request.
-	const bodies = turns.map(provider.body);
-	let turn = 0;
+	const replies = turns.map(provider.render);
+	let sent = 0;
 	await page.route(provider.url, async (route) => {
-		const body = bodies[Math.min(turn, bodies.length - 1)];
-		turn += 1;
+		const body = replies[Math.min(sent, replies.length - 1)];
+		sent += 1;
 		await route.fulfill({
 			status: 200,
 			headers: { 'content-type': 'text/event-stream' },

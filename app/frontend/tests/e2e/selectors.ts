@@ -14,7 +14,7 @@ export const testId = (page: Page, name: string, value?: string) =>
 	);
 
 /** One row of a tree (file, folder or database), named by what it shows. */
-export const treeNode = (page: Page, name: string) => testId(page, 'tree.node', name);
+export const treeRow = (page: Page, name: string) => testId(page, 'tree.node', name);
 
 /**
  * The rename box, wherever in the tree it is open.
@@ -35,7 +35,7 @@ export const renameBox = (page: Page) =>
 export const dbStatus = (page: Page, id: string) => testId(page, 'db.status', id);
 
 /** The tree rows currently selected, in whichever trees are on screen. */
-export const selectedTreeNodes = (page: Page) =>
+export const selectedRows = (page: Page) =>
 	page.locator('[data-test="tree.node"][data-test-selected="true"]');
 
 /** One open tab, named by the label it shows. */

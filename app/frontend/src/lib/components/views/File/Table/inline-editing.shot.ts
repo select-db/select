@@ -38,7 +38,8 @@ const FRAMING: Framing = { name: 'inlineedit', width: 1160, height: 620, density
  * says `paid`, so changing one to `refunded` is a visible change whichever row
  * the database happens to put first.
  */
-const QUERY = "SELECT id, status, total_cents FROM orders WHERE status = 'paid' ORDER BY id LIMIT 12;";
+const QUERY =
+	"SELECT id, status, total_cents FROM orders WHERE status = 'paid' ORDER BY id LIMIT 12;";
 
 /** Columns in the order the query selects them; `id` is the key, so not editable. */
 const STATUS = 1;
@@ -119,7 +120,9 @@ for (const theme of THEMES) {
 			// primary key is still in the picture. It is why the query selects it
 			// and why the cells are editable at all; a figure without it argues
 			// against the page it illustrates.
-			await expect.poll(() => queryResultTable.scroller(page).evaluate((el) => el.scrollLeft)).toBe(0);
+			await expect
+				.poll(() => queryResultTable.scroller(page).evaluate((el) => el.scrollLeft))
+				.toBe(0);
 
 			await shot(page, dir, `inlineedit.cell.${theme}`, FRAMING);
 

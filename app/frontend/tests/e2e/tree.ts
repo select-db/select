@@ -1,5 +1,5 @@
 import { expect, type Page } from './wails';
-import { renameBox, testId, treeNode } from './selectors';
+import { renameBox, testId, treeRow } from './selectors';
 
 /**
  * Driving the workspace tree. `selectors.ts` says how to address a row; this
@@ -8,8 +8,8 @@ import { renameBox, testId, treeNode } from './selectors';
  * same name.
  */
 
-/** The tree's own context menu, from the empty space below the last row. */
-export async function openTreeMenu(page: Page) {
+/** The workspace root's menu, opened on the empty space below the last row. */
+export async function openRootMenu(page: Page) {
 	const panel = testId(page, 'tree.panel');
 	const box = await panel.boundingBox();
 	if (!box) throw new Error('file tree is not on screen');
@@ -18,8 +18,8 @@ export async function openTreeMenu(page: Page) {
 }
 
 /** The context menu of one row. */
-export async function openMenuOn(page: Page, name: string) {
-	await treeNode(page, name).click({ button: 'right' });
+export async function openRowMenu(page: Page, name: string) {
+	await treeRow(page, name).click({ button: 'right' });
 }
 
 /**
@@ -29,7 +29,7 @@ export async function openMenuOn(page: Page, name: string) {
  * a loose match on the first would sometimes hit the second and take rows with
  * it that nobody named.
  */
-export async function chooseMenuItem(page: Page, name: string) {
+export async function choose(page: Page, name: string) {
 	await page.getByRole('menuitem', { name, exact: true }).click();
 }
 

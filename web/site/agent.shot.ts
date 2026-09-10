@@ -8,7 +8,7 @@ import {
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
-import { ANTHROPIC, say, stubProvider, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
+import { ANTHROPIC, say, modelWillReply, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
 import { testId } from '../../app/frontend/tests/e2e/selectors';
 
 /**
@@ -73,7 +73,7 @@ for (const theme of THEMES) {
 
 		test('an agent refused the column its role does not grant', async ({ page, signIn }, info) => {
 			await holdSession(page);
-			await stubProvider(page, ANTHROPIC, TURNS);
+			await modelWillReply(page, ANTHROPIC, TURNS);
 			await page.goto('/');
 			await signIn();
 
