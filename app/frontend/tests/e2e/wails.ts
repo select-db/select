@@ -6,7 +6,7 @@ import {
 	type Page,
 	type Route
 } from '@playwright/test';
-import { testId, treeNode } from './selectors';
+import { testId, treeRow } from './selectors';
 import { startApp } from './app';
 
 /**
@@ -140,9 +140,7 @@ export const QUERY_CALL = 2964708639;
  * on a login screen. Answering that one call changes nothing else.
  */
 export async function holdSession(page: Page) {
-	await routeWailsMethod(page, CHECK_FOR_LOGOUT, (route) =>
-		route.fulfill({ status: 200, body: '' })
-	);
+	await intercept(page, CHECK_FOR_LOGOUT, (route) => route.fulfill({ status: 200, body: '' }));
 }
 
 /**
@@ -150,7 +148,7 @@ export async function holdSession(page: Page) {
  * Handlers stack: a non-matching call falls back to whatever was registered
  * before it, and to the app itself when nothing was.
  */
-export async function routeWailsMethod(
+export async function intercept(
 	page: Page,
 	methodID: number,
 	handler: (route: Route) => Promise<unknown>
@@ -169,14 +167,14 @@ export async function routeWailsMethod(
  * right budget for a render; a round trip through SQLite on a loaded CI runner
  * is not a render.
  */
-export const QUERIED = { timeout: 20_000 };
+export const AFTER_QUERY = { timeout: 20_000 };
 
 /** Signs in and waits for the seeded workspace: the state every spec starts from. */
 export async function open(page: Page, signIn: () => Promise<void>) {
 	await holdSession(page);
 	await page.goto('/');
 	await signIn();
-	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
+	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 }
 
 /** Qualified Go names, which is what the runtime dispatches on. */
@@ -205,7 +203,7 @@ const GIT_LOCK_RETRY_MS = 100;
  * race a person hits running git beside the open app, so failing here would be
  * asserting something that is not true.
  */
-export async function inWorkspace(
+export async function exec(
 	request: APIRequestContext,
 	id: string,
 	command: string,
@@ -237,7 +235,7 @@ async function workspaceURI(request: APIRequestContext, id: string, path: string
 }
 
 /** Whether the workspace holds an entry at that path, root-relative. */
-export async function existsInWorkspace(
+export async function onDisk(
 	request: APIRequestContext,
 	id: string,
 	path: string
@@ -251,7 +249,7 @@ export async function existsInWorkspace(
 }
 
 /** Reads a workspace file from disk, through the app's own provider. */
-export async function readWorkspaceFile(
+export async function readFile(
 	request: APIRequestContext,
 	id: string,
 	path: string

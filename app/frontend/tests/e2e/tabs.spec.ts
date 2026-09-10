@@ -1,14 +1,6 @@
-import {
-	expect,
-	inWorkspace,
-	open,
-	readWorkspaceFile,
-	test,
-	workspaceId,
-	type Page
-} from './wails';
-import { activeTab, editor, selectedTreeNodes, tab, tabs, testId, treeNode } from './selectors';
-import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
+import { expect, exec, open, readFile, test, workspaceId, type Page } from './wails';
+import { activeTab, editor, selectedRows, tab, tabs, testId, treeRow } from './selectors';
+import { choose, openRowMenu, openRootMenu, renameTo } from './tree';
 
 /**
  * Tabs: what the workbench does with them, not what they hold. A tab frames a
@@ -29,7 +21,7 @@ const COHORTS = '-- Cohort report, first cut.';
 
 /** Opens a file from the tree and waits for its tab. */
 async function openFromTree(page: Page, name: string) {
-	await treeNode(page, name).click();
+	await treeRow(page, name).click();
 	await expect(tab(page, name)).toBeVisible();
 }
 
@@ -77,7 +69,7 @@ test('opens one tab per file, and closes them by every route there is', async ({
 	// is saved somewhere, not before.
 	await page.getByTitle('New SQL file').click();
 	await expect(activeTab(page)).toHaveAttribute('data-test-value', '[temp].sql');
-	await expect(treeNode(page, '[temp].sql')).toHaveCount(0);
+	await expect(treeRow(page, '[temp].sql')).toHaveCount(0);
 	await closeTab(page, '[temp].sql');
 
 	// Closing the active tab hands the group to its left-hand neighbour rather
@@ -108,7 +100,7 @@ test('opens one tab per file, and closes them by every route there is', async ({
 test('gives each tab back what it was showing', async ({ page, request, signIn }) => {
 	await open(page, signIn);
 	const id = await workspaceId(request);
-	const run = (command: string, ...args: string[]) => inWorkspace(request, id, command, ...args);
+	const run = (command: string, ...args: string[]) => exec(request, id, command, ...args);
 
 	await openFromTree(page, 'weekly_revenue.sql');
 	await expect(editor.line(page, WEEKLY)).toBeVisible();
@@ -128,8 +120,8 @@ test('gives each tab back what it was showing', async ({ page, request, signIn }
 
 	// The tree follows the active tab: the row of the file being edited is the
 	// one selected, so the panel points at what the workbench is showing.
-	await expect(selectedTreeNodes(page)).toHaveCount(1);
-	await expect(selectedTreeNodes(page)).toHaveAttribute('data-test-value', 'cohorts.sql');
+	await expect(selectedRows(page)).toHaveCount(1);
+	await expect(selectedRows(page)).toHaveAttribute('data-test-value', 'cohorts.sql');
 
 	// A terminal does not take the tab you were in: it opens a half of its own
 	// below, so what is being worked on stays on screen. Two halves, each with
@@ -142,10 +134,10 @@ test('gives each tab back what it was showing', async ({ page, request, signIn }
 
 	// A tab with no file behind it points at nothing, and says so by leaving the
 	// tree with nothing selected rather than pointing at the file before it.
-	await expect(selectedTreeNodes(page)).toHaveCount(0);
+	await expect(selectedRows(page)).toHaveCount(0);
 
 	await tab(page, 'weekly_revenue.sql').click();
-	await expect(selectedTreeNodes(page)).toHaveAttribute('data-test-value', 'weekly_revenue.sql');
+	await expect(selectedRows(page)).toHaveAttribute('data-test-value', 'weekly_revenue.sql');
 	await expect(editor.line(page, WEEKLY)).toBeVisible();
 
 	// Closing the last tab of a half takes the half with it, rather than leaving
@@ -174,9 +166,7 @@ test('gives each tab back what it was showing', async ({ page, request, signIn }
 	await page.keyboard.type('\n-- checked');
 	await tab(page, '[temp].sql').click();
 
-	await expect
-		.poll(() => readWorkspaceFile(request, id, 'weekly_revenue.sql'))
-		.toContain('-- checked');
+	await expect.poll(() => readFile(request, id, 'weekly_revenue.sql')).toContain('-- checked');
 
 	await run('git', 'checkout', '--', 'weekly_revenue.sql');
 });
@@ -276,15 +266,15 @@ test('reorders tabs, splits the workbench with one, and takes it back', async ({
 test('follows the files it has open', async ({ page, request, signIn }) => {
 	await open(page, signIn);
 	const id = await workspaceId(request);
-	const run = (command: string, ...args: string[]) => inWorkspace(request, id, command, ...args);
+	const run = (command: string, ...args: string[]) => exec(request, id, command, ...args);
 
 	await openFromTree(page, 'weekly_revenue.sql');
 	await openFromTree(page, 'cohorts.sql');
 
 	// A rename through the app moves the tab with the file rather than opening a
 	// second tab on the new name.
-	await openMenuOn(page, 'cohorts.sql');
-	await chooseMenuItem(page, 'Rename...');
+	await openRowMenu(page, 'cohorts.sql');
+	await choose(page, 'Rename...');
 	await renameTo(page, 'cohorts-2026.sql');
 
 	await expect(tab(page, 'cohorts-2026.sql')).toBeVisible();
@@ -301,8 +291,8 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 	// So does a file inside a folder that is deleted whole.
 	await run('mkdir', 'box');
 	await run('cp', 'cohorts-2026.sql', 'box/inside.sql');
-	await expect(treeNode(page, 'box')).toBeVisible();
-	await treeNode(page, 'box').click();
+	await expect(treeRow(page, 'box')).toBeVisible();
+	await treeRow(page, 'box').click();
 	await openFromTree(page, 'inside.sql');
 
 	await run('rm', '-rf', 'box');
@@ -310,17 +300,17 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 
 	// A database is not a file, and its tab goes the same way: the graph loses
 	// the database, the tab showing its connection goes with it.
-	await openTreeMenu(page);
-	await chooseMenuItem(page, 'New Database...');
-	await expect(treeNode(page, 'db #1')).toBeVisible();
+	await openRootMenu(page);
+	await choose(page, 'New Database...');
+	await expect(treeRow(page, 'db #1')).toBeVisible();
 
-	await openMenuOn(page, 'db #1');
-	await chooseMenuItem(page, 'Edit...');
+	await openRowMenu(page, 'db #1');
+	await choose(page, 'Edit...');
 	await expect(tab(page, 'db #1')).toBeVisible();
 
-	await openMenuOn(page, 'db #1');
-	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'db #1')).toHaveCount(0);
+	await openRowMenu(page, 'db #1');
+	await choose(page, 'Delete');
+	await expect(treeRow(page, 'db #1')).toHaveCount(0);
 	await expect(tab(page, 'db #1')).toHaveCount(0);
 
 	// Leaving the workspace as it was found -- by name, not with a checkout of
@@ -331,6 +321,6 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 	await run('mv', 'cohorts-2026.sql.metadata.json', 'cohorts.sql.metadata.json');
 
 	for (const seeded of ['weekly_revenue.sql', 'top_customers.sql', 'cohorts.sql', 'warehouse']) {
-		await expect(treeNode(page, seeded)).toBeVisible();
+		await expect(treeRow(page, seeded)).toBeVisible();
 	}
 });

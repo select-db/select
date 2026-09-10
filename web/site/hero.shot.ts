@@ -9,7 +9,7 @@ import {
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
-import { ANTHROPIC, say, stubProvider, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
+import { ANTHROPIC, say, modelWillReply, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
 import { testId, editor } from '../../app/frontend/tests/e2e/selectors';
 
 /**
@@ -116,7 +116,7 @@ for (const framing of FRAMINGS) {
 			test('a query, its results, and completion over both', async ({ page, signIn }, info) => {
 				await holdSession(page);
 				if (framing.chat) {
-					await stubProvider(page, ANTHROPIC, TURNS);
+					await modelWillReply(page, ANTHROPIC, TURNS);
 				}
 				await page.goto('/');
 				await signIn();

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { QUERIED, expect, open, test } from './wails';
+import { AFTER_QUERY, expect, open, test } from './wails';
 import { editor, queryResultTable, testId } from './selectors';
 import {
 	MAX_AUTO_COLUMN_WIDTH,
@@ -48,13 +48,13 @@ test('a cell expands into an editor', async ({ page, signIn }) => {
 	await run(page, QUERY);
 
 	// The row count the toolbar reports, which only a result can set.
-	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/12/, QUERIED);
+	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/12/, AFTER_QUERY);
 
 	await queryResultTable.cell(page, 0, STATUS).click();
 	await expect(queryResultTable.cellInput(page)).toBeVisible();
 	await page.keyboard.press('Shift+Enter');
 
-	await expect(page.locator('.monaco-editor').last()).toBeVisible(QUERIED);
+	await expect(page.locator('.monaco-editor').last()).toBeVisible(AFTER_QUERY);
 });
 
 // Single-digit ids against 400 characters of hex: the two ends of the clamp, in
@@ -65,7 +65,7 @@ test('columns are sized to the rows that arrived', async ({ page, signIn }) => {
 	await open(page, signIn);
 	await run(page, WIDTHS_QUERY);
 
-	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/5/, QUERIED);
+	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/5/, AFTER_QUERY);
 
 	// Non-optional: a null box means the header never laid out, which is a
 	// different failure from one that laid out at the wrong width.

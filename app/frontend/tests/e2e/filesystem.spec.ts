@@ -2,9 +2,9 @@ import {
 	GRAPH,
 	call,
 	databasesInGraph,
-	existsInWorkspace,
+	onDisk,
 	expect,
-	inWorkspace,
+	exec,
 	open,
 	test,
 	workspaceId,
@@ -12,8 +12,8 @@ import {
 	type Locator,
 	type Page
 } from './wails';
-import { editor, renameBox, selectedTreeNodes, tab, treeNode } from './selectors';
-import { chooseMenuItem, keepName, openMenuOn, openTreeMenu, renameTo } from './tree';
+import { editor, renameBox, selectedRows, tab, treeRow } from './selectors';
+import { choose, keepName, openRowMenu, openRootMenu, renameTo } from './tree';
 
 /**
  * File management: what a person does to the workspace tree in a session, plus
@@ -48,15 +48,15 @@ async function selectOnly(page: Page, folder: string, ...rows: string[]) {
 	// of a click three steps earlier that never registered.
 	await expect
 		.poll(async () => {
-			await treeNode(page, folder).click();
-			await treeNode(page, folder).click();
-			await treeNode(page, folder).click({ modifiers: ['ControlOrMeta'] });
-			return selectedTreeNodes(page).count();
+			await treeRow(page, folder).click();
+			await treeRow(page, folder).click();
+			await treeRow(page, folder).click({ modifiers: ['ControlOrMeta'] });
+			return selectedRows(page).count();
 		})
 		.toBe(0);
 
-	for (const row of rows) await treeNode(page, row).click({ modifiers: ['ControlOrMeta'] });
-	await expect(selectedTreeNodes(page)).toHaveCount(rows.length);
+	for (const row of rows) await treeRow(page, row).click({ modifiers: ['ControlOrMeta'] });
+	await expect(selectedRows(page)).toHaveCount(rows.length);
 }
 
 /**
@@ -114,28 +114,28 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await open(page, signIn);
 
 	const id = await workspaceId(request);
-	const run = (command: string, ...args: string[]) => inWorkspace(request, id, command, ...args);
+	const run = (command: string, ...args: string[]) => exec(request, id, command, ...args);
 
 	// --- Making things -------------------------------------------------------
 
 	// A new folder is created named, and named again by the person making it.
-	await openTreeMenu(page);
-	await chooseMenuItem(page, 'New folder...');
+	await openRootMenu(page);
+	await choose(page, 'New folder...');
 	await renameTo(page, 'reports');
-	await expect(treeNode(page, 'reports')).toBeVisible();
+	await expect(treeRow(page, 'reports')).toBeVisible();
 
 	// And folders nest.
-	await openMenuOn(page, 'reports');
-	await chooseMenuItem(page, 'New folder...');
+	await openRowMenu(page, 'reports');
+	await choose(page, 'New folder...');
 	await renameTo(page, '2026');
-	await expect(treeNode(page, '2026')).toBeVisible();
+	await expect(treeRow(page, '2026')).toBeVisible();
 
 	// A file made two folders deep opens as a tab, and what is typed into it is
 	// written to disk without a save.
-	await openMenuOn(page, '2026');
-	await chooseMenuItem(page, 'New file...');
+	await openRowMenu(page, '2026');
+	await choose(page, 'New file...');
 	await renameTo(page, 'daily.sql');
-	await expect(treeNode(page, 'daily.sql')).toBeVisible();
+	await expect(treeRow(page, 'daily.sql')).toBeVisible();
 	await expect(tab(page, 'daily.sql')).toBeVisible();
 
 	await editor.surface(page).click();
@@ -160,10 +160,10 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 		{ name: '#2.sql', content: 'SELECT 2 AS two;' }
 	];
 	for (const file of proposed) {
-		await openMenuOn(page, 'reports');
-		await chooseMenuItem(page, 'New file...');
+		await openRowMenu(page, 'reports');
+		await choose(page, 'New file...');
 		await keepName(page);
-		await expect(treeNode(page, file.name)).toBeVisible();
+		await expect(treeRow(page, file.name)).toBeVisible();
 
 		await editor.surface(page).click();
 		await page.keyboard.type(file.content);
@@ -176,14 +176,14 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// follows the file rather than closing on a path that no longer exists, and
 	// the rest of the workspace stays where it was -- a rename rebuilds the whole
 	// graph, and the folders that had been read have to come back read.
-	await openMenuOn(page, 'daily.sql');
-	await chooseMenuItem(page, 'Rename...');
+	await openRowMenu(page, 'daily.sql');
+	await choose(page, 'Rename...');
 	await renameTo(page, 'weekly.sql');
 
-	await expect(treeNode(page, 'weekly.sql')).toBeVisible();
-	await expect(treeNode(page, 'daily.sql')).toHaveCount(0);
-	await expect(treeNode(page, '#1.sql')).toBeVisible();
-	await expect(treeNode(page, '#2.sql')).toBeVisible();
+	await expect(treeRow(page, 'weekly.sql')).toBeVisible();
+	await expect(treeRow(page, 'daily.sql')).toHaveCount(0);
+	await expect(treeRow(page, '#1.sql')).toBeVisible();
+	await expect(treeRow(page, '#2.sql')).toBeVisible();
 
 	// It still holds what was typed into it under its old name, and the database
 	// bound to it: the sidecar moved with the file.
@@ -192,21 +192,21 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await expect(page.getByRole('button', { name: 'warehouse' })).toBeVisible();
 
 	// Escape leaves a name alone.
-	await openMenuOn(page, '#2.sql');
-	await chooseMenuItem(page, 'Rename...');
+	await openRowMenu(page, '#2.sql');
+	await choose(page, 'Rename...');
 	await renameBox(page).fill('escaped.sql');
 	await keepName(page);
-	await expect(treeNode(page, '#2.sql')).toBeVisible();
-	await expect(treeNode(page, 'escaped.sql')).toHaveCount(0);
+	await expect(treeRow(page, '#2.sql')).toBeVisible();
+	await expect(treeRow(page, 'escaped.sql')).toHaveCount(0);
 
 	// A rename onto a name already in the folder is refused rather than
 	// overwriting it: os.Rename replaces its target without a word.
-	await openMenuOn(page, '#2.sql');
-	await chooseMenuItem(page, 'Rename...');
+	await openRowMenu(page, '#2.sql');
+	await choose(page, 'Rename...');
 	await renameTo(page, '#1.sql');
 
-	await expect(treeNode(page, '#1.sql')).toBeVisible();
-	await expect(treeNode(page, '#2.sql')).toBeVisible();
+	await expect(treeRow(page, '#1.sql')).toBeVisible();
+	await expect(treeRow(page, '#2.sql')).toBeVisible();
 
 	// Neither file moved: the one that would have been overwritten still holds
 	// its own content, not the other's.
@@ -219,18 +219,18 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 
 	// Dropping a file on a folder moves it there. Collapsing the folder takes
 	// the file with it, which is what proves where it landed.
-	await treeNode(page, '#2.sql').dragTo(treeNode(page, '2026'));
-	await expect(treeNode(page, '#2.sql')).toBeVisible();
+	await treeRow(page, '#2.sql').dragTo(treeRow(page, '2026'));
+	await expect(treeRow(page, '#2.sql')).toBeVisible();
 
-	await treeNode(page, '2026').click();
-	await expect(treeNode(page, '#2.sql')).toHaveCount(0);
-	await treeNode(page, '2026').click();
-	await expect(treeNode(page, '#2.sql')).toBeVisible();
+	await treeRow(page, '2026').click();
+	await expect(treeRow(page, '#2.sql')).toHaveCount(0);
+	await treeRow(page, '2026').click();
+	await expect(treeRow(page, '#2.sql')).toBeVisible();
 
 	// Dropping it back where it already is asks to rename it to its own name.
 	// Nothing moves, nothing is lost, and nothing is said about it.
-	await treeNode(page, '#2.sql').dragTo(treeNode(page, '2026'));
-	await expect(treeNode(page, '#2.sql')).toBeVisible();
+	await treeRow(page, '#2.sql').dragTo(treeRow(page, '2026'));
+	await expect(treeRow(page, '#2.sql')).toBeVisible();
 	await tab(page, '#2.sql').click();
 	await expect(editor.line(page, 'SELECT 2 AS two;')).toBeVisible();
 
@@ -241,85 +241,85 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 		['reports', 'SELECT 4 AS four;'],
 		['2026', 'SELECT 5 AS five;']
 	]) {
-		await openMenuOn(page, folder);
-		await chooseMenuItem(page, 'New file...');
+		await openRowMenu(page, folder);
+		await choose(page, 'New file...');
 		await renameTo(page, 'twin.sql');
 		await editor.surface(page).click();
 		await page.keyboard.type(content);
 		await expect(editor.line(page, content)).toBeVisible();
 	}
-	await expect(treeNode(page, 'twin.sql')).toHaveCount(2);
+	await expect(treeRow(page, 'twin.sql')).toHaveCount(2);
 
 	// Closing 2026 leaves one of them on screen, which is the one to drag -- and
 	// after the refusal there are still two.
-	await treeNode(page, '2026').click();
-	await expect(treeNode(page, 'twin.sql')).toHaveCount(1);
-	await treeNode(page, 'twin.sql').dragTo(treeNode(page, '2026'));
-	await expect(treeNode(page, 'twin.sql')).toBeVisible();
+	await treeRow(page, '2026').click();
+	await expect(treeRow(page, 'twin.sql')).toHaveCount(1);
+	await treeRow(page, 'twin.sql').dragTo(treeRow(page, '2026'));
+	await expect(treeRow(page, 'twin.sql')).toBeVisible();
 
 	// Deleting that one while 2026 is still closed leaves the tree with none of
 	// them on screen, so the one that comes back when 2026 opens is the other.
-	await openMenuOn(page, 'twin.sql');
-	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'twin.sql')).toHaveCount(0);
+	await openRowMenu(page, 'twin.sql');
+	await choose(page, 'Delete');
+	await expect(treeRow(page, 'twin.sql')).toHaveCount(0);
 
-	await treeNode(page, '2026').click();
-	await expect(treeNode(page, 'twin.sql')).toBeVisible();
+	await treeRow(page, '2026').click();
+	await expect(treeRow(page, 'twin.sql')).toBeVisible();
 	await tab(page, 'twin.sql').click();
 	await expect(editor.line(page, 'SELECT 5 AS five;')).toBeVisible();
 
 	// A database directory is a folder on disk, and takes a drop like one. A drop
 	// opens what it landed in -- so the row is already there to see, and it takes
 	// one click, not two, to put it away again.
-	await treeNode(page, '#1.sql').dragTo(treeNode(page, 'warehouse'));
-	await expect(treeNode(page, '#1.sql')).toBeVisible();
-	await treeNode(page, 'warehouse').click();
-	await expect(treeNode(page, '#1.sql')).toHaveCount(0);
+	await treeRow(page, '#1.sql').dragTo(treeRow(page, 'warehouse'));
+	await expect(treeRow(page, '#1.sql')).toBeVisible();
+	await treeRow(page, 'warehouse').click();
+	await expect(treeRow(page, '#1.sql')).toHaveCount(0);
 
 	// The empty space below the tree is the workspace root, and takes it back
 	// out again: it stays on screen when the database is closed.
-	await treeNode(page, 'warehouse').click();
-	await dropOnRoot(page, treeNode(page, '#1.sql'));
-	await treeNode(page, 'warehouse').click();
-	await expect(treeNode(page, '#1.sql')).toBeVisible();
+	await treeRow(page, 'warehouse').click();
+	await dropOnRoot(page, treeRow(page, '#1.sql'));
+	await treeRow(page, 'warehouse').click();
+	await expect(treeRow(page, '#1.sql')).toBeVisible();
 
 	// On the root itself, not merely somewhere on screen: a row named the same
 	// can be anywhere in the tree, and this one has just been moved twice.
-	expect(await existsInWorkspace(request, id, '#1.sql')).toBe(true);
+	expect(await onDisk(request, id, '#1.sql')).toBe(true);
 
 	// Several rows selected move together: dragging one of them takes the rest.
 	await selectOnly(page, 'reports', '#1.sql', 'twin.sql');
-	await treeNode(page, '#1.sql').dragTo(treeNode(page, 'reports'));
+	await treeRow(page, '#1.sql').dragTo(treeRow(page, 'reports'));
 
-	await treeNode(page, 'reports').click();
-	await expect(treeNode(page, '#1.sql')).toHaveCount(0);
-	await expect(treeNode(page, 'twin.sql')).toHaveCount(0);
-	await treeNode(page, 'reports').click();
-	await expect(treeNode(page, '#1.sql')).toBeVisible();
-	await expect(treeNode(page, 'twin.sql')).toBeVisible();
+	await treeRow(page, 'reports').click();
+	await expect(treeRow(page, '#1.sql')).toHaveCount(0);
+	await expect(treeRow(page, 'twin.sql')).toHaveCount(0);
+	await treeRow(page, 'reports').click();
+	await expect(treeRow(page, '#1.sql')).toBeVisible();
+	await expect(treeRow(page, 'twin.sql')).toBeVisible();
 
 	// And took only those two. The database is a row like any other, and a drag
 	// moves everything selected: it goes along quietly if the selection was
 	// never cleared, and the workspace loses it when the folder is deleted.
-	expect(await existsInWorkspace(request, id, 'warehouse')).toBe(true);
+	expect(await onDisk(request, id, 'warehouse')).toBe(true);
 
 	// twin.sql has served its purpose; #1.sql is still needed below. A drag
 	// leaves what it moved selected, so the selection is named again first.
 	await selectOnly(page, '2026', 'twin.sql');
-	await openMenuOn(page, 'twin.sql');
-	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'twin.sql')).toHaveCount(0);
+	await openRowMenu(page, 'twin.sql');
+	await choose(page, 'Delete');
+	await expect(treeRow(page, 'twin.sql')).toHaveCount(0);
 
 	// --- Deleting ------------------------------------------------------------
 
 	// More than one row selected turns the menu into a batch delete, across
 	// folders.
 	await selectOnly(page, '2026', '#1.sql', '#2.sql');
-	await openMenuOn(page, '#2.sql');
-	await chooseMenuItem(page, 'Delete selected');
+	await openRowMenu(page, '#2.sql');
+	await choose(page, 'Delete selected');
 
-	await expect(treeNode(page, '#1.sql')).toHaveCount(0);
-	await expect(treeNode(page, '#2.sql')).toHaveCount(0);
+	await expect(treeRow(page, '#1.sql')).toHaveCount(0);
+	await expect(treeRow(page, '#2.sql')).toHaveCount(0);
 	await expect(tab(page, '#1.sql')).toHaveCount(0);
 	await expect(tab(page, '#2.sql')).toHaveCount(0);
 
@@ -329,34 +329,34 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// sits in, and a name climbing out of the workspace would put it on the
 	// host filesystem. Both leave the file where it is.
 	for (const refused of ['   ', '../../../escaped.sql']) {
-		await openMenuOn(page, 'weekly.sql');
-		await chooseMenuItem(page, 'Rename...');
+		await openRowMenu(page, 'weekly.sql');
+		await choose(page, 'Rename...');
 		await renameTo(page, refused);
-		await expect(treeNode(page, 'weekly.sql')).toBeVisible();
+		await expect(treeRow(page, 'weekly.sql')).toBeVisible();
 	}
-	await expect(treeNode(page, 'escaped.sql')).toHaveCount(0);
+	await expect(treeRow(page, 'escaped.sql')).toHaveCount(0);
 
 	// --- Renaming and moving a folder ---------------------------------------
 
 	// A folder rename moves everything under it. The rows come back under the
 	// new name, and a file open in a tab is still readable at its new path
 	// rather than pointing at one that no longer exists.
-	await openMenuOn(page, 'reports');
-	await chooseMenuItem(page, 'New folder...');
+	await openRowMenu(page, 'reports');
+	await choose(page, 'New folder...');
 	await renameTo(page, 'before');
-	await openMenuOn(page, 'before');
-	await chooseMenuItem(page, 'New file...');
+	await openRowMenu(page, 'before');
+	await choose(page, 'New file...');
 	await renameTo(page, 'inside.sql');
 	await editor.surface(page).click();
 	await page.keyboard.type('SELECT 3 AS three;');
 	await expect(editor.line(page, 'SELECT 3 AS three;')).toBeVisible();
 
-	await openMenuOn(page, 'before');
-	await chooseMenuItem(page, 'Rename...');
+	await openRowMenu(page, 'before');
+	await choose(page, 'Rename...');
 	await renameTo(page, 'after');
 
-	await expect(treeNode(page, 'after')).toBeVisible();
-	await expect(treeNode(page, 'before')).toHaveCount(0);
+	await expect(treeRow(page, 'after')).toBeVisible();
+	await expect(treeRow(page, 'before')).toHaveCount(0);
 
 	// The file went with the folder: it is still in the workspace, and the tab
 	// open on it still reads it at its new path rather than pointing at one that
@@ -370,71 +370,71 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await expect(editor.line(page, 'SELECT 3 AS three;')).toBeVisible();
 
 	// Folders drag like files do.
-	await treeNode(page, 'after').dragTo(treeNode(page, '2026'));
-	await treeNode(page, '2026').click();
-	await expect(treeNode(page, 'after')).toHaveCount(0);
-	await treeNode(page, '2026').click();
-	await expect(treeNode(page, 'after')).toBeVisible();
+	await treeRow(page, 'after').dragTo(treeRow(page, '2026'));
+	await treeRow(page, '2026').click();
+	await expect(treeRow(page, 'after')).toHaveCount(0);
+	await treeRow(page, '2026').click();
+	await expect(treeRow(page, 'after')).toBeVisible();
 
 	// A folder cannot be dropped inside itself: the filesystem refuses to move a
 	// directory into its own subtree, and nothing moves or is lost by asking.
-	await treeNode(page, 'reports').dragTo(treeNode(page, 'after'));
-	await expect(treeNode(page, 'reports')).toBeVisible();
-	await expect(treeNode(page, '2026')).toBeVisible();
-	await expect(treeNode(page, 'after')).toBeVisible();
+	await treeRow(page, 'reports').dragTo(treeRow(page, 'after'));
+	await expect(treeRow(page, 'reports')).toBeVisible();
+	await expect(treeRow(page, '2026')).toBeVisible();
+	await expect(treeRow(page, 'after')).toBeVisible();
 	await findInPicker(page, 'inside.sql');
 
 	// Holding a dragged file over a closed folder opens it, so the drop can go
 	// to something inside it. Done by hand rather than with dragTo: the point is
 	// the pause in the middle, which a single gesture has no room for.
-	await openMenuOn(page, 'reports');
-	await chooseMenuItem(page, 'New file...');
+	await openRowMenu(page, 'reports');
+	await choose(page, 'New file...');
 	await renameTo(page, 'hover.sql');
-	await treeNode(page, '2026').click();
-	await expect(treeNode(page, 'after')).toHaveCount(0);
+	await treeRow(page, '2026').click();
+	await expect(treeRow(page, 'after')).toHaveCount(0);
 
-	await treeNode(page, 'hover.sql').hover();
+	await treeRow(page, 'hover.sql').hover();
 	await page.mouse.down();
-	await hoverOver(page, treeNode(page, '2026'));
-	await expect(treeNode(page, 'after')).toBeVisible();
-	await hoverOver(page, treeNode(page, 'after'));
+	await hoverOver(page, treeRow(page, '2026'));
+	await expect(treeRow(page, 'after')).toBeVisible();
+	await hoverOver(page, treeRow(page, 'after'));
 	await page.mouse.up();
 
-	await expect(treeNode(page, 'hover.sql')).toBeVisible();
-	await treeNode(page, 'after').click();
-	await expect(treeNode(page, 'hover.sql')).toHaveCount(0);
-	await treeNode(page, 'after').click();
-	await expect(treeNode(page, 'hover.sql')).toBeVisible();
+	await expect(treeRow(page, 'hover.sql')).toBeVisible();
+	await treeRow(page, 'after').click();
+	await expect(treeRow(page, 'hover.sql')).toHaveCount(0);
+	await treeRow(page, 'after').click();
+	await expect(treeRow(page, 'hover.sql')).toBeVisible();
 
 	// --- Selecting a range ---------------------------------------------------
 
 	// Shift-click takes everything between the two rows, which the menu reports
 	// by offering the batch delete. Nothing is deleted here: these are the
 	// workspace's own files.
-	await treeNode(page, 'top_customers.sql').click();
-	await treeNode(page, 'weekly_revenue.sql').click({ modifiers: ['Shift'] });
-	await openMenuOn(page, 'weekly_revenue.sql');
+	await treeRow(page, 'top_customers.sql').click();
+	await treeRow(page, 'weekly_revenue.sql').click({ modifiers: ['Shift'] });
+	await openRowMenu(page, 'weekly_revenue.sql');
 	await expect(page.getByRole('menuitem', { name: 'Delete selected' })).toBeVisible();
 	await page.keyboard.press('Escape');
 
 	// And the selection is put back to one row, or every menu after this one is
 	// the batch delete.
-	await treeNode(page, 'reports').click();
-	await treeNode(page, 'reports').click();
-	await treeNode(page, 'reports').click({ modifiers: ['ControlOrMeta'] });
+	await treeRow(page, 'reports').click();
+	await treeRow(page, 'reports').click();
+	await treeRow(page, 'reports').click({ modifiers: ['ControlOrMeta'] });
 
 	// --- Files inside a database --------------------------------------------
 
 	// A database is a directory too: files can be made in it, and they are the
 	// database's own rather than the folder's.
-	await openMenuOn(page, 'warehouse');
-	await chooseMenuItem(page, 'New file...');
+	await openRowMenu(page, 'warehouse');
+	await choose(page, 'New file...');
 	await renameTo(page, 'in-db.sql');
-	await expect(treeNode(page, 'in-db.sql')).toBeVisible();
+	await expect(treeRow(page, 'in-db.sql')).toBeVisible();
 
-	await openMenuOn(page, 'in-db.sql');
-	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'in-db.sql')).toHaveCount(0);
+	await openRowMenu(page, 'in-db.sql');
+	await choose(page, 'Delete');
+	await expect(treeRow(page, 'in-db.sql')).toHaveCount(0);
 
 	// --- What happens without the app ---------------------------------------
 
@@ -442,14 +442,14 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// told the app what it was: the path is gone by the time the event arrives,
 	// and a file reported as a folder would leave the tab open on nothing.
 	await run('rm', 'reports/2026/weekly.sql', 'reports/2026/weekly.sql.metadata.json');
-	await expect(treeNode(page, 'weekly.sql')).toHaveCount(0);
+	await expect(treeRow(page, 'weekly.sql')).toHaveCount(0);
 	await expect(tab(page, 'weekly.sql')).toHaveCount(0);
 
 	// A file appearing in a folder nobody has opened is still findable: the
 	// picker asks the backend rather than filtering what the tree happens to
 	// hold.
 	await run('mkdir', '-p', 'archive/quarterly');
-	await expect(treeNode(page, 'archive')).toBeVisible();
+	await expect(treeRow(page, 'archive')).toBeVisible();
 
 	// The file is written only once the graph is holding the folder it goes in.
 	// A watch is registered per directory as the directory turns up, so a file
@@ -462,28 +462,28 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 
 	// A seeded file removed and then restored by git comes back on its own.
 	await run('rm', 'cohorts.sql');
-	await expect(treeNode(page, 'cohorts.sql')).toHaveCount(0);
+	await expect(treeRow(page, 'cohorts.sql')).toHaveCount(0);
 	await run('git', 'checkout', '--', 'cohorts.sql');
-	await expect(treeNode(page, 'cohorts.sql')).toBeVisible();
+	await expect(treeRow(page, 'cohorts.sql')).toBeVisible();
 
 	// --- Databases are folders too ------------------------------------------
 
 	// A database is a directory carrying a db.config.json, so it is made and
 	// removed like a folder while being a different kind of node.
-	await openTreeMenu(page);
-	await chooseMenuItem(page, 'New Database...');
-	await expect(treeNode(page, 'db #1')).toBeVisible();
+	await openRootMenu(page);
+	await choose(page, 'New Database...');
+	await expect(treeRow(page, 'db #1')).toBeVisible();
 
 	// Databases are listed by name, so the new one lands above the seeded one
 	// and pushes it down. Both are waited for before anything is clicked: acting
 	// while the rows are still moving hits whichever one arrives under the
 	// pointer.
-	await expect(treeNode(page, 'warehouse')).toBeVisible();
+	await expect(treeRow(page, 'warehouse')).toBeVisible();
 
-	await openMenuOn(page, 'db #1');
-	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'db #1')).toHaveCount(0);
-	await expect(treeNode(page, 'warehouse')).toBeVisible();
+	await openRowMenu(page, 'db #1');
+	await choose(page, 'Delete');
+	await expect(treeRow(page, 'db #1')).toHaveCount(0);
+	await expect(treeRow(page, 'warehouse')).toBeVisible();
 
 	// And it stays deleted. Its connection form saves on a debounce, so a save
 	// can be in the air when the delete lands: writing it out used to make the
@@ -492,20 +492,20 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// what is being watched for is something arriving late.
 	await page.waitForTimeout(1500);
 	expect(await databasesInGraph(request)).toEqual(['warehouse']);
-	await expect(treeNode(page, 'db #1')).toHaveCount(0);
+	await expect(treeRow(page, 'db #1')).toHaveCount(0);
 
 	// --- Leaving it as it was found -----------------------------------------
 
 	// Deleting a folder takes what is still inside it.
-	await openMenuOn(page, 'reports');
-	await chooseMenuItem(page, 'Delete');
-	await expect(treeNode(page, 'reports')).toHaveCount(0);
-	await expect(treeNode(page, '2026')).toHaveCount(0);
+	await openRowMenu(page, 'reports');
+	await choose(page, 'Delete');
+	await expect(treeRow(page, 'reports')).toHaveCount(0);
+	await expect(treeRow(page, '2026')).toHaveCount(0);
 
 	await run('rm', '-rf', 'archive');
-	await expect(treeNode(page, 'archive')).toHaveCount(0);
+	await expect(treeRow(page, 'archive')).toHaveCount(0);
 
 	for (const seeded of ['weekly_revenue.sql', 'top_customers.sql', 'cohorts.sql', 'warehouse']) {
-		await expect(treeNode(page, seeded)).toBeVisible();
+		await expect(treeRow(page, seeded)).toBeVisible();
 	}
 });
