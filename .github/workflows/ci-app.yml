@@ -179,20 +179,23 @@ jobs:
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      # The wails CLI and the binding generator both compile the cgo webview
-      # code, so the headers are needed even though the binary under test
-      # links no GUI toolkit.
-      - uses: ./.github/actions/gtk-deps
-
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
+          # `nocgo` keeps this out of the entry the desktop build writes, which
+          # holds a CLI linked against GTK: restored here it would not start,
+          # because this job installs no GTK runtime for it to find.
+          key: wails-nocgo-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+        # Built without cgo, which is what keeps this job free of GTK: the CLI
+        # links the webview through cgo by default, and nothing it does here
+        # (`task`, and generating bindings under `-tags server`) needs it.
+        env:
+          CGO_ENABLED: 0
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
       - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: app/frontend
