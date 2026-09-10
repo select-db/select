@@ -2,8 +2,8 @@ import {
 	databasesInGraph,
 	existsInWorkspace,
 	expect,
-	holdSession,
 	inWorkspace,
+	open,
 	test,
 	workspaceId,
 	type Page
@@ -12,21 +12,16 @@ import { dbStatus, labelledInput, renameBox, tab, testId, treeNode } from './sel
 import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
 
 /**
- * A database is a directory named after itself. There is nowhere else its name
- * is written down, so everything that changes the name changes the directory,
- * and everything that changes the directory changes the name.
+ * A database is a directory named after itself. Its name is written down
+ * nowhere else, so everything that changes the name changes the directory and
+ * everything that changes the directory changes the name.
  *
- * The first scenario is about that one fact: what a database is called when it
- * is made, what renaming it from the tree and from its own form does to the
- * directory, what moving the directory does to the database, and what the name
- * is allowed to be. One scenario rather than a test per gesture, for the same
- * reason as filesystem.spec.ts: each step is only meaningful on the state the
- * last left.
+ * The first scenario is about that one fact, in one sequence rather than a test
+ * per gesture for the same reason as filesystem.spec.ts: each step is only
+ * meaningful on the state the last one left. The second is about the other
+ * thing a row says, whether the database answers.
  *
- * The second is about the other thing a row says: whether the database answers.
- *
- * Both leave the seeded workspace as they found it, so they can run in either
- * order and beside every other spec.
+ * Both leave the seeded workspace as they found it.
  */
 
 test.setTimeout(180_000);
@@ -42,9 +37,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	request,
 	signIn
 }) => {
-	await holdSession(page);
-	await page.goto('/');
-	await signIn();
+	await open(page, signIn);
 
 	const id = await workspaceId(request);
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
@@ -183,9 +176,7 @@ test('names a database by its directory, and renames the directory with it', asy
 });
 
 test('shows what the last attempt to reach a database found', async ({ page, signIn }) => {
-	await holdSession(page);
-	await page.goto('/');
-	await signIn();
+	await open(page, signIn);
 
 	await expect(treeNode(page, 'warehouse')).toBeVisible();
 

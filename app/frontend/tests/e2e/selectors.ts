@@ -13,7 +13,7 @@ export const testId = (page: Page, name: string, value?: string) =>
 			: `[data-test="${name}"][data-test-value="${value}"]`
 	);
 
-/** One row of a tree — file, folder or database — named by what it shows. */
+/** One row of a tree (file, folder or database), named by what it shows. */
 export const treeNode = (page: Page, name: string) => testId(page, 'tree.node', name);
 
 /**
@@ -44,7 +44,7 @@ export const tab = (page: Page, name: string) => testId(page, 'tabs.tab', name);
 /** The tabs on screen, in the order they are laid out. */
 export const tabs = (page: Page) => testId(page, 'tabs.tab');
 
-/** The active tab of each group — one per group, so more than one with a split. */
+/** The active tab of each group, so more than one once the workbench is split. */
 export const activeTab = (page: Page) =>
 	page.locator('[data-test="tabs.tab"][data-test-active="true"]');
 
@@ -52,20 +52,17 @@ export const activeTab = (page: Page) =>
 export const toolCall = (page: Page, name?: string) => testId(page, 'chat.tool-call', name);
 
 /**
- * The tool cards in whichever state — 'running', 'pending', 'ok' or 'failed'.
- * 'running' after the conversation has moved on is a call that never finished.
+ * The tool cards in one state: 'running', 'pending', 'ok' or 'failed'. Still
+ * 'running' after the conversation moved on is a call that never finished.
  */
 export const toolCallsInState = (page: Page, state: 'running' | 'pending' | 'ok' | 'failed') =>
 	testId(page, 'chat.tool-state', state);
 
 /**
- * Monaco's own DOM, quarantined.
- *
- * These class names are the editor's internals, not ours: they are not covered
- * by the convention and they can change when monaco-editor is upgraded. Keeping
- * them in one file means an upgrade is one place to fix rather than a search
- * across every spec. Nothing outside this file should mention `.view-line`,
- * `.suggest-widget` or `.monaco-*`.
+ * Monaco's own DOM, quarantined: these class names are the editor's internals
+ * and change when monaco-editor is upgraded, so an upgrade is one file to fix.
+ * Nothing outside this file mentions `.view-line`, `.suggest-widget` or
+ * `.monaco-*`.
  */
 export const editor = {
 	surface: (page: Page) => testId(page, 'editor.surface'),
@@ -113,10 +110,8 @@ export const queryResultTable = {
 };
 
 /**
- * The diff view's own DOM, for telling it apart from everything else on screen.
- *
- * An agent's edit puts Allow and Deny in two places at once -- here and in the
- * chat panel that asked for them -- and a spec usually means one of them.
+ * The diff view's own DOM. An agent's edit puts Allow and Deny in two places at
+ * once, here and in the chat panel that asked for them, and a spec means one.
  */
 export const diffView = (page: Page) => page.locator('.diff-view');
 

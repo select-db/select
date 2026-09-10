@@ -4,8 +4,8 @@ import {
 	databasesInGraph,
 	existsInWorkspace,
 	expect,
-	holdSession,
 	inWorkspace,
+	open,
 	test,
 	workspaceId,
 	type APIRequestContext,
@@ -16,21 +16,18 @@ import { editor, renameBox, selectedTreeNodes, tab, treeNode } from './selectors
 import { chooseMenuItem, keepName, openMenuOn, openTreeMenu, renameTo } from './tree';
 
 /**
- * File management: what a person does to the workspace tree in a session --
- * make folders, put files in them, name them, bind one to a database, move
- * them, delete them -- plus the things that happen to a workspace while the app
- * is only watching: a file removed in a terminal, one restored by git, one
- * appearing in a folder nobody has opened.
+ * File management: what a person does to the workspace tree in a session, plus
+ * what happens to a workspace while the app is only watching -- a file removed
+ * in a terminal, one restored by git, one appearing in a folder nobody opened.
  *
- * One scenario rather than a test per gesture. These steps are what the app
- * does in sequence, and each is only meaningful on the state the last one left:
- * a rename is interesting because there is something beside it to disturb, a
- * delete because a tab is open on what is being deleted, a move because the
- * folder it lands in can be collapsed again to prove it went there.
+ * One scenario rather than a test per gesture, because each step is only
+ * meaningful on the state the last one left: a rename is interesting because
+ * there is something beside it to disturb, a delete because a tab is open on
+ * what is being deleted, a move because the folder it lands in can be collapsed
+ * again to prove it went there.
  *
  * Everything it makes, it removes, so the seeded workspace is unchanged at the
- * end -- the same workspace the screenshot suite photographs and the other specs
- * read.
+ * end -- the same workspace the screenshot suite photographs.
  */
 
 /** Long by design: one session's worth of gestures, each waiting on the app. */
@@ -40,17 +37,15 @@ test.setTimeout(180_000);
  * Leaves exactly the named rows selected.
  *
  * Ctrl-click toggles, so a sequence of them only means what it says from a
- * known starting point. Clicking a folder sets the selection to that folder --
- * and toggles it open, hence the second click putting it back -- and
- * ctrl-clicking it off then leaves nothing selected.
+ * known starting point. Clicking a folder selects it and toggles it open, hence
+ * the second click putting it back, and ctrl-clicking it off leaves nothing.
  */
 async function selectOnly(page: Page, folder: string, ...rows: string[]) {
-	// Repeated until the tree agrees nothing is selected. A click that lands
-	// while the rows are still moving does nothing, and the ctrl-click that was
-	// meant to clear the folder then adds it instead: the ctrl-clicks below
-	// would extend a selection left over from the step before, and a drag takes
-	// everything selected -- a database moved into a folder because a click three
-	// steps earlier never registered.
+	// Polled until the tree agrees nothing is selected: a click landing while the
+	// rows are still moving does nothing, and the ctrl-click meant to clear the
+	// folder then adds it instead. The cost of getting this wrong is silent -- a
+	// drag takes everything selected, so a database moves into a folder because
+	// of a click three steps earlier that never registered.
 	await expect
 		.poll(async () => {
 			await treeNode(page, folder).click();
@@ -116,12 +111,7 @@ async function folderInGraph(request: APIRequestContext, name: string): Promise<
 }
 
 test('creates, renames, moves and deletes files and folders', async ({ page, request, signIn }) => {
-	await holdSession(page);
-	await page.goto('/');
-	await signIn();
-
-	// What the workspace starts as.
-	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
+	await open(page, signIn);
 
 	const id = await workspaceId(request);
 	const run = (command: string, ...args: string[]) => inWorkspace(request, id, command, ...args);

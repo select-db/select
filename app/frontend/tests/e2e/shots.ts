@@ -3,19 +3,13 @@ import { testId, editor, labelledInput } from './selectors';
 
 /**
  * The shared half of the screenshot harness. The other half is one
- * `<shot-id>.shot.ts` per picture, living beside the content that shows it —
- * see `web/site/hero.shot.ts`.
+ * `<shot-id>.shot.ts` per picture, living beside the content that shows it: see
+ * `web/site/hero.shot.ts`.
  *
- * Everything here drives the real application: the same server-mode build, Go
- * services, bindings and events every other spec drives. Nothing is mocked
- * except the AI provider, which `aiProvider.ts` answers locally rather than
- * faking in the UI.
+ * Everything here drives the real application, the same build every other spec
+ * drives. Nothing is mocked except the AI provider, which `aiProvider.ts`
+ * answers locally rather than faking in the UI.
  */
-
-// `tests/**` is type-checked by svelte-check, which has no Node types — the app
-// has no reason to depend on them. Declaring the one global the harness needs
-// keeps it that way.
-declare const process: { env: Record<string, string | undefined> };
 
 // Re-exported because every shot holds the session, and a shot spec should not
 // have to import from a second file to do the one thing all of them do.
@@ -30,8 +24,10 @@ export type Framing = {
 	height: number;
 	/** Render density. 1.5 is ~2x at the size the hero is actually displayed. */
 	density?: number;
-	/** App UI scale. Raise it for a doc figure read in a narrow column: fewer
-	 *  pixels of chrome, larger text, without shrinking the window. */
+	/**
+	 * App UI scale. Raise it for a doc figure read in a narrow column: fewer
+	 * pixels of chrome, larger text, without shrinking the window.
+	 */
 	appZoom?: number;
 };
 
@@ -123,13 +119,10 @@ export async function shot(
 	// A login screen is the one thing that must never be published.
 	await expect(page.getByText('Log in with Github')).toBeHidden();
 
-	// Monaco paints its first frame before its tokenizer has run, and for about
-	// 90ms every token wears mtk1, the theme's default colour: a picture taken in
-	// that window shows SELECT and FROM as plain text while the schema
-	// decorations around them are already coloured, which reads as an editor that
-	// does not know it is looking at SQL. Nothing else on screen says it has
-	// finished, so wait for a token that is not the default one. Skipped when
-	// there is no editor, or when the editor is empty.
+	// Monaco paints its first frame before its tokenizer runs, and for ~90ms
+	// every token wears mtk1, the theme's default colour: SELECT and FROM as
+	// plain text beside schema decorations that are already coloured. Nothing
+	// else says the tokenizer has finished, so wait for a non-default token.
 	if (await editor.tokens(page).count()) {
 		await expect
 			.poll(() =>
@@ -140,12 +133,12 @@ export async function shot(
 			.toBe(true);
 	}
 
-	// `animations: 'disabled'` waits for CSS animations and transitions to
-	// finish, or fast-forwards them — the settle that a trailing sleep used to
-	// approximate, done by the tool that can actually observe it.
-	const shot = { path: `${dir}/${name}.png`, animations: 'disabled' as const };
-	if (clip) await clip.screenshot(shot);
-	else await page.screenshot(shot);
+	// `animations: 'disabled'` waits out CSS animations and transitions, or
+	// fast-forwards them: the settle a trailing sleep used to approximate, done
+	// by the tool that can observe it.
+	const options = { path: `${dir}/${name}.png`, animations: 'disabled' as const };
+	if (clip) await clip.screenshot(options);
+	else await page.screenshot(options);
 }
 
 export { expect, test, type Locator, type Page };

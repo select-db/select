@@ -11,17 +11,16 @@ import { activeTab, editor, selectedTreeNodes, tab, tabs, testId, treeNode } fro
 import { chooseMenuItem, openMenuOn, openTreeMenu, renameTo } from './tree';
 
 /**
- * Tabs: what the workbench does with them, not what they hold.
+ * Tabs: what the workbench does with them, not what they hold. A tab frames a
+ * file, a terminal or a settings page, and each of those has its own spec.
  *
- * A tab is a frame around something else -- a file, a terminal, a settings page
- * -- and each of those has its own spec. What is tested here is the frame: that
- * opening the same file twice does not open it twice, that closing the active
- * one leaves a sensible tab behind, that the group remembers where it has been,
- * that a tab can be dragged into a split and back out, and that a tab follows
- * the file underneath it when the file moves or goes away.
+ * The frame is what is tested: opening the same file twice does not open it
+ * twice, closing the active one leaves a sensible tab behind, the group
+ * remembers where it has been, a tab drags into a split and back out, and a tab
+ * follows the file underneath it when that moves or goes away.
  *
- * Where a file's content is asserted it is only ever evidence of which tab is
- * on screen. Nothing here is about the editor.
+ * Where a file's content is asserted it is only evidence of which tab is on
+ * screen. Nothing here is about the editor.
  */
 
 /** The seeded files, and the first line each one shows. */

@@ -1,21 +1,17 @@
 import { expect, type Page } from './wails';
 
 /**
- * The AI providers, answered from here.
+ * The AI providers, answered from here. Nothing reaches a real API: no network,
+ * no cost, and the same reply every run. The app still wants a key present
+ * before it tries, and reads it from the workspace .env where the seed leaves a
+ * placeholder for each provider.
  *
- * Nothing reaches a real API: no network, no cost, and the same reply on every
- * run, which a live model could never give. The app still requires a key to be
- * present before it will try, and reads it from the workspace .env, where the
- * seed leaves a placeholder for each provider.
+ * A spec describes a turn once and each provider renders it in its own wire
+ * format, which is the only thing that differs between them: the app has to end
+ * every call the model makes, whichever provider carried it.
  *
- * A spec describes a turn once — some text, a tool call, whether the stream
- * breaks — and each provider renders it in its own wire format. That is the
- * only thing that differs between them, and it is exactly what a spec running
- * against all five is there to cover: the app has to end every call the model
- * makes, whichever provider carried it.
- *
- * The two controls for talking to a chat live here too, since every spec and
- * shot that scripts a provider also has to pick one and type at it.
+ * The two controls for talking to a chat live here too, since every spec that
+ * scripts a provider also has to pick one and type at it.
  */
 
 /** One assistant turn, before any provider has had a say in how it looks. */
@@ -50,8 +46,8 @@ const frame = (payload: object, event?: string) =>
 	`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(payload)}\n\n`;
 
 /**
- * Providers stream tool arguments in fragments, never in one piece — and send
- * none at all for a call with no input, which is what leaves the app holding an
+ * Providers stream tool arguments in fragments, never in one piece, and send
+ * none at all for a call with no input: that is what leaves the app holding an
  * empty string rather than `{}`.
  */
 const fragments = (input: object, truncated = false) => {
@@ -142,8 +138,8 @@ const openAiCompatible = (turn: Turn): string => {
 
 /**
  * Gemini names no call ids on the wire and matches results back by function
- * name, so the ids the app runs on are its own — which is why a conversation
- * with more than one call is the case worth running here.
+ * name, so the ids the app runs on are its own. That is why the case worth
+ * running here is a conversation with more than one call.
  */
 const gemini = (turn: Turn): string => {
 	if (turn.truncated) {
@@ -205,8 +201,8 @@ export async function say(page: Page, message: string) {
 }
 
 /**
- * Moves the model picker, which is addressed by the model it is showing —
- * that is its accessible name, and the only thing a person could call it by.
+ * Moves the model picker, addressed by the model it is showing: that is its
+ * accessible name, and the only thing a person could call it by.
  */
 export async function chooseModel(page: Page, model: string) {
 	await expect(page.getByRole('button', { name: ANTHROPIC.model })).toBeVisible();
