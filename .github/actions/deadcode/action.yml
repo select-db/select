@@ -1,13 +1,13 @@
 name: deadcode
 description: Puts a pinned deadcode on PATH, built once and cached.
 
-# x/tools ships no binaries, so this one is compiled. It was `@latest`, which
-# has neither a stable cache key nor a reproducible result: a gate that blocks
-# merges should not change under you between two runs of the same commit.
+# x/tools ships no binaries, so this one is compiled and cached. The version is
+# pinned because a gate that blocks merges must not change between two runs of
+# the same commit.
 
 inputs:
   go-version:
-    description: Go version, so a toolchain bump rebuilds rather than reuses.
+    description: Cache key input, so a toolchain bump rebuilds rather than reuses.
     required: true
 
 runs:

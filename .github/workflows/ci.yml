@@ -1,17 +1,17 @@
 name: CI
 
-# Single source of truth for CI. The `plan` job holds ALL gating logic
-# (change detection + module dependency fan-in + event/ref rules) and emits
-# plain outputs; every other job is a simple `if: needs.plan.outputs.X`.
+# Single source of truth for CI. The plan job holds every gating decision and
+# emits plain outputs, so each other job is one `if: needs.plan.outputs.X`.
 #
-# Module dependency graph (drives the fan-in in `plan`):
-#   toolkit  -> (depended on by dialect, backend, app)
-#   dialect  -> (depended on by backend, app)
-#   backend  -> (hosted server; nothing depends on it)
-#   app      -> desktop client
+# The fan-in those outputs encode:
 #
-# Branch protection should require the single "CI OK" check (not the individual
-# matrix legs), since path-gated jobs may legitimately be skipped.
+#   dialect and backend and app all depend on toolkit
+#   backend and app depend on dialect
+#   backend is the hosted server and nothing depends on it
+#   app is the desktop client
+#
+# Branch protection requires the single "CI OK" check rather than the
+# individual legs, because a path gated job may legitimately be skipped.
 
 on:
   push:
@@ -25,17 +25,15 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs for the same PR; never cancel dev/main/tag builds.
+# Supersede runs for the same PR, and never cancel a dev, main or tag build.
 #
-# The branch is baked into the group rather than into cancel-in-progress. An
-# expression there evaluates to the *string* "false" for a push, which is
-# non-empty and so still cancels: 11 of the last 27 dev pushes were cancelled
-# under the previous form, including cfd6c3c, whose cancelled run is how a
-# stale generated file reached dev unchecked (see #176).
+# The branch belongs in the group, not in cancel-in-progress, where an
+# expression evaluates to the non-empty string "false" for a push and cancels
+# anyway. That cancelled 11 of 27 dev pushes, including cfd6c3c, whose
+# cancelled run let a stale generated file reach dev unchecked (see #176).
 #
-# Giving every non-PR run its own group (run_id is unique per run) means a push
-# to dev/main/a tag shares a group with nothing and can never be superseded,
-# while PR runs still collapse onto one group per ref.
+# run_id is unique, so every non-PR run gets a group to itself while PR runs
+# still collapse onto one group per ref.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
   cancel-in-progress: true
@@ -44,14 +42,6 @@ env:
   WAILS_VERSION: v3.0.0-beta.12
   # Minimum app version, bump when a release contains a breaking change.
   MIN_APP_VERSION: 0.0.0
-  # Tools the quality jobs run. Both used to be `go install`ed, which compiles
-  # them from source on every run: sqlc alone cost 45-73s of a 2-3 minute job.
-  # sqlc ships linux binaries, so it is downloaded and checksummed instead;
-  # deadcode ships none, so it is built once and cached on a pinned version
-  # (it was `@latest`, which has no stable cache key and no reproducibility).
-  SQLC_VERSION: 1.31.1
-  SQLC_SHA256: 497ae4fcdfa64c5b0c311ffe4c2bd991e43991e82e5367792ed78bc2dca27354
-  DEADCODE_VERSION: v0.50.0
 
 jobs:
   plan:
@@ -77,15 +67,15 @@ jobs:
           EVENT="${{ github.event_name }}"
           REF="${{ github.ref }}"
 
-          # Raw per-area change flags. Full on push/dispatch/schedule; on PRs we
-          # diff the merge against its base (HEAD~1 of the merge commit).
+          # Raw per-area change flags. Everything runs on push, dispatch and
+          # schedule. A PR diffs the merge against its base.
           frontend=false; app=false; backend=false; dialect=false; toolkit=false; python=false; web=false
           if [[ "$EVENT" == "push" || "$EVENT" == "workflow_dispatch" || "$EVENT" == "schedule" ]]; then
             frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
           else
             FILES="$(git diff --name-only HEAD~1 HEAD || true)"
             if grep -qE '^(\.github/|\.gitleaks\.toml)' <<<"$FILES"; then
-              # Shared infra changed -> run everything to be safe.
+              # Shared infrastructure changed, so run everything.
               frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
             else
               grep -q '^app/frontend/' <<<"$FILES" && frontend=true || true
@@ -94,9 +84,9 @@ jobs:
               { grep '^dialect/' <<<"$FILES" | grep -qv '^dialect/core/tokenanalyzer/python/'; } && dialect=true || true
               grep -q '^dialect/core/tokenanalyzer/python/' <<<"$FILES" && python=true || true
               grep -q '^toolkit/' <<<"$FILES" && toolkit=true || true
-              # The website: its own source, any doc page (they live next to the
-              # code they document), the app theme it takes its colours from,
-              # and the OpenAPI spec behind the API reference.
+              # The website source, any doc page (they sit beside the code
+              # they document), the app theme it takes its colours from, and
+              # the OpenAPI spec behind the API reference.
               grep -q '^web/' <<<"$FILES" && web=true || true
               grep -q '\.doc\.md$' <<<"$FILES" && web=true || true
               grep -q '^app/internal/graph/defaults/user/\.theme$' <<<"$FILES" && web=true || true
@@ -104,13 +94,14 @@ jobs:
             fi
           fi
 
-          # Dependency fan-in: everyone depends on toolkit; backend & app depend on dialect.
+          # Dependency fan-in. Everyone depends on toolkit, and backend and app
+          # depend on dialect.
           go_dialect=false; [[ "$dialect" == true || "$toolkit" == true ]] && go_dialect=true || true
           go_backend=false; [[ "$backend" == true || "$dialect" == true || "$toolkit" == true ]] && go_backend=true || true
           go_app=false;     [[ "$app" == true || "$dialect" == true || "$toolkit" == true ]] && go_app=true || true
           go_toolkit="$toolkit"
 
-          # JSON array of Go modules that need security scanning (govulncheck + semgrep).
+          # JSON array of the Go modules to scan.
           mods=()
           [[ "$go_app" == true ]] && mods+=('"app"') || true
           [[ "$go_backend" == true ]] && mods+=('"backend"') || true
@@ -118,7 +109,7 @@ jobs:
           [[ "$go_toolkit" == true ]] && mods+=('"toolkit"') || true
           joined="$(IFS=,; echo "${mods[*]}")"
 
-          # Build/release gates (kept out of every job's conditional).
+          # Build and release gates, kept out of every job's conditional.
           desktop=false
           if [[ "$EVENT" == "workflow_dispatch" ]] || { [[ "$EVENT" == "push" ]] && { [[ "$REF" == "refs/heads/dev" ]] || [[ "$REF" == refs/tags/* ]]; }; }; then
             desktop=true
@@ -141,15 +132,15 @@ jobs:
 
           echo "Plan: go-modules=[${joined}] frontend=$frontend python=$python web=$web desktop=$desktop staging=$staging draft=$draft"
 
-  # ---- Security / vulnerability scanning (path-gated matrix) ----
+  # Security scanning, gated on which modules changed.
   security:
     name: Security (${{ matrix.module }})
     needs: [plan]
     if: needs.plan.outputs.go-modules != '[]'
     runs-on: ubuntu-latest
-    # Budget sits on the scan steps, not the job: the GTK/WebKit apt install
-    # ahead of them measured 6s to 13m40s for the same packages, and at 13m40s
-    # it consumed a 15-minute job budget and cancelled semgrep.
+    # The budget sits on the scan steps, not the job. The apt install ahead of
+    # them measured anywhere from 6s to 13m40s for the same packages, and at
+    # 13m40s it ate a 15 minute job budget and cancelled semgrep.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -161,11 +152,11 @@ jobs:
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           cache-dependency-path: ${{ matrix.module }}/go.sum
-      # The app module embeds the frontend build output; stub it so packages compile.
+      # The app embeds the frontend build output. Stub it so packages compile.
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
       - run: sudo apt-get update && sudo apt-get install -y gcc
-      # The app module binds the webview through cgo, so loading its packages
-      # needs the GTK3/WebKit2GTK headers the desktop build links against.
+      # The app binds the webview through cgo, so loading its packages needs
+      # the GTK3 and WebKit2GTK headers the desktop build links against.
       - if: matrix.module == 'app'
         run: sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: govulncheck
@@ -174,7 +165,7 @@ jobs:
         env:
           BUILD_TAGS: ${{ matrix.module == 'app' && 'gtk3' || '' }}
         run: |
-          # Pinned, not @latest: a blocking gate should not change between runs.
+          # Pinned because a blocking gate must not change between runs.
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
       - name: semgrep (SAST)
@@ -182,27 +173,24 @@ jobs:
         timeout-minutes: 10
         working-directory: ${{ matrix.module }}
         run: |
-          # Build-free SAST — replaces gosec, whose whole-program SSA re-compiled
-          # the entire module graph on every cold runner (~6 min + near-OOM on
-          # backend, which repeatedly hung/SIGTERM'd this job). Semgrep parses
-          # source directly, so it's ~seconds and independent of the build cache.
-          # Deep interprocedural taint (SSRF/path-traversal/injection) now runs
-          # nightly in the CodeQL workflow (.github/workflows/codeql.yml), off the
-          # PR critical path.
+          # Build free SAST, replacing gosec. Its whole-program SSA recompiled
+          # the module graph on every cold runner, taking 6 minutes and nearly
+          # running backend out of memory. Semgrep parses source directly.
           #
-          # Blocking gate: --error makes semgrep exit non-zero on any finding, so
-          # a new issue fails the PR.
+          # Interprocedural taint analysis runs nightly in codeql.yml instead,
+          # off the PR critical path. --error makes this a blocking gate.
           #
-          # Two acceptance mechanisms, by scope:
-          #   * Categorical patterns are excluded repo-wide here (documented,
-          #     mirrors the old gosec -exclude rationale):
-          #       string-formatted-query            engine builds parameterized SQL; values are bound (was gosec G201/G202)
-          #       unsafe-deserialization-interface  heterogeneous sync payloads unmarshaled then type-switched, by design
-          #       potential-dos-via-decompression-bomb  decompresses only our own signed release artifacts
-          #   * Single reviewed sites are suppressed inline with `// nosemgrep`
-          #     (keeps the rule active for any new code): the desktop TOFU SSH
-          #     host key (dialect/engine/ssh.go) and a reflect-by-name over a
-          #     struct's own field names (app/internal/graph/helpers.go).
+          # Findings are accepted in one of two places. Patterns excluded here
+          # are categorical, and each is excluded for a stated reason:
+          #
+          #   string-formatted-query: the engine binds values into SQL it builds
+          #   unsafe-deserialization-interface: sync payloads are type-switched
+          #   potential-dos-via-decompression-bomb: only signed release artifacts
+          #
+          # A single reviewed site is suppressed with `// nosemgrep`, which
+          # leaves the rule live for new code. There are two: the desktop TOFU
+          # SSH host key in dialect/engine/ssh.go, and a reflect by name over a
+          # struct's own field names in app/internal/graph/helpers.go.
           pipx run --spec 'semgrep==1.170.0' semgrep scan \
             --config p/gosec --config p/golang \
             --exclude-rule go.lang.security.audit.database.string-formatted-query.string-formatted-query \
@@ -227,19 +215,16 @@ jobs:
       - name: Scan working tree for secrets
         run: gitleaks dir . --config .gitleaks.toml --redact --verbose
 
-  # ---- Per-module quality and tests ----
   # One called workflow per module, so a module's checks sit together in the
-  # run graph and in the tree instead of spread across a flat list of nine.
-  # Gating stays here: `plan` decides, the caller applies, and the called
-  # workflow only knows how to check its module.
+  # run graph and in the tree. Gating stays here: plan decides, the caller
+  # applies, and the called workflow only knows how to check its module.
   app:
     name: App
     needs: [plan]
     if: needs.plan.outputs.go-app == 'true' || needs.plan.outputs.frontend == 'true'
     uses: ./.github/workflows/ci-app.yml
-    # The app module has a Go half and a web half that change independently, so
-    # the caller runs when either did and passes both answers in. plan still
-    # decides; the called workflow only applies.
+    # The Go half and the web half change independently, so the caller runs
+    # when either did and passes both answers in.
     with:
       go-app: ${{ needs.plan.outputs.go-app == 'true' }}
       frontend: ${{ needs.plan.outputs.frontend == 'true' }}
@@ -262,7 +247,7 @@ jobs:
       python: ${{ needs.plan.outputs.python == 'true' }}
 
 
-  # ---- Website (docs + API reference + marketing) ----
+  # The website: docs, API reference and marketing pages.
   website:
     name: Website
     needs: [plan]
@@ -275,20 +260,20 @@ jobs:
         with:
           go-version-file: web/generate/go.mod
           cache-dependency-path: web/generate/go.sum
-      # The Scalar bundle behind /api/ is fetched once and cached; without this
-      # every run re-downloads it and a bad day upstream fails the build.
+      # The Scalar bundle behind /api/ is fetched once and cached. Without
+      # this every run redownloads it and a bad day upstream fails the build.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: web/.cache
           key: web-cache-${{ hashFiles('web/generate/main.go') }}
           restore-keys: web-cache-
       # The build is the check. It fails on a broken internal link, a sidebar
-      # entry pointing at a file that does not exist, a marketing page over the
-      # 14 KB brotli budget, or a page fetching from a third-party origin.
+      # entry pointing at nothing, a marketing page over the 14KB brotli
+      # budget, or a page fetching from a third party origin.
       - run: go run .
         working-directory: web/generate
 
-  # ---- Single required gate: aggregates every PR-relevant job ----
+  # The one required check. It aggregates every job a PR runs.
   ci-ok:
     name: CI OK
     if: always()
@@ -314,15 +299,15 @@ jobs:
           done
           echo "All required jobs passed or were skipped."
 
-  # ---- Build & release (dev/tags only; gated by plan) ----
-  # Staging version: derived from commit count, not GITHUB_RUN_NUMBER, which
-  # resets when the workflow file is renamed and would break the update toast.
+  # Build and release, on dev and tags only.
+  #
+  # The staging version comes from the commit count rather than
+  # GITHUB_RUN_NUMBER, which resets when the workflow file is renamed and would
+  # break the update toast.
   version:
     name: Compute staging version
-    # After the gate, not beside it. Everything that consumes this waits for
-    # `ci-ok` anyway, so running it earlier bought nothing and spent a runner
-    # on every run that was going to fail. It also leaves the graph saying what
-    # is actually true: nothing downstream of CI OK starts before CI OK.
+    # After the gate rather than beside it. Every consumer waits for ci-ok
+    # anyway, so running earlier only spent a runner on runs about to fail.
     needs: [plan, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
@@ -620,9 +605,9 @@ jobs:
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        # The CLI links the webview through cgo like the app does, so on Linux
-        # it needs the same gtk3 tag; without it the build reaches for the
-        # GTK4/WebKitGTK 6 headers we do not install.
+        # The CLI links the webview through cgo as the app does, so on Linux
+        # it needs the same gtk3 tag. Without it the build reaches for GTK4 and
+        # WebKitGTK 6 headers that are not installed.
         run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -723,8 +708,9 @@ jobs:
         working-directory: dist
         run: find . -maxdepth 1 -type f ! -name checksums.sha256 -exec sha256sum {} + > checksums.sha256 && cat checksums.sha256
 
-      # Draft: signatures and the publish step happen on a maintainer's laptop
-      # via the select-ops repo's sign-and-deploy.sh. Users never see this release until then.
+      # Signing and publishing happen on a maintainer's laptop, through
+      # sign-and-deploy.sh in the select-ops repo. Users see nothing until
+      # then.
       - name: Upload to draft release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
