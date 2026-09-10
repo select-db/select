@@ -9,7 +9,12 @@ import {
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
-import { ANTHROPIC, say, modelWillReply, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
+import {
+	ANTHROPIC,
+	say,
+	modelWillReply,
+	type ModelReply
+} from '../../app/frontend/tests/e2e/aiProvider';
 import { testId, editor } from '../../app/frontend/tests/e2e/selectors';
 
 /**
@@ -46,7 +51,7 @@ const CLAUSE_END = "'2026-01-05'";
  * types on is not enough on its own: what a half-written file actually breaks
  * is the join between the WHERE clause and the GROUP BY after it, and the
  * formatter will happily glue a stray character to the next keyword. Checking
- * the boundary turns that into an immediate failure instead of a 25-second
+ * the boundary replies that into an immediate failure instead of a 25-second
  * timeout on a result row that was never going to arrive.
  *
  * Whitespace-insensitive because the formatter has two layouts for this query
@@ -74,7 +79,7 @@ const FRAMINGS: (Framing & { chat: boolean })[] = [
 ];
 
 /**
- * Two turns, because one is not the product. The first answers with a tool
+ * Two replies, because one is not the product. The first answers with a tool
  * call, which the app runs for real against the seeded database — the card in
  * the picture is genuine introspection, not a drawing of one. The second, now
  * holding that result, answers.
@@ -82,7 +87,7 @@ const FRAMINGS: (Framing & { chat: boolean })[] = [
  * The answer claims nothing the data does not support: `orders.status` and the
  * partial trailing week are both real.
  */
-const TURNS: Turn[] = [
+const REPLIES: ModelReply[] = [
 	{
 		call: {
 			name: 'get_database_schemas',
@@ -116,7 +121,7 @@ for (const framing of FRAMINGS) {
 			test('a query, its results, and completion over both', async ({ page, signIn }, info) => {
 				await holdSession(page);
 				if (framing.chat) {
-					await modelWillReply(page, ANTHROPIC, TURNS);
+					await modelWillReply(page, ANTHROPIC, REPLIES);
 				}
 				await page.goto('/');
 				await signIn();

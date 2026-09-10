@@ -8,7 +8,12 @@ import {
 	test,
 	type Framing
 } from '../../../../../tests/e2e/shots';
-import { ANTHROPIC, say, modelWillReply, type Turn } from '../../../../../tests/e2e/aiProvider';
+import {
+	ANTHROPIC,
+	say,
+	modelWillReply,
+	type ModelReply
+} from '../../../../../tests/e2e/aiProvider';
 import { testId, diffView } from '../../../../../tests/e2e/selectors';
 
 /**
@@ -42,7 +47,7 @@ ORDER BY
   c.created_at DESC;
 `;
 
-const TURNS: Turn[] = [
+const REPLIES: ModelReply[] = [
 	{ call: { name: 'read_file', input: { uri: URI }, id: 'toolu_e2e_1' } },
 	{ call: { name: 'edit_file', input: { uri: URI, content: PROPOSED }, id: 'toolu_e2e_2' } },
 	{ text: 'Replaced the star with the three columns the report reads.' }
@@ -57,7 +62,7 @@ for (const theme of THEMES) {
 
 		test('an edit proposed as a diff, waiting on approval', async ({ page, signIn }, info) => {
 			await holdSession(page);
-			await modelWillReply(page, ANTHROPIC, TURNS);
+			await modelWillReply(page, ANTHROPIC, REPLIES);
 			await page.goto('/');
 			await signIn();
 

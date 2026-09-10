@@ -1,5 +1,12 @@
 import { AFTER_QUERY, QUERY_CALL, expect, open, intercept, test, type Page } from './wails';
-import { ANTHROPIC, PROVIDERS, chooseModel, say, modelWillReply, type Turn } from './aiProvider';
+import {
+	ANTHROPIC,
+	PROVIDERS,
+	chooseModel,
+	say,
+	modelWillReply,
+	type ModelReply
+} from './aiProvider';
 import { toolCall, toolCallsInState, tabs } from './selectors';
 
 /**
@@ -9,7 +16,7 @@ import { toolCall, toolCallsInState, tabs } from './selectors';
  * conversation has moved on is a call the app forgot, and the model is told
  * "Tool execution did not complete." for the rest of the session.
  *
- * The first half runs against every provider, since how a turn arrives is all
+ * The first half runs against every provider, since how a reply arrives is all
  * that differs between them: Anthropic and the Chat Completions providers name
  * their calls, Gemini does not, and each reports a broken stream its own way.
  * The second half is about the app rather than the wire, and runs once.
@@ -18,8 +25,8 @@ import { toolCall, toolCallsInState, tabs } from './selectors';
 /** The id the sample workspace gives its one database (internal/sample). */
 const WAREHOUSE = 'sample-warehouse';
 
-/** A turn in which the model says something, then runs a query. */
-const runs = (text: string, statement: string, callId: string): Turn => ({
+/** A reply in which the model says something, then runs a query. */
+const runs = (text: string, statement: string, callId: string): ModelReply => ({
 	text,
 	call: { name: 'execute_query', input: { dbInstanceId: WAREHOUSE, statement }, id: callId }
 });
