@@ -8,7 +8,12 @@ import {
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
-import { ANTHROPIC, say, modelWillReply, type Turn } from '../../app/frontend/tests/e2e/aiProvider';
+import {
+	ANTHROPIC,
+	say,
+	modelWillReply,
+	type ModelReply
+} from '../../app/frontend/tests/e2e/aiProvider';
 import { testId } from '../../app/frontend/tests/e2e/selectors';
 
 /**
@@ -35,7 +40,7 @@ const FRAMING: Framing = { name: 'agent', width: 1840, height: 820, density: 2 }
  * second call is the picture: the role denies select on customers.email, and
  * the tool says so in the words the app produced.
  */
-const TURNS: Turn[] = [
+const REPLIES: ModelReply[] = [
 	{
 		call: {
 			name: 'get_database_schemas',
@@ -73,7 +78,7 @@ for (const theme of THEMES) {
 
 		test('an agent refused the column its role does not grant', async ({ page, signIn }, info) => {
 			await holdSession(page);
-			await modelWillReply(page, ANTHROPIC, TURNS);
+			await modelWillReply(page, ANTHROPIC, REPLIES);
 			await page.goto('/');
 			await signIn();
 
