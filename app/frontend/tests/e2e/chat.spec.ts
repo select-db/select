@@ -1,21 +1,18 @@
-import { QUERY_CALL, expect, open, routeWailsMethod, test, type Page } from './wails';
+import { QUERIED, QUERY_CALL, expect, open, routeWailsMethod, test, type Page } from './wails';
 import { ANTHROPIC, PROVIDERS, chooseModel, say, stubProvider, type Turn } from './aiProvider';
 import { toolCall, toolCallsInState, tabs } from './selectors';
 
 /**
- * The agent's tool calls, run for real against the seeded warehouse.
+ * The agent's tool calls, run for real against the seeded warehouse. Only the
+ * model's side is scripted, so what is under test is the app around it: every
+ * call the model makes has to end in a result. A card still spinning after the
+ * conversation has moved on is a call the app forgot, and the model is told
+ * "Tool execution did not complete." for the rest of the session.
  *
- * Only the model's side is scripted — there is no model in a run — so what is
- * under test is the app around it: every call the model makes has to end in a
- * result. A card still showing its spinner after the conversation has moved on
- * is a call the app forgot, and the model is told "Tool execution did not
- * complete." for the rest of the session.
- *
- * The first half runs against every provider, because how a turn arrives is the
- * only thing that differs between them: Anthropic and the Chat Completions
- * providers name their calls, Gemini does not, and each reports a broken stream
- * its own way. The second half is about the app rather than the wire, and runs
- * once.
+ * The first half runs against every provider, since how a turn arrives is all
+ * that differs between them: Anthropic and the Chat Completions providers name
+ * their calls, Gemini does not, and each reports a broken stream its own way.
+ * The second half is about the app rather than the wire, and runs once.
  */
 
 const DB = 'sample-warehouse';
@@ -46,8 +43,8 @@ async function openChat(page: Page, signIn: () => Promise<void>, model = ANTHROP
 
 /** Every call on screen has finished, whatever it finished as. */
 async function expectSettled(page: Page, count: number) {
-	await expect(toolCall(page)).toHaveCount(count, { timeout: 20_000 });
-	await expect(toolCallsInState(page, 'running')).toHaveCount(0, { timeout: 20_000 });
+	await expect(toolCall(page)).toHaveCount(count, QUERIED);
+	await expect(toolCallsInState(page, 'running')).toHaveCount(0, QUERIED);
 }
 
 for (const provider of PROVIDERS) {
@@ -61,15 +58,14 @@ for (const provider of PROVIDERS) {
 			await openChat(page, signIn, provider.model);
 			await say(page, 'What is in there?');
 
-			await expect(page.getByText('Both came back.')).toBeVisible({ timeout: 20_000 });
+			await expect(page.getByText('Both came back.')).toBeVisible(QUERIED);
 			await expectSettled(page, 2);
 			expect(consoleErrors).toEqual([]);
 		});
 
 		test('a broken stream does not strand the call that turn made', async ({ page, signIn }) => {
-			// Every provider can stop mid-stream once the tool call is already
-			// complete — Anthropic sends an error event when it is overloaded, the
-			// others an error chunk. The call is good; only the stream broke.
+			// Anthropic sends an error event when it is overloaded, the others an
+			// error chunk. Either way the call is complete and only the stream broke.
 			await stubProvider(page, provider, [
 				{ ...queryTurn('SELECT COUNT(*) FROM orders', 'call_1', 'Counting.'), overloaded: true },
 				{ text: 'Recovered.' }
@@ -97,7 +93,7 @@ test('a second broken turn does not strand either call', async ({ page, signIn }
 	await openChat(page, signIn);
 	await say(page, 'What status values exist?');
 
-	await expect(toolCall(page)).toHaveCount(1, { timeout: 20_000 });
+	await expect(toolCall(page)).toHaveCount(1, QUERIED);
 	await say(page, 'stuck ?');
 
 	await expectSettled(page, 2);
@@ -111,7 +107,7 @@ test('a turn cut off mid-arguments settles as a failed call', async ({ page, sig
 	await openChat(page, signIn);
 	await say(page, 'How many orders?');
 
-	await expect(toolCallsInState(page, 'failed')).toHaveCount(1, { timeout: 20_000 });
+	await expect(toolCallsInState(page, 'failed')).toHaveCount(1, QUERIED);
 	await expectSettled(page, 1);
 });
 
@@ -126,7 +122,7 @@ test('a call that carries no arguments at all still runs', async ({ page, signIn
 	await openChat(page, signIn);
 	await say(page, 'Run a query.');
 
-	await expect(page.getByText('It said no.')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('It said no.')).toBeVisible(QUERIED);
 	await expectSettled(page, 1);
 	// The tool's own complaint, not one the app invented on its behalf.
 	await toolCall(page).click();
@@ -144,7 +140,7 @@ test('a call to a tool the app does not have settles as a failed call', async ({
 	await openChat(page, signIn);
 	await say(page, 'Migrate it.');
 
-	await expect(toolCallsInState(page, 'failed')).toHaveCount(1, { timeout: 20_000 });
+	await expect(toolCallsInState(page, 'failed')).toHaveCount(1, QUERIED);
 	await expectSettled(page, 1);
 });
 
@@ -157,7 +153,7 @@ test('a query that fails at the transport settles as a failed call', async ({ pa
 	await openChat(page, signIn);
 	await say(page, 'How many orders?');
 
-	await expect(page.getByText('That failed.')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('That failed.')).toBeVisible(QUERIED);
 	await expectSettled(page, 1);
 });
 
@@ -173,7 +169,7 @@ test('a second chat tab does not strand the query the first one started', async 
 	await openChat(page, signIn);
 	await say(page, 'How many orders?');
 
-	await expect(toolCall(page)).toHaveCount(1, { timeout: 20_000 });
+	await expect(toolCall(page)).toHaveCount(1, QUERIED);
 	await expect.poll(gate.started).toBeGreaterThan(0);
 
 	// A second chat in the same group: the first panel is unmounted with its
@@ -184,7 +180,7 @@ test('a second chat tab does not strand the query the first one started', async 
 	gate.release();
 	await tabs(page).first().click();
 
-	await expect(page.getByText('It came back.')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('It came back.')).toBeVisible(QUERIED);
 	await expectSettled(page, 1);
 });
 
@@ -197,7 +193,7 @@ test('a restart with a query still running settles the restored call', async ({ 
 	await openChat(page, signIn);
 	await say(page, 'How many orders?');
 
-	await expect(toolCall(page)).toHaveCount(1, { timeout: 20_000 });
+	await expect(toolCall(page)).toHaveCount(1, QUERIED);
 	await expect.poll(gate.started).toBeGreaterThan(0);
 
 	gate.release();

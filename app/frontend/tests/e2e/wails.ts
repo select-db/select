@@ -10,15 +10,12 @@ import { testId, treeNode } from './selectors';
 import { startApp } from './app';
 
 /**
- * Talking to the Go side the way the app does — over `/wails/runtime`, the
- * endpoint the app's own bindings call — but from the test process rather than
- * from inside the page.
+ * Talking to the Go side over `/wails/runtime`, the endpoint the app's own
+ * bindings call, but from the test process rather than from inside the page.
  *
- * That distinction matters. The runtime is also served to the page at
- * `/wails/runtime.js`, and importing it from a test looks tempting; it also
+ * Over HTTP rather than by importing the runtime the page is served: that
  * registers a second client id and takes over the event dispatcher, after which
- * the app's own calls start coming back 422. Speaking HTTP leaves the page
- * exactly as the app left it, at the cost of naming two protocol constants.
+ * the app's own calls come back 422. The cost is naming two protocol constants.
  */
 const CALL_OBJECT = 0;
 const EVENTS_OBJECT = 3;
@@ -69,16 +66,13 @@ export const test = base.extend<
 	},
 
 	/**
-	 * Emits an event, standing in for a backend that emitted it itself: the Go
-	 * side broadcasts it to every listener, the app included.
+	 * Emits an event as the backend would, which the Go side broadcasts to every
+	 * listener.
 	 *
-	 * Events are never queued or replayed, and in server mode the socket that
-	 * carries them and the app bundle that listens on it come up independently —
-	 * so an event can reach a page that is not listening yet, and is then simply
-	 * dropped. There is no earlier moment to wait for instead: the only reliable
-	 * signal is the app acting on it. Callers therefore emit inside a poll and
-	 * stop once they see the effect, which is why every event used here has to
-	 * be safe to send more than once.
+	 * Events are never queued or replayed, and the socket carrying them comes up
+	 * independently of the bundle that listens on it, so one sent too early is
+	 * dropped with nothing to wait on instead. Callers emit inside a poll until
+	 * they see the effect -- every event used here is safe to send twice.
 	 */
 	emit: async ({ request }, use) => {
 		await use(async (name, data) => {
@@ -93,22 +87,16 @@ export const test = base.extend<
 	/**
 	 * Puts the app into its signed-in state.
 	 *
-	 * `login` is the event the frontend's session wall listens for; the Go side
-	 * emits it once it finds a stored token and a current user. Tokens live in
-	 * the OS keyring, which a headless runner has none of, so the suite emits the
-	 * event and lets the app read the seeded database for the rest.
+	 * `login` is what the session wall listens for, and the Go side emits it on
+	 * finding a stored token. Tokens live in the OS keyring, which a headless
+	 * runner has none of, so the suite emits it and lets the app read the seeded
+	 * database for the rest.
 	 *
-	 * What is waited on is the signed-in shell. Waiting for the login wall first
-	 * and then starting to emit puts one render on the critical path that nothing
-	 * needs: the app is listening before it has painted, so the event can go out
-	 * while it is still coming up. Emitting into the gap costs nothing -- every
-	 * event the suite sends is safe to send twice -- and it took setup from
-	 * ~960ms to ~810ms, most of the difference being the jitter of waiting for a
-	 * paint. What is left is the app's own boot, which is ~660ms to first paint.
-	 *
-	 * The intervals are tighter than the default for the same reason: the first
-	 * emit lands before the app is listening and is dropped, so the retry is on
-	 * the critical path of every test.
+	 * Emitting immediately rather than waiting for the login wall to paint: the
+	 * app listens before it paints, so the wait is a render nothing needs (~960ms
+	 * of setup against ~810ms). The tight first intervals are the other half of
+	 * that -- the first emit usually lands before anyone is listening, putting
+	 * the retry on every test's critical path.
 	 */
 	signIn: async ({ page, emit }, use) => {
 		await use(async () => {
@@ -136,23 +124,21 @@ export const test = base.extend<
 });
 
 /**
- * Signed-in state survives only while a token exists. Tokens live in the OS
- * keyring, which a headless runner has none of, so the app's 500ms
- * CheckForLogout poll emits `logout` about half a second in and everything
- * after runs on a login screen. Answering that one call keeps the session up
- * without changing the app's behaviour.
- *
- * The numbers below are wails' ids for bound methods, from the generated
- * bindings under `src/lib/bindings/`. Wails derives one from the method's
- * qualified name, so it is identical across builds and changes only if the
- * method is renamed or moved -- at which point the specs that route it fail.
- * Regenerate the bindings and copy the new id.
+ * Wails' ids for bound methods, from the generated bindings under
+ * `src/lib/bindings/`. Derived from each method's qualified name, so they are
+ * stable across builds and change only on a rename or a move -- at which point
+ * the specs routing them fail. Regenerate the bindings and copy the new id.
  */
 const CHECK_FOR_LOGOUT = 2480583021;
 
 /** DbClient.Query, for the specs that hold a query open or answer it themselves. */
 export const QUERY_CALL = 2964708639;
 
+/**
+ * Keeps the session up. With no keyring to hold a token, the app's 500ms
+ * CheckForLogout poll emits `logout` half a second in and everything after runs
+ * on a login screen. Answering that one call changes nothing else.
+ */
 export async function holdSession(page: Page) {
 	await routeWailsMethod(page, CHECK_FOR_LOGOUT, (route) =>
 		route.fulfill({ status: 200, body: '' })
@@ -161,10 +147,8 @@ export async function holdSession(page: Page) {
 
 /**
  * Answers one bound Go method from the test, leaving every other call alone.
- *
- * Handlers stack, so more than one of these can be in force at a time: a
- * non-matching call falls back to whatever was registered before it, and to the
- * app itself when nothing was.
+ * Handlers stack: a non-matching call falls back to whatever was registered
+ * before it, and to the app itself when nothing was.
  */
 export async function routeWailsMethod(
 	page: Page,
@@ -181,9 +165,13 @@ export async function routeWailsMethod(
 }
 
 /**
- * Signs in and waits for the seeded workspace to be on screen — the state every
- * spec starts from.
+ * For waits on something the app runs a real query for. The default 5s is the
+ * right budget for a render; a round trip through SQLite on a loaded CI runner
+ * is not a render.
  */
+export const QUERIED = { timeout: 20_000 };
+
+/** Signs in and waits for the seeded workspace: the state every spec starts from. */
 export async function open(page: Page, signIn: () => Promise<void>) {
 	await holdSession(page);
 	await page.goto('/');
@@ -191,10 +179,7 @@ export async function open(page: Page, signIn: () => Promise<void>) {
 	await expect(treeNode(page, 'weekly_revenue.sql')).toBeVisible();
 }
 
-/**
- * The two services a spec asks about the workspace. Qualified Go names, which
- * is what the runtime dispatches on.
- */
+/** Qualified Go names, which is what the runtime dispatches on. */
 const FS = 'selectDb/internal/fs_provider.FSProvider';
 export const GRAPH = 'selectDb/internal/graph.Graph';
 
@@ -204,10 +189,21 @@ export async function workspaceId(request: APIRequestContext): Promise<string> {
 	return workspace.id;
 }
 
+/** Long enough to outlast the app's debounced git status, short enough to fail fast. */
+const GIT_LOCK_RETRIES = 20;
+const GIT_LOCK_RETRY_MS = 100;
+
 /**
  * Runs a command in the workspace root, standing in for everything that changes
  * a workspace without going through the app: a terminal, a git checkout, an
  * editor somebody else has open. The app only finds out by watching.
+ *
+ * Retried on .git/index.lock. Each change here wakes the watcher, which runs a
+ * git of the app's own ~200ms later, and two gits in one repository contend for
+ * that lock. The lock is held for one command rather than for anything a test
+ * could wait on, so retrying is what git itself prescribes -- and it is the same
+ * race a person hits running git beside the open app, so failing here would be
+ * asserting something that is not true.
  */
 export async function inWorkspace(
 	request: APIRequestContext,
@@ -223,15 +219,6 @@ export async function inWorkspace(
 		);
 		if (result.exitCode === 0) return;
 
-		// Every change made here wakes the watcher, which has the app run git of
-		// its own about 200ms later. Two gits in one repository contend for
-		// .git/index.lock, so a git command run beside the app loses that race
-		// sometimes -- rarely on a quiet machine, often on a loaded CI runner.
-		//
-		// Retrying is what git itself prescribes: the lock is held for the length
-		// of one command, not for anything a test could wait on. This is also the
-		// race a person hits running git in a terminal while the app is open, so
-		// treating it as fatal here would be testing something that is not true.
 		if (attempt < GIT_LOCK_RETRIES && result.stderr.includes('index.lock')) {
 			await new Promise((resolve) => setTimeout(resolve, GIT_LOCK_RETRY_MS));
 			continue;
@@ -241,15 +228,7 @@ export async function inWorkspace(
 	}
 }
 
-/** Long enough to outlast the app's debounced git status, short enough to fail fast. */
-const GIT_LOCK_RETRIES = 20;
-const GIT_LOCK_RETRY_MS = 100;
-
-/**
- * The URI of a root-relative path in a workspace. The prefix is fixed for the
- * whole run, and readWorkspaceFile is called inside a poll, so it is fetched
- * once rather than on every call.
- */
+/** Fixed for the whole run, and asked for inside polls, so fetched once. */
 let uriPrefix: Promise<string> | null = null;
 
 async function workspaceURI(request: APIRequestContext, id: string, path: string) {

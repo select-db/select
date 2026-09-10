@@ -2,13 +2,9 @@ import { expect, type Page } from './wails';
 import { renameBox, testId, treeNode } from './selectors';
 
 /**
- * Driving the workspace tree: the handful of gestures every spec that touches
- * it needs, so they mean the same thing in all of them.
- *
- * `selectors.ts` says how to address a row; this says what to do to one. The
- * split matters because these carry waits and assumptions -- a menu that has to
- * be matched exactly, a rename box that opens with part of the name selected --
- * and a spec that reimplements them gets a subtly different gesture with the
+ * Driving the workspace tree. `selectors.ts` says how to address a row; this
+ * says what to do to one. Separate because these carry waits and assumptions,
+ * and a spec that reimplements one gets a subtly different gesture under the
  * same name.
  */
 
@@ -38,12 +34,11 @@ export async function chooseMenuItem(page: Page, name: string) {
 }
 
 /**
- * Types a whole new name into the rename box a new file, a new folder and
+ * Types a whole new name into the rename box that a new file, a new folder and
  * "Rename..." all open, and commits it.
  *
- * The box opens with part of the name selected -- up to the extension, so
- * typing keeps it -- which is right for a person and ambiguous for a test,
- * hence the select-all first: what is typed here is the whole new name.
+ * Select-all first: the box opens with only part of the name selected, up to
+ * the extension. What is passed here is always the whole new name.
  *
  * The box closes whether the name was taken or not, so this returns once the
  * app has answered, not once it has agreed.

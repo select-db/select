@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, open, test } from './wails';
+import { QUERIED, expect, open, test } from './wails';
 import { editor, queryResultTable, testId } from './selectors';
 import {
 	MAX_AUTO_COLUMN_WIDTH,
@@ -10,14 +10,12 @@ import {
 /**
  * The results table, for two things nothing else here would notice.
  *
- * The modal a cell expands into is monaco, and monaco is no longer in the bundle
- * by the time this runs. It arrives when the modal opens or it does not arrive at
- * all, and an empty modal is not something the app would report -- it would
- * simply be empty.
+ * The modal a cell expands into is monaco, which is no longer in the bundle by
+ * the time this runs: it arrives when the modal opens or not at all, and an
+ * empty modal is not something the app reports.
  *
- * Column widths come from measuring the first batch of rows against the theme's
- * own font, which only a browser can do. A unit test would be measuring the
- * fallback.
+ * Column widths come from measuring the first rows against the theme's own
+ * font, which only a browser can do. A unit test would measure the fallback.
  */
 
 const QUERY =
@@ -50,13 +48,13 @@ test('a cell expands into an editor', async ({ page, signIn }) => {
 	await run(page, QUERY);
 
 	// The row count the toolbar reports, which only a result can set.
-	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/12/, { timeout: 20_000 });
+	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/12/, QUERIED);
 
 	await queryResultTable.cell(page, 0, STATUS).click();
 	await expect(queryResultTable.cellInput(page)).toBeVisible();
 	await page.keyboard.press('Shift+Enter');
 
-	await expect(page.locator('.monaco-editor').last()).toBeVisible({ timeout: 20_000 });
+	await expect(page.locator('.monaco-editor').last()).toBeVisible(QUERIED);
 });
 
 // Single-digit ids against 400 characters of hex: the two ends of the clamp, in
@@ -67,7 +65,7 @@ test('columns are sized to the rows that arrived', async ({ page, signIn }) => {
 	await open(page, signIn);
 	await run(page, WIDTHS_QUERY);
 
-	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/5/, { timeout: 20_000 });
+	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/5/, QUERIED);
 
 	// Non-optional: a null box means the header never laid out, which is a
 	// different failure from one that laid out at the wrong width.
