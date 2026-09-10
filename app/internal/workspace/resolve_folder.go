@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 )
 
-// normalizeFolder returns an absolute, cleaned path, refusing the two folders
+// resolveFolder returns an absolute, cleaned path, refusing the two folders
 // nobody opens on purpose: a home directory and a filesystem root both mean
 // indexing everything the user owns. Anything narrower would get in the way of
 // people who keep SQL in odd places.
-func normalizeFolder(path string) (string, error) {
+func resolveFolder(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("no folder given")
 	}

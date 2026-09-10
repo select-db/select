@@ -5,39 +5,6 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-export class CreateWorkspaceParams {
-    "ID": string;
-    "WorkspaceToUserID": string;
-    "UserID": string;
-    "Name": string;
-
-    /** Creates a new CreateWorkspaceParams instance. */
-    constructor($$source: Partial<CreateWorkspaceParams> = {}) {
-        if (!("ID" in $$source)) {
-            this["ID"] = "";
-        }
-        if (!("WorkspaceToUserID" in $$source)) {
-            this["WorkspaceToUserID"] = "";
-        }
-        if (!("UserID" in $$source)) {
-            this["UserID"] = "";
-        }
-        if (!("Name" in $$source)) {
-            this["Name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CreateWorkspaceParams instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CreateWorkspaceParams {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new CreateWorkspaceParams($$parsedSource as Partial<CreateWorkspaceParams>);
-    }
-}
-
 /**
  * FolderState is the status plus whatever its screen needs to say something
  * specific.

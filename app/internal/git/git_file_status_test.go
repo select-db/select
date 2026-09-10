@@ -14,8 +14,8 @@ import (
 // openWorkspace makes dir the open workspace for the duration of the test.
 func openWorkspace(t *testing.T, workspaceID, dir string) {
 	t.Helper()
-	graph.SetOpenWorkspaceRoot(workspaceID, dir)
-	t.Cleanup(graph.ClearOpenWorkspaceRoot)
+	graph.SetOpenWorkspace(workspaceID, dir)
+	t.Cleanup(graph.ClearOpenWorkspace)
 }
 
 // setupTestGitRepo creates a temporary git repository and opens it as the

@@ -28,8 +28,8 @@ func seedInto(t *testing.T) string {
 	// The sample is written into the folder somebody opened, so the fixture
 	// opens one.
 	root := t.TempDir()
-	graph.SetOpenWorkspaceRoot("test-workspace", root)
-	t.Cleanup(graph.ClearOpenWorkspaceRoot)
+	graph.SetOpenWorkspace("test-workspace", root)
+	t.Cleanup(graph.ClearOpenWorkspace)
 
 	if err := sample.Write("test-workspace"); err != nil {
 		t.Fatalf("write sample: %v", err)

@@ -395,8 +395,8 @@ func createTempWorkspaceWithSQLFiles(t *testing.T, files map[string]string) (str
 	_, restore := withTempAppDataDirForSubstitution(t)
 	workspaceID := "ws-subst"
 	workspaceRoot := t.TempDir()
-	graph.SetOpenWorkspaceRoot(workspaceID, workspaceRoot)
-	t.Cleanup(graph.ClearOpenWorkspaceRoot)
+	graph.SetOpenWorkspace(workspaceID, workspaceRoot)
+	t.Cleanup(graph.ClearOpenWorkspace)
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(workspaceRoot, name), []byte(content), 0o600); err != nil {
 			t.Fatalf("write %s: %v", name, err)

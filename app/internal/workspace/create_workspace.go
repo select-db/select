@@ -8,17 +8,16 @@ import (
 	"selectDb/internal/db/generated"
 )
 
-type CreateWorkspaceParams struct {
+type newWorkspaceParams struct {
 	ID                string
 	WorkspaceToUserID string
 	UserID            string
 	Name              string
 }
 
-// CreateWorkspace records a server-created workspace and this user's membership.
-// It does not make it current: adoptFolder owns that, since current follows from
-// which folder is open.
-func (w *Workspace) CreateWorkspace(params CreateWorkspaceParams) (generated.Workspace, error) {
+// insertWorkspace records a server-created workspace and this user's membership.
+// It does not make it current: setCurrentWorkspace owns that.
+func (w *Workspace) insertWorkspace(params newWorkspaceParams) (generated.Workspace, error) {
 	if params.ID == "" || params.WorkspaceToUserID == "" || params.UserID == "" {
 		return generated.Workspace{}, fmt.Errorf("ID, WorkspaceToUserID, and UserID are required")
 	}

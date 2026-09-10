@@ -7,6 +7,5 @@ export {
     ListRolesByWorkspaceRow,
     MutationCommit,
     Role,
-    User,
-    Workspace
+    User
 } from "./models.js";

@@ -11,11 +11,11 @@ import (
 
 const syncDebounceDelay = 500 * time.Millisecond
 
-// CurrentWorkspaceGoneHandler runs when a server delete takes away the open
-// workspace, or this user's membership of it. There is nothing to switch to:
-// picking a different folder is the user's call.
-type CurrentWorkspaceGoneHandler interface {
-	OnCurrentWorkspaceGone()
+// WorkspaceGoneHandler runs when a server delete takes away the open workspace,
+// or this user's membership of it. There is nothing to switch to: picking a
+// different folder is the user's call.
+type WorkspaceGoneHandler interface {
+	OnWorkspaceGone()
 }
 
 type Syncer struct {
@@ -24,7 +24,7 @@ type Syncer struct {
 	Graph   *graph.Graph
 
 	// Optional; set by app wiring.
-	CurrentWorkspaceGone CurrentWorkspaceGoneHandler
+	WorkspaceGone WorkspaceGoneHandler
 
 	// EmitRolesUpdated is optional. When set, called after sync applies role/user_to_role/permission changes.
 	EmitRolesUpdated func()

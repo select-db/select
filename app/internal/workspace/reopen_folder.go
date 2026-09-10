@@ -35,31 +35,27 @@ func (w *Workspace) GetLastFolder() (LastFolder, error) {
 		return LastFolder{}, fmt.Errorf("get current workspace: %w", err)
 	}
 
-	folder, ok := w.folderFor(ctx, ws.ID, ws.LocalPath.Or(""))
-	if !ok {
+	folder := ws.LocalPath.Or("")
+	if !folderNamesWorkspace(folder, ws.ID) {
+		// Gone, or now another workspace's. Forget it quietly.
+		_ = w.forgetFolder(ctx, ws.ID)
 		return LastFolder{}, nil
 	}
 	return LastFolder{Path: folder, Name: ws.Name}, nil
 }
 
-// folderFor confirms remembered still holds a config naming workspaceID, and
-// forgets it when it does not.
+// folderNamesWorkspace reports whether path still holds a config naming
+// workspaceID.
 //
 // local_path is a hint, never an authority: a folder re-inited as a different
 // workspace leaves the old row pointing at it, so acting on the memory without
 // asking the folder acts on somebody else's.
-func (w *Workspace) folderFor(ctx context.Context, workspaceID, remembered string) (string, bool) {
-	if remembered == "" {
-		return "", false
+func folderNamesWorkspace(path, workspaceID string) bool {
+	if path == "" {
+		return false
 	}
-
-	cfg, err := graph.ReadWorkspaceConfig(remembered)
-	if err != nil || cfg.WorkspaceID != workspaceID {
-		// Gone, or now another workspace's. Forget it quietly.
-		_ = w.forgetFolder(ctx, workspaceID)
-		return "", false
-	}
-	return remembered, true
+	cfg, err := graph.ReadWorkspaceConfig(path)
+	return err == nil && cfg.WorkspaceID == workspaceID
 }
 
 // ReopenLastFolder runs after login, so a returning user skips the picker.
