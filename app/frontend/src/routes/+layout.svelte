@@ -13,6 +13,7 @@
 	} from '$lib/components/views/Git/gitStore';
 	import {
 		StartFileWatcher,
+		StopFileWatcher,
 		StartDatabaseWatcher
 	} from '$lib/bindings/selectDb/internal/system/system';
 
@@ -84,12 +85,23 @@
 	// Runes, because this component takes props now and the two modes cannot be
 	// mixed. These ran on init before and run after mount now, which neither the
 	// watchers nor the keybinding context care about.
-	let watchedWorkspaceId: string | undefined;
+	// Keyed on the folder, not the workspace: the same workspace can be opened
+	// at a different path, and the old watcher would keep its watches.
+	let watchedFolder: string | undefined;
 	$effect(() => {
 		const workspace = $workspaceGraphStore;
-		if (!workspace || workspace.id === watchedWorkspaceId) return;
+		if (!workspace) {
+			if (watchedFolder !== undefined) {
+				watchedFolder = undefined;
+				StopFileWatcher();
+			}
+			return;
+		}
 
-		watchedWorkspaceId = workspace.id;
+		const key = `${workspace.id}:${$folderStore?.path ?? ''}`;
+		if (key === watchedFolder) return;
+
+		watchedFolder = key;
 		gitWorkspaceStatusStore.set(null);
 		gitFileStatusStore.set(null);
 		loadGitStatus();

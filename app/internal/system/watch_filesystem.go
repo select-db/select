@@ -32,7 +32,17 @@ func classifyFSOp(op fsnotify.Op) (string, bool) {
 	}
 }
 
-// Stops any running watcher and starts a new one for workspaceID.
+// StopFileWatcher releases the inotify watches on a folder being closed.
+func (s *System) StopFileWatcher() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fileWatcherCancel != nil {
+		s.fileWatcherCancel()
+		s.fileWatcherCancel = nil
+	}
+}
+
+// StartFileWatcher stops any running watcher and starts a new one for workspaceID.
 func (s *System) StartFileWatcher(workspaceID string) {
 	s.mu.Lock()
 	if s.fileWatcherCancel != nil {

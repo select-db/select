@@ -102,7 +102,7 @@ func NewApp() *App {
 	}
 
 	Server := server.New(
-		func(_ string) {
+		func() {
 			Graph.InvalidateWorkspaceGraph()
 		},
 		db.RunMigrationsAt,
@@ -113,7 +113,7 @@ func NewApp() *App {
 	Group := group.New(Queries)
 	DbClient := db_client.New(Queries, Graph, FSProvider)
 	SqlLang := sqllang.New(Graph, Queries, DbClient.GetMeta, DbClient.InspectStatement)
-	Workspace := workspace.New(Queries, FSProvider, Graph)
+	Workspace := workspace.New(Queries, Graph)
 
 	System := system.New(Queries, Graph, DbClient, FSProvider)
 	Graph.AfterWorkspaceGraphBuild = func(ws *graph.WorkspaceNode) {

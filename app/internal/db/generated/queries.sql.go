@@ -28,18 +28,6 @@ func (q *Queries) ClearCurrentWorkspaceToUser(ctx context.Context) error {
 	return err
 }
 
-const clearWorkspaceLocalPaths = `-- name: ClearWorkspaceLocalPaths :exec
-; -- @no-track
-UPDATE workspace
-SET local_path = NULL
-WHERE local_path IS NOT NULL
-`
-
-func (q *Queries) ClearWorkspaceLocalPaths(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearWorkspaceLocalPaths)
-	return err
-}
-
 const createHistory = `-- name: CreateHistory :one
 ; -- @no-track
 INSERT INTO history (
@@ -640,35 +628,6 @@ func (q *Queries) GetWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg 
 	row := q.db.QueryRowContext(ctx, getWorkspaceToUserByUserAndWorkspace, arg.UserID, arg.WorkspaceID)
 	var i GetWorkspaceToUserByUserAndWorkspaceRow
 	err := row.Scan(&i.ID, &i.WorkspaceID, &i.UserID)
-	return i, err
-}
-
-const getWorkspaceToUserByUserId = `-- name: GetWorkspaceToUserByUserId :one
-SELECT 
-    w.id, w.name, w.last_pulled_at, w.owner_id, w.statement_timeout_ms, w.max_result_size_mb, w.logo, w.local_path 
-FROM 
-    workspace w
-    LEFT JOIN workspace_to_user wtu ON wtu.workspace_id = w.id
-WHERE 
-    wtu.user_id = ?1
-ORDER BY 
-    w.name ASC 
-LIMIT 1
-`
-
-func (q *Queries) GetWorkspaceToUserByUserId(ctx context.Context, userID string) (Workspace, error) {
-	row := q.db.QueryRowContext(ctx, getWorkspaceToUserByUserId, userID)
-	var i Workspace
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.LastPulledAt,
-		&i.OwnerID,
-		&i.StatementTimeoutMs,
-		&i.MaxResultSizeMb,
-		&i.Logo,
-		&i.LocalPath,
-	)
 	return i, err
 }
 

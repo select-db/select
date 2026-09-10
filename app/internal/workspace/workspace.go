@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"selectDb/internal/db/generated"
-	"selectDb/internal/fs_provider"
 	"selectDb/internal/graph"
 )
 
@@ -20,17 +19,15 @@ type ReloadHooks struct {
 
 type Workspace struct {
 	Queries     *generated.Queries
-	FSProvider  *fs_provider.FSProvider
 	Graph       *graph.Graph
 	ReloadHooks *ReloadHooks
 	// PullFunc fetches server-side changes locally. Wired by the app layer to avoid circular deps.
 	PullFunc func(ctx context.Context, userID string) error
 }
 
-func New(Queries *generated.Queries, FSProvider *fs_provider.FSProvider, Graph *graph.Graph) *Workspace {
+func New(Queries *generated.Queries, Graph *graph.Graph) *Workspace {
 	return &Workspace{
-		Queries:    Queries,
-		FSProvider: FSProvider,
-		Graph:      Graph,
+		Queries: Queries,
+		Graph:   Graph,
 	}
 }

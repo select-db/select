@@ -175,10 +175,17 @@ export function StartDatabaseWatcher(): $CancellablePromise<void> {
 }
 
 /**
- * Stops any running watcher and starts a new one for workspaceID.
+ * StartFileWatcher stops any running watcher and starts a new one for workspaceID.
  */
 export function StartFileWatcher(workspaceID: string): $CancellablePromise<void> {
     return $Call.ByID(2481068214, workspaceID);
+}
+
+/**
+ * StopFileWatcher releases the inotify watches on a folder being closed.
+ */
+export function StopFileWatcher(): $CancellablePromise<void> {
+    return $Call.ByID(3165017730);
 }
 
 /**

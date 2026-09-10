@@ -48,7 +48,7 @@ func (s *Syncer) Sync(ctx context.Context, userID string) error {
 		// No current workspace for this user — or a stale pointer left by a
 		// previous user (e.g. after the backend reassigned ids). Full-pull the
 		// backend's workspaces so the next Sync uses the normal path.
-		return s.syncWith(ctx, userID, nil, nil, false, "")
+		return s.syncWith(ctx, userID, nil, nil, "")
 	}
 
 	var lastPulledAt *time.Time
@@ -66,7 +66,7 @@ func (s *Syncer) Sync(ctx context.Context, userID string) error {
 		if len(commits) == 0 {
 			return nil
 		}
-		if err := s.syncWith(ctx, userID, commits, lastPulledAt, true, currentWTU.WorkspaceID); err != nil {
+		if err := s.syncWith(ctx, userID, commits, lastPulledAt, currentWTU.WorkspaceID); err != nil {
 			return err
 		}
 		if len(commits) < pendingCommitsBatchSize {
@@ -86,7 +86,7 @@ func (s *Syncer) Sync(ctx context.Context, userID string) error {
 func (s *Syncer) Pull(ctx context.Context, userID string) error {
 	currentWTU, err := s.Queries.GetCurrentWorkspaceToUser(ctx)
 	if err != nil || currentWTU.UserID != userID {
-		return s.syncWith(ctx, userID, nil, nil, false, "")
+		return s.syncWith(ctx, userID, nil, nil, "")
 	}
 
 	var lastPulledAt *time.Time
@@ -94,13 +94,13 @@ func (s *Syncer) Pull(ctx context.Context, userID string) error {
 		lastPulledAt = &at.Time
 	}
 
-	return s.syncWith(ctx, userID, nil, lastPulledAt, true, currentWTU.WorkspaceID)
+	return s.syncWith(ctx, userID, nil, lastPulledAt, currentWTU.WorkspaceID)
 }
 
 // 1. sends commits to the backend
 // 2. applies the response (confirmed, restored, changes)
 // 3. update last_pulled_at
-func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generated.MutationCommit, lastPulledAt *time.Time, hadCurrentWorkspace bool, currentWorkspaceID string) error {
+func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generated.MutationCommit, lastPulledAt *time.Time, currentWorkspaceID string) error {
 	pending := make([]SyncCommit, 0, len(commits))
 	for _, c := range commits {
 		pending = append(pending, SyncCommit{
@@ -269,9 +269,9 @@ func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload m
 	var err error
 	switch tableName {
 	case "workspace":
-		wasCurrent, _, err = syncworkspace.ApplyDelete(ctx, s.Queries, payload)
+		wasCurrent, err = syncworkspace.ApplyDelete(ctx, s.Queries, payload)
 	case "workspace_to_user":
-		wasCurrent, _, err = syncwtu.ApplyDelete(ctx, s.Queries, payload)
+		wasCurrent, err = syncwtu.ApplyDelete(ctx, s.Queries, payload)
 	case "role":
 		err = syncrole.ApplyDelete(ctx, s.Queries, payload)
 	case "user_to_role":

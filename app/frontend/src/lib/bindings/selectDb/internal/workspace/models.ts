@@ -272,45 +272,6 @@ export class WorkspaceUserRole {
     }
 }
 
-/**
- * WorkspaceWithCurrent is a workspace entry with a current flag for the UI.
- * Logo is the base64 of a 128x128 PNG, empty when the workspace has none; the
- * UI composes the data URL around it so a stored value can never bring its own
- * media type.
- */
-export class WorkspaceWithCurrent {
-    "id": string;
-    "name": string;
-    "logo": string;
-    "current": boolean;
-
-    /** Creates a new WorkspaceWithCurrent instance. */
-    constructor($$source: Partial<WorkspaceWithCurrent> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("logo" in $$source)) {
-            this["logo"] = "";
-        }
-        if (!("current" in $$source)) {
-            this["current"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new WorkspaceWithCurrent instance from a string or object.
-     */
-    static createFrom($$source: any = {}): WorkspaceWithCurrent {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new WorkspaceWithCurrent($$parsedSource as Partial<WorkspaceWithCurrent>);
-    }
-}
-
 // Private type creation functions
 const $$createType0 = WorkspaceUserRole.createFrom;
 const $$createType1 = $Create.Array($$createType0);

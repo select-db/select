@@ -38,13 +38,6 @@ func WorkspaceConfigPath(folder string) string {
 	return filepath.Join(folder, WorkspaceConfigFileName)
 }
 
-// IsWorkspaceFolder reports whether folder holds a workspace config, mirroring
-// CheckIsDBInstance for database directories.
-func IsWorkspaceFolder(folder string) bool {
-	_, err := os.Stat(WorkspaceConfigPath(folder))
-	return err == nil
-}
-
 // ReadWorkspaceConfig returns ErrNoWorkspaceConfig when there is no file, and a
 // plain error when there is one but it is unusable. Callers must keep the two
 // apart: offering to create a workspace over a corrupt config loses the one it

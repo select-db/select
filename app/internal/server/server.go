@@ -8,19 +8,19 @@ import (
 // Server provides server selection and management (domain-based, no meta DB).
 // DB operations are injected to avoid import cycles.
 type Server struct {
-	setRootFunc     func(root string)
+	onServerChanged func()
 	runMigrationsAt func(dbPath string) error
 	switchToServer  func(domain string) error
 }
 
 // New returns a new Server. Callbacks are invoked when the current server is set or switched.
 func New(
-	setRootFunc func(root string),
+	onServerChanged func(),
 	runMigrationsAt func(dbPath string) error,
 	switchToServer func(domain string) error,
 ) *Server {
 	return &Server{
-		setRootFunc:     setRootFunc,
+		onServerChanged: onServerChanged,
 		runMigrationsAt: runMigrationsAt,
 		switchToServer:  switchToServer,
 	}
@@ -68,8 +68,8 @@ func (s *Server) SetCurrentServer(domain string) error {
 	if err := WriteCurrentDomain(domain); err != nil {
 		return err
 	}
-	if s.setRootFunc != nil {
-		s.setRootFunc(serverDir)
+	if s.onServerChanged != nil {
+		s.onServerChanged()
 	}
 	return nil
 }
@@ -129,16 +129,8 @@ func (s *Server) RemoveServer(domain string) error {
 		if err := WriteCurrentDomain(next); err != nil {
 			return err
 		}
-		if s.setRootFunc != nil {
-			if next != "" {
-				nextRoot, err := ServerRootPath(next)
-				if err != nil {
-					return err
-				}
-				s.setRootFunc(nextRoot)
-			} else {
-				s.setRootFunc("")
-			}
+		if s.onServerChanged != nil {
+			s.onServerChanged()
 		}
 	}
 	return os.RemoveAll(serverDir)

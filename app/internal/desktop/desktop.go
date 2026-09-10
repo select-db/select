@@ -66,21 +66,17 @@ type FileFilter struct {
 }
 
 // OpenDirectory shows a native folder picker, returning "" when cancelled.
-func OpenDirectory(title, defaultDirectory string) (string, error) {
+func OpenDirectory(title string) (string, error) {
 	app := application.Get()
 	if app == nil {
 		return "", ErrNoApplication
 	}
 
-	dialog := app.Dialog.OpenFile().
+	return app.Dialog.OpenFile().
 		SetTitle(title).
 		CanChooseDirectories(true).
-		CanChooseFiles(false)
-	if defaultDirectory != "" {
-		dialog.SetDirectory(defaultDirectory)
-	}
-
-	return dialog.PromptForSingleSelection()
+		CanChooseFiles(false).
+		PromptForSingleSelection()
 }
 
 // OpenFile shows a native file picker and returns the selected path. The
