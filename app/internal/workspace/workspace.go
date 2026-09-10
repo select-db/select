@@ -12,9 +12,7 @@ import (
 type ReloadHooks struct {
 	BuildWorkspaceGraph       func() error
 	EmitWorkspaceGraphUpdated func()
-	// EmitWorkspaceClosed tells the frontend no folder is open any more, so it
-	// shows the no-folder screen rather than a tree of files that are gone.
-	EmitWorkspaceClosed func()
+	EmitWorkspaceClosed       func()
 }
 
 type Workspace struct {

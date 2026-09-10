@@ -117,8 +117,7 @@
 
 <style>
 	.wrapper {
-		/* The window is frameless and this screen renders no tab bar, so the
-		   backdrop is the drag handle, as on the sign-in screen. */
+		/* Frameless window, no tab bar: the backdrop is the drag handle. */
 		--wails-draggable: drag;
 
 		display: flex;
@@ -129,8 +128,8 @@
 		background-color: var(--gray-0);
 	}
 
-	/* --wails-draggable inherits, so anything interactive has to opt back out or
-	   its mousedown starts a window drag instead of reaching the control. */
+	/* --wails-draggable inherits, so controls have to opt back out or their
+	   mousedown starts a window drag. */
 	.actions,
 	.field,
 	.wrapper :global(button),
