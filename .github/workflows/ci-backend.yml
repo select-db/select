@@ -3,7 +3,7 @@ name: Backend
 # The hosted server module. Called by ci.yml, which owns the gating.
 #
 # Quality and tests do not depend on each other, for the reason given in
-# ci-app-backend.yml.
+# ci-app.yml.
 
 on:
   workflow_call:

@@ -227,43 +227,22 @@ jobs:
       - name: Scan working tree for secrets
         run: gitleaks dir . --config .gitleaks.toml --redact --verbose
 
-  # ---- Quality (lint / typecheck) ----
-  quality-frontend:
-    name: Frontend typecheck & lint
-    needs: [plan]
-    if: needs.plan.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: app/frontend/package-lock.json
-      # --prefer-offline: setup-node restores ~/.npm, but npm still revalidates
-      # it against the registry, and that round-trip stalls on these runners --
-      # the same `npm ci` measured 5s to 7m03s within one hour. Cached entries
-      # are served without asking, anything missing is still fetched, so the
-      # lockfile alone decides versions. The timeout bounds a hang: it sits above
-      # every measurement, so a slow day stays green rather than red.
-      - run: npm ci --prefer-offline --no-audit --no-fund
-        working-directory: app/frontend
-        timeout-minutes: 10
-      - run: npm run check
-        working-directory: app/frontend
-      - run: npm run lint
-        working-directory: app/frontend
-
   # ---- Per-module quality and tests ----
   # One called workflow per module, so a module's checks sit together in the
   # run graph and in the tree instead of spread across a flat list of nine.
   # Gating stays here: `plan` decides, the caller applies, and the called
   # workflow only knows how to check its module.
-  app-backend:
-    name: App backend
+  app:
+    name: App
     needs: [plan]
-    if: needs.plan.outputs.go-app == 'true'
-    uses: ./.github/workflows/ci-app-backend.yml
+    if: needs.plan.outputs.go-app == 'true' || needs.plan.outputs.frontend == 'true'
+    uses: ./.github/workflows/ci-app.yml
+    # The app module has a Go half and a web half that change independently, so
+    # the caller runs when either did and passes both answers in. plan still
+    # decides; the called workflow only applies.
+    with:
+      go-app: ${{ needs.plan.outputs.go-app == 'true' }}
+      frontend: ${{ needs.plan.outputs.frontend == 'true' }}
 
   backend:
     name: Backend
@@ -290,99 +269,6 @@ jobs:
         working-directory: dialect/core/tokenanalyzer/python
       - run: uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
         working-directory: dialect/core/tokenanalyzer/python
-
-  e2e-app:
-    name: App e2e
-    needs: [plan]
-    if: needs.plan.outputs.frontend == 'true' || needs.plan.outputs.go-app == 'true'
-    runs-on: ubuntu-latest
-    # The suite drives a server-mode build (`-tags server`): the real Go
-    # services and bindings behind an HTTP server instead of a webview, so it
-    # runs under an ordinary browser with no display server in sight.
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        id: setup-go
-        with:
-          go-version-file: app/go.mod
-          # setup-go keys its cache on go.sum alone, so all four app jobs share
-          # one entry and only the first to finish writes it. That winner builds
-          # -tags gtk3 with cgo; this job builds -tags server without it, so
-          # nothing in the shared entry is reusable here and the server binary
-          # compiled from cold on every run. Keep an entry of its own instead.
-          cache: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-e2e-${{ runner.os }}-${{ hashFiles('app/go.sum') }}
-          restore-keys: go-e2e-${{ runner.os }}-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: app/frontend/package-lock.json
-
-      # Both the wails CLI and the binding generator compile the app's cgo
-      # webview code, so this job needs the GTK3 headers even though the binary
-      # it ends up testing links no GUI toolkit at all. Moving the generator to
-      # a job that already had the headers was tried and reverted: this job
-      # finishes minutes inside the critical path, so the install costs nothing
-      # here, and the jobs that already had them are that critical path.
-      - run: sudo apt-get update && sudo apt-get install -y gcc libgtk-3-dev libwebkit2gtk-4.1-dev
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: cache-wails
-        with:
-          path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
-
-      - name: Install Wails
-        if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
-
-      # Flags and timeout as in the frontend quality job above.
-      - run: npm ci --prefer-offline --no-audit --no-fund
-        working-directory: app/frontend
-        timeout-minutes: 10
-
-      # The browsers cache, the OS packages behind them do not, so the download
-      # is what gets skipped. --only-shell: the suite sets neither `channel` nor
-      # `headless: false`, so it drives the headless shell, and the 184MB full
-      # Chrome build is a download nothing here ever launches.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: cache-playwright
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
-      - run: npx playwright install-deps chromium
-        working-directory: app/frontend
-      - run: npx playwright install --only-shell chromium
-        if: steps.cache-playwright.outputs.cache-hit != 'true'
-        working-directory: app/frontend
-
-      - run: wails3 task test:e2e
-        working-directory: app
-
-      # The bindings are committed, and building the suite regenerates them, so
-      # a Go signature change that was never regenerated shows up here as a
-      # dirty tree rather than as a type error nobody sees until runtime.
-      - name: Generated bindings are up to date
-        working-directory: app
-        run: |
-          git diff --exit-code frontend/src/lib/bindings || {
-            echo "::error::Bindings are stale. Run 'wails3 task generate:bindings' and commit the result."
-            exit 1
-          }
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: failure()
-        with:
-          name: playwright-report
-          path: app/frontend/playwright-report/
-          retention-days: 7
 
   # ---- Website (docs + API reference + marketing) ----
   website:
@@ -418,12 +304,10 @@ jobs:
       - plan
       - security
       - gitleaks
-      - quality-frontend
-      - app-backend
+      - app
       - backend
       - dialect
       - test-analyzer
-      - e2e-app
       - website
     runs-on: ubuntu-latest
     steps:
@@ -444,7 +328,11 @@ jobs:
   # resets when the workflow file is renamed and would break the update toast.
   version:
     name: Compute staging version
-    needs: [plan]
+    # After the gate, not beside it. Everything that consumes this waits for
+    # `ci-ok` anyway, so running it earlier bought nothing and spent a runner
+    # on every run that was going to fail. It also leaves the graph saying what
+    # is actually true: nothing downstream of CI OK starts before CI OK.
+    needs: [plan, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     outputs:

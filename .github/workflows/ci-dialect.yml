@@ -3,7 +3,7 @@ name: Dialect
 # The SQL dialect module. Called by ci.yml, which owns the gating.
 #
 # Quality and tests do not depend on each other, for the reason given in
-# ci-app-backend.yml. This pair used to be chained, which made it the second
+# ci-app.yml. This pair used to be chained, which made it the second
 # longest path in a run for no reason: 1m12 of lint followed by 1m27 of tests
 # that never needed the lint result.
 
