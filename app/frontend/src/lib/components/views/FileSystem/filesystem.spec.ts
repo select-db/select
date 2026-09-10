@@ -11,9 +11,15 @@ import {
 	type APIRequestContext,
 	type Locator,
 	type Page
-} from './wails';
-import { editor, renameBox, selectedRows, tab, treeRow } from './selectors';
-import { choose, keepName, openRowMenu, openRootMenu, renameTo } from './tree';
+} from '../../../../../tests/e2e/wails';
+import { editor, renameBox, selectedRows, tab, treeRow } from '../../../../../tests/e2e/selectors';
+import {
+	choose,
+	keepName,
+	openRowMenu,
+	openRootMenu,
+	renameTo
+} from '../../../../../tests/e2e/tree';
 
 /**
  * File management: what a person does to the workspace tree in a session, plus

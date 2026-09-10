@@ -16,25 +16,24 @@ import { defineConfig } from '@playwright/test';
  * exactly what a second worker cannot have.
  */
 
+const NOT_SOURCE = ['**/node_modules/**', '**/build/**', '**/dist/**', '**/.svelte-kit/**'];
+
 export default defineConfig({
-	testDir: 'tests/e2e',
+	testDir: '.',
 
 	/**
-	 * `e2e` is the suite: specs under tests/e2e, run by `wails3 task test:e2e`
-	 * and by CI.
+	 * `e2e` is the suite, run by `wails3 task test:e2e` and by CI. A spec sits
+	 * beside the component it drives -- `Chat/chat.spec.ts` -- so what covers a
+	 * component is visible from its directory rather than from a list somewhere
+	 * else. What is shared between them stays under `tests/e2e`.
 	 *
-	 * `shots` writes the website's product screenshots. Each spec sits beside the
-	 * content that shows it. They write into the repo, so CI never selects this
-	 * project; `wails3 task shots` does, and sets SHOTS=1.
+	 * `shots` writes the website's product screenshots, beside the content that
+	 * shows them, on the same principle. They write into the repo, so CI never
+	 * selects this project; `wails3 task shots` does, and sets SHOTS=1.
 	 */
 	projects: [
-		{ name: 'e2e', testDir: 'tests/e2e', testMatch: /\.spec\.ts$/ },
-		{
-			name: 'shots',
-			testDir: '../..',
-			testMatch: /\.shot\.ts$/,
-			testIgnore: ['**/node_modules/**', '**/build/**', '**/dist/**', '**/.svelte-kit/**']
-		}
+		{ name: 'e2e', testDir: '.', testMatch: /\.spec\.ts$/, testIgnore: NOT_SOURCE },
+		{ name: 'shots', testDir: '../..', testMatch: /\.shot\.ts$/, testIgnore: NOT_SOURCE }
 	],
 
 	forbidOnly: !!process.env.CI,

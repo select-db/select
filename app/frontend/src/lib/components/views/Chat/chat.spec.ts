@@ -1,4 +1,12 @@
-import { AFTER_QUERY, QUERY_CALL, expect, open, intercept, test, type Page } from './wails';
+import {
+	AFTER_QUERY,
+	QUERY_CALL,
+	expect,
+	open,
+	intercept,
+	test,
+	type Page
+} from '../../../../../tests/e2e/wails';
 import {
 	ANTHROPIC,
 	PROVIDERS,
@@ -6,8 +14,8 @@ import {
 	say,
 	modelWillReply,
 	type ModelReply
-} from './aiProvider';
-import { toolCall, toolCallsInState, tabs } from './selectors';
+} from '../../../../../tests/e2e/aiProvider';
+import { toolCall, toolCallsInState, tabs } from '../../../../../tests/e2e/selectors';
 
 /**
  * The agent's tool calls, run for real against the seeded warehouse. Only the

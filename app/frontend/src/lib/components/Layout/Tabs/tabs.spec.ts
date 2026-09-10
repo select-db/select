@@ -1,6 +1,22 @@
-import { expect, exec, open, readFile, test, workspaceId, type Page } from './wails';
-import { activeTab, editor, selectedRows, tab, tabs, testId, treeRow } from './selectors';
-import { choose, openRowMenu, openRootMenu, renameTo } from './tree';
+import {
+	expect,
+	exec,
+	open,
+	readFile,
+	test,
+	workspaceId,
+	type Page
+} from '../../../../../tests/e2e/wails';
+import {
+	activeTab,
+	editor,
+	selectedRows,
+	tab,
+	tabs,
+	testId,
+	treeRow
+} from '../../../../../tests/e2e/selectors';
+import { choose, openRowMenu, openRootMenu, renameTo } from '../../../../../tests/e2e/tree';
 
 /**
  * Tabs: what the workbench does with them, not what they hold. A tab frames a
