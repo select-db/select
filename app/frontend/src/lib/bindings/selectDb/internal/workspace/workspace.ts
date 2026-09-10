@@ -25,6 +25,11 @@ export function CloseFolder(): $CancellablePromise<void> {
     return $Call.ByID(2005530750);
 }
 
+/**
+ * CreateWorkspace records a server-created workspace and this user's membership.
+ * It does not make it current: adoptFolder owns that, since current follows from
+ * which folder is open.
+ */
 export function CreateWorkspace(params: $models.CreateWorkspaceParams): $CancellablePromise<generated$0.Workspace> {
     return $Call.ByID(1706524711, params).then(($result: any) => {
         return $$createType0($result);
@@ -69,15 +74,6 @@ export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserE
 }
 
 /**
- * ListWorkspacesForCurrentUser returns all workspaces for the current user (from workspace_to_user).
- */
-export function ListWorkspacesForCurrentUser(): $CancellablePromise<$models.WorkspaceWithCurrent[]> {
-    return $Call.ByID(1919920487).then(($result: any) => {
-        return $$createType6($result);
-    });
-}
-
-/**
  * OpenFolder is the only thing that sets up a workspace: not login, not sync.
  */
 export function OpenFolder(path: string): $CancellablePromise<$models.OpenFolderResult> {
@@ -108,7 +104,7 @@ export function ReopenLastFolder(): $CancellablePromise<$models.OpenFolderResult
 
 export function SearchUser(email: string): $CancellablePromise<$models.SearchUserResult | null> {
     return $Call.ByID(2043344285, email).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType6($result);
     });
 }
 
@@ -134,7 +130,5 @@ const $$createType1 = $models.LastFolder.createFrom;
 const $$createType2 = $models.OpenFolderResult.createFrom;
 const $$createType3 = $models.WorkspaceUserEntry.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = $models.WorkspaceWithCurrent.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $models.SearchUserResult.createFrom;
-const $$createType8 = $Create.Nullable($$createType7);
+const $$createType5 = $models.SearchUserResult.createFrom;
+const $$createType6 = $Create.Nullable($$createType5);

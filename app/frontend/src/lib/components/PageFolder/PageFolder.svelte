@@ -14,27 +14,13 @@
 		lastFolderStore,
 		openFolder,
 		pickAndOpenFolder,
-		refreshLastFolder
+		applyOpenResult
 	} from './folderStore';
 
 	const view = $derived($folderStore);
 
+	// Empty means "use the folder's name", which the backend fills in.
 	let workspaceName = $state('');
-	let initialisedFor = $state('');
-
-	// The folder's own name is what the user would have typed, so it is what the
-	// field starts with. Reset when the folder changes, not on every render.
-	$effect(() => {
-		const s = $folderStore;
-		if (s?.state === 'needs_init' && initialisedFor !== s.path) {
-			initialisedFor = s.path;
-			workspaceName = s.suggestedName ?? '';
-		}
-	});
-
-	$effect(() => {
-		if ($folderStore?.state === 'no_folder') void refreshLastFolder();
-	});
 
 	async function createWorkspace() {
 		const s = $folderStore;
@@ -45,10 +31,7 @@
 			notify({ type: AlertType.Error, message: err?.message ?? 'Could not create the workspace' });
 			return;
 		}
-		folderStore.set(result);
-		// The graph load lives in the store's open path; reopening by path is the
-		// shortest way to reuse it rather than repeat it here.
-		await openFolder(s.path);
+		await applyOpenResult(result);
 	}
 </script>
 
@@ -64,8 +47,8 @@
 				<strong>{view.currentServer}</strong>.
 			</p>
 			<p class="hint">
-				Roles and permissions come from the server a workspace lives on, so this folder cannot
-				be opened until you sign in there. Sign out, pick
+				Roles and permissions come from the server a workspace lives on, so this folder cannot be
+				opened until you sign in there. Sign out, pick
 				<strong>{view.folderServer}</strong> on the sign-in screen, and open the folder again.
 			</p>
 			<div class="actions">
@@ -79,15 +62,15 @@
 			</p>
 			{#if view.staleWorkspaceId}
 				<p class="hint">
-					The folder says it belongs to a workspace this server does not have, or that you are
-					not a member of. Creating a workspace here replaces that reference; nothing else in
-					the folder is touched.
+					The folder says it belongs to a workspace this server does not have, or that you are not a
+					member of. Creating a workspace here replaces that reference; nothing else in the folder
+					is touched.
 				</p>
 			{:else}
 				<p class="hint">
-					Creating a workspace here adds a <code>select.config.json</code> naming it, and
-					nothing else. Your files stay exactly as they are. An empty folder also gets a small
-					sample database to start from.
+					Creating a workspace here adds a <code>select.config.json</code> naming it, and nothing else.
+					Your files stay exactly as they are. An empty folder also gets a small sample database to start
+					from.
 				</p>
 			{/if}
 
@@ -97,19 +80,14 @@
 			</div>
 
 			<div class="actions">
-				<Button
-					content="Create workspace"
-					emphasis="high"
-					disabled={!workspaceName.trim()}
-					onclick={createWorkspace}
-				/>
+				<Button content="Create workspace" emphasis="high" onclick={createWorkspace} />
 				<Button content="Open another folder" onclick={pickAndOpenFolder} />
 			</div>
-		{:else}
+		{:else if view.state === 'no_folder'}
 			<h1>No folder open</h1>
 			<p class="hint">
-				A workspace is a folder on your machine. Open one to start, and SELECT reads the SQL
-				files, database configs and lint rules already in it.
+				A workspace is a folder on your machine. Open one to start, and SELECT reads the SQL files,
+				database configs and lint rules already in it.
 			</p>
 
 			<div class="actions">
@@ -130,6 +108,9 @@
 			{#if $lastFolderStore}
 				<p class="hint path">{$lastFolderStore.path}</p>
 			{/if}
+		{:else}
+			<!-- opened: the tree is still loading -->
+			<Loader size={24} />
 		{/if}
 	</div>
 </div>

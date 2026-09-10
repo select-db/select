@@ -6,10 +6,13 @@ import {
 	OpenFolder,
 	PickFolder,
 	ReopenLastFolder,
-	GetLastFolder,
-	CloseFolder
+	GetLastFolder
 } from '$lib/bindings/selectDb/internal/workspace/workspace';
-import type { OpenFolderResult, LastFolder } from '$lib/bindings/selectDb/internal/workspace/models';
+import {
+	OpenFolderResult,
+	OpenFolderState,
+	type LastFolder
+} from '$lib/bindings/selectDb/internal/workspace/models';
 import {
 	clearWorkspaceGraphCache,
 	initializeWorkspaceGraph,
@@ -23,7 +26,7 @@ export const folderStore = writable<OpenFolderResult | null>(null);
 export const lastFolderStore = writable<LastFolder | null>(null);
 
 function noFolder(): OpenFolderResult {
-	return { state: 'no_folder', path: '' } as OpenFolderResult;
+	return new OpenFolderResult({ state: OpenFolderState.OpenFolderNone });
 }
 
 export function clearFolderState() {
@@ -32,20 +35,20 @@ export function clearFolderState() {
 }
 
 /** Only the opened state has a workspace behind it; the rest are screens. */
-async function apply(result: OpenFolderResult | null): Promise<void> {
+async function apply(result: OpenFolderResult): Promise<void> {
 	folderStore.set(result);
+	clearWorkspaceGraphCache();
 
-	if (result?.state !== 'opened') {
-		clearWorkspaceGraphCache();
-		workspaceGraphStore.set(undefined);
-		if (result?.state !== undefined) await refreshLastFolder();
+	if (result.state !== OpenFolderState.OpenFolderOpened) {
+		await refreshLastFolder();
 		return;
 	}
 
-	clearWorkspaceGraphCache();
 	const [graph] = await tryCatch(initializeWorkspaceGraph);
 	if (graph) workspaceGraphStore.set(graph);
 }
+
+export { apply as applyOpenResult };
 
 export async function refreshLastFolder(): Promise<void> {
 	const [last] = await tryCatch(GetLastFolder);
@@ -80,22 +83,12 @@ export async function reopenLastFolder(): Promise<void> {
 		await apply(noFolder());
 		return;
 	}
-	await apply(result ?? noFolder());
-}
-
-/** Closes the open folder without touching it. */
-export async function closeFolder(): Promise<void> {
-	const [, err] = await tryCatch(CloseFolder);
-	if (err) {
-		notify({ type: AlertType.Error, message: err?.message ?? 'Could not close the folder' });
-		return;
-	}
-	await onFolderClosed();
+	await apply(result);
 }
 
 /** The backend closed the folder on us, e.g. after a server delete. */
 export async function onFolderClosed(): Promise<void> {
-	if (get(folderStore)?.state === 'opened') {
+	if (get(folderStore)?.state === OpenFolderState.OpenFolderOpened) {
 		notify({
 			type: AlertType.Default,
 			message: 'This workspace is no longer available to you. Your files were left untouched.',

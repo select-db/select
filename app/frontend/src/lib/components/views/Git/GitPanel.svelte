@@ -270,9 +270,9 @@
 		<div class="section space x y">
 			<p class="section-title">Not a Git repository</p>
 			<p class="hint">
-				This folder is not under version control. Run <code>git init</code>, or clone an
-				existing repository and open that folder instead. The built-in terminal
-				(<code>Ctrl+`</code>) is a good place to do it.
+				This folder is not under version control. Run <code>git init</code>, or clone an existing
+				repository and open that folder instead. The built-in terminal (<code>Ctrl+`</code>) is a
+				good place to do it.
 			</p>
 		</div>
 	{/if}
@@ -309,7 +309,6 @@
 		padding-bottom: var(--space-sm-md);
 	}
 
-
 	.section-title {
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
@@ -333,7 +332,6 @@
 		display: flex;
 		gap: var(--space-xs);
 	}
-
 
 	:global(.github-panel .title-actions button:first-of-type) {
 		margin-left: auto;

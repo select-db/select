@@ -11,9 +11,6 @@ import (
 func TestWorkspaceConfigRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	if IsWorkspaceFolder(dir) {
-		t.Fatal("an empty folder is not a workspace")
-	}
 	if _, err := ReadWorkspaceConfig(dir); !errors.Is(err, ErrNoWorkspaceConfig) {
 		t.Fatalf("ReadWorkspaceConfig on an empty folder = %v, want ErrNoWorkspaceConfig", err)
 	}
@@ -21,10 +18,6 @@ func TestWorkspaceConfigRoundTrip(t *testing.T) {
 	if err := WriteWorkspaceConfig(dir, "app.select.dev", "ws-123"); err != nil {
 		t.Fatalf("WriteWorkspaceConfig: %v", err)
 	}
-	if !IsWorkspaceFolder(dir) {
-		t.Error("folder should read as a workspace once the config is written")
-	}
-
 	cfg, err := ReadWorkspaceConfig(dir)
 	if err != nil {
 		t.Fatalf("ReadWorkspaceConfig: %v", err)
@@ -52,8 +45,8 @@ func TestWorkspaceConfigRoundTrip(t *testing.T) {
 	if err := RemoveWorkspaceConfig(dir); err != nil {
 		t.Fatalf("RemoveWorkspaceConfig: %v", err)
 	}
-	if IsWorkspaceFolder(dir) {
-		t.Error("folder should stop being a workspace once the config is gone")
+	if _, err := ReadWorkspaceConfig(dir); !errors.Is(err, ErrNoWorkspaceConfig) {
+		t.Errorf("folder should stop being a workspace once the config is gone, got %v", err)
 	}
 	// Removing what is not there is how "delete workspace" behaves after a
 	// folder has already been cleaned up by hand, so it must not error.

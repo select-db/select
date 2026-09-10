@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 )
 
 // ignoreMatcher decides whether a directory is gitignored.
@@ -19,117 +17,80 @@ import (
 // A matcher is a snapshot: each .gitignore is read once, and a new WorkspaceFS
 // is the invalidation point.
 //
-// Only directories. A gitignored file stays visible and readable, and that is
-// deliberate rather than lazy: the .gitignore this app ships ignores .env,
-// which the app itself reads for $VARIABLES and offers in the tree. Hiding
-// files because git does would break the feature the file exists for.
-//
-// Directories are where the cost is -- node_modules, target, dist, .venv -- and
-// skipping one skips everything under it, which is also what git does: it never
-// looks inside an excluded directory, so a negation inside one cannot bring it
-// back.
-//
-// # What of the format is implemented
-//
-// Comments, blank lines, negation with "!", directory-only patterns with a
-// trailing "/", anchoring (a pattern containing a slash is relative to the
-// .gitignore holding it, one without matches at any depth), "*" and "?" and
-// character classes within a segment, "**" across segments, and last-match-wins
-// across the .gitignore files from the root down.
-//
-// Not implemented: .git/info/exclude, core.excludesFile, and escaped literals
-// such as "\#". None of them shows up in the workspace of somebody who wanted a
-// directory left alone.
-
-// ignoreMatcher answers whether a directory is excluded, reading the .gitignore
-// files above it and caching what it parsed.
+// Unsupported: .git/info/exclude, core.excludesFile, escaped literals.
 type ignoreMatcher struct {
 	root string
 
-	mu     sync.Mutex
-	byDir  map[string]*ignoreFile
-	loaded map[string]time.Time
-}
-
-// ignoreFile is one parsed .gitignore, and the directory it governs.
-type ignoreFile struct {
-	patterns []ignorePattern
+	mu      sync.Mutex
+	byDir   map[string][]ignorePattern
+	decided map[string]bool
 }
 
 type ignorePattern struct {
-	segs     []string
+	segs []string
+	// Set when the pattern holds no metacharacter, so the hot loop can use ==.
+	literal  string
 	negate   bool
 	anchored bool
 }
 
 func newIgnoreMatcher(root string) *ignoreMatcher {
 	return &ignoreMatcher{
-		root:   root,
-		byDir:  map[string]*ignoreFile{},
-		loaded: map[string]time.Time{},
+		root:    root,
+		byDir:   map[string][]ignorePattern{},
+		decided: map[string]bool{},
 	}
 }
 
-// IgnoresDir reports whether dir is excluded by a .gitignore at or above it.
+// IgnoresDir reports whether dir is gitignored. rel is dir relative to the
+// workspace root, slash-separated; the caller already has it.
 //
 // Files are read root-first so a deeper .gitignore overrides a shallower one,
 // and within a file the last matching pattern wins, which is what makes "!"
 // work.
-func (m *ignoreMatcher) IgnoresDir(dir string) bool {
-	if m == nil {
+func (m *ignoreMatcher) IgnoresDir(dir, rel string) bool {
+	if m == nil || rel == "" || rel == "." {
 		return false
-	}
-
-	rel, err := filepath.Rel(m.root, dir)
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return false
-	}
-
-	segments := strings.Split(filepath.ToSlash(rel), "/")
-
-	ignored := false
-	// Every directory from the root down to dir's parent may hold a .gitignore
-	// that has something to say about dir.
-	for i := range segments {
-		owner := filepath.Join(append([]string{m.root}, segments[:i]...)...)
-		file := m.load(owner)
-		if file == nil {
-			continue
-		}
-		subject := strings.Join(segments[i:], "/")
-		if decided, isIgnored := file.match(subject); decided {
-			ignored = isIgnored
-		}
-	}
-	return ignored
-}
-
-// load returns the parsed .gitignore in dir, re-reading it when it has changed
-// since it was cached. The watcher holds one matcher for a whole session, so a
-// .gitignore somebody edits has to take effect without a restart.
-func (m *ignoreMatcher) load(dir string) *ignoreFile {
-	p := filepath.Join(dir, ".gitignore")
-
-	var mtime time.Time
-	if info, err := os.Stat(p); err == nil {
-		mtime = info.ModTime()
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if was, seen := m.loaded[dir]; seen && was.Equal(mtime) {
-		return m.byDir[dir]
+	if was, seen := m.decided[dir]; seen {
+		return was
 	}
 
-	file := parseIgnoreFile(p)
-	m.loaded[dir] = mtime
-	m.byDir[dir] = file
-	return file
+	segments := strings.Split(rel, "/")
+
+	ignored := false
+	// Each ancestor's path is a prefix of dir, so slice rather than re-join.
+	off := len(m.root)
+	for i := range segments {
+		if patterns := m.patternsIn(dir[:off]); patterns != nil {
+			if decided, isIgnored := matchPatterns(patterns, segments[i:]); decided {
+				ignored = isIgnored
+			}
+		}
+		off += 1 + len(segments[i])
+	}
+
+	m.decided[dir] = ignored
+	return ignored
+}
+
+// patternsIn reads dir's .gitignore once, caching "no file here" too.
+// Callers hold m.mu.
+func (m *ignoreMatcher) patternsIn(dir string) []ignorePattern {
+	if patterns, seen := m.byDir[dir]; seen {
+		return patterns
+	}
+	patterns := parseIgnoreFile(dir + string(os.PathSeparator) + ".gitignore")
+	m.byDir[dir] = patterns
+	return patterns
 }
 
 // parseIgnoreFile returns nil when there is no file, or it holds no patterns.
-func parseIgnoreFile(path string) *ignoreFile {
+func parseIgnoreFile(path string) []ignorePattern {
 	f, err := os.Open(path) // #nosec G304 -- path is a workspace directory joined with a constant name
 	if err != nil {
 		return nil
@@ -143,10 +104,7 @@ func parseIgnoreFile(path string) *ignoreFile {
 			patterns = append(patterns, p)
 		}
 	}
-	if len(patterns) == 0 {
-		return nil
-	}
-	return &ignoreFile{patterns: patterns}
+	return patterns
 }
 
 func parseIgnoreLine(line string) (ignorePattern, bool) {
@@ -164,9 +122,6 @@ func parseIgnoreLine(line string) (ignorePattern, bool) {
 	// "Directories only" is all this matcher is asked about, so a trailing
 	// slash carries no information and is dropped.
 	line = strings.TrimSuffix(line, "/")
-	if line == "" {
-		return ignorePattern{}, false
-	}
 
 	// A slash anchors the pattern to the .gitignore's directory; without one it
 	// matches a name at any depth.
@@ -181,16 +136,15 @@ func parseIgnoreLine(line string) (ignorePattern, bool) {
 	}
 
 	p.segs = strings.Split(line, "/")
+	if len(p.segs) == 1 && !strings.ContainsAny(line, "*?[\\") {
+		p.literal = line
+	}
 	return p, true
 }
 
-// match reports whether the file has anything to say about subject, a
-// slash-separated path relative to the directory holding it, and what it said.
-// Later patterns override earlier ones.
-func (f *ignoreFile) match(subject string) (decided, ignored bool) {
-	segments := strings.Split(subject, "/")
-
-	for _, p := range f.patterns {
+// matchPatterns reports whether any pattern matched, and the last one's verdict.
+func matchPatterns(patterns []ignorePattern, segments []string) (decided, ignored bool) {
+	for _, p := range patterns {
 		if p.matches(segments) {
 			decided, ignored = true, !p.negate
 		}
@@ -212,6 +166,12 @@ func (p ignorePattern) matches(segments []string) bool {
 
 	// A bare name matches at any depth, so one matching component is enough.
 	for _, seg := range segments {
+		if p.literal != "" {
+			if p.literal == seg {
+				return true
+			}
+			continue
+		}
 		if ok, err := path.Match(p.segs[0], seg); err == nil && ok {
 			return true
 		}

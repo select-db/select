@@ -1,4 +1,7 @@
-import { clearWorkspaceGraphCache, workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+import {
+	clearWorkspaceGraphCache,
+	workspaceGraphStore
+} from '$lib/utils/graph/workspaceGraphStore';
 import {
 	clearFolderState,
 	onFolderClosed,
@@ -51,11 +54,14 @@ EventsOn('login', async () => {
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
 
+	// Keyed on the user, not the folder, so it need not wait on the tree walk.
+	const permissions = loadMyPermissions();
+
 	await reopenLastFolder();
 
 	modalStore.set(null);
 	checkSessionInterval = setInterval(() => CheckForLogout(), 500);
-	await Promise.all([loadGitStatus(), loadMyPermissions()]);
+	await Promise.all([loadGitStatus(), permissions]);
 });
 
 export const setupSessionWall = async () => {

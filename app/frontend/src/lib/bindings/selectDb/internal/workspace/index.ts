@@ -14,6 +14,5 @@ export {
     SearchUserResult,
     WorkspaceUserEntry,
     WorkspaceUserGroup,
-    WorkspaceUserRole,
-    WorkspaceWithCurrent
+    WorkspaceUserRole
 } from "./models.js";

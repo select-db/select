@@ -83,17 +83,12 @@ func (c *WorkspaceFS) entry(path string, d fs.DirEntry) (Entry, bool) {
 	if !inside || IsInternalWorkspacePath(rel) {
 		return Entry{}, false
 	}
+	// Directories only; see gitignore.go for why files are never filtered.
 	if d.IsDir() {
-		// Only directories are filtered by .gitignore, and skipping one skips
-		// what is under it: that is where a walk of somebody's own folder gets
-		// expensive, and it leaves gitignored files such as .env visible, which
-		// the app reads. See gitignore.go.
-		if c.ignore.IgnoresDir(path) {
+		if c.ignore.IgnoresDir(path, rel) {
 			return Entry{}, false
 		}
-		return Entry{DirEntry: d, Path: path, Rel: rel, fs: c}, true
-	}
-	if IsInternalWorkspaceFile(d.Name()) {
+	} else if IsInternalWorkspaceFile(d.Name()) {
 		return Entry{}, false
 	}
 	return Entry{DirEntry: d, Path: path, Rel: rel, fs: c}, true

@@ -47,7 +47,7 @@ type OpenFolderResult struct {
 
 // PickFolder returns "" when the user cancels.
 func (w *Workspace) PickFolder() (string, error) {
-	return desktop.OpenDirectory("Open Folder", "")
+	return desktop.OpenDirectory("Open Folder")
 }
 
 // OpenFolder is the only thing that sets up a workspace: not login, not sync.

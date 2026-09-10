@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"path/filepath"
+
 	"selectDb/internal/api"
 	"selectDb/internal/graph"
 	"selectDb/internal/server"
@@ -47,7 +49,7 @@ func (w *Workspace) InitWorkspaceInFolder(path, name string) (OpenFolderResult, 
 
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return OpenFolderResult{}, fmt.Errorf("a workspace needs a name")
+		name = filepath.Base(folder)
 	}
 
 	var resp createWorkspaceResponse

@@ -16,10 +16,11 @@ import (
 func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 	ctx := context.Background()
 
-	// Read before deleting the row, since that is where the folder is recorded.
+	// Read before deleting the row, and confirm the folder still names this
+	// workspace: a stale path would take another workspace's config.
 	folder := ""
 	if p, err := w.Queries.GetWorkspaceLocalPath(ctx, workspaceID); err == nil {
-		folder = p.Or("")
+		folder, _ = w.folderFor(ctx, workspaceID, p.Or(""))
 	}
 
 	if err := api.Fetch(ctx, "DELETE", "workspaces/"+workspaceID, nil, api.WorkspaceHeader(workspaceID), nil); err != nil {
