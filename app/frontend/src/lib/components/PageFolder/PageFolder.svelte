@@ -14,8 +14,9 @@
 		lastFolderStore,
 		openFolder,
 		pickAndOpenFolder,
-		showFolderResult
+		showFolderState
 	} from './folderStore';
+	import { WorkspaceStatus } from '$lib/bindings/selectDb/internal/workspace/models';
 
 	const view = $derived($folderStore);
 
@@ -24,14 +25,14 @@
 
 	async function createWorkspace() {
 		const s = $folderStore;
-		if (s?.state !== 'needs_init') return;
+		if (s?.status !== WorkspaceStatus.NeedsSetup) return;
 
 		const [result, err] = await tryCatch(InitWorkspaceInFolder, s.path, workspaceName.trim());
 		if (err) {
 			notify({ type: AlertType.Error, message: err?.message ?? 'Could not create the workspace' });
 			return;
 		}
-		await showFolderResult(result);
+		await showFolderState(result);
 	}
 </script>
 
@@ -39,7 +40,7 @@
 	<div class="panel">
 		{#if !view}
 			<Loader size={24} />
-		{:else if view.state === 'wrong_server'}
+		{:else if view.status === WorkspaceStatus.WrongServer}
 			<h1>This folder belongs to another server</h1>
 			<p class="hint">
 				<code>{view.path}</code> is a workspace on
@@ -55,7 +56,7 @@
 				<Button content="Sign out" emphasis="high" onclick={() => Logout()} />
 				<Button content="Open another folder" onclick={pickAndOpenFolder} />
 			</div>
-		{:else if view.state === 'needs_init'}
+		{:else if view.status === WorkspaceStatus.NeedsSetup}
 			<h1>{view.staleWorkspaceId ? 'This workspace no longer exists' : 'Set up this folder'}</h1>
 			<p class="hint">
 				<code>{view.path}</code>
@@ -83,7 +84,7 @@
 				<Button content="Create workspace" emphasis="high" onclick={createWorkspace} />
 				<Button content="Open another folder" onclick={pickAndOpenFolder} />
 			</div>
-		{:else if view.state === 'no_folder'}
+		{:else if view.status === WorkspaceStatus.NoFolder}
 			<h1>No folder open</h1>
 			<p class="hint">
 				A workspace is a folder on your machine. Open one to start, and SELECT reads the SQL files,
@@ -109,7 +110,7 @@
 				<p class="hint path">{$lastFolderStore.path}</p>
 			{/if}
 		{:else}
-			<!-- opened: the tree is still loading -->
+			<!-- ready: the tree is still loading -->
 			<Loader size={24} />
 		{/if}
 	</div>

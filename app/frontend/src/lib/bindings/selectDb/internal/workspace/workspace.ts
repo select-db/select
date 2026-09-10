@@ -61,7 +61,7 @@ export function GetLastFolder(): $CancellablePromise<$models.LastFolder> {
  * InitWorkspaceInFolder creates the workspace on the server, writes the config
  * that names it, and opens it. An empty name defaults to the folder's.
  */
-export function InitWorkspaceInFolder(path: string, name: string): $CancellablePromise<$models.OpenFolderResult> {
+export function InitWorkspaceInFolder(path: string, name: string): $CancellablePromise<$models.FolderState> {
     return $Call.ByID(1245205774, path, name).then(($result: any) => {
         return $$createType2($result);
     });
@@ -76,7 +76,7 @@ export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserE
 /**
  * OpenFolder is the only thing that sets up a workspace: not login, not sync.
  */
-export function OpenFolder(path: string): $CancellablePromise<$models.OpenFolderResult> {
+export function OpenFolder(path: string): $CancellablePromise<$models.FolderState> {
     return $Call.ByID(2229533346, path).then(($result: any) => {
         return $$createType2($result);
     });
@@ -96,7 +96,7 @@ export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<voi
 /**
  * ReopenLastFolder runs after login, so a returning user skips the picker.
  */
-export function ReopenLastFolder(): $CancellablePromise<$models.OpenFolderResult> {
+export function ReopenLastFolder(): $CancellablePromise<$models.FolderState> {
     return $Call.ByID(80028743).then(($result: any) => {
         return $$createType2($result);
     });
@@ -127,7 +127,7 @@ export function UpdateName(workspaceID: string, name: string): $CancellablePromi
 // Private type creation functions
 const $$createType0 = generated$0.Workspace.createFrom;
 const $$createType1 = $models.LastFolder.createFrom;
-const $$createType2 = $models.OpenFolderResult.createFrom;
+const $$createType2 = $models.FolderState.createFrom;
 const $$createType3 = $models.WorkspaceUserEntry.createFrom;
 const $$createType4 = $Create.Array($$createType3);
 const $$createType5 = $models.SearchUserResult.createFrom;

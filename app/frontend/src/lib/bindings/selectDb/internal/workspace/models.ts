@@ -39,6 +39,48 @@ export class CreateWorkspaceParams {
 }
 
 /**
+ * FolderState is the status plus whatever its screen needs to say something
+ * specific.
+ */
+export class FolderState {
+    "status": WorkspaceStatus;
+    "path": string;
+
+    /**
+     * The folder's own name, offered as the workspace name on the setup screen.
+     */
+    "suggestedName"?: string;
+
+    /**
+     * Set when the config names a workspace this server does not have, so the
+     * setup screen can say so rather than pretend the folder was never one.
+     */
+    "staleWorkspaceId"?: string;
+    "folderServer"?: string;
+    "currentServer"?: string;
+
+    /** Creates a new FolderState instance. */
+    constructor($$source: Partial<FolderState> = {}) {
+        if (!("status" in $$source)) {
+            this["status"] = WorkspaceStatus.$zero;
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FolderState instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FolderState {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FolderState($$parsedSource as Partial<FolderState>);
+    }
+}
+
+/**
  * LastFolder is what the no-folder screen offers to reopen.
  */
 export class LastFolder {
@@ -65,74 +107,6 @@ export class LastFolder {
         return new LastFolder($$parsedSource as Partial<LastFolder>);
     }
 }
-
-export class OpenFolderResult {
-    "state": OpenFolderState;
-    "path": string;
-
-    /**
-     * The folder's own name, offered as the workspace name on the init screen.
-     */
-    "suggestedName"?: string;
-
-    /**
-     * Set when the config names a workspace this server does not have, so the
-     * init screen can say so rather than pretend the folder was never one.
-     */
-    "staleWorkspaceId"?: string;
-    "folderServer"?: string;
-    "currentServer"?: string;
-
-    /** Creates a new OpenFolderResult instance. */
-    constructor($$source: Partial<OpenFolderResult> = {}) {
-        if (!("state" in $$source)) {
-            this["state"] = OpenFolderState.$zero;
-        }
-        if (!("path" in $$source)) {
-            this["path"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new OpenFolderResult instance from a string or object.
-     */
-    static createFrom($$source: any = {}): OpenFolderResult {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new OpenFolderResult($$parsedSource as Partial<OpenFolderResult>);
-    }
-}
-
-/**
- * OpenFolderState is which screen the frontend owes the user next.
- */
-export enum OpenFolderState {
-    /**
-     * The Go zero value for the underlying type of the enum.
-     */
-    $zero = "",
-
-    /**
-     * Signed in, nothing open.
-     */
-    OpenFolderNone = "no_folder",
-
-    /**
-     * The workspace is set up and the graph is built.
-     */
-    OpenFolderOpened = "opened",
-
-    /**
-     * No config, or one naming a workspace this server does not have.
-     */
-    OpenFolderNeedsInit = "needs_init",
-
-    /**
-     * The workspace lives on another server, whose permissions gate every query.
-     */
-    OpenFolderWrongServer = "wrong_server",
-};
 
 export class SearchUserResult {
     "found": boolean;
@@ -164,6 +138,37 @@ export class SearchUserResult {
         return new SearchUserResult($$parsedSource as Partial<SearchUserResult>);
     }
 }
+
+/**
+ * WorkspaceStatus is what opening a folder found, and so which screen the
+ * frontend owes the user next.
+ */
+export enum WorkspaceStatus {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * Signed in, nothing open.
+     */
+    NoFolder = "no_folder",
+
+    /**
+     * The workspace is set up and the graph is built.
+     */
+    Ready = "ready",
+
+    /**
+     * No config, or one naming a workspace this server does not have.
+     */
+    NeedsSetup = "needs_setup",
+
+    /**
+     * The workspace lives on another server, whose permissions gate every query.
+     */
+    WrongServer = "wrong_server",
+};
 
 export class WorkspaceUserEntry {
     "id": string;
