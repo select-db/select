@@ -8,7 +8,8 @@
 #   ./dev.sh app package           package it for this platform
 #   ./dev.sh app bindings          regenerate the frontend bindings from Go
 #   ./dev.sh app test              Go tests, then the frontend's check and lint
-#   ./dev.sh app e2e               the Playwright suite against a server build
+#   ./dev.sh app e2e [args...]     the Playwright suite against a server build
+#                                  args go to playwright: --ui, --headed, a spec name
 #   ./dev.sh app migrate up        apply pending migrations to the current server
 #   ./dev.sh app migrate down      roll back the last one
 #   ./dev.sh app migrate reset     roll back every one
@@ -137,11 +138,23 @@ require_wails3() {
 # every other platform needs none. Same rule as PLATFORM_TAGS in app/Taskfile.yml.
 app_tags() { [[ "$(uname -s)" == Linux ]] && echo "gtk3"; }
 
+# Extra arguments are handed to the task as CLI_ARGS, which the Taskfile
+# interpolates into the command it runs -- `app e2e --ui` reaches playwright.
+#
+# As a variable assignment rather than after `--`: wails3 wraps the task runner
+# and swallows everything past `--`, so CLI_ARGS arrives empty that way. The
+# value is one raw string, so an argument containing a space does not survive as
+# one argument; pass those to the tool directly.
 app_task() {
   require_wails3
-  step "App — $1"
-  (cd "$ROOT/app" && wails3 task "$1")
-  done_ "app $1"
+  local task="$1"; shift || true
+  step "App — $task${*:+ $*}"
+  if (( $# )); then
+    (cd "$ROOT/app" && wails3 task "$task" "CLI_ARGS=$*")
+  else
+    (cd "$ROOT/app" && wails3 task "$task")
+  fi
+  done_ "app $task"
 }
 
 # The same three checks CI runs over the app, in the order that fails fastest.
@@ -182,12 +195,12 @@ app_migrate() {
 app() {
   local sub="${1:-}"; shift || true
   case "$sub" in
-    start)    app_task dev ;;
-    build)    app_task build ;;
-    package)  app_task package ;;
-    bindings) app_task generate:bindings ;;
+    start)    app_task dev "$@" ;;
+    build)    app_task build "$@" ;;
+    package)  app_task package "$@" ;;
+    bindings) app_task generate:bindings "$@" ;;
     test)     app_test ;;
-    e2e)      app_task test:e2e ;;
+    e2e)      app_task test:e2e "$@" ;;
     migrate)  app_migrate "$@" ;;
     *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e|migrate)" >&2; exit 1 ;;
   esac
