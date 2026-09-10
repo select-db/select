@@ -36,6 +36,29 @@ its place by explaining the constraint, the failure it avoids, or the decision
 that is not obvious from reading the lines below it. Match the density of the
 file you are in rather than adding a header to every function.
 
+**Be concise and technical.** A comment is one or two lines. Three is a lot. If
+it runs longer, it is either documentation, which belongs in a `.doc.md`, or a
+sign the code needs the work instead.
+
+Do not narrate history. "This used to be X, now it is Y", "the old model
+assumed", "what changed here" -- none of that helps somebody reading the file
+next year, and all of it is in `git log` and the pull request already. Write for
+a reader who has never seen the previous version, because that is who reads it.
+
+Cut, in order:
+
+- **The restatement.** `// Remembered so the next launch can reopen it` above a
+  call to `rememberFolder`.
+- **The justification.** Explaining why the obvious thing is obvious, or arguing
+  with a decision nobody is contesting.
+- **The essay.** A file header with sections. Two lines of constraint beat
+  twenty of reasoning; a rule complex enough to need twenty lines is one to test,
+  not to describe.
+- **The flourish.** Analogies, asides, and anything written to be read aloud.
+
+Doc comments on exported identifiers say what a caller has to know, not the
+story of the implementation.
+
 ## Compose what exists before adding a layer
 
 Most of what looks like a missing capability is a composition of parts that are
