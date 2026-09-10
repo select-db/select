@@ -1,14 +1,24 @@
 name: Dialect
 
-# The SQL dialect module. Called by ci.yml, which owns the gating.
+# The SQL dialect module: its Go side, and the Python token analyzer under
+# dialect/core/tokenanalyzer/python. Called by ci.yml, which owns the gating.
 #
-# Quality and tests do not depend on each other, for the reason given in
-# ci-app.yml. This pair used to be chained, which made it the second
-# longest path in a run for no reason: 1m12 of lint followed by 1m27 of tests
-# that never needed the lint result.
+# The jobs do not depend on each other, for the reason given in ci-app.yml.
+# Quality and tests used to be chained, which made them the second longest path
+# in a run for no reason: 1m12 of lint followed by 1m27 of tests that never
+# needed the lint result.
 
 on:
   workflow_call:
+    inputs:
+      go-dialect:
+        description: Run the Go legs. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
+      python:
+        description: Run the analyzer. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
 
 permissions:
   contents: read
@@ -16,6 +26,7 @@ permissions:
 jobs:
   quality:
     name: Quality
+    if: inputs.go-dialect
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,6 +45,7 @@ jobs:
 
   tests:
     name: Tests
+    if: inputs.go-dialect
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,3 +55,15 @@ jobs:
           cache-dependency-path: dialect/go.sum
       - run: go test ./...
         working-directory: dialect
+
+  analyzer-tests:
+    name: Analyzer tests
+    if: inputs.python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync
+        working-directory: dialect/core/tokenanalyzer/python
+      - run: uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
+        working-directory: dialect/core/tokenanalyzer/python

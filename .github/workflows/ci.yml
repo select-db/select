@@ -253,22 +253,14 @@ jobs:
   dialect:
     name: Dialect
     needs: [plan]
-    if: needs.plan.outputs.go-dialect == 'true'
+    if: needs.plan.outputs.go-dialect == 'true' || needs.plan.outputs.python == 'true'
     uses: ./.github/workflows/ci-dialect.yml
+    # The Go side and the Python analyzer under it change independently, so the
+    # caller runs when either did and passes both answers in.
+    with:
+      go-dialect: ${{ needs.plan.outputs.go-dialect == 'true' }}
+      python: ${{ needs.plan.outputs.python == 'true' }}
 
-
-  test-analyzer:
-    name: Analyzer tests
-    needs: [plan]
-    if: needs.plan.outputs.python == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - run: uv sync
-        working-directory: dialect/core/tokenanalyzer/python
-      - run: uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
-        working-directory: dialect/core/tokenanalyzer/python
 
   # ---- Website (docs + API reference + marketing) ----
   website:
@@ -307,7 +299,6 @@ jobs:
       - app
       - backend
       - dialect
-      - test-analyzer
       - website
     runs-on: ubuntu-latest
     steps:
