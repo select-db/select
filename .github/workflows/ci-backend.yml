@@ -2,8 +2,7 @@ name: Backend
 
 # The hosted server module. Called by ci.yml, which owns the gating.
 #
-# Quality and tests do not depend on each other, for the reason given in
-# ci-app.yml.
+# Quality and tests are independent, for the reason given in ci-app.yml.
 
 on:
   workflow_call:
@@ -21,9 +20,8 @@ jobs:
         id: setup-go
         with:
           go-version-file: backend/go.mod
-          # Module cache from setup-go, build cache below; see the app backend
-          # quality job for why its entry is right for one and wrong for the
-          # other.
+          # Module cache from setup-go, build cache below. See the App
+          # workflow's backend quality job.
           cache-dependency-path: backend/go.sum
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -36,18 +34,17 @@ jobs:
         with:
           version: v2.11.4
           working-directory: backend
-          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
-          # linting, so an outage there fails a build for reasons unrelated to
-          # the code, as it did on #174.
+          # Skips the JSONSchema fetch from golangci-lint.run, which runs
+          # before any linting. An outage there failed a build on #174.
           verify: false
       - uses: ./.github/actions/deadcode
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
       - name: Dead code check
         run: |
-          # -test: the e2e harness is reachable only from _test.go files, so tests
-          # must be roots or the whole support package reads as dead.
-          # deadcode exits 0 even when it finds dead code; treat any output as failure
+          # -test because the e2e harness is reachable only from _test.go, so
+          # tests must be roots or the support package reads as dead. deadcode
+          # exits 0 on a finding, so output is the failure.
           out=$(deadcode -test ./...)
           if [ -n "$out" ]; then
             echo "$out"
@@ -57,15 +54,15 @@ jobs:
           echo "No dead code found"
         working-directory: backend
 
-      # db/generated is committed, and it drifted from the schema once already
-      # because regenerating needed a live database nobody had in CI. sqlc reads
-      # db/migrations now, so this job -- which provisions no database -- can
-      # regenerate and diff. Routing it through the script rather than calling
-      # sqlc directly also picks up the script's check for nullable columns that
-      # fell back to database/sql types.
+      # db/generated is committed and drifted from the schema once, because
+      # regenerating needed a live database nobody had in CI. sqlc reads
+      # db/migrations, so this job regenerates and diffs without one.
       #
-      # TERM is load-bearing: the script uses tput, which fails under `set -e`
-      # when TERM is unset, as it is on the runner by default.
+      # Through the script rather than sqlc directly, because the script also
+      # checks for nullable columns that fell back to database/sql types.
+      #
+      # TERM is load bearing. The script calls tput, which fails under set -e
+      # when TERM is unset, as it is on the runner.
       - uses: ./.github/actions/sqlc
       - name: Generated sqlc output is up to date
         working-directory: backend
@@ -86,9 +83,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
-          # Module cache from setup-go, build cache below; see the app backend
-          # quality job for why its entry is right for one and wrong for the
-          # other.
+          # Module cache from setup-go, build cache below. See the App
+          # workflow's backend quality job.
           cache-dependency-path: backend/go.sum
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -102,12 +98,11 @@ jobs:
           path: ~/.embedded-postgres-go
           key: embedded-postgres-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
           restore-keys: embedded-postgres-${{ runner.os }}-
-      # The audit e2e tests run against Postgres 18 + pg_partman so they exercise
-      # the production audit config (real monthly partitions), not the no-partman
-      # DEFAULT-partition fallback. The harness connects via TEST_PG_*; packages
-      # without those env vars fall back to embedded Postgres. Postgres 18 lands
-      # on a non-5432 port (the runner's preinstalled cluster holds 5432), so the
-      # port is derived, not hardcoded.
+      # The audit tests need pg_partman so they exercise the production config
+      # of real monthly partitions, not the DEFAULT partition fallback. The
+      # harness reads TEST_PG_*, and packages without those use embedded
+      # Postgres. The port is derived because the runner's own cluster holds
+      # 5432.
       - name: Postgres 18 + pg_partman
         run: |
           sudo apt-get update
@@ -125,11 +120,9 @@ jobs:
           } >> "$GITHUB_ENV"
       - run: go test ./...
         working-directory: backend
-      # Saved from the test job only, since it compiles the widest set of
-      # packages, and only on the default branch. A cache written from a PR can
-      # be read back by nothing except that same PR, so saving there would fill
-      # the repository's 10GB budget with entries no other run can use, and
-      # evict the ones every run does use.
+      # Written here because tests compile the widest set of packages, and only
+      # on the default branch. A cache saved from a PR is readable by that PR
+      # alone, so it would fill the 10GB budget and evict the shared entries.
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: github.ref == 'refs/heads/dev'
         with:

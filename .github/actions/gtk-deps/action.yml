@@ -3,9 +3,9 @@ description: >
   Installs the GTK3/WebKit2GTK headers the app module's cgo webview bindings
   compile against, from a cache of the .deb files.
 
-# Downloading them is 56MB and around 20s of the ~25s this used to take, paid
-# by every job that touches the app module. The packages themselves change only
-# when the runner image does, which is what the key tracks.
+# The download is 56MB and about 20s of the 25s this used to take, paid by
+# every job that touches the app module. The packages change only when the
+# runner image does, which is what the key tracks.
 
 runs:
   using: composite
@@ -29,8 +29,8 @@ runs:
           sudo chown -R "$USER" /tmp/gtk-debs
         fi
 
-        # Falls back to a plain install: a cached set can go stale against a
-        # newer runner image, and a slow job is better than a broken one.
+        # A cached set can go stale against a newer runner image. A slow job
+        # is better than a broken one, so failure falls back to a plain install.
         sudo apt-get install -y --no-install-recommends /tmp/gtk-debs/*.deb || {
           echo "::warning::cached packages did not install; falling back to apt"
           sudo apt-get update

@@ -1,12 +1,11 @@
 name: Dialect
 
-# The SQL dialect module: its Go side, and the Python token analyzer under
+# The SQL dialect module, including the Python token analyzer under
 # dialect/core/tokenanalyzer/python. Called by ci.yml, which owns the gating.
 #
-# The jobs do not depend on each other, for the reason given in ci-app.yml.
-# Quality and tests used to be chained, which made them the second longest path
-# in a run for no reason: 1m12 of lint followed by 1m27 of tests that never
-# needed the lint result.
+# The jobs are independent. Chaining quality to tests made them the second
+# longest path in a run, 1m12 of lint before 1m27 of tests that never read its
+# result.
 
 on:
   workflow_call:

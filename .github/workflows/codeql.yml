@@ -1,21 +1,20 @@
 name: CodeQL
 
-# Deep, interprocedural taint analysis for Go — SSRF, path traversal, SQL/command
-# injection, unsafe deserialization, open redirect, etc. This is the analysis
-# gosec's whole-program SSA attempted per-PR but far too slowly (~6 min +
-# near-OOM on the backend module, which repeatedly hung the security job).
+# Interprocedural taint analysis for Go: SSRF, path traversal, SQL and command
+# injection, unsafe deserialization, open redirect. This is what gosec's
+# whole-program SSA attempted on every PR, taking 6 minutes and hanging the
+# security job by nearly exhausting memory on the backend module.
 #
-# It runs nightly, deliberately OFF the PR critical path: a multi-minute deep
-# scan is free at night and never blocks a merge. Per-PR security is the fast
-# build-free semgrep step in ci.yml. Results surface in the Security tab.
+# It runs nightly, off the PR critical path, where a multi-minute scan is free
+# and blocks no merge. Per-PR security is the semgrep step in ci.yml, and
+# results from both surface in the Security tab.
 #
-# Scope: a `schedule` trigger fires only on the repo's default branch, so the
-# nightly scan runs there and there only. Feature branches / PRs are covered by
-# the per-PR semgrep step instead.
+# A schedule trigger fires only on the default branch, so that is the only
+# place this runs. Branches and PRs get semgrep instead.
 #
-# Note: uploading results requires Code scanning enabled for the repo (GitHub
-# Advanced Security on private repositories). If it isn't, analyze fails with a
-# clear message and an admin can enable it in repo Settings.
+# Uploading results needs Code scanning enabled for the repository, which on a
+# private repository means GitHub Advanced Security. Without it analyze fails
+# with a clear message and an admin can enable it in Settings.
 
 on:
   schedule:
@@ -39,11 +38,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Buildless (build-mode: none) extracts every Go source across the
-      # monorepo's modules without compiling — no per-module build wrangling and
-      # no trouble with the `replace ../dialect` local directives. For even
-      # deeper cross-module dataflow, switch build-mode to `autobuild` and run
-      # one analyze per module (backend, dialect, app, toolkit) via a matrix.
+      # build-mode none extracts every Go source across the modules without
+      # compiling, so there is no per-module build to wrangle and the local
+      # `replace ../dialect` directives cause no trouble. Deeper cross-module
+      # dataflow would mean autobuild and one analyze per module in a matrix.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:

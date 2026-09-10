@@ -1,10 +1,8 @@
 name: sqlc
 description: Puts a pinned sqlc on PATH.
 
-# Downloaded, not `go install`ed. Building sqlc from source cost 45s in the
-# backend quality job and 73s in the app's; the release binary takes about one.
-# The version lives here so the two jobs that regenerate queries cannot drift
-# apart on it.
+# Downloaded rather than built. Compiling sqlc from source cost 45s and 73s in
+# the two jobs that use it, against about one second for the release binary.
 
 runs:
   using: composite
