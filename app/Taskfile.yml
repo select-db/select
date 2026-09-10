@@ -209,10 +209,20 @@ tasks:
     env:
       CGO_ENABLED: 0
 
+  build:seed:
+    summary: Builds the workspace seeder each e2e worker runs before its app
+    cmds:
+      # Built, not `go run`: every worker seeds its own workspace, and a compile
+      # each is a cold cache away from dominating the run.
+      - go build -tags server -buildvcs=false -o "{{.BIN_DIR}}/e2eseed{{exeExt}}" ./internal/cmd/e2eseed
+    env:
+      CGO_ENABLED: 0
+
   test:e2e:
     summary: Runs the Playwright end-to-end suite against a server-mode build
     deps:
       - build:server
+      - build:seed
       - install:frontend
     dir: frontend
     cmds:
@@ -225,6 +235,7 @@ tasks:
     # does not fail the run, it publishes pictures of the previous build.
     deps:
       - build:server
+      - build:seed
       - install:frontend
     dir: frontend
     env:
