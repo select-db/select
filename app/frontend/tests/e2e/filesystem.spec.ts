@@ -278,9 +278,10 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await tab(page, 'twin.sql').click();
 	await expect(editor.line(page, 'SELECT 5 AS five;')).toBeVisible();
 
-	// A database directory is a folder on disk, and takes a drop like one.
+	// A database directory is a folder on disk, and takes a drop like one. A drop
+	// opens what it landed in -- so the row is already there to see, and it takes
+	// one click, not two, to put it away again.
 	await treeNode(page, '#1.sql').dragTo(treeNode(page, 'warehouse'));
-	await treeNode(page, 'warehouse').click();
 	await expect(treeNode(page, '#1.sql')).toBeVisible();
 	await treeNode(page, 'warehouse').click();
 	await expect(treeNode(page, '#1.sql')).toHaveCount(0);
