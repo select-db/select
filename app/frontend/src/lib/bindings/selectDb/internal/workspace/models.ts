@@ -19,10 +19,9 @@ export class FolderState {
     "suggestedName"?: string;
 
     /**
-     * Set when the config names a workspace this server does not have, so the
-     * setup screen can say so rather than pretend the folder was never one.
+     * The workspace the config names, empty when the folder has none.
      */
-    "staleWorkspaceId"?: string;
+    "workspaceId"?: string;
     "folderServer"?: string;
     "currentServer"?: string;
 
@@ -127,9 +126,15 @@ export enum WorkspaceStatus {
     Ready = "ready",
 
     /**
-     * No config, or one naming a workspace this server does not have.
+     * The folder holds no config, so there is no workspace to open yet.
      */
     NeedsSetup = "needs_setup",
+
+    /**
+     * The config names a workspace this user cannot open: deleted, revoked, or
+     * never theirs.
+     */
+    NoAccess = "no_access",
 
     /**
      * The workspace lives on another server, whose permissions gate every query.

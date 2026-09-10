@@ -24,8 +24,12 @@ const (
 	// The workspace is set up and the graph is built.
 	Ready WorkspaceStatus = "ready"
 
-	// No config, or one naming a workspace this server does not have.
+	// The folder holds no config, so there is no workspace to open yet.
 	NeedsSetup WorkspaceStatus = "needs_setup"
+
+	// The config names a workspace this user cannot open: deleted, revoked, or
+	// never theirs.
+	NoAccess WorkspaceStatus = "no_access"
 
 	// The workspace lives on another server, whose permissions gate every query.
 	WrongServer WorkspaceStatus = "wrong_server"
@@ -40,9 +44,8 @@ type FolderState struct {
 	// The folder's own name, offered as the workspace name on the setup screen.
 	SuggestedName string `json:"suggestedName,omitempty"`
 
-	// Set when the config names a workspace this server does not have, so the
-	// setup screen can say so rather than pretend the folder was never one.
-	StaleWorkspaceID string `json:"staleWorkspaceId,omitempty"`
+	// The workspace the config names, empty when the folder has none.
+	WorkspaceID string `json:"workspaceId,omitempty"`
 
 	FolderServer  string `json:"folderServer,omitempty"`
 	CurrentServer string `json:"currentServer,omitempty"`
@@ -77,6 +80,7 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 		// Unusable config: reporting it beats overwriting the workspace it named.
 		return FolderState{}, err
 	}
+	result.WorkspaceID = cfg.WorkspaceID
 
 	if cfg.Server != currentServer {
 		result.Status = WrongServer
@@ -84,13 +88,12 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 		return result, nil
 	}
 
-	known, err := w.workspaceExists(cfg.WorkspaceID)
+	member, err := w.isMember(cfg.WorkspaceID)
 	if err != nil {
 		return FolderState{}, err
 	}
-	if !known {
-		result.Status = NeedsSetup
-		result.StaleWorkspaceID = cfg.WorkspaceID
+	if !member {
+		result.Status = NoAccess
 		return result, nil
 	}
 
@@ -102,31 +105,49 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 	return result, nil
 }
 
-// workspaceExists pulls before answering: a teammate who just cloned has the
-// folder before the local database has heard of the workspace. "Not a member"
-// and "no such workspace" both come back false, since both need an init.
-func (w *Workspace) workspaceExists(workspaceID string) (bool, error) {
+// isMember answers on the membership row rather than on the workspace row: a
+// revoked membership deletes the first and leaves the second, so asking whether
+// the workspace exists opens a folder every query then refuses.
+//
+// It pulls before saying no, since a teammate who just cloned has the folder
+// before the local database has heard of the workspace.
+func (w *Workspace) isMember(workspaceID string) (bool, error) {
 	ctx := context.Background()
 
-	if _, err := w.Queries.GetWorkspaceByID(ctx, workspaceID); err == nil {
-		return true, nil
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return false, fmt.Errorf("look up workspace: %w", err)
+	u, err := w.Queries.GetCurrentUser(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, fmt.Errorf("no current user")
+		}
+		return false, fmt.Errorf("get current user: %w", err)
+	}
+
+	member, err := w.hasMemberRow(ctx, u.ID, workspaceID)
+	if err != nil || member {
+		return member, err
 	}
 
 	if w.PullFunc == nil {
 		return false, nil
 	}
-	u, err := w.Queries.GetCurrentUser(ctx)
-	if err != nil {
-		return false, nil
-	}
 	if err := w.PullFunc(ctx, u.ID); err != nil {
 		return false, fmt.Errorf("pull workspaces: %w", err)
 	}
+	return w.hasMemberRow(ctx, u.ID, workspaceID)
+}
 
-	_, err = w.Queries.GetWorkspaceByID(ctx, workspaceID)
-	return err == nil, nil
+func (w *Workspace) hasMemberRow(ctx context.Context, userID, workspaceID string) (bool, error) {
+	_, err := w.Queries.GetWorkspaceToUserByUserAndWorkspace(ctx, generated.GetWorkspaceToUserByUserAndWorkspaceParams{
+		UserID:      userID,
+		WorkspaceID: workspaceID,
+	})
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, fmt.Errorf("look up workspace membership: %w", err)
 }
 
 // setCurrentWorkspace makes workspaceID the current workspace, rooted at folder.

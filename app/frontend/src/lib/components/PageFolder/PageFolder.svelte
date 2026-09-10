@@ -23,9 +23,13 @@
 	// Empty means "use the folder's name", which the backend fills in.
 	let workspaceName = $state('');
 
+	// Replacing the config of a workspace the user cannot open is behind a click,
+	// so it cannot be the reflex when the real answer is to ask for an invite.
+	let replacing = $state(false);
+
 	async function createWorkspace() {
 		const current = $folderStore;
-		if (current?.status !== WorkspaceStatus.NeedsSetup) return;
+		if (!current || !current.path) return;
 
 		const [result, err] = await tryCatch(
 			CreateWorkspaceInFolder,
@@ -41,7 +45,7 @@
 </script>
 
 <div class="wrapper">
-	<div class="panel">
+	<div class="panel" data-test="folder.screen" data-test-value={folder?.status ?? ''}>
 		{#if !folder}
 			<Loader size={24} />
 		{:else if folder.status === WorkspaceStatus.WrongServer}
@@ -60,24 +64,49 @@
 				<Button content="Sign out" emphasis="high" onclick={() => Logout()} />
 				<Button content="Open another folder" onclick={pickAndOpenFolder} />
 			</div>
+		{:else if folder.status === WorkspaceStatus.NoAccess}
+			<h1>You cannot open this workspace</h1>
+			<p class="hint">
+				<code>{folder.path}</code> belongs to a workspace on
+				<strong>{folder.currentServer}</strong> that is not yours to open: it was deleted, or your access
+				to it was removed.
+			</p>
+			<p class="hint">
+				Ask someone in the workspace to invite you, then open the folder again. Your files are
+				untouched either way.
+			</p>
+
+			<div class="actions">
+				<Button content="Open another folder" emphasis="high" onclick={pickAndOpenFolder} />
+				<Button content="Try again" onclick={() => openFolder(folder.path)} />
+			</div>
+
+			<button class="link" onclick={() => (replacing = true)}>
+				Start a new workspace in this folder
+			</button>
+			{#if replacing}
+				<p class="hint">
+					This overwrites <code>select.config.json</code>, which your team may share. Everything
+					else in the folder stays as it is.
+				</p>
+				<div class="field">
+					<p class="label">Workspace name</p>
+					<Input bind:value={workspaceName} placeholder="Workspace name" autofocus />
+				</div>
+				<div class="actions">
+					<Button content="Create workspace" emphasis="warning" onclick={createWorkspace} />
+				</div>
+			{/if}
 		{:else if folder.status === WorkspaceStatus.NeedsSetup}
-			<h1>{folder.staleWorkspaceId ? 'This workspace no longer exists' : 'Set up this folder'}</h1>
+			<h1>Set up this folder</h1>
 			<p class="hint">
 				<code>{folder.path}</code>
 			</p>
-			{#if folder.staleWorkspaceId}
-				<p class="hint">
-					The folder says it belongs to a workspace this server does not have, or that you are not a
-					member of. Creating a workspace here replaces that reference; nothing else in the folder
-					is touched.
-				</p>
-			{:else}
-				<p class="hint">
-					Creating a workspace here adds a <code>select.config.json</code> naming it, and nothing else.
-					Your files stay exactly as they are. An empty folder also gets a small sample database to start
-					from.
-				</p>
-			{/if}
+			<p class="hint">
+				Creating a workspace here adds a <code>select.config.json</code> naming it, and nothing else.
+				Your files stay exactly as they are. An empty folder also gets a small sample database to start
+				from.
+			</p>
 
 			<div class="field">
 				<p class="label">Workspace name</p>
@@ -137,6 +166,7 @@
 	   mousedown starts a window drag. */
 	.actions,
 	.field,
+	.wrapper :global(.link),
 	.wrapper :global(button),
 	.wrapper :global(input) {
 		--wails-draggable: no-drag;
@@ -189,6 +219,16 @@
 		margin: 0;
 		font-size: var(--font-size-sm, 0.85rem);
 		color: var(--gray-600);
+	}
+
+	.link {
+		padding: 0;
+		border: none;
+		background: none;
+		font-size: var(--font-size-sm, 0.85rem);
+		color: var(--gray-600);
+		text-decoration: underline;
+		cursor: pointer;
 	}
 
 	.actions {
