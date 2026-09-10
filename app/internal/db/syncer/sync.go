@@ -290,8 +290,8 @@ func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload m
 	if err != nil {
 		return err
 	}
-	if wasCurrent && s.CurrentWorkspaceGone != nil {
-		s.CurrentWorkspaceGone.OnCurrentWorkspaceGone()
+	if wasCurrent && s.WorkspaceGone != nil {
+		s.WorkspaceGone.OnWorkspaceGone()
 	}
 	return nil
 }

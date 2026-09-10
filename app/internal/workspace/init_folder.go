@@ -21,10 +21,10 @@ type createWorkspaceResponse struct {
 	OwnerID           string `json:"owner_id"`
 }
 
-// InitWorkspaceInFolder creates the workspace on the server, writes the config
+// CreateWorkspaceInFolder creates the workspace on the server, writes the config
 // that names it, and opens it. An empty name defaults to the folder's.
-func (w *Workspace) InitWorkspaceInFolder(path, name string) (FolderState, error) {
-	folder, err := normalizeFolder(path)
+func (w *Workspace) CreateWorkspaceInFolder(path, name string) (FolderState, error) {
+	folder, err := resolveFolder(path)
 	if err != nil {
 		return FolderState{}, err
 	}
@@ -57,7 +57,7 @@ func (w *Workspace) InitWorkspaceInFolder(path, name string) (FolderState, error
 		return FolderState{}, fmt.Errorf("create workspace on server: %w", err)
 	}
 
-	ws, err := w.CreateWorkspace(CreateWorkspaceParams{
+	ws, err := w.insertWorkspace(newWorkspaceParams{
 		ID:                resp.ID,
 		WorkspaceToUserID: resp.WorkspaceToUserID,
 		UserID:            u.ID,
@@ -73,7 +73,7 @@ func (w *Workspace) InitWorkspaceInFolder(path, name string) (FolderState, error
 		return FolderState{}, err
 	}
 
-	if err := w.adoptFolder(ws.ID, folder); err != nil {
+	if err := w.setCurrentWorkspace(ws.ID, folder); err != nil {
 		return FolderState{}, err
 	}
 

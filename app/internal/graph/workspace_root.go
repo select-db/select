@@ -14,24 +14,24 @@ var (
 	openRoot        string
 )
 
-// SetOpenWorkspaceRoot is called by the open-folder flow before the graph builds.
-func SetOpenWorkspaceRoot(workspaceID, root string) {
+// SetOpenWorkspace is called by the open-folder flow before the graph builds.
+func SetOpenWorkspace(workspaceID, root string) {
 	openMu.Lock()
 	defer openMu.Unlock()
 	openWorkspaceID = workspaceID
 	openRoot = root
 }
 
-// ClearOpenWorkspaceRoot forgets the open workspace.
-func ClearOpenWorkspaceRoot() {
+// ClearOpenWorkspace forgets the open workspace.
+func ClearOpenWorkspace() {
 	openMu.Lock()
 	defer openMu.Unlock()
 	openWorkspaceID = ""
 	openRoot = ""
 }
 
-// OpenWorkspaceRoot returns false when no folder is open.
-func OpenWorkspaceRoot() (workspaceID, root string, ok bool) {
+// OpenWorkspace returns false when no folder is open.
+func OpenWorkspace() (workspaceID, root string, ok bool) {
 	openMu.RLock()
 	defer openMu.RUnlock()
 	if openWorkspaceID == "" || openRoot == "" {
@@ -46,7 +46,7 @@ func WorkspaceRootPath(workspaceID string) (string, error) {
 	if workspaceID == "" {
 		return "", fmt.Errorf("no workspace given")
 	}
-	id, root, ok := OpenWorkspaceRoot()
+	id, root, ok := OpenWorkspace()
 	if !ok {
 		return "", fmt.Errorf("no workspace folder is open")
 	}

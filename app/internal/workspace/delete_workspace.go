@@ -20,7 +20,9 @@ func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 	// workspace: a stale path would take another workspace's config.
 	folder := ""
 	if p, err := w.Queries.GetWorkspaceLocalPath(ctx, workspaceID); err == nil {
-		folder, _ = w.folderFor(ctx, workspaceID, p.Or(""))
+		if path := p.Or(""); folderNamesWorkspace(path, workspaceID) {
+			folder = path
+		}
 	}
 
 	if err := api.Fetch(ctx, "DELETE", "workspaces/"+workspaceID, nil, api.WorkspaceHeader(workspaceID), nil); err != nil {
@@ -41,7 +43,7 @@ func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 		}
 	}
 
-	if id, _, ok := graph.OpenWorkspaceRoot(); ok && id == workspaceID {
+	if id, _, ok := graph.OpenWorkspace(); ok && id == workspaceID {
 		return w.CloseFolder()
 	}
 	return nil

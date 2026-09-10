@@ -8,60 +8,64 @@
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notify } from '$lib/system/Notifications/notificationsStore';
 	import { AlertType } from '$lib/system/Alert/types';
-	import { InitWorkspaceInFolder } from '$lib/bindings/selectDb/internal/workspace/workspace';
+	import { CreateWorkspaceInFolder } from '$lib/bindings/selectDb/internal/workspace/workspace';
 	import {
 		folderStore,
 		lastFolderStore,
 		openFolder,
 		pickAndOpenFolder,
-		showFolderState
+		displayFolder
 	} from './folderStore';
 	import { WorkspaceStatus } from '$lib/bindings/selectDb/internal/workspace/models';
 
-	const view = $derived($folderStore);
+	const folder = $derived($folderStore);
 
 	// Empty means "use the folder's name", which the backend fills in.
 	let workspaceName = $state('');
 
 	async function createWorkspace() {
-		const s = $folderStore;
-		if (s?.status !== WorkspaceStatus.NeedsSetup) return;
+		const current = $folderStore;
+		if (current?.status !== WorkspaceStatus.NeedsSetup) return;
 
-		const [result, err] = await tryCatch(InitWorkspaceInFolder, s.path, workspaceName.trim());
+		const [result, err] = await tryCatch(
+			CreateWorkspaceInFolder,
+			current.path,
+			workspaceName.trim()
+		);
 		if (err) {
 			notify({ type: AlertType.Error, message: err?.message ?? 'Could not create the workspace' });
 			return;
 		}
-		await showFolderState(result);
+		await displayFolder(result);
 	}
 </script>
 
 <div class="wrapper">
 	<div class="panel">
-		{#if !view}
+		{#if !folder}
 			<Loader size={24} />
-		{:else if view.status === WorkspaceStatus.WrongServer}
+		{:else if folder.status === WorkspaceStatus.WrongServer}
 			<h1>This folder belongs to another server</h1>
 			<p class="hint">
-				<code>{view.path}</code> is a workspace on
-				<strong>{view.folderServer}</strong>, and you are signed in to
-				<strong>{view.currentServer}</strong>.
+				<code>{folder.path}</code> is a workspace on
+				<strong>{folder.folderServer}</strong>, and you are signed in to
+				<strong>{folder.currentServer}</strong>.
 			</p>
 			<p class="hint">
 				Roles and permissions come from the server a workspace lives on, so this folder cannot be
 				opened until you sign in there. Sign out, pick
-				<strong>{view.folderServer}</strong> on the sign-in screen, and open the folder again.
+				<strong>{folder.folderServer}</strong> on the sign-in screen, and open the folder again.
 			</p>
 			<div class="actions">
 				<Button content="Sign out" emphasis="high" onclick={() => Logout()} />
 				<Button content="Open another folder" onclick={pickAndOpenFolder} />
 			</div>
-		{:else if view.status === WorkspaceStatus.NeedsSetup}
-			<h1>{view.staleWorkspaceId ? 'This workspace no longer exists' : 'Set up this folder'}</h1>
+		{:else if folder.status === WorkspaceStatus.NeedsSetup}
+			<h1>{folder.staleWorkspaceId ? 'This workspace no longer exists' : 'Set up this folder'}</h1>
 			<p class="hint">
-				<code>{view.path}</code>
+				<code>{folder.path}</code>
 			</p>
-			{#if view.staleWorkspaceId}
+			{#if folder.staleWorkspaceId}
 				<p class="hint">
 					The folder says it belongs to a workspace this server does not have, or that you are not a
 					member of. Creating a workspace here replaces that reference; nothing else in the folder
@@ -84,7 +88,7 @@
 				<Button content="Create workspace" emphasis="high" onclick={createWorkspace} />
 				<Button content="Open another folder" onclick={pickAndOpenFolder} />
 			</div>
-		{:else if view.status === WorkspaceStatus.NoFolder}
+		{:else if folder.status === WorkspaceStatus.NoFolder}
 			<h1>No folder open</h1>
 			<p class="hint">
 				A workspace is a folder on your machine. Open one to start, and SELECT reads the SQL files,

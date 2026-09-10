@@ -262,58 +262,5 @@ export class User {
     }
 }
 
-export class Workspace {
-    "id": string;
-    "name": string;
-    "last_pulled_at": sql$0.NullTime;
-    "owner_id": db_types$0.JSONNullString;
-    "statement_timeout_ms": number;
-    "max_result_size_mb": number;
-    "logo": db_types$0.JSONNullString;
-    "local_path": db_types$0.JSONNullString;
-
-    /** Creates a new Workspace instance. */
-    constructor($$source: Partial<Workspace> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("last_pulled_at" in $$source)) {
-            this["last_pulled_at"] = (new sql$0.NullTime());
-        }
-        if (!("owner_id" in $$source)) {
-            this["owner_id"] = null;
-        }
-        if (!("statement_timeout_ms" in $$source)) {
-            this["statement_timeout_ms"] = 0;
-        }
-        if (!("max_result_size_mb" in $$source)) {
-            this["max_result_size_mb"] = 0;
-        }
-        if (!("logo" in $$source)) {
-            this["logo"] = null;
-        }
-        if (!("local_path" in $$source)) {
-            this["local_path"] = null;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Workspace instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Workspace {
-        const $$createField2_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("last_pulled_at" in $$parsedSource) {
-            $$parsedSource["last_pulled_at"] = $$createField2_0($$parsedSource["last_pulled_at"]);
-        }
-        return new Workspace($$parsedSource as Partial<Workspace>);
-    }
-}
-
 // Private type creation functions
 const $$createType0 = sql$0.NullTime.createFrom;

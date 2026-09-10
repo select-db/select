@@ -7,7 +7,6 @@ export {
 };
 
 export {
-    CreateWorkspaceParams,
     FolderState,
     LastFolder,
     SearchUserResult,

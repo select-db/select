@@ -160,7 +160,7 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 
 	a.InternalDb.Syncer.SetContext(ctx)
 	a.Syncer.SetContext(ctx)
-	a.Syncer.CurrentWorkspaceGone = &currentWorkspaceGoneHandler{app: a}
+	a.Syncer.WorkspaceGone = &workspaceGoneHandler{app: a}
 	a.Syncer.EmitRolesUpdated = func() {
 		utils.DebouncedEventsEmit("rolesUpdated", 100*time.Millisecond)
 	}

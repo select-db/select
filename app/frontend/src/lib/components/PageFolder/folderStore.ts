@@ -29,13 +29,13 @@ function noFolder(): FolderState {
 	return new FolderState({ status: WorkspaceStatus.NoFolder });
 }
 
-export function clearFolderState() {
+export function clearFolderState(): void {
 	folderStore.set(null);
 	lastFolderStore.set(null);
 }
 
-/** Puts the app into the state an OpenFolder call reported. */
-export async function showFolderState(state: FolderState): Promise<void> {
+/** Displays the folder: its tree when ready, the screen for its status otherwise. */
+export async function displayFolder(state: FolderState): Promise<void> {
 	folderStore.set(state);
 	clearWorkspaceGraphCache();
 
@@ -59,7 +59,7 @@ export async function openFolder(path: string): Promise<void> {
 		notify({ type: AlertType.Error, message: err?.message ?? 'Could not open that folder' });
 		return;
 	}
-	await showFolderState(result);
+	await displayFolder(result);
 }
 
 export async function pickAndOpenFolder(): Promise<void> {
@@ -78,10 +78,10 @@ export async function reopenLastFolder(): Promise<void> {
 	if (err) {
 		// No notification: the user did not ask for this, and the no-folder
 		// screen is a fine place to land.
-		await showFolderState(noFolder());
+		await displayFolder(noFolder());
 		return;
 	}
-	await showFolderState(result);
+	await displayFolder(result);
 }
 
 /** The backend closed the folder on us, e.g. after a server delete. */
@@ -93,5 +93,5 @@ export async function onFolderClosed(): Promise<void> {
 			duration: 8000
 		});
 	}
-	await showFolderState(noFolder());
+	await displayFolder(noFolder());
 }

@@ -55,7 +55,7 @@ func (w *Workspace) PickFolder() (string, error) {
 
 // OpenFolder is the only thing that sets up a workspace: not login, not sync.
 func (w *Workspace) OpenFolder(path string) (FolderState, error) {
-	folder, err := normalizeFolder(path)
+	folder, err := resolveFolder(path)
 	if err != nil {
 		return FolderState{}, err
 	}
@@ -94,7 +94,7 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 		return result, nil
 	}
 
-	if err := w.adoptFolder(cfg.WorkspaceID, folder); err != nil {
+	if err := w.setCurrentWorkspace(cfg.WorkspaceID, folder); err != nil {
 		return FolderState{}, err
 	}
 
@@ -129,8 +129,8 @@ func (w *Workspace) workspaceExists(workspaceID string) (bool, error) {
 	return err == nil, nil
 }
 
-// adoptFolder makes workspaceID current, rooted at folder.
-func (w *Workspace) adoptFolder(workspaceID, folder string) error {
+// setCurrentWorkspace makes workspaceID the current workspace, rooted at folder.
+func (w *Workspace) setCurrentWorkspace(workspaceID, folder string) error {
 	ctx := context.Background()
 
 	u, err := w.Queries.GetCurrentUser(ctx)
@@ -155,9 +155,9 @@ func (w *Workspace) adoptFolder(workspaceID, folder string) error {
 		return err
 	}
 
-	graph.SetOpenWorkspaceRoot(workspaceID, folder)
+	graph.SetOpenWorkspace(workspaceID, folder)
 
-	if err := w.seedIfEmpty(workspaceID); err != nil {
+	if err := w.seedSampleIfEmpty(workspaceID); err != nil {
 		return err
 	}
 
@@ -167,7 +167,7 @@ func (w *Workspace) adoptFolder(workspaceID, folder string) error {
 // CloseFolder leaves the user signed in on the no-folder screen. The folder on
 // disk is untouched.
 func (w *Workspace) CloseFolder() error {
-	graph.ClearOpenWorkspaceRoot()
+	graph.ClearOpenWorkspace()
 	if w.Graph != nil {
 		w.Graph.InvalidateWorkspaceGraph()
 	}

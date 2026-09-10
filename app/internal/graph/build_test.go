@@ -37,8 +37,8 @@ func openTestWorkspace(t *testing.T, workspaceID string) string {
 	t.Helper()
 
 	root := t.TempDir()
-	SetOpenWorkspaceRoot(workspaceID, root)
-	t.Cleanup(ClearOpenWorkspaceRoot)
+	SetOpenWorkspace(workspaceID, root)
+	t.Cleanup(ClearOpenWorkspace)
 	return root
 }
 

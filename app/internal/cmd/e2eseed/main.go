@@ -176,7 +176,7 @@ func seed(dataDir string) error {
 	if err := os.MkdirAll(folder, 0o700); err != nil {
 		return fmt.Errorf("create workspace folder: %w", err)
 	}
-	graph.SetOpenWorkspaceRoot(WorkspaceID, folder)
+	graph.SetOpenWorkspace(WorkspaceID, folder)
 
 	if err := graph.WriteWorkspaceConfig(folder, domain, WorkspaceID); err != nil {
 		return fmt.Errorf("workspace config: %w", err)

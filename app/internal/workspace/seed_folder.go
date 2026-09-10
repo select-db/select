@@ -8,10 +8,10 @@ import (
 	"selectDb/internal/sample"
 )
 
-// seedIfEmpty writes the sample workspace, gated on the folder being empty
-// rather than new: the folder is the user's, and seeding one they have work in
-// would scatter files through it.
-func (w *Workspace) seedIfEmpty(workspaceID string) error {
+// seedSampleIfEmpty writes the sample workspace only into an empty folder: the
+// folder is the user's, and seeding one they have work in would scatter files
+// through it.
+func (w *Workspace) seedSampleIfEmpty(workspaceID string) error {
 	root, err := graph.WorkspaceRootPath(workspaceID)
 	if err != nil {
 		return fmt.Errorf("resolve workspace root: %w", err)

@@ -7,10 +7,6 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as generated$0 from "../db/generated/models.js";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 export function AddUserToWorkspace(email: string): $CancellablePromise<void> {
@@ -26,12 +22,11 @@ export function CloseFolder(): $CancellablePromise<void> {
 }
 
 /**
- * CreateWorkspace records a server-created workspace and this user's membership.
- * It does not make it current: adoptFolder owns that, since current follows from
- * which folder is open.
+ * CreateWorkspaceInFolder creates the workspace on the server, writes the config
+ * that names it, and opens it. An empty name defaults to the folder's.
  */
-export function CreateWorkspace(params: $models.CreateWorkspaceParams): $CancellablePromise<generated$0.Workspace> {
-    return $Call.ByID(1706524711, params).then(($result: any) => {
+export function CreateWorkspaceInFolder(path: string, name: string): $CancellablePromise<$models.FolderState> {
+    return $Call.ByID(1466431544, path, name).then(($result: any) => {
         return $$createType0($result);
     });
 }
@@ -57,19 +52,9 @@ export function GetLastFolder(): $CancellablePromise<$models.LastFolder> {
     });
 }
 
-/**
- * InitWorkspaceInFolder creates the workspace on the server, writes the config
- * that names it, and opens it. An empty name defaults to the folder's.
- */
-export function InitWorkspaceInFolder(path: string, name: string): $CancellablePromise<$models.FolderState> {
-    return $Call.ByID(1245205774, path, name).then(($result: any) => {
-        return $$createType2($result);
-    });
-}
-
 export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserEntry[]> {
     return $Call.ByID(2078216013).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType3($result);
     });
 }
 
@@ -78,7 +63,7 @@ export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserE
  */
 export function OpenFolder(path: string): $CancellablePromise<$models.FolderState> {
     return $Call.ByID(2229533346, path).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType0($result);
     });
 }
 
@@ -98,13 +83,13 @@ export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<voi
  */
 export function ReopenLastFolder(): $CancellablePromise<$models.FolderState> {
     return $Call.ByID(80028743).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType0($result);
     });
 }
 
 export function SearchUser(email: string): $CancellablePromise<$models.SearchUserResult | null> {
     return $Call.ByID(2043344285, email).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType5($result);
     });
 }
 
@@ -125,10 +110,9 @@ export function UpdateName(workspaceID: string, name: string): $CancellablePromi
 }
 
 // Private type creation functions
-const $$createType0 = generated$0.Workspace.createFrom;
+const $$createType0 = $models.FolderState.createFrom;
 const $$createType1 = $models.LastFolder.createFrom;
-const $$createType2 = $models.FolderState.createFrom;
-const $$createType3 = $models.WorkspaceUserEntry.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = $models.SearchUserResult.createFrom;
-const $$createType6 = $Create.Nullable($$createType5);
+const $$createType2 = $models.WorkspaceUserEntry.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $models.SearchUserResult.createFrom;
+const $$createType5 = $Create.Nullable($$createType4);

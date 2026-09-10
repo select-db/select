@@ -25,7 +25,7 @@ func (s *System) Logout() error {
 }
 
 func (s *System) closeOpenFolder() {
-	graph.ClearOpenWorkspaceRoot()
+	graph.ClearOpenWorkspace()
 	if s.Graph != nil {
 		s.Graph.InvalidateWorkspaceGraph()
 	}

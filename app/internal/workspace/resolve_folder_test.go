@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func TestNormalizeFolder_AcceptsAnOrdinaryFolder(t *testing.T) {
+func TestResolveFolder_AcceptsAnOrdinaryFolder(t *testing.T) {
 	dir := t.TempDir()
 
-	got, err := normalizeFolder(dir)
+	got, err := resolveFolder(dir)
 	if err != nil {
-		t.Fatalf("normalizeFolder(%q): %v", dir, err)
+		t.Fatalf("resolveFolder(%q): %v", dir, err)
 	}
 	if got != filepath.Clean(dir) {
 		t.Errorf("got %q, want %q", got, filepath.Clean(dir))
@@ -19,16 +19,16 @@ func TestNormalizeFolder_AcceptsAnOrdinaryFolder(t *testing.T) {
 
 	// Must come back absolute: everything downstream joins onto it.
 	t.Chdir(dir)
-	got, err = normalizeFolder(".")
+	got, err = resolveFolder(".")
 	if err != nil {
-		t.Fatalf("normalizeFolder(\".\"): %v", err)
+		t.Fatalf("resolveFolder(\".\"): %v", err)
 	}
 	if !filepath.IsAbs(got) {
 		t.Errorf("got %q, want an absolute path", got)
 	}
 }
 
-func TestNormalizeFolder_RefusesWhatIsNotAFolderToOpen(t *testing.T) {
+func TestResolveFolder_RefusesWhatIsNotAFolderToOpen(t *testing.T) {
 	dir := t.TempDir()
 
 	file := filepath.Join(dir, "query.sql")
@@ -53,8 +53,8 @@ func TestNormalizeFolder_RefusesWhatIsNotAFolderToOpen(t *testing.T) {
 
 	for name, path := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := normalizeFolder(path); err == nil {
-				t.Errorf("normalizeFolder(%q) = nil error, want rejection", path)
+			if _, err := resolveFolder(path); err == nil {
+				t.Errorf("resolveFolder(%q) = nil error, want rejection", path)
 			}
 		})
 	}
