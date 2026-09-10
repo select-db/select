@@ -7,6 +7,7 @@ import {
 	type Route
 } from '@playwright/test';
 import { testId, treeNode } from './selectors';
+import { startApp } from './app';
 
 /**
  * Talking to the Go side the way the app does — over `/wails/runtime`, the
@@ -45,11 +46,28 @@ export async function call<T = unknown>(
 	return (response.headers()['content-type']?.includes('json') ? JSON.parse(body) : body) as T;
 }
 
-export const test = base.extend<{
-	emit: (name: string, data?: unknown) => Promise<void>;
-	signIn: () => Promise<void>;
-	consoleErrors: string[];
-}>({
+export const test = base.extend<
+	{
+		emit: (name: string, data?: unknown) => Promise<void>;
+		signIn: () => Promise<void>;
+		consoleErrors: string[];
+	},
+	{ app: string }
+>({
+	app: [
+		async ({}, use, workerInfo) => {
+			const { url, stop } = await startApp(workerInfo.workerIndex);
+			await use(url);
+			await stop();
+		},
+		{ scope: 'worker' }
+	],
+
+	// Carries `page` and `request` with it, so a spec never names a port.
+	baseURL: async ({ app }, use) => {
+		await use(app);
+	},
+
 	/**
 	 * Emits an event, standing in for a backend that emitted it itself: the Go
 	 * side broadcasts it to every listener, the app included.

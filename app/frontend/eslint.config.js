@@ -37,6 +37,15 @@ export default ts.config(
 		}
 	},
 	{
+		// `async ({}, use)` is how playwright declares a fixture that depends on no
+		// other fixture -- it reads the destructuring pattern to find them, so the
+		// empty one is the declaration, not an oversight.
+		files: ['tests/**/*.ts'],
+		rules: {
+			'no-empty-pattern': ['error', { allowObjectPatternsAsParameters: true }]
+		}
+	},
+	{
 		// The app may not import the test suite. Only the screenshot specs may,
 		// and they sit under src/ so they can live beside what they photograph --
 		// which is what makes this worth enforcing: from the file tree, a spec and

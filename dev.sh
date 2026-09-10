@@ -192,11 +192,9 @@ app_migrate() {
   esac
 }
 
-# An interrupted run leaves its server holding the port, and playwright now
-# refuses to start rather than adopting it (see reuseExistingServer in
-# playwright.config.ts). Clearing the leftover here is what keeps that refusal
-# from being a chore: nothing else ever runs this binary, so anything answering
-# to the name is an orphan.
+# An interrupted run leaves its servers holding their ports, and the next run
+# cannot bind them. Nothing else ever runs this binary, so anything answering to
+# the name is an orphan and clearing it is safe.
 #
 # By name (`-x`), not by command line (`-f`): a `-f` pattern this script
 # contains matches the shell running the script, and the desktop app is a

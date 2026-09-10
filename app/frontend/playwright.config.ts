@@ -1,8 +1,4 @@
 import { defineConfig } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 /**
  * Drives the real application built with Wails' `server` tag — the same Go
@@ -13,33 +9,12 @@ import { join } from 'node:path';
  *
  * It cannot cover what needs a native window — zoom, dialogs, menus — and the
  * engine under test is Chromium, not WebKit or WebView2.
+ *
+ * Each worker seeds a workspace and starts its own app on its own port, in the
+ * `app` fixture in `tests/e2e/app.ts`, which is also where `baseURL` comes
+ * from. There is no `webServer` here for that reason: one shared server is
+ * exactly what a second worker cannot have.
  */
-
-const PORT = Number(process.env.E2E_PORT ?? 9346);
-const HOST = '127.0.0.1';
-
-// The app keeps its SQLite DB and user config under the OS config dir. Point it
-// at a throwaway one so a test run never reads or writes the developer's real
-// workspaces. `XDG_CONFIG_HOME` covers Linux, `HOME` covers macOS.
-const dataDir = mkdtempSync(join(tmpdir(), 'select-e2e-'));
-
-// Fill it before the app starts: a migrated database, a user, the workspace
-// they are in, and its files — without which the app only ever shows a login
-// screen. See `internal/cmd/e2eseed`. This runs here rather than in a
-// globalSetup because Playwright starts `webServer` first, and the app reads
-// all of this while booting. What that costs is a config Playwright also loads
-// in every worker, hence the guard: only the main process starts `webServer`,
-// so only its `dataDir` is ever read, and an unguarded seed just ran twice.
-// `-tags server` for the same reason the binary under test uses it: without it
-// the build pulls in wails' GUI cgo path and needs GTK headers no headless
-// runner has.
-if (process.env.TEST_WORKER_INDEX === undefined) {
-	execFileSync('go', ['run', '-tags', 'server', './internal/cmd/e2eseed', dataDir], {
-		cwd: '..',
-		env: { ...process.env, CGO_ENABLED: '0' },
-		stdio: 'inherit'
-	});
-}
 
 export default defineConfig({
 	testDir: 'tests/e2e',
@@ -63,42 +38,22 @@ export default defineConfig({
 	],
 
 	forbidOnly: !!process.env.CI,
+
 	/**
-	 * One worker, no retries: every page talks to the same app process, and an
-	 * event emitted by one test is broadcast to all of them. Serial keeps that
-	 * honest, and a flake stays visible instead of being retried away.
+	 * Files spread across workers; the tests inside one do not. A spec is a
+	 * sequence of gestures on the workspace its worker owns, and reordering them
+	 * is not a thing any of them survive.
 	 *
-	 * Measured rather than assumed, and it is not a tradeoff between speed and
-	 * honesty -- there is no speed to trade. The specs that rewrite the workspace
-	 * cannot overlap with anything (`filesystem` renames weekly_revenue.sql, the
-	 * file every other spec waits for on sign-in), so only the chat suite can be
-	 * spread out, and it is a third of the run. Two workers came out no faster
-	 * than one and flaked; four were slower: four pages against one Go process,
-	 * one connection and one metadata cache contend on exactly what they are
-	 * testing, and a `login` broadcast reaches every page rather than the one
-	 * signing in. Making this parallel means giving each worker its own app and
-	 * its own workspace, not turning a knob here.
+	 * `shots` writes images into the repo and stays serial regardless.
 	 */
-	workers: 1,
+	fullyParallel: false,
+	workers: process.env.SHOTS ? 1 : undefined,
+
+	/** No retries: a flake stays visible instead of being retried away. */
+	retries: 0,
 	reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
 
 	use: {
-		baseURL: `http://${HOST}:${PORT}`,
 		trace: 'retain-on-failure'
-	},
-
-	webServer: {
-		command: `../build/bin/select-server`,
-		url: `http://${HOST}:${PORT}/`,
-		reuseExistingServer: !!process.env.E2E_REUSE_SERVER,
-		stdout: 'pipe',
-		stderr: 'pipe',
-		timeout: 60_000,
-		env: {
-			WAILS_SERVER_HOST: HOST,
-			WAILS_SERVER_PORT: String(PORT),
-			XDG_CONFIG_HOME: dataDir,
-			HOME: dataDir
-		}
 	}
 });
