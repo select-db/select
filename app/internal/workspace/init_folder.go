@@ -80,6 +80,7 @@ func (w *Workspace) CreateWorkspaceInFolder(path, name string) (FolderState, err
 	return FolderState{
 		Status:        Ready,
 		Path:          folder,
+		WorkspaceID:   ws.ID,
 		CurrentServer: currentServer,
 	}, nil
 }

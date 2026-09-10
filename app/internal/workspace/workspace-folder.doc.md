@@ -10,7 +10,7 @@ directory. Your files stay where you put them.
 ## Opening a folder
 
 Click the workspace name in the top left, or open a folder from the start
-screen. One of three things happens.
+screen. One of four things happens.
 
 **The folder is already a workspace.** It holds a `select.config.json`, so
 SELECT knows which workspace it is, connects to the right server, and builds
@@ -24,6 +24,12 @@ there is something to run on the first day.
 **The folder belongs to another server.** Roles and permissions come from the
 server a workspace lives on, so the folder cannot be opened until you sign in
 there. Sign out, pick that server, and open the folder again.
+
+**The workspace is not yours to open.** The folder names a workspace you are
+not in: it was deleted, your access was removed, or you were never invited.
+Ask someone in the workspace to invite you and open the folder again. SELECT
+does not overwrite `select.config.json` here, because your team probably shares
+it -- starting a new workspace in the folder is a separate, deliberate click.
 
 ## `select.config.json`
 
@@ -76,8 +82,14 @@ Deleting a workspace removes it from the server and deletes
 folder, the queries and the databases in it stay exactly as they were, and you
 can create a new workspace in the same folder afterwards.
 
-If someone else deletes a workspace you have open, the folder closes and you are
-left on the start screen, still signed in. Your files are still there.
+Only the owner can delete a workspace. On their machine the folder closes and
+`select.config.json` goes with it; everyone else finds out on their next sync,
+where the folder closes and the config stays. Your files are still there either
+way, and the folder then opens on the screen above.
+
+Losing access to a workspace someone else deleted, or being removed from one,
+looks the same from your side: the folder closes and you are left on the start
+screen, still signed in.
 
 ## Folders SELECT will not open
 

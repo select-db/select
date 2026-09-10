@@ -501,3 +501,79 @@ func TestPayloadHasDeletedAt(t *testing.T) {
 	assert.True(t, PayloadHasDeletedAt(map[string]any{"deleted_at": "2026-01-01T00:00:00Z"}))
 	assert.True(t, PayloadHasDeletedAt(map[string]any{"deleted_at": float64(1)}))
 }
+
+// closedFolder records the workspace-gone callback the app wires to CloseFolder.
+type closedFolder struct{ called bool }
+
+func (c *closedFolder) OnWorkspaceGone() { c.called = true }
+
+func TestSyncWith_ClosesFolder_WhenOwnerDeletesTheWorkspace(t *testing.T) {
+	db := newTestDB(t)
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
+
+	gone := &closedFolder{}
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			Workspaces: []map[string]any{
+				{"id": "ws1", "name": "My Workspace", "deleted_at": time.Now().UTC()},
+			},
+		},
+	}))
+	s.WorkspaceGone = gone
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
+	assert.True(t, gone.called, "the open folder must be closed")
+
+	var count int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workspace WHERE id = 'ws1'`).Scan(&count))
+	assert.Equal(t, 0, count)
+}
+
+func TestSyncWith_ClosesFolder_WhenMembershipIsRevoked(t *testing.T) {
+	db := newTestDB(t)
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
+
+	gone := &closedFolder{}
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			WorkspaceToUser: []map[string]any{
+				{"id": "wtu1", "workspace_id": "ws1", "user_id": "u1", "deleted_at": time.Now().UTC()},
+			},
+		},
+	}))
+	s.WorkspaceGone = gone
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
+	assert.True(t, gone.called, "the open folder must be closed")
+
+	// The workspace row outlives the membership, which is why opening a folder
+	// asks whether the user is in the workspace and not whether it exists.
+	var workspaces, memberships int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workspace WHERE id = 'ws1'`).Scan(&workspaces))
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workspace_to_user WHERE id = 'wtu1'`).Scan(&memberships))
+	assert.Equal(t, 1, workspaces)
+	assert.Equal(t, 0, memberships)
+}
+
+func TestSyncWith_KeepsFolder_WhenAnotherWorkspaceIsDeleted(t *testing.T) {
+	db := newTestDB(t)
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedWorkspace(t, db, "ws2", "Somebody Else's")
+	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
+	seedWorkspaceToUser(t, db, "wtu2", "ws2", "u1", false)
+
+	gone := &closedFolder{}
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			Workspaces: []map[string]any{
+				{"id": "ws2", "name": "Somebody Else's", "deleted_at": time.Now().UTC()},
+			},
+		},
+	}))
+	s.WorkspaceGone = gone
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
+	assert.False(t, gone.called)
+}
