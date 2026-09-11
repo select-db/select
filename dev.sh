@@ -35,8 +35,8 @@
 #   ./dev.sh test                  every module's tests, the way CI runs them
 #
 # `app test` and `app e2e` compile the app's Go code, which links the webview.
-# On Linux that wants the GTK3 headers: apt install libgtk-3-dev
-# libwebkit2gtk-4.1-dev. macOS and Windows need nothing extra.
+# On Linux that wants the GTK4 headers: apt install libgtk-4-dev
+# libwebkitgtk-6.0-dev. macOS and Windows need nothing extra.
 #
 # The dev database runs in Docker (see backend/docker-compose.yml and
 # Dockerfile.postgres: Postgres 17 with pg_partman baked in), published on host
@@ -133,11 +133,6 @@ require_wails3() {
   }
 }
 
-# The build tags the app's own Go code needs. Linux pins GTK3 + WebKit2GTK 4.1
-# because wails v3 defaults to GTK4, which the distros we ship to do not carry;
-# every other platform needs none. Same rule as PLATFORM_TAGS in app/Taskfile.yml.
-app_tags() { [[ "$(uname -s)" == Linux ]] && echo "gtk3"; }
-
 # Extra arguments are handed to the task as CLI_ARGS, which the Taskfile
 # interpolates into the command it runs -- `app e2e --ui` reaches playwright.
 #
@@ -159,13 +154,8 @@ app_task() {
 
 # The same three checks CI runs over the app, in the order that fails fastest.
 app_test() {
-  local tags; tags="$(app_tags)"
-  step "App — Go tests${tags:+ (tags: $tags)}"
-  if [[ -n "$tags" ]]; then
-    (cd "$ROOT/app" && go test -tags "$tags" ./internal/...)
-  else
-    (cd "$ROOT/app" && go test ./internal/...)
-  fi
+  step "App - Go tests"
+  (cd "$ROOT/app" && go test ./internal/...)
 
   step "App — frontend typecheck (svelte-check)"
   (cd "$ROOT/app/frontend" && npm run check)

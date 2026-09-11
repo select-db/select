@@ -17,10 +17,6 @@ vars:
   APP_ENV: '{{.APP_ENV | default "dev"}}'
   MINISIGN_PUBLIC_KEY: '{{.MINISIGN_PUBLIC_KEY | default ""}}'
 
-  # Linux keeps GTK3 + WebKit2GTK 4.1 (wails v3 defaults to GTK4 + WebKitGTK 6.0,
-  # which is not available on the distros we currently ship to).
-  PLATFORM_TAGS: '{{if eq OS "linux"}}gtk3{{end}}'
-
   META_LDFLAGS: '-X main.appVersion={{.APP_VERSION}} -X main.appEnv={{.APP_ENV}} -X selectDb/internal/updater.minisignPublicKey={{.MINISIGN_PUBLIC_KEY}}'
 
 tasks:
@@ -79,7 +75,7 @@ tasks:
       - cmd: powershell -Command "Remove-Item -Force -ErrorAction Ignore *.syso"
         platforms: [windows]
     vars:
-      TAGS: '{{if eq .DEV "true"}}{{.PLATFORM_TAGS}}{{else}}production{{if .PLATFORM_TAGS}},{{.PLATFORM_TAGS}}{{end}}{{end}}'
+      TAGS: '{{if ne .DEV "true"}}production{{end}}'
       # Dev builds keep symbols and inlining; production strips and, on Windows,
       # drops the console window.
       BUILD_FLAGS: '{{if .TAGS}}-tags {{.TAGS}} {{end}}-buildvcs=false {{if eq .DEV "true"}}-gcflags=all="-l" -ldflags="{{.META_LDFLAGS}}"{{else}}-trimpath -ldflags="-w -s{{if eq OS "windows"}} -H windowsgui{{end}} {{.META_LDFLAGS}}"{{end}}'
