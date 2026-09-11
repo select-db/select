@@ -5,7 +5,7 @@ go 1.26.8
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/apache/arrow-go/v18 v18.7.0
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/klauspost/compress v1.19.2
 	github.com/lib/pq v1.10.9
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
