@@ -91,6 +91,23 @@ test('the workbench is there with no folder open', async ({ page, signIn, reques
 	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 });
 
+test('signing out takes the user with it', async ({ page, signIn, emit }) => {
+	await holdSession(page);
+	await page.goto('/');
+	await signIn();
+
+	const user = testId(page, 'bottombar.user');
+	await expect(user).toHaveAttribute('data-test-value', 'Sam Okafor');
+
+	// The bottom bar outlives the login wall, so whoever it names is whoever it
+	// was told about last unless signing out tells it too.
+	await emit('logout');
+	await expect(user).toHaveCount(0);
+
+	await signIn();
+	await expect(user).toHaveAttribute('data-test-value', 'Sam Okafor');
+});
+
 test('a picker that answers nothing leaves the button usable', async ({
 	page,
 	signIn,

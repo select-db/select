@@ -1,27 +1,11 @@
 <script lang="ts">
-	import { GetCurrentUser, GetCurrentUserAvatar } from '$lib/bindings/selectDb/internal/user/user';
-	import { onMount } from 'svelte';
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
 	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
-	import { tryCatch } from '$lib/utils/tryCatch';
-
-	let avatarSrc: string = '';
-	let userName: string = '';
+	import { currentUserStore } from '$lib/stores/currentUserStore';
 
 	// The signed-in user, not the workspace's: this shows with no folder open.
-	const loadUser = async () => {
-		const [user, err] = await tryCatch(GetCurrentUser);
-		if (err || !user?.id) return;
-
-		userName = user.name ?? '';
-		const [avatar, avatarErr] = await tryCatch(GetCurrentUserAvatar, user.id);
-		if (avatarErr) return;
-
-		avatarSrc = avatar;
-	};
-
-	onMount(() => loadUser());
+	const user = $derived($currentUserStore);
 
 	const options: ContextMenuOption[] = [
 		{
@@ -34,20 +18,22 @@
 	];
 </script>
 
-<Contextable
-	{options}
-	direction="right"
-	on="click"
-	anchor="child"
-	style="display:flex; align-items: stretch"
->
-	<div class="wrapper avatar">
-		{#if avatarSrc}
-			<img src={avatarSrc} alt="User Avatar" />
-		{/if}
-		<p>{userName}</p>
-	</div>
-</Contextable>
+{#if user}
+	<Contextable
+		{options}
+		direction="right"
+		on="click"
+		anchor="child"
+		style="display:flex; align-items: stretch"
+	>
+		<div class="wrapper avatar" data-test="bottombar.user" data-test-value={user.name}>
+			{#if user.avatar}
+				<img src={user.avatar} alt="User Avatar" />
+			{/if}
+			<p>{user.name}</p>
+		</div>
+	</Contextable>
+{/if}
 
 <style>
 	.wrapper {
