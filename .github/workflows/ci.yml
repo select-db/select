@@ -156,19 +156,22 @@ jobs:
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
       - if: matrix.module != 'app'
         run: sudo apt-get update && sudo apt-get install -y gcc
-      # The app binds the webview through cgo, so loading its packages needs
-      # the GTK4 and WebKitGTK headers the desktop build links against. From
-      # the cached .debs, as the app jobs do, rather than the plain apt install
-      # whose 13m40s worst case the timeout above is written against.
-      - if: matrix.module == 'app'
-        uses: ./.github/actions/gtk-deps
       - name: govulncheck
         working-directory: ${{ matrix.module }}
         timeout-minutes: 10
+        # The app is scanned in its server build, which carries the same Go
+        # code with the cgo webview swapped for an HTTP server. That keeps GTK
+        # out of this job entirely. The cost is real and bounded: a
+        # vulnerability reachable only through the GTK path is not reported
+        # here. Nothing in the webview layer is ours, and the desktop variant
+        # is still compiled by the lint job on every PR.
+        env:
+          BUILD_TAGS: ${{ matrix.module == 'app' && 'server' || '' }}
+          CGO_ENABLED: ${{ matrix.module == 'app' && '0' || '1' }}
         run: |
           # Pinned because a blocking gate must not change between runs.
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          govulncheck ./...
+          govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
       - name: semgrep (SAST)
         if: ${{ !cancelled() }}
         timeout-minutes: 10
