@@ -162,9 +162,6 @@ func (w *Workspace) setCurrentWorkspace(workspaceID, folder string) error {
 		return fmt.Errorf("get current user: %w", err)
 	}
 
-	if err := w.Queries.ClearCurrentWorkspaceToUser(ctx); err != nil {
-		return fmt.Errorf("clear current workspace: %w", err)
-	}
 	if err := w.Queries.UpdateCurrentWorkspaceToUser(ctx, generated.UpdateCurrentWorkspaceToUserParams{
 		UserID:      u.ID,
 		WorkspaceID: workspaceID,

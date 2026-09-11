@@ -13,21 +13,6 @@ import (
 	"selectDb/internal/db/db_types"
 )
 
-const clearCurrentWorkspaceToUser = `-- name: ClearCurrentWorkspaceToUser :exec
-; -- @no-track
-UPDATE 
-    workspace_to_user 
-SET 
-    current = FALSE 
-WHERE 
-    current = TRUE
-`
-
-func (q *Queries) ClearCurrentWorkspaceToUser(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearCurrentWorkspaceToUser)
-	return err
-}
-
 const createHistory = `-- name: CreateHistory :one
 ; -- @no-track
 INSERT INTO history (
@@ -1625,26 +1610,20 @@ func (q *Queries) UpdateCommit(ctx context.Context, arg UpdateCommitParams) (Mut
 const updateCurrentWorkspaceToUser = `-- name: UpdateCurrentWorkspaceToUser :exec
 ; -- @no-track
 UPDATE workspace_to_user
-SET current = TRUE
-WHERE id = (
-    SELECT 
-        wtu.id
-    FROM 
-        workspace_to_user AS wtu
-        LEFT JOIN workspace w ON w.id = wtu.workspace_id
-    WHERE 
-        wtu.user_id = ?1
-        AND wtu.workspace_id = ?2
-)
+SET current = (workspace_id = ?1)
+WHERE user_id = ?2
 `
 
 type UpdateCurrentWorkspaceToUserParams struct {
-	UserID      string `json:"user_id"`
 	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
 }
 
+// One statement, because GetCurrentUser selects on this flag: clearing the old
+// row before setting the new one leaves a window with no current user at all,
+// and anything asking in it is told there is none.
 func (q *Queries) UpdateCurrentWorkspaceToUser(ctx context.Context, arg UpdateCurrentWorkspaceToUserParams) error {
-	_, err := q.db.ExecContext(ctx, updateCurrentWorkspaceToUser, arg.UserID, arg.WorkspaceID)
+	_, err := q.db.ExecContext(ctx, updateCurrentWorkspaceToUser, arg.WorkspaceID, arg.UserID)
 	return err
 }
 
