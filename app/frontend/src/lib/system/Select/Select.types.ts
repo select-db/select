@@ -36,6 +36,9 @@ export type SelectProps<V = string> = {
 	multiple?: boolean;
 	summaryDisplay?: SummaryDisplay<V>;
 
+	/** Order the menu by label. Off keeps the order the options came in. */
+	sortOptions?: boolean;
+
 	/** Enable search field in the underlying Menu. */
 	searchEnabled?: boolean;
 	searchPlaceholder?: string;
