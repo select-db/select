@@ -173,6 +173,7 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 		EmitWorkspaceClosed: func() {
 			utils.DebouncedEventsEmit("workspaceClosed", 100*time.Millisecond)
 		},
+		StopWatchingFolder: a.System.StopFileWatcher,
 	}
 	a.Git.SetContext(ctx)
 	a.Search.SetContext(ctx)

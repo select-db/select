@@ -13,6 +13,7 @@ type ReloadHooks struct {
 	BuildWorkspaceGraph       func() error
 	EmitWorkspaceGraphUpdated func()
 	EmitWorkspaceClosed       func()
+	StopWatchingFolder        func()
 }
 
 type Workspace struct {
