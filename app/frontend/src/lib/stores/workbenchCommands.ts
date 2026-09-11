@@ -25,6 +25,7 @@ import {
 	navigateToNextTab
 } from '$lib/components/Layout/layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+import { pickAndOpenFolder } from '$lib/components/PageFolder/folderStore';
 
 export function registerWorkbenchCommands(): void {
 	registerCommand('workbench.toggleLeftPanel', () => {
@@ -46,6 +47,8 @@ export function registerWorkbenchCommands(): void {
 			width: 650
 		});
 	});
+
+	registerCommand('workbench.openFolder', pickAndOpenFolder);
 
 	registerCommand('workbench.zoomIn', zoomIn);
 	registerCommand('workbench.zoomOut', zoomOut);
