@@ -7,6 +7,7 @@ import {
 	holdSession,
 	intercept,
 	test,
+	workspaceId,
 	type APIRequestContext,
 	type Page
 } from '../../../../tests/e2e/wails';
@@ -172,6 +173,35 @@ test('a folder with no config becomes a workspace', async ({ page, signIn, reque
 	expect(JSON.parse(readFileSync(join(folder, 'select.config.json'), 'utf8')).server).toBe(
 		currentServer(dataDir)
 	);
+
+	// Every workspace this machine has a folder for is offered, not just the
+	// last one: both the seeded workspace and the one just made.
+	await call(request, `${WORKSPACE}.CloseFolder`);
+	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
+	await expect(page.getByRole('button', { name: 'Reopen reports' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Reopen analytics' })).toBeVisible();
+});
+
+test('deleting the open workspace does not lock the user out', async ({
+	page,
+	signIn,
+	request,
+	dataDir
+}) => {
+	const folder = scratch(dataDir, 'doomed-');
+	await readyToOpen(page, request, signIn, folder);
+	await page.getByPlaceholder('Workspace name').fill('doomed');
+	await page.getByRole('button', { name: 'Create workspace' }).click();
+	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
+
+	await call(request, `${WORKSPACE}.DeleteWorkspace`, await workspaceId(request));
+
+	// No workspace is current now, and who is signed in must not depend on that:
+	// opening a folder used to answer "no current user" and leave no way out.
+	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
+	await answerPicker(page, seeded(dataDir));
+	await openFolderButton(page).click();
+	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 });
 
 test('a folder from another server is not opened here', async ({

@@ -6,6 +6,34 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * Folder is a workspace this machine has a folder for.
+ */
+export class Folder {
+    "path": string;
+    "name": string;
+
+    /** Creates a new Folder instance. */
+    constructor($$source: Partial<Folder> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Folder instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Folder {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Folder($$parsedSource as Partial<Folder>);
+    }
+}
+
+/**
  * FolderState is the status plus whatever its screen needs to say something
  * specific.
  */
@@ -43,34 +71,6 @@ export class FolderState {
     static createFrom($$source: any = {}): FolderState {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new FolderState($$parsedSource as Partial<FolderState>);
-    }
-}
-
-/**
- * LastFolder is what the no-folder screen offers to reopen.
- */
-export class LastFolder {
-    "path": string;
-    "name": string;
-
-    /** Creates a new LastFolder instance. */
-    constructor($$source: Partial<LastFolder> = {}) {
-        if (!("path" in $$source)) {
-            this["path"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new LastFolder instance from a string or object.
-     */
-    static createFrom($$source: any = {}): LastFolder {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new LastFolder($$parsedSource as Partial<LastFolder>);
     }
 }
 

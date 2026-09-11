@@ -7,8 +7,8 @@ export {
 };
 
 export {
+    Folder,
     FolderState,
-    LastFolder,
     SearchUserResult,
     WorkspaceStatus,
     WorkspaceUserEntry,

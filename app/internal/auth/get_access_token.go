@@ -89,6 +89,12 @@ func (ga *GithubAuth) GetAccessToken(deviceCode string) error {
 		return err
 	}
 
+	// This is who is signed in, before any workspace is open: the sync below and
+	// everything after it asks the database that question.
+	if err := ga.Queries.SetCurrentUser(ctx, user.ID); err != nil {
+		return fmt.Errorf("set current user: %w", err)
+	}
+
 	// Pull changes and push any pending commits
 	// same path for login, deco/reco, new commit.
 	if err := ga.Syncer.Sync(ctx, user.ID); err != nil {

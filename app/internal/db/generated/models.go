@@ -82,6 +82,7 @@ type User struct {
 	Name      db_types.JSONNullString `json:"name"`
 	Email     db_types.JSONNullString `json:"email"`
 	AvatarUrl db_types.JSONNullString `json:"avatar_url"`
+	Current   db_types.JSONNullBool   `json:"current"`
 }
 
 type UserToGroup struct {

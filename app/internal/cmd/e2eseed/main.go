@@ -297,6 +297,9 @@ func seedTables(ctx context.Context, queries *generated.Queries) error {
 
 	// `current` is what GetCurrentUser and GetCurrentWorkspace select on: it is
 	// the difference between a seeded database and a signed-in one.
+	if err := queries.SetCurrentUser(ctx, UserID); err != nil {
+		return fmt.Errorf("sign the user in: %w", err)
+	}
 	if err := queries.UpdateCurrentWorkspaceToUser(ctx, generated.UpdateCurrentWorkspaceToUserParams{
 		UserID:      UserID,
 		WorkspaceID: WorkspaceID,
