@@ -1,5 +1,5 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import {
 	call,
@@ -62,8 +62,8 @@ async function readyToOpen(
 	await openFolderButton(page).click();
 }
 
-/** The call to action on the screen, not the one in the corner. */
-const openFolderButton = (page: Page) => screen(page).getByRole('button', { name: 'Open folder' });
+/** The one button that opens a folder, in the corner of the leftbar. */
+const openFolderButton = (page: Page) => testId(page, 'workspace.button');
 
 // Specs share one app per worker, so a spec that leaves another folder open
 // would hand the next one a workspace it never asked for.
@@ -79,13 +79,13 @@ test('the workbench is there with no folder open', async ({ page, signIn, reques
 
 	// The chrome a signed-in user has, whether or not a folder is in it.
 	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
-	await expect(testId(page, 'workspace.button')).toHaveText('Open folder');
+	await expect(openFolderButton(page)).toHaveText('Open folder');
 	await expect(testId(page, 'tree.panel')).toBeVisible();
 	await expect(page.getByText('Sam Okafor')).toBeVisible();
 
 	// And the button in the corner opens one.
 	await answerPicker(page, seeded(dataDir));
-	await testId(page, 'workspace.button').click();
+	await openFolderButton(page).click();
 	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 });
 
@@ -112,6 +112,22 @@ test('a picker that answers nothing leaves the button usable', async ({
 
 	await openFolderButton(page).click();
 	await expect.poll(() => picks.count).toBe(2);
+});
+
+test('the open-folder shortcut opens the picker', async ({ page, signIn, request }) => {
+	await holdSession(page);
+	await page.goto('/');
+	await signIn();
+	await call(request, `${WORKSPACE}.CloseFolder`);
+	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
+
+	const picks = { count: 0 };
+	await intercept(page, PICK_FOLDER, async () => {
+		picks.count++;
+	});
+
+	await page.keyboard.press('ControlOrMeta+o');
+	await expect.poll(() => picks.count).toBe(1);
 });
 
 test('signing in reopens the folder that was open', async ({ page, signIn }) => {
@@ -145,7 +161,10 @@ test('a folder with no config becomes a workspace', async ({ page, signIn, reque
 	await expect(screen(page)).toHaveAttribute('data-test-value', 'needs_setup');
 	await expect(page.getByText(folder)).toBeVisible();
 
-	await page.getByPlaceholder('Workspace name').fill('reports');
+	// The folder's own name is the offer; typing over it is the exception.
+	const name = page.getByPlaceholder('Workspace name');
+	await expect(name).toHaveValue(basename(folder));
+	await name.fill('reports');
 	await page.getByRole('button', { name: 'Create workspace' }).click();
 
 	// An empty folder is seeded on the way in, so the sample is what proves it opened.

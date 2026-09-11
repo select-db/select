@@ -35,8 +35,8 @@
 	<aside class="leftbar" class:resizing>
 		<div class="actions-wrapper" style="--wails-draggable:drag">
 			<WorkspaceButton />
-			<div style="margin-left: auto;"></div>
 			{#if $workspaceGraphStore}
+				<div style="margin-left: auto;"></div>
 				<Search />
 				<NewFileButton />
 			{/if}
