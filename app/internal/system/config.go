@@ -1,8 +1,6 @@
 package system
 
 import (
-	"time"
-
 	"selectDb/internal/graph"
 )
 
@@ -51,6 +49,6 @@ func (s *System) UpdateWorkspaceExecutionLimits(statementTimeoutMs, maxResultSiz
 	if err != nil {
 		return nil, err
 	}
-	graph.EmitWorkspaceGraphUpdated(s.Graph, 100*time.Millisecond)
+	graph.EmitWorkspaceGraphUpdated(s.Graph)
 	return &ExecutionLimitsResponse{StatementTimeoutMs: timeoutMs, MaxResultSizeMB: sizeMB}, nil
 }

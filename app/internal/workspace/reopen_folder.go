@@ -17,9 +17,9 @@ type Folder struct {
 	Name string `json:"name"`
 }
 
-// ListFolders returns every workspace this user has a folder for, the one that
-// was open first. A remembered path that no longer names its workspace is
-// forgotten rather than offered.
+// ListFolders returns every workspace this user has a folder for, current one
+// first. A remembered path that no longer names its workspace is forgotten
+// rather than offered.
 func (w *Workspace) ListFolders() ([]Folder, error) {
 	ctx := context.Background()
 
@@ -54,9 +54,6 @@ func (w *Workspace) ListFolders() ([]Folder, error) {
 	return folders, nil
 }
 
-// folderNamesWorkspace reports whether path still holds a config naming
-// workspaceID.
-//
 // local_path is a hint, never an authority: a folder re-inited as a different
 // workspace leaves the old row pointing at it, so acting on the memory without
 // asking the folder acts on somebody else's.

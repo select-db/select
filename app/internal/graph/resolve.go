@@ -8,7 +8,6 @@ package graph
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // materializeFiles reads dirPath and attaches a node for every user-facing file
@@ -92,7 +91,7 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 		return nil, err
 	}
 	if resolved {
-		EmitWorkspaceGraphUpdated(g, 100*time.Millisecond)
+		EmitWorkspaceGraphUpdated(g)
 	}
 
 	return resolvedFolder, nil

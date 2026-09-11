@@ -36,16 +36,16 @@ export function CreateWorkspaceInFolder(path: string, name: string): $Cancellabl
  * select.config.json that named it. The folder is left as it was.
  * 
  * A config can outlive its workspace when the delete happened on another
- * machine; the init screen cleans that up on the next open.
+ * machine. Opening that folder reports no access and leaves the config alone.
  */
 export function DeleteWorkspace(workspaceID: string): $CancellablePromise<void> {
     return $Call.ByID(1009480846, workspaceID);
 }
 
 /**
- * ListFolders returns every workspace this user has a folder for, the one that
- * was open first. A remembered path that no longer names its workspace is
- * forgotten rather than offered.
+ * ListFolders returns every workspace this user has a folder for, current one
+ * first. A remembered path that no longer names its workspace is forgotten
+ * rather than offered.
  */
 export function ListFolders(): $CancellablePromise<$models.Folder[]> {
     return $Call.ByID(3511278583).then(($result: any) => {

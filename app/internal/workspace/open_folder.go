@@ -110,12 +110,10 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 	return result, nil
 }
 
-// isMember answers on the membership row rather than on the workspace row: a
-// revoked membership deletes the first and leaves the second, so asking whether
-// the workspace exists opens a folder every query then refuses.
-//
-// It pulls before saying no, since a teammate who just cloned has the folder
-// before the local database has heard of the workspace.
+// isMember reads the membership row, not the workspace row: revoking access
+// deletes the first and leaves the second. A miss pulls first, because a
+// teammate who just cloned has the folder before the local database has the
+// workspace.
 func (w *Workspace) isMember(userID, workspaceID string) (bool, error) {
 	ctx := context.Background()
 
@@ -147,7 +145,8 @@ func (w *Workspace) hasMemberRow(ctx context.Context, userID, workspaceID string
 	return false, fmt.Errorf("look up workspace membership: %w", err)
 }
 
-// setCurrentWorkspace makes workspaceID the current workspace, rooted at folder.
+// setCurrentWorkspace publishes the open workspace before seeding, because
+// sample.Write resolves the root through graph.OpenWorkspace rather than folder.
 func (w *Workspace) setCurrentWorkspace(userID, workspaceID, folder string) error {
 	ctx := context.Background()
 
@@ -174,10 +173,9 @@ func (w *Workspace) setCurrentWorkspace(userID, workspaceID, folder string) erro
 // CloseFolder leaves the user signed in on the no-folder screen. The folder on
 // disk is untouched.
 func (w *Workspace) CloseFolder() error {
-	// The watcher first: every change it sees rebuilds the graph and sends it to
-	// the frontend, and one arriving after this would put the closed workspace
-	// back on screen. Deleting a workspace removes its config, which is exactly
-	// such a change.
+	// Stop the watcher first. A change seen after this point rebuilds the graph
+	// and puts the closed workspace back on screen, and deleting a workspace
+	// removes its config, which is such a change.
 	if h := w.ReloadHooks; h != nil && h.StopWatchingFolder != nil {
 		h.StopWatchingFolder()
 	}

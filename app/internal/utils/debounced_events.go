@@ -9,10 +9,10 @@ import (
 	"selectDb/internal/desktop"
 )
 
-// DebouncedEventsEmitter manages debounced event emissions
+// DebouncedEventsEmitter holds one debouncer per event name.
 type DebouncedEventsEmitter struct {
 	debouncers map[string]*debounce.Debouncer
-	mutex      sync.RWMutex
+	mu         sync.RWMutex
 }
 
 var (
@@ -20,7 +20,6 @@ var (
 	globalEmitterOnce sync.Once
 )
 
-// GetDebouncedEventsEmitter returns the singleton instance of DebouncedEventsEmitter
 func GetDebouncedEventsEmitter() *DebouncedEventsEmitter {
 	globalEmitterOnce.Do(func() {
 		globalEmitter = &DebouncedEventsEmitter{
@@ -30,41 +29,39 @@ func GetDebouncedEventsEmitter() *DebouncedEventsEmitter {
 	return globalEmitter
 }
 
-// Emit emits an event with debouncing based on the event name
-// Subsequent calls with the same eventName within the timeout period will be debounced
-func (e *DebouncedEventsEmitter) Emit(eventName string, timeout time.Duration, data ...interface{}) {
-	e.mutex.Lock()
+// Emit debounces by event name and captures the payload now. Use EmitFunc when
+// building the payload is expensive.
+//
+// A Debouncer keeps the window it was created with, so timeout applies only to
+// the first call for an event name.
+func (e *DebouncedEventsEmitter) Emit(eventName string, timeout time.Duration, payload ...interface{}) {
+	e.mu.Lock()
 
-	// Get or create debouncer for this event
 	debouncer, exists := e.debouncers[eventName]
 	if !exists {
-		// Create new debouncer with callback
 		newDebouncer := debounce.NewDebounce(timeout, func() {
-			desktop.Emit(eventName, data...)
+			desktop.Emit(eventName, payload...)
 		})
 		e.debouncers[eventName] = &newDebouncer
 		debouncer = &newDebouncer
 	} else {
-		// Update callback with new data
 		debouncer.UpdateDebounceCallback(func() {
-			desktop.Emit(eventName, data...)
+			desktop.Emit(eventName, payload...)
 		})
 	}
 
-	e.mutex.Unlock()
+	e.mu.Unlock()
 
-	// Trigger debounce
 	debouncer.Debounce()
 }
 
-// EmitFunc debounces like Emit, but builds the payload when the event fires
-// rather than on every call. A burst keeps only the last payload, so building
-// one per call is work thrown away -- and the callback outlives the burst, so
-// an eagerly built payload stays reachable until the next event replaces it.
-func (e *DebouncedEventsEmitter) EmitFunc(eventName string, timeout time.Duration, data func() []interface{}) {
-	e.mutex.Lock()
+// EmitFunc builds the payload when the event fires, not on every call. A burst
+// keeps only the last payload, and the pending callback keeps whatever it
+// captured alive until the next event replaces it.
+func (e *DebouncedEventsEmitter) EmitFunc(eventName string, timeout time.Duration, buildPayload func() []interface{}) {
+	e.mu.Lock()
 
-	callback := func() { desktop.Emit(eventName, data()...) }
+	callback := func() { desktop.Emit(eventName, buildPayload()...) }
 
 	debouncer, exists := e.debouncers[eventName]
 	if !exists {
@@ -75,24 +72,17 @@ func (e *DebouncedEventsEmitter) EmitFunc(eventName string, timeout time.Duratio
 		debouncer.UpdateDebounceCallback(callback)
 	}
 
-	e.mutex.Unlock()
+	e.mu.Unlock()
 
 	debouncer.Debounce()
 }
 
 // DebouncedEventsEmitFunc is EmitFunc on the global emitter.
-func DebouncedEventsEmitFunc(eventName string, timeout time.Duration, data func() []interface{}) {
-	GetDebouncedEventsEmitter().EmitFunc(eventName, timeout, data)
+func DebouncedEventsEmitFunc(eventName string, timeout time.Duration, buildPayload func() []interface{}) {
+	GetDebouncedEventsEmitter().EmitFunc(eventName, timeout, buildPayload)
 }
 
-// DebouncedEventsEmit is a convenience function that uses the global emitter
-// It debounces desktop.Emit calls based on eventName
-//
-// Example usage:
-//
-//	utils.DebouncedEventsEmit("databaseAvailability", 500*time.Millisecond, map[string]interface{}{
-//	    "databases": databases,
-//	})
-func DebouncedEventsEmit(eventName string, timeout time.Duration, data ...interface{}) {
-	GetDebouncedEventsEmitter().Emit(eventName, timeout, data...)
+// DebouncedEventsEmit is Emit on the global emitter.
+func DebouncedEventsEmit(eventName string, timeout time.Duration, payload ...interface{}) {
+	GetDebouncedEventsEmitter().Emit(eventName, timeout, payload...)
 }

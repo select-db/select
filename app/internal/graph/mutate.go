@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"selectDb/internal/db/generated"
-	"time"
 
 	"github.com/selectDb/toolkit"
 
@@ -80,7 +79,7 @@ func (g *Graph) Mutate(ctx context.Context, commit generated.MutationCommit) err
 
 	commit.Payload = dto
 	desktop.Emit("mutation", commit)
-	EmitWorkspaceGraphUpdated(g, 100*time.Millisecond)
+	EmitWorkspaceGraphUpdated(g)
 
 	return nil
 }
