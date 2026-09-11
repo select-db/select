@@ -15,8 +15,7 @@ import {
 } from '$lib/bindings/selectDb/internal/workspace/models';
 import {
 	clearWorkspaceGraphCache,
-	initializeWorkspaceGraph,
-	workspaceGraphStore
+	initializeWorkspaceGraph
 } from '$lib/utils/graph/workspaceGraphStore';
 
 /** What the app shows between "signed in" and "here are your files". `null` while loading. */
@@ -47,8 +46,8 @@ export async function displayFolder(state: FolderState): Promise<void> {
 	clearWorkspaceGraphCache();
 
 	if (state.status === WorkspaceStatus.Ready) {
-		const [graph] = await tryCatch(initializeWorkspaceGraph);
-		if (graph) workspaceGraphStore.set(graph);
+		// Sets the store itself; called for its error handling.
+		await tryCatch(initializeWorkspaceGraph);
 		return;
 	}
 

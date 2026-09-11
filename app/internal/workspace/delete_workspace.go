@@ -16,13 +16,11 @@ import (
 func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 	ctx := context.Background()
 
-	// Read before deleting the row, and confirm the folder still names this
-	// workspace: a stale path would take another workspace's config.
+	// The open workspace is the one whose folder is known for certain; a
+	// local_path is a hint, and a stale one would take another workspace's config.
 	folder := ""
-	if p, err := w.Queries.GetWorkspaceLocalPath(ctx, workspaceID); err == nil {
-		if path := p.Or(""); folderNamesWorkspace(path, workspaceID) {
-			folder = path
-		}
+	if id, root, ok := graph.OpenWorkspace(); ok && id == workspaceID {
+		folder = root
 	}
 
 	if err := api.Fetch(ctx, "DELETE", "workspaces/"+workspaceID, nil, api.WorkspaceHeader(workspaceID), nil); err != nil {
@@ -43,7 +41,7 @@ func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 		}
 	}
 
-	if id, _, ok := graph.OpenWorkspace(); ok && id == workspaceID {
+	if folder != "" {
 		return w.CloseFolder()
 	}
 	return nil

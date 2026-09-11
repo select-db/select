@@ -2,8 +2,6 @@ package workspace
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -31,12 +29,9 @@ func (w *Workspace) CreateWorkspaceInFolder(path, name string) (FolderState, err
 
 	ctx := context.Background()
 
-	u, err := w.Queries.GetCurrentUser(ctx)
+	userID, err := w.currentUserID(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return FolderState{}, fmt.Errorf("no current user")
-		}
-		return FolderState{}, fmt.Errorf("get current user: %w", err)
+		return FolderState{}, err
 	}
 
 	currentServer, err := server.ReadCurrentDomain()
@@ -60,7 +55,7 @@ func (w *Workspace) CreateWorkspaceInFolder(path, name string) (FolderState, err
 	ws, err := w.insertWorkspace(newWorkspaceParams{
 		ID:                resp.ID,
 		WorkspaceToUserID: resp.WorkspaceToUserID,
-		UserID:            u.ID,
+		UserID:            userID,
 		Name:              resp.Name,
 	})
 	if err != nil {
@@ -73,14 +68,7 @@ func (w *Workspace) CreateWorkspaceInFolder(path, name string) (FolderState, err
 		return FolderState{}, err
 	}
 
-	if err := w.setCurrentWorkspace(ws.ID, folder); err != nil {
-		return FolderState{}, err
-	}
-
-	return FolderState{
-		Status:        Ready,
-		Path:          folder,
-		WorkspaceID:   ws.ID,
-		CurrentServer: currentServer,
-	}, nil
+	// Opened rather than reported open: one definition of what Ready means, and
+	// the config just written is read back the way any other open reads it.
+	return w.OpenFolder(folder)
 }

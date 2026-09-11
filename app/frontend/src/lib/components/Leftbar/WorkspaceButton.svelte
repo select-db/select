@@ -29,11 +29,12 @@
 		...$foldersStore.map((folder) => ({ value: folder.path, label: folder.name }))
 	]);
 
-	// The list is what the machine has folders for, which a workspace opened,
-	// renamed or deleted changes.
+	// Keyed on the names rather than the stores: the graph store is replaced on
+	// every watcher event, and re-listing the folders on each one is a round trip
+	// per keystroke somebody else is typing.
+	const listKey = $derived(`${$folderStore?.path ?? ''}|${$workspaceGraphStore?.name ?? ''}`);
 	$effect(() => {
-		void $workspaceGraphStore?.name;
-		void $folderStore?.path;
+		void listKey;
 		refreshFolders();
 	});
 

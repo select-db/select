@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"selectDb/internal/utils"
 )
 
 // materializeFiles reads dirPath and attaches a node for every user-facing file
@@ -87,7 +85,6 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	}
 
 	resolved, err := g.resolveFolder(folder, fsCtx)
-	wsGraph := g.WorkspaceGraph.Clone()
 	resolvedFolder := folder.Clone()
 	g.mu.Unlock()
 
@@ -95,7 +92,7 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 		return nil, err
 	}
 	if resolved {
-		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, wsGraph)
+		EmitWorkspaceGraphUpdated(g, 100*time.Millisecond)
 	}
 
 	return resolvedFolder, nil

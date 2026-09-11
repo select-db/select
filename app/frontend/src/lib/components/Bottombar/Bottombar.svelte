@@ -12,22 +12,21 @@
 
 <div id="bottom-bar" class="wrapper">
 	<NetworkQuality />
+	<div class="divider"></div>
+	<UserAvatar />
 	{#if $workspaceGraphStore}
-		<UserAvatar />
 		<div class="divider"></div>
 		<FilesButton />
 		<div class="divider"></div>
 		<GitButton />
 		<GitBranch />
+	{/if}
 
-		<div style="margin-left: auto"></div>
+	<div style="margin-left: auto"></div>
+	{#if $workspaceGraphStore}
 		<HistoryButton />
 		<div class="divider"></div>
 		<SearchButton />
-	{:else}
-		<div class="divider"></div>
-		<UserAvatar />
-		<div style="margin-left: auto"></div>
 	{/if}
 	<div class="divider"></div>
 	<ThemeButton />
