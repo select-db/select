@@ -19,3 +19,6 @@ Thumbs.db
 # Local browser pin: points Playwright at a Chromium already on this machine,
 # so the path is only ever right on the machine that wrote it.
 /playwright.pinned.config.ts
+
+# Scratch Playwright config for running the suite against a local browser.
+pw.local.config.ts
