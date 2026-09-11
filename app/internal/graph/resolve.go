@@ -87,7 +87,8 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	}
 
 	resolved, err := g.resolveFolder(folder, fsCtx)
-	wsGraph := g.WorkspaceGraph
+	wsGraph := g.WorkspaceGraph.Clone()
+	resolvedFolder := folder.Clone()
 	g.mu.Unlock()
 
 	if err != nil {
@@ -97,7 +98,7 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, wsGraph)
 	}
 
-	return folder, nil
+	return resolvedFolder, nil
 }
 
 // resolveAlongPath resolves every folder between the workspace root and the

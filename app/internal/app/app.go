@@ -168,7 +168,7 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 	a.Workspace.ReloadHooks = &workspace.ReloadHooks{
 		BuildWorkspaceGraph: a.Graph.RebuildWorkspaceGraph,
 		EmitWorkspaceGraphUpdated: func() {
-			utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
+			utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, graph.SnapshotWorkspaceGraph(a.Graph))
 		},
 		EmitWorkspaceClosed: func() {
 			utils.DebouncedEventsEmit("workspaceClosed", 100*time.Millisecond)

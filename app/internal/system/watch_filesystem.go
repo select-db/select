@@ -213,11 +213,7 @@ func (s *System) rebuildGraphAndEmit() {
 		// @todo handle error
 		return
 	}
-	wsGraph, err := s.Graph.GetWorkspaceGraph()
-	if err != nil {
-		return
-	}
-	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, graph.SnapshotWorkspaceGraph(s.Graph))
 }
 
 // LoadAllDatabaseSchemas runs QuerySchema for each workspace DB instance (same as after other graph rebuilds).
@@ -313,7 +309,7 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 
 	folderURI := ctx.URI(folderRel)
 
-	wsGraph, err := s.Graph.GetWorkspaceGraph()
+	wsGraph, err := graph.EnsureWorkspaceGraph(s.Graph)
 	if err != nil || wsGraph == nil {
 		return
 	}
@@ -332,7 +328,7 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 		}
 	}
 
-	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, graph.SnapshotWorkspaceGraph(s.Graph))
 }
 
 // Emits themeUpdated when the per-user .theme file changes.

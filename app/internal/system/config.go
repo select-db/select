@@ -52,8 +52,6 @@ func (s *System) UpdateWorkspaceExecutionLimits(statementTimeoutMs, maxResultSiz
 	if err != nil {
 		return nil, err
 	}
-	if ws, err := s.Graph.GetWorkspaceGraph(); err == nil {
-		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, ws)
-	}
+	utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, graph.SnapshotWorkspaceGraph(s.Graph))
 	return &ExecutionLimitsResponse{StatementTimeoutMs: timeoutMs, MaxResultSizeMB: sizeMB}, nil
 }
