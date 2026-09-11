@@ -27,8 +27,10 @@ let sessionState: 'loggedin' | 'loggedout' | undefined;
 // The watcher debounces, so an update emitted before a folder closed can land
 // after it. Applied blindly it restores the workbench for a workspace that is
 // no longer open.
-EventsOn('workspaceGraphUpdated', async (updatedGraph: WorkspaceNode) => {
-	if (sessionState !== 'loggedin') return;
+EventsOn('workspaceGraphUpdated', async (updatedGraph: WorkspaceNode | null) => {
+	// The snapshot is taken when the debounce fires, so a folder closed inside
+	// that window sends nothing to apply.
+	if (!updatedGraph || sessionState !== 'loggedin') return;
 
 	const folder = get(folderStore);
 	if (folder?.status !== WorkspaceStatus.Ready || folder.workspaceId !== updatedGraph.id) return;

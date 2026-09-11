@@ -163,11 +163,19 @@ func (w *Workspace) setCurrentWorkspace(userID, workspaceID, folder string) erro
 
 	graph.SetOpenWorkspace(workspaceID, folder)
 
+	// Published above, so a failure past this point has to take it back: the
+	// caller reports an error while every URI would still resolve into the new
+	// folder.
 	if err := w.seedSampleIfEmpty(workspaceID, folder); err != nil {
+		graph.ClearOpenWorkspace()
 		return err
 	}
 
-	return w.reloadGraph()
+	if err := w.reloadGraph(); err != nil {
+		graph.ClearOpenWorkspace()
+		return err
+	}
+	return nil
 }
 
 // CloseFolder leaves the user signed in on the no-folder screen. The folder on

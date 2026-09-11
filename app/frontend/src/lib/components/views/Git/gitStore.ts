@@ -11,7 +11,8 @@ export const gitFileStatusStore = writable<git.GitFileStatus | null>(null);
 
 EventsOn('gitDetailedStatusChanged', () => loadGitStatus());
 
-const folderIsOpen = () => get(workspaceGraphStore) !== null;
+// The store holds undefined when no folder is open, never null.
+const folderIsOpen = () => get(workspaceGraphStore) !== undefined;
 
 /**
  * Git belongs to the open folder, so a folder closing under a call in flight
@@ -35,7 +36,9 @@ export const loadGitStatus = async (): Promise<void> => {
 	}
 	gitWorkspaceStatusStore.set(status);
 
-	if (status?.isGitRepo && status.hasRemote) {
+	// A repository is enough. Staging and committing need no origin, and gating
+	// on one left a git init with no remote showing an empty panel.
+	if (status?.isGitRepo) {
 		await loadGitFileStatus();
 	} else {
 		gitFileStatusStore.set(null);
