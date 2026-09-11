@@ -9,6 +9,7 @@ import {
 } from '$lib/components/PageFolder/folderStore';
 import { loadGitStatus } from '$lib/components/views/Git/gitStore';
 import { loadMyPermissions, clearMyPermissions } from '$lib/stores/myPermissionsStore';
+import { loadCurrentUser, clearCurrentUser } from '$lib/stores/currentUserStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { CheckForLogin, CheckForLogout } from '$lib/bindings/selectDb/internal/system/system';
@@ -38,6 +39,7 @@ EventsOn('logout', () => {
 	}
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
+	clearCurrentUser();
 	clearFolderState();
 });
 
@@ -54,14 +56,15 @@ EventsOn('login', async () => {
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
 
-	// Keyed on the user, not the folder, so it need not wait on the tree walk.
+	// Keyed on the user, not the folder, so they need not wait on the tree walk.
 	const permissions = loadMyPermissions();
+	const user = loadCurrentUser();
 
 	await reopenLastFolder();
 
 	modalStore.set(null);
 	checkSessionInterval = setInterval(() => CheckForLogout(), 500);
-	await Promise.all([loadGitStatus(), permissions]);
+	await Promise.all([loadGitStatus(), permissions, user]);
 });
 
 export const setupSessionWall = async () => {
