@@ -66,15 +66,14 @@
 {/snippet}
 
 <div class="wrapper">
-	<div class="logo-row">
-		<Wordmark height="1.1rem" color="var(--gray-800)" />
-	</div>
-	<div class="divider"></div>
-
 	<div class="panel" data-test="folder.screen" data-test-value={folder?.status ?? ''}>
 		{#if !folder}
 			<Loader size={24} />
 		{:else if folder.status === WorkspaceStatus.WrongServer}
+			<div class="logo-row">
+				<Wordmark height="1.1rem" color="var(--gray-800)" />
+			</div>
+			<div class="divider"></div>
 			<div class="state" in:fly={enter}>
 				<h1>This folder belongs to another server</h1>
 				<p class="path">{folder.path}</p>
@@ -87,6 +86,10 @@
 				</div>
 			</div>
 		{:else if folder.status === WorkspaceStatus.NoAccess}
+			<div class="logo-row">
+				<Wordmark height="1.1rem" color="var(--gray-800)" />
+			</div>
+			<div class="divider"></div>
 			<div class="state" in:fly={enter}>
 				<h1>You cannot open this workspace</h1>
 				<p class="path">{folder.path}</p>
@@ -136,6 +139,10 @@
 				</p>
 			</div>
 		{:else if folder.status === WorkspaceStatus.NoFolder}
+			<div class="logo-row">
+				<Wordmark height="1.1rem" color="var(--gray-800)" />
+			</div>
+			<div class="divider"></div>
 			<div class="state" in:fly={enter}>
 				<p class="eyebrow">Recent</p>
 				{#if $foldersStore.length}
