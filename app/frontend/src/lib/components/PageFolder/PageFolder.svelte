@@ -272,10 +272,9 @@
 		border-radius: var(--br-sm);
 		background-color: var(--gray-200);
 		box-shadow: var(--shadow-subtle);
-		cursor: pointer;
 		transition:
-			background-color 0.12s ease-out,
-			border-color 0.12s ease-out;
+			background-color 0.1s ease-out 0.03s,
+			border-color 0.1s ease-out 0.03s;
 	}
 
 	.recent-card:hover {
@@ -328,7 +327,7 @@
 		color: var(--gray-700);
 		text-decoration: underline;
 		text-underline-offset: 2px;
-		cursor: pointer;
+		transition: color 0.1s ease-out 0.05s;
 	}
 
 	.link:hover {
