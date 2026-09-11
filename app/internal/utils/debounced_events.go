@@ -57,6 +57,34 @@ func (e *DebouncedEventsEmitter) Emit(eventName string, timeout time.Duration, d
 	debouncer.Debounce()
 }
 
+// EmitFunc debounces like Emit, but builds the payload when the event fires
+// rather than on every call. A burst keeps only the last payload, so building
+// one per call is work thrown away -- and the callback outlives the burst, so
+// an eagerly built payload stays reachable until the next event replaces it.
+func (e *DebouncedEventsEmitter) EmitFunc(eventName string, timeout time.Duration, data func() []interface{}) {
+	e.mutex.Lock()
+
+	callback := func() { desktop.Emit(eventName, data()...) }
+
+	debouncer, exists := e.debouncers[eventName]
+	if !exists {
+		newDebouncer := debounce.NewDebounce(timeout, callback)
+		e.debouncers[eventName] = &newDebouncer
+		debouncer = &newDebouncer
+	} else {
+		debouncer.UpdateDebounceCallback(callback)
+	}
+
+	e.mutex.Unlock()
+
+	debouncer.Debounce()
+}
+
+// DebouncedEventsEmitFunc is EmitFunc on the global emitter.
+func DebouncedEventsEmitFunc(eventName string, timeout time.Duration, data func() []interface{}) {
+	GetDebouncedEventsEmitter().EmitFunc(eventName, timeout, data)
+}
+
 // DebouncedEventsEmit is a convenience function that uses the global emitter
 // It debounces desktop.Emit calls based on eventName
 //

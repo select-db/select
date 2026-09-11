@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"selectDb/internal/graph"
-	"selectDb/internal/utils"
 )
 
 // GetConfig loads and returns the merged personal config (defaults + per-user
@@ -52,6 +51,6 @@ func (s *System) UpdateWorkspaceExecutionLimits(statementTimeoutMs, maxResultSiz
 	if err != nil {
 		return nil, err
 	}
-	utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, graph.SnapshotWorkspaceGraph(s.Graph))
+	graph.EmitWorkspaceGraphUpdated(s.Graph, 100*time.Millisecond)
 	return &ExecutionLimitsResponse{StatementTimeoutMs: timeoutMs, MaxResultSizeMB: sizeMB}, nil
 }

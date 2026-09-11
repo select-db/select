@@ -2,6 +2,9 @@ package workspace
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
 
 	"selectDb/internal/db/generated"
 	"selectDb/internal/graph"
@@ -29,4 +32,17 @@ func New(Queries *generated.Queries, Graph *graph.Graph) *Workspace {
 		Queries: Queries,
 		Graph:   Graph,
 	}
+}
+
+// currentUserID is the signed-in user, which every folder operation needs and
+// none can do without.
+func (w *Workspace) currentUserID(ctx context.Context) (string, error) {
+	u, err := w.Queries.GetCurrentUser(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("no current user")
+		}
+		return "", fmt.Errorf("get current user: %w", err)
+	}
+	return u.ID, nil
 }

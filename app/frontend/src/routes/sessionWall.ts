@@ -9,7 +9,6 @@ import {
 	reopenLastFolder
 } from '$lib/components/PageFolder/folderStore';
 import { WorkspaceStatus } from '$lib/bindings/selectDb/internal/workspace/models';
-import { loadGitStatus } from '$lib/components/views/Git/gitStore';
 import { loadMyPermissions, clearMyPermissions } from '$lib/stores/myPermissionsStore';
 import { loadCurrentUser, clearCurrentUser } from '$lib/stores/currentUserStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
@@ -29,12 +28,12 @@ let lastState: 'loggedin' | 'loggedout' | undefined;
 // after it. Applied blindly it puts the workbench back for a workspace that is
 // no longer open, which after a delete is one that no longer exists.
 EventsOn('workspaceGraphUpdated', async (g: WorkspaceNode) => {
-	stripNullItems(g);
 	if (lastState !== 'loggedin') return;
 
 	const folder = get(folderStore);
 	if (folder?.status !== WorkspaceStatus.Ready || folder.workspaceId !== g.id) return;
 
+	stripNullItems(g);
 	workspaceGraphStore.set(g);
 });
 
@@ -72,7 +71,7 @@ EventsOn('login', async () => {
 
 	modalStore.set(null);
 	checkSessionInterval = setInterval(() => CheckForLogout(), 500);
-	await Promise.all([loadGitStatus(), permissions, user]);
+	await Promise.all([permissions, user]);
 });
 
 export const setupSessionWall = async () => {

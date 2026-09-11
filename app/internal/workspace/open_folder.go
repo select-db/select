@@ -88,7 +88,12 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 		return result, nil
 	}
 
-	member, err := w.isMember(cfg.WorkspaceID)
+	userID, err := w.currentUserID(context.Background())
+	if err != nil {
+		return FolderState{}, err
+	}
+
+	member, err := w.isMember(userID, cfg.WorkspaceID)
 	if err != nil {
 		return FolderState{}, err
 	}
@@ -97,7 +102,7 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 		return result, nil
 	}
 
-	if err := w.setCurrentWorkspace(cfg.WorkspaceID, folder); err != nil {
+	if err := w.setCurrentWorkspace(userID, cfg.WorkspaceID, folder); err != nil {
 		return FolderState{}, err
 	}
 
@@ -111,18 +116,10 @@ func (w *Workspace) OpenFolder(path string) (FolderState, error) {
 //
 // It pulls before saying no, since a teammate who just cloned has the folder
 // before the local database has heard of the workspace.
-func (w *Workspace) isMember(workspaceID string) (bool, error) {
+func (w *Workspace) isMember(userID, workspaceID string) (bool, error) {
 	ctx := context.Background()
 
-	u, err := w.Queries.GetCurrentUser(ctx)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, fmt.Errorf("no current user")
-		}
-		return false, fmt.Errorf("get current user: %w", err)
-	}
-
-	member, err := w.hasMemberRow(ctx, u.ID, workspaceID)
+	member, err := w.hasMemberRow(ctx, userID, workspaceID)
 	if err != nil || member {
 		return member, err
 	}
@@ -130,10 +127,10 @@ func (w *Workspace) isMember(workspaceID string) (bool, error) {
 	if w.PullFunc == nil {
 		return false, nil
 	}
-	if err := w.PullFunc(ctx, u.ID); err != nil {
+	if err := w.PullFunc(ctx, userID); err != nil {
 		return false, fmt.Errorf("pull workspaces: %w", err)
 	}
-	return w.hasMemberRow(ctx, u.ID, workspaceID)
+	return w.hasMemberRow(ctx, userID, workspaceID)
 }
 
 func (w *Workspace) hasMemberRow(ctx context.Context, userID, workspaceID string) (bool, error) {
@@ -151,19 +148,11 @@ func (w *Workspace) hasMemberRow(ctx context.Context, userID, workspaceID string
 }
 
 // setCurrentWorkspace makes workspaceID the current workspace, rooted at folder.
-func (w *Workspace) setCurrentWorkspace(workspaceID, folder string) error {
+func (w *Workspace) setCurrentWorkspace(userID, workspaceID, folder string) error {
 	ctx := context.Background()
 
-	u, err := w.Queries.GetCurrentUser(ctx)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("no current user")
-		}
-		return fmt.Errorf("get current user: %w", err)
-	}
-
 	if err := w.Queries.UpdateCurrentWorkspaceToUser(ctx, generated.UpdateCurrentWorkspaceToUserParams{
-		UserID:      u.ID,
+		UserID:      userID,
 		WorkspaceID: workspaceID,
 	}); err != nil {
 		return fmt.Errorf("set current workspace: %w", err)
@@ -175,7 +164,7 @@ func (w *Workspace) setCurrentWorkspace(workspaceID, folder string) error {
 
 	graph.SetOpenWorkspace(workspaceID, folder)
 
-	if err := w.seedSampleIfEmpty(workspaceID); err != nil {
+	if err := w.seedSampleIfEmpty(workspaceID, folder); err != nil {
 		return err
 	}
 

@@ -171,10 +171,15 @@ export function LoadConfig(): $CancellablePromise<$models.ConfigResponse | null>
 }
 
 /**
- * LoadFolderEnvFile loads the .env file for a folder and updates its Variables map.
+ * LoadFolderEnvFile reads the folder's .env into its node.
+ * 
+ * Addressed by URI, and the write is taken under the graph's lock: a node
+ * pointer written to from outside is one the snapshot's maps.Clone can be
+ * reading at the same time, which is a fatal concurrent map access rather than
+ * a recoverable panic.
  */
-export function LoadFolderEnvFile(folderNode: $models.FolderNode | null, wfs: $models.WorkspaceFS | null): $CancellablePromise<void> {
-    return $Call.ByID(821143247, folderNode, wfs);
+export function LoadFolderEnvFile(folderURI: string, wfs: $models.WorkspaceFS | null): $CancellablePromise<void> {
+    return $Call.ByID(821143247, folderURI, wfs);
 }
 
 /**

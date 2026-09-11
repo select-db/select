@@ -3,6 +3,9 @@ package graph
 import (
 	"maps"
 	"slices"
+	"time"
+
+	"selectDb/internal/utils"
 )
 
 // The frontend is handed copies of nodes, never the nodes themselves.
@@ -16,6 +19,16 @@ import (
 // Interface values (a schema item's metadata) and query results are shared:
 // both are replaced wholesale rather than edited in place, so the copy's own
 // header always describes memory nobody rewrites.
+
+// EmitWorkspaceGraphUpdated queues the tree for the frontend. The copy is taken
+// when the debounce fires, not per call: a burst keeps only the last payload,
+// and one mutation per file of a checkout would otherwise copy the whole tree
+// once per file to throw all but one away.
+func EmitWorkspaceGraphUpdated(g *Graph, timeout time.Duration) {
+	utils.DebouncedEventsEmitFunc("workspaceGraphUpdated", timeout, func() []interface{} {
+		return []interface{}{SnapshotWorkspaceGraph(g)}
+	})
+}
 
 // SnapshotWorkspaceGraph copies the tree under the read lock. Callers already
 // holding it clone the node directly.
