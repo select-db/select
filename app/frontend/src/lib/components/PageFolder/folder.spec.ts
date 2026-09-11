@@ -61,11 +61,20 @@ async function readyToOpen(
 	await answerPicker(page, folder);
 	await call(request, `${WORKSPACE}.CloseFolder`);
 	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
-	await openFolderButton(page).click();
+	await chooseOpenFolder(page);
 }
 
-/** The one button that opens a folder, in the corner of the leftbar. */
-const openFolderButton = (page: Page) => testId(page, 'workspace.button');
+/** The workspace picker in the corner of the leftbar, which names the open folder. */
+const workspaceButton = (page: Page) => testId(page, 'workspace.button');
+
+/** The picker's dropdown. The trigger names the open folder, so both say things. */
+const pickerMenu = (page: Page) => page.getByLabel('Menu options');
+
+/** Opens the picker and takes its first entry, which is always Open folder. */
+async function chooseOpenFolder(page: Page) {
+	await workspaceButton(page).click();
+	await pickerMenu(page).getByText('Open folder', { exact: true }).click();
+}
 
 // Specs share one app per worker, so a spec that leaves another folder open
 // would hand the next one a workspace it never asked for.
@@ -81,14 +90,40 @@ test('the workbench is there with no folder open', async ({ page, signIn, reques
 
 	// The chrome a signed-in user has, whether or not a folder is in it.
 	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
-	await expect(openFolderButton(page)).toHaveText('Open folder');
+	await expect(workspaceButton(page)).toContainText('Open folder');
 	await expect(testId(page, 'tree.panel')).toBeVisible();
 	await expect(page.getByText('Sam Okafor')).toBeVisible();
 
-	// And the button in the corner opens one.
+	// And the picker in the corner opens one.
 	await answerPicker(page, seeded(dataDir));
-	await openFolderButton(page).click();
-	await expect(openFolderButton(page)).toContainText('analytics');
+	await chooseOpenFolder(page);
+	await expect(workspaceButton(page)).toContainText('analytics');
+	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
+});
+
+test('the picker lists the folders, and always offers Open folder first', async ({
+	page,
+	signIn,
+	request,
+	dataDir
+}) => {
+	const fresh = scratch(dataDir, 'second-');
+	await readyToOpen(page, request, signIn, fresh);
+	await page.getByPlaceholder('Workspace name').fill('second');
+	await page.getByRole('button', { name: 'Create workspace' }).click();
+	await expect(workspaceButton(page)).toContainText('second');
+
+	await workspaceButton(page).click();
+
+	// Open folder leads, then every workspace this machine has a folder for.
+	const entries = pickerMenu(page).getByRole('menuitem');
+	await expect(entries.first()).toHaveText('Open folder');
+	await expect(entries.filter({ hasText: 'analytics' })).toHaveCount(1);
+	await expect(entries.filter({ hasText: 'second' })).toHaveCount(1);
+
+	// And picking one switches to it, with no OS dialog in the way.
+	await entries.filter({ hasText: 'analytics' }).click();
+	await expect(workspaceButton(page)).toContainText('analytics');
 	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 });
 
@@ -127,10 +162,10 @@ test('a picker that answers nothing leaves the button usable', async ({
 		picks.count++;
 	});
 
-	await openFolderButton(page).click();
+	await chooseOpenFolder(page);
 	await expect.poll(() => picks.count).toBe(1);
 
-	await openFolderButton(page).click();
+	await chooseOpenFolder(page);
 	await expect.poll(() => picks.count).toBe(2);
 });
 
@@ -237,7 +272,7 @@ test('deleting the open workspace does not lock the user out', async ({
 
 	// By name: every workspace is seeded with the same sample, so a file from it
 	// says nothing about which one the app has open.
-	await expect(openFolderButton(page)).toContainText('doomed');
+	await expect(workspaceButton(page)).toContainText('doomed');
 
 	await call(request, `${WORKSPACE}.DeleteWorkspace`, await workspaceId(request));
 
@@ -245,8 +280,8 @@ test('deleting the open workspace does not lock the user out', async ({
 	// opening a folder used to answer "no current user" and leave no way out.
 	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
 	await answerPicker(page, seeded(dataDir));
-	await openFolderButton(page).click();
-	await expect(openFolderButton(page)).toContainText('analytics');
+	await chooseOpenFolder(page);
+	await expect(workspaceButton(page)).toContainText('analytics');
 	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 });
 

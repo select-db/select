@@ -1,50 +1,86 @@
 <script lang="ts">
-	// A workspace is a folder, so switching means picking one. With none open
-	// there is nothing to name, and the button says what it does instead.
-	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+	// The workspace picker. A workspace is a folder, so the list is the folders
+	// this machine has, and Open folder is always there to reach one it does not.
+	import Select from '$lib/system/Select/Select.svelte';
+	import type { SelectOption } from '$lib/system/Select/Select.types';
 	import Avatar from '$lib/system/Avatar/Avatar.svelte';
-	import Button from '$lib/system/Button/Button.svelte';
-	import Tooltip from '$lib/system/Tooltip/Tooltip.svelte';
+	import Icon from '$lib/system/Icon/Icon.svelte';
+	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { logoSrc } from '$lib/utils/workspaceLogo';
 	import {
 		folderStore,
+		foldersStore,
+		openFolder,
 		openingStore,
-		pickAndOpenFolder
+		pickAndOpenFolder,
+		refreshFolders
 	} from '$lib/components/PageFolder/folderStore';
-	import { osStore } from '$lib/utils/platform';
+
+	// No folder is at this path, so it cannot collide with one.
+	const OPEN_FOLDER = 'select:open-folder';
 
 	const workspace = $derived($workspaceGraphStore);
-	const folderPath = $derived($folderStore?.path ?? '');
+	const currentPath = $derived($folderStore?.path ?? '');
 
-	// The chord the keymap binds to workbench.openFolder, spelled for this platform.
-	const shortcut = $derived($osStore === 'macos' ? 'Cmd+O' : 'Ctrl+O');
+	// Order is the menu's order, so Open folder leads and the folders follow as
+	// ListFolders gives them: the open one first.
+	const options = $derived<SelectOption[]>([
+		{ value: OPEN_FOLDER, label: 'Open folder' },
+		...$foldersStore.map((folder) => ({ value: folder.path, label: folder.name }))
+	]);
+
+	// The list is what the machine has folders for, which a workspace opened,
+	// renamed or deleted changes.
+	$effect(() => {
+		void $workspaceGraphStore?.name;
+		void $folderStore?.path;
+		refreshFolders();
+	});
+
+	async function choose(value: string) {
+		if (value === OPEN_FOLDER) {
+			await pickAndOpenFolder();
+			return;
+		}
+		if (value === currentPath) return;
+		await openFolder(value);
+	}
 </script>
 
-<div class="slot" class:empty={!workspace} data-test="workspace.button">
-	{#if workspace}
-		<Tooltip text={folderPath} position="bottom" capitalize={false}>
-			<button type="button" class="workspace" onclick={pickAndOpenFolder}>
-				<Avatar src={logoSrc(workspace.logo)} name={workspace.name} size={20} shape="rounded" />
-				<p class="workspace-name">{workspace.name}</p>
-			</button>
-		</Tooltip>
+{#snippet folderOption(option: SelectOption | null)}
+	{#if option?.value === OPEN_FOLDER}
+		<span class="option">
+			<Icon icon="folder-open" size={18} stroke="var(--gray-800)" />
+			<span class="option-label">{option.label}</span>
+		</span>
 	{:else}
-		<Button
-			content="Open folder"
-			leftIcon="folder-open"
-			iconSize={18}
-			emphasis="high"
-			label={`Open a folder (${shortcut})`}
-			noCapitalizeTooltip
-			loading={$openingStore}
-			style="width: 100%; justify-content: start;"
-			onclick={pickAndOpenFolder}
-		/>
+		<span class="option" title={option?.value ?? ''}>
+			<Avatar
+				src={option && option.value === currentPath ? logoSrc(workspace?.logo) : null}
+				name={option?.label}
+				size={20}
+				shape="rounded"
+			/>
+			<span class="option-label">{option?.label ?? 'Open folder'}</span>
+		</span>
 	{/if}
+{/snippet}
+
+<div class="slot" class:empty={!workspace} data-test="workspace.button">
+	<Select
+		value={currentPath}
+		{options}
+		onchange={(v) => choose(v as string)}
+		sortOptions={false}
+		isLoading={$openingStore}
+		placeholder="Open folder"
+		menuWidth={300}
+		emphasis="low"
+		optionDisplay={folderOption}
+	/>
 </div>
 
 <style>
-	/* The tooltip is what sits in the leftbar row, so the width goes on it. */
 	.slot {
 		min-width: 0;
 		max-width: 100%;
@@ -54,49 +90,16 @@
 		flex: 1;
 	}
 
-	.slot.empty :global(.tooltip-container) {
-		display: block;
-	}
-
-	/* The system button cannot hold an avatar, so this one is built to match it:
-	   same padding, radius, hover and press as a low-emphasis Button. */
-	.workspace {
+	.option {
 		display: flex;
 		align-items: center;
 		gap: var(--space-sm);
 		min-width: 0;
-		max-width: 100%;
-		min-height: 26px;
-
-		padding: var(--space-xs) var(--space-sm);
-		border: none;
-		border-radius: var(--br-xs);
-		background-color: transparent;
-		font: inherit;
-		transition:
-			background-color 0.1s ease-out 0.03s,
-			transform 0.05s ease;
 	}
 
-	.workspace:hover {
-		background-color: var(--gray-400);
-	}
-
-	.workspace:active {
-		transform: scale(0.98);
-	}
-
-	.workspace-name {
-		margin: 0;
-		padding: var(--space-xs);
+	.option-label {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		color: var(--gray-800);
-		transition: color 0.1s ease-out 0.05s;
-	}
-
-	.workspace:hover .workspace-name {
-		color: var(--gray-1000);
 	}
 </style>

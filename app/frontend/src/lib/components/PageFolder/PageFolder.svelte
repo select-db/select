@@ -6,7 +6,6 @@
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';
-	import Wordmark from '$lib/components/shared/Wordmark/Wordmark.svelte';
 	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notify } from '$lib/system/Notifications/notificationsStore';
@@ -176,16 +175,6 @@
 		padding: var(--space-md) 0;
 		box-sizing: border-box;
 		overflow: auto;
-	}
-
-	.logo-row {
-		padding-bottom: var(--space-xs);
-	}
-
-	.divider {
-		width: 100%;
-		margin-bottom: var(--space-md);
-		border-bottom: var(--border);
 	}
 
 	.panel {
