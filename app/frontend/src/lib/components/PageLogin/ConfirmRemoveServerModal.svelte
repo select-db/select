@@ -28,8 +28,14 @@
 	</p>
 </ModalBody>
 <footer class="footer">
-	<Button content="Cancel" size="sm" emphasis="high" onclick={onClose} disabled={removing} />
-	<Button content="Remove" size="sm" emphasis="low" onclick={handleConfirm} disabled={removing} />
+	<Button content="Cancel" size="sm" emphasis="low" onclick={onClose} disabled={removing} />
+	<Button
+		content="Remove"
+		size="sm"
+		emphasis="warning"
+		onclick={handleConfirm}
+		disabled={removing}
+	/>
 </footer>
 
 <style>

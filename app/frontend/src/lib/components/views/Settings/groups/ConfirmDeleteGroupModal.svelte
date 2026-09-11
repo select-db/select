@@ -32,7 +32,7 @@
 </ModalBody>
 <ModalFooter
 	secondaryAction={{ label: 'Cancel', action: async () => onClose(), disabled: deleting }}
-	mainAction={{ label: 'Delete', action: handleConfirm, disabled: deleting }}
+	mainAction={{ label: 'Delete', action: handleConfirm, disabled: deleting, emphasis: 'warning' }}
 />
 
 <style>
