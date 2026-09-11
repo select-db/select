@@ -191,12 +191,12 @@
 	}
 
 	.logo-row {
-		padding-left: var(--space-md);
 		padding-bottom: var(--space-xs);
 	}
 
 	.divider {
 		width: 100%;
+		margin-bottom: var(--space-md);
 		border-bottom: var(--border);
 	}
 
