@@ -15,7 +15,9 @@
 
 	const handleConfirm = async () => {
 		deleting = true;
-		await must(tryCatch(onConfirm), null, () => { deleting = false; });
+		await must(tryCatch(onConfirm), null, () => {
+			deleting = false;
+		});
 		deleting = false;
 		onClose();
 	};
@@ -29,7 +31,7 @@
 </ModalBody>
 <ModalFooter
 	secondaryAction={{ label: 'Cancel', action: async () => onClose(), disabled: deleting }}
-	mainAction={{ label: 'Delete', action: handleConfirm, disabled: deleting }}
+	mainAction={{ label: 'Delete', action: handleConfirm, disabled: deleting, emphasis: 'warning' }}
 />
 
 <style>
