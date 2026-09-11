@@ -13,12 +13,11 @@
 <div id="bottom-bar" class="wrapper">
 	<NetworkQuality />
 	{#if $workspaceGraphStore}
+		<UserAvatar />
+		<div class="divider"></div>
 		<FilesButton />
 		<div class="divider"></div>
 		<GitButton />
-		<div class="divider"></div>
-		<UserAvatar />
-		<div class="divider"></div>
 		<GitBranch />
 
 		<div style="margin-left: auto"></div>
