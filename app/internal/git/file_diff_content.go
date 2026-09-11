@@ -25,7 +25,7 @@ type GetFileDiffContentResult struct {
 func (g *Git) GetFileDiffContent(params GetFileDiffContentParams) (*GetFileDiffContentResult, error) {
 	ctx := g.context()
 
-	root, err := g.workspaceRootPath(g.Graph.WorkspaceGraph.ID)
+	root, err := openWorkspaceRoot()
 	if err != nil {
 		return nil, fmt.Errorf("workspace root: %w", err)
 	}

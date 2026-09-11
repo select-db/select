@@ -22,9 +22,7 @@ func (g *Git) context() context.Context {
 // prepareGit validates that git is available, the workspace is a repo, and
 // a remote named "origin" is configured. Use for remote operations (push/pull/fetch).
 func (g *Git) prepareGit(ctx context.Context) (string, error) {
-	workspaceID := g.Graph.WorkspaceGraph.ID
-
-	root, err := g.workspaceRootPath(workspaceID)
+	root, err := openWorkspaceRoot()
 	if err != nil {
 		return "", err
 	}
@@ -50,9 +48,7 @@ func (g *Git) prepareGit(ctx context.Context) (string, error) {
 // without requiring a configured remote. Use for local-only operations
 // (staging, committing, reverting).
 func (g *Git) prepareGitLocal(ctx context.Context) (string, error) {
-	workspaceID := g.Graph.WorkspaceGraph.ID
-
-	root, err := g.workspaceRootPath(workspaceID)
+	root, err := openWorkspaceRoot()
 	if err != nil {
 		return "", err
 	}

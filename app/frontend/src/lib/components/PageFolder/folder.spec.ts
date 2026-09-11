@@ -38,6 +38,11 @@ function currentServer(dataDir: string) {
 	return JSON.parse(config).server as string;
 }
 
+/** Answers the OS folder dialog with a folder of the spec's choosing. */
+async function answerPicker(page: Page, folder: string) {
+	await intercept(page, PICK_FOLDER, (route) => route.fulfill({ status: 200, body: folder }));
+}
+
 /**
  * Signs in, closes the seeded folder, and answers the picker with `folder`:
  * the state a person is in when they click Open folder.
@@ -51,16 +56,62 @@ async function readyToOpen(
 	await holdSession(page);
 	await page.goto('/');
 	await signIn();
-	await intercept(page, PICK_FOLDER, (route) => route.fulfill({ status: 200, body: folder }));
+	await answerPicker(page, folder);
 	await call(request, `${WORKSPACE}.CloseFolder`);
 	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
-	await page.getByRole('button', { name: 'Open folder' }).click();
+	await openFolderButton(page).click();
 }
+
+/** The call to action on the screen, not the one in the corner. */
+const openFolderButton = (page: Page) => screen(page).getByRole('button', { name: 'Open folder' });
 
 // Specs share one app per worker, so a spec that leaves another folder open
 // would hand the next one a workspace it never asked for.
 test.afterEach(async ({ request, dataDir }) => {
 	await call(request, `${WORKSPACE}.OpenFolder`, seeded(dataDir));
+});
+
+test('the workbench is there with no folder open', async ({ page, signIn, request, dataDir }) => {
+	await holdSession(page);
+	await page.goto('/');
+	await signIn();
+	await call(request, `${WORKSPACE}.CloseFolder`);
+
+	// The chrome a signed-in user has, whether or not a folder is in it.
+	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
+	await expect(testId(page, 'workspace.button')).toHaveText('Open folder');
+	await expect(testId(page, 'tree.panel')).toBeVisible();
+	await expect(page.getByText('Sam Okafor')).toBeVisible();
+
+	// And the button in the corner opens one.
+	await answerPicker(page, seeded(dataDir));
+	await testId(page, 'workspace.button').click();
+	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
+});
+
+test('a picker that answers nothing leaves the button usable', async ({
+	page,
+	signIn,
+	request
+}) => {
+	await holdSession(page);
+	await page.goto('/');
+	await signIn();
+	await call(request, `${WORKSPACE}.CloseFolder`);
+	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
+
+	// A dialog the user closed without choosing. Never answering is the worst
+	// case of that, and a spinner tied to it is one nothing can clear.
+	const picks = { count: 0 };
+	await intercept(page, PICK_FOLDER, async () => {
+		picks.count++;
+	});
+
+	await openFolderButton(page).click();
+	await expect.poll(() => picks.count).toBe(1);
+
+	await openFolderButton(page).click();
+	await expect.poll(() => picks.count).toBe(2);
 });
 
 test('signing in reopens the folder that was open', async ({ page, signIn }) => {

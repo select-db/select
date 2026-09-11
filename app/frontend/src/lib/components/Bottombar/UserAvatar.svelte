@@ -1,33 +1,27 @@
 <script lang="ts">
-	import { GetCurrentUserAvatar } from '$lib/bindings/selectDb/internal/user/user';
+	import { GetCurrentUser, GetCurrentUserAvatar } from '$lib/bindings/selectDb/internal/user/user';
 	import { onMount } from 'svelte';
-	import { get } from 'svelte/store';
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
 	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
-	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
 	import { tryCatch } from '$lib/utils/tryCatch';
 
 	let avatarSrc: string = '';
 	let userName: string = '';
 
-	const loadAvatar = async () => {
-		const ws = get(workspaceGraphStore);
-		if (!ws?.user?.id) return;
+	// The signed-in user, not the workspace's: this shows with no folder open.
+	const loadUser = async () => {
+		const [user, err] = await tryCatch(GetCurrentUser);
+		if (err || !user?.id) return;
 
-		userName = ws?.user.name;
-		const [r, err] = await tryCatch(GetCurrentUserAvatar, ws?.user.id);
-		if (err) return;
+		userName = user.name ?? '';
+		const [avatar, avatarErr] = await tryCatch(GetCurrentUserAvatar, user.id);
+		if (avatarErr) return;
 
-		avatarSrc = r;
+		avatarSrc = avatar;
 	};
 
-	$: {
-		void $workspaceGraphStore;
-		loadAvatar();
-	}
-
-	onMount(() => loadAvatar());
+	onMount(() => loadUser());
 
 	const options: ContextMenuOption[] = [
 		{

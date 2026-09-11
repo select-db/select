@@ -25,6 +25,13 @@ export const folderStore = writable<FolderState | null>(null);
 /** The folder offered on the no-folder screen. */
 export const lastFolderStore = writable<LastFolder | null>(null);
 
+/**
+ * True while a folder is being opened, which the buttons that open one show as
+ * loading. It covers the open and never the picker: a spinner tied to an OS
+ * dialog is one the app cannot clear when the dialog answers nothing.
+ */
+export const openingStore = writable(false);
+
 function noFolder(): FolderState {
 	return new FolderState({ status: WorkspaceStatus.NoFolder });
 }
@@ -54,7 +61,10 @@ export async function refreshLastFolder(): Promise<void> {
 }
 
 export async function openFolder(path: string): Promise<void> {
+	openingStore.set(true);
 	const [result, err] = await tryCatch(OpenFolder, path);
+	openingStore.set(false);
+
 	if (err) {
 		notify({ type: AlertType.Error, message: err?.message ?? 'Could not open that folder' });
 		return;
