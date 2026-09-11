@@ -53,10 +53,9 @@ go test ./...
 > The `app` module embeds the frontend build output; stub it when testing Go only:
 > `mkdir -p app/frontend/build && touch app/frontend/build/.keep`
 >
-> On Linux the desktop app links against GTK3/WebKit2GTK 4.1 through cgo, so
-> building, linting or testing the `app` module needs `libgtk-3-dev` and
-> `libwebkit2gtk-4.1-dev` installed and the `gtk3` build tag
-> (`go test -tags gtk3 ./internal/...`).
+> On Linux the desktop app links against GTK4/WebKitGTK 6.0 through cgo, so
+> building, linting or testing the `app` module needs `libgtk-4-dev` and
+> `libwebkitgtk-6.0-dev` installed.
 
 **End-to-end** (`app`):
 ```bash

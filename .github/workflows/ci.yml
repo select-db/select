@@ -157,7 +157,7 @@ jobs:
       - if: matrix.module != 'app'
         run: sudo apt-get update && sudo apt-get install -y gcc
       # The app binds the webview through cgo, so loading its packages needs
-      # the GTK3 and WebKit2GTK headers the desktop build links against. From
+      # the GTK4 and WebKitGTK headers the desktop build links against. From
       # the cached .debs, as the app jobs do, rather than the plain apt install
       # whose 13m40s worst case the timeout above is written against.
       - if: matrix.module == 'app'
@@ -165,12 +165,10 @@ jobs:
       - name: govulncheck
         working-directory: ${{ matrix.module }}
         timeout-minutes: 10
-        env:
-          BUILD_TAGS: ${{ matrix.module == 'app' && 'gtk3' || '' }}
         run: |
           # Pinned because a blocking gate must not change between runs.
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
+          govulncheck ./...
       - name: semgrep (SAST)
         if: ${{ !cancelled() }}
         timeout-minutes: 10
@@ -591,14 +589,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            nsis
+      - uses: ./.github/actions/gtk-deps
+      - name: Install the Windows installer builder
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
@@ -608,10 +601,7 @@ jobs:
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        # The CLI links the webview through cgo as the app does, so on Linux
-        # it needs the same gtk3 tag. Without it the build reaches for GTK4 and
-        # WebKitGTK 6 headers that are not installed.
-        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 

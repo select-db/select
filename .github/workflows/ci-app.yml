@@ -31,9 +31,7 @@ jobs:
     if: inputs.go-app
     runs-on: ubuntu-latest
     # Wails binds the webview through cgo, so analysing this module needs the
-    # GTK3 and WebKit2GTK headers the desktop build links against.
-    env:
-      GOFLAGS: -tags=gtk3
+    # GTK4 and WebKitGTK headers the desktop build links against.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -48,10 +46,10 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/go-build
-          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          key: go-app-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
           restore-keys: |
-            go-app-gtk3-${{ hashFiles('app/go.sum') }}-
-            go-app-gtk3-
+            go-app-${{ hashFiles('app/go.sum') }}-
+            go-app-
       - uses: ./.github/actions/gtk-deps
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -66,9 +64,8 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
       - name: Dead code check
         run: |
-          # deadcode sets its own -tags, overriding GOFLAGS, so the cgo tag is
-          # repeated here. It exits 0 on a finding, so output is the failure.
-          out=$(deadcode -tags=gtk3 ./...)
+          # deadcode exits 0 on a finding, so output is the failure.
+          out=$(deadcode ./...)
           if [ -n "$out" ]; then
             echo "$out"
             echo "::error::Dead code detected"
@@ -109,12 +106,12 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/go-build
-          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          key: go-app-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
           restore-keys: |
-            go-app-gtk3-${{ hashFiles('app/go.sum') }}-
-            go-app-gtk3-
+            go-app-${{ hashFiles('app/go.sum') }}-
+            go-app-
       - uses: ./.github/actions/gtk-deps
-      - run: go test -tags gtk3 ./internal/...
+      - run: go test ./internal/...
         working-directory: app
       # Written here because tests compile the widest set of packages, and only
       # on the default branch. A cache saved from a PR is readable by that PR
@@ -123,7 +120,7 @@ jobs:
         if: github.ref == 'refs/heads/dev'
         with:
           path: ~/.cache/go-build
-          key: go-app-gtk3-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          key: go-app-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
 
   frontend-quality:
     name: Frontend quality
@@ -164,7 +161,7 @@ jobs:
         with:
           go-version-file: app/go.mod
           # An entry of its own. This job builds -tags server without cgo, so
-          # nothing the gtk3 jobs compiled is reusable here.
+          # nothing the desktop jobs compiled is reusable here.
           cache: false
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
