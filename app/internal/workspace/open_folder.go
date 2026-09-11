@@ -185,6 +185,14 @@ func (w *Workspace) setCurrentWorkspace(workspaceID, folder string) error {
 // CloseFolder leaves the user signed in on the no-folder screen. The folder on
 // disk is untouched.
 func (w *Workspace) CloseFolder() error {
+	// The watcher first: every change it sees rebuilds the graph and sends it to
+	// the frontend, and one arriving after this would put the closed workspace
+	// back on screen. Deleting a workspace removes its config, which is exactly
+	// such a change.
+	if h := w.ReloadHooks; h != nil && h.StopWatchingFolder != nil {
+		h.StopWatchingFolder()
+	}
+
 	graph.ClearOpenWorkspace()
 	if w.Graph != nil {
 		w.Graph.InvalidateWorkspaceGraph()

@@ -87,6 +87,7 @@ test('the workbench is there with no folder open', async ({ page, signIn, reques
 	// And the button in the corner opens one.
 	await answerPicker(page, seeded(dataDir));
 	await openFolderButton(page).click();
+	await expect(openFolderButton(page)).toContainText('analytics');
 	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 });
 
@@ -192,7 +193,10 @@ test('deleting the open workspace does not lock the user out', async ({
 	await readyToOpen(page, request, signIn, folder);
 	await page.getByPlaceholder('Workspace name').fill('doomed');
 	await page.getByRole('button', { name: 'Create workspace' }).click();
-	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
+
+	// By name: every workspace is seeded with the same sample, so a file from it
+	// says nothing about which one the app has open.
+	await expect(openFolderButton(page)).toContainText('doomed');
 
 	await call(request, `${WORKSPACE}.DeleteWorkspace`, await workspaceId(request));
 
@@ -201,6 +205,7 @@ test('deleting the open workspace does not lock the user out', async ({
 	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
 	await answerPicker(page, seeded(dataDir));
 	await openFolderButton(page).click();
+	await expect(openFolderButton(page)).toContainText('analytics');
 	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
 });
 
