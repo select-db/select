@@ -15,6 +15,8 @@
 	const Settings = () => import('$lib/components/views/Settings/Settings.svelte');
 	import QuickActions from '$lib/components/QuickActions/QuickActions.svelte';
 	import Wordmark from '$lib/components/shared/Wordmark/Wordmark.svelte';
+	import PageFolder from '$lib/components/PageFolder/PageFolder.svelte';
+	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 
 	import type { TabGroup } from '../layoutStore';
 	import { layoutStore, splitGroup, moveTabToGroup } from '../layoutStore';
@@ -137,6 +139,8 @@
 						<p>Can't find tab</p>
 					</div>
 				{/if}
+			{:else if !$workspaceGraphStore}
+				<PageFolder />
 			{:else}
 				<div class="empty">
 					<div class="logo-row">

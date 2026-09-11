@@ -9,8 +9,10 @@ directory. Your files stay where you put them.
 
 ## Opening a folder
 
-Click the workspace name in the top left, or open a folder from the start
-screen. One of four things happens.
+Signing in with no folder open leaves you in the app itself, with **Open a
+folder to start** where your files would be. Open one from there, or from the
+button in the top left corner, which carries the workspace name once there is
+one. One of four things happens.
 
 **The folder is already a workspace.** It holds a `select.config.json`, so
 SELECT knows which workspace it is, connects to the right server, and builds

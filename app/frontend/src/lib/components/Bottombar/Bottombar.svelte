@@ -25,9 +25,13 @@
 		<HistoryButton />
 		<div class="divider"></div>
 		<SearchButton />
+	{:else}
 		<div class="divider"></div>
-		<ThemeButton />
+		<UserAvatar />
+		<div style="margin-left: auto"></div>
 	{/if}
+	<div class="divider"></div>
+	<ThemeButton />
 </div>
 
 <style>

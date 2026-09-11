@@ -34,9 +34,11 @@ func (dbc *DbClient) Ping(params PingParams) (result string) {
 	ctx, cancel := context.WithTimeout(base, 10*time.Second)
 	defer cancel()
 
+	openWorkspaceID, _, _ := graph.OpenWorkspace()
+
 	node := &graph.DBInstanceNode{
 		ID:          params.DbInstanceID,
-		WorkspaceID: dbc.Graph.WorkspaceGraph.ID,
+		WorkspaceID: openWorkspaceID,
 		DBType:      params.DbType,
 		DSN:         params.Dsn,
 		FolderID:    params.FolderId,

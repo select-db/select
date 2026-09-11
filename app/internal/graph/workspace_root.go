@@ -44,7 +44,7 @@ func OpenWorkspace() (workspaceID, root string, ok bool) {
 // can disagree about which directory an id names.
 func WorkspaceRootPath(workspaceID string) (string, error) {
 	if workspaceID == "" {
-		return "", fmt.Errorf("no workspace given")
+		return "", fmt.Errorf("no workspace folder is open")
 	}
 	id, root, ok := OpenWorkspace()
 	if !ok {

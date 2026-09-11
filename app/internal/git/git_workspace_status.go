@@ -20,14 +20,10 @@ func (g *Git) GetGitWorkspaceStatus() (*GitWorkspaceStatus, error) {
 
 	stat := &GitWorkspaceStatus{}
 
-	if g.Graph == nil || g.Graph.WorkspaceGraph == nil {
-		return stat, nil
-	}
-	workspaceID := g.Graph.WorkspaceGraph.ID
-
-	root, err := g.workspaceRootPath(workspaceID)
+	root, err := openWorkspaceRoot()
 	if err != nil {
-		return stat, err
+		// No folder open is no repository, which is what this reports.
+		return stat, nil
 	}
 
 	gitOK, _ := isGitAvailable(ctx)

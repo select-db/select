@@ -31,21 +31,20 @@ type session struct {
 type Terminal struct {
 	mu       sync.Mutex
 	sessions map[string]*session
-	Graph    *graph.Graph
 }
 
-func New(g *graph.Graph) *Terminal {
+func New() *Terminal {
 	return &Terminal{
 		sessions: make(map[string]*session),
-		Graph:    g,
 	}
 }
 
 func (t *Terminal) workspaceRootPath() (string, error) {
-	if t.Graph == nil || t.Graph.WorkspaceGraph == nil {
-		return "", fmt.Errorf("workspace not loaded")
+	_, root, ok := graph.OpenWorkspace()
+	if !ok {
+		return "", fmt.Errorf("no workspace folder is open")
 	}
-	return graph.WorkspaceRootPath(t.Graph.WorkspaceGraph.ID)
+	return root, nil
 }
 
 func (t *Terminal) GetAvailableShells() []ShellOption {

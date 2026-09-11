@@ -1,6 +1,6 @@
 <script lang="ts">
-	// The screens between signing in and looking at files. One shell, since only
-	// the reason for not having a folder open differs.
+	// What the workbench shows when no folder is open, in place of the tabs a
+	// workspace would have. One shell, since only the reason differs.
 	import { fly } from 'svelte/transition';
 	import Button from '$lib/system/Button/Button.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
@@ -16,6 +16,7 @@
 		folderStore,
 		lastFolderStore,
 		openFolder,
+		openingStore,
 		pickAndOpenFolder,
 		displayFolder
 	} from './folderStore';
@@ -85,7 +86,11 @@
 				</p>
 				<div class="actions">
 					<Button content="Sign out" emphasis="high" onclick={() => Logout()} />
-					<Button content="Open another folder" onclick={pickAndOpenFolder} />
+					<Button
+						content="Open another folder"
+						loading={$openingStore}
+						onclick={pickAndOpenFolder}
+					/>
 				</div>
 			</div>
 		{:else if folder.status === WorkspaceStatus.NoAccess}
@@ -106,8 +111,17 @@
 				</p>
 
 				<div class="actions">
-					<Button content="Open another folder" emphasis="high" onclick={pickAndOpenFolder} />
-					<Button content="Try again" onclick={() => openFolder(folder.path)} />
+					<Button
+						content="Open another folder"
+						emphasis="high"
+						loading={$openingStore}
+						onclick={pickAndOpenFolder}
+					/>
+					<Button
+						content="Try again"
+						loading={$openingStore}
+						onclick={() => openFolder(folder.path)}
+					/>
 				</div>
 
 				<div class="aside">
@@ -140,7 +154,11 @@
 
 				<div class="actions">
 					<Button content="Create workspace" emphasis="high" onclick={createWorkspace} />
-					<Button content="Open another folder" onclick={pickAndOpenFolder} />
+					<Button
+						content="Open another folder"
+						loading={$openingStore}
+						onclick={pickAndOpenFolder}
+					/>
 				</div>
 
 				<p class="hint footnote">
@@ -167,6 +185,7 @@
 						leftIcon="folder-open"
 						iconSize={18}
 						emphasis="high"
+						loading={$openingStore}
 						onclick={pickAndOpenFolder}
 					/>
 				</div>
@@ -198,17 +217,13 @@
 
 <style>
 	.wrapper {
-		/* Frameless window, no tab bar: the backdrop is the drag handle. */
-		--wails-draggable: drag;
-
 		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 100vw;
-		height: 100vh;
-		overflow: hidden;
-		background-color: var(--gray-0);
+		width: 100%;
+		height: 100%;
+		overflow: auto;
 	}
 
 	/* Lifts the panel off a flat backdrop. Too faint to read as a colour, which
@@ -223,18 +238,6 @@
 			color-mix(in srgb, var(--blue-glow) 8%, transparent),
 			transparent 70%
 		);
-	}
-
-	/* --wails-draggable inherits, so controls have to opt back out or their
-	   mousedown starts a window drag. */
-	.actions,
-	.cta,
-	.field,
-	.recent-card,
-	.wrapper :global(.link),
-	.wrapper :global(button),
-	.wrapper :global(input) {
-		--wails-draggable: no-drag;
 	}
 
 	.panel {

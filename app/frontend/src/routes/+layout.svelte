@@ -19,7 +19,6 @@
 
 	import Leftbar from '$lib/components/Leftbar/Leftbar.svelte';
 	import PageLogin from '$lib/components/PageLogin/PageLogin.svelte';
-	import PageFolder from '$lib/components/PageFolder/PageFolder.svelte';
 	import { folderStore } from '$lib/components/PageFolder/folderStore';
 	import Rightbar from '$lib/components/Rightbar/Rightbar.svelte';
 	import Bottombar from '$lib/components/Bottombar/Bottombar.svelte';
@@ -117,7 +116,7 @@
 	<div class="layout">
 		{#if $sessionCheckingStore}
 			<div class="session-loader"><Loader size={24} /></div>
-		{:else if $workspaceGraphStore}
+		{:else if $folderStore || $workspaceGraphStore}
 			{#key `${$themeVersionStore}-${$configVersionStore}-${$lintVersionStore}`}
 				<Leftbar />
 				<main class:left-bar-closed={!$isLeftbarOpened} class:right-bar-closed={!$isRightbarOpened}>
@@ -130,8 +129,6 @@
 			<Tooltips />
 
 			<KeybindingsManager />
-		{:else if $folderStore}
-			<PageFolder />
 		{:else}
 			<PageLogin />
 		{/if}

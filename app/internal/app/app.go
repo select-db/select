@@ -146,7 +146,7 @@ func NewApp() *App {
 		DbClient:   DbClient,
 		SqlLang:    SqlLang,
 		FSProvider: FSProvider,
-		Terminal:   terminal.New(Graph),
+		Terminal:   terminal.New(),
 		Server:     Server,
 		Updater:    updater.New(),
 	}
