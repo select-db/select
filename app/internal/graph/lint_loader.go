@@ -21,7 +21,7 @@ func GetDefaultLintContent() string {
 
 // GetLintFilePath returns the path to the .lint file for the current workspace.
 func (g *Graph) GetLintFilePath() (string, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
+	wsGraph, err := EnsureWorkspaceGraph(g)
 	if err != nil {
 		return "", fmt.Errorf("workspace graph not initialized: %w", err)
 	}

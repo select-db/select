@@ -165,7 +165,7 @@ func unescapeValue(s string) string {
 // SQL file refs use same-folder only.
 // Implements sqllang.VarReplacer.
 func (g *Graph) ResolveVariable(varName string, folderID string) (value string, isSqlFile bool, err error) {
-	if _, err := g.GetWorkspaceGraph(); err != nil {
+	if _, err := EnsureWorkspaceGraph(g); err != nil {
 		return "", false, fmt.Errorf("workspace graph not initialized: %w", err)
 	}
 
@@ -206,7 +206,7 @@ func (g *Graph) ResolveVariable(varName string, folderID string) (value string, 
 // readSqlFileContentByRefName finds a .sql file in the given folder whose name (without extension)
 // equals refName, and returns its content. Same-folder only.
 func (g *Graph) readSqlFileContentByRefName(folderID string, refName string) (string, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
+	wsGraph, err := EnsureWorkspaceGraph(g)
 	if err != nil {
 		return "", err
 	}
@@ -257,7 +257,7 @@ func (g *Graph) LoadFolderEnvFile(folderNode *FolderNode, wfs *WorkspaceFS) erro
 
 // GetEnvFilePath returns the path to the .env file for a given folder URI.
 func (g *Graph) GetEnvFilePath(folderURI string) (string, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
+	wsGraph, err := EnsureWorkspaceGraph(g)
 	if err != nil {
 		return "", fmt.Errorf("workspace graph not initialized: %w", err)
 	}

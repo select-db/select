@@ -142,11 +142,8 @@ export function GetUriVariables(uri: string): $CancellablePromise<$models.Variab
 }
 
 /**
- * GetWorkspaceGraph returns the workspace graph, building it on first use.
- * 
- * It also guarantees the graph is indexed: WorkspaceGraph is an exported field,
- * so a graph can be assigned rather than built, and every lookup goes through
- * the index.
+ * GetWorkspaceGraph returns a copy of the workspace graph for the frontend.
+ * See clone.go: what crosses the bridge is never the tree the watcher writes to.
  */
 export function GetWorkspaceGraph(): $CancellablePromise<$models.WorkspaceNode | null> {
     return $Call.ByID(977516625).then(($result: any) => {

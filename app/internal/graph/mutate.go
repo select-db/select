@@ -81,7 +81,7 @@ func (g *Graph) Mutate(ctx context.Context, commit generated.MutationCommit) err
 
 	commit.Payload = dto
 	desktop.Emit("mutation", commit)
-	utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, g.WorkspaceGraph)
+	utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, g.WorkspaceGraph.Clone())
 
 	return nil
 }
