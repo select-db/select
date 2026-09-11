@@ -299,13 +299,12 @@ func (q *Queries) DeleteWorkspaceToUserTracked(ctx context.Context, id string) e
 }
 
 const getCurrentUser = `-- name: GetCurrentUser :one
-SELECT 
-    u.id, u.name, u.email, u.avatar_url 
-FROM 
+SELECT
+    u.id, u.name, u.email, u.avatar_url, u."current"
+FROM
     user u
-    LEFT JOIN workspace_to_user wtu ON wtu.user_id = u.id
-WHERE 
-    wtu.current = 1
+WHERE
+    u.current = TRUE
 LIMIT 1
 `
 
@@ -317,6 +316,7 @@ func (q *Queries) GetCurrentUser(ctx context.Context) (User, error) {
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
+		&i.Current,
 	)
 	return i, err
 }
@@ -1408,6 +1408,7 @@ SELECT
     w.id,
     w.name,
     w.logo,
+    w.local_path,
     wtu.current
 FROM
     workspace w
@@ -1419,10 +1420,11 @@ ORDER BY
 `
 
 type ListWorkspacesByUserIDRow struct {
-	ID      string                  `json:"id"`
-	Name    string                  `json:"name"`
-	Logo    db_types.JSONNullString `json:"logo"`
-	Current sql.NullBool            `json:"current"`
+	ID        string                  `json:"id"`
+	Name      string                  `json:"name"`
+	Logo      db_types.JSONNullString `json:"logo"`
+	LocalPath db_types.JSONNullString `json:"local_path"`
+	Current   sql.NullBool            `json:"current"`
 }
 
 func (q *Queries) ListWorkspacesByUserID(ctx context.Context, userID string) ([]ListWorkspacesByUserIDRow, error) {
@@ -1438,6 +1440,7 @@ func (q *Queries) ListWorkspacesByUserID(ctx context.Context, userID string) ([]
 			&i.ID,
 			&i.Name,
 			&i.Logo,
+			&i.LocalPath,
 			&i.Current,
 		); err != nil {
 			return nil, err
@@ -1572,6 +1575,19 @@ func (q *Queries) SaveCommit(ctx context.Context, arg SaveCommitParams) (Mutatio
 		&i.WorkspaceID,
 	)
 	return i, err
+}
+
+const setCurrentUser = `-- name: SetCurrentUser :exec
+; -- @no-track
+UPDATE user
+SET current = (id = ?1)
+`
+
+// One statement: anything asking who is signed in between a clear and a set
+// would be told nobody is.
+func (q *Queries) SetCurrentUser(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, setCurrentUser, id)
+	return err
 }
 
 const updateCommit = `-- name: UpdateCommit :one
@@ -1879,7 +1895,7 @@ VALUES (?1, ?2)
 ON CONFLICT (id) DO UPDATE 
 SET
   name = EXCLUDED.name
-RETURNING id, name, email, avatar_url
+RETURNING id, name, email, avatar_url, "current"
 `
 
 type UpsertUserParams struct {
@@ -1895,6 +1911,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, e
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
+		&i.Current,
 	)
 	return i, err
 }

@@ -42,8 +42,9 @@ func TestGroupRoleFlow_AppliesToLocalPermissions(t *testing.T) {
 		}
 	}
 
-	// Current user + workspace (current=1 is what GetCurrentUser/Workspace key on).
-	exec(`INSERT INTO user (id, name) VALUES ('u1','Alice')`)
+	// Signed-in user + open workspace: user.current is who is signed in,
+	// workspace_to_user.current is what they have open.
+	exec(`INSERT INTO user (id, name, current) VALUES ('u1','Alice',1)`)
 	exec(`INSERT INTO workspace (id, name) VALUES ('ws1','WS')`)
 	exec(`INSERT INTO workspace_to_user (id, workspace_id, user_id, current) VALUES ('wtu1','ws1','u1',1)`)
 	// A role that denies SELECT on a specific datasource (db-scoped => enforceable).
@@ -111,7 +112,7 @@ func TestGroupReadModels_UserGroupsAndRoleGroupCount(t *testing.T) {
 		}
 	}
 
-	exec(`INSERT INTO user (id, name) VALUES ('u1','Alice')`)
+	exec(`INSERT INTO user (id, name, current) VALUES ('u1','Alice',1)`)
 	exec(`INSERT INTO workspace (id, name) VALUES ('ws1','WS')`)
 	exec(`INSERT INTO role (id, workspace_id, name) VALUES ('r1','ws1','Analyst')`)
 	exec(`INSERT INTO "group" (id, workspace_id, name) VALUES ('g1','ws1','Data Eng')`)

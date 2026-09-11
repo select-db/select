@@ -28,10 +28,10 @@ const answers = async (url: string) => {
 };
 
 /**
- * The SELECT backend, as far as the app can tell. It answers the two calls the
- * folder flow makes -- creating a workspace, and the sync that decides whether
- * a workspace is the user's -- and 404s everything else, which is what the app
- * already got from an unreachable server.
+ * The SELECT backend, as far as the app can tell. It answers the calls the
+ * folder flow makes -- creating and deleting a workspace, and the sync that
+ * decides whether a workspace is the user's -- and 404s everything else, which
+ * is what the app already got from an unreachable server.
  *
  * A sync that returns nothing is the honest answer for these specs: the fixture
  * database already holds what the user has, and the server has nothing to add.
@@ -48,6 +48,12 @@ function startAPI(port: number): Promise<Server> {
 	};
 
 	const server = createServer((req, res) => {
+		// Deleting a workspace is the server's to confirm; the rest is local.
+		if (req.method === 'DELETE' && req.url?.startsWith('/workspaces/')) {
+			res.writeHead(204).end();
+			return;
+		}
+
 		if (req.method !== 'POST') {
 			res.writeHead(404).end();
 			return;

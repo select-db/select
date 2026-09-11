@@ -234,6 +234,7 @@ export class User {
     "name": db_types$0.JSONNullString;
     "email": db_types$0.JSONNullString;
     "avatar_url": db_types$0.JSONNullString;
+    "current": db_types$0.JSONNullBool;
 
     /** Creates a new User instance. */
     constructor($$source: Partial<User> = {}) {
@@ -248,6 +249,9 @@ export class User {
         }
         if (!("avatar_url" in $$source)) {
             this["avatar_url"] = null;
+        }
+        if (!("current" in $$source)) {
+            this["current"] = null;
         }
 
         Object.assign(this, $$source);

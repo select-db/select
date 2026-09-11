@@ -11,37 +11,47 @@ import (
 	"selectDb/internal/graph"
 )
 
-// LastFolder is what the no-folder screen offers to reopen.
-type LastFolder struct {
+// Folder is a workspace this machine has a folder for.
+type Folder struct {
 	Path string `json:"path"`
 	Name string `json:"name"`
 }
 
-// GetLastFolder returns the folder the current user last had open, when it is
-// still there and still names the same workspace.
-func (w *Workspace) GetLastFolder() (LastFolder, error) {
+// ListFolders returns every workspace this user has a folder for, the one that
+// was open first. A remembered path that no longer names its workspace is
+// forgotten rather than offered.
+func (w *Workspace) ListFolders() ([]Folder, error) {
 	ctx := context.Background()
+
+	folders := []Folder{}
 
 	u, err := w.Queries.GetCurrentUser(ctx)
 	if err != nil {
-		return LastFolder{}, nil
+		return folders, nil
 	}
 
-	ws, err := w.Queries.GetCurrentWorkspace(ctx, u.ID)
+	rows, err := w.Queries.ListWorkspacesByUserID(ctx, u.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return LastFolder{}, nil
-		}
-		return LastFolder{}, fmt.Errorf("get current workspace: %w", err)
+		return nil, fmt.Errorf("list workspaces: %w", err)
 	}
 
-	folder := ws.LocalPath.Or("")
-	if !folderNamesWorkspace(folder, ws.ID) {
-		// Gone, or now another workspace's. Forget it quietly.
-		_ = w.forgetFolder(ctx, ws.ID)
-		return LastFolder{}, nil
+	for _, row := range rows {
+		path := row.LocalPath.Or("")
+		if !folderNamesWorkspace(path, row.ID) {
+			if path != "" {
+				_ = w.forgetFolder(ctx, row.ID)
+			}
+			continue
+		}
+		folder := Folder{Path: path, Name: row.Name}
+		if row.Current.Valid && row.Current.Bool {
+			folders = append([]Folder{folder}, folders...)
+			continue
+		}
+		folders = append(folders, folder)
 	}
-	return LastFolder{Path: folder, Name: ws.Name}, nil
+
+	return folders, nil
 }
 
 // folderNamesWorkspace reports whether path still holds a config naming
@@ -60,14 +70,27 @@ func folderNamesWorkspace(path, workspaceID string) bool {
 
 // ReopenLastFolder runs after login, so a returning user skips the picker.
 func (w *Workspace) ReopenLastFolder() (FolderState, error) {
-	last, err := w.GetLastFolder()
+	ctx := context.Background()
+
+	u, err := w.Queries.GetCurrentUser(ctx)
 	if err != nil {
-		return FolderState{}, err
-	}
-	if last.Path == "" {
 		return FolderState{Status: NoFolder}, nil
 	}
-	return w.OpenFolder(last.Path)
+
+	ws, err := w.Queries.GetCurrentWorkspace(ctx, u.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return FolderState{Status: NoFolder}, nil
+		}
+		return FolderState{}, fmt.Errorf("get current workspace: %w", err)
+	}
+
+	folder := ws.LocalPath.Or("")
+	if !folderNamesWorkspace(folder, ws.ID) {
+		_ = w.forgetFolder(ctx, ws.ID)
+		return FolderState{Status: NoFolder}, nil
+	}
+	return w.OpenFolder(folder)
 }
 
 func (w *Workspace) rememberFolder(ctx context.Context, workspaceID, folder string) error {

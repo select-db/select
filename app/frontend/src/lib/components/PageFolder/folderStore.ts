@@ -6,12 +6,12 @@ import {
 	OpenFolder,
 	PickFolder,
 	ReopenLastFolder,
-	GetLastFolder
+	ListFolders
 } from '$lib/bindings/selectDb/internal/workspace/workspace';
 import {
 	FolderState,
 	WorkspaceStatus,
-	type LastFolder
+	type Folder
 } from '$lib/bindings/selectDb/internal/workspace/models';
 import {
 	clearWorkspaceGraphCache,
@@ -22,8 +22,8 @@ import {
 /** What the app shows between "signed in" and "here are your files". `null` while loading. */
 export const folderStore = writable<FolderState | null>(null);
 
-/** The folder offered on the no-folder screen. */
-export const lastFolderStore = writable<LastFolder | null>(null);
+/** The folders this machine has, offered on the no-folder screen. */
+export const foldersStore = writable<Folder[]>([]);
 
 /**
  * True while a folder is being opened, which the buttons that open one show as
@@ -38,7 +38,7 @@ function noFolder(): FolderState {
 
 export function clearFolderState(): void {
 	folderStore.set(null);
-	lastFolderStore.set(null);
+	foldersStore.set([]);
 }
 
 /** Displays the folder: its tree when ready, the screen for its status otherwise. */
@@ -52,12 +52,12 @@ export async function displayFolder(state: FolderState): Promise<void> {
 		return;
 	}
 
-	await refreshLastFolder();
+	await refreshFolders();
 }
 
-export async function refreshLastFolder(): Promise<void> {
-	const [last] = await tryCatch(GetLastFolder);
-	lastFolderStore.set(last?.path ? last : null);
+export async function refreshFolders(): Promise<void> {
+	const [folders] = await tryCatch(ListFolders);
+	foldersStore.set(folders ?? []);
 }
 
 export async function openFolder(path: string): Promise<void> {

@@ -43,18 +43,19 @@ export function DeleteWorkspace(workspaceID: string): $CancellablePromise<void> 
 }
 
 /**
- * GetLastFolder returns the folder the current user last had open, when it is
- * still there and still names the same workspace.
+ * ListFolders returns every workspace this user has a folder for, the one that
+ * was open first. A remembered path that no longer names its workspace is
+ * forgotten rather than offered.
  */
-export function GetLastFolder(): $CancellablePromise<$models.LastFolder> {
-    return $Call.ByID(1074679738).then(($result: any) => {
-        return $$createType1($result);
+export function ListFolders(): $CancellablePromise<$models.Folder[]> {
+    return $Call.ByID(3511278583).then(($result: any) => {
+        return $$createType2($result);
     });
 }
 
 export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserEntry[]> {
     return $Call.ByID(2078216013).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -89,7 +90,7 @@ export function ReopenLastFolder(): $CancellablePromise<$models.FolderState> {
 
 export function SearchUser(email: string): $CancellablePromise<$models.SearchUserResult | null> {
     return $Call.ByID(2043344285, email).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -111,8 +112,9 @@ export function UpdateName(workspaceID: string, name: string): $CancellablePromi
 
 // Private type creation functions
 const $$createType0 = $models.FolderState.createFrom;
-const $$createType1 = $models.LastFolder.createFrom;
-const $$createType2 = $models.WorkspaceUserEntry.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.SearchUserResult.createFrom;
-const $$createType5 = $Create.Nullable($$createType4);
+const $$createType1 = $models.Folder.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $models.WorkspaceUserEntry.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $models.SearchUserResult.createFrom;
+const $$createType6 = $Create.Nullable($$createType5);

@@ -14,7 +14,7 @@
 	import { CreateWorkspaceInFolder } from '$lib/bindings/selectDb/internal/workspace/workspace';
 	import {
 		folderStore,
-		lastFolderStore,
+		foldersStore,
 		openFolder,
 		openingStore,
 		displayFolder
@@ -138,19 +138,25 @@
 		{:else if folder.status === WorkspaceStatus.NoFolder}
 			<div class="state" in:fly={enter}>
 				<p class="eyebrow">Recent</p>
-				{#if $lastFolderStore}
-					<button
-						class="recent-card"
-						aria-label={`Reopen ${$lastFolderStore.name}`}
-						onclick={() => openFolder($lastFolderStore!.path)}
-					>
-						<Icon icon="folder" size={16} stroke="var(--gray-700)" />
-						<span class="recent-text">
-							<span class="recent-name">{$lastFolderStore.name}</span>
-							<span class="recent-path">{$lastFolderStore.path}</span>
-						</span>
-						<Icon icon="chevron-right" size={15} stroke="var(--gray-700)" />
-					</button>
+				{#if $foldersStore.length}
+					<ul class="recent-list">
+						{#each $foldersStore as recent (recent.path)}
+							<li>
+								<button
+									class="recent-card"
+									aria-label={`Reopen ${recent.name}`}
+									onclick={() => openFolder(recent.path)}
+								>
+									<Icon icon="folder" size={16} stroke="var(--gray-700)" />
+									<span class="recent-text">
+										<span class="recent-name">{recent.name}</span>
+										<span class="recent-path">{recent.path}</span>
+									</span>
+									<Icon icon="chevron-right" size={15} stroke="var(--gray-700)" />
+								</button>
+							</li>
+						{/each}
+					</ul>
 				{:else}
 					<p class="hint">No folder opened yet.</p>
 				{/if}
@@ -260,6 +266,14 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--gray-700);
+	}
+
+	.recent-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		width: 100%;
+		list-style: none;
 	}
 
 	.recent-card {

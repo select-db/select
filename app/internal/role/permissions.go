@@ -2,6 +2,8 @@ package role
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"selectDb/internal/db/db_types"
@@ -119,6 +121,11 @@ func GetMyPermissions(queries *generated.Queries) ([]core.PermissionEntry, error
 
 	ws, err := queries.GetCurrentWorkspace(ctx, user.ID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Permissions are the workspace's. With no folder open there are none
+			// to have, which is an answer rather than a failure.
+			return []core.PermissionEntry{}, nil
+		}
 		return nil, fmt.Errorf("get my permissions: current workspace: %w", err)
 	}
 
