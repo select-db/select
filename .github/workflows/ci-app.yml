@@ -30,8 +30,12 @@ jobs:
     name: Backend quality
     if: inputs.go-app
     runs-on: ubuntu-latest
-    # Wails binds the webview through cgo, so analysing this module needs the
-    # GTK4 and WebKitGTK headers the desktop build links against.
+    # Analysed in the server build: the same Go code with Wails' cgo webview
+    # swapped for an HTTP server, so no job on a pull request installs GTK. The
+    # desktop variant is compiled when this lands on dev and the app is built.
+    env:
+      GOFLAGS: -tags=server
+      CGO_ENABLED: 0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -46,11 +50,10 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/go-build
-          key: go-app-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          key: go-app-server-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
           restore-keys: |
-            go-app-${{ hashFiles('app/go.sum') }}-
-            go-app-
-      - uses: ./.github/actions/gtk-deps
+            go-app-server-${{ hashFiles('app/go.sum') }}-
+            go-app-server-
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -64,8 +67,9 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
       - name: Dead code check
         run: |
-          # deadcode exits 0 on a finding, so output is the failure.
-          out=$(deadcode ./...)
+          # deadcode sets its own -tags, overriding GOFLAGS, so the tag is
+          # repeated here. It exits 0 on a finding, so output is the failure.
+          out=$(deadcode -tags server ./...)
           if [ -n "$out" ]; then
             echo "$out"
             echo "::error::Dead code detected"
