@@ -16,5 +16,5 @@
 </script>
 
 {#if branchName}
-	<Button content={branchName} onclick={openBranchSwitcher} noRadius noBounce truncate />
+	<Button content={branchName} onclick={openBranchSwitcher} noBounce truncate />
 {/if}
