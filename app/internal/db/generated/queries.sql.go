@@ -352,15 +352,19 @@ func (q *Queries) GetCurrentWorkspace(ctx context.Context, userID string) (Works
 }
 
 const getCurrentWorkspaceToUser = `-- name: GetCurrentWorkspaceToUser :one
-SELECT 
-    id, "current", workspace_id, user_id 
-FROM 
+SELECT
+    wtu.id, wtu."current", wtu.workspace_id, wtu.user_id
+FROM
     workspace_to_user wtu
-WHERE 
-    wtu.current = true
+    JOIN user u ON u.id = wtu.user_id
+WHERE
+    wtu.current = TRUE
+    AND u.current = TRUE
 LIMIT 1
 `
 
+// Joined on the signed-in user, because the current flag is cleared per user:
+// a row left current by whoever was signed in before would otherwise win.
 func (q *Queries) GetCurrentWorkspaceToUser(ctx context.Context) (WorkspaceToUser, error) {
 	row := q.db.QueryRowContext(ctx, getCurrentWorkspaceToUser)
 	var i WorkspaceToUser

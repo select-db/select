@@ -89,6 +89,14 @@ func seedUser(t *testing.T, db *sql.DB, id, name string) {
 	require.NoError(t, err)
 }
 
+// seedCurrentUser inserts the signed-in user. The current workspace is read
+// through this flag, so a membership row alone is not enough to be in one.
+func seedCurrentUser(t *testing.T, db *sql.DB, id, name string) {
+	t.Helper()
+	_, err := db.Exec(`INSERT INTO user (id, name, current) VALUES (?, ?, TRUE)`, id, name)
+	require.NoError(t, err)
+}
+
 // seedWorkspace inserts a workspace row.
 func seedWorkspace(t *testing.T, db *sql.DB, id, name string) {
 	t.Helper()

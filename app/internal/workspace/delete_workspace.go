@@ -35,14 +35,15 @@ func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 		return fmt.Errorf("delete workspace: %w", err)
 	}
 
-	if folder != "" {
-		if err := graph.RemoveWorkspaceConfig(folder); err != nil {
-			return err
-		}
+	if folder == "" {
+		return nil
 	}
 
-	if folder != "" {
-		return w.CloseFolder()
+	// Closed before the config goes, because closing stops the watcher: removing
+	// the config with it still running is the change that puts the workspace
+	// back on screen.
+	if err := w.CloseFolder(); err != nil {
+		return err
 	}
-	return nil
+	return graph.RemoveWorkspaceConfig(folder)
 }

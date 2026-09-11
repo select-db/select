@@ -509,6 +509,7 @@ func (c *closedFolder) OnWorkspaceGone() { c.called = true }
 
 func TestSyncWith_ClosesFolder_WhenOwnerDeletesTheWorkspace(t *testing.T) {
 	db := newTestDB(t)
+	seedCurrentUser(t, db, "u1", "Sam")
 	seedWorkspace(t, db, "ws1", "My Workspace")
 	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
 
@@ -532,6 +533,7 @@ func TestSyncWith_ClosesFolder_WhenOwnerDeletesTheWorkspace(t *testing.T) {
 
 func TestSyncWith_ClosesFolder_WhenMembershipIsRevoked(t *testing.T) {
 	db := newTestDB(t)
+	seedCurrentUser(t, db, "u1", "Sam")
 	seedWorkspace(t, db, "ws1", "My Workspace")
 	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
 
