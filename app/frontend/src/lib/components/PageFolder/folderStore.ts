@@ -18,16 +18,15 @@ import {
 	initializeWorkspaceGraph
 } from '$lib/utils/graph/workspaceGraphStore';
 
-/** What the app shows between "signed in" and "here are your files". `null` while loading. */
+/** The folder the app has open, or null while one is still being resolved. */
 export const folderStore = writable<FolderState | null>(null);
 
-/** The folders this machine has, offered on the no-folder screen. */
+/** The folders this machine has, listed on the no-folder screen and in the picker. */
 export const foldersStore = writable<Folder[]>([]);
 
 /**
- * True while a folder is being opened, which the buttons that open one show as
- * loading. It covers the open and never the picker: a spinner tied to an OS
- * dialog is one the app cannot clear when the dialog answers nothing.
+ * True while a folder is opening. The picker is excluded: a spinner tied to an
+ * OS dialog cannot be cleared when the dialog answers nothing.
  */
 export const openingStore = writable(false);
 
@@ -40,7 +39,7 @@ export function clearFolderState(): void {
 	foldersStore.set([]);
 }
 
-/** Displays the folder: its tree when ready, the screen for its status otherwise. */
+/** The only supported way to set folderStore: it also drops the cached graph. */
 export async function displayFolder(state: FolderState): Promise<void> {
 	folderStore.set(state);
 	clearWorkspaceGraphCache();
@@ -61,14 +60,14 @@ export async function refreshFolders(): Promise<void> {
 
 export async function openFolder(path: string): Promise<void> {
 	openingStore.set(true);
-	const [result, err] = await tryCatch(OpenFolder, path);
+	const [folderState, err] = await tryCatch(OpenFolder, path);
 	openingStore.set(false);
 
 	if (err) {
 		notify({ type: AlertType.Error, message: err?.message ?? 'Could not open that folder' });
 		return;
 	}
-	await displayFolder(result);
+	await displayFolder(folderState);
 }
 
 export async function pickAndOpenFolder(): Promise<void> {
@@ -93,7 +92,7 @@ export async function reopenLastFolder(): Promise<void> {
 	await displayFolder(result);
 }
 
-/** The backend closed the folder on us, e.g. after a server delete. */
+/** Handles the backend closing the folder, for example after a server delete. */
 export async function onFolderClosed(): Promise<void> {
 	if (get(folderStore)?.status === WorkspaceStatus.Ready) {
 		notify({

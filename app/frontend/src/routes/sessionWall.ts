@@ -20,29 +20,29 @@ import { get, writable } from 'svelte/store';
 
 export const sessionCheckingStore = writable(true);
 
-let checkSessionInterval: ReturnType<typeof setInterval> | undefined;
+let logoutPollInterval: ReturnType<typeof setInterval> | undefined;
 
-let lastState: 'loggedin' | 'loggedout' | undefined;
+let sessionState: 'loggedin' | 'loggedout' | undefined;
 
-// The watcher debounces, so an update it emitted before a folder closed lands
-// after it. Applied blindly it puts the workbench back for a workspace that is
-// no longer open, which after a delete is one that no longer exists.
-EventsOn('workspaceGraphUpdated', async (g: WorkspaceNode) => {
-	if (lastState !== 'loggedin') return;
+// The watcher debounces, so an update emitted before a folder closed can land
+// after it. Applied blindly it restores the workbench for a workspace that is
+// no longer open.
+EventsOn('workspaceGraphUpdated', async (updatedGraph: WorkspaceNode) => {
+	if (sessionState !== 'loggedin') return;
 
 	const folder = get(folderStore);
-	if (folder?.status !== WorkspaceStatus.Ready || folder.workspaceId !== g.id) return;
+	if (folder?.status !== WorkspaceStatus.Ready || folder.workspaceId !== updatedGraph.id) return;
 
-	stripNullItems(g);
-	workspaceGraphStore.set(g);
+	stripNullItems(updatedGraph);
+	workspaceGraphStore.set(updatedGraph);
 });
 
 EventsOn('logout', () => {
-	if (lastState === 'loggedout') return;
-	lastState = 'loggedout';
-	if (checkSessionInterval) {
-		clearInterval(checkSessionInterval);
-		checkSessionInterval = undefined;
+	if (sessionState === 'loggedout') return;
+	sessionState = 'loggedout';
+	if (logoutPollInterval) {
+		clearInterval(logoutPollInterval);
+		logoutPollInterval = undefined;
 	}
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
@@ -51,26 +51,26 @@ EventsOn('logout', () => {
 });
 
 EventsOn('workspaceClosed', () => {
-	if (lastState !== 'loggedin') return;
+	if (sessionState !== 'loggedin') return;
 	void onFolderClosed();
 });
 
 EventsOn('login', async () => {
-	if (lastState === 'loggedin') return;
-	lastState = 'loggedin';
+	if (sessionState === 'loggedin') return;
+	sessionState = 'loggedin';
 
-	// Clear cached graph so we fetch for the current server (backend invalidated on switch).
+	// Drop the cached graph so the next load fetches from the server just signed in to.
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
 
-	// Keyed on the user, not the folder, so they need not wait on the tree walk.
+	// Started before the folder reopens, since neither call depends on the tree walk.
 	const permissions = loadMyPermissions();
 	const user = loadCurrentUser();
 
 	await reopenLastFolder();
 
 	modalStore.set(null);
-	checkSessionInterval = setInterval(() => CheckForLogout(), 500);
+	logoutPollInterval = setInterval(() => CheckForLogout(), 500);
 	await Promise.all([permissions, user]);
 });
 
@@ -80,8 +80,8 @@ export const setupSessionWall = async () => {
 };
 
 export const teardownSessionWall = () => {
-	if (checkSessionInterval) {
-		clearInterval(checkSessionInterval);
-		checkSessionInterval = undefined;
+	if (logoutPollInterval) {
+		clearInterval(logoutPollInterval);
+		logoutPollInterval = undefined;
 	}
 };

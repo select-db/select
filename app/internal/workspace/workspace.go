@@ -34,8 +34,6 @@ func New(Queries *generated.Queries, Graph *graph.Graph) *Workspace {
 	}
 }
 
-// currentUserID is the signed-in user, which every folder operation needs and
-// none can do without.
 func (w *Workspace) currentUserID(ctx context.Context) (string, error) {
 	u, err := w.Queries.GetCurrentUser(ctx)
 	if err != nil {

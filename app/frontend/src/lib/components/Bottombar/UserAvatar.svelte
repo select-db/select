@@ -4,7 +4,8 @@
 	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
 	import { currentUserStore } from '$lib/stores/currentUserStore';
 
-	// The signed-in user, not the workspace's: this shows with no folder open.
+	// The signed-in user rather than a workspace member, since this renders with
+	// no folder open.
 	const user = $derived($currentUserStore);
 
 	const options: ContextMenuOption[] = [

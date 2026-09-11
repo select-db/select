@@ -8,24 +8,24 @@ import (
 	"selectDb/internal/utils"
 )
 
-// The frontend is handed copies of nodes, never the nodes themselves.
+// The frontend is handed copies of nodes, never the nodes themselves. Wails
+// marshals a result or event payload after the call that produced it returned,
+// and the watcher keeps rewriting those slices, so encoding a live slice header
+// panics with "reflect: slice index out of range".
 //
-// Wails marshals a bound call's result, and an event's payload, after the call
-// that produced it returned. The watcher keeps writing to the same slices in
-// the meantime -- turning a new directory into a database node is exactly that
-// -- and the JSON encoder reading a slice header while it is rewritten panics
-// with "reflect: slice index out of range", taking the app with it.
-//
-// Interface values (a schema item's metadata) and query results are shared:
-// both are replaced wholesale rather than edited in place, so the copy's own
-// header always describes memory nobody rewrites.
+// Metadata interface values and query results stay shared. Both are replaced
+// wholesale rather than edited in place, so no copy points at rewritten memory.
+
+// The window every workspaceGraphUpdated emit shares. One constant because a
+// Debouncer keeps the window it was created with, so a per-call argument would
+// be whatever the first caller happened to pass.
+const graphUpdateWindow = 100 * time.Millisecond
 
 // EmitWorkspaceGraphUpdated queues the tree for the frontend. The copy is taken
-// when the debounce fires, not per call: a burst keeps only the last payload,
-// and one mutation per file of a checkout would otherwise copy the whole tree
-// once per file to throw all but one away.
-func EmitWorkspaceGraphUpdated(g *Graph, timeout time.Duration) {
-	utils.DebouncedEventsEmitFunc("workspaceGraphUpdated", timeout, func() []interface{} {
+// when the debounce fires, not per call, so a checkout touching a thousand
+// files copies the tree once instead of a thousand times.
+func EmitWorkspaceGraphUpdated(g *Graph) {
+	utils.DebouncedEventsEmitFunc("workspaceGraphUpdated", graphUpdateWindow, func() []interface{} {
 		return []interface{}{SnapshotWorkspaceGraph(g)}
 	})
 }
@@ -43,15 +43,15 @@ func SnapshotWorkspaceGraph(g *Graph) *WorkspaceNode {
 
 type cloneable[T any] interface{ Clone() T }
 
-func cloneAll[T cloneable[T]](in []T) []T {
-	if in == nil {
+func cloneAll[T cloneable[T]](nodes []T) []T {
+	if nodes == nil {
 		return nil
 	}
-	out := make([]T, len(in))
-	for i, node := range in {
-		out[i] = node.Clone()
+	clones := make([]T, len(nodes))
+	for i, node := range nodes {
+		clones[i] = node.Clone()
 	}
-	return out
+	return clones
 }
 
 func (wg *WorkspaceNode) Clone() *WorkspaceNode {

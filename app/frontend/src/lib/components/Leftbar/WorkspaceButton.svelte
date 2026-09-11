@@ -1,6 +1,6 @@
 <script lang="ts">
-	// The workspace picker. A workspace is a folder, so the list is the folders
-	// this machine has, and Open folder is always there to reach one it does not.
+	// Workspace picker. A workspace is a folder, so the options are this machine's
+	// folders, plus Open folder for any it does not have yet.
 	import Select from '$lib/system/Select/Select.svelte';
 	import type { SelectOption } from '$lib/system/Select/Select.types';
 	import Avatar from '$lib/system/Avatar/Avatar.svelte';
@@ -22,16 +22,15 @@
 	const workspace = $derived($workspaceGraphStore);
 	const currentPath = $derived($folderStore?.path ?? '');
 
-	// Order is the menu's order, so Open folder leads and the folders follow as
-	// ListFolders gives them: the open one first.
+	// Select is given sortOptions={false}, so this is the menu order and
+	// ListFolders decides the rest, open folder first.
 	const options = $derived<SelectOption[]>([
 		{ value: OPEN_FOLDER, label: 'Open folder' },
 		...$foldersStore.map((folder) => ({ value: folder.path, label: folder.name }))
 	]);
 
-	// Keyed on the names rather than the stores: the graph store is replaced on
-	// every watcher event, and re-listing the folders on each one is a round trip
-	// per keystroke somebody else is typing.
+	// Keyed on names rather than store identity: the graph store is replaced on
+	// every watcher event, which would otherwise re-list the folders each time.
 	const listKey = $derived(`${$folderStore?.path ?? ''}|${$workspaceGraphStore?.name ?? ''}`);
 	$effect(() => {
 		void listKey;
@@ -71,7 +70,7 @@
 	<Select
 		value={currentPath}
 		{options}
-		onchange={(v) => choose(v as string)}
+		onchange={(selected) => choose(selected as string)}
 		sortOptions={false}
 		isLoading={$openingStore}
 		placeholder="Open folder"

@@ -62,13 +62,12 @@ func (w *Workspace) CreateWorkspaceInFolder(path, name string) (FolderState, err
 		return FolderState{}, fmt.Errorf("create workspace locally: %w", err)
 	}
 
-	// Written last: it is what makes the folder a workspace, and a config for a
-	// workspace that was never created is the state the init screen cleans up.
+	// Written last, because this file is what makes the folder a workspace: a
+	// failed create must leave the folder as it was.
 	if err := graph.WriteWorkspaceConfig(folder, currentServer, ws.ID); err != nil {
 		return FolderState{}, err
 	}
 
-	// Opened rather than reported open: one definition of what Ready means, and
-	// the config just written is read back the way any other open reads it.
+	// Opened rather than reported open, so Ready has one definition.
 	return w.OpenFolder(folder)
 }

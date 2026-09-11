@@ -12,7 +12,7 @@ import (
 // select.config.json that named it. The folder is left as it was.
 //
 // A config can outlive its workspace when the delete happened on another
-// machine; the init screen cleans that up on the next open.
+// machine. Opening that folder reports no access and leaves the config alone.
 func (w *Workspace) DeleteWorkspace(workspaceID string) error {
 	ctx := context.Background()
 
