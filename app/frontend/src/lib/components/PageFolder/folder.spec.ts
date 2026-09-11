@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import {
+	GRAPH,
 	call,
 	expect,
 	holdSession,
@@ -171,6 +172,29 @@ test('closing the folder offers it back', async ({ page, signIn, request, dataDi
 
 	await page.getByRole('button', { name: 'Reopen analytics' }).click();
 	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
+});
+
+test('a graph event in flight does not reopen a folder that closed', async ({
+	page,
+	signIn,
+	request,
+	emit
+}) => {
+	await holdSession(page);
+	await page.goto('/');
+	await signIn();
+	await expect(treeRow(page, 'weekly_revenue.sql')).toBeVisible();
+
+	// The watcher debounces, so an update it emitted before the close lands
+	// after it. Taking a real one and replaying it is that event, on demand.
+	const inFlight = await call(request, `${GRAPH}.GetWorkspaceGraph`);
+
+	await call(request, `${WORKSPACE}.CloseFolder`);
+	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
+
+	await emit('workspaceGraphUpdated', inFlight);
+	await expect(screen(page)).toHaveAttribute('data-test-value', 'no_folder');
+	await expect(treeRow(page, 'weekly_revenue.sql')).toHaveCount(0);
 });
 
 test('a folder with no config becomes a workspace', async ({ page, signIn, request, dataDir }) => {
