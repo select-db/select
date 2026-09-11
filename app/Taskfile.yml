@@ -27,10 +27,13 @@ tasks:
   generate:bindings:
     summary: Regenerates the frontend bindings from the bound Go services
     cmds:
-      # The generator loads the whole app module, so it needs the same build
-      # tags the build uses; without them it would look for the GTK4/WebKitGTK 6
-      # headers we do not ship against.
-      - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}}{{if .PLATFORM_TAGS}} -f "-tags {{.PLATFORM_TAGS}}"{{end}}
+      # The generator loads the whole app module, so it needs a tag set that
+      # compiles. `server` is the one that compiles everywhere: it excludes the
+      # cgo webview on every platform, so generating needs no GTK headers on
+      # Linux and no C toolchain at all. The output is the same as under
+      # PLATFORM_TAGS because the bound services are platform independent --
+      # bind a service that is not, and its methods would go missing here.
+      - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}} -f "-tags server"
 
   generate:icons:
     summary: Generates the macOS `.icns` and Windows `.ico` from build/appicon.png

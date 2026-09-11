@@ -154,11 +154,14 @@ jobs:
           cache-dependency-path: ${{ matrix.module }}/go.sum
       # The app embeds the frontend build output. Stub it so packages compile.
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
-      - run: sudo apt-get update && sudo apt-get install -y gcc
+      - if: matrix.module != 'app'
+        run: sudo apt-get update && sudo apt-get install -y gcc
       # The app binds the webview through cgo, so loading its packages needs
-      # the GTK3 and WebKit2GTK headers the desktop build links against.
+      # the GTK3 and WebKit2GTK headers the desktop build links against. From
+      # the cached .debs, as the app jobs do, rather than the plain apt install
+      # whose 13m40s worst case the timeout above is written against.
       - if: matrix.module == 'app'
-        run: sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+        uses: ./.github/actions/gtk-deps
       - name: govulncheck
         working-directory: ${{ matrix.module }}
         timeout-minutes: 10
