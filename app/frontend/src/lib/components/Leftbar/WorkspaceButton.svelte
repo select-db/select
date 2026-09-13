@@ -1,103 +1,103 @@
 <script lang="ts">
+	// Workspace picker. A workspace is a folder, so the options are this machine's
+	// folders, plus Open folder for any it does not have yet.
 	import Select from '$lib/system/Select/Select.svelte';
 	import type { SelectOption } from '$lib/system/Select/Select.types';
-	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { notify } from '$lib/system/Notifications/notificationsStore';
-	import { AlertType } from '$lib/system/Alert/types';
-	import { tryCatch } from '$lib/utils/tryCatch';
-	import {
-		ListWorkspacesForCurrentUser,
-		SwitchWorkspace,
-		CreateWorkspaceAndReload
-	} from '$lib/bindings/selectDb/internal/workspace/workspace';
-	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
-	import type * as workspace from '$lib/bindings/selectDb/internal/workspace/models';
 	import Avatar from '$lib/system/Avatar/Avatar.svelte';
+	import Icon from '$lib/system/Icon/Icon.svelte';
+	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { logoSrc } from '$lib/utils/workspaceLogo';
+	import {
+		folderStore,
+		foldersStore,
+		openFolder,
+		openingStore,
+		pickAndOpenFolder,
+		refreshFolders
+	} from '$lib/components/PageFolder/folderStore';
 
-	let workspaces = $state<workspace.WorkspaceWithCurrent[]>([]);
-	let loading = $state(true);
+	// No folder is at this path, so it cannot collide with one.
+	const OPEN_FOLDER = 'select:open-folder';
 
-	const currentId = $derived(
-		workspaces.find((w) => w.current)?.id ?? $workspaceGraphStore?.id ?? ''
-	);
-	const options = $derived<SelectOption[]>(workspaces.map((w) => ({ value: w.id, label: w.name })));
+	const workspace = $derived($workspaceGraphStore);
+	const currentPath = $derived($folderStore?.path ?? '');
 
-	// SelectOption carries only a value and a label, so the logo is looked up by id.
-	const logoById = $derived(new Map(workspaces.map((w) => [w.id, logoSrc(w.logo)])));
+	// Select is given sortOptions={false}, so this is the menu order and
+	// ListFolders decides the rest, open folder first.
+	const options = $derived<SelectOption[]>([
+		{ value: OPEN_FOLDER, label: 'Open folder' },
+		...$foldersStore.map((folder) => ({ value: folder.path, label: folder.name }))
+	]);
 
-	async function load() {
-		loading = true;
-		const [list, err] = await tryCatch(ListWorkspacesForCurrentUser);
-		loading = false;
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to load workspaces' });
-			return;
-		}
-		workspaces = list ?? [];
-	}
-
-	async function switchTo(id: string) {
-		if (!id || id === currentId) return;
-		const [, err] = await tryCatch(SwitchWorkspace, id);
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to switch workspace' });
-		}
-	}
-
-	async function createAndSwitch(name: string) {
-		const [, err] = await tryCatch(CreateWorkspaceAndReload, name.trim() || 'New workspace');
-		if (err) {
-			notify({ type: AlertType.Error, message: err?.message ?? 'Failed to create workspace' });
-			return;
-		}
-		await Logout();
-	}
-
+	// Keyed on names rather than store identity: the graph store is replaced on
+	// every watcher event, which would otherwise re-list the folders each time.
+	const listKey = $derived(`${$folderStore?.path ?? ''}|${$workspaceGraphStore?.name ?? ''}`);
 	$effect(() => {
-		// Re-list on graph changes, so a rename or logo saved in Settings shows here.
-		void $workspaceGraphStore?.name;
-		void $workspaceGraphStore?.logo;
-		load();
+		void listKey;
+		refreshFolders();
 	});
+
+	async function choose(value: string) {
+		if (value === OPEN_FOLDER) {
+			await pickAndOpenFolder();
+			return;
+		}
+		if (value === currentPath) return;
+		await openFolder(value);
+	}
 </script>
 
-{#snippet workspaceOption(option: SelectOption | null)}
-	<span class="workspace-option">
-		<Avatar
-			src={option ? (logoById.get(option.value as string) ?? null) : null}
-			name={option?.label}
-			size={20}
-			shape="rounded"
-		/>
-		<span class="workspace-name">{option?.label ?? 'Workspace'}</span>
-	</span>
+{#snippet folderOption(option: SelectOption | null)}
+	{#if option?.value === OPEN_FOLDER}
+		<span class="option">
+			<Icon icon="folder-open" size={18} stroke="var(--gray-800)" />
+			<span class="option-label">{option.label}</span>
+		</span>
+	{:else}
+		<span class="option" title={option?.value ?? ''}>
+			<Avatar
+				src={option && option.value === currentPath ? logoSrc(workspace?.logo) : null}
+				name={option?.label}
+				size={20}
+				shape="rounded"
+			/>
+			<span class="option-label">{option?.label ?? 'Open folder'}</span>
+		</span>
+	{/if}
 {/snippet}
 
-<Select
-	value={currentId}
-	{options}
-	onchange={(v) => switchTo(v as string)}
-	isLoading={loading}
-	placeholder="Workspace"
-	searchEnabled
-	searchPlaceholder="Search or create workspace..."
-	createOptionLabel={(q) => `Create workspace '${q}'`}
-	onCreate={createAndSwitch}
-	menuWidth={300}
-	emphasis="low"
-	optionDisplay={workspaceOption}
-/>
+<div class="slot" class:empty={!workspace} data-test="workspace.button">
+	<Select
+		value={currentPath}
+		{options}
+		onchange={(selected) => choose(selected as string)}
+		sortOptions={false}
+		isLoading={$openingStore}
+		placeholder="Open folder"
+		menuWidth={300}
+		emphasis="low"
+		optionDisplay={folderOption}
+	/>
+</div>
 
 <style>
-	.workspace-option {
+	.slot {
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	.slot.empty {
+		flex: 1;
+	}
+
+	.option {
 		display: flex;
 		align-items: center;
 		gap: var(--space-sm);
 		min-width: 0;
 	}
 
-	.workspace-name {
+	.option-label {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

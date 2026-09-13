@@ -7,11 +7,11 @@ export {
 };
 
 export {
-    CreateWorkspaceParams,
+    Folder,
+    FolderState,
     SearchUserResult,
-    SetOrCreateCurrentWorkspaceParams,
+    WorkspaceStatus,
     WorkspaceUserEntry,
     WorkspaceUserGroup,
-    WorkspaceUserRole,
-    WorkspaceWithCurrent
+    WorkspaceUserRole
 } from "./models.js";

@@ -3,6 +3,8 @@
 	import { isLeftbarOpened, LEFTBAR_WIDTH_KEY } from '$lib/components/Leftbar/store';
 	import { readStoredWidth } from '$lib/utils/storedWidth';
 
+	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+
 	import Resizer from './Resizer.svelte';
 	import Content from './Content/Content.svelte';
 	import Search from './Search/Search.svelte';
@@ -33,9 +35,11 @@
 	<aside class="leftbar" class:resizing>
 		<div class="actions-wrapper" style="--wails-draggable:drag">
 			<WorkspaceButton />
-			<div style="margin-left: auto;"></div>
-			<Search />
-			<NewFileButton />
+			{#if $workspaceGraphStore}
+				<div style="margin-left: auto;"></div>
+				<Search />
+				<NewFileButton />
+			{/if}
 		</div>
 		<Content />
 	</aside>

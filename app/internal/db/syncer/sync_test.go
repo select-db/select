@@ -21,7 +21,7 @@ func TestSyncWith_ConfirmsCommits(t *testing.T) {
 		Confirmed: []string{"commit-1", "commit-2"},
 	}))
 
-	err := s.syncWith(context.Background(), "u1", nil, nil, true, "ws1")
+	err := s.syncWith(context.Background(), "u1", nil, nil, "ws1")
 	require.NoError(t, err)
 
 	var count int
@@ -46,7 +46,7 @@ func TestSyncWith_AppliesWorkspaceChange(t *testing.T) {
 		},
 	}))
 
-	err := s.syncWith(context.Background(), "u1", nil, nil, true, "ws1")
+	err := s.syncWith(context.Background(), "u1", nil, nil, "ws1")
 	require.NoError(t, err)
 
 	var name string
@@ -66,7 +66,7 @@ func TestSyncWith_AppliesRoleChange(t *testing.T) {
 		},
 	}))
 
-	err := s.syncWith(context.Background(), "u1", nil, nil, true, "ws1")
+	err := s.syncWith(context.Background(), "u1", nil, nil, "ws1")
 	require.NoError(t, err)
 
 	var name string
@@ -87,7 +87,7 @@ func TestSyncWith_AppliesRoleChange_UpdatesExisting(t *testing.T) {
 		},
 	}))
 
-	err := s.syncWith(context.Background(), "u1", nil, nil, true, "ws1")
+	err := s.syncWith(context.Background(), "u1", nil, nil, "ws1")
 	require.NoError(t, err)
 
 	var name string
@@ -108,7 +108,7 @@ func TestSyncWith_AppliesPermissionChange(t *testing.T) {
 		},
 	}))
 
-	err := s.syncWith(context.Background(), "u1", nil, nil, true, "ws1")
+	err := s.syncWith(context.Background(), "u1", nil, nil, "ws1")
 	require.NoError(t, err)
 
 	var effect string
@@ -130,7 +130,7 @@ func TestSyncWith_DeletesRole(t *testing.T) {
 		},
 	}))
 
-	err := s.syncWith(context.Background(), "u1", nil, nil, true, "ws1")
+	err := s.syncWith(context.Background(), "u1", nil, nil, "ws1")
 	require.NoError(t, err)
 
 	var count int
@@ -154,7 +154,7 @@ func TestSyncWith_DeletesPermission(t *testing.T) {
 		},
 	}))
 
-	err = s.syncWith(context.Background(), "u1", nil, nil, true, "ws1")
+	err = s.syncWith(context.Background(), "u1", nil, nil, "ws1")
 	require.NoError(t, err)
 
 	var count int
@@ -176,7 +176,7 @@ func TestSyncWith_EmitsRolesUpdated_OnRoleChange(t *testing.T) {
 	}))
 	s.EmitRolesUpdated = func() { called = true }
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 	assert.True(t, called, "EmitRolesUpdated must fire when roles in changes")
 }
 
@@ -195,7 +195,7 @@ func TestSyncWith_EmitsRolesUpdated_OnPermissionChange(t *testing.T) {
 	}))
 	s.EmitRolesUpdated = func() { called = true }
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 	assert.True(t, called)
 }
 
@@ -212,7 +212,7 @@ func TestSyncWith_NoEmitRolesUpdated_WhenNoRoleChanges(t *testing.T) {
 	}))
 	s.EmitRolesUpdated = func() { called = true }
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, ""))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, ""))
 	assert.False(t, called, "EmitRolesUpdated must NOT fire for workspace-only changes")
 }
 
@@ -233,7 +233,7 @@ func TestSyncWith_RestoresRole(t *testing.T) {
 		},
 	}))
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 
 	var name string
 	require.NoError(t, db.QueryRow(`SELECT name FROM role WHERE id = 'role-1'`).Scan(&name))
@@ -255,7 +255,7 @@ func TestSyncWith_EmitsRolesUpdated_OnRestoredRole(t *testing.T) {
 	}))
 	s.EmitRolesUpdated = func() { called = true }
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 	assert.True(t, called)
 }
 
@@ -270,7 +270,7 @@ func TestSyncWith_UpdatesLastPulledAt(t *testing.T) {
 		ServerTime: serverTime,
 	}))
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 
 	var lastPulledAt sql.NullTime
 	require.NoError(t, db.QueryRow(`SELECT last_pulled_at FROM workspace WHERE id = 'ws1'`).Scan(&lastPulledAt))
@@ -292,7 +292,7 @@ func TestSyncWith_AppliesUserToRoleChange(t *testing.T) {
 		},
 	}))
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 
 	var count int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM user_to_role WHERE id = 'utr-1'`).Scan(&count))
@@ -316,7 +316,7 @@ func TestSyncWith_AppliesUserToRoleChange_UpdatesExisting(t *testing.T) {
 		},
 	}))
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 
 	var roleID string
 	require.NoError(t, db.QueryRow(`SELECT role_id FROM user_to_role WHERE id = 'utr-1'`).Scan(&roleID))
@@ -340,7 +340,7 @@ func TestSyncWith_DeletesUserToRole(t *testing.T) {
 		},
 	}))
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 
 	var count int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM user_to_role WHERE id = 'utr-1'`).Scan(&count))
@@ -363,7 +363,7 @@ func TestSyncWith_EmitsRolesUpdated_OnUserToRoleChange(t *testing.T) {
 	}))
 	s.EmitRolesUpdated = func() { called = true }
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 	assert.True(t, called)
 }
 
@@ -427,7 +427,7 @@ func TestSyncWith_AppliesGroupGraph_InOnePayload(t *testing.T) {
 		},
 	}))
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 
 	var name string
 	require.NoError(t, db.QueryRow(`SELECT name FROM "group" WHERE id = 'grp-1'`).Scan(&name))
@@ -464,7 +464,7 @@ func TestSyncWith_DeletesGroupToRoleAndUserToGroup(t *testing.T) {
 		},
 	}))
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 
 	var n int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM user_to_group WHERE id = 'utg-1'`).Scan(&n))
@@ -490,7 +490,7 @@ func TestSyncWith_EmitsRolesUpdated_OnGroupToRoleChange(t *testing.T) {
 	}))
 	s.EmitRolesUpdated = func() { called = true }
 
-	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, true, "ws1"))
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
 	assert.True(t, called, "group->role change must refresh effective roles in the UI")
 }
 
@@ -500,4 +500,82 @@ func TestPayloadHasDeletedAt(t *testing.T) {
 	assert.False(t, PayloadHasDeletedAt(map[string]any{"deleted_at": ""}))
 	assert.True(t, PayloadHasDeletedAt(map[string]any{"deleted_at": "2026-01-01T00:00:00Z"}))
 	assert.True(t, PayloadHasDeletedAt(map[string]any{"deleted_at": float64(1)}))
+}
+
+// closedFolder records the workspace-gone callback the app wires to CloseFolder.
+type closedFolder struct{ called bool }
+
+func (c *closedFolder) OnWorkspaceGone() { c.called = true }
+
+func TestSyncWith_ClosesFolder_WhenOwnerDeletesTheWorkspace(t *testing.T) {
+	db := newTestDB(t)
+	seedCurrentUser(t, db, "u1", "Sam")
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
+
+	gone := &closedFolder{}
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			Workspaces: []map[string]any{
+				{"id": "ws1", "name": "My Workspace", "deleted_at": time.Now().UTC()},
+			},
+		},
+	}))
+	s.WorkspaceGone = gone
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
+	assert.True(t, gone.called, "the open folder must be closed")
+
+	var count int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workspace WHERE id = 'ws1'`).Scan(&count))
+	assert.Equal(t, 0, count)
+}
+
+func TestSyncWith_ClosesFolder_WhenMembershipIsRevoked(t *testing.T) {
+	db := newTestDB(t)
+	seedCurrentUser(t, db, "u1", "Sam")
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
+
+	gone := &closedFolder{}
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			WorkspaceToUser: []map[string]any{
+				{"id": "wtu1", "workspace_id": "ws1", "user_id": "u1", "deleted_at": time.Now().UTC()},
+			},
+		},
+	}))
+	s.WorkspaceGone = gone
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
+	assert.True(t, gone.called, "the open folder must be closed")
+
+	// The workspace row outlives the membership, which is why opening a folder
+	// asks whether the user is in the workspace and not whether it exists.
+	var workspaces, memberships int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workspace WHERE id = 'ws1'`).Scan(&workspaces))
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM workspace_to_user WHERE id = 'wtu1'`).Scan(&memberships))
+	assert.Equal(t, 1, workspaces)
+	assert.Equal(t, 0, memberships)
+}
+
+func TestSyncWith_KeepsFolder_WhenAnotherWorkspaceIsDeleted(t *testing.T) {
+	db := newTestDB(t)
+	seedWorkspace(t, db, "ws1", "My Workspace")
+	seedWorkspace(t, db, "ws2", "Somebody Else's")
+	seedWorkspaceToUser(t, db, "wtu1", "ws1", "u1", true)
+	seedWorkspaceToUser(t, db, "wtu2", "ws2", "u1", false)
+
+	gone := &closedFolder{}
+	s := newTestSyncer(t, db, fakeSyncHandler(SyncResponse{
+		Changes: SyncChanges{
+			Workspaces: []map[string]any{
+				{"id": "ws2", "name": "Somebody Else's", "deleted_at": time.Now().UTC()},
+			},
+		},
+	}))
+	s.WorkspaceGone = gone
+
+	require.NoError(t, s.syncWith(context.Background(), "u1", nil, nil, "ws1"))
+	assert.False(t, gone.called)
 }

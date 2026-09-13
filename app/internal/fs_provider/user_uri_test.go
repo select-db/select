@@ -37,7 +37,7 @@ func withTempUserConfig(t *testing.T) string {
 
 func TestGetOSPathFromURI_UserScheme(t *testing.T) {
 	userDir := withTempUserConfig(t)
-	fsp := New() // no root set: user URIs must not depend on the server root
+	fsp := New(nil) // no workspace lookup: user URIs must not depend on one
 
 	got, err := fsp.GetOSPathFromURI("selectdb://user/.theme")
 	if err != nil {
@@ -51,7 +51,7 @@ func TestGetOSPathFromURI_UserScheme(t *testing.T) {
 
 func TestGetOSPathFromURI_UserSchemeRejectsTraversal(t *testing.T) {
 	withTempUserConfig(t)
-	fsp := New()
+	fsp := New(nil)
 
 	for _, uri := range []string{
 		"selectdb://user/../escape",
@@ -65,7 +65,7 @@ func TestGetOSPathFromURI_UserSchemeRejectsTraversal(t *testing.T) {
 
 func TestUserURI_ReadWriteRoundTrip(t *testing.T) {
 	withTempUserConfig(t)
-	fsp := New()
+	fsp := New(nil)
 
 	const uri = "selectdb://user/.config"
 	if err := fsp.Write(WriteParams{URI: uri, Content: "hello"}); err != nil {

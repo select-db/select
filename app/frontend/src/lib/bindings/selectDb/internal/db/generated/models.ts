@@ -234,6 +234,7 @@ export class User {
     "name": db_types$0.JSONNullString;
     "email": db_types$0.JSONNullString;
     "avatar_url": db_types$0.JSONNullString;
+    "current": db_types$0.JSONNullBool;
 
     /** Creates a new User instance. */
     constructor($$source: Partial<User> = {}) {
@@ -249,6 +250,9 @@ export class User {
         if (!("avatar_url" in $$source)) {
             this["avatar_url"] = null;
         }
+        if (!("current" in $$source)) {
+            this["current"] = null;
+        }
 
         Object.assign(this, $$source);
     }
@@ -259,59 +263,6 @@ export class User {
     static createFrom($$source: any = {}): User {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new User($$parsedSource as Partial<User>);
-    }
-}
-
-export class Workspace {
-    "id": string;
-    "name": string;
-    "git_remote_url": db_types$0.JSONNullString;
-    "last_pulled_at": sql$0.NullTime;
-    "owner_id": db_types$0.JSONNullString;
-    "statement_timeout_ms": number;
-    "max_result_size_mb": number;
-    "logo": db_types$0.JSONNullString;
-
-    /** Creates a new Workspace instance. */
-    constructor($$source: Partial<Workspace> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("git_remote_url" in $$source)) {
-            this["git_remote_url"] = null;
-        }
-        if (!("last_pulled_at" in $$source)) {
-            this["last_pulled_at"] = (new sql$0.NullTime());
-        }
-        if (!("owner_id" in $$source)) {
-            this["owner_id"] = null;
-        }
-        if (!("statement_timeout_ms" in $$source)) {
-            this["statement_timeout_ms"] = 0;
-        }
-        if (!("max_result_size_mb" in $$source)) {
-            this["max_result_size_mb"] = 0;
-        }
-        if (!("logo" in $$source)) {
-            this["logo"] = null;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Workspace instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Workspace {
-        const $$createField3_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("last_pulled_at" in $$parsedSource) {
-            $$parsedSource["last_pulled_at"] = $$createField3_0($$parsedSource["last_pulled_at"]);
-        }
-        return new Workspace($$parsedSource as Partial<Workspace>);
     }
 }
 

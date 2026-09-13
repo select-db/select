@@ -31,7 +31,7 @@ type SqlFileCandidate struct {
 // take precedence over parent folder variables.
 func (g *Graph) GetUriVariables(uri string) ([]VariableCandidate, error) {
 	// Get the workspace graph
-	if _, err := g.GetWorkspaceGraph(); err != nil {
+	if _, err := EnsureWorkspaceGraph(g); err != nil {
 		return nil, err
 	}
 
@@ -124,7 +124,7 @@ func (g *Graph) sqlFilesInFolder(folderURI string) ([]*FileNode, error) {
 // GetUriSqlFileRefs returns SQL files in the same folder as the given URI (same-folder only).
 // Each candidate includes a short preview of the file content for the suggestion menu.
 func (g *Graph) GetUriSqlFileRefs(uri string) ([]SqlFileCandidate, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
+	wsGraph, err := EnsureWorkspaceGraph(g)
 	if err != nil {
 		return nil, err
 	}

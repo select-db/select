@@ -48,13 +48,15 @@ export const test = base.extend<
 		emit: (name: string, data?: unknown) => Promise<void>;
 		signIn: () => Promise<void>;
 		consoleErrors: string[];
+		/** Where the app keeps its database, its config and its workspace folder. */
+		dataDir: string;
 	},
-	{ app: string }
+	{ app: { url: string; dataDir: string } }
 >({
 	app: [
 		async ({}, use, workerInfo) => {
-			const { url, stop } = await startApp(workerInfo.workerIndex);
-			await use(url);
+			const { url, dataDir, stop } = await startApp(workerInfo.workerIndex);
+			await use({ url, dataDir });
 			await stop();
 		},
 		{ scope: 'worker' }
@@ -62,7 +64,11 @@ export const test = base.extend<
 
 	// Carries `page` and `request` with it, so a spec never names a port.
 	baseURL: async ({ app }, use) => {
-		await use(app);
+		await use(app.url);
+	},
+
+	dataDir: async ({ app }, use) => {
+		await use(app.dataDir);
 	},
 
 	/**

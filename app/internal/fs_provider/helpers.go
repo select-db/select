@@ -15,10 +15,9 @@ import (
 //
 // Two URI namespaces are supported, both under the "selectdb://" scheme:
 //
-//   - selectdb://workspaces/<id>/...  → joined under the provider root (the
-//     current server folder), so URI and filesystem paths share the same shape.
-//   - selectdb://user/...             → joined under the per-user config dir,
-//     for personal files (.theme, .config) that live outside every workspace.
+//   - selectdb://workspaces/<id>/...  -> under that workspace's folder.
+//   - selectdb://user/...             -> under the per-user config dir, for
+//     personal files (.theme, .config) that live outside every workspace.
 func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
 	rel, ok := fs_uri.Rel(URI)
 	if !ok {
@@ -33,21 +32,44 @@ func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
 		return "", fmt.Errorf("invalid URI path (expected to start with %q or %q): %s", fs_uri.WorkspacePrefix, fs_uri.UserPrefix, URI)
 	}
 
-	if fsp.root == "" {
-		return "", fmt.Errorf("FSProvider root not set (no server selected)")
+	root, sub, err := fsp.workspaceRootFromURI(URI, rel)
+	if err != nil {
+		return "", err
 	}
 
-	full, err := fs_uri.Resolve(fsp.root, rel)
+	full, err := fs_uri.Resolve(root, sub)
 	if err != nil {
-		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape root): %s", URI)
+		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape the workspace): %s", URI)
 	}
 
 	// This path is about to be read or written, so the lexical check is not
 	// enough: a symlink inside the workspace must not lead out of it.
-	if err := fs_uri.EnsureWithin(fsp.root, full); err != nil {
+	if err := fs_uri.EnsureWithin(root, full); err != nil {
 		return "", fmt.Errorf("invalid URI path (escapes workspace root): %s", URI)
 	}
 	return full, nil
+}
+
+// workspaceRootFromURI splits selectdb://workspaces/<id>/rest into <id>'s folder
+// and the remainder, which is empty for the root itself.
+func (fsp *FSProvider) workspaceRootFromURI(URI, rel string) (root, sub string, err error) {
+	after := strings.TrimPrefix(rel, fs_uri.WorkspacePrefix)
+	workspaceID, sub, _ := strings.Cut(after, "/")
+	if workspaceID == "" {
+		return "", "", fmt.Errorf("invalid URI (names no workspace): %s", URI)
+	}
+
+	if fsp.workspaceRoot == nil {
+		return "", "", fmt.Errorf("FSProvider cannot resolve workspaces (no lookup wired)")
+	}
+	root, err = fsp.workspaceRoot(workspaceID)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve workspace %s: %w", workspaceID, err)
+	}
+	if root == "" {
+		return "", "", fmt.Errorf("workspace %s has no folder open", workspaceID)
+	}
+	return root, sub, nil
 }
 
 // WorkspaceURIPrefix returns the prefix every workspace URI starts with,

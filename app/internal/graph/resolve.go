@@ -8,9 +8,6 @@ package graph
 import (
 	"fmt"
 	"strings"
-	"time"
-
-	"selectDb/internal/utils"
 )
 
 // materializeFiles reads dirPath and attaches a node for every user-facing file
@@ -87,17 +84,17 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	}
 
 	resolved, err := g.resolveFolder(folder, fsCtx)
-	wsGraph := g.WorkspaceGraph
+	resolvedFolder := folder.Clone()
 	g.mu.Unlock()
 
 	if err != nil {
 		return nil, err
 	}
 	if resolved {
-		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, wsGraph)
+		EmitWorkspaceGraphUpdated(g)
 	}
 
-	return folder, nil
+	return resolvedFolder, nil
 }
 
 // resolveAlongPath resolves every folder between the workspace root and the

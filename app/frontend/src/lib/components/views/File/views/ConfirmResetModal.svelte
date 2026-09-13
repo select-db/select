@@ -22,7 +22,7 @@
 <ModalBody>
 	<p class="message">{message}</p>
 </ModalBody>
-<ModalFooter mainAction={{ label: 'Reset', action: handleConfirm }} />
+<ModalFooter mainAction={{ label: 'Reset', action: handleConfirm, emphasis: 'warning' }} />
 
 <style>
 	.message {

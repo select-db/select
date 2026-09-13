@@ -1,118 +1,79 @@
 import {
 	clearWorkspaceGraphCache,
-	initializeWorkspaceGraph,
 	workspaceGraphStore
 } from '$lib/utils/graph/workspaceGraphStore';
-import { loadGitStatus, gitWorkspaceStatusStore } from '$lib/components/views/Git/gitStore';
+import {
+	clearFolderState,
+	folderStore,
+	onFolderClosed,
+	reopenLastFolder
+} from '$lib/components/PageFolder/folderStore';
+import { WorkspaceStatus } from '$lib/bindings/selectDb/internal/workspace/models';
 import { loadMyPermissions, clearMyPermissions } from '$lib/stores/myPermissionsStore';
-import { notify } from '$lib/system/Notifications/notificationsStore';
-import { AlertType } from '$lib/system/Alert/types';
+import { loadCurrentUser, clearCurrentUser } from '$lib/stores/currentUserStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { tryCatch } from '$lib/utils/tryCatch';
-import {
-	CheckForLogin,
-	CheckForLogout,
-	Logout
-} from '$lib/bindings/selectDb/internal/system/system';
+import { CheckForLogin, CheckForLogout } from '$lib/bindings/selectDb/internal/system/system';
 import { EventsOn } from '$lib/wails/events';
 import { stripNullItems, type WorkspaceNode } from '$lib/wails/graph';
-import { writable, get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
 export const sessionCheckingStore = writable(true);
 
-let checkSessionInterval: ReturnType<typeof setInterval> | undefined;
+let logoutPollInterval: ReturnType<typeof setInterval> | undefined;
 
-let lastState: 'loggedin' | 'loggedout' | undefined;
+let sessionState: 'loggedin' | 'loggedout' | undefined;
 
-EventsOn('workspaceGraphUpdated', async (g: WorkspaceNode) => {
-	stripNullItems(g);
-	if (lastState === 'loggedin') {
-		workspaceGraphStore.set(g);
-	}
-});
+// The watcher debounces, so an update emitted before a folder closed can land
+// after it. Applied blindly it restores the workbench for a workspace that is
+// no longer open.
+EventsOn('workspaceGraphUpdated', async (updatedGraph: WorkspaceNode | null) => {
+	// The snapshot is taken when the debounce fires, so a folder closed inside
+	// that window sends nothing to apply.
+	if (!updatedGraph || sessionState !== 'loggedin') return;
 
-type WorkspaceRepoChange = {
-	action: 'noop' | 'linked' | 'switched' | 'unlinked';
-	changed: boolean;
-	remoteUrl: string;
-	backupPath: string;
-	backupRef: string;
-};
+	const folder = get(folderStore);
+	if (folder?.status !== WorkspaceStatus.Ready || folder.workspaceId !== updatedGraph.id) return;
 
-EventsOn('workspaceRepoChanged', async (info: WorkspaceRepoChange) => {
-	if (lastState !== 'loggedin') return;
-	await loadGitStatus();
-
-	if (info.action === 'switched') {
-		notify({
-			type: AlertType.Default,
-			message: info.backupPath
-				? `This workspace was relinked to a different git repository by an admin. Your previous local content was saved to ${info.backupPath}`
-				: 'This workspace was relinked to a different git repository by an admin.',
-			duration: 10000,
-			copyable: true
-		});
-	} else if (info.action === 'unlinked') {
-		notify({
-			type: AlertType.Default,
-			message:
-				'This workspace is no longer linked to a git repository. Your files were kept locally.',
-			duration: 8000
-		});
-	} else if (info.action === 'linked' && info.changed) {
-		notify({
-			type: AlertType.Success,
-			message: 'This workspace is now linked to its git repository.',
-			duration: 5000
-		});
-	}
+	stripNullItems(updatedGraph);
+	workspaceGraphStore.set(updatedGraph);
 });
 
 EventsOn('logout', () => {
-	if (lastState === 'loggedout') return;
-	lastState = 'loggedout';
-	if (checkSessionInterval) {
-		clearInterval(checkSessionInterval);
-		checkSessionInterval = undefined;
+	if (sessionState === 'loggedout') return;
+	sessionState = 'loggedout';
+	if (logoutPollInterval) {
+		clearInterval(logoutPollInterval);
+		logoutPollInterval = undefined;
 	}
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
+	clearCurrentUser();
+	clearFolderState();
+});
+
+EventsOn('workspaceClosed', () => {
+	if (sessionState !== 'loggedin') return;
+	void onFolderClosed();
 });
 
 EventsOn('login', async () => {
-	if (lastState === 'loggedin') return;
-	lastState = 'loggedin';
+	if (sessionState === 'loggedin') return;
+	sessionState = 'loggedin';
 
-	// Clear cached graph so we fetch for the current server (backend invalidated on switch).
+	// Drop the cached graph so the next load fetches from the server just signed in to.
 	clearWorkspaceGraphCache();
 	clearMyPermissions();
 
-	const [graph, err] = await tryCatch(initializeWorkspaceGraph);
-	if (err) {
-		lastState = 'loggedout';
-		workspaceGraphStore.set(undefined);
-		await tryCatch(Logout);
-		return;
-	}
+	// Started before the folder reopens, since neither call depends on the tree walk.
+	const permissions = loadMyPermissions();
+	const user = loadCurrentUser();
 
-	// Set store here so layout sees the graph (init's set can be invisible across async boundary)
-	if (graph) workspaceGraphStore.set(graph);
+	await reopenLastFolder();
+
 	modalStore.set(null);
-	checkSessionInterval = setInterval(() => CheckForLogout(), 500);
-	await Promise.all([loadGitStatus(), loadMyPermissions()]);
-
-	// The workspace expects a git repo but git is missing: its files cannot
-	// sync. Surface this once so the user understands why content is stale.
-	const gitStatus = get(gitWorkspaceStatusStore);
-	if (gitStatus && !gitStatus.gitAvailable && gitStatus.configuredRemoteUrl) {
-		notify({
-			type: AlertType.Default,
-			message:
-				'This workspace is linked to a Git repository, but Git is not installed. Its files cannot sync until you install Git.',
-			duration: 12000,
-			copyable: true
-		});
-	}
+	logoutPollInterval = setInterval(() => CheckForLogout(), 500);
+	await Promise.all([permissions, user]);
 });
 
 export const setupSessionWall = async () => {
@@ -121,8 +82,8 @@ export const setupSessionWall = async () => {
 };
 
 export const teardownSessionWall = () => {
-	if (checkSessionInterval) {
-		clearInterval(checkSessionInterval);
-		checkSessionInterval = undefined;
+	if (logoutPollInterval) {
+		clearInterval(logoutPollInterval);
+		logoutPollInterval = undefined;
 	}
 };

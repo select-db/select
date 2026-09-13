@@ -42,6 +42,21 @@ const (
 	UserEmail     = "sam@example.com"
 	WorkspaceID   = "e2e-workspace"
 	WorkspaceName = "analytics"
+
+	// RevokedWorkspaceID is a workspace row with no membership row, which is what
+	// a revoked membership leaves behind: only the membership is deleted.
+	RevokedWorkspaceID = "e2e-revoked-workspace"
+)
+
+// The folders the fixture leaves beside the workspace, for the specs that open
+// something other than a workspace of their own.
+const (
+	// RevokedFolder names RevokedWorkspaceID.
+	RevokedFolder = "revoked"
+
+	// OtherServerFolder names a workspace on a server the user is not signed in to.
+	OtherServerFolder = "other-server"
+	OtherServer       = "api.other.example.com"
 )
 
 // The rest of the team, so the Users, Roles and Groups screens have more than
@@ -123,16 +138,23 @@ LIMIT
 const DatasourceID = sample.WarehouseID
 
 func main() {
-	if len(os.Args) != 2 {
-		log.Fatalf("usage: %s <data-dir>", filepath.Base(os.Args[0]))
+	if len(os.Args) < 2 || len(os.Args) > 3 {
+		log.Fatalf("usage: %s <data-dir> [server-domain]", filepath.Base(os.Args[0]))
 	}
 
-	if err := seed(os.Args[1]); err != nil {
+	domain := ""
+	if len(os.Args) == 3 {
+		domain = os.Args[2]
+	}
+
+	if err := seed(os.Args[1], domain); err != nil {
 		log.Fatalf("seed: %v", err)
 	}
 }
 
-func seed(dataDir string) error {
+// seed writes the fixture. An empty domain takes the env's default; a spec that
+// needs the app to reach a server passes one it is listening on.
+func seed(dataDir, domain string) error {
 	// The app resolves its data directory from the OS config dir. Same variables
 	// the Playwright config gives the server.
 	for _, key := range []string{"XDG_CONFIG_HOME", "HOME"} {
@@ -148,7 +170,9 @@ func seed(dataDir string) error {
 	// migrations and queries below open it the same way.
 	sql.Register("sqlite3", &sqlite.Driver{})
 
-	domain := server.DefaultDomainForEnv()
+	if domain == "" {
+		domain = server.DefaultDomainForEnv()
+	}
 	if err := server.WriteCurrentDomain(domain); err != nil {
 		return fmt.Errorf("select server %q: %w", domain, err)
 	}
@@ -171,10 +195,31 @@ func seed(dataDir string) error {
 		return err
 	}
 
+	// Recorded as the last folder, so every run exercises reopen-on-login.
+	folder := filepath.Join(dataDir, "workspace")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		return fmt.Errorf("create workspace folder: %w", err)
+	}
+	graph.SetOpenWorkspace(WorkspaceID, folder)
+
+	if err := graph.WriteWorkspaceConfig(folder, domain, WorkspaceID); err != nil {
+		return fmt.Errorf("workspace config: %w", err)
+	}
+	if err := generated.New(handle).UpdateWorkspaceLocalPath(context.Background(), generated.UpdateWorkspaceLocalPathParams{
+		ID:        WorkspaceID,
+		LocalPath: text(folder),
+	}); err != nil {
+		return fmt.Errorf("record workspace folder: %w", err)
+	}
+
 	// The same workspace a real person is given. Everything below is the test
 	// account wrapped around it.
 	if err := sample.Write(WorkspaceID); err != nil {
 		return fmt.Errorf("sample workspace: %w", err)
+	}
+
+	if err := seedFolders(dataDir, domain); err != nil {
+		return err
 	}
 
 	if err := appendChatKeys(); err != nil {
@@ -188,6 +233,23 @@ func seed(dataDir string) error {
 	// Last: everything above writes into the workspace, so an earlier init would
 	// leave half the fixture untracked.
 	return initWorkspaceRepo(dataDir)
+}
+
+// seedFolders writes the folders the open-folder specs point the app at. Each
+// is a folder a person could pick, in the state its screen is named after.
+func seedFolders(dataDir, domain string) error {
+	for _, name := range []string{RevokedFolder, OtherServerFolder} {
+		if err := os.MkdirAll(filepath.Join(dataDir, name), 0o700); err != nil {
+			return fmt.Errorf("create %s folder: %w", name, err)
+		}
+	}
+	if err := graph.WriteWorkspaceConfig(filepath.Join(dataDir, RevokedFolder), domain, RevokedWorkspaceID); err != nil {
+		return fmt.Errorf("revoked folder config: %w", err)
+	}
+	if err := graph.WriteWorkspaceConfig(filepath.Join(dataDir, OtherServerFolder), OtherServer, "e2e-elsewhere-workspace"); err != nil {
+		return fmt.Errorf("other-server folder config: %w", err)
+	}
+	return nil
 }
 
 func seedTables(ctx context.Context, queries *generated.Queries) error {
@@ -216,6 +278,15 @@ func seedTables(ctx context.Context, queries *generated.Queries) error {
 		return fmt.Errorf("create workspace: %w", err)
 	}
 
+	// No membership row: the folder naming it must not open.
+	if _, err := queries.CreateWorkspace(ctx, generated.CreateWorkspaceParams{
+		ID:      RevokedWorkspaceID,
+		Name:    "revoked",
+		OwnerID: db_types.JSONNullString{NullString: sql.NullString{String: "somebody-else", Valid: true}},
+	}); err != nil {
+		return fmt.Errorf("create revoked workspace: %w", err)
+	}
+
 	if _, err := queries.CreateWorkspaceToUser(ctx, generated.CreateWorkspaceToUserParams{
 		ID:          "e2e-workspace-to-user",
 		WorkspaceID: WorkspaceID,
@@ -226,6 +297,9 @@ func seedTables(ctx context.Context, queries *generated.Queries) error {
 
 	// `current` is what GetCurrentUser and GetCurrentWorkspace select on: it is
 	// the difference between a seeded database and a signed-in one.
+	if err := queries.SetCurrentUser(ctx, UserID); err != nil {
+		return fmt.Errorf("sign the user in: %w", err)
+	}
 	if err := queries.UpdateCurrentWorkspaceToUser(ctx, generated.UpdateCurrentWorkspaceToUserParams{
 		UserID:      UserID,
 		WorkspaceID: WorkspaceID,

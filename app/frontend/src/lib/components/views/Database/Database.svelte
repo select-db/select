@@ -39,8 +39,6 @@
 		};
 	});
 
-	let currentName = $derived(database?.name ?? '');
-
 	// The form auto-saves on a debounce, so this lands well after the edit — and
 	// `tab` is a live prop that by then resolves to whatever tab is active, not
 	// the one this form belongs to. Switching tabs mid-save would therefore graft
@@ -75,7 +73,6 @@
 			<DatabaseForm
 				id={database.id}
 				uri={database.uri}
-				bind:name={currentName}
 				db_type={(database.db_type as AvailableDatabases) || 'postgresql'}
 				dsn={database.dsn}
 				ssh={sshConfig}

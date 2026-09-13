@@ -5,36 +5,72 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-export class CreateWorkspaceParams {
-    "ID": string;
-    "WorkspaceToUserID": string;
-    "UserID": string;
-    "Name": string;
+/**
+ * Folder is a workspace this machine has a folder for.
+ */
+export class Folder {
+    "path": string;
+    "name": string;
 
-    /** Creates a new CreateWorkspaceParams instance. */
-    constructor($$source: Partial<CreateWorkspaceParams> = {}) {
-        if (!("ID" in $$source)) {
-            this["ID"] = "";
+    /** Creates a new Folder instance. */
+    constructor($$source: Partial<Folder> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
         }
-        if (!("WorkspaceToUserID" in $$source)) {
-            this["WorkspaceToUserID"] = "";
-        }
-        if (!("UserID" in $$source)) {
-            this["UserID"] = "";
-        }
-        if (!("Name" in $$source)) {
-            this["Name"] = "";
+        if (!("name" in $$source)) {
+            this["name"] = "";
         }
 
         Object.assign(this, $$source);
     }
 
     /**
-     * Creates a new CreateWorkspaceParams instance from a string or object.
+     * Creates a new Folder instance from a string or object.
      */
-    static createFrom($$source: any = {}): CreateWorkspaceParams {
+    static createFrom($$source: any = {}): Folder {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new CreateWorkspaceParams($$parsedSource as Partial<CreateWorkspaceParams>);
+        return new Folder($$parsedSource as Partial<Folder>);
+    }
+}
+
+/**
+ * FolderState is the status plus whatever its screen needs to say something
+ * specific.
+ */
+export class FolderState {
+    "status": WorkspaceStatus;
+    "path": string;
+
+    /**
+     * The folder's own name, offered as the workspace name on the setup screen.
+     */
+    "suggestedName"?: string;
+
+    /**
+     * The workspace the config names, empty when the folder has none.
+     */
+    "workspaceId"?: string;
+    "folderServer"?: string;
+    "currentServer"?: string;
+
+    /** Creates a new FolderState instance. */
+    constructor($$source: Partial<FolderState> = {}) {
+        if (!("status" in $$source)) {
+            this["status"] = WorkspaceStatus.$zero;
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FolderState instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FolderState {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FolderState($$parsedSource as Partial<FolderState>);
     }
 }
 
@@ -69,26 +105,42 @@ export class SearchUserResult {
     }
 }
 
-export class SetOrCreateCurrentWorkspaceParams {
-    "UserID": string;
-
-    /** Creates a new SetOrCreateCurrentWorkspaceParams instance. */
-    constructor($$source: Partial<SetOrCreateCurrentWorkspaceParams> = {}) {
-        if (!("UserID" in $$source)) {
-            this["UserID"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
+/**
+ * WorkspaceStatus is what opening a folder found, and so which screen the
+ * frontend owes the user next.
+ */
+export enum WorkspaceStatus {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
 
     /**
-     * Creates a new SetOrCreateCurrentWorkspaceParams instance from a string or object.
+     * Signed in, nothing open.
      */
-    static createFrom($$source: any = {}): SetOrCreateCurrentWorkspaceParams {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new SetOrCreateCurrentWorkspaceParams($$parsedSource as Partial<SetOrCreateCurrentWorkspaceParams>);
-    }
-}
+    NoFolder = "no_folder",
+
+    /**
+     * The workspace is set up and the graph is built.
+     */
+    Ready = "ready",
+
+    /**
+     * The folder holds no config, so there is no workspace to open yet.
+     */
+    NeedsSetup = "needs_setup",
+
+    /**
+     * The config names a workspace this user cannot open: deleted, revoked, or
+     * never theirs.
+     */
+    NoAccess = "no_access",
+
+    /**
+     * The workspace lives on another server, whose permissions gate every query.
+     */
+    WrongServer = "wrong_server",
+};
 
 export class WorkspaceUserEntry {
     "id": string;
@@ -194,45 +246,6 @@ export class WorkspaceUserRole {
     static createFrom($$source: any = {}): WorkspaceUserRole {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new WorkspaceUserRole($$parsedSource as Partial<WorkspaceUserRole>);
-    }
-}
-
-/**
- * WorkspaceWithCurrent is a workspace entry with a current flag for the UI.
- * Logo is the base64 of a 128x128 PNG, empty when the workspace has none; the
- * UI composes the data URL around it so a stored value can never bring its own
- * media type.
- */
-export class WorkspaceWithCurrent {
-    "id": string;
-    "name": string;
-    "logo": string;
-    "current": boolean;
-
-    /** Creates a new WorkspaceWithCurrent instance. */
-    constructor($$source: Partial<WorkspaceWithCurrent> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("logo" in $$source)) {
-            this["logo"] = "";
-        }
-        if (!("current" in $$source)) {
-            this["current"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new WorkspaceWithCurrent instance from a string or object.
-     */
-    static createFrom($$source: any = {}): WorkspaceWithCurrent {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new WorkspaceWithCurrent($$parsedSource as Partial<WorkspaceWithCurrent>);
     }
 }
 

@@ -20,12 +20,24 @@ func (g *Graph) FindDbItemNodeById(dbInstanceID, nodeID string) *DBInstanceItemN
 	return nil
 }
 
-// GetWorkspaceGraph returns the workspace graph, building it on first use.
+// GetWorkspaceGraph returns a copy of the workspace graph for the frontend.
+// See clone.go: what crosses the bridge is never the tree the watcher writes to.
+func (g *Graph) GetWorkspaceGraph() (*WorkspaceNode, error) {
+	if _, err := EnsureWorkspaceGraph(g); err != nil {
+		return nil, err
+	}
+	return SnapshotWorkspaceGraph(g), nil
+}
+
+// EnsureWorkspaceGraph returns the tree itself, building it on first use.
+//
+// A function rather than a method: every method on Graph is frontend API, and
+// this hands out the live tree, which is the app's to hold and no one else's.
 //
 // It also guarantees the graph is indexed: WorkspaceGraph is an exported field,
 // so a graph can be assigned rather than built, and every lookup goes through
 // the index.
-func (g *Graph) GetWorkspaceGraph() (*WorkspaceNode, error) {
+func EnsureWorkspaceGraph(g *Graph) (*WorkspaceNode, error) {
 	g.mu.RLock()
 	if g.WorkspaceGraph != nil && g.index != nil {
 		defer g.mu.RUnlock()

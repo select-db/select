@@ -2,7 +2,6 @@
 	import { Ping, ChooseSSHKeyFile } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
-	import { renameEntry } from '$lib/components/views/shared/renameEntry';
 	import { DB_CONFIG_FILE } from '$lib/components/views/FileSystem/Files/options/helpers';
 	import {
 		GetDatasource,
@@ -65,7 +64,6 @@
 	type DatabaseFormProps = {
 		id?: string;
 		uri?: string;
-		name?: string;
 		db_type?: AvailableDatabases;
 		dsn?: string;
 		ssh?: SSHConfig;
@@ -97,7 +95,6 @@
 	let {
 		id = $bindable(''),
 		uri = $bindable(''),
-		name = $bindable(''),
 		db_type = $bindable<AvailableDatabases>('postgresql'),
 		dsn = $bindable(''),
 		ssh = $bindable<SSHConfig>({
@@ -139,6 +136,10 @@
 	let maxIdleConns = $state(5);
 	let connMaxLifetime = $state(0);
 	let connMaxIdleTime = $state(0);
+
+	// The directory the database lives in is its name, so there is no copy of it
+	// to keep in step and no second way to change it: renaming is the tree's.
+	const name = $derived(uri.split('/').pop() ?? '');
 
 	const isValid = $derived(!!uri && name.trim().length > 0);
 	const isNetworked = $derived(db_type !== 'sqlite');
@@ -209,22 +210,6 @@
 		remoteLoading = false;
 		mounted = true;
 	});
-
-	// The name is the directory the database lives in, so what it is called is
-	// not a field to save but the last segment of its URI -- no copy of it to
-	// keep in step. Changing it is a rename, committed when the field is left
-	// rather than on the autosave: renaming on a 600ms pause would rename the
-	// directory once per word typed.
-	const folderName = () => uri.split('/').pop() ?? '';
-
-	const commitName = async () => {
-		if (!uri) return;
-
-		const wanted = name.trim();
-		// Refused, or never a change: the field says what the directory is
-		// called, not what was typed at it.
-		name = (await renameEntry(uri, wanted)) ? wanted : folderName();
-	};
 
 	const debouncedSave = debounce(async () => await save(), 600);
 
@@ -398,7 +383,7 @@
 			const [, err] = await tryCatch(UpsertDatasource, {
 				id,
 				db_type,
-				name: folderName(),
+				name,
 				dsn: dsnLocal,
 				ssh: JSON.stringify(savedSsh),
 				max_open_conns: maxOpenConns,
@@ -487,22 +472,6 @@
 						{/if}
 					{/snippet}
 				</Select>
-			</div>
-
-			<div class="standalone-input" style="flex: 1">
-				<p class="label">Name</p>
-				<Input
-					bind:value={name}
-					placeholder="Prod read-only (RDS)"
-					onblur={commitName}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
-						if (e.key === 'Escape') {
-							name = folderName();
-							(e.currentTarget as HTMLInputElement).blur();
-						}
-					}}
-				/>
 			</div>
 		</div>
 	</div>

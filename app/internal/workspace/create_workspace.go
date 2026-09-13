@@ -8,14 +8,16 @@ import (
 	"selectDb/internal/db/generated"
 )
 
-type CreateWorkspaceParams struct {
+type newWorkspaceParams struct {
 	ID                string
 	WorkspaceToUserID string
 	UserID            string
 	Name              string
 }
 
-func (w *Workspace) CreateWorkspace(params CreateWorkspaceParams) (generated.Workspace, error) {
+// insertWorkspace records a server-created workspace and this user's membership.
+// It does not make it current: setCurrentWorkspace owns that.
+func (w *Workspace) insertWorkspace(params newWorkspaceParams) (generated.Workspace, error) {
 	if params.ID == "" || params.WorkspaceToUserID == "" || params.UserID == "" {
 		return generated.Workspace{}, fmt.Errorf("ID, WorkspaceToUserID, and UserID are required")
 	}
@@ -45,19 +47,8 @@ func (w *Workspace) CreateWorkspace(params CreateWorkspaceParams) (generated.Wor
 		return generated.Workspace{}, err
 	}
 
-	if err := qtx.ClearCurrentWorkspaceToUser(ctx); err != nil {
-		return generated.Workspace{}, err
-	}
-
 	if _, err = qtx.CreateWorkspaceToUser(ctx, generated.CreateWorkspaceToUserParams{
 		ID:          params.WorkspaceToUserID,
-		UserID:      params.UserID,
-		WorkspaceID: workspace.ID,
-	}); err != nil {
-		return generated.Workspace{}, err
-	}
-
-	if err := qtx.UpdateCurrentWorkspaceToUser(ctx, generated.UpdateCurrentWorkspaceToUserParams{
 		UserID:      params.UserID,
 		WorkspaceID: workspace.ID,
 	}); err != nil {

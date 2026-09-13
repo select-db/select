@@ -39,7 +39,7 @@ func NormalizeMaxResultSizeMB(v int) int {
 // WorkspaceExecutionLimits returns the current workspace statement timeout (ms)
 // and max result size (MB), falling back to defaults when no workspace is loaded.
 func (g *Graph) WorkspaceExecutionLimits() (statementTimeoutMs, maxResultSizeMB int) {
-	ws, err := g.GetWorkspaceGraph()
+	ws, err := EnsureWorkspaceGraph(g)
 	if err != nil || ws == nil {
 		return DefaultStatementTimeoutMs, DefaultMaxResultSizeMB
 	}
@@ -51,7 +51,7 @@ func (g *Graph) WorkspaceExecutionLimits() (statementTimeoutMs, maxResultSizeMB 
 // in-memory workspace node so the change takes effect immediately. It returns
 // the normalized values that were stored.
 func (g *Graph) UpdateWorkspaceExecutionLimits(statementTimeoutMs, maxResultSizeMB int) (int, int, error) {
-	ws, err := g.GetWorkspaceGraph()
+	ws, err := EnsureWorkspaceGraph(g)
 	if err != nil {
 		return 0, 0, fmt.Errorf("workspace graph not initialized: %w", err)
 	}

@@ -30,7 +30,7 @@
 </ModalBody>
 <ModalFooter
 	secondaryAction={{ label: 'Cancel', action: async () => onClose(), disabled: rotating }}
-	mainAction={{ label: 'Rotate', action: handleConfirm, disabled: rotating }}
+	mainAction={{ label: 'Rotate', action: handleConfirm, disabled: rotating, emphasis: 'warning' }}
 />
 
 <style>

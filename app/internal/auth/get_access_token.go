@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"selectDb/internal/db/db_types"
 	"selectDb/internal/db/generated"
 	"selectDb/internal/utils"
-	"selectDb/internal/workspace"
 
 	"selectDb/internal/desktop"
 )
@@ -91,27 +89,16 @@ func (ga *GithubAuth) GetAccessToken(deviceCode string) error {
 		return err
 	}
 
+	// This is who is signed in, before any workspace is open: the sync below and
+	// everything after it asks the database that question.
+	if err := ga.Queries.SetCurrentUser(ctx, user.ID); err != nil {
+		return fmt.Errorf("set current user: %w", err)
+	}
+
 	// Pull changes and push any pending commits
 	// same path for login, deco/reco, new commit.
 	if err := ga.Syncer.Sync(ctx, user.ID); err != nil {
 		return fmt.Errorf("sync after login: %w", err)
-	}
-
-	_, err = ga.Queries.GetCurrentWorkspace(ctx, user.ID)
-	if err != nil {
-		switch err {
-		case sql.ErrNoRows:
-			_, err := ga.WorkspaceService.SetOrCreateCurrentWorkspace(
-				workspace.SetOrCreateCurrentWorkspaceParams{
-					UserID: user.ID,
-				},
-			)
-			if err != nil {
-				return fmt.Errorf("failed to set or create current workspace: %w", err)
-			}
-		default:
-			return fmt.Errorf("failed to get current workspace: %w", err)
-		}
 	}
 
 	_ = utils.FetchAndSaveAvatar(ctx, backendUser.AvatarURL, user.ID)

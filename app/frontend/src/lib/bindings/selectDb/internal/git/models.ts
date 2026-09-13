@@ -220,23 +220,14 @@ export class GitFileStatusItem {
 }
 
 /**
- * GitWorkspaceStatus describes the Git-level state of a workspace on disk. This is the
- * primary shape that the frontend will consume to decide which CTAs to show
- * (init, publish, link, etc).
+ * GitWorkspaceStatus is read off the folder. The app does not configure the
+ * repository; whoever cloned it chose the remote.
  */
 export class GitWorkspaceStatus {
     "gitAvailable": boolean;
     "isGitRepo": boolean;
     "hasRemote": boolean;
     "remoteUrl"?: string;
-
-    /**
-     * ConfiguredRemoteUrl is the workspace's server-authoritative git remote,
-     * read from the DB independently of git availability. When git is missing
-     * this is the only way the UI can tell the user the workspace is supposed
-     * to be linked (and therefore its files cannot sync until git is installed).
-     */
-    "configuredRemoteUrl"?: string;
 
     /** Creates a new GitWorkspaceStatus instance. */
     constructor($$source: Partial<GitWorkspaceStatus> = {}) {
@@ -259,140 +250,6 @@ export class GitWorkspaceStatus {
     static createFrom($$source: any = {}): GitWorkspaceStatus {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new GitWorkspaceStatus($$parsedSource as Partial<GitWorkspaceStatus>);
-    }
-}
-
-/**
- * InitAndPublishParams defines the input for initializing a local git repo for
- * a workspace and preparing it for publication to GitHub. The actual GitHub
- * repository creation will be delegated to the remote backend in a later step.
- */
-export class InitAndPublishParams {
-    "repoName": string;
-
-    /**
-     * "public" or "private"
-     */
-    "visibility": string;
-    "remoteUrl"?: string;
-
-    /** Creates a new InitAndPublishParams instance. */
-    constructor($$source: Partial<InitAndPublishParams> = {}) {
-        if (!("repoName" in $$source)) {
-            this["repoName"] = "";
-        }
-        if (!("visibility" in $$source)) {
-            this["visibility"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new InitAndPublishParams instance from a string or object.
-     */
-    static createFrom($$source: any = {}): InitAndPublishParams {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new InitAndPublishParams($$parsedSource as Partial<InitAndPublishParams>);
-    }
-}
-
-export class LinkExistingParams {
-    "remoteUrl": string;
-
-    /** Creates a new LinkExistingParams instance. */
-    constructor($$source: Partial<LinkExistingParams> = {}) {
-        if (!("remoteUrl" in $$source)) {
-            this["remoteUrl"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new LinkExistingParams instance from a string or object.
-     */
-    static createFrom($$source: any = {}): LinkExistingParams {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new LinkExistingParams($$parsedSource as Partial<LinkExistingParams>);
-    }
-}
-
-export class LinkStatus {
-    "scenario": string;
-    "branch": string;
-
-    /** Creates a new LinkStatus instance. */
-    constructor($$source: Partial<LinkStatus> = {}) {
-        if (!("scenario" in $$source)) {
-            this["scenario"] = "";
-        }
-        if (!("branch" in $$source)) {
-            this["branch"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new LinkStatus instance from a string or object.
-     */
-    static createFrom($$source: any = {}): LinkStatus {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new LinkStatus($$parsedSource as Partial<LinkStatus>);
-    }
-}
-
-export enum ReconcileAction {
-    /**
-     * The Go zero value for the underlying type of the enum.
-     */
-    $zero = "",
-
-    ReconcileNoop = "noop",
-    ReconcileLinked = "linked",
-    ReconcileSwitched = "switched",
-    ReconcileUnlinked = "unlinked",
-};
-
-/**
- * ReconcileResult describes what reconcile did so the caller can rebuild the
- * graph and surface a transparent notification to the user.
- */
-export class ReconcileResult {
-    "action": ReconcileAction;
-    "changed": boolean;
-    "remoteUrl": string;
-    "backupPath": string;
-    "backupRef": string;
-
-    /** Creates a new ReconcileResult instance. */
-    constructor($$source: Partial<ReconcileResult> = {}) {
-        if (!("action" in $$source)) {
-            this["action"] = ReconcileAction.$zero;
-        }
-        if (!("changed" in $$source)) {
-            this["changed"] = false;
-        }
-        if (!("remoteUrl" in $$source)) {
-            this["remoteUrl"] = "";
-        }
-        if (!("backupPath" in $$source)) {
-            this["backupPath"] = "";
-        }
-        if (!("backupRef" in $$source)) {
-            this["backupRef"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ReconcileResult instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ReconcileResult {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ReconcileResult($$parsedSource as Partial<ReconcileResult>);
     }
 }
 

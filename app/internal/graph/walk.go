@@ -83,7 +83,12 @@ func (c *WorkspaceFS) entry(path string, d fs.DirEntry) (Entry, bool) {
 	if !inside || IsInternalWorkspacePath(rel) {
 		return Entry{}, false
 	}
-	if !d.IsDir() && IsInternalWorkspaceFile(d.Name()) {
+	// Directories only; see gitignore.go for why files are never filtered.
+	if d.IsDir() {
+		if c.ignore.IgnoresDir(path, rel) {
+			return Entry{}, false
+		}
+	} else if IsInternalWorkspaceFile(d.Name()) {
 		return Entry{}, false
 	}
 	return Entry{DirEntry: d, Path: path, Rel: rel, fs: c}, true
