@@ -17,20 +17,19 @@ vars:
   APP_ENV: '{{.APP_ENV | default "dev"}}'
   MINISIGN_PUBLIC_KEY: '{{.MINISIGN_PUBLIC_KEY | default ""}}'
 
-  # Linux keeps GTK3 + WebKit2GTK 4.1 (wails v3 defaults to GTK4 + WebKitGTK 6.0,
-  # which is not available on the distros we currently ship to).
-  PLATFORM_TAGS: '{{if eq OS "linux"}}gtk3{{end}}'
-
   META_LDFLAGS: '-X main.appVersion={{.APP_VERSION}} -X main.appEnv={{.APP_ENV}} -X selectDb/internal/updater.minisignPublicKey={{.MINISIGN_PUBLIC_KEY}}'
 
 tasks:
   generate:bindings:
     summary: Regenerates the frontend bindings from the bound Go services
     cmds:
-      # The generator loads the whole app module, so it needs the same build
-      # tags the build uses; without them it would look for the GTK4/WebKitGTK 6
-      # headers we do not ship against.
-      - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}}{{if .PLATFORM_TAGS}} -f "-tags {{.PLATFORM_TAGS}}"{{end}}
+      # The generator loads the whole app module, so it needs a tag set that
+      # compiles. `server` is the one that compiles everywhere: it excludes the
+      # cgo webview on every platform, so generating needs no GTK headers on
+      # Linux and no C toolchain at all. The output is the same as under
+      # PLATFORM_TAGS because the bound services are platform independent --
+      # bind a service that is not, and its methods would go missing here.
+      - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}} -f "-tags server"
 
   generate:icons:
     summary: Generates the macOS `.icns` and Windows `.ico` from build/appicon.png
@@ -76,7 +75,7 @@ tasks:
       - cmd: powershell -Command "Remove-Item -Force -ErrorAction Ignore *.syso"
         platforms: [windows]
     vars:
-      TAGS: '{{if eq .DEV "true"}}{{.PLATFORM_TAGS}}{{else}}production{{if .PLATFORM_TAGS}},{{.PLATFORM_TAGS}}{{end}}{{end}}'
+      TAGS: '{{if ne .DEV "true"}}production{{end}}'
       # Dev builds keep symbols and inlining; production strips and, on Windows,
       # drops the console window.
       BUILD_FLAGS: '{{if .TAGS}}-tags {{.TAGS}} {{end}}-buildvcs=false {{if eq .DEV "true"}}-gcflags=all="-l" -ldflags="{{.META_LDFLAGS}}"{{else}}-trimpath -ldflags="-w -s{{if eq OS "windows"}} -H windowsgui{{end}} {{.META_LDFLAGS}}"{{end}}'

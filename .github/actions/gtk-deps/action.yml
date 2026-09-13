@@ -1,6 +1,6 @@
 name: GTK build dependencies
 description: >
-  Installs the GTK3/WebKit2GTK headers the app module's cgo webview bindings
+  Installs the GTK4/WebKitGTK headers the app module's cgo webview bindings
   compile against, from a cache of the .deb files.
 
 # The download is 56MB and about 20s of the 25s this used to take, paid by
@@ -14,12 +14,12 @@ runs:
       id: debs
       with:
         path: /tmp/gtk-debs
-        key: gtk-debs-${{ runner.os }}-${{ env.ImageOS }}-1
+        key: gtk4-debs-${{ runner.os }}-${{ env.ImageOS }}-1
 
     - shell: bash
       run: |
         set -euo pipefail
-        packages="gcc libgtk-3-dev libwebkit2gtk-4.1-dev"
+        packages="gcc libgtk-4-dev libwebkitgtk-6.0-dev"
 
         if [ "${{ steps.debs.outputs.cache-hit }}" != "true" ]; then
           sudo apt-get update
