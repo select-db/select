@@ -7,9 +7,10 @@
 
 	import Resizer from './Resizer.svelte';
 	import Content from './Content/Content.svelte';
-	import Search from './Search/Search.svelte';
+	import SearchButton from './SearchButton.svelte';
 	import NewFileButton from './NewFileButton.svelte';
 	import WorkspaceButton from './WorkspaceButton.svelte';
+	import SettingsButton from './SettingsButton.svelte';
 
 	const MIN_WIDTH = 0;
 	const DEFAULT_WIDTH = 200;
@@ -37,7 +38,8 @@
 			<WorkspaceButton />
 			{#if $workspaceGraphStore}
 				<div style="margin-left: auto;"></div>
-				<Search />
+				<SearchButton />
+				<SettingsButton />
 				<NewFileButton />
 			{/if}
 		</div>

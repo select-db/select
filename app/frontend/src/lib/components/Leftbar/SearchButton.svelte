@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Button from '$lib/system/Button/Button.svelte';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
-	import SearchModalContent from './SearchModalContent.svelte';
+	import SearchModalContent from './Search/SearchModalContent.svelte';
 	import type { Component } from 'svelte';
 </script>
 
@@ -15,5 +15,6 @@
 				width: 650
 			})}
 		size="sm"
+		label="Search"
 	/>
 </div>
