@@ -3,12 +3,24 @@
 	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
 	import { currentUserStore } from '$lib/stores/currentUserStore';
+	import { openSettingsSection } from '$lib/components/Layout/layoutStore';
 
 	// The signed-in user rather than a workspace member, since this renders with
 	// no folder open.
 	const user = $derived($currentUserStore);
 
 	const options: ContextMenuOption[] = [
+		{
+			label: 'Settings',
+			action: (onclose) => {
+				openSettingsSection();
+				onclose();
+			}
+		},
+		{
+			label: '',
+			divider: true
+		},
 		{
 			label: 'Log out',
 			action: async (onclose) => {
