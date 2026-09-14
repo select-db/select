@@ -30,12 +30,12 @@
 <ModalBody>
 	<p class="message">
 		Deletes <strong>{workspaceName}</strong>
-		{#if server}from <strong>{server}</strong>{/if}, for everyone in it: its users, roles and
+		{#if server}from <strong>{server}</strong>{/if}, for everyone in it: <br /> its users, roles and
 		permissions go with it.
 	</p>
 	<p class="message">
-		Your files stay where they are. Only <code>select.config.json</code> is removed from the folder,
-		and you are signed out.
+		Your files stay where they are. Only <code>select.config.json</code> <br />is removed from the
+		folder, and you are signed out.
 	</p>
 </ModalBody>
 <ModalFooter
