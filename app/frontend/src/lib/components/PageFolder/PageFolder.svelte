@@ -6,7 +6,7 @@
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';
-	import { Logout } from '$lib/bindings/selectDb/internal/system/system';
+	import { Logout, OpenURL } from '$lib/bindings/selectDb/internal/system/system';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notify } from '$lib/system/Notifications/notificationsStore';
 	import { AlertType } from '$lib/system/Alert/types';
@@ -39,6 +39,16 @@
 	});
 
 	const enter = { y: 6, duration: 260 };
+
+	// The two the website's own header offers, so someone who arrived from it
+	// finds the same things here.
+	const DOCS_URL = 'https://select-db.com/docs/getting-started/';
+	const REPO_URL = 'https://github.com/select-db/select';
+
+	async function openInBrowser(url: string) {
+		const [, err] = await tryCatch(OpenURL, url);
+		if (err) notify({ type: AlertType.Error, message: 'Could not open your browser' });
+	}
 
 	async function createWorkspace() {
 		const current = $folderStore;
@@ -115,7 +125,7 @@
 			</div>
 		{:else if folder.status === WorkspaceStatus.NeedsSetup}
 			<div class="state" in:fly={enter}>
-				<h1>Set up this folder</h1>
+				<h1>Create a workspace in this folder</h1>
 				<p class="path">{folder.path}</p>
 
 				{@render nameField()}
@@ -154,6 +164,23 @@
 				{:else}
 					<p class="hint">No folder opened yet.</p>
 				{/if}
+
+				<div class="links">
+					<Button
+						content="Docs"
+						leftIcon="journal"
+						iconSize={16}
+						noLoader
+						onclick={() => openInBrowser(DOCS_URL)}
+					/>
+					<Button
+						content="GitHub"
+						leftIcon="github"
+						iconSize={16}
+						noLoader
+						onclick={() => openInBrowser(REPO_URL)}
+					/>
+				</div>
 			</div>
 		{:else}
 			<!-- ready: the tree is still loading -->
@@ -337,5 +364,16 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-sm);
+	}
+
+	/* Off to the side of the folders, which are what the screen is for. */
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-xs);
+		width: 100%;
+		padding-top: var(--space-md);
+		border-top: var(--border);
 	}
 </style>
