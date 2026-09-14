@@ -15,6 +15,7 @@
 		pickAndOpenFolder,
 		refreshFolders
 	} from '$lib/components/PageFolder/folderStore';
+	import Button from '$lib/system/Button/Button.svelte';
 
 	// No folder is at this path, so it cannot collide with one.
 	const OPEN_FOLDER = 'select:open-folder';
@@ -50,7 +51,7 @@
 {#snippet folderOption(option: SelectOption | null)}
 	{#if option?.value === OPEN_FOLDER}
 		<span class="option">
-			<Icon icon="folder-open" size={18} stroke="var(--gray-800)" />
+			<Icon icon="folder-open" size={16} stroke="var(--gray-800)" />
 			<span class="option-label">{option.label}</span>
 		</span>
 	{:else}
@@ -66,19 +67,28 @@
 	{/if}
 {/snippet}
 
-<div class="slot" class:empty={!workspace} data-test="workspace.button">
-	<Select
-		value={currentPath}
-		{options}
-		onchange={(selected) => choose(selected as string)}
-		sortOptions={false}
-		isLoading={$openingStore}
-		placeholder="Open folder"
-		menuWidth={300}
-		emphasis="low"
-		optionDisplay={folderOption}
+{#if options.length > 1}
+	<div class="slot" class:empty={!workspace} data-test="workspace.button">
+		<Select
+			value={currentPath}
+			{options}
+			onchange={(selected) => choose(selected as string)}
+			sortOptions={false}
+			isLoading={$openingStore}
+			placeholder="Open folder"
+			menuWidth={260}
+			emphasis="low"
+			optionDisplay={folderOption}
+		/>
+	</div>
+{:else}
+	<Button
+		leftIcon="folder-open"
+		iconSize={16}
+		content="Open folder"
+		onclick={() => choose(OPEN_FOLDER)}
 	/>
-</div>
+{/if}
 
 <style>
 	.slot {
