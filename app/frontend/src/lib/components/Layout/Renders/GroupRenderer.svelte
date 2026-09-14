@@ -108,6 +108,7 @@
 
 		<div
 			class="content"
+			class:no-tabs={group.tabs.length < 1}
 			data-test="group.content"
 			bind:this={contentElement}
 			ondragover={handleGroupDragOver}
@@ -176,6 +177,10 @@
 		border-bottom: var(--border);
 		border-radius: var(--br-sm);
 		background-color: var(--gray-200);
+	}
+
+	.content.no-tabs {
+		border-top: var(--border);
 	}
 
 	.empty {
