@@ -1,9 +1,10 @@
 package graph
 
 // A build lays out a workspace's folders and db instances but not its files. A
-// folder reads its files the first time it is opened and records that in
-// FolderNode.Resolved; a lookup by ID resolves the folders along the path first,
-// so callers never have to know whether a folder has been opened.
+// folder reads its files the first time it is opened, along with the folders
+// directly inside it, and records that in FolderNode.Resolved; a lookup by ID
+// resolves the folders along the path first, so callers never have to know
+// whether a folder has been opened.
 
 import (
 	"fmt"
@@ -84,6 +85,19 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	}
 
 	resolved, err := g.resolveFolder(folder, fsCtx)
+
+	// The children too, so opening one of them shows its files at once instead
+	// of after another round trip. One ReadDir each, on a directory the walk
+	// has already listed, against a click that would otherwise read an empty
+	// folder and fill it in later.
+	if err == nil {
+		for _, child := range folder.Folders {
+			if childResolved, childErr := g.resolveFolder(child, fsCtx); childErr == nil && childResolved {
+				resolved = true
+			}
+		}
+	}
+
 	resolvedFolder := folder.Clone()
 	g.mu.Unlock()
 
