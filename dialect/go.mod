@@ -10,7 +10,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.56.0
-	modernc.org/sqlite v1.57.0
+	modernc.org/sqlite v1.58.0
 )
 
 require (
@@ -27,9 +27,9 @@ require (
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	modernc.org/libc v1.74.4 // indirect
+	modernc.org/libc v1.75.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )
 
 replace github.com/selectDb/toolkit => ../toolkit
