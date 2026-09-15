@@ -5,16 +5,26 @@ site.
 
 | Path | What it is |
 |------|------------|
+| `website/` | Marketing pages, served at `/`: hand-written HTML, one file per page, CSS inline. |
+| `docs/` | Everything behind `/docs/*`: the manifest, the page shell, the browser components and the pages with no code module of their own. |
+| `api/` | `index.html` for `/api/`, the full-viewport Scalar page. The bundle and the spec are staged into it at build time. |
 | `generate/` | The site generator (Go + goldmark). `./dev.sh web build` builds; `./dev.sh web start` builds, serves on :3333 and watches. |
-| `sidebar.txt` | Docs manifest: the nav tree, mapping labels to `.doc.md` files anywhere in the repo. |
-| `content/` | Doc pages that belong to no code module (getting started, …). Every other `.doc.md` lives next to the code it documents. |
-| `template/` | Page shell: `base.html`, `head.html`, `sidebar.html`, `page-nav.html`. |
-| `components/` | Browser components loaded on doc pages (search, TOC, sidebar, code blocks). |
-| `theme/base.css` | Shared tokens, reset and base typography. Used by every surface. |
-| `theme/docs.css` | Docs-site layout only. |
-| `site/` | Marketing pages: hand-written HTML, one file per page, CSS inline. |
-| `content/` and everywhere else | `*.shot.ts` and `shots/` sit beside the code they photograph. See [Screenshots](#screenshots). |
+| `base.css`, `theme.js`, `favicon.png`, `logo.png` | Shared by all three surfaces, which is why they sit here rather than in one of them. |
 | `dist/` | Build output. Git-ignored. |
+
+One directory per URL namespace (see [URL namespaces](#url-namespaces)), so the
+directory a file is in says which surface it ships to. Inside `docs/`:
+
+| Path | What it is |
+|------|------------|
+| `docs/sidebar.txt` | Docs manifest: the nav tree, mapping labels to `.doc.md` files anywhere in the repo. |
+| `docs/content/` | Doc pages that belong to no code module (getting started, ...). Every other `.doc.md` lives next to the code it documents. |
+| `docs/template/` | Page shell: `base.html`, `head.html`, `sidebar.html`, `page-nav.html`. |
+| `docs/components/` | Browser components loaded on doc pages (search, TOC, sidebar, code blocks). |
+| `docs/docs.css` | Docs-site layout only. |
+
+`*.shot.ts` and `shots/` sit beside the code they photograph, under `docs/content/`,
+`website/` and everywhere else in the repo. See [Screenshots](#screenshots).
 
 ## Machine-readable surfaces
 
@@ -28,7 +38,7 @@ one.
 | `/llms.txt` | The site index in the [llms.txt](https://llmstxt.org) format: the tagline, the marketing pages, every doc page with a one-line description, and pointers to the rest. Doc entries link to the twins, not the pages. |
 | `/llms-full.txt` | Every doc page concatenated, each under its source URL. |
 | `/sitemap.xml` | Every page, homepage first. |
-| JSON-LD | `TechArticle` on doc pages, from the template; `SoftwareApplication` with the shipping editions' prices on the homepage, written inline in `site/index.html` beside the prose it mirrors. |
+| JSON-LD | `TechArticle` on doc pages, from the template; `SoftwareApplication` with the shipping editions' prices on the homepage, written inline in `website/index.html` beside the prose it mirrors. |
 
 There is nothing to keep in step: a twin **is** its source file, and the
 llms.txt tagline is read out of the homepage's own meta description. The one
@@ -44,9 +54,9 @@ nosniff` on every response stops the browser from guessing.
 
 | Prefix | Source |
 |--------|--------|
-| `/` | Marketing (`site/`) |
-| `/docs/*` | Generated documentation |
-| `/api/` | API reference (Scalar + the generated OpenAPI spec) |
+| `/` | Marketing (`website/`) |
+| `/docs/*` | Generated documentation (`docs/`) |
+| `/api/` | API reference (`api/`: Scalar + the generated OpenAPI spec) |
 
 **Write cross-references with the full path.** In a `.doc.md`, link to
 `/docs/workspace/roles/` — the URL the page actually has. Nothing rewrites links
@@ -73,7 +83,7 @@ marker mechanism as everything else rather than through a template engine.
 
 Each page is a single self-contained file: CSS inline in `<head>`, system fonts,
 no web fonts, no framework, no third-party request. The build copies
-`site/*.html` into `dist/` and substitutes into the markers below. `index.html`
+`website/*.html` into `dist/` and substitutes into the markers below. `index.html`
 becomes the site root; `foo.html` becomes `/foo/`. `*.draft.html` files are
 skipped, so a work-in-progress page can sit beside a live one, and so are files
 whose name starts with `_`, which are partials rather than pages.
@@ -81,8 +91,8 @@ whose name starts with `_`, which are partials rather than pages.
 | Marker | Replaced with |
 |--------|---------------|
 | `/*THEME*/` | The app's `.theme` file, verbatim. Required — a page without it fails the build. |
-| `<!--HEADER-->` | `site/_header.html`, verbatim. Optional: a page without the marker simply has no header. |
-| `<!--FOOTER-->` | `site/_footer.html`, verbatim. |
+| `<!--HEADER-->` | `website/_header.html`, verbatim. Optional: a page without the marker simply has no header. |
+| `<!--FOOTER-->` | `website/_footer.html`, verbatim. |
 | `<!--STARS-->` | The GitHub star count, read once per build and cached for six hours. Empty when it cannot be read, so the button degrades to its label; a build never fails over it. |
 
 The count is baked in rather than fetched from the browser for the reason in the
@@ -91,7 +101,7 @@ worth a DNS lookup, a TCP connection and a TLS handshake on every visit.
 
 **The theme file is not the whole token set.** The app defines `--border` and
 `--shadow-subtle` in its own stylesheet, not in `.theme`, so a marketing page
-has to restate them — as `theme/base.css` already does for the docs. An
+has to restate them, as `base.css` already does for the docs. An
 undefined custom property makes every rule that uses it invalid, and CSS drops
 invalid rules silently: the symptom is a page with no borders and no error.
 
@@ -143,6 +153,19 @@ The PNG stays the baseline that makes pixel-diffing work in review, and the
 same picture ships at roughly a third of the bytes. It needs an encoder on the
 build machine, which is why it is not wired up yet.
 
+## API reference
+
+`api/index.html` is hand-written, like a marketing page and for the same
+reason: Scalar owns the whole viewport, so there is no docs layout to generate
+it into. It carries the same `/*THEME*/` marker, and the build writes the
+Scalar bundle and `openapi.json` beside it so the page fetches neither from a
+third party.
+
+It does not go through the marketing pipeline: the bundle puts it far over the
+14 KB budget, which is the budget doing its job rather than a rule to bend.
+`openapi.json` comes from `backend/internal/apigen/gen/`, so a checkout that
+has not run `apigen generate` builds a reference with nothing in it and says so.
+
 ## Screenshots
 
 Every product picture on the site is captured from the running application, not
@@ -164,7 +187,7 @@ collision, and the build says which two rather than letting one win. A doc page
 writes the light path in its markdown and the generator emits a `<picture>`
 carrying both cuts.
 
-The specs under `site/` have no `.doc.md` to be named after: their pictures only
+The specs under `website/` have no `.doc.md` to be named after: their pictures only
 ever appear on the landing page, which is the code they photograph as far as
 this repo is concerned. `Settings/team.shot.ts` is the other exception -- it
 feeds the users, roles and groups pages, so no single one of them names it.
@@ -198,7 +221,7 @@ you create.
 
 ## Colours come from the app
 
-`theme/base.css` defines the scale (spacing, type, radii, borders). The colour
+`base.css` defines the scale (spacing, type, radii, borders). The colour
 tokens it uses — `--gray-0` … `--gray-1000`, `--blue` — are read at build time
 from `app/internal/graph/defaults/user/.theme`, the app's own default theme. The
 site and the product cannot drift apart.

@@ -7,12 +7,12 @@ import {
 	expect,
 	test,
 	type Framing
-} from '../../app/frontend/tests/e2e/shots';
-import { testId, editor } from '../../app/frontend/tests/e2e/selectors';
+} from '../../../app/frontend/tests/e2e/shots';
+import { testId, editor } from '../../../app/frontend/tests/e2e/selectors';
 
 /**
  * The three pictures in the Getting Started guide, which is
- * `web/content/introduction.doc.md` rather than a marketing page. They are
+ * `web/docs/content/introduction.doc.md` rather than a marketing page. They are
  * captured here so every product screenshot the site publishes comes out of one
  * `shots/` directory and is served from one path, whichever page shows it.
  *

@@ -1,6 +1,6 @@
 # SELECT Documentation
 
-Getting Started              : web/content/introduction.doc.md
+Getting Started              : web/docs/content/introduction.doc.md
 API
   Reference                  : /api/
 Workspace
