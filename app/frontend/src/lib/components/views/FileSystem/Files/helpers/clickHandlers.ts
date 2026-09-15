@@ -9,7 +9,7 @@ import {
 	requestFsPanelFocus
 } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-import { loadSchema } from '$lib/utils/query/loadSchema';
+import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { navigateToGitFile } from '$lib/components/views/Git/navigateToGitFile';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
@@ -129,10 +129,7 @@ const clickItem = async (item: graph.DBInstanceNode | graph.DBInstanceItemNode) 
 
 	if (!expandableItemTypes.has(item.type)) return;
 
-	const shouldLoadSchema =
-		item.type === 'db_instance' && 'children' in item && item.children.length === 0;
-
-	if (shouldLoadSchema) loadSchema({ database: item as graph.DBInstanceNode });
+	if (item.type === 'db_instance') void loadSchemaIfEmpty(item as graph.DBInstanceNode);
 
 	setItemSelection([item.id]);
 };

@@ -11,7 +11,7 @@
 	} from '$lib/components/QuickActions/quickActionsData';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { loadSchema } from '$lib/utils/query/loadSchema';
+	import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 	import type { ResourceMenuOption, ResourceSearchScope } from '$lib/components/ResourceMenu/types';
 	import { GetFileNodeByID } from '$lib/wails/graph';
 	import type * as graph from '$lib/wails/graph';
@@ -88,10 +88,7 @@
 	});
 
 	onMount(() => {
-		for (const db of databases) {
-			if ((db.children?.length ?? 0) !== 0) continue;
-			loadSchema({ database: db });
-		}
+		for (const db of databases) void loadSchemaIfEmpty(db);
 	});
 
 	async function handleSelect(option: ResourceMenuOption) {
