@@ -91,14 +91,7 @@ func NewApp() *App {
 	Queries := generated.New(db.NewLiveDB())
 	Graph := graph.New(Queries)
 
-	FSProvider := fs_provider.New()
-	if currentDomain != "" {
-		serverRoot, err := server.ServerRootPath(currentDomain)
-		if err != nil {
-			log.Fatal("Failed to get server root: ", err)
-		}
-		FSProvider.SetRoot(serverRoot)
-	}
+	FSProvider := fs_provider.New(graph.WorkspaceRootPath)
 
 	// Seed the per-user config defaults (.theme, .config keybindings/snippets)
 	// outside every workspace. Existing files are preserved.
@@ -109,8 +102,7 @@ func NewApp() *App {
 	}
 
 	Server := server.New(
-		func(root string) {
-			FSProvider.SetRoot(root)
+		func() {
 			Graph.InvalidateWorkspaceGraph()
 		},
 		db.RunMigrationsAt,
@@ -121,7 +113,7 @@ func NewApp() *App {
 	Group := group.New(Queries)
 	DbClient := db_client.New(Queries, Graph, FSProvider)
 	SqlLang := sqllang.New(Graph, Queries, DbClient.GetMeta, DbClient.InspectStatement)
-	Workspace := workspace.New(Queries, FSProvider)
+	Workspace := workspace.New(Queries, Graph)
 
 	System := system.New(Queries, Graph, DbClient, FSProvider)
 	Graph.AfterWorkspaceGraphBuild = func(ws *graph.WorkspaceNode) {
@@ -129,7 +121,7 @@ func NewApp() *App {
 	}
 
 	Git := git.New(Queries, FSProvider, Graph)
-	Syncer := syncer.New(Queries, Graph, Workspace, Git)
+	Syncer := syncer.New(Queries, Graph)
 	internalDb := db.New(Queries, Syncer)
 	GlobalInterceptor.Db = internalDb
 
@@ -139,7 +131,7 @@ func NewApp() *App {
 		Graph:      Graph,
 
 		System:     System,
-		GithubAuth: auth.New(Queries, Workspace, Syncer),
+		GithubAuth: auth.New(Queries, Syncer),
 		Git:        Git,
 		Search:     search.New(Graph),
 		User:       user.New(Queries),
@@ -154,7 +146,7 @@ func NewApp() *App {
 		DbClient:   DbClient,
 		SqlLang:    SqlLang,
 		FSProvider: FSProvider,
-		Terminal:   terminal.New(Graph),
+		Terminal:   terminal.New(),
 		Server:     Server,
 		Updater:    updater.New(),
 	}
@@ -168,28 +160,20 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 
 	a.InternalDb.Syncer.SetContext(ctx)
 	a.Syncer.SetContext(ctx)
-	a.Syncer.SwitchOrLogout = &switchOrLogoutHandler{app: a}
+	a.Syncer.WorkspaceGone = &workspaceGoneHandler{app: a}
 	a.Syncer.EmitRolesUpdated = func() {
 		utils.DebouncedEventsEmit("rolesUpdated", 100*time.Millisecond)
-	}
-	a.Syncer.EmitWorkspaceRepoChanged = func(res git.ReconcileResult) {
-		utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
-		utils.DebouncedEventsEmit("workspaceRepoChanged", 100*time.Millisecond, res)
 	}
 	a.Workspace.PullFunc = a.Syncer.Pull
 	a.Workspace.ReloadHooks = &workspace.ReloadHooks{
 		BuildWorkspaceGraph: a.Graph.RebuildWorkspaceGraph,
 		EmitWorkspaceGraphUpdated: func() {
-			utils.DebouncedEventsEmit("workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
+			graph.EmitWorkspaceGraphUpdated(a.Graph)
 		},
-		RunSwitchOrLogout: a.Syncer.RunSwitchOrLogout,
-		ReconcileGitRemote: func(workspaceID string) {
-			ws, err := a.Git.Queries.GetWorkspaceByID(context.Background(), workspaceID)
-			if err != nil {
-				return
-			}
-			_, _ = a.Git.ReconcileWorkspaceRemote(workspaceID, ws.GitRemoteUrl.Ptr())
+		EmitWorkspaceClosed: func() {
+			utils.DebouncedEventsEmit("workspaceClosed", 100*time.Millisecond)
 		},
+		StopWatchingFolder: a.System.StopFileWatcher,
 	}
 	a.Git.SetContext(ctx)
 	a.Search.SetContext(ctx)

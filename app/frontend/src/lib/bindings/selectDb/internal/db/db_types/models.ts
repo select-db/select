@@ -7,6 +7,12 @@ import { Create as $Create } from "@wailsio/runtime";
 
 /**
  * *
+ * *	Bool
+ */
+export type JSONNullBool = any;
+
+/**
+ * *
  * *	String
  */
 export type JSONNullString = any;

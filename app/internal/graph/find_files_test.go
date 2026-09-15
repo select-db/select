@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"selectDb/internal/server"
 )
 
 // queryWorkspace lays out a workspace from a set of relative paths in a
@@ -17,11 +15,7 @@ func queryWorkspace(t *testing.T, workspaceID string, files ...string) (*Graph, 
 
 	withTempAppDataDir(t)
 
-	serverRoot, err := server.CurrentServerRoot()
-	if err != nil {
-		t.Fatalf("CurrentServerRoot: %v", err)
-	}
-	workspaceRoot := filepath.Join(serverRoot, "workspaces", workspaceID)
+	workspaceRoot := openTestWorkspace(t, workspaceID)
 
 	for _, rel := range files {
 		path := filepath.Join(workspaceRoot, filepath.FromSlash(rel))

@@ -29,15 +29,21 @@ type GitFileStatus struct {
 func (g *Git) GetGitFileStatus() (*GitFileStatus, error) {
 	ctx := g.context()
 
-	root, err := g.prepareGitLocal(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	status := &GitFileStatus{
 		Staged:    []GitFileStatusItem{},
 		Unstaged:  []GitFileStatusItem{},
 		Untracked: []GitFileStatusItem{},
+	}
+
+	// Nothing open is nothing changed, not a failure: a folder closing under a
+	// status already in flight would otherwise surface as an error.
+	if _, err := openWorkspaceRoot(); err != nil {
+		return status, nil
+	}
+
+	root, err := g.prepareGitLocal(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	hasCommits, _ := hasAnyCommits(ctx, root)

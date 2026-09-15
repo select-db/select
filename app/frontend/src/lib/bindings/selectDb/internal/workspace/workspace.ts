@@ -7,55 +7,72 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as generated$0 from "../db/generated/models.js";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 export function AddUserToWorkspace(email: string): $CancellablePromise<void> {
     return $Call.ByID(2010975648, email);
 }
 
-export function CreateWorkspace(params: $models.CreateWorkspaceParams): $CancellablePromise<generated$0.Workspace> {
-    return $Call.ByID(1706524711, params).then(($result: any) => {
+/**
+ * CloseFolder leaves the user signed in on the no-folder screen. The folder on
+ * disk is untouched.
+ */
+export function CloseFolder(): $CancellablePromise<void> {
+    return $Call.ByID(2005530750);
+}
+
+/**
+ * CreateWorkspaceInFolder creates the workspace on the server, writes the config
+ * that names it, and opens it. An empty name defaults to the folder's.
+ */
+export function CreateWorkspaceInFolder(path: string, name: string): $CancellablePromise<$models.FolderState> {
+    return $Call.ByID(1466431544, path, name).then(($result: any) => {
         return $$createType0($result);
     });
 }
 
-export function CreateWorkspaceAndReload(name: string): $CancellablePromise<void> {
-    return $Call.ByID(2601939573, name);
-}
-
 /**
- * DeleteWorkspace deletes the workspace on the server then removes it locally.
- * If the deleted workspace was current and ReloadHooks is set, runs switch-or-logout.
- * Returns (loggedOut, nil) when the user had no workspaces left and was logged out, (false, nil) otherwise, or (false, err) on error.
+ * DeleteWorkspace removes the workspace on the server, its local rows, and the
+ * select.config.json that named it. The folder is left as it was.
+ * 
+ * A config can outlive its workspace when the delete happened on another
+ * machine. Opening that folder reports no access and leaves the config alone.
  */
 export function DeleteWorkspace(workspaceID: string): $CancellablePromise<void> {
     return $Call.ByID(1009480846, workspaceID);
 }
 
 /**
- * Ensures the workspace root folder exists on disk
+ * ListFolders returns every workspace this user has a folder for, current one
+ * first. A remembered path that no longer names its workspace is forgotten
+ * rather than offered.
  */
-export function EnsureWorkspaceFolderByID(workspaceID: string, $1: string): $CancellablePromise<void> {
-    return $Call.ByID(1961383445, workspaceID, $1);
-}
-
-export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserEntry[]> {
-    return $Call.ByID(2078216013).then(($result: any) => {
+export function ListFolders(): $CancellablePromise<$models.Folder[]> {
+    return $Call.ByID(3511278583).then(($result: any) => {
         return $$createType2($result);
     });
 }
 
-/**
- * ListWorkspacesForCurrentUser returns all workspaces for the current user (from workspace_to_user).
- */
-export function ListWorkspacesForCurrentUser(): $CancellablePromise<$models.WorkspaceWithCurrent[]> {
-    return $Call.ByID(1919920487).then(($result: any) => {
+export function ListWorkspaceUsers(): $CancellablePromise<$models.WorkspaceUserEntry[]> {
+    return $Call.ByID(2078216013).then(($result: any) => {
         return $$createType4($result);
     });
+}
+
+/**
+ * OpenFolder is the only thing that sets up a workspace: not login, not sync.
+ */
+export function OpenFolder(path: string): $CancellablePromise<$models.FolderState> {
+    return $Call.ByID(2229533346, path).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+/**
+ * PickFolder returns "" when the user cancels.
+ */
+export function PickFolder(): $CancellablePromise<string> {
+    return $Call.ByID(2753062023);
 }
 
 export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<void> {
@@ -63,31 +80,18 @@ export function RemoveUserFromWorkspace(userID: string): $CancellablePromise<voi
 }
 
 /**
- * RemoveWorkspaceFolderByID deletes the workspace root directory on disk.
- * Safe to call if the folder does not exist (no error).
+ * ReopenLastFolder runs after login, so a returning user skips the picker.
  */
-export function RemoveWorkspaceFolderByID(workspaceID: string): $CancellablePromise<void> {
-    return $Call.ByID(436077763, workspaceID);
+export function ReopenLastFolder(): $CancellablePromise<$models.FolderState> {
+    return $Call.ByID(80028743).then(($result: any) => {
+        return $$createType0($result);
+    });
 }
 
 export function SearchUser(email: string): $CancellablePromise<$models.SearchUserResult | null> {
     return $Call.ByID(2043344285, email).then(($result: any) => {
         return $$createType6($result);
     });
-}
-
-export function SetOrCreateCurrentWorkspace(params: $models.SetOrCreateCurrentWorkspaceParams): $CancellablePromise<generated$0.Workspace> {
-    return $Call.ByID(3116085253, params).then(($result: any) => {
-        return $$createType0($result);
-    });
-}
-
-/**
- * SwitchWorkspace sets the current workspace for the current user, ensures its folder exists,
- * rebuilds the workspace graph, and emits workspaceGraphUpdated when ReloadHooks is set.
- */
-export function SwitchWorkspace(workspaceID: string): $CancellablePromise<void> {
-    return $Call.ByID(1184707179, workspaceID);
 }
 
 /**
@@ -107,10 +111,10 @@ export function UpdateName(workspaceID: string, name: string): $CancellablePromi
 }
 
 // Private type creation functions
-const $$createType0 = generated$0.Workspace.createFrom;
-const $$createType1 = $models.WorkspaceUserEntry.createFrom;
+const $$createType0 = $models.FolderState.createFrom;
+const $$createType1 = $models.Folder.createFrom;
 const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $models.WorkspaceWithCurrent.createFrom;
+const $$createType3 = $models.WorkspaceUserEntry.createFrom;
 const $$createType4 = $Create.Array($$createType3);
 const $$createType5 = $models.SearchUserResult.createFrom;
 const $$createType6 = $Create.Nullable($$createType5);
