@@ -7,8 +7,8 @@ import {
 	expect,
 	test,
 	type Framing
-} from '../../app/frontend/tests/e2e/shots';
-import { testId, editor } from '../../app/frontend/tests/e2e/selectors';
+} from '../../../app/frontend/tests/e2e/shots';
+import { testId, editor } from '../../../app/frontend/tests/e2e/selectors';
 
 /**
  * The three pictures in the Getting Started guide, which is
