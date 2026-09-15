@@ -44,12 +44,3 @@ func WriteCurrentDomain(domain string) error {
 	domain = strings.TrimSpace(domain)
 	return os.WriteFile(path, []byte(domain), 0o600)
 }
-
-// CurrentServerRoot returns the root path for the current server, or empty if none.
-func CurrentServerRoot() (string, error) {
-	domain, err := ReadCurrentDomain()
-	if err != nil || domain == "" {
-		return "", err
-	}
-	return ServerRootPath(domain)
-}

@@ -51,3 +51,24 @@ func (ns JSONNullString) Ptr() *string {
 	return &ns.String
 }
 
+
+/**
+*	Bool
+ */
+type JSONNullBool struct {
+	sql.NullBool
+}
+
+func (nb JSONNullBool) MarshalJSON() ([]byte, error) {
+	if nb.Valid {
+		return json.Marshal(nb.Bool)
+	}
+	return json.Marshal(nil)
+}
+
+func (nb JSONNullBool) Or(defaultVal bool) bool {
+	if nb.Valid {
+		return nb.Bool
+	}
+	return defaultVal
+}

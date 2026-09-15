@@ -10,7 +10,6 @@ import (
 
 	"selectDb/internal/graph"
 	"selectDb/internal/sample"
-	"selectDb/internal/server"
 )
 
 func init() { sql.Register("sqlite3-sampletest", &sqlite.Driver{}) }
@@ -26,16 +25,14 @@ func seedInto(t *testing.T) string {
 	t.Setenv("HOME", dir)
 	t.Setenv("APP_ENV", "dev")
 
-	if err := server.WriteCurrentDomain(server.DefaultDomainForEnv()); err != nil {
-		t.Fatalf("current domain: %v", err)
-	}
+	// The sample is written into the folder somebody opened, so the fixture
+	// opens one.
+	root := t.TempDir()
+	graph.SetOpenWorkspace("test-workspace", root)
+	t.Cleanup(graph.ClearOpenWorkspace)
+
 	if err := sample.Write("test-workspace"); err != nil {
 		t.Fatalf("write sample: %v", err)
-	}
-
-	root, err := graph.WorkspaceRootPath("test-workspace")
-	if err != nil {
-		t.Fatalf("workspace root: %v", err)
 	}
 	return root
 }

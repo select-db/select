@@ -18,8 +18,6 @@ import (
 	syncutr "selectDb/internal/db/syncer/user_to_role"
 	syncworkspace "selectDb/internal/db/syncer/workspace"
 	syncwtu "selectDb/internal/db/syncer/workspace_to_user"
-	"selectDb/internal/git"
-	"selectDb/internal/utils"
 )
 
 const pendingCommitsBatchSize = 100
@@ -50,7 +48,7 @@ func (s *Syncer) Sync(ctx context.Context, userID string) error {
 		// No current workspace for this user — or a stale pointer left by a
 		// previous user (e.g. after the backend reassigned ids). Full-pull the
 		// backend's workspaces so the next Sync uses the normal path.
-		return s.syncWith(ctx, userID, nil, nil, false, "")
+		return s.syncWith(ctx, userID, nil, nil, "")
 	}
 
 	var lastPulledAt *time.Time
@@ -68,7 +66,7 @@ func (s *Syncer) Sync(ctx context.Context, userID string) error {
 		if len(commits) == 0 {
 			return nil
 		}
-		if err := s.syncWith(ctx, userID, commits, lastPulledAt, true, currentWTU.WorkspaceID); err != nil {
+		if err := s.syncWith(ctx, userID, commits, lastPulledAt, currentWTU.WorkspaceID); err != nil {
 			return err
 		}
 		if len(commits) < pendingCommitsBatchSize {
@@ -88,7 +86,7 @@ func (s *Syncer) Sync(ctx context.Context, userID string) error {
 func (s *Syncer) Pull(ctx context.Context, userID string) error {
 	currentWTU, err := s.Queries.GetCurrentWorkspaceToUser(ctx)
 	if err != nil || currentWTU.UserID != userID {
-		return s.syncWith(ctx, userID, nil, nil, false, "")
+		return s.syncWith(ctx, userID, nil, nil, "")
 	}
 
 	var lastPulledAt *time.Time
@@ -96,13 +94,13 @@ func (s *Syncer) Pull(ctx context.Context, userID string) error {
 		lastPulledAt = &at.Time
 	}
 
-	return s.syncWith(ctx, userID, nil, lastPulledAt, true, currentWTU.WorkspaceID)
+	return s.syncWith(ctx, userID, nil, lastPulledAt, currentWTU.WorkspaceID)
 }
 
 // 1. sends commits to the backend
 // 2. applies the response (confirmed, restored, changes)
 // 3. update last_pulled_at
-func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generated.MutationCommit, lastPulledAt *time.Time, hadCurrentWorkspace bool, currentWorkspaceID string) error {
+func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generated.MutationCommit, lastPulledAt *time.Time, currentWorkspaceID string) error {
 	pending := make([]SyncCommit, 0, len(commits))
 	for _, c := range commits {
 		pending = append(pending, SyncCommit{
@@ -162,53 +160,7 @@ func (s *Syncer) syncWith(ctx context.Context, userID string, commits []generate
 		}
 	}
 
-	if !hadCurrentWorkspace {
-		if err := syncwtu.SetFirstAsCurrent(ctx, s.Queries, userID, res.Changes.WorkspaceToUser); err != nil {
-			return err
-		}
-	}
-
-	s.reconcileCurrentWorkspaceRepo(ctx)
-
 	return s.updateLastPulledAt(ctx, currentWorkspaceID, res.ServerTime)
-}
-
-// reconcileCurrentWorkspaceRepo makes the current workspace's local repository
-// converge to its server-authoritative git_remote_url. It runs on every sync,
-// so a transient failure simply retries on the next sync instead of leaving the
-// client desynced. Errors are intentionally non-fatal: a temporarily
-// unreachable repo must not block role/permission sync.
-func (s *Syncer) reconcileCurrentWorkspaceRepo(ctx context.Context) {
-	if s.Git == nil {
-		return
-	}
-	wtu, err := s.Queries.GetCurrentWorkspaceToUser(ctx)
-	if err != nil {
-		return
-	}
-	ws, err := s.Queries.GetWorkspaceByID(ctx, wtu.WorkspaceID)
-	if err != nil {
-		return
-	}
-
-	res, err := s.Git.ReconcileWorkspaceRemote(wtu.WorkspaceID, ws.GitRemoteUrl.Ptr())
-	if err != nil {
-		return
-	}
-
-	notable := res.Action == git.ReconcileSwitched ||
-		res.Action == git.ReconcileUnlinked ||
-		(res.Action == git.ReconcileLinked && res.Changed)
-	if !notable {
-		return
-	}
-
-	if res.Changed && s.Graph != nil {
-		_ = s.Graph.RebuildWorkspaceGraph()
-	}
-	if s.EmitWorkspaceRepoChanged != nil {
-		s.EmitWorkspaceRepoChanged(res)
-	}
 }
 
 func (s *Syncer) deleteConfirmed(ctx context.Context, ids []string) error {
@@ -311,16 +263,15 @@ func (s *Syncer) applyOneRow(ctx context.Context, tableName string, payload map[
 	return s.applyRow(ctx, tableName, payload)
 }
 
-// applyDeleteRow dispatches to the table-specific ApplyDelete and runs switch-or-logout when the deleted row was current.
+// applyDeleteRow closes the open folder when the deleted row was its workspace.
 func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload map[string]any) error {
 	var wasCurrent bool
-	var userIDForSwitch string
 	var err error
 	switch tableName {
 	case "workspace":
-		wasCurrent, userIDForSwitch, err = syncworkspace.ApplyDelete(ctx, s.Queries, payload)
+		wasCurrent, err = syncworkspace.ApplyDelete(ctx, s.Queries, payload)
 	case "workspace_to_user":
-		wasCurrent, userIDForSwitch, err = syncwtu.ApplyDelete(ctx, s.Queries, payload)
+		wasCurrent, err = syncwtu.ApplyDelete(ctx, s.Queries, payload)
 	case "role":
 		err = syncrole.ApplyDelete(ctx, s.Queries, payload)
 	case "user_to_role":
@@ -339,48 +290,10 @@ func (s *Syncer) applyDeleteRow(ctx context.Context, tableName string, payload m
 	if err != nil {
 		return err
 	}
-	if tableName == "workspace" && s.Workspace != nil {
-		if workspaceID := utils.MapGetString(payload, "id"); workspaceID != "" {
-			_ = s.Workspace.RemoveWorkspaceFolderByID(workspaceID)
-		}
-	}
-	if wasCurrent && userIDForSwitch != "" && s.SwitchOrLogout != nil {
-		s.runSwitchOrLogout(ctx, userIDForSwitch)
+	if wasCurrent && s.WorkspaceGone != nil {
+		s.WorkspaceGone.OnWorkspaceGone()
 	}
 	return nil
-}
-
-// runSwitchOrLogout lists remaining workspaces for the user; if any, sets first as current and notifies; else logs out.
-// Returns true if the user was logged out (no workspaces left).
-func (s *Syncer) runSwitchOrLogout(ctx context.Context, userID string) bool {
-	remaining, err := s.Queries.ListWorkspacesByUserID(ctx, userID)
-	if err != nil || len(remaining) == 0 {
-		if s.SwitchOrLogout != nil {
-			s.SwitchOrLogout.OnLogout()
-		}
-		return true
-	}
-	// Set first remaining as current.
-	if err := s.Queries.ClearCurrentWorkspaceToUser(ctx); err != nil {
-		return false
-	}
-	first := remaining[0]
-	if err := s.Queries.UpdateCurrentWorkspaceToUser(ctx, generated.UpdateCurrentWorkspaceToUserParams{
-		UserID:      userID,
-		WorkspaceID: first.ID,
-	}); err != nil {
-		return false
-	}
-	if s.Workspace != nil {
-		_ = s.Workspace.EnsureWorkspaceFolderByID(first.ID, first.Name)
-	}
-	if s.Graph != nil {
-		_ = s.Graph.RebuildWorkspaceGraph()
-	}
-	if s.SwitchOrLogout != nil {
-		s.SwitchOrLogout.OnAfterWorkspaceSwitch()
-	}
-	return false
 }
 
 // applyRow upserts one server-authoritative row by table name.
@@ -389,7 +302,7 @@ func (s *Syncer) applyRow(ctx context.Context, tableName string, payload map[str
 	case "user":
 		return syncuser.Restore(ctx, s.Queries, payload)
 	case "workspace":
-		return syncworkspace.Restore(ctx, s.Queries, payload, s.Workspace)
+		return syncworkspace.Restore(ctx, s.Queries, payload)
 	case "workspace_to_user":
 		return syncwtu.Restore(ctx, s.Queries, payload)
 	case "role":

@@ -3,6 +3,7 @@ SELECT
     w.id,
     w.name,
     w.logo,
+    w.local_path,
     wtu.current
 FROM
     workspace w

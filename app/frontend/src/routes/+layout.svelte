@@ -13,11 +13,13 @@
 	} from '$lib/components/views/Git/gitStore';
 	import {
 		StartFileWatcher,
+		StopFileWatcher,
 		StartDatabaseWatcher
 	} from '$lib/bindings/selectDb/internal/system/system';
 
 	import Leftbar from '$lib/components/Leftbar/Leftbar.svelte';
 	import PageLogin from '$lib/components/PageLogin/PageLogin.svelte';
+	import { folderStore } from '$lib/components/PageFolder/folderStore';
 	import Rightbar from '$lib/components/Rightbar/Rightbar.svelte';
 	import Bottombar from '$lib/components/Bottombar/Bottombar.svelte';
 	import EditorLayout from '$lib/components/Layout/Layout.svelte';
@@ -82,12 +84,23 @@
 	// Runes, because this component takes props now and the two modes cannot be
 	// mixed. These ran on init before and run after mount now, which neither the
 	// watchers nor the keybinding context care about.
-	let watchedWorkspaceId: string | undefined;
+	// Keyed on the folder, not the workspace: the same workspace can be opened
+	// at a different path, and the old watcher would keep its watches.
+	let watchedFolder: string | undefined;
 	$effect(() => {
 		const workspace = $workspaceGraphStore;
-		if (!workspace || workspace.id === watchedWorkspaceId) return;
+		if (!workspace) {
+			if (watchedFolder !== undefined) {
+				watchedFolder = undefined;
+				StopFileWatcher();
+			}
+			return;
+		}
 
-		watchedWorkspaceId = workspace.id;
+		const key = `${workspace.id}:${$folderStore?.path ?? ''}`;
+		if (key === watchedFolder) return;
+
+		watchedFolder = key;
 		gitWorkspaceStatusStore.set(null);
 		gitFileStatusStore.set(null);
 		loadGitStatus();
@@ -103,7 +116,7 @@
 	<div class="layout">
 		{#if $sessionCheckingStore}
 			<div class="session-loader"><Loader size={24} /></div>
-		{:else if $workspaceGraphStore}
+		{:else if $folderStore || $workspaceGraphStore}
 			{#key `${$themeVersionStore}-${$configVersionStore}-${$lintVersionStore}`}
 				<Leftbar />
 				<main class:left-bar-closed={!$isLeftbarOpened} class:right-bar-closed={!$isRightbarOpened}>

@@ -8,14 +8,7 @@ import {
 	workspaceId,
 	type Page
 } from '../../../../../tests/e2e/wails';
-import {
-	dbStatus,
-	labelledInput,
-	renameBox,
-	tab,
-	testId,
-	treeRow
-} from '../../../../../tests/e2e/selectors';
+import { dbStatus, renameBox, tab, testId, treeRow } from '../../../../../tests/e2e/selectors';
 import { choose, openRowMenu, openRootMenu, renameTo } from '../../../../../tests/e2e/tree';
 
 /**
@@ -109,29 +102,22 @@ test('names a database by its directory, and renames the directory with it', asy
 	await expect(treeRow(page, 'analytics')).toBeVisible();
 	expect(await databasesInGraph(request)).toEqual(['analytics', 'warehouse']);
 
-	// --- Renamed from its own form ------------------------------------------
+	// --- Renamed again, and the form follows --------------------------------
 
-	// The form's Name field is the same rename, so the tree follows it, and so
-	// does the tab that is open on the form.
+	// The tree is the one way to rename, and the form open on the database takes
+	// the new name with it rather than holding the old one.
 	await openRowMenu(page, 'analytics');
 	await choose(page, 'Edit...');
 	await expect(tab(page, 'analytics')).toBeVisible();
 
-	const nameField = labelledInput(page, 'Name');
-	await nameField.fill('reporting');
-	await nameField.blur();
+	await openRowMenu(page, 'analytics');
+	await choose(page, 'Rename...');
+	await renameTo(page, 'reporting');
 
 	await expect(treeRow(page, 'reporting')).toBeVisible();
 	await expect(treeRow(page, 'analytics')).toHaveCount(0);
 	await expect(tab(page, 'reporting')).toBeVisible();
 	expect(await onDisk(request, id, 'reporting')).toBe(true);
-
-	// A refusal leaves the field saying what the directory is still called,
-	// rather than the name that was turned down.
-	await nameField.fill('warehouse');
-	await nameField.blur();
-	await expect(nameField).toHaveValue('reporting');
-	await expect(treeRow(page, 'reporting')).toBeVisible();
 
 	// --- Moved --------------------------------------------------------------
 

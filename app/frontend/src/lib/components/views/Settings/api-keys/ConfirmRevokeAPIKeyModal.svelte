@@ -31,7 +31,7 @@
 </ModalBody>
 <ModalFooter
 	secondaryAction={{ label: 'Cancel', action: async () => onClose(), disabled: revoking }}
-	mainAction={{ label: 'Revoke', action: handleConfirm, disabled: revoking }}
+	mainAction={{ label: 'Revoke', action: handleConfirm, disabled: revoking, emphasis: 'warning' }}
 />
 
 <style>
