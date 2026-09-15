@@ -2,7 +2,6 @@ import type { Icons } from '$lib/system/Icon/types';
 
 export type SettingsSectionId =
 	| 'workspace'
-	| 'git'
 	| 'users'
 	| 'roles'
 	| 'groups'
@@ -25,7 +24,6 @@ export type SettingsSection = {
 /** Single source of truth for Settings sections (nav, tab labels, resource menu). */
 export const settingsSections: SettingsSection[] = [
 	{ id: 'workspace', label: 'Workspace', icon: 'folder', action: 'workspace/settings.write' },
-	{ id: 'git', label: 'Git', icon: 'github-branch', action: 'workspace/settings.write' },
 	{ id: 'users', label: 'Users', icon: 'users', action: 'workspace/users.manage' },
 	{ id: 'roles', label: 'Roles', icon: 'roles', action: 'workspace/roles.manage' },
 	{ id: 'groups', label: 'Groups', icon: 'users', action: 'workspace/groups.manage' },

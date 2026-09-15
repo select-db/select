@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Button from '$lib/system/Button/Button.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
-	import GitLinkPanel from '$lib/components/views/Git/GitLinkPanel.svelte';
 	import WorkspacePanel from '$lib/components/views/Settings/workspace/WorkspacePanel.svelte';
 	import RolesPanel from '$lib/components/views/Settings/roles/RolesPanel.svelte';
 	import GroupsPanel from '$lib/components/views/Settings/groups/GroupsPanel.svelte';
@@ -71,8 +70,6 @@
 			<APIKeysPanel />
 		{:else if selectedSection === 'connections'}
 			<ConnectionsPanel />
-		{:else if selectedSection === 'git'}
-			<GitLinkPanel showUnsync />
 		{:else if selectedSection === 'theme'}
 			<UserSettingsEditor kind="theme" />
 		{:else if selectedSection === 'config'}

@@ -12,7 +12,14 @@ import {
 	type Locator,
 	type Page
 } from '../../../../../tests/e2e/wails';
-import { editor, renameBox, selectedRows, tab, treeRow } from '../../../../../tests/e2e/selectors';
+import {
+	activeTab,
+	editor,
+	renameBox,
+	selectedRows,
+	tab,
+	treeRow
+} from '../../../../../tests/e2e/selectors';
 import {
 	choose,
 	keepName,
@@ -250,6 +257,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 		await openRowMenu(page, folder);
 		await choose(page, 'New file...');
 		await renameTo(page, 'twin.sql');
+		await expect(activeTab(page)).toHaveAttribute('data-test-value', 'twin.sql');
 		await editor.surface(page).click();
 		await page.keyboard.type(content);
 		await expect(editor.line(page, content)).toBeVisible();
@@ -353,6 +361,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await openRowMenu(page, 'before');
 	await choose(page, 'New file...');
 	await renameTo(page, 'inside.sql');
+	await expect(activeTab(page)).toHaveAttribute('data-test-value', 'inside.sql');
 	await editor.surface(page).click();
 	await page.keyboard.type('SELECT 3 AS three;');
 	await expect(editor.line(page, 'SELECT 3 AS three;')).toBeVisible();

@@ -65,6 +65,20 @@ type FileFilter struct {
 	Pattern     string // semicolon separated extensions, e.g. "*.csv"
 }
 
+// OpenDirectory shows a native folder picker, returning "" when cancelled.
+func OpenDirectory(title string) (string, error) {
+	app := application.Get()
+	if app == nil {
+		return "", ErrNoApplication
+	}
+
+	return app.Dialog.OpenFile().
+		SetTitle(title).
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		PromptForSingleSelection()
+}
+
 // OpenFile shows a native file picker and returns the selected path. The
 // returned path is empty when the user cancels.
 func OpenFile(title, defaultDirectory string, showHiddenFiles bool) (string, error) {

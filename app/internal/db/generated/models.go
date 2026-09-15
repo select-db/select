@@ -82,6 +82,7 @@ type User struct {
 	Name      db_types.JSONNullString `json:"name"`
 	Email     db_types.JSONNullString `json:"email"`
 	AvatarUrl db_types.JSONNullString `json:"avatar_url"`
+	Current   db_types.JSONNullBool   `json:"current"`
 }
 
 type UserToGroup struct {
@@ -106,12 +107,12 @@ type UserToRole struct {
 type Workspace struct {
 	ID                 string                  `json:"id"`
 	Name               string                  `json:"name"`
-	GitRemoteUrl       db_types.JSONNullString `json:"git_remote_url"`
 	LastPulledAt       sql.NullTime            `json:"last_pulled_at"`
 	OwnerID            db_types.JSONNullString `json:"owner_id"`
 	StatementTimeoutMs int64                   `json:"statement_timeout_ms"`
 	MaxResultSizeMb    int64                   `json:"max_result_size_mb"`
 	Logo               db_types.JSONNullString `json:"logo"`
+	LocalPath          db_types.JSONNullString `json:"local_path"`
 }
 
 type WorkspaceToUser struct {

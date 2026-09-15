@@ -137,7 +137,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	}
 
 	// Load .env file for the root folder if it exists
-	_ = g.LoadFolderEnvFile(rootFolder, fsCtx)
+	_ = loadFolderEnvInto(rootFolder, fsCtx)
 
 	err := fsCtx.Walk(func(entry Entry) error {
 		if entry.IsDir() {
@@ -219,7 +219,7 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 			}
 
 			// Load .env file for this folder if it exists
-			_ = g.LoadFolderEnvFile(folder, fsCtx)
+			_ = loadFolderEnvInto(folder, fsCtx)
 
 			return nil
 		}

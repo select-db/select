@@ -20,6 +20,7 @@
 		optionDisplay,
 		summaryDisplay,
 		placeholder = 'Select an option',
+		sortOptions = true,
 		searchEnabled = false,
 		searchPlaceholder = 'Search...',
 		createOptionLabel,
@@ -249,7 +250,7 @@
 		<FloatingBox anchor={triggerEl} offset={{ x: 0, y: 4 }} backdrop onBackdropClick={close}>
 			<Menu
 				options={menuOptions}
-				sortOptions={true}
+				{sortOptions}
 				onClose={close}
 				bind:searchQuery
 				{searchEnabled}

@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"fmt"
 
 	"selectDb/internal/db/generated"
 	"selectDb/internal/fs_provider"
@@ -16,11 +17,6 @@ type Git struct {
 	Queries    *generated.Queries
 	FSProvider *fs_provider.FSProvider
 	Graph      *graph.Graph
-
-	// Pending state for the two-phase link flow (set by LinkExistingRepo,
-	// consumed by CompleteLinkExistingRepo).
-	pendingLinkWorkspaceID string
-	pendingLinkBranch      string
 }
 
 func New(
@@ -39,8 +35,11 @@ func (s *Git) SetContext(ctx context.Context) {
 	s.ctx = ctx
 }
 
-// workspaceRootPath resolves the absolute filesystem path for a given workspace
-// ID using the shared graph helpers.
-func (s *Git) workspaceRootPath(workspaceID string) (string, error) {
-	return graph.WorkspaceRootPath(workspaceID)
+// openWorkspaceRoot returns the folder git runs in: the one the app has open.
+func openWorkspaceRoot() (string, error) {
+	_, root, ok := graph.OpenWorkspace()
+	if !ok {
+		return "", fmt.Errorf("no workspace folder is open")
+	}
+	return root, nil
 }

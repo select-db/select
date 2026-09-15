@@ -37,7 +37,7 @@ func (s *System) watchDatabases(ctx context.Context) {
 	lastPing := make(map[string]time.Time)
 
 	for {
-		ws, err := s.Graph.GetWorkspaceGraph()
+		ws, err := graph.EnsureWorkspaceGraph(s.Graph)
 		if err == nil && ws != nil {
 			dbs := s.Graph.WorkspaceGraph.DBInstances
 			now := time.Now()

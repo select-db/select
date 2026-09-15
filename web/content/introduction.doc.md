@@ -36,7 +36,18 @@ Unzip and run `SELECT.exe`.
 
 Unzip and run the `select` binary.
 
-## 3. Connect your first database
+## 3. Open a folder
+
+A workspace is a folder on your machine, so SELECT starts by asking for one.
+Pick an empty folder to try it out, or a repository of `.sql` files you already
+have. SELECT adds a single `select.config.json` naming the workspace and leaves
+everything else alone; an empty folder also gets a small sample database to run
+queries against.
+
+See [Workspace Folder](/docs/workspace/workspace-folder/) for sharing one with a
+team.
+
+## 4. Connect your first database
 
 SELECT supports **PostgreSQL**, **MySQL**, and **SQLite**.
 
@@ -58,7 +69,7 @@ SELECT supports **PostgreSQL**, **MySQL**, and **SQLite**.
 
 For full details, see [Connecting a Database](/docs/databases/connecting/).
 
-## 4. Run your first query
+## 5. Run your first query
 
 1. Right-click your database folder and choose **New file...** to create a `.sql` file. (In a hurry? `Cmd+N` opens a [scratch tab](/docs/sql/sql-files/#scratch-files) you can save later.)
 2. Press `Cmd+Shift+D` to open the database picker and associate the file with the connection you just created.
