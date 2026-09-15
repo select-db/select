@@ -5,6 +5,7 @@ import (
 
 	"backend/db"
 	"backend/internal/audit"
+	"backend/internal/datasource"
 	"backend/internal/middlewares"
 
 	"github.com/google/uuid"
@@ -54,6 +55,14 @@ func DeleteHandler() http.HandlerFunc {
 		}
 
 		_ = db.Queries.DeleteUserRefreshTokens(r.Context(), userUUID)
+
+		// The workspace row is the one place a datasource's standing is
+		// written: reads join it, and membership is derived from it, so the
+		// deletion above already takes both away. What it does not take away is
+		// what is already open -- a decrypted DSN in the cache, a pool, an SSH
+		// tunnel -- and those stand for the rest of their TTL unless they are
+		// dropped here.
+		datasource.InvalidateWorkspaceCache(workspaceID)
 
 		audit.EmitAction(r.Context(), audit.WorkspaceDeleted, audit.Record{
 			WorkspaceID: workspaceID,
