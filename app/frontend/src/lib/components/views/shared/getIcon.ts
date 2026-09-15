@@ -71,26 +71,191 @@ type FileIconDef = { icon: Icons; size: number; color: string };
 
 const SPECIAL_FILENAMES: Record<string, FileIconDef> = {
 	'[edits].sql': { icon: 'db-upload', size: 16, color: 'var(--gray-800)' },
-	'.gitignore': { icon: 'branch', size: 20, color: 'var(--blue)' }
+	'.gitignore': { icon: 'branch', size: 20, color: 'var(--blue)' },
+	'.gitattributes': { icon: 'branch', size: 20, color: 'var(--blue)' },
+	'.dockerignore': { icon: 'package', size: 19, color: 'var(--blue)' },
+	Dockerfile: { icon: 'package', size: 19, color: 'var(--blue)' },
+	Makefile: { icon: 'cog', size: 19, color: 'var(--orange)' },
+	LICENSE: { icon: 'journal', size: 19, color: 'var(--gray-800)' },
+	'go.mod': { icon: 'package', size: 19, color: 'var(--blue)' },
+	'go.sum': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
+	'package.json': { icon: 'package', size: 19, color: 'var(--red)' },
+	'package-lock.json': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
+	'Cargo.toml': { icon: 'package', size: 19, color: 'var(--orange)' },
+	'Cargo.lock': { icon: 'lock', size: 19, color: 'var(--gray-800)' }
 };
 
-const EXTENSION_ICONS: Record<string, FileIconDef> = {
-	'.theme': { icon: 'css', size: 20, color: 'var(--orange)' },
-	'.config': { icon: 'cog', size: 19, color: 'var(--gray-800)' },
-	'.lint': { icon: 'eslint', size: 20, color: 'var(--purple)' },
-	'.css': { icon: 'css', size: 20, color: 'var(--blue)' },
-	'.html': { icon: 'html', size: 20, color: 'var(--red)' },
-	'.js': { icon: 'js', size: 20, color: 'var(--yellow)' },
-	'.sql': { icon: 'sql', size: 20, color: 'var(--red)' },
-	'.env': { icon: 'code-bracket', size: 19, color: 'var(--gray-800)' },
-	'.ts': { icon: 'ts', size: 20, color: 'var(--blue)' },
-	'.csv': { icon: 'csv', size: 20, color: 'var(--gray-800)' },
-	'.json': { icon: 'json', size: 19, color: 'var(--gray-800)' }
-};
+/**
+ * The look each group of extensions wears, written once per group rather than
+ * once per extension. Colour carries as much of the reading as the shape does:
+ * a folder of mixed files is scanned by colour first.
+ */
+const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
+	// SELECT's own files
+	[{ icon: 'css', size: 20, color: 'var(--orange)' }, ['.theme']],
+	[{ icon: 'cog', size: 19, color: 'var(--gray-800)' }, ['.config']],
+	[{ icon: 'eslint', size: 20, color: 'var(--purple)' }, ['.lint']],
+	[{ icon: 'code-bracket', size: 19, color: 'var(--gray-800)' }, ['.env']],
 
+	// Queries and the databases they run against
+	[{ icon: 'sql', size: 20, color: 'var(--red)' }, ['.sql', '.psql', '.ddl', '.dml']],
+	[
+		{ icon: 'db', size: 19, color: 'var(--green)' },
+		['.sqlite', '.sqlite3', '.db', '.duckdb', '.mdb', '.accdb']
+	],
+	[{ icon: 'schema', size: 19, color: 'var(--green)' }, ['.prisma', '.dbml', '.graphql', '.gql']],
+
+	// Web
+	[{ icon: 'ts', size: 20, color: 'var(--blue)' }, ['.ts', '.tsx', '.mts', '.cts']],
+	[{ icon: 'js', size: 20, color: 'var(--yellow)' }, ['.js', '.mjs', '.cjs', '.jsx']],
+	[{ icon: 'html', size: 20, color: 'var(--red)' }, ['.html', '.htm', '.xhtml', '.hbs', '.ejs']],
+	[{ icon: 'html', size: 20, color: 'var(--orange)' }, ['.svelte', '.vue', '.astro']],
+	[{ icon: 'css', size: 20, color: 'var(--blue)' }, ['.css', '.scss', '.sass', '.less', '.styl']],
+
+	// Structured text
+	[{ icon: 'json', size: 19, color: 'var(--gray-800)' }, ['.json', '.jsonc', '.json5', '.ndjson']],
+	[
+		{ icon: 'cog', size: 19, color: 'var(--orange)' },
+		['.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.properties']
+	],
+	[
+		{ icon: 'code-bracket', size: 19, color: 'var(--orange)' },
+		['.xml', '.plist', '.xsd', '.xsl', '.svgz']
+	],
+	[{ icon: 'lock', size: 19, color: 'var(--gray-800)' }, ['.lock']],
+
+	// Prose
+	[{ icon: 'markdown', size: 20, color: 'var(--blue)' }, ['.md', '.mdx', '.markdown', '.mdown']],
+	[
+		{ icon: 'paragraph', size: 18, color: 'var(--gray-800)' },
+		['.txt', '.text', '.log', '.rst', '.adoc', '.asciidoc']
+	],
+	[{ icon: 'pdf', size: 19, color: 'var(--red)' }, ['.pdf']],
+	[
+		{ icon: 'journal', size: 19, color: 'var(--blue)' },
+		['.doc', '.docx', '.odt', '.rtf', '.pages', '.tex']
+	],
+	[{ icon: 'chart', size: 19, color: 'var(--orange)' }, ['.ppt', '.pptx', '.odp', '.keynote']],
+
+	// Tabular
+	[{ icon: 'csv', size: 20, color: 'var(--gray-800)' }, ['.csv']],
+	[
+		{ icon: 'table', size: 19, color: 'var(--green)' },
+		['.tsv', '.xls', '.xlsx', '.xlsm', '.ods', '.parquet', '.avro', '.arrow', '.feather']
+	],
+
+	// Languages, one colour each so a mixed folder reads at a glance
+	[{ icon: 'code-bracket', size: 19, color: 'var(--blue)' }, ['.go']],
+	[{ icon: 'code-bracket', size: 19, color: 'var(--orange)' }, ['.rs', '.zig', '.nim']],
+	[{ icon: 'code-bracket', size: 19, color: 'var(--yellow)' }, ['.py', '.pyi', '.ipynb', '.lua']],
+	[{ icon: 'code-bracket', size: 19, color: 'var(--red)' }, ['.rb', '.erb', '.gemspec', '.rake']],
+	[{ icon: 'code-bracket', size: 19, color: 'var(--purple)' }, ['.php', '.cs', '.fs', '.vb']],
+	[
+		{ icon: 'code-bracket', size: 19, color: 'var(--green)' },
+		['.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hh', '.m', '.mm']
+	],
+	[
+		{ icon: 'function', size: 19, color: 'var(--purple)' },
+		['.hs', '.ex', '.exs', '.erl', '.clj', '.cljs', '.scala', '.ml', '.elm']
+	],
+	[
+		{ icon: 'code-bracket', size: 19, color: 'var(--orange)' },
+		['.java', '.kt', '.kts', '.swift', '.groovy', '.gradle']
+	],
+	[
+		{ icon: 'chart-line', size: 19, color: 'var(--blue)' },
+		['.r', '.rmd', '.jl', '.m4', '.sas', '.do']
+	],
+	[{ icon: 'code-bracket', size: 19, color: 'var(--blue)' }, ['.dart', '.sol', '.pl', '.pm']],
+
+	// Shells and the machines they run on
+	[
+		{ icon: 'terminal', size: 19, color: 'var(--green)' },
+		['.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd', '.awk', '.sed']
+	],
+	[
+		{ icon: 'server', size: 19, color: 'var(--purple)' },
+		['.tf', '.tfvars', '.hcl', '.nix', '.bicep']
+	],
+	[{ icon: 'package', size: 19, color: 'var(--blue)' }, ['.dockerfile', '.containerfile']],
+	[{ icon: 'cog', size: 19, color: 'var(--gray-800)' }, ['.mk', '.cmake', '.bazel', '.bzl']],
+
+	// Media
+	[
+		{ icon: 'image', size: 19, color: 'var(--purple)' },
+		[
+			'.png',
+			'.jpg',
+			'.jpeg',
+			'.gif',
+			'.svg',
+			'.webp',
+			'.bmp',
+			'.ico',
+			'.tif',
+			'.tiff',
+			'.avif',
+			'.heic',
+			'.psd',
+			'.ai',
+			'.fig',
+			'.sketch'
+		]
+	],
+	[
+		{ icon: 'video', size: 19, color: 'var(--purple)' },
+		['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.m4v', '.mpg', '.mpeg']
+	],
+	[
+		{ icon: 'audio', size: 19, color: 'var(--purple)' },
+		['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.opus', '.mid']
+	],
+	[
+		{ icon: 'font', size: 19, color: 'var(--orange)' },
+		['.ttf', '.otf', '.woff', '.woff2', '.eot']
+	],
+
+	// Everything that arrives packed, signed or compiled
+	[
+		{ icon: 'archive', size: 19, color: 'var(--orange)' },
+		['.zip', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.7z', '.rar', '.zst', '.lz4', '.iso']
+	],
+	[
+		{ icon: 'key', size: 19, color: 'var(--yellow)' },
+		['.pem', '.key', '.crt', '.cer', '.pub', '.asc', '.gpg', '.p12', '.pfx', '.jks', '.keystore']
+	],
+	[
+		{ icon: 'binary', size: 19, color: 'var(--gray-800)' },
+		[
+			'.exe',
+			'.dll',
+			'.so',
+			'.dylib',
+			'.bin',
+			'.wasm',
+			'.o',
+			'.a',
+			'.class',
+			'.pyc',
+			'.dat',
+			'.pak'
+		]
+	],
+	[
+		{ icon: 'package', size: 19, color: 'var(--gray-800)' },
+		['.jar', '.war', '.deb', '.rpm', '.dmg', '.pkg', '.apk', '.appimage', '.msi', '.whl', '.egg']
+	],
+	[{ icon: 'diff', size: 19, color: 'var(--green)' }, ['.patch', '.diff']]
+];
+
+const EXTENSION_ICONS: Record<string, FileIconDef> = Object.fromEntries(
+	EXTENSION_GROUPS.flatMap(([look, extensions]) => extensions.map((ext) => [ext, look]))
+);
+
+/** Lowercased: an extension is the same one however it was typed. */
 function getFileExtension(fileName: string): string {
 	const lastDot = fileName.lastIndexOf('.');
-	return lastDot !== -1 ? fileName.slice(lastDot) : '';
+	return lastDot !== -1 ? fileName.slice(lastDot).toLowerCase() : '';
 }
 
 function getFileIconConfig(fileName: string): FileIconDef {
