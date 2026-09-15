@@ -32,7 +32,17 @@ func classifyFSOp(op fsnotify.Op) (string, bool) {
 	}
 }
 
-// Stops any running watcher and starts a new one for workspaceID.
+// StopFileWatcher releases the inotify watches on a folder being closed.
+func (s *System) StopFileWatcher() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fileWatcherCancel != nil {
+		s.fileWatcherCancel()
+		s.fileWatcherCancel = nil
+	}
+}
+
+// StartFileWatcher stops any running watcher and starts a new one for workspaceID.
 func (s *System) StartFileWatcher(workspaceID string) {
 	s.mu.Lock()
 	if s.fileWatcherCancel != nil {
@@ -203,11 +213,7 @@ func (s *System) rebuildGraphAndEmit() {
 		// @todo handle error
 		return
 	}
-	wsGraph, err := s.Graph.GetWorkspaceGraph()
-	if err != nil {
-		return
-	}
-	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	graph.EmitWorkspaceGraphUpdated(s.Graph)
 }
 
 // LoadAllDatabaseSchemas runs QuerySchema for each workspace DB instance (same as after other graph rebuilds).
@@ -303,26 +309,26 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 
 	folderURI := ctx.URI(folderRel)
 
-	wsGraph, err := s.Graph.GetWorkspaceGraph()
+	wsGraph, err := graph.EnsureWorkspaceGraph(s.Graph)
 	if err != nil || wsGraph == nil {
 		return
 	}
 
-	folderNode := s.Graph.GetFolderNodeByID(folderURI)
-	if folderNode == nil {
-		return
-	}
-
 	if event.Op&fsnotify.Remove != 0 {
-		folderNode.Variables = make(map[string]string)
+		if err := graph.SetFolderVariables(s.Graph, folderURI, map[string]string{}); err != nil {
+			return
+		}
 	} else {
 		wfs, err := graph.NewWorkspaceFS(wsGraph.ID)
-		if err == nil {
-			_ = s.Graph.LoadFolderEnvFile(folderNode, wfs)
+		if err != nil {
+			return
+		}
+		if err := s.Graph.LoadFolderEnvFile(folderURI, wfs); err != nil {
+			return
 		}
 	}
 
-	utils.DebouncedEventsEmit("workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	graph.EmitWorkspaceGraphUpdated(s.Graph)
 }
 
 // Emits themeUpdated when the per-user .theme file changes.

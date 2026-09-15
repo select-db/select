@@ -1,10 +1,13 @@
 <script lang="ts">
-	import Button from '../Button/Button.svelte';
+	import Button, { type ButtonEmphasis } from '../Button/Button.svelte';
 
 	type ActionProps = {
 		label: string;
 		action: () => Promise<void>;
 		disabled?: boolean;
+		/** "warning" for anything destructive. Defaults to the button's place in
+		 * the footer: the main action is high, the others low. */
+		emphasis?: ButtonEmphasis;
 	};
 
 	type ModalFooterProps = {
@@ -22,7 +25,7 @@
 			content={leftAction.label}
 			onclick={leftAction.action}
 			disabled={leftAction.disabled}
-			emphasis="low"
+			emphasis={leftAction.emphasis ?? 'low'}
 		/>
 	{/if}
 	<div class="main-group">
@@ -31,7 +34,7 @@
 				content={secondaryAction.label}
 				onclick={secondaryAction.action}
 				disabled={secondaryAction.disabled}
-				emphasis="low"
+				emphasis={secondaryAction.emphasis ?? 'low'}
 			/>
 		{/if}
 		{#if mainAction}
@@ -39,7 +42,7 @@
 				content={mainAction.label}
 				onclick={mainAction.action}
 				disabled={mainAction.disabled}
-				emphasis="high"
+				emphasis={mainAction.emphasis ?? 'high'}
 			/>
 		{/if}
 	</div>

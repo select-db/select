@@ -102,6 +102,7 @@
 		padding: var(--space-xs-sm) var(--space-sm) 0 var(--space-sm);
 		border-bottom: var(--border);
 		min-height: 35px;
+		background-color: var(--gray-200);
 	}
 
 	.left-wrapper {

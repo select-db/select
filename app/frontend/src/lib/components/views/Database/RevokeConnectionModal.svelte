@@ -41,7 +41,8 @@
 	secondaryAction={{ label: 'Cancel', action: async () => onCancel() }}
 	mainAction={{
 		label: verb === 'Delete' ? 'Delete and revoke' : 'Revoke',
-		action: async () => onConfirm()
+		action: async () => onConfirm(),
+		emphasis: 'warning'
 	}}
 />
 

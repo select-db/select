@@ -38,7 +38,8 @@
 	}
 
 	.avatar.rounded {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
+		border: var(--border);
 	}
 
 	.avatar {

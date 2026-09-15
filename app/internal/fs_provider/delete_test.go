@@ -11,11 +11,7 @@ import (
 func deleteFixture(t *testing.T) (*FSProvider, string, string, string) {
 	t.Helper()
 
-	root := t.TempDir()
-	dir := filepath.Join(root, "workspaces", "ws-1")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	dir := t.TempDir()
 
 	path := filepath.Join(dir, "query.sql")
 	meta := path + MetadataFileSuffix
@@ -25,8 +21,12 @@ func deleteFixture(t *testing.T) (*FSProvider, string, string, string) {
 		}
 	}
 
-	fsp := New()
-	fsp.SetRoot(root)
+	fsp := New(func(id string) (string, error) {
+		if id != "ws-1" {
+			return "", os.ErrNotExist
+		}
+		return dir, nil
+	})
 	return fsp, "selectdb://workspaces/ws-1/query.sql", path, meta
 }
 
