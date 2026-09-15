@@ -110,16 +110,42 @@ const keyByCode: Record<string, string> = {
 const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta', 'CapsLock']);
 
 /**
- * The key a keystroke names.
- *
- * A letter is what the layout prints -- somebody on AZERTY pressing the key
- * marked A means A. Everything else is named by where it sits: the digit row
- * needs shift on AZERTY and the punctuation moves on QWERTZ, so a binding
- * written once for "-" is answered by the key in the same place on any of them.
- * Holding alt prints a different character again on macOS, which is the other
- * reason a letter falls back to its position.
+ * The punctuation a binding may name, as internal/keymap's `punctuation` lists
+ * it: the symbols a US layout prints without shift. A keystroke that prints one
+ * of these, or a letter or a digit, names a key a binding can be written for.
  */
-function keyFromEvent(e: KeyboardEvent): string {
+const bindableCharacters = "-=[]\\;',./`";
+
+function isBindableCharacter(key: string): boolean {
+	return /^[a-z0-9]$/.test(key) || bindableCharacters.includes(key);
+}
+
+/**
+ * The key a keystroke prints, when that is something a binding can name.
+ *
+ * This is what somebody reads off their own keyboard: a French layout prints
+ * "-" on the key a US layout prints "=" on, and a binding written for "-" is
+ * the one they expect that key to run. Empty when the character is not one a
+ * binding can be written for -- "&" on AZERTY, "é", a dead key -- and the
+ * position below answers for those.
+ */
+function printedKey(e: KeyboardEvent): string {
+	const key = (e.key ?? '').toLowerCase();
+	if (modifierKeys.has(e.key ?? '')) return '';
+	if (key.length !== 1) return '';
+	return isBindableCharacter(key) ? key : '';
+}
+
+/**
+ * The key a keystroke sits on.
+ *
+ * Named by where it is, so a binding written for a key in one place is answered
+ * by the key in the same place on a layout that prints something else there.
+ * This is what a keystroke falls back to: the digit row needs shift on AZERTY,
+ * holding alt prints another character again on macOS, and neither of those
+ * prints a name a binding could be written for.
+ */
+function positionalKey(e: KeyboardEvent): string {
 	const code = e.code ?? '';
 	const key = e.key ?? '';
 
@@ -136,15 +162,8 @@ function keyFromEvent(e: KeyboardEvent): string {
 	return key.toLowerCase();
 }
 
-/**
- * The keystroke, written the way a binding is: modifiers in a fixed order, then
- * the key. Matches internal/keymap's canonical form, and is compared to it as a
- * string -- the two orders are the same list.
- */
-export function chordFromEvent(e: KeyboardEvent): string {
-	const key = keyFromEvent(e);
-	if (!key) return '';
-
+/** Modifiers in a fixed order, then the key: internal/keymap's canonical form. */
+function chord(e: KeyboardEvent, key: string): string {
 	const parts: string[] = [];
 	if (e.ctrlKey) parts.push('ctrl');
 	if (e.altKey) parts.push('alt');
@@ -153,6 +172,26 @@ export function chordFromEvent(e: KeyboardEvent): string {
 	parts.push(key);
 
 	return parts.join('+');
+}
+
+/**
+ * The chords a keystroke answers to, in the order they are tried: what the key
+ * prints first, where the key sits second.
+ *
+ * The two are the same string on a US layout and differ on every other, which
+ * is the whole point: on AZERTY the key printed "-" answers "cmd+-" rather than
+ * running whatever is bound to the key in that position, and a key that prints
+ * nothing a binding could name still answers for its position.
+ */
+export function chordsFromEvent(e: KeyboardEvent): string[] {
+	const printed = printedKey(e);
+	const positional = positionalKey(e);
+
+	const chords: string[] = [];
+	if (printed) chords.push(chord(e, printed));
+	if (positional && positional !== printed) chords.push(chord(e, positional));
+
+	return chords;
 }
 
 function evaluateWhen(when: string | undefined, context: KeybindingsContext): boolean {
@@ -344,6 +383,25 @@ export function findMatchingKeybinding(
 	for (let i = keybindings.length - 1; i >= 0; i--) {
 		const kb = keybindings[i];
 		if (kb.key === chord && evaluateWhen(kb.when, context)) return kb;
+	}
+	return null;
+}
+
+/**
+ * The binding a keystroke runs.
+ *
+ * Every binding is tried against what the key prints before any of them is
+ * tried against where the key sits, so a layout that prints "-" somewhere else
+ * runs the binding written for "-" from that key, and a key printing nothing a
+ * binding could name still runs what its position is bound to.
+ */
+export function keybindingForEvent(
+	e: KeyboardEvent,
+	context: KeybindingsContext
+): Keybinding | null {
+	for (const chord of chordsFromEvent(e)) {
+		const keybinding = findMatchingKeybinding(chord, context);
+		if (keybinding) return keybinding;
 	}
 	return null;
 }

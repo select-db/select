@@ -1,10 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import {
-		chordFromEvent,
-		findMatchingKeybinding,
-		initKeybindings
-	} from '$lib/stores/keybindingsStore';
+	import { keybindingForEvent, initKeybindings } from '$lib/stores/keybindingsStore';
 	import { getContext } from '$lib/stores/keybindingsContextStore';
 	import { executeCommand } from '$lib/stores/commandRegistry';
 
@@ -22,9 +18,6 @@
 	function handleKeydown(e: KeyboardEvent) {
 		if (!initialized) return;
 
-		const chord = chordFromEvent(e);
-		if (!chord) return;
-
 		const context = getContext();
 
 		// Escape closes the menu whatever is held with it.
@@ -36,7 +29,7 @@
 			return;
 		}
 
-		const keybinding = findMatchingKeybinding(chord, context);
+		const keybinding = keybindingForEvent(e, context);
 		if (!keybinding) return;
 
 		if (context.menuFocus && keybinding.command === 'menu.selectNext' && (e.metaKey || e.ctrlKey)) {
