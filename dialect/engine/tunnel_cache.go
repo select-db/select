@@ -40,8 +40,11 @@ type Tunnel interface {
 
 var (
 	// 20k entries × ~100 KB = ~2GB max
-	tunnelCache   = cache.New(cache.Options{MaxEntries: 20_000, TTL: 20 * time.Minute})
-	tunnelCacheMu sync.Mutex
+	tunnelCache = cache.New(cache.Options{MaxEntries: 20_000, TTL: 20 * time.Minute})
+	// secondary index: key → workspace, for CloseWorkspaceTunnels. The key is a
+	// hash, so nothing else can tell whose tunnel an entry is.
+	tunnelKeyToWorkspace = make(map[string]string)
+	tunnelCacheMu        sync.Mutex
 )
 
 // GetOrCreateTunnel returns a live cached tunnel, dialling via StartSSHTunnel on miss.
@@ -69,6 +72,7 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		}
 		addr := existing.LocalAddr()
 		tunnelCache.Delete(key)
+		delete(tunnelKeyToWorkspace, key)
 		existing.Close()
 		tunnelCacheMu.Unlock()
 		DeleteConnsByAddr(addr)
@@ -93,11 +97,13 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		tunnelCache.Delete(key)
 		existing.Close()
 		tunnelCache.Set(key, tunnel)
+		tunnelKeyToWorkspace[key] = workspaceID
 		tunnelCacheMu.Unlock()
 		DeleteConnsByAddr(addr)
 		return tunnel, nil
 	}
 	tunnelCache.Set(key, tunnel)
+	tunnelKeyToWorkspace[key] = workspaceID
 	tunnelCacheMu.Unlock()
 	return tunnel, nil
 }
@@ -106,13 +112,41 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 func DeleteTunnel(key string) {
 	tunnelCacheMu.Lock()
 	tunnelCache.Delete(key)
+	delete(tunnelKeyToWorkspace, key)
 	tunnelCacheMu.Unlock()
+}
+
+// CloseWorkspaceTunnels closes every tunnel a workspace opened. Called when the
+// workspace is deleted: the tunnel outlives the cache entry otherwise, and it
+// is a live socket into the customer's network.
+func CloseWorkspaceTunnels(workspaceID string) {
+	var closed []Tunnel
+
+	tunnelCacheMu.Lock()
+	for key, id := range tunnelKeyToWorkspace {
+		if id != workspaceID {
+			continue
+		}
+		if tunnel, ok := getTunnel(key); ok {
+			closed = append(closed, tunnel)
+		}
+		tunnelCache.Delete(key)
+		delete(tunnelKeyToWorkspace, key)
+	}
+	tunnelCacheMu.Unlock()
+
+	for _, tunnel := range closed {
+		addr := tunnel.LocalAddr()
+		tunnel.Close()
+		DeleteConnsByAddr(addr)
+	}
 }
 
 // ClearTunnelCache drops all entries.
 func ClearTunnelCache() {
 	tunnelCacheMu.Lock()
 	tunnelCache.DeleteFunc(func(string) bool { return true })
+	tunnelKeyToWorkspace = make(map[string]string)
 	tunnelCacheMu.Unlock()
 }
 
