@@ -34,6 +34,7 @@
 				disabled: false,
 				action: opt.action
 					? async () => {
+							onClose();
 							await opt.action?.(onClose, metadata);
 						}
 					: undefined

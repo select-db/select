@@ -246,7 +246,8 @@
 		background-color: var(--gray-200);
 		font-family: 'JetBrains Mono', monospace;
 		font-size: var(--fs-xs);
-		word-break: break-all;
+		overflow: hidden;
+		text-overflow: ellipsis;
 		color: var(--gray-800);
 	}
 

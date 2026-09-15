@@ -12,6 +12,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
@@ -47,6 +49,13 @@ const (
 	// a revoked membership leaves behind: only the membership is deleted.
 	RevokedWorkspaceID = "e2e-revoked-workspace"
 )
+
+// The workspace logo, a 128x128 PNG as the app stores one. A file rather than a
+// literal so it stays something you can open and look at, and drawn rather than
+// derived because the identicons above cannot make a duck.
+//
+//go:embed workspace-logo.png
+var workspaceLogo []byte
 
 // The folders the fixture leaves beside the workspace, for the specs that open
 // something other than a workspace of their own.
@@ -276,6 +285,15 @@ func seedTables(ctx context.Context, queries *generated.Queries) error {
 		OwnerID: db_types.JSONNullString{NullString: sql.NullString{String: UserID, Valid: true}},
 	}); err != nil {
 		return fmt.Errorf("create workspace: %w", err)
+	}
+
+	// Stored bare, no data: prefix, which is the convention the app reads it back
+	// under (frontend/src/lib/utils/workspaceLogo.ts).
+	if err := queries.UpdateWorkspaceLogo(ctx, generated.UpdateWorkspaceLogoParams{
+		ID:   WorkspaceID,
+		Logo: db_types.NewJSONNullString(base64.StdEncoding.EncodeToString(workspaceLogo)),
+	}); err != nil {
+		return fmt.Errorf("set workspace logo: %w", err)
 	}
 
 	// No membership row: the folder naming it must not open.
