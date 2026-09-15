@@ -12,7 +12,7 @@
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
 	import { createClickHandlers, createClickGestureHandlers } from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
-	import { loadSchema } from '$lib/utils/query/loadSchema';
+	import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
@@ -90,12 +90,13 @@
 
 		toggleIsItemExpanded(item.id);
 
-		// Through loadSchema, not QuerySchema directly: expanding a database is the
-		// most common way to load a schema, and it was the one path that dropped
-		// the result on the floor — no await, no catch. A server that refuses the
-		// read left the node expanded and empty with nothing said anywhere.
-		if (item.type === 'db_instance' && 'children' in item && item.children.length === 0) {
-			void loadSchema({ database: item as graph.DBInstanceNode });
+		// Through loadSchemaIfEmpty, not QuerySchema directly: expanding a database
+		// is the most common way to load a schema, and it was the one path that
+		// dropped the result on the floor -- no await, no catch. A server that
+		// refuses the read left the node expanded and empty with nothing said
+		// anywhere.
+		if (item.type === 'db_instance') {
+			void loadSchemaIfEmpty(item as graph.DBInstanceNode);
 		}
 	};
 

@@ -29,8 +29,12 @@ var (
 	})
 
 	// secondary index: hash → DSN for DeleteConnsByAddr. SSH-rewritten DSNs are 127.0.0.1:port.
-	connHashToDSN   = make(map[string]string)
-	connHashToDSNMu sync.Mutex
+	connHashToDSN = make(map[string]string)
+	// secondary index: hash → workspace, for CloseWorkspaceConns. The cache key
+	// is a hash of the workspace and the DSN, so nothing else can tell whose
+	// pool an entry is.
+	connHashToWorkspace = make(map[string]string)
+	connHashToDSNMu     sync.Mutex
 )
 
 // poolCloseGrace is how long closeDeletedPool waits before closing a pool that
@@ -44,6 +48,7 @@ var poolCloseGrace = 60 * time.Second
 func closeDeletedPool(hash string, value any) {
 	connHashToDSNMu.Lock()
 	delete(connHashToDSN, hash)
+	delete(connHashToWorkspace, hash)
 	connHashToDSNMu.Unlock()
 
 	db, ok := value.(*sql.DB)
@@ -53,10 +58,12 @@ func closeDeletedPool(hash string, value any) {
 	time.AfterFunc(poolCloseGrace, func() { _ = db.Close() })
 }
 
-// indexConn records hash → dsn so DeleteConnsByAddr can find this pool again.
-func indexConn(hash, dsn string) {
+// indexConn records hash → dsn and hash → workspace so DeleteConnsByAddr and
+// CloseWorkspaceConns can find this pool again.
+func indexConn(hash, workspaceID, dsn string) {
 	connHashToDSNMu.Lock()
 	connHashToDSN[hash] = dsn
+	connHashToWorkspace[hash] = workspaceID
 	connHashToDSNMu.Unlock()
 }
 
@@ -90,6 +97,25 @@ func DeleteConnsByAddr(addr string) {
 	connHashToDSNMu.Unlock()
 	// Delete fires closeDeletedPool, which closes the pool behind the dead
 	// tunnel rather than leaving it to linger on a socket that no longer works.
+	for _, hash := range toDelete {
+		connCache.Delete(hash)
+	}
+}
+
+// CloseWorkspaceConns drops every pool opened for a workspace, closing each one
+// through closeDeletedPool. Called when the workspace is deleted: its
+// datasources are gone, and a pool that outlives them is an open connection to
+// a database nobody may reach any more.
+func CloseWorkspaceConns(workspaceID string) {
+	var toDelete []string
+	connHashToDSNMu.Lock()
+	for hash, id := range connHashToWorkspace {
+		if id == workspaceID {
+			toDelete = append(toDelete, hash)
+		}
+	}
+	connHashToDSNMu.Unlock()
+
 	for _, hash := range toDelete {
 		connCache.Delete(hash)
 	}
@@ -182,7 +208,7 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		// Indexed here so only the caller that opened writes it, not every cache
 		// hit. Safe before the store: create runs only on a miss, so nothing
 		// under this key is displaced.
-		indexConn(hash, dsn)
+		indexConn(hash, workspaceID, dsn)
 		return db, nil
 	})
 	if err != nil {
@@ -196,5 +222,6 @@ func ClearConnCache() {
 	connCache.DeleteFunc(func(string) bool { return true })
 	connHashToDSNMu.Lock()
 	connHashToDSN = make(map[string]string)
+	connHashToWorkspace = make(map[string]string)
 	connHashToDSNMu.Unlock()
 }

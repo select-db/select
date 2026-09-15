@@ -17,10 +17,13 @@ import { tryCatch } from '../tryCatch';
  */
 export const loadSchema = async ({
 	database,
-	noCache = false
+	noCache = false,
+	announce = noCache
 }: {
 	database: graph.DBInstanceNode;
 	noCache?: boolean;
+	/** Says "schema loaded" when it worked. On by default for an explicit reload. */
+	announce?: boolean;
 }) => {
 	pushToLoadingStore(database.id);
 
@@ -38,9 +41,23 @@ export const loadSchema = async ({
 		return;
 	}
 
-	if (noCache)
+	if (announce)
 		notify({
 			type: AlertType.Success,
 			message: `${database.name} schema loaded`
 		});
+};
+
+/**
+ * Loads the schema of a database that is showing nothing.
+ *
+ * Empty is the one state where cached metadata is worth nothing: the entry the
+ * cache would serve is the one that produced the empty row, so a person
+ * clicking it again would be answered from the cache and see it stay empty.
+ * The read goes to the database instead, which makes every click on such a row
+ * another attempt to open it.
+ */
+export const loadSchemaIfEmpty = async (database: graph.DBInstanceNode) => {
+	if (database.children?.length) return;
+	await loadSchema({ database, noCache: true, announce: false });
 };

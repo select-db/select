@@ -56,7 +56,7 @@ func getConn(workspaceID, dsn string) (*sql.DB, bool) {
 func setConn(workspaceID, dsn string, db *sql.DB) {
 	hash := hashWorkspaceDSN(workspaceID, dsn)
 	connCache.Set(hash, db)
-	indexConn(hash, dsn)
+	indexConn(hash, workspaceID, dsn)
 }
 
 func poolIsClosed(db *sql.DB) bool {
@@ -311,5 +311,40 @@ func TestFailedOpenIsNotCached(t *testing.T) {
 	}
 	if _, ok := getConn("ws1", "dsn-unopenable"); ok {
 		t.Fatal("a failed open was cached")
+	}
+}
+
+// TestCloseWorkspaceConnsClosesOnlyThatWorkspace: deleting a workspace revokes
+// its datasources, and a pool that outlives them is an open connection to a
+// database nobody may reach any more. The other workspace's pool is untouched.
+func TestCloseWorkspaceConnsClosesOnlyThatWorkspace(t *testing.T) {
+	restore := poolCloseGrace
+	poolCloseGrace = 10 * time.Millisecond
+	defer func() { poolCloseGrace = restore; ClearConnCache() }()
+	ClearConnCache()
+
+	deleted := openTestPool(t, "ws-deleted")
+	kept := openTestPool(t, "ws-kept")
+	setConn("ws-deleted", "dsn-a", deleted)
+	setConn("ws-kept", "dsn-b", kept)
+
+	CloseWorkspaceConns("ws-deleted")
+
+	if _, ok := getConn("ws-deleted", "dsn-a"); ok {
+		t.Fatal("the deleted workspace still has a cached pool")
+	}
+	if _, ok := getConn("ws-kept", "dsn-b"); !ok {
+		t.Fatal("another workspace's pool was dropped with it")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !poolIsClosed(deleted) {
+		if time.Now().After(deadline) {
+			t.Fatal("the deleted workspace's pool was never closed")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if poolIsClosed(kept) {
+		t.Fatal("another workspace's pool was closed")
 	}
 }

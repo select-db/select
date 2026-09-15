@@ -1,15 +1,17 @@
 -- name: GetDatasource :one
 SELECT
-  db_type,
-  name,
-  encrypted_dsn,
-  encrypted_ssh,
-  max_open_conns,
-  max_idle_conns,
-  conn_max_lifetime,
-  conn_max_idle_time
+  d.db_type,
+  d.name,
+  d.encrypted_dsn,
+  d.encrypted_ssh,
+  d.max_open_conns,
+  d.max_idle_conns,
+  d.conn_max_lifetime,
+  d.conn_max_idle_time
 FROM
-  app.datasource
+  app.datasource d
+  JOIN app.workspace w ON w.id = d.workspace_id
 WHERE
-  id = $1
-  AND workspace_id = $2;
+  d.id = $1
+  AND d.workspace_id = $2
+  AND w.deleted_at IS NULL;

@@ -157,6 +157,12 @@
 	.layout {
 		display: flex;
 		flex: 1;
+		/* A flex item will not shrink below its content without this, and the
+		   content here is a file tree: a workspace with more rows than fit
+		   stretched this box past the window instead of scrolling inside it,
+		   and the rows below the fold were clipped away with no way to reach
+		   them. */
+		min-height: 0;
 		/* clip, not hidden: `hidden` still makes this a scroll container, and a
 		   scrollIntoView from the file tree or the editor leaves it scrolled a
 		   few px sideways with no scrollbar to put it back — the whole app then

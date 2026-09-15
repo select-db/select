@@ -1,7 +1,9 @@
 package git
 
 import (
+	"context"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -12,7 +14,42 @@ type BranchInfo struct {
 	IsRemote  bool   `json:"isRemote"`
 }
 
-// GetBranches returns a list of all branches (local and remote).
+// branchLimit caps how many branches of each kind the picker asks git for. A
+// repository with thousands of them spent the difference building a menu nobody
+// reads to the end, and the ones a person switches to are the ones committed to
+// recently. A branch past the cap is still reachable: SwitchBranch takes a name
+// the picker never listed. A var so tests can lower it.
+var branchLimit = 100
+
+// branchNames lists the branches under a ref prefix, most recently committed to
+// first, at most branchLimit of them. The count is git's, so it stops walking
+// rather than handing back every ref for us to drop.
+func branchNames(ctx context.Context, root, prefix string) []string {
+	out, err := runGitWithOutput(ctx, root,
+		"for-each-ref",
+		"--sort=-committerdate",
+		"--count="+strconv.Itoa(branchLimit),
+		"--format=%(refname:short)",
+		prefix,
+	)
+	if err != nil || strings.TrimSpace(out) == "" {
+		return nil
+	}
+
+	var names []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		name := strings.TrimSpace(line)
+		// origin/HEAD is the symbolic ref, not a branch to switch to.
+		if name == "" || name == "origin/HEAD" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetBranches returns the branches to pick from, local ones first, each kind
+// capped at branchLimit and ordered by how recently it was committed to.
 func (g *Git) GetBranches() ([]BranchInfo, error) {
 	ctx := g.context()
 
@@ -27,55 +64,38 @@ func (g *Git) GetBranches() ([]BranchInfo, error) {
 
 	if !hasCommits {
 		// No local commits yet, only show remote branches.
-		remoteBranches, err := runGitWithOutput(ctx, root, "branch", "-r")
-		if err == nil && strings.TrimSpace(remoteBranches) != "" {
-			for _, line := range strings.Split(strings.TrimSpace(remoteBranches), "\n") {
-				line = strings.TrimSpace(line)
-				if line == "" || strings.Contains(line, "->") {
-					continue
-				}
-				branches = append(branches, BranchInfo{
-					Name:     strings.TrimPrefix(line, "origin/"),
-					IsRemote: true,
-				})
-			}
+		for _, name := range branchNames(ctx, root, "refs/remotes/origin") {
+			branches = append(branches, BranchInfo{
+				Name:     strings.TrimPrefix(name, "origin/"),
+				IsRemote: true,
+			})
 		}
 		return branches, nil
 	}
 
-	// Local branches.
-	localOut, err := runGitWithOutput(ctx, root, "branch")
-	if err == nil {
-		for _, line := range strings.Split(strings.TrimSpace(localOut), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			isCurrent := strings.HasPrefix(line, "* ")
-			branches = append(branches, BranchInfo{
-				Name:      strings.TrimPrefix(line, "* "),
-				IsCurrent: isCurrent,
-			})
-		}
+	current := ""
+	if out, err := runGitWithOutput(ctx, root, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
+		current = strings.TrimSpace(out)
+	}
+
+	localSet := make(map[string]bool, branchLimit)
+	for _, name := range branchNames(ctx, root, "refs/heads") {
+		localSet[name] = true
+		branches = append(branches, BranchInfo{Name: name, IsCurrent: name == current})
+	}
+
+	// The branch you are on belongs in the list whether or not it is among the
+	// most recent: it is the one the picker marks as current.
+	if current != "" && current != "HEAD" && !localSet[current] {
+		localSet[current] = true
+		branches = append([]BranchInfo{{Name: current, IsCurrent: true}}, branches...)
 	}
 
 	// Remote-only branches (deduplicated against locals).
-	localSet := make(map[string]bool, len(branches))
-	for _, b := range branches {
-		localSet[b.Name] = true
-	}
-
-	remoteOut, err := runGitWithOutput(ctx, root, "branch", "-r")
-	if err == nil {
-		for _, line := range strings.Split(strings.TrimSpace(remoteOut), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.Contains(line, "->") {
-				continue
-			}
-			branchName := strings.TrimPrefix(line, "origin/")
-			if !localSet[branchName] {
-				branches = append(branches, BranchInfo{Name: branchName, IsRemote: true})
-			}
+	for _, name := range branchNames(ctx, root, "refs/remotes/origin") {
+		branchName := strings.TrimPrefix(name, "origin/")
+		if !localSet[branchName] {
+			branches = append(branches, BranchInfo{Name: branchName, IsRemote: true})
 		}
 	}
 
