@@ -70,20 +70,29 @@ transform you have to know about.
 
 ## Marketing pages
 
-Hand-written, deliberately. They share **CSS variables** with the docs and
-nothing else — no shared template, no shared layout, no generated markup. A
-landing page and a doc page want different structure, and pretending otherwise
-costs more than it saves.
+Hand-written, deliberately. They share **CSS variables** with the docs, and the
+header and footer with each other, and nothing else -- no shared template, no
+shared layout, no generated markup. A landing page and a doc page want different
+structure, and pretending otherwise costs more than it saves.
+
+The header and footer are the exception because they are the same furniture on
+every marketing page: a copy per page drifts the moment one of them gains a
+link, which is exactly how the download page ended up with a different header
+and a different footer from the home page. They are substituted through the same
+marker mechanism as everything else rather than through a template engine.
 
 Each page is a single self-contained file: CSS inline in `<head>`, system fonts,
 no web fonts, no framework, no third-party request. The build copies
-`website/*.html` into `dist/` and substitutes into two markers. `index.html`
+`website/*.html` into `dist/` and substitutes into the markers below. `index.html`
 becomes the site root; `foo.html` becomes `/foo/`. `*.draft.html` files are
-skipped, so a work-in-progress page can sit beside a live one.
+skipped, so a work-in-progress page can sit beside a live one, and so are files
+whose name starts with `_`, which are partials rather than pages.
 
 | Marker | Replaced with |
 |--------|---------------|
 | `/*THEME*/` | The app's `.theme` file, verbatim. Required — a page without it fails the build. |
+| `<!--HEADER-->` | `website/_header.html`, verbatim. Optional: a page without the marker simply has no header. |
+| `<!--FOOTER-->` | `website/_footer.html`, verbatim. |
 | `<!--STARS-->` | The GitHub star count, read once per build and cached for six hours. Empty when it cannot be read, so the button degrades to its label; a build never fails over it. |
 
 The count is baked in rather than fetched from the browser for the reason in the

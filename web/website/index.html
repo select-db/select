@@ -4,13 +4,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SELECT: the SQL client that works like your editor</title>
+  <title>SELECT: the SQL client that lives in your repo</title>
   <meta name="description"
     content="An SQL client shaped like an IDE. Schema-aware completion, real-time linting, and a workspace that is a folder in your repo. PostgreSQL, MySQL, SQLite.">
   <link rel="canonical" href="https://select-db.com/">
   <link rel="icon" href="/favicon.png">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="SELECT: the SQL client that works like your editor">
+  <meta property="og:title" content="SELECT: the SQL client that lives in your repo">
   <meta property="og:description"
     content="Schema-aware completion, real-time linting, and a workspace that is a folder in your repo.">
   <meta property="og:url" content="https://select-db.com/">
@@ -352,6 +352,21 @@
       padding: 13px 22px
     }
 
+    /* A button that names an OS shows that OS's mark. Scoped to .os so every
+       other button keeps its inline-block layout. */
+    .btn.os {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px
+    }
+
+    .btn.os svg {
+      width: 1.05em;
+      height: 1.05em;
+      fill: currentColor;
+      flex: none
+    }
+
     :focus-visible {
       outline: 2px solid var(--red);
       outline-offset: 2px
@@ -383,27 +398,33 @@
       margin-top: var(--s2)
     }
 
-    h1 span {
-      color: var(--gray-700)
-    }
-
+    /* The hero and the closing section are the same four-part stack: headline,
+       lede, buttons, fine print. Each gap is a step wider than the one above it,
+       so the eye reads them as four blocks rather than one paragraph. */
     .lede {
-      margin-top: var(--s2);
+      margin-top: var(--s3);
       max-width: 56ch;
       font-size: 1.15rem;
       color: var(--gray-900)
     }
 
+    /* The hero headline is the page's largest type, up to 3.6rem, and a gap set
+       for the closing section's h2 reads as cramped under it. The space under a
+       headline belongs to the headline's size, not to the stack. */
+    .hero .lede {
+      margin-top: var(--s4)
+    }
+
     .cta {
       display: flex;
       flex-wrap: wrap;
-      gap: var(--s1);
-      margin-top: var(--s3)
+      gap: var(--s2);
+      margin-top: var(--s4)
     }
 
     .fine {
-      margin-top: var(--s2);
-      font: var(--t1)/1.5 var(--m);
+      margin-top: var(--s3);
+      font: var(--t1)/1.6 var(--m);
       color: var(--gray-700)
     }
 
@@ -580,62 +601,6 @@
       font-weight: 400
     }
 
-    /* three pillars */
-    .cols {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr)
-    }
-
-    .cols>* {
-      padding: var(--s4) var(--s3);
-      border-right: var(--border)
-    }
-
-    .cols>*:last-child {
-      border-right: 0
-    }
-
-    @media (max-width:820px) {
-      .cols {
-        grid-template-columns: 1fr
-      }
-
-      .cols>* {
-        border-right: 0;
-        border-bottom: var(--border)
-      }
-
-      .cols>*:last-child {
-        border-bottom: 0
-      }
-    }
-
-    .cols h3 {
-      font-size: 1.1rem;
-      margin: var(--s2) 0 var(--s1)
-    }
-
-    .cols p {
-      color: var(--gray-900);
-      font-size: .95rem
-    }
-
-    .cols ul {
-      margin-top: var(--s2);
-      display: grid;
-      gap: 6px
-    }
-
-    .cols li {
-      font: var(--t2)/1.4 var(--m);
-      color: var(--gray-700)
-    }
-
-    .cols li::before {
-      content: "→ ";
-      color: var(--gray-600)
-    }
-
     /* the argument */
     .arg {
       background: var(--gray-100)
@@ -690,14 +655,26 @@
       max-width: 46ch
     }
 
-    .row a {
+    .row p+p {
+      margin-top: var(--s2)
+    }
+
+    /* .row p is the more specific selector, so the aside keeps its own colour
+       only if it is named here too. */
+    .row p.fine {
+      color: var(--gray-700)
+    }
+
+    .row a,
+    .arg .f>a {
       display: inline-block;
       margin-top: var(--s2);
       font: var(--t2)/1 var(--m);
       text-decoration: none
     }
 
-    .row a:hover {
+    .row a:hover,
+    .arg .f>a:hover {
       text-decoration: underline
     }
 
@@ -870,85 +847,29 @@
 <body>
 
   <div class="bar">
-    <div class="f">Public beta · hosted in US East (Virginia) · EU region next</div>
+    <div class="f">Public beta · Solo is free forever · Teams is $12 a seat, and stays $12 for everyone who joins now</div>
   </div>
 
-  <header>
-    <div class="f">
-      <a class="logo" href="/"><img src="/logo.png" alt="" width="22" height="22"><svg class="logo-text"
-          viewBox="0 -880 4487 1024" fill="currentColor">
-          <g transform="scale(1, -1)">
-            <path transform="translate(0, 0)"
-              d="M710 525Q710 497 690 478Q671 458 643 458H243Q224 457 211.5 449.5Q199 442 193.0 432.5Q187 423 187 413Q187 403 193.0 393.5Q199 384 211.5 376.5Q224 369 243 368H527Q597 366 642.5 335.5Q688 305 707.5 265.5Q727 226 727 185Q727 145 707.0 105.5Q687 66 642.0 35.5Q597 5 527 5H521Q515 4 509 4H131Q103 4 83.5 23.5Q64 43 64 71Q64 99 84 118Q103 138 131 138H533Q552 137 564.5 145.0Q577 153 583.0 163.5Q589 174 589 185Q589 192 583.0 204.5Q577 217 564.5 225.0Q552 233 533 234H249Q179 236 133.5 266.0Q88 296 68.5 334.5Q49 373 49 413Q49 452 69.0 490.5Q89 529 134.0 559.0Q179 589 249 591H255Q261 592 267 592H643Q671 592 690.5 572.5Q710 553 710 525Z" />
-            <path transform="translate(776, 0)"
-              d="M249 592H295H635Q663 591 681.5 571.0Q700 551 700 523Q695 463 635 458H283Q245 456 220.0 429.0Q195 402 183.5 367.5Q172 333 172 297Q172 261 183.5 226.5Q195 192 220.0 165.0Q245 138 283 136H635Q663 135 681.5 115.0Q700 95 700 67Q699 40 680.5 21.5Q662 3 635 2H268H249Q179 6 133.5 55.5Q88 105 68.5 168.0Q49 231 49 297Q49 363 69.0 426.0Q89 489 134.0 538.5Q179 588 249 592ZM698 301Q698 273 678 254Q659 234 631 234H329Q301 234 281.5 253.5Q262 273 262 301Q262 329 281 349Q301 368 329 368H631Q659 368 678.5 348.5Q698 329 698 301Z" />
-            <path transform="translate(1513, 0)"
-              d="M130 608Q158 608 178.0 589.5Q198 571 199 543V302Q198 261 204.5 226.5Q211 192 236.0 165.0Q261 138 299 136H619Q647 135 665.5 115.0Q684 95 684 67Q683 40 664.5 21.5Q646 3 619 2H265Q195 6 149.5 49.5Q104 93 84 156Q65 219 64 290V543Q65 570 84.0 588.5Q103 607 130 608Z" />
-            <path transform="translate(2229, 0)"
-              d="M249 592H295H635Q663 591 681.5 571.0Q700 551 700 523Q695 463 635 458H283Q245 456 220.0 429.0Q195 402 183.5 367.5Q172 333 172 297Q172 261 183.5 226.5Q195 192 220.0 165.0Q245 138 283 136H635Q663 135 681.5 115.0Q700 95 700 67Q699 40 680.5 21.5Q662 3 635 2H268H249Q179 6 133.5 55.5Q88 105 68.5 168.0Q49 231 49 297Q49 363 69.0 426.0Q89 489 134.0 538.5Q179 588 249 592ZM698 301Q698 273 678 254Q659 234 631 234H329Q301 234 281.5 253.5Q262 273 262 301Q262 329 281 349Q301 368 329 368H631Q659 368 678.5 348.5Q698 329 698 301Z" />
-            <path transform="translate(2966, 0)"
-              d="M291 458Q253 456 227.5 429.0Q202 402 191.0 367.5Q180 333 180 297Q180 261 190.5 226.0Q201 191 227.0 164.5Q253 138 291 136H621Q684 130 690 67Q689 39 669.0 20.5Q649 2 621 2H302H256Q186 6 141.0 55.5Q96 105 76.5 168.0Q57 231 57 297Q57 346 68.0 394.0Q79 442 102.5 485.5Q126 529 165.5 560.0Q205 591 256 592H275H621Q684 586 690 523Q690 495 669.5 476.5Q649 458 621 458Z" />
-            <path transform="translate(3685, 0)"
-              d="M44 525Q44 553 63.5 572.5Q83 592 111 592H693Q721 592 741 573Q760 553 760 525Q760 497 740.5 477.5Q721 458 693 458H470V53Q464 -7 404 -12Q376 -12 355.5 6.5Q335 25 335 53V458H111Q83 458 64 478Q44 497 44 525Z" />
-          </g>
-        </svg><span class="beta">BETA</span></a>
-      <nav>
-        <a href="#pricing">Pricing</a>
-        <a href="/docs/getting-started/">Docs</a>
-        <a href="/api/">API</a>
-      </nav>
-      <div class="acts">
-        <!-- The star count is substituted at build time (see starsMarker in
-           web/generate). Nothing is fetched from the browser: this page makes
-           no third-party request, and the build fails if it starts to. -->
-        <a class="gh" href="https://github.com/select-db/select" rel="noopener">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path
-              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
-          </svg><span>Star</span><!--STARS-->
-        </a>
-        <button class="tt" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
-          <svg class="icon-light" viewBox="0 0 24 24">
-            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-            <path d="M12 8a4 4 0 1 1 -3.995 4.2l-.005 -.2l.005 -.2a4 4 0 0 1 3.995 -3.8z" />
-            <path d="M12 4a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-            <path d="M17 6a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-            <path d="M19 11a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-            <path d="M17 16a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-            <path d="M12 18a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-            <path d="M7 16a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-            <path d="M5 11a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-            <path d="M7 6a1 1 0 0 1 .993 .883l.007 .127a1 1 0 0 1 -1.993 .117l-.007 -.127a1 1 0 0 1 1 -1z" />
-          </svg><svg class="icon-dark" viewBox="0 0 24 24">
-            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
-            <path d="M12 5l0 .01" />
-            <path d="M17 7l0 .01" />
-            <path d="M19 12l0 .01" />
-            <path d="M17 17l0 .01" />
-            <path d="M12 19l0 .01" />
-            <path d="M7 17l0 .01" />
-            <path d="M5 12l0 .01" />
-            <path d="M7 7l0 .01" />
-          </svg>
-        </button>
-        <a class="btn" href="/download/">Download</a>
-      </div>
-    </div>
-  </header>
+  <!--HEADER-->
 
   <main>
 
     <section class="hero" style="border-bottom: none;">
       <div class="f">
-        <h1>The SQL client <span>for devs.</span></h1>
+        <h1>The SQL client that lives in your repo.</h1>
         <p class="lede">Completion that knows your schema, lint rules your team commits, and <span
             class="mono">$variables</span> that resolve from your <span class="mono">.env</span>. Your queries stay
-          <span class="mono">.sql</span> files in your repo, not tabs in a tool that owns them.</p>
+          plain <span class="mono">.sql</span> files, not tabs in a tool that owns them.
+        </p>
         <p class="cta">
-          <a class="btn b" href="/download/">Download for macOS</a>
+          <a class="btn b os" href="/download/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.53c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.71-3.19-1.73-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.18-1.54 2.67-.39 6.62 1.11 8.79.73 1.06 1.6 2.25 2.74 2.21 1.1-.04 1.52-.71 2.85-.71 1.33 0 1.71.71 2.88.69 1.19-.02 1.94-1.08 2.67-2.14.84-1.23 1.19-2.42 1.21-2.48-.03-.01-2.32-.89-2.34-3.54zM14.88 5.68c.61-.74 1.02-1.77.91-2.79-.88.04-1.94.59-2.57 1.32-.56.65-1.05 1.7-.92 2.7.98.08 1.98-.5 2.58-1.23z"/></svg>Download for macOS</a>
           <a class="btn g b" href="/docs/getting-started/">Read the docs</a>
         </p>
+        <!-- Cost, engines, platforms and the GitHub sign-in, above the fold: a
+           reader who runs MySQL or refuses a sign-in should not have to scroll
+           to the pricing table to find out. -->
+        <p class="fine">Free and open source · PostgreSQL, MySQL, SQLite · macOS, Windows and Linux · sign in once with
+          GitHub on first launch</p>
       </div>
     </section>
 
@@ -967,281 +888,210 @@
       </div>
     </section>
 
-                <section id="features">
-                  <div class="f cols">
-                    <div>
-                      <p class="k">01</p>
-                      <h3>An IDE, not a query box</h3>
-                      <p>Completion off the live schema, not a keyword list. Lint that parses your SQL and checks it
-                        against that schema, as you type. Variables that resolve from <span class="mono">.env</span>, so a query is
-                        parameterised like
-                        code instead of edited before every run.</p>
-                      <ul>
-                        <li>tables, columns, types, keys</li>
-                        <li>lint against the real schema</li>
-                        <li>$variables from .env</li>
-                        <li>keyboard-first, ⌘↵ to run</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p class="k">02</p>
-                      <h3>Your workspace is a folder</h3>
-                      <p>Queries are <span class="mono">.sql</span> files on disk with names you chose. Connection
-                        config, lint
-                        rules and themes sit beside them. Git is native, and optional.</p>
-                      <ul>
-                        <li>⌘N to scratch, save when it matters</li>
-                        <li>branch, diff, commit, push</li>
-                        <li>secrets stay in .env</li>
-                        <li>nothing to export, ever</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p class="k">03</p>
-                      <h3>Prod access without the ritual</h3>
-                      <p>You don't have prod access because access is all-or-nothing. Grant a column instead of a
-                        database, keep
-                        credentials off laptops entirely, and let the log answer "who ran that".</p>
-                      <ul>
-                        <li>db · schema · table · column</li>
-                        <li>credentials never on laptops</li>
-                        <li>an audit log, not a guess</li>
-                        <li>API keys for your agents</li>
-                      </ul>
-                    </div>
-                  </div>
-                </section>
+    <section class="arg">
+      <div class="f">
+        <p class="k">Why SELECT</p>
+        <h2>Every language in your stack has real tooling. Except SQL.</h2>
+        <div class="body">
+          <p>In the editor you already like you get completion, go-to-definition, lint on save, a formatter
+            and twenty years of git history. Then you open your SQL client and you get a text area, a Run
+            button, and a tab called <span class="mono">Script-14.sql</span> that nobody will ever read
+            again.</p>
+          <p><b>That is not a missing feature. It is the wrong shape.</b> SQL is code. It gets reviewed,
+            refactored, blamed, reverted and rewritten by whoever picks up the ticket next. It should live
+            where the rest of your code lives, and be edited by something that understands it.</p>
+          <p>The mature clients are not badly built. They are built for someone else. They grew up serving
+            the person who administers the database, and the developer writing SQL between two commits was
+            never their customer.</p>
+          <p><b>We only build for that developer.</b> Files instead of a workspace database. Git instead of
+            a share button. A keyboard instead of a wizard. One grant instead of an admin ticket.</p>
+        </div>
+      </div>
+    </section>
 
-                <section class="arg">
-                  <div class="f">
-                    <p class="k">Why SELECT</p>
-                    <h2>Every language in your stack has real tooling. Except SQL.</h2>
-                    <div class="body">
-                      <p>You have completion, go-to-definition, lint on save, a formatter and twenty years of git
-                        history in the editor you already like. Then you open your SQL client, and it is a text area
-                        with a Run button, a connection tree, and a tab called <span class="mono">Script-14.sql</span>
-                        that nobody will ever read again.</p>
-                      <p><b>We do not think that is a missing feature.</b> It is a missing shape. SQL is code. It gets
-                        reviewed, refactored, blamed, reverted and rewritten by whoever picks up the ticket next. It
-                        should live where the rest of the code lives, and be edited by something that understands
-                        it.</p>
-                      <p>The mature clients are not badly built. They are built for someone else. They grew up serving
-                        the person who administers the database, and the developer writing SQL between two commits was
-                        never their customer.</p>
-                      <p><b>We only build for you.</b> Every choice here follows from that: files instead of a
-                        workspace database, git instead of sharing, a keyboard instead of a wizard, one grant instead
-                        of an admin ticket.</p>
-                    </div>
-                  </div>
-                </section>
+    <section class="row" id="features">
+      <div class="f">
+        <div>
+          <p class="k">01 · The editor</p>
+          <h3>Completion and lint that read your schema</h3>
+          <p>Point it at PostgreSQL, MySQL or SQLite and it reads the whole schema. Completion gives you
+            real tables, columns, types and keys, not a keyword list, and the graph view draws how they
+            join.</p>
+          <p>Lint parses your query and checks it against that schema as you
+            type: the column that does not exist, the <span class="mono">id</span> that is ambiguous across
+            two joins, the CTE you stopped using, the <span class="mono">= NULL</span> that silently matches
+            nothing.</p>
+          <p>Your own rules go in a file in the repo, scoped by path, so the
+            rule your team agreed on is the rule everyone gets. <span class="mono">⌘↵</span> runs. Nothing
+            here needs the mouse.</p>
+          <a href="/docs/sql/lint-rules/">Lint rules →</a>
+        </div>
+        <figure>
+          <picture data-shot>
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/lint.dark.png" width="1468" height="512">
+            <img src="/shots/lint.light.png" width="1468" height="512" loading="lazy" decoding="async"
+              alt="A draft query in SELECT with SELECT * underlined, and the workspace lint rule that flagged it: avoid SELECT *, list columns explicitly.">
+          </picture>
+        </figure>
+      </div>
+    </section>
 
-                <section class="row">
-                  <div class="f">
-                    <div>
-                      <p class="k">01 · The editor</p>
-                      <h3>It knows your schema before you do</h3>
-                      <p>Point it at Postgres, MySQL or SQLite and it introspects the whole schema. Completion is real:
-                        tables, columns, types, keys, not a keyword list. So is the lint: your SQL is parsed and
-                        checked against that schema, so it catches the column that does not exist, the
-                        <span class="mono">id</span> that is ambiguous across two joins, the CTE you stopped using and
-                        the <span class="mono">= NULL</span> that silently matches nothing. Your own rules go in a file
-                        in the repo, scoped by path, so the rule your team agreed on is the rule everyone gets.</p>
-                      <a href="/docs/sql/lint-rules/">Lint rules →</a>
-                    </div>
-                    <figure>
-                      <picture data-shot>
-                        <source media="(prefers-color-scheme:dark)" srcset="/shots/lint.dark.png" width="1468" height="512">
-                        <img src="/shots/lint.light.png" width="1468" height="512" loading="lazy" decoding="async"
-                             alt="A draft query in SELECT with SELECT * underlined, and the workspace lint rule that flagged it: avoid SELECT *, list columns explicitly.">
-                      </picture>
-                    </figure>
-                  </div>
-                </section>
+    <section class="row">
+      <div class="f">
+        <div>
+          <p class="k">02 · The workspace</p>
+          <h3>Review a query like you review code</h3>
+          <p>The last place your team's SQL lived was a Slack thread.</p>
+          <p>A workspace is a folder of <span class="mono">.sql</span> files
+            with names you chose. Branch it, diff it, open a pull request against it, on whatever git host
+            you already use. Your teammate's fix arrives the way every other fix arrives, and
+            <span class="mono">git blame</span> works on it.
+          </p>
+          <p>Git is built in, and optional. A plain folder is still a workspace, and your secrets stay in
+            <span class="mono">.env</span> either way.</p>
+          <a href="/docs/workspace/git/">Git workspaces →</a>
+        </div>
+        <figure>
+          <picture data-shot>
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/git.dark.png" width="1880" height="1040">
+            <img src="/shots/git.light.png" width="1880" height="1040" loading="lazy" decoding="async"
+              alt="SELECT's source control panel on a feature branch, showing a modified query and its diff against the last commit.">
+          </picture>
+        </figure>
+      </div>
+    </section>
 
-                <section class="row">
-                  <div class="f">
-                    <div>
-                      <p class="k">02 · The workspace</p>
-                      <h3>Review a query like you review code</h3>
-                      <p>The last place your team's SQL lived was a Slack thread. A workspace is a directory: branch it,
-                        diff it,
-                        open a pull request against it. Your teammate's fix arrives the way every other fix arrives, and
-                        <span class="mono">git blame</span> works on it.</p>
-                      <a href="/docs/workspace/git/">Git workspaces →</a>
-                    </div>
-                    <figure>
-                      <picture data-shot>
-                        <source media="(prefers-color-scheme:dark)" srcset="/shots/git.dark.png" width="1880" height="1040">
-                        <img src="/shots/git.light.png" width="1880" height="1040" loading="lazy" decoding="async"
-                             alt="SELECT's source control panel on a feature branch, showing a modified query and its diff against the last commit.">
-                      </picture>
-                    </figure>
-                  </div>
-                </section>
+    <section class="row" id="teams">
+      <div class="f">
+        <div>
+          <p class="k">03 · The team</p>
+          <h3>Stop asking someone for prod</h3>
+          <p>Access is usually all or nothing, which is why the answer is usually no. Grant a column instead
+            of a database: four levels of data (database, schema, table, column) and five actions (SELECT,
+            INSERT, UPDATE, DELETE, DDL).</p>
+          <p>Read <span class="mono">orders</span> on production without ever
+            seeing <span class="mono">customers.email</span>, and without a DSN on your laptop. Every query
+            through the server lands in an audit log, so "who ran that" has an answer. Narrow enough that
+            someone can finally say yes.</p>
+          <p class="fine">On Teams. Solo connects straight from your machine.</p>
+          <a href="/docs/workspace/permissions/">Permissions &amp; proxified connections →</a>
+        </div>
+        <figure>
+          <picture data-shot>
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/roles.dark.png" width="2360" height="1240">
+            <img src="/shots/roles.light.png" width="2360" height="1240" loading="lazy" decoding="async"
+              alt="A role in SELECT granted read access to a database, with one column, customers.email, denied.">
+          </picture>
+        </figure>
+      </div>
+    </section>
 
-                <section class="row" id="teams">
-                  <div class="f">
-                    <div>
-                      <p class="k">03 · The team</p>
-                      <h3>Stop asking someone for prod</h3>
-                      <p>Five levels (app, database, schema, table, column) and five actions. Read <span
-                          class="mono">orders</span>
-                        on production without ever seeing <span class="mono">customers.email</span>, and without a DSN
-                        on your
-                        laptop. Narrow enough that someone can finally say yes.</p>
-                      <a href="/docs/workspace/permissions/">Permissions &amp; proxified connections →</a>
-                    </div>
-                    <figure>
-                      <picture data-shot>
-                        <source media="(prefers-color-scheme:dark)" srcset="/shots/roles.dark.png" width="2360" height="1240">
-                        <img src="/shots/roles.light.png" width="2360" height="1240" loading="lazy" decoding="async"
-                             alt="A role in SELECT granted read access to a database, with one column, customers.email, denied.">
-                      </picture>
-                    </figure>
-                  </div>
-                </section>
+    <section class="row">
+      <div class="f">
+        <div>
+          <p class="k">Agents</p>
+          <h3>Give your agent a key, not the keys</h3>
+          <p>You already point Claude Code and Cursor at your repo. Point them at your database the same
+            way. The MCP server exposes seven read and write tools and nothing else: no shell, no
+            filesystem. An API key carries roles, and those roles are exactly what the model can touch,
+            down to the column.</p>
+          <p>The chat panel in the app runs on the same bounds, with your own
+            API key and your own choice of model.</p>
+          <a href="/docs/workspace/mcp-server/">MCP server &amp; API keys →</a>
+        </div>
+        <figure>
+          <picture data-shot>
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/agent.dark.png" width="1626" height="1462">
+            <img src="/shots/agent.light.png" width="1626" height="1462" loading="lazy" decoding="async"
+              alt="SELECT's chat panel, where a query for a customer email column is refused: permission denied for the analyst-readonly role.">
+          </picture>
+        </figure>
+      </div>
+    </section>
 
-                <section class="row">
-                  <div class="f">
-                    <div>
-                      <p class="k">Agents</p>
-                      <h3>Give your agent a key, not the keys</h3>
-                      <p>You already point Claude Code and Cursor at your repo. Point them at your database the same
-                        way. The MCP
-                        server exposes seven tools and nothing else: no shell, no filesystem. An API key carries roles,
-                        and those
-                        roles are exactly what the model can touch.</p>
-                      <a href="/docs/workspace/mcp-server/">MCP server &amp; API keys →</a>
-                    </div>
-                    <figure>
-                      <picture data-shot>
-                        <source media="(prefers-color-scheme:dark)" srcset="/shots/agent.dark.png" width="1626" height="1462">
-                        <img src="/shots/agent.light.png" width="1626" height="1462" loading="lazy" decoding="async"
-                             alt="SELECT's chat panel, where a query for a customer email column is refused: permission denied for the analyst-readonly role.">
-                      </picture>
-                    </figure>
-                  </div>
-                </section>
+    <section class="arg" id="setup">
+      <div class="f">
+        <p class="k">Setup</p>
+        <h2>Any project,<br /> in minutes.</h2>
+        <div class="body">
+          <p>Download the app. Open any folder on your machine. Point it at your database, directly or
+            through an SSH tunnel. <b>That is the install.</b> No server to stand up, no agent to run, no
+            migration to apply.</p>
+          <p>Any project works. A folder you made this morning, a monorepo, a repo six years old. SELECT
+            reads what is already in it and asks you to change nothing.</p>
+        </div>
+        <a href="/docs/getting-started/">Getting started →</a>
+      </div>
+    </section>
 
-                <section class="arg" id="privacy">
-                  <div class="f">
-                    <p class="k">What reaches our servers</p>
-                    <h2>Almost nothing of yours reaches us.</h2>
-                    <div class="body">
-                      <p>Your queries, lint rules and themes are files in your workspace, and our servers have no idea
-                        they exist. Credentials reach us only if you turn on the proxy, encrypted field by field and
-                        never handed back to a client. <b>Keep a connection local and we never see it.</b></p>
-                      <p>What we do hold is what runs through us, a proxied query or an MCP call, plus your roles and
-                        groups, so a grant you make on one machine is enforced on every other.</p>
-                    </div>
-                  </div>
-                </section>
+    <section class="price" id="pricing">
+      <div class="f">
+        <p class="k">Editions</p>
+        <h2 style="font-size:1.45rem;margin-top:var(--s2);max-width:30ch">Solo is free forever. Pay when
+          your team needs
+          a server between them.</h2>
+        <div class="tiers">
+          <div>
+            <h3>Solo</h3>
+            <p class="amt"><b>Free</b><span>FOREVER · NOT A TRIAL</span></p>
+            <ul>
+              <li>The full client, native, no JVM and no bundled browser</li>
+              <li>PostgreSQL, MySQL and SQLite</li>
+              <li>Completion, lint, variables, graph view</li>
+              <li>Git workspaces, SSH tunnels, AI chat with your own key</li>
+              <li>Collaborate through your own git remote</li>
+            </ul>
+            <a class="btn g" href="/download/">Download</a>
+          </div>
+          <div class="mid">
+            <h3>Teams</h3>
+            <p class="amt"><b>$12</b><span>/ SEAT / MONTH</span><s>$17</s></p>
+            <p class="note" style="color:var(--orange)">BETA PRICE</p>
+            <ul>
+              <li>Everything in Solo</li>
+              <li>Proxified connections: credentials off laptops, encrypted server-side</li>
+              <li>Centralised role-based access, down to a single column</li>
+              <li>Audit log of every query and grant that runs through the server</li>
+              <li>MCP server and API keys, bounded by the same roles</li>
+            </ul>
+            <p class="note">US East today · EU region next</p>
+            <a class="btn" href="mailto:sales@select-db.com">Request access</a>
+          </div>
+          <div>
+            <h3>Enterprise</h3>
+            <p class="amt"><b>Talk</b><span>DEDICATED OR ON-PREM</span></p>
+            <p class="note" style="color:var(--orange)">NOT SHIPPED YET</p>
+            <p style="font-size:.9rem;color:var(--gray-900)">We are taking design partners now and building
+              it with them. Everything in Teams, plus:</p>
+            <ul>
+              <li>A dedicated instance in the region you need</li>
+              <li>On-premises deployment</li>
+              <li>Priority fixes, SLA and a direct line to the maintainers</li>
+              <li>Security review and procurement support</li>
+            </ul>
+            <a class="btn g" href="mailto:sales@select-db.com">Contact us</a>
+          </div>
+        </div>
+        <p class="note" style="margin-top:var(--s2)">Teams is $12 a seat at the beta price, and everyone
+          who joins during the beta keeps that price after it ends.</p>
+      </div>
+    </section>
 
-                <section class="price" id="pricing">
-                  <div class="f">
-                    <p class="k">Editions</p>
-                    <h2 style="font-size:1.45rem;margin-top:var(--s2);max-width:30ch">Solo is free forever. Pay when
-                      your team needs
-                      a server between them.</h2>
-                    <div class="tiers">
-                      <div>
-                        <h3>Solo</h3>
-                        <p class="amt"><b>Free</b><span>FOREVER · NOT A TRIAL</span></p>
-                        <ul>
-                          <li>The full client, native, no JVM and no runtime to install</li>
-                          <li>PostgreSQL, MySQL and SQLite</li>
-                          <li>Completion, lint, variables, graph view</li>
-                          <li>Git workspaces, SSH tunnels, AI chat with your own key</li>
-                          <li>Collaborate through your own git remote</li>
-                        </ul>
-                        <a class="btn g" href="/download/">Download</a>
-                      </div>
-                      <div class="mid">
-                        <h3>Teams</h3>
-                        <p class="amt"><b>$12</b><span>/ SEAT / MONTH</span><s>$17</s></p>
-                        <p class="note" style="color:var(--orange)">BETA PRICE</p>
-                        <ul>
-                          <li>Everything in Solo</li>
-                          <li>Proxified connections: credentials off laptops, encrypted server-side</li>
-                          <li>Centralised role-based access, down to a single column</li>
-                          <li>Audit log of every query and grant that runs through the server</li>
-                          <li>MCP server and API keys, bounded by the same roles</li>
-                        </ul>
-                        <p class="note">US East today · EU region next</p>
-                        <a class="btn" href="mailto:sales@select-db.com">Talk to us</a>
-                      </div>
-                      <div>
-                        <h3>Enterprise</h3>
-                        <p class="amt"><b>Talk</b><span>DEDICATED OR ON-PREM</span></p>
-                        <ul>
-                          <li>Everything in Teams</li>
-                          <li>A dedicated instance in the region you need</li>
-                          <li>On-premises deployment</li>
-                          <li>Priority fixes, SLA and a direct line to the maintainers</li>
-                          <li>Security review and procurement support</li>
-                        </ul>
-                        <p class="note">Not shipped yet. We are taking design partners now and building it with them.
-                        </p>
-                        <a class="btn g" href="mailto:sales@select-db.com">Contact us</a>
-                      </div>
-                    </div>
-                    <p class="note" style="margin-top:var(--s2)">Solo is free forever, not a trial. Teams is $12 a
-                      seat at the beta price, and everyone who joins during the beta keeps that price
-                      after it ends.</p>
-                  </div>
-                </section>
-
-                <section class="end">
-                  <div class="f">
-                    <h2>Finally, love writing SQL.</h2>
-                    <p class="lede">SQL was never the problem. The tooling around it was. That is the part we are
-                      trying to fix, and it takes under a minute to find out whether we did.</p>
-                    <p class="cta">
-                      <a class="btn b" href="/download/">Download for macOS</a>
-                      <a class="btn g b" href="/docs/getting-started/">Read the docs</a>
-                    </p>
-                  </div>
-                </section>
+    <section class="end">
+      <div class="f">
+        <h2>SQL was never the problem.</h2>
+        <p class="lede">The tooling around it was. That is the part we are trying to fix, and it takes five
+          minutes to find out whether we did.</p>
+        <p class="cta">
+          <a class="btn b os" href="/download/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.53c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.71-3.19-1.73-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.18-1.54 2.67-.39 6.62 1.11 8.79.73 1.06 1.6 2.25 2.74 2.21 1.1-.04 1.52-.71 2.85-.71 1.33 0 1.71.71 2.88.69 1.19-.02 1.94-1.08 2.67-2.14.84-1.23 1.19-2.42 1.21-2.48-.03-.01-2.32-.89-2.34-3.54zM14.88 5.68c.61-.74 1.02-1.77.91-2.79-.88.04-1.94.59-2.57 1.32-.56.65-1.05 1.7-.92 2.7.98.08 1.98-.5 2.58-1.23z"/></svg>Download for macOS</a>
+          <a class="btn g b" href="/docs/getting-started/">Read the docs</a>
+        </p>
+      </div>
+    </section>
 
   </main>
 
-  <footer>
-    <div class="f">
-      <div class="fcols">
-        <div>
-          <p class="logo">SELECT</p>
-          <p class="note" style="margin-top:10px;max-width:28ch">An SQL client shaped like an IDE. Open source,
-            local-first, git-native.</p>
-        </div>
-        <div>
-          <h4>Product</h4>
-          <ul>
-            <li><a href="/download/">Download</a></li>
-            <li><a href="#features">Features</a></li>
-            <li><a href="#pricing">Pricing</a></li>
-          </ul>
-        </div>
-        <div>
-          <h4>Docs</h4>
-          <ul>
-            <li><a href="/docs/getting-started/">Getting started</a></li>
-            <li><a href="/docs/databases/connecting/">Connecting</a></li>
-            <li><a href="/docs/workspace/permissions/">Permissions</a></li>
-            <li><a href="/api/">API reference</a></li>
-          </ul>
-        </div>
-        <div>
-          <h4>Company</h4>
-          <ul>
-            <li><a href="https://github.com/select-db/select">GitHub</a></li>
-            <li><a href="https://github.com/select-db/select/blob/main/SECURITY.md">Security</a></li>
-            <li><a href="mailto:hello@select-db.com">Contact</a></li>
-          </ul>
-        </div>
-      </div>
-      <p class="legal"><span>© 2026 select-db · AGPL-3.0</span><span>PostgreSQL · MySQL · SQLite</span></p>
-    </div>
-  </footer>
+  <!--FOOTER-->
 
 </body>
 

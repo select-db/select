@@ -54,6 +54,11 @@ function startAPI(port: number): Promise<Server> {
 			return;
 		}
 
+		if ((req.method === 'PUT' || req.method === 'DELETE') && req.url?.startsWith('/datasources/')) {
+			res.writeHead(204).end();
+			return;
+		}
+
 		if (req.method !== 'POST') {
 			res.writeHead(404).end();
 			return;

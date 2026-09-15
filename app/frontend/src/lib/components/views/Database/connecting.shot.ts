@@ -11,6 +11,7 @@ import {
 	type Page
 } from '../../../../../tests/e2e/shots';
 import { testId } from '../../../../../tests/e2e/selectors';
+import { choose, openRowMenu, renameTo } from '../../../../../tests/e2e/tree';
 
 /**
  * The connection form in its three shapes, for Connecting a Database, SSH
@@ -43,6 +44,13 @@ const SAMPLE_DB = 'warehouse';
 const CREATED = 'analytics-prod';
 
 /**
+ * What the app calls a database it has just made. Cleared alongside CREATED so
+ * the number is always 1: a pass that died between creating and renaming would
+ * otherwise leave one behind and push the next one to `db #2`.
+ */
+const NEW_DB = 'db #1';
+
+/**
  * Deletes every database in the tree called name, and waits for the tree to
  * agree that they are gone.
  *
@@ -52,18 +60,32 @@ const CREATED = 'analytics-prod';
  */
 async function removeDatabases(page: Page, name: string) {
 	const nodes = testId(page, 'tree.node', name);
+	const confirm = page.getByRole('button', { name: 'Delete and revoke' });
 
-	// Deleting is retried rather than waited on: a right-click on a row the tree
-	// is still moving opens the menu on whatever arrives under the pointer, and
-	// the database stays. Retrying the whole delete until the tree has none of
-	// them left is the only outcome worth waiting on.
+	// Retried rather than waited on: a right-click on a row the tree is still
+	// moving opens the menu on whatever arrives under the pointer, and the
+	// database stays.
 	await expect
 		.poll(
 			async () => {
-				const left = await nodes.count();
-				if (left === 0) return 0;
+				if ((await nodes.count()) === 0) return 0;
+
 				await nodes.first().click({ button: 'right' });
-				await page.getByText('Delete', { exact: true }).click();
+				await choose(page, 'Delete');
+
+				// A proxified database keeps its credential on the server, so
+				// deleting it asks before dropping that for the whole workspace. A
+				// local one is never asked about, so the dialog is waited for only
+				// long enough to tell the two apart.
+				await confirm.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+				if (await confirm.isVisible()) await confirm.click();
+
+				// The row goes when the graph comes back, not when the click
+				// returns. Reporting before that sends the next attempt at a row on
+				// its way out, whose menu belongs to nothing by the time it opens.
+				await expect(nodes)
+					.toHaveCount(0, { timeout: 15_000 })
+					.catch(() => {});
 				return nodes.count();
 			},
 			{ timeout: 30_000 }
@@ -96,6 +118,12 @@ for (const theme of THEMES) {
 		});
 
 		test('local, tunnelled and proxified', async ({ page, signIn }, info) => {
+			// Three captures, two viewport changes and a database made and taken
+			// away again, against the default 30s for a test that usually does one
+			// of those. The teardown was what ran out of budget, which leaves the
+			// database behind for every spec after this one.
+			test.slow();
+
 			const dir = shotsDirFor(info.file);
 
 			await holdSession(page);
@@ -123,6 +151,7 @@ for (const theme of THEMES) {
 			// failed part-way through did not. Start from the workspace this spec
 			// expects rather than from whatever the last run left in it.
 			await removeDatabases(page, CREATED);
+			await removeDatabases(page, NEW_DB);
 
 			// A database of our own, through the same action a person uses. The
 			// root menu hangs off the file panel itself, so the right-click has to
@@ -135,12 +164,18 @@ for (const theme of THEMES) {
 			await page.getByText('New Database...', { exact: true }).click();
 			await expect(testId(page, 'database.form')).toBeVisible();
 
-			const form = testId(page, 'database.form');
 			const dsn = testId(page, 'database.dsn').locator('input');
 
 			// A name worth photographing. The app numbers a new database `db #1`,
 			// which tells a reader nothing about what they are looking at.
-			await form.locator('input').first().fill(CREATED);
+			//
+			// Renamed from the tree: a database is named by its folder, and the
+			// form derives what it shows from the URI rather than offering a field
+			// for it.
+			await openRowMenu(page, NEW_DB);
+			await choose(page, 'Rename...');
+			await renameTo(page, CREATED);
+			await expect(testId(page, 'tree.node', CREATED)).toBeVisible({ timeout: 15_000 });
 
 			// 1. Postgres, local. What a networked database opens as, and the form
 			// the Connecting page is written about: the proxy, connection-mode and
@@ -150,12 +185,6 @@ for (const theme of THEMES) {
 			await expect(page.getByText('PostgreSQL', { exact: true }).first()).toBeVisible();
 			await dsn.fill('host=$PG_HOST port=5432 user=$PG_USER password=$PG_PASS dbname=analytics');
 			await expect(page.getByText('Proxy connection')).toBeVisible();
-
-			// The name reaches the tab and the tree only once the form's 600ms
-			// autosave has written it. Captured before that, the figure showed
-			// `db #1` in both while the Name field beside them read analytics-prod,
-			// which reads as a form that does not do what it says.
-			await expect(testId(page, 'tree.node', CREATED)).toBeVisible({ timeout: 15_000 });
 
 			await dismissErrors(page);
 			await shot(page, dir, `dbform.local.${theme}`, FRAMING);
