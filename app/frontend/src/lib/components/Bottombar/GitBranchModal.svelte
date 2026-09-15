@@ -61,11 +61,14 @@
 			trimmedQuery && branches.some((b) => b.name.toLowerCase() === trimmedQuery.toLowerCase());
 		const showCreateOption = trimmedQuery && !exactMatch;
 
-		// Add create option if applicable
+		// Offered for anything the list does not already hold, because the list
+		// is the most recent branches rather than all of them: SwitchBranch
+		// checks out a local or remote branch of that name and only creates one
+		// when neither exists.
 		if (showCreateOption) {
 			options.push({
 				id: '__create__',
-				label: `Create and checkout '${trimmedQuery}'`,
+				label: `Switch to or create '${trimmedQuery}'`,
 				icon: 'plus',
 				action: createAndCheckoutBranch
 			});
