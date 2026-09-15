@@ -21,23 +21,55 @@ The two the logo already uses, plus the same hue pushed either way:
 | pupil | `#7C1E22` | pupils and the smile |
 | joint | `#C7484C` | shell lines |
 
-## Cuts
+## Variants
+
+Two families. The mark and the character are separate artefacts, not one
+drawing at two sizes, which is how Rust treats its logo and Ferris.
 
 | Draft | Role |
 | ----- | ---- |
-| `cartoon` | Primary mark |
-| `cartoon-micro` | Small-size cut, below 24px |
-| `cartoon-wave` | Waving pose, for docs and empty states |
-| `cartoon-legs` | Swimmerets, fuller character |
-| `cartoon-tile` | Mark on the off-white square |
-| `cartoon-invert` | Knocked out of a brand-red square |
+| `curl` | The mark, full detail |
+| `curl-reduced` | The mark below about 24px |
+| `curl-open` | Shallower sweep, lighter weight |
+| `curl-tight` | Tighter sweep, heaviest, most compact |
+| `curl-badge` | Knocked out of a disc, for circular crops |
+| `curl-mirror` | Facing into the wordmark |
+| `mascot` | The character, with swimmerets |
+| `mascot-wave` | Raised claw |
+| `mascot-chibi` | Larger head, shorter body |
+| `mascot-peek` | Cropped by a ledge, for empty states |
+| `tile-red` | Knocked out of a brand-red square |
+| `tile-paper` | On the off-white square the icon uses now |
+
+## Silhouette complexity
+
+Small-size legibility tracks the number of path commands in the silhouette,
+so the generator is set up to control it. Comparable marks, each reduced to
+one silhouette and counted the same way:
+
+| | commands |
+| - | - |
+| Vercel | 3 |
+| Linear | 21 |
+| DBeaver | 39 |
+| Bruno | 70 |
+| Docker | 94 |
+| Rust (Ferris) | 194 |
+
+Abstract marks sit between 3 and 23; animal mascots between 39 and 194.
+Keep the small cut under about 40. `curl-reduced` is 37 against `curl` at
+167, and the two are near-identical at a glance -- almost all of that came
+from the sample count, not from dropping features.
 
 ## Editing the geometry
 
 Bodies are a centreline plus a width profile rather than hand-written
-beziers, because at this scale a hand-drawn taper wobbles and the six cuts
-have to stay the same animal. Three constraints are baked in:
+beziers, because at this scale a hand-drawn taper wobbles and the variants
+have to stay the same animal. Four constraints are baked in:
 
+- `cr()` emits one cubic per sample, so `n` is the main cost control. `n=34`
+  spends 70 commands on the body outline before anything else is drawn;
+  `n=11` looks the same at logo sizes.
 - The spine sweeps about 220 degrees. More closes the curl into a ring and
   the silhouette stops reading as a shrimp.
 - Width has to stay well under the spine radius. When it does not, the inner
