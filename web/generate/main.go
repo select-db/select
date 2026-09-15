@@ -66,7 +66,7 @@ type PageLink struct {
 	Href  string
 }
 
-// marketingPage is a hand-written page from web/site, as the rest of the build
+// marketingPage is a hand-written page from web/website, as the rest of the build
 // needs to know it: the URL it ended up at, and the title and description it
 // declares in its own <head>. Read back out of the page rather than configured
 // here, so the sitemap and llms.txt cannot describe it differently from the
@@ -101,7 +101,8 @@ type buildConfig struct {
 	templateDir   string
 	cssPath       string
 	basePath      string
-	siteDir       string
+	websiteDir    string
+	apiPagePath   string
 	themePath     string
 	componentsDir string
 	cacheDir      string
@@ -121,107 +122,24 @@ const (
 // items so a new-tab jump is visually distinct from in-site navigation.
 const externalIcon = ` <svg class="external-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:0.3em;vertical-align:-0.1em;opacity:0.65"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`
 
-// apiReferencePageTmpl is the standalone, full-viewport Scalar page served at
-// /api/ (outside the docs layout so Scalar owns the whole screen). The %s is the
-// site's .theme CSS, inlined so the reference shares the docs design tokens; a
-// mapping layer binds Scalar's --scalar-* variables to those tokens (theme:
-// 'none' disables Scalar's built-in palette so ours wins). Light/dark follows
-// the docs' stored preference (localStorage doc-theme, same origin); Scalar's
-// own toggle is hidden so it can't drift from that.
-const apiReferencePageTmpl = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Select API Reference</title>
-  <link rel="icon" href="/favicon.png" />
-  <style>
-/*THEME*/
-    /* --ff lives in docs.css, not .theme; redeclare it here. */
-    :root { --ff: system-ui, -apple-system, sans-serif; }
-    /* Bind Scalar's tokens to ours. Our color tokens are keyed on
-       :root[data-theme], so a single mapping serves both light and dark; the
-       mode classes are included so it wins over Scalar's own definitions. */
-    :root, .light-mode, .dark-mode {
-      --scalar-background-1: var(--gray-100);
-      --scalar-background-2: var(--gray-200);
-      --scalar-background-3: var(--gray-300);
-      --scalar-color-1: var(--gray-1000);
-      --scalar-color-2: var(--gray-800);
-      --scalar-color-3: var(--gray-700);
-      --scalar-color-accent: var(--red);
-      --scalar-border-color: var(--border-color);
-      --scalar-sidebar-background-1: var(--gray-100);
-      --scalar-sidebar-border-color: var(--border-color);
-      --scalar-sidebar-color-1: var(--gray-1000);
-      --scalar-sidebar-color-2: var(--gray-800);
-      --scalar-sidebar-color-active: var(--red);
-      --scalar-sidebar-item-hover-background: var(--gray-300);
-      --scalar-sidebar-item-active-background: var(--gray-300);
-      --scalar-sidebar-search-background: var(--gray-200);
-      --scalar-sidebar-search-border-color: var(--border-color);
-      --scalar-font: var(--ff);
-      --scalar-font-code: ui-monospace, monospace;
-      --scalar-radius: var(--br-sm);
-      --scalar-radius-lg: var(--br-md);
-      /* Match the docs body size so generated endpoint descriptions (and the
-         filterable-fields tables inside them) read at the same scale as the
-         doc pages. Scalar's own heading/sidebar/code scale is left untouched. */
-      --scalar-paragraph: var(--fs-body);
-    }
-    /* --fs-body lives in docs.css, not .theme; redeclare it for this standalone page. */
-    :root { --fs-body: 1.0625rem; }
-    html, body { height: 100%; }
-    body { margin: 0; background: var(--gray-100); color: var(--gray-1000); }
-    #app { height: 100%; }
-    /* SELECT logo pinned to the TOP OF SCALAR'S SIDEBAR (like the docs header),
-       not a full-width bar. Its width tracks Scalar's sidebar column, and the
-       sidebar is padded so its search/nav start below the logo. Sizes match the
-       docs (.logo-icon 22px, .logo-text 18px). */
-    .api-topbar {
-      position: fixed; top: 0; left: 0; z-index: 10; box-sizing: border-box;
-      width: var(--scalar-sidebar-width, 280px); height: 3.25rem;
-      display: flex; align-items: center; padding: 0 1rem;
-      background: var(--gray-100); border-bottom: var(--bw) solid var(--border-color);
-    }
-    .api-topbar .logo { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--gray-1000); text-decoration: none; }
-    .api-topbar .logo-icon { width: 22px; height: 22px; border-radius: var(--br-xs); display: block; }
-    .api-topbar .logo-text { height: 18px; width: auto; display: block; }
-    .t-doc__sidebar { padding-top: 3.25rem; }
-  </style>
-  <script>
-    (function () {
-      var stored = localStorage.getItem('doc-theme');
-      var system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', stored || system);
-    })();
-  </script>
-</head>
-<body>
-  <header class="api-topbar">
-    <a href="/" class="logo" title="Back to docs">
-      <img src="/logo.png" alt="" class="logo-icon" />
-      <svg class="logo-text" viewBox="0 -880 4487 1024" fill="currentColor" aria-label="Select"><g transform="scale(1, -1)"><path transform="translate(0, 0)" d="M710 525Q710 497 690 478Q671 458 643 458H243Q224 457 211.5 449.5Q199 442 193.0 432.5Q187 423 187 413Q187 403 193.0 393.5Q199 384 211.5 376.5Q224 369 243 368H527Q597 366 642.5 335.5Q688 305 707.5 265.5Q727 226 727 185Q727 145 707.0 105.5Q687 66 642.0 35.5Q597 5 527 5H521Q515 4 509 4H131Q103 4 83.5 23.5Q64 43 64 71Q64 99 84 118Q103 138 131 138H533Q552 137 564.5 145.0Q577 153 583.0 163.5Q589 174 589 185Q589 192 583.0 204.5Q577 217 564.5 225.0Q552 233 533 234H249Q179 236 133.5 266.0Q88 296 68.5 334.5Q49 373 49 413Q49 452 69.0 490.5Q89 529 134.0 559.0Q179 589 249 591H255Q261 592 267 592H643Q671 592 690.5 572.5Q710 553 710 525Z"/><path transform="translate(776, 0)" d="M249 592H295H635Q663 591 681.5 571.0Q700 551 700 523Q695 463 635 458H283Q245 456 220.0 429.0Q195 402 183.5 367.5Q172 333 172 297Q172 261 183.5 226.5Q195 192 220.0 165.0Q245 138 283 136H635Q663 135 681.5 115.0Q700 95 700 67Q699 40 680.5 21.5Q662 3 635 2H268H249Q179 6 133.5 55.5Q88 105 68.5 168.0Q49 231 49 297Q49 363 69.0 426.0Q89 489 134.0 538.5Q179 588 249 592ZM698 301Q698 273 678 254Q659 234 631 234H329Q301 234 281.5 253.5Q262 273 262 301Q262 329 281 349Q301 368 329 368H631Q659 368 678.5 348.5Q698 329 698 301Z"/><path transform="translate(1513, 0)" d="M130 608Q158 608 178.0 589.5Q198 571 199 543V302Q198 261 204.5 226.5Q211 192 236.0 165.0Q261 138 299 136H619Q647 135 665.5 115.0Q684 95 684 67Q683 40 664.5 21.5Q646 3 619 2H265Q195 6 149.5 49.5Q104 93 84 156Q65 219 64 290V543Q65 570 84.0 588.5Q103 607 130 608Z"/><path transform="translate(2229, 0)" d="M249 592H295H635Q663 591 681.5 571.0Q700 551 700 523Q695 463 635 458H283Q245 456 220.0 429.0Q195 402 183.5 367.5Q172 333 172 297Q172 261 183.5 226.5Q195 192 220.0 165.0Q245 138 283 136H635Q663 135 681.5 115.0Q700 95 700 67Q699 40 680.5 21.5Q662 3 635 2H268H249Q179 6 133.5 55.5Q88 105 68.5 168.0Q49 231 49 297Q49 363 69.0 426.0Q89 489 134.0 538.5Q179 588 249 592ZM698 301Q698 273 678 254Q659 234 631 234H329Q301 234 281.5 253.5Q262 273 262 301Q262 329 281 349Q301 368 329 368H631Q659 368 678.5 348.5Q698 329 698 301Z"/><path transform="translate(2966, 0)" d="M291 458Q253 456 227.5 429.0Q202 402 191.0 367.5Q180 333 180 297Q180 261 190.5 226.0Q201 191 227.0 164.5Q253 138 291 136H621Q684 130 690 67Q689 39 669.0 20.5Q649 2 621 2H302H256Q186 6 141.0 55.5Q96 105 76.5 168.0Q57 231 57 297Q57 346 68.0 394.0Q79 442 102.5 485.5Q126 529 165.5 560.0Q205 591 256 592H275H621Q684 586 690 523Q690 495 669.5 476.5Q649 458 621 458Z"/><path transform="translate(3685, 0)" d="M44 525Q44 553 63.5 572.5Q83 592 111 592H693Q721 592 741 573Q760 553 760 525Q760 497 740.5 477.5Q721 458 693 458H470V53Q464 -7 404 -12Q376 -12 355.5 6.5Q335 25 335 53V458H111Q83 458 64 478Q44 497 44 525Z"/></g></svg>
-    </a>
-  </header>
-  <div id="app"></div>
-  <script src="/api/scalar.standalone.js"></script>
-  <script>
-    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    Scalar.createApiReference('#app', {
-      url: '/api/openapi.json',
-      theme: 'none',
-      darkMode: dark,
-      hideDarkModeToggle: true,
-    });
-  </script>
-</body>
-</html>
-`
-
 // themeMarker is the literal the marketing pages carry where the app's theme
 // file is spliced in at build time.
 const themeMarker = "/*THEME*/"
+
+// spliceTheme puts the app's theme file where a page's marker is. Exactly one
+// marker, because a second (in a comment, say) would take the substitution
+// instead and the page would ship without the colour tokens -- which CSS drops
+// silently, giving a page with no borders and no error to go on.
+func spliceTheme(src []byte, themeCSS, name string) ([]byte, error) {
+	switch n := bytes.Count(src, []byte(themeMarker)); n {
+	case 1:
+		return bytes.Replace(src, []byte(themeMarker), []byte(themeCSS), 1), nil
+	case 0:
+		return nil, fmt.Errorf("%s: missing %s marker (the app theme has nowhere to go)", name, themeMarker)
+	default:
+		return nil, fmt.Errorf("%s: %d %s markers, want exactly one", name, n, themeMarker)
+	}
+}
 
 // starsMarker is where a marketing page carries the GitHub star count. The
 // count is read once per build and written in, because the alternative is the
@@ -238,20 +156,25 @@ const starsRepo = "select-db/select"
 // that a deploy ships a current number.
 const starsMaxAge = 6 * time.Hour
 
+// Source layout: one directory per URL namespace -- website/ is "/", docs/ is
+// "/docs/*", api/ is "/api/" -- and anything every surface shares (base.css,
+// theme.js, the images) sits at the top of web/.
 func newBuildConfig(rootDir string) buildConfig {
 	webDir := filepath.Join(rootDir, "web")
+	docsDir := filepath.Join(webDir, "docs")
 	return buildConfig{
 		rootDir:       rootDir,
 		webDir:        webDir,
-		sidebarPath:   filepath.Join(webDir, "sidebar.txt"),
-		templateDir:   filepath.Join(webDir, "template"),
-		cssPath:       filepath.Join(webDir, "theme", "docs.css"),
-		basePath:      filepath.Join(webDir, "theme", "base.css"),
+		sidebarPath:   filepath.Join(docsDir, "sidebar.txt"),
+		templateDir:   filepath.Join(docsDir, "template"),
+		cssPath:       filepath.Join(docsDir, "docs.css"),
+		basePath:      filepath.Join(webDir, "base.css"),
 		themePath:     filepath.Join(rootDir, "app", "internal", "graph", "defaults", "user", ".theme"),
-		componentsDir: filepath.Join(webDir, "components"),
+		componentsDir: filepath.Join(docsDir, "components"),
 		cacheDir:      filepath.Join(webDir, ".cache"),
 		openAPIPath:   filepath.Join(rootDir, "backend", "internal", "apigen", "gen", "openapi.json"),
-		siteDir:       filepath.Join(webDir, "site"),
+		websiteDir:    filepath.Join(webDir, "website"),
+		apiPagePath:   filepath.Join(webDir, "api", "index.html"),
 		outDir:        filepath.Join(webDir, "dist"),
 	}
 }
@@ -466,7 +389,7 @@ func build(cfg buildConfig) error {
 		}
 	}
 
-	marketing, err := copySitePages(cfg, string(themeCSS), starCount(cfg.cacheDir))
+	marketing, err := copyMarketingPages(cfg, string(themeCSS), starCount(cfg.cacheDir))
 	if err != nil {
 		return fmt.Errorf("staging marketing pages: %w", err)
 	}
@@ -559,7 +482,7 @@ func watch(cfg buildConfig) {
 				// dist is what this build writes and .cache is what it downloads:
 				// watching either makes every build trigger the next one. generate
 				// is the builder's own source, which needs a restart, not a
-				// rebuild. site is watched — editing a marketing page is the
+				// rebuild. website is watched -- editing a marketing page is the
 				// commonest reason to be running this at all.
 				if info.IsDir() && (info.Name() == "dist" || info.Name() == ".cache" || info.Name() == "generate") {
 					return filepath.SkipDir
@@ -780,7 +703,7 @@ func lint(rootDir string, tree []*SidebarNode, sidebarPath string) error {
 		if err != nil {
 			return nil
 		}
-		if info.IsDir() && (info.Name() == ".git" || info.Name() == "node_modules" || info.Name() == "site") {
+		if info.IsDir() && (info.Name() == ".git" || info.Name() == "node_modules" || info.Name() == "website") {
 			return filepath.SkipDir
 		}
 		if strings.HasSuffix(path, ".doc.md") {
@@ -1115,12 +1038,12 @@ func verifyLinks(outDir string) error {
 	return nil
 }
 
-// copyAPIAssets stages the interactive API reference under /api/: the Scalar
-// bundle (fetched+cached at build time, then served same-origin) and the
-// generated OpenAPI spec. The spec is produced by `apigen generate` against a
-// database, so it may be absent in a checkout that hasn't generated yet; the
-// build proceeds without it (the reference renders once the spec exists) rather
-// than failing.
+// copyAPIAssets stages the interactive API reference under /api/: the page from
+// web/api/, the Scalar bundle (fetched+cached at build time, then served
+// same-origin) and the generated OpenAPI spec. The spec is produced by `apigen
+// generate` against a database, so it may be absent in a checkout that hasn't
+// generated yet; the build proceeds without it (the reference renders once the
+// spec exists) rather than failing.
 func copyAPIAssets(cfg buildConfig, themeCSS string) error {
 	apiDir := filepath.Join(cfg.outDir, "api")
 	if err := os.MkdirAll(apiDir, 0o755); err != nil {
@@ -1137,15 +1060,20 @@ func copyAPIAssets(cfg buildConfig, themeCSS string) error {
 	if err := os.WriteFile(filepath.Join(apiDir, "scalar.standalone.js"), scalar, 0o644); err != nil {
 		return err
 	}
-	// The standalone full-viewport reference page served at /api/ (the sidebar's
-	// "Reference" link opens it in a new tab), themed with the site's tokens.
-	//
-	// Substituted, not Sprintf'd: the template is CSS, CSS is full of percent
-	// signs, and `height: 100%;` reaching a format string came out as
-	// `height: 100%!;(NOVERB)` on the shipped page. The same marker the
-	// marketing pages use, which cannot misread its own content.
-	page := strings.Replace(apiReferencePageTmpl, themeMarker, themeCSS, 1)
-	if err := os.WriteFile(filepath.Join(apiDir, "index.html"), []byte(page), 0o644); err != nil {
+	// web/api/index.html is the standalone full-viewport reference page (the
+	// sidebar's "Reference" link opens it in a new tab). Hand-written HTML
+	// carrying the same /*THEME*/ marker a marketing page does, so the
+	// reference, the docs and the product share one palette. It skips
+	// copyMarketingPages because Scalar puts it far over the marketing page budget.
+	src, err := os.ReadFile(cfg.apiPagePath)
+	if err != nil {
+		return fmt.Errorf("reading the API reference page: %w", err)
+	}
+	page, err := spliceTheme(src, themeCSS, cfg.apiPagePath)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(apiDir, "index.html"), page, 0o644); err != nil {
 		return err
 	}
 	spec, err := os.ReadFile(cfg.openAPIPath)
@@ -1414,8 +1342,8 @@ func fatal(format string, args ...any) {
 	os.Exit(1)
 }
 
-// copySitePages copies the hand-written marketing pages from web/site into the
-// build, substituting the app's theme file for the /*THEME*/ marker in each.
+// copyMarketingPages copies the hand-written marketing pages from web/website
+// into the build, substituting the app's theme file for the /*THEME*/ marker.
 //
 // The marketing pages share the app's colour tokens with the docs and nothing
 // else: no shared template, no shared layout, no generated markup. They are
@@ -1426,8 +1354,8 @@ func fatal(format string, args ...any) {
 //
 // Reports the pages it staged, so the sitemap and llms.txt can list the
 // marketing side of the site alongside the docs.
-func copySitePages(cfg buildConfig, themeCSS, stars string) ([]marketingPage, error) {
-	entries, err := os.ReadDir(cfg.siteDir)
+func copyMarketingPages(cfg buildConfig, themeCSS, stars string) ([]marketingPage, error) {
+	entries, err := os.ReadDir(cfg.websiteDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -1443,14 +1371,14 @@ func copySitePages(cfg buildConfig, themeCSS, stars string) ([]marketingPage, er
 		if e.IsDir() || !strings.HasSuffix(name, ".html") || strings.HasSuffix(name, ".draft.html") {
 			continue
 		}
-		src, err := os.ReadFile(filepath.Join(cfg.siteDir, name))
+		src, err := os.ReadFile(filepath.Join(cfg.websiteDir, name))
 		if err != nil {
 			return nil, err
 		}
-		if !bytes.Contains(src, []byte(themeMarker)) {
-			return nil, fmt.Errorf("%s: missing %s marker (the app theme has nowhere to go)", name, themeMarker)
+		out, err := spliceTheme(src, themeCSS, name)
+		if err != nil {
+			return nil, err
 		}
-		out := bytes.Replace(src, []byte(themeMarker), []byte(themeCSS), 1)
 		out = bytes.ReplaceAll(out, []byte(starsMarker), []byte(stars))
 
 		// index.html is the site root; any other page gets a directory so its
@@ -1477,7 +1405,7 @@ func copySitePages(cfg buildConfig, themeCSS, stars string) ([]marketingPage, er
 		})
 	}
 
-	if err := checkSiteBudget(cfg, staged); err != nil {
+	if err := checkMarketingBudget(cfg, staged); err != nil {
 		return nil, err
 	}
 
@@ -1524,10 +1452,10 @@ func externalFetches(html string) []string {
 	return out
 }
 
-// checkSiteBudget holds the two rules that keep a marketing page fast, both of
+// checkMarketingBudget holds the two rules that keep a marketing page fast, both of
 // which regress silently: it must arrive in one round trip, and it must not
 // depend on anyone else's server. Web fonts break both at once.
-func checkSiteBudget(cfg buildConfig, paths []string) error {
+func checkMarketingBudget(cfg buildConfig, paths []string) error {
 	var problems []string
 	for _, path := range paths {
 		data, err := os.ReadFile(path)

@@ -4,7 +4,7 @@ import { testId, editor, labelledInput } from './selectors';
 /**
  * The shared half of the screenshot harness. The other half is one
  * `<shot-id>.shot.ts` per picture, living beside the content that shows it: see
- * `web/site/hero.shot.ts`.
+ * `web/website/hero.shot.ts`.
  *
  * Everything here drives the real application, the same build every other spec
  * drives. Nothing is mocked except the AI provider, which `aiProvider.ts`
