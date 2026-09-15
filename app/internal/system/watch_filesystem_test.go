@@ -456,3 +456,47 @@ func TestDropStaleWatches(t *testing.T) {
 		t.Fatalf("no event named %q: the watch is still reporting the pre-rename path", written)
 	}
 }
+
+// A db.config.json and a sidecar are routed to their own handlers and go no
+// further, which is how they stopped reaching the git panel: the file is
+// tracked by git like any other, and a change to it belongs in the list of
+// changes.
+func TestHandleWatchEvent_RefreshesGitStatusForEveryTrackedFile(t *testing.T) {
+	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
+
+	dbDir := filepath.Join(workspaceRoot, "db1")
+	if err := os.MkdirAll(dbDir, 0o700); err != nil {
+		t.Fatalf("mkdir db dir: %v", err)
+	}
+
+	dbConfig := `{"version":1,"id":"db-1","db_type":"sqlite","dsn":"file:test.db","workspace_id":"ws-1"}`
+	dbConfigPath := filepath.Join(dbDir, "db.config.json")
+	if err := os.WriteFile(dbConfigPath, []byte(dbConfig), 0o600); err != nil {
+		t.Fatalf("write db.config.json: %v", err)
+	}
+
+	sidecarPath := filepath.Join(dbDir, "query.sql.metadata.json")
+	if err := os.WriteFile(sidecarPath, []byte(`{"databases":[]}`), 0o600); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("new watcher: %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	for _, path := range []string{dbConfigPath, sidecarPath} {
+		refreshes := 0
+		s := &System{
+			emitHook:      func(generated.MutationCommit) {},
+			gitStatusHook: func() { refreshes++ },
+		}
+
+		s.handleWatchEvent(fsnotify.Event{Name: path, Op: fsnotify.Write}, "user-1", watcher, fsCtx)
+
+		if refreshes != 1 {
+			t.Errorf("%s: git status refreshes = %d, want 1", filepath.Base(path), refreshes)
+		}
+	}
+}

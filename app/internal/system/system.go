@@ -24,6 +24,9 @@ type System struct {
 	// emitHook is an optional test hook that, when set, is called instead of
 	// invoking Graph.Mutate from emitMutation. It is nil in production.
 	emitHook func(generated.MutationCommit)
+	// gitStatusHook is the same for the git panel's refresh signal, which is
+	// otherwise emitted onto the runtime no test has. It is nil in production.
+	gitStatusHook func()
 }
 
 func New(Queries *generated.Queries, Graph *graph.Graph, DbClient *db_client.DbClient, FSProvider *fs_provider.FSProvider) *System {
