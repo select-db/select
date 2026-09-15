@@ -18,6 +18,7 @@ import {
 	renameBox,
 	selectedRows,
 	tab,
+	testId,
 	treeRow
 } from '../../../../../tests/e2e/selectors';
 import {
@@ -523,4 +524,59 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	for (const seeded of ['weekly_revenue.sql', 'top_customers.sql', 'cohorts.sql', 'warehouse']) {
 		await expect(treeRow(page, seeded)).toBeVisible();
 	}
+});
+
+/**
+ * A drop target below the fold is reached by holding the drag at the bottom
+ * edge of the panel: the tree scrolls under the pointer rather than making the
+ * person let go, scroll, and pick the row up again.
+ */
+test('the tree scrolls while something is dragged over its edge', async ({
+	page,
+	request,
+	signIn
+}) => {
+	await open(page, signIn);
+	const id = await workspaceId(request);
+
+	// Enough folders to overflow the panel several times, and one last by name
+	// so it sits below every one of them.
+	const filler = Array.from({ length: 80 }, (_, i) => `aa-${String(i).padStart(2, '0')}`);
+	await exec(request, id, 'mkdir', ...filler, 'zz-target');
+
+	const dragged = treeRow(page, 'aa-00');
+	const target = treeRow(page, 'zz-target');
+	await expect(dragged).toBeVisible();
+
+	const panel = testId(page, 'tree.panel');
+	const panelBox = (await panel.boundingBox())!;
+	const from = (await dragged.boundingBox())!;
+
+	// A row below the fold is in the DOM, so what says it is out of reach is
+	// where it is, not whether it rendered.
+	const targetIsOnScreen = async () => {
+		const box = await target.boundingBox();
+		return !!box && box.y >= panelBox.y && box.y + box.height <= panelBox.y + panelBox.height;
+	};
+	// Polled: the folders arrive through the watcher, and the target is only out
+	// of reach once the tree holds all of them.
+	await expect.poll(targetIsOnScreen, { timeout: 15_000 }).toBe(false);
+
+	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+	await page.mouse.down();
+
+	// Onto the bottom edge, in steps: a browser calls it a drag only once it has
+	// seen the pointer travel.
+	await page.mouse.move(panelBox.x + 40, panelBox.y + panelBox.height - 6, { steps: 10 });
+
+	// The pointer stays where it is: the scrolling is the panel's doing, and the
+	// row it is waiting for arrives under it.
+	await expect.poll(targetIsOnScreen, { timeout: 10_000 }).toBe(true);
+	await hoverOver(page, target);
+	await page.mouse.up();
+
+	await expect.poll(() => onDisk(request, id, 'zz-target/aa-00')).toBe(true);
+
+	await exec(request, id, 'rm', '-rf', 'zz-target', ...filler.slice(1));
+	await expect(treeRow(page, 'zz-target')).toHaveCount(0);
 });
