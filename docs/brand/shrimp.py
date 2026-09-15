@@ -1,20 +1,20 @@
-"""Generate shrimp logo concepts as SVG.
+"""Generate the friendly cartoon shrimp, in the existing logo colours.
 
-Bodies are built from a centreline plus a width profile so the taper is even;
-hand-written beziers wobble at this scale. The silhouette that reads as a
-shrimp is one continuous teardrop -- pointed rostrum, heavy carapace, hard
-taper into a flared tail fan -- over a sweep of about 220 degrees. More sweep
-closes it into a ring, and a separately drawn rostrum reads as a broken
-antenna.
+The palette is the two colours already in web/logo.png: #AC2D31 on #FAFAFA.
+Friendliness here is geometry, not styling -- a big forward-facing head with
+two eyes and a smile, round caps on every limb, and no point anywhere. The
+realistic pointed rostrum is what made the earlier drafts read as seafood
+rather than as a character, so it is gone.
 """
 import math, os, re
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drafts")
 os.makedirs(OUT, exist_ok=True)
 
-RED = "#DC3535"
-ORANGE = "#F97316"
-ORANGE_DARK = "#EA580C"
+BRAND = "#AC2D31"      # web/logo.png
+PAPER = "#FAFAFA"      # web/logo.png ground
+DARK = "#7C1E22"       # pupils and shadow, same hue
+TINT = "#C7484C"       # shell joints and belly, same hue
 
 
 def lerp(a, b, t):
@@ -54,36 +54,11 @@ def cr(points):
     return d + "Z"
 
 
-def blade(base, ang, length, halfw):
-    c, s = math.cos(ang), math.sin(ang)
-    tip = (base[0] + length * c, base[1] + length * s)
-    mid = (base[0] + length * 0.45 * c, base[1] + length * 0.45 * s)
-    nx, ny = -s, c
-    l = (mid[0] + nx * halfw, mid[1] + ny * halfw)
-    r = (mid[0] - nx * halfw, mid[1] - ny * halfw)
-    f = lambda p: "%.1f,%.1f" % p
-    return "M%s Q%s %s Q%s %s Z" % (f(base), f(l), f(tip), f(r), f(base))
-
-
-def fan(base, ang, length, spread=0.56, blades=3, halfw=None, back=0.40):
-    """Tail fan. Blades spring from a point set back along the body axis so
-    they overlap the abdomen instead of hinging on a visible seam."""
-    hw = halfw if halfw is not None else length * 0.29
-    root = (base[0] - math.cos(ang) * length * back,
-            base[1] - math.sin(ang) * length * back)
-    out = []
-    for i in range(blades):
-        k = (i / (blades - 1)) * 2 - 1 if blades > 1 else 0
-        out.append(blade(root, ang + k * spread,
-                         length * (1 + back) * (1 - 0.13 * abs(k)), hw))
-    return " ".join(out)
-
-
 def arc_center(cx, cy, a0, a1, r0, r1):
     def fn(t):
         a = math.radians(lerp(a0, a1, t))
-        r = lerp(r0, r1, t)
-        return (cx + r * math.cos(a), cy + r * math.sin(a))
+        return (cx + lerp(r0, r1, t) * math.cos(a),
+                cy + lerp(r0, r1, t) * math.sin(a))
     return fn
 
 
@@ -98,129 +73,123 @@ def profile(stops):
     return fn
 
 
-def segments(center_fn, width_fn, ts, grow=1.5):
-    out = []
-    for t in ts:
-        (x, y), (dx, dy), (nx, ny) = sample(center_fn, t)
-        w = width_fn(t) * grow
-        # Shell joints sit at a slight rake, not square to the spine.
-        rx, ry = nx * 0.94 + dx * 0.34, ny * 0.94 + dy * 0.34
-        out.append("M%.1f,%.1f L%.1f,%.1f"
-                   % (x + rx * w, y + ry * w, x - rx * w, y - ry * w))
-    return " ".join(out)
+def ray(p, ang, length):
+    return "M%.1f,%.1f L%.1f,%.1f" % (
+        p[0], p[1], p[0] + length * math.cos(ang), p[1] + length * math.sin(ang))
 
 
-# The carapace-forward teardrop every concept shares.
-BODY = profile([(0.00, 1.7), (0.08, 7.2), (0.20, 11.0), (0.38, 9.0),
-                (0.62, 6.4), (0.84, 4.0), (1.00, 2.3)])
-SLIM = profile([(0.00, 1.5), (0.08, 6.4), (0.20, 9.8), (0.38, 8.0),
-                (0.62, 5.7), (0.84, 3.6), (1.00, 2.1)])
+def stroke(d, colour, w, extra=""):
+    return ('<path d="%s" fill="none" stroke="%s" stroke-width="%.1f" '
+            'stroke-linecap="round" stroke-linejoin="round"%s/>'
+            % (d, colour, w, extra))
 
 
-def shrimp(uid, center, width, fan_len, fan_kick=0.0, colour=ORANGE,
-           segs=(0.36, 0.50, 0.64, 0.78), antennae=True, legs=False,
-           eye=True, eye_fill="#FFFFFF", pupil=None, seg_col="#FFFFFF",
-           seg_op="0.55", seg_w="2.7"):
-    body = cr(taper(center, width))
-    (tx, ty), (tdx, tdy), _ = sample(center, 1.0)
-    tail = fan((tx, ty), math.atan2(tdy, tdx) + fan_kick, fan_len)
-    (hx, hy), (hd), (hn) = sample(center, 0.0)
-    fwd = (-hd[0], -hd[1])
+# Body: starts fat where the head sits over it, tapers hard to the tail base.
+SPINE = arc_center(50, 46, 207, -16, 26, 25)
+GIRTH = profile([(0.00, 12.0), (0.15, 12.2), (0.35, 10.0),
+                 (0.60, 7.2), (0.82, 5.4), (1.00, 4.2)])
+CHUNK = profile([(0.00, 13.0), (0.15, 13.2), (0.35, 11.2),
+                 (0.60, 8.4), (0.82, 6.4), (1.00, 5.0)])
+
+HEAD = SPINE(0.0)
+HEAD_R = 12.3
+
+
+def face(palette, wink=False):
+    """Two forward-facing eyes and a smile, placed off the head centre. The
+    size difference between them is what turns a flat front view into a
+    three-quarter one; equal circles read as a bug."""
+    colour, paper, dark = palette["body"], palette["paper"], palette["dark"]
+    hx, hy = HEAD
+    lx, ly, lr = hx - 4.8, hy - 6.2, 5.7
+    rx, ry, rr = hx + 5.4, hy - 6.9, 5.2
+    out = ['<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>' % (lx, ly, lr, paper),
+           '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>' % (rx, ry, rr, paper)]
+    out.append('<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>'
+               % (lx + 1.5, ly + 1.0, lr * 0.46, dark))
+    if wink:
+        out.append(stroke("M%.1f,%.1f q 3.4,-3.2 6.8,0.2" % (rx - 3.4, ry + 0.6), dark, 2.4))
+    else:
+        out.append('<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>'
+                   % (rx + 1.3, ry + 0.9, rr * 0.46, dark))
+    out.append(stroke("M%.1f,%.1f q 4.6,4.8 9.2,0.2" % (hx - 4.6, hy + 3.4), dark, 2.9))
+    return "\n".join(out)
+
+
+def cartoon(uid, girth=GIRTH, fan_len=23, legs=True, arms=True, antennae=True,
+            joints=True, eyes=True, wink=False, wave=False,
+            body_col=BRAND, paper_col=PAPER, dark_col=DARK, tint_col=TINT):
+    palette = {"body": body_col, "paper": paper_col, "dark": dark_col}
+    body = cr(taper(SPINE, girth))
+    (tx, ty), (tdx, tdy), _ = sample(SPINE, 1.0)
+    ang = math.atan2(tdy, tdx) - 0.36
+    root = SPINE(0.90)
+    hx, hy = HEAD
 
     parts = []
     if legs:
-        strokes = []
-        for t in (0.34, 0.46, 0.58, 0.70):
-            (x, y), (dx, dy), (nx, ny) = sample(center, t)
-            w = width(t)
-            # Swimmerets hang off the belly, which is the inside of the curl.
-            strokes.append('M%.1f,%.1f q %.1f,%.1f %.1f,%.1f'
-                           % (x - nx * w * 0.55, y - ny * w * 0.55,
-                              -nx * 5 + dx * 2.5, -ny * 5 + dy * 2.5,
-                              -nx * 7.5 + dx * 6.5, -ny * 7.5 + dy * 6.5))
-        parts.append('<g stroke="%s" stroke-width="3" stroke-linecap="round" '
-                     'fill="none"><path d="%s"/></g>'
-                     % (ORANGE_DARK, " ".join(strokes)))
+        # Swimmerets point into the open side of the curl, which is the only
+        # place they are not hidden behind the body.
+        d = []
+        for t in (0.34, 0.50, 0.66):
+            (x, y), _, (nx, ny) = sample(SPINE, t)
+            w = girth(t)
+            d.append(ray((x - nx * w * 0.55, y - ny * w * 0.55),
+                         math.atan2(-ny, -nx) + 0.40, 7.0))
+        parts.append(stroke(" ".join(d), body_col, 4.4))
 
     if antennae:
-        a = ('M%.1f,%.1f q %.1f,%.1f %.1f,%.1f'
-             % (hx, hy, fwd[0] * 9 - hn[0] * 2, fwd[1] * 9 - hn[1] * 2,
-                fwd[0] * 11 - hn[0] * 13, fwd[1] * 11 - hn[1] * 13))
-        b = ('M%.1f,%.1f q %.1f,%.1f %.1f,%.1f'
-             % (hx, hy, fwd[0] * 7 + hn[0] * 4, fwd[1] * 7 + hn[1] * 4,
-                fwd[0] * 4 + hn[0] * 16, fwd[1] * 4 + hn[1] * 16))
-        parts.append('<g stroke="%s" stroke-width="2.8" stroke-linecap="round" '
-                     'fill="none"><path d="%s %s"/></g>' % (colour, a, b))
+        parts.append(stroke(
+            "M%.1f,%.1f q -5.5,-10.5 -13.0,-13.5 M%.1f,%.1f q 6.0,-10.0 14.5,-11.5"
+            % (hx - 4.5, hy - 9.5, hx + 5.0, hy - 9.0), body_col, 3.2))
 
-    parts.append('<g fill="%s"><path d="%s"/><path d="%s"/></g>'
-                 % (colour, body, tail))
+    # Round-capped strokes rather than pointed leaves: no spikes anywhere.
+    parts.append(stroke(
+        " ".join(ray(root, ang + k * 0.46, fan_len * (1 - 0.08 * abs(k)))
+                 for k in (-1, 0, 1)), body_col, fan_len * 0.34))
 
-    if segs:
-        parts.append('<clipPath id="c-%s"><path d="%s"/></clipPath>' % (uid, body))
-        parts.append('<g clip-path="url(#c-%s)" stroke="%s" stroke-width="%s" '
-                     'stroke-opacity="%s" stroke-linecap="round">'
-                     '<path d="%s"/></g>'
-                     % (uid, seg_col, seg_w, seg_op,
-                        segments(center, width, segs)))
+    parts.append('<path d="%s" fill="%s"/>' % (body, body_col))
+    parts.append('<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>'
+                 % (hx, hy, HEAD_R, body_col))
 
-    if eye:
-        (ex, ey), _, (enx, eny) = sample(center, 0.17)
-        ew = width(0.17)
-        cx_, cy_ = ex + enx * ew * 0.18, ey + eny * ew * 0.18
-        parts.append('<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>'
-                     % (cx_, cy_, ew * 0.31, eye_fill))
-        if pupil:
-            parts.append('<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>'
-                         % (cx_ + fwd[0] * 1.1, cy_ + fwd[1] * 1.1,
-                            ew * 0.155, pupil))
+    if arms:
+        parts.append(stroke("M%.1f,%.1f q 9.5,-2.0 10.5,-10.5" % (hx + 8.0, hy + 8.5),
+                            body_col, 5.2))
+
+    if joints:
+        parts.append('<clipPath id="j-%s"><path d="%s"/></clipPath>' % (uid, body))
+        d = []
+        for t in (0.50, 0.65, 0.80):
+            (x, y), (dx, dy), (nx, ny) = sample(SPINE, t)
+            w = girth(t) * 1.6
+            rx, ry = nx * 0.94 + dx * 0.34, ny * 0.94 + dy * 0.34
+            d.append("M%.1f,%.1f L%.1f,%.1f"
+                     % (x + rx * w, y + ry * w, x - rx * w, y - ry * w))
+        parts.append('<g clip-path="url(#j-%s)">%s</g>'
+                     % (uid, stroke(" ".join(d), tint_col, 3.0)))
+
+    if eyes:
+        parts.append(face(palette, wink=wink))
     return "\n".join(parts)
 
 
-def svg(name, body, w=100, rotate=None):
-    if rotate:
-        body = '<g transform="rotate(%s,50,50)">\n%s\n</g>' % (rotate, body)
-    doc = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d">\n%s\n</svg>\n'
-           % (w, w, body))
-    # A path missing its slash swallows following siblings as attributes; that
-    # silently emptied the clip path once already.
+def svg(name, body, w=100, pre=""):
+    doc = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d">\n%s%s\n</svg>\n'
+           % (w, w, pre, body))
     opens = len(re.findall(r'<(?:path|circle|rect|stop)\b', doc))
-    closes = len(re.findall(r'/>', doc))
-    assert opens == closes, "%s: %d shapes, %d self-closes" % (name, opens, closes)
-    with open(os.path.join(OUT, name + ".svg"), "w") as fh:
-        fh.write(doc)
+    assert opens == len(re.findall(r'/>', doc)), name
+    open(os.path.join(OUT, name + ".svg"), "w").write(doc)
     return doc
 
 
-CURL = arc_center(50, 46, 207, -16, 26, 25)
-DIVE = arc_center(50, 50, 176, 14, 34, 31)
-
-
-GRAD = ('<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-        '<stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/>'
-        '</linearGradient></defs>' % (ORANGE, RED))
-
-# Small sizes lose the antennae and shell joints before they lose the
-# silhouette, so the micro cut drops them and fattens what is left.
-MICRO = profile([(0.00, 2.2), (0.08, 8.2), (0.20, 12.2), (0.38, 10.2),
-                 (0.62, 7.4), (0.84, 4.8), (1.00, 2.8)])
-
-
-def build():
-    svg("curl", shrimp("curl", CURL, BODY, 23, fan_kick=-0.30))
-    svg("curl-solid", shrimp("curls", CURL, BODY, 23, fan_kick=-0.30,
-                             segs=(), antennae=False))
-    svg("mascot", shrimp("mas", CURL, BODY, 24, fan_kick=-0.34, legs=True,
-                         pupil=ORANGE_DARK, seg_op="0.45"))
-    svg("dive", shrimp("div", DIVE, SLIM, 21, fan_kick=-0.20), rotate=-18)
-    svg("curl-grad", GRAD + shrimp("grad", CURL, BODY, 23, fan_kick=-0.30,
-                                   colour="url(#g)"))
-    svg("curl-micro", shrimp("mic", CURL, MICRO, 26, fan_kick=-0.30,
-                             segs=(), antennae=False, eye=False))
-    svg("tile", '<rect x="2" y="2" width="96" height="96" rx="24" fill="%s"/>\n%s'
-        % (RED, shrimp("tile", arc_center(50, 47, 207, -16, 23, 22), SLIM, 20,
-                       fan_kick=-0.30, colour="#FFFFFF", eye_fill=RED,
-                       seg_col=RED, seg_op="0.85", seg_w="2.4")))
-
-
-build()
+svg("cartoon", cartoon("a", legs=False, arms=False))
+svg("cartoon-wave", cartoon("b", legs=False, arms=True, wink=True))
+svg("cartoon-legs", cartoon("c", legs=True, arms=False))
+svg("cartoon-micro", cartoon("d", girth=CHUNK, fan_len=26, legs=False,
+                             arms=False, antennae=False, joints=False))
+svg("cartoon-tile", cartoon("e"),
+    pre='<rect x="2" y="2" width="96" height="96" rx="24" fill="%s"/>\n' % PAPER)
+svg("cartoon-invert", cartoon("f", body_col=PAPER, paper_col=BRAND,
+                              dark_col=BRAND, tint_col="#8E2328"),
+    pre='<rect x="2" y="2" width="96" height="96" rx="24" fill="%s"/>\n' % BRAND)
 print("\n".join(sorted(os.listdir(OUT))))
