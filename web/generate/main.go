@@ -230,6 +230,33 @@ const themeMarker = "/*THEME*/"
 // nothing when the count cannot be read, so the button degrades to its verb.
 const starsMarker = "<!--STARS-->"
 
+// The header and footer every marketing page carries. These are the one thing
+// worth sharing between otherwise self-contained pages: they are the same
+// furniture on each, and a copy per page drifts the moment one of them gains a
+// link. The partials live in site/ as _header.html and _footer.html; a file
+// whose name starts with _ is a partial, not a page, and is never emitted.
+const (
+	headerMarker = "<!--HEADER-->"
+	footerMarker = "<!--FOOTER-->"
+
+	headerPartial = "_header.html"
+	footerPartial = "_footer.html"
+)
+
+// readPartial reads one shared block from site/. Missing is not an error: a
+// site with no _header.html simply has no header to substitute, and a page that
+// carries the marker anyway ends up without one rather than failing the build.
+func readPartial(siteDir, name string) ([]byte, error) {
+	body, err := os.ReadFile(filepath.Join(siteDir, name))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", name, err)
+	}
+	return bytes.TrimRight(body, "\n"), nil
+}
+
 // starsRepo is the repository the header's star button points at and counts.
 const starsRepo = "select-db/select"
 
@@ -1435,12 +1462,24 @@ func copySitePages(cfg buildConfig, themeCSS, stars string) ([]marketingPage, er
 		return nil, err
 	}
 
+	header, err := readPartial(cfg.siteDir, headerPartial)
+	if err != nil {
+		return nil, err
+	}
+	footer, err := readPartial(cfg.siteDir, footerPartial)
+	if err != nil {
+		return nil, err
+	}
+
 	var pages []marketingPage
 	var staged []string
 	for _, e := range entries {
 		name := e.Name()
 
 		if e.IsDir() || !strings.HasSuffix(name, ".html") || strings.HasSuffix(name, ".draft.html") {
+			continue
+		}
+		if strings.HasPrefix(name, "_") {
 			continue
 		}
 		src, err := os.ReadFile(filepath.Join(cfg.siteDir, name))
@@ -1451,6 +1490,10 @@ func copySitePages(cfg buildConfig, themeCSS, stars string) ([]marketingPage, er
 			return nil, fmt.Errorf("%s: missing %s marker (the app theme has nowhere to go)", name, themeMarker)
 		}
 		out := bytes.Replace(src, []byte(themeMarker), []byte(themeCSS), 1)
+		// Before the stars: the count lives inside the header partial, so the
+		// header has to be in the page for the marker to be there to replace.
+		out = bytes.ReplaceAll(out, []byte(headerMarker), header)
+		out = bytes.ReplaceAll(out, []byte(footerMarker), footer)
 		out = bytes.ReplaceAll(out, []byte(starsMarker), []byte(stars))
 
 		// index.html is the site root; any other page gets a directory so its

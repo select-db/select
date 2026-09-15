@@ -11,27 +11,28 @@ directory. Your files stay where you put them.
 
 Signing in with no folder open leaves you in the app itself, with the folders
 you opened recently where your files would be. Open one from there, or with the
-button in the top left corner -- `Cmd+O` on macOS, `Ctrl+O` elsewhere -- which
-carries the workspace name once there is one. One of four things happens.
+button in the top left corner -- `Cmd+O` on macOS, `Ctrl+O` elsewhere.
 
-**The folder is already a workspace.** It holds a `select.config.json`, so
-SELECT knows which workspace it is, connects to the right server, and builds
-the tree.
+![The app with no folder open: recent folders where the files would be, and the workspace button in the top left corner.](/shots/folder.start.light.png)
 
-**The folder is not a workspace yet.** SELECT offers to make one, with the
-folder's own name filled in as the workspace name. Creating it adds one file and
-changes nothing else. An empty folder also gets a small sample database, so
-there is something to run on the first day.
+What happens next depends on what is in the folder.
 
-**The folder belongs to another server.** Roles and permissions come from the
-server a workspace lives on, so the folder cannot be opened until you sign in
-there. Sign out, pick that server, and open the folder again.
+**Already a workspace.** It holds a `select.config.json`, so SELECT connects to
+the right server and builds the tree.
 
-**The workspace is not yours to open.** The folder names a workspace you are
-not in: it was deleted, your access was removed, or you were never invited.
-Ask someone in the workspace to invite you and open the folder again. SELECT
-does not overwrite `select.config.json` here, because your team probably shares
-it -- starting a new workspace in the folder is a separate, deliberate click.
+**Not a workspace yet.** SELECT offers to make one, named after the folder.
+Creating it adds that one file and changes nothing else; an empty folder also
+gets a small sample database to start from.
+
+![Opening a folder that is not a workspace yet: its path, the workspace name filled in from the folder, and what creating one will add.](/shots/folder.setup.light.png)
+
+**On another server.** Roles and permissions come from the server a workspace
+lives on, so sign out, pick that server, and open the folder again.
+
+**Not yours to open.** The workspace was deleted, or you are not in it. Ask
+someone in the workspace to invite you. `select.config.json` is left alone,
+because your team probably shares it -- starting a new workspace in the folder
+is a separate, deliberate click.
 
 ## `select.config.json`
 

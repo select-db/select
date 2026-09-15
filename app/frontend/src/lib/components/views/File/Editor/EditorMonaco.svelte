@@ -566,6 +566,10 @@
 </div>
 
 <style>
+	:global(.editorContainer .monaco-editor .view-line span) {
+		font-weight: inherit;
+	}
+
 	:global(.editorContainer .monaco-editor .sql-schema-cmd-link) {
 		text-decoration: underline;
 		font-weight: 300 !important;

@@ -1,4 +1,4 @@
-import { expect, holdSession, test, type Locator, type Page } from './wails';
+import { expect, holdSession as keepSession, test, type Locator, type Page } from './wails';
 import { testId, editor, labelledInput } from './selectors';
 
 /**
@@ -11,9 +11,31 @@ import { testId, editor, labelledInput } from './selectors';
  * answers locally rather than faking in the UI.
  */
 
-// Re-exported because every shot holds the session, and a shot spec should not
-// have to import from a second file to do the one thing all of them do.
-export { holdSession };
+/**
+ * The width the left bar opens at in every shot.
+ *
+ * The workspace button carries the workspace logo beside its name, which at the
+ * stored default leaves no room for the name itself: every figure showed an
+ * avatar and a truncation. A reader picks their own width; a screenshot cannot,
+ * so it is set here rather than left to whatever the seed happened to store.
+ */
+const LEFTBAR_WIDTH = 290;
+
+/**
+ * Holds the session, as every spec does, and opens the left bar wide enough to
+ * read the workspace name.
+ *
+ * Wrapped here rather than in `wails.ts`: the ordinary suite asserts against the
+ * width a user gets, and only the pictures need a chosen one. An init script
+ * because the bar reads the width once, as it mounts.
+ *
+ * `leftbar` is for a framing too narrow to give the bar this much without
+ * squeezing what the picture is actually of.
+ */
+export async function holdSession(page: Page, leftbar = LEFTBAR_WIDTH) {
+	await page.addInitScript((width) => localStorage.setItem('leftbarWidth', String(width)), leftbar);
+	await keepSession(page);
+}
 
 /** Skipped unless SHOTS=1, so an ordinary test run never writes to the repo. */
 export const shotsEnabled = () => Boolean(process.env.SHOTS);
