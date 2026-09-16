@@ -5,11 +5,13 @@ and `app/build/appicon.png` are untouched.
 
 | Generator | Output | Direction |
 | --------- | ------ | --------- |
-| `mark.py` | `drafts-mark/` | Variants on the existing bowtie |
+| `mark.py` | `drafts-mark/` | Structural variants on the existing bowtie |
+| `treatments.py` | `drafts-treatments/` | Surface treatments on the rounded bowtie |
 | `shrimp.py` | `drafts/` | Replacing it with a shrimp mascot |
 
 ```sh
 python3 docs/brand/mark.py
+python3 docs/brand/treatments.py
 python3 docs/brand/shrimp.py
 ```
 
@@ -42,6 +44,23 @@ Two constraints in that generator:
   polygon is pre-scaled about the mark centre instead.
 - Chevrons are stroked, not outlined. A hand-built chevron outline doubles
   back on itself at the tips and the fill rule eats the result.
+
+## Treatments
+
+`round` from `drafts-mark/` is the chosen base. `treatments.py` dresses that
+one geometry thirteen different ways: gradients, outline, sticker, cartoon,
+extrusion, grain, glass and two icon tiles.
+
+Flat stays the master. Outline, extrude, grain and glass all fail below
+about 24px, so they are hero and marketing assets rather than working marks.
+Only `grad-warm` introduces a hue the brand does not already own.
+
+The `overlap` treatment computes the real intersection of the two triangles
+with a Sutherland-Hodgman clip rather than faking it with `mix-blend-mode`,
+which renderers disagree about and which breaks when the mark sits on a
+coloured ground. At the master's apex depth that intersection is a sliver
+that reads as a printing fault, so this variant reaches its apexes further
+past centre to make the crossing deliberate.
 
 ## Shrimp drafts
 

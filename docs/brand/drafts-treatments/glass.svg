@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#AC2D31"/><stop offset="1" stop-color="#5A1417"/></linearGradient></defs>
+<defs><linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient></defs>
+<rect x="2" y="2" width="96" height="96" rx="24" fill="url(#gg)"/>
+<path d="M15.0,15.0L85.0,15.0L40.0,60.2Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="10.0" stroke-linejoin="round" fill-opacity="0.20" stroke-opacity="0.42"/><path d="M85.0,85.0L15.0,85.0L60.0,39.8Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="10.0" stroke-linejoin="round" fill-opacity="0.20" stroke-opacity="0.42"/><path d="M17.8,17.8L82.2,17.8L40.8,59.3Z" fill="url(#sheen)" stroke="url(#sheen)" stroke-width="10.0" stroke-linejoin="round" stroke="none"/>
+</svg>
