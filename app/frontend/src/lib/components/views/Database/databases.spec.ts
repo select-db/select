@@ -215,3 +215,55 @@ test('shows what the last attempt to reach a database found', async ({ page, sig
 	await expect(dsn).toHaveValue(seeded);
 	await expect(treeRow(page, 'warehouse')).toBeVisible();
 });
+
+/**
+ * Whether a row reads as open.
+ *
+ * The folder icon is the only thing that says so for a database with nothing
+ * under it: there are no child rows to look for, which is the whole state this
+ * is about.
+ */
+const isOpen = (page: Page, name: string) =>
+	treeRow(page, name).locator('.icon-folder-open').isVisible();
+
+/**
+ * One click, as a gesture of its own.
+ *
+ * The tree drops the second of two clicks that the browser has grouped into a
+ * double-click, so back to back clicks land as one. The wait is what separates
+ * them, which is what a person clicking twice to close a row does anyway.
+ */
+const clickRow = async (page: Page, name: string) => {
+	await treeRow(page, name).click();
+	await page.waitForTimeout(600);
+};
+
+test('a database with nothing under it opens on every click', async ({ page, request, signIn }) => {
+	await open(page, signIn);
+	const id = await workspaceId(request);
+
+	// Made through the app rather than by writing the config by hand: a new
+	// database names no DSN, so there is nothing to read a schema from and the
+	// row stays empty however often it is asked.
+	await openRootMenu(page);
+	await choose(page, 'New Database...');
+	await expect(treeRow(page, 'db #1')).toBeVisible();
+
+	await clickRow(page, 'db #1');
+	await expect.poll(() => isOpen(page, 'db #1')).toBe(true);
+
+	// The second click is the point. Toggling shut a row whose schema may be
+	// about to arrive is what made people click twice and guess at the timing.
+	await clickRow(page, 'db #1');
+	await expect.poll(() => isOpen(page, 'db #1')).toBe(true);
+
+	// A database that has its schema still closes on a second click, which is
+	// what every other row in the tree does.
+	await clickRow(page, 'warehouse');
+	await expect(treeRow(page, 'main')).toBeVisible();
+	await clickRow(page, 'warehouse');
+	await expect(treeRow(page, 'main')).toHaveCount(0);
+
+	await exec(request, id, 'rm', '-rf', 'db #1');
+	await expect(treeRow(page, 'db #1')).toHaveCount(0);
+});

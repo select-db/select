@@ -10,9 +10,12 @@
 	} from '$lib/components/views/shared/sharedStore';
 	import { getActions } from './actions/getActions';
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
-	import { createClickHandlers, createClickGestureHandlers } from './helpers/clickHandlers';
+	import {
+		clickDatabase,
+		createClickHandlers,
+		createClickGestureHandlers
+	} from './helpers/clickHandlers';
 	import { hiddenChildrenStore, filterVisibleChildren } from './helpers/childVisibilityStore';
-	import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 	import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 	import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 	import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
@@ -88,16 +91,15 @@
 			return;
 		}
 
-		toggleIsItemExpanded(item.id);
-
-		// Through loadSchemaIfEmpty, not QuerySchema directly: expanding a database
-		// is the most common way to load a schema, and it was the one path that
-		// dropped the result on the floor -- no await, no catch. A server that
-		// refuses the read left the node expanded and empty with nothing said
-		// anywhere.
+		// Through clickDatabase, so a database inside another folder answers a
+		// click the way one at the root does: opening while it is empty, and
+		// reading the schema that makes it not be.
 		if (item.type === 'db_instance') {
-			void loadSchemaIfEmpty(item as graph.DBInstanceNode);
+			clickDatabase(item as graph.DBInstanceNode);
+			return;
 		}
+
+		toggleIsItemExpanded(item.id);
 	};
 
 	// Route a click to the handler that item kind would have got on its own.
