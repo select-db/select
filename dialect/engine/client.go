@@ -127,7 +127,7 @@ func (client *Client) GetMetadata(ctx context.Context, conn Conn, instance DBIns
 	if client.Transport == nil {
 		return nil, fmt.Errorf("instance %s is proxified but no transport is configured", instance.ID)
 	}
-	meta, err := client.Transport.GetMetadata(ctx, workspaceID, instance.ID)
+	meta, err := client.Transport.GetMetadata(ctx, workspaceID, instance.ID, noCache)
 	if err != nil {
 		return nil, err
 	}
