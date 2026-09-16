@@ -16,7 +16,13 @@ import {
 	testId,
 	treeRow
 } from '../../../../../tests/e2e/selectors';
-import { choose, openRowMenu, openRootMenu, renameTo } from '../../../../../tests/e2e/tree';
+import {
+	choose,
+	openFolderTo,
+	openRowMenu,
+	openRootMenu,
+	renameTo
+} from '../../../../../tests/e2e/tree';
 
 /**
  * Tabs: what the workbench does with them, not what they hold. A tab frames a
@@ -308,7 +314,7 @@ test('follows the files it has open', async ({ page, request, signIn }) => {
 	await run('mkdir', 'box');
 	await run('cp', 'cohorts-2026.sql', 'box/inside.sql');
 	await expect(treeRow(page, 'box')).toBeVisible();
-	await treeRow(page, 'box').click();
+	await openFolderTo(page, 'box', 'inside.sql');
 	await openFromTree(page, 'inside.sql');
 
 	await run('rm', '-rf', 'box');

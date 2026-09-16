@@ -9,7 +9,13 @@ import {
 	type Page
 } from '../../../../../tests/e2e/wails';
 import { dbStatus, renameBox, tab, testId, treeRow } from '../../../../../tests/e2e/selectors';
-import { choose, openRowMenu, openRootMenu, renameTo } from '../../../../../tests/e2e/tree';
+import {
+	choose,
+	openFolderTo,
+	openRowMenu,
+	openRootMenu,
+	renameTo
+} from '../../../../../tests/e2e/tree';
 
 /**
  * A database is a directory named after itself. Its name is written down
@@ -131,8 +137,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	await exec(request, id, 'mv', 'reporting', 'europe/reporting');
 
 	await expect(treeRow(page, 'europe')).toBeVisible();
-	await treeRow(page, 'europe').click();
-	await expect(treeRow(page, 'reporting')).toBeVisible();
+	await openFolderTo(page, 'europe', 'reporting');
 	expect(await onDisk(request, id, 'reporting')).toBe(false);
 	expect(await databasesInGraph(request)).toContain('reporting');
 
@@ -148,8 +153,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	// still reaches the tree, which it does not if the watch is left pointing
 	// at the name the directory had.
 	await exec(request, id, 'touch', 'europe/eu-metrics/inside.sql');
-	await treeRow(page, 'eu-metrics').click();
-	await expect(treeRow(page, 'inside.sql')).toBeVisible();
+	await openFolderTo(page, 'eu-metrics', 'inside.sql');
 
 	// --- Deleted ------------------------------------------------------------
 

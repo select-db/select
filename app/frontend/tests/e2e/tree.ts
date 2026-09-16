@@ -54,6 +54,27 @@ export async function renameTo(page: Page, name: string) {
 	await expect(box).toBeHidden();
 }
 
+/**
+ * Opens a folder far enough to show one of its children.
+ *
+ * A click toggles, and an entry the watcher reports inside a folder opens that
+ * folder on its own. When that lands just before the click, the click closes it
+ * again, so the click is retried until the child is on screen.
+ *
+ * The child is matched under that folder only: an entry just moved in can still
+ * show its old row elsewhere.
+ */
+export async function openFolderTo(page: Page, folder: string, child: string) {
+	const folderRow = treeRow(page, folder);
+	const folderId = await folderRow.getAttribute('data-id');
+	const childRow = treeRow(page, child).and(page.locator(`[data-parent-ids$="${folderId}"]`));
+
+	await expect(async () => {
+		if (!(await childRow.isVisible())) await folderRow.click();
+		await expect(childRow).toBeVisible({ timeout: 1_000 });
+	}).toPass({ timeout: 10_000 });
+}
+
 /** Leaves the rename box without renaming, which is how a default name is kept. */
 export async function keepName(page: Page) {
 	const box = renameBox(page);
