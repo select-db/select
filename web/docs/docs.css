@@ -199,14 +199,14 @@ main {
   background: var(--gray-200);
 }
 
-.main-inner { padding: var(--space-xxl) var(--space-xxxl); }
+.main-inner { padding: var(--space-xxxl) var(--space-xxxl); }
 
 .content { line-height: 1.8; color: var(--gray-800); }
 
 .content h1 {
   font-size: var(--fs-xxxl);
   font-weight: var(--fw-bold);
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-xxl);
   line-height: 1.15;
   letter-spacing: -0.025em;
   color: var(--gray-1000);
@@ -220,8 +220,8 @@ main {
 .content h2 {
   font-size: 1.625rem;
   font-weight: 700;
-  margin-top: var(--space-xxl);
-  margin-bottom: var(--space-md-lg);
+  margin-top: var(--space-xxxl);
+  margin-bottom: var(--space-lg);
   line-height: 1.25;
   letter-spacing: -0.02em;
   border-bottom: var(--border);
@@ -232,8 +232,8 @@ main {
 .content h3 {
   font-size: 1.25rem;
   font-weight: 700;
-  margin-top: var(--space-xl);
-  margin-bottom: var(--space-sm-md);
+  margin-top: var(--space-xxl);
+  margin-bottom: var(--space-md);
   line-height: 1.35;
   letter-spacing: -0.01em;
   color: var(--gray-1000);
@@ -272,7 +272,7 @@ main {
 
 .copy-toast.visible { opacity: 1; }
 
-.content p { margin-bottom: var(--space-md-lg); text-wrap: pretty; letter-spacing: 0.01em; }
+.content p { margin-bottom: var(--space-lg); text-wrap: pretty; letter-spacing: 0.01em; }
 .content strong { font-weight: var(--fw-bold); color: var(--gray-1000); }
 .content em { font-style: italic; }
 .content a {
@@ -285,7 +285,7 @@ main {
 }
 .content a:hover { text-decoration-color: var(--red); }
 .content a:hover { color: var(--gray-1000); }
-.content ul, .content ol { margin-bottom: var(--space-md-lg); padding-left: var(--space-lg); }
+.content ul, .content ol { margin-bottom: var(--space-lg); padding-left: var(--space-lg); }
 .content li { margin-bottom: var(--space-sm); padding-left: var(--space-xs); }
 .content li::marker { color: var(--gray-700); }
 .content li strong { font-weight: var(--fw-bold); color: var(--gray-1000); }
@@ -330,7 +330,7 @@ main {
 }
 
 .content pre {
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-md-lg);
   padding: var(--space-md);
   background: var(--gray-300);
   border-radius: var(--br-md);
@@ -365,7 +365,7 @@ main {
    rather than quoted. Italics are dropped on purpose: a warning is the last
    thing that should be harder to read than the paragraph above it. */
 .content blockquote {
-  margin: var(--space-md-lg) 0;
+  margin: var(--space-lg) 0;
   padding: var(--space-md) var(--space-md-lg);
   border: var(--border);
   border-left: 2px solid var(--gray-600);
@@ -475,7 +475,7 @@ main {
 /* A screenshot in the prose gets the frame the marketing page gives its
    shots, so a figure here and a figure there are the same object. */
 .content img { max-width: 100%; border-radius: var(--br-md); }
-.content picture[data-shot] { display: block; margin: var(--space-md) 0; }
+.content picture[data-shot] { display: block; margin: var(--space-lg) 0; }
 .content picture[data-shot] img {
   display: block;
   width: 100%;
@@ -486,7 +486,7 @@ main {
 /* Inside a numbered step, the figure belongs to that step: indented with it
    and tight against the sentence it illustrates. */
 .content li > picture[data-shot] { margin: var(--space-sm) 0 var(--space-md); }
-.content hr { margin: var(--space-xl) 0; border: none; border-top: var(--border); }
+.content hr { margin: var(--space-xxl) 0; border: none; border-top: var(--border); }
 
 /* Breadcrumbs. Same mono-uppercase treatment as the "On this page" heading, so
    the two read as chrome around the prose rather than as part of it. The
@@ -511,7 +511,7 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-md);
-  margin-top: var(--space-xl);
+  margin-top: var(--space-xxl);
   font-size: var(--fs-sm);
   color: var(--gray-700);
 }
@@ -524,7 +524,7 @@ main {
 .page-meta a:hover { color: var(--red); }
 
 /* Page nav */
-.page-nav { display: flex; justify-content: space-between; margin-top: var(--space-xl); padding-top: var(--space-md); border-top: var(--border); }
+.page-nav { display: flex; justify-content: space-between; margin-top: var(--space-xxl); padding-top: var(--space-md); border-top: var(--border); }
 .page-nav a { color: var(--gray-800); text-decoration: none; font-size: var(--fs-sm); }
 .page-nav a:hover { color: var(--gray-1000); }
 .page-nav .next { margin-left: auto; }
