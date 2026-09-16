@@ -634,13 +634,20 @@
       grid-template-columns: 1fr 1.1fr;
       gap: var(--s4);
       align-items: center;
-      padding: var(--s4) var(--s3)
+      padding: var(--s4) var(--s3);
+      /* A row's height is otherwise whichever column happens to be taller, so
+         the rows whose screenshot is short collapse onto their text and read
+         cramped next to the one whose screenshot is tall. The floor makes the
+         band a decision rather than a property of the image. */
+      min-height: 36rem
     }
 
     @media (max-width:860px) {
       .row .f {
         grid-template-columns: 1fr;
-        gap: var(--s3)
+        gap: var(--s3);
+        /* One column stacks to whatever it needs; a floor here is dead space. */
+        min-height: 0
       }
     }
 
