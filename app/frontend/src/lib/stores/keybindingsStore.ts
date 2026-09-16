@@ -110,14 +110,15 @@ const keyByCode: Record<string, string> = {
 const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta', 'CapsLock']);
 
 /**
- * The punctuation a binding may name, as internal/keymap's `punctuation` lists
- * it: the symbols a US layout prints without shift. A keystroke that prints one
- * of these, or a letter or a digit, names a key a binding can be written for.
+ * The punctuation a binding may name: the symbols a US layout prints without
+ * shift, which are exactly the one-character names in keyByCode above. Read
+ * from there rather than written out again, because a key added to one list and
+ * not the other is a binding the config accepts and no keystroke ever matches.
  */
-const bindableCharacters = "-=[]\\;',./`";
+const bindableCharacters = new Set(Object.values(keyByCode).filter((name) => name.length === 1));
 
 function isBindableCharacter(key: string): boolean {
-	return /^[a-z0-9]$/.test(key) || bindableCharacters.includes(key);
+	return /^[a-z0-9]$/.test(key) || bindableCharacters.has(key);
 }
 
 /**
@@ -183,7 +184,7 @@ function chord(e: KeyboardEvent, key: string): string {
  * running whatever is bound to the key in that position, and a key that prints
  * nothing a binding could name still answers for its position.
  */
-export function chordsFromEvent(e: KeyboardEvent): string[] {
+function chordsFromEvent(e: KeyboardEvent): string[] {
 	const printed = printedKey(e);
 	const positional = positionalKey(e);
 
@@ -375,10 +376,7 @@ function evaluateTokens(tokens: Token[], context: KeybindingsContext): boolean {
  * is an unbinding, and is returned as one: it stops the search rather than
  * falling through to the default it was written to take away.
  */
-export function findMatchingKeybinding(
-	chord: string,
-	context: KeybindingsContext
-): Keybinding | null {
+function findMatchingKeybinding(chord: string, context: KeybindingsContext): Keybinding | null {
 	const keybindings = get(keybindingsStore);
 	for (let i = keybindings.length - 1; i >= 0; i--) {
 		const kb = keybindings[i];

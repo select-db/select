@@ -81,8 +81,7 @@ const SPECIAL_FILENAMES: Record<string, FileIconDef> = {
 	'go.sum': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
 	'package.json': { icon: 'package', size: 19, color: 'var(--red)' },
 	'package-lock.json': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
-	'Cargo.toml': { icon: 'package', size: 19, color: 'var(--orange)' },
-	'Cargo.lock': { icon: 'lock', size: 19, color: 'var(--gray-800)' }
+	'Cargo.toml': { icon: 'package', size: 19, color: 'var(--orange)' }
 };
 
 /**
@@ -93,7 +92,10 @@ const SPECIAL_FILENAMES: Record<string, FileIconDef> = {
 const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 	// SELECT's own files
 	[{ icon: 'css', size: 20, color: 'var(--orange)' }, ['.theme']],
-	[{ icon: 'cog', size: 19, color: 'var(--gray-800)' }, ['.config']],
+	[
+		{ icon: 'cog', size: 19, color: 'var(--gray-800)' },
+		['.config', '.mk', '.cmake', '.bazel', '.bzl']
+	],
 	[{ icon: 'eslint', size: 20, color: 'var(--purple)' }, ['.lint']],
 	[{ icon: 'code-bracket', size: 19, color: 'var(--gray-800)' }, ['.env']],
 
@@ -144,9 +146,16 @@ const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 		['.tsv', '.xls', '.xlsx', '.xlsm', '.ods', '.parquet', '.avro', '.arrow', '.feather']
 	],
 
-	// Languages, one colour each so a mixed folder reads at a glance
-	[{ icon: 'code-bracket', size: 19, color: 'var(--blue)' }, ['.go']],
-	[{ icon: 'code-bracket', size: 19, color: 'var(--orange)' }, ['.rs', '.zig', '.nim']],
+	// Languages, grouped by the colour they wear so a mixed folder reads at a
+	// glance. One entry per look, not per language: a recolour is one edit.
+	[
+		{ icon: 'code-bracket', size: 19, color: 'var(--blue)' },
+		['.go', '.dart', '.sol', '.pl', '.pm']
+	],
+	[
+		{ icon: 'code-bracket', size: 19, color: 'var(--orange)' },
+		['.rs', '.zig', '.nim', '.java', '.kt', '.kts', '.swift', '.groovy', '.gradle']
+	],
 	[{ icon: 'code-bracket', size: 19, color: 'var(--yellow)' }, ['.py', '.pyi', '.ipynb', '.lua']],
 	[{ icon: 'code-bracket', size: 19, color: 'var(--red)' }, ['.rb', '.erb', '.gemspec', '.rake']],
 	[{ icon: 'code-bracket', size: 19, color: 'var(--purple)' }, ['.php', '.cs', '.fs', '.vb']],
@@ -159,14 +168,9 @@ const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 		['.hs', '.ex', '.exs', '.erl', '.clj', '.cljs', '.scala', '.ml', '.elm']
 	],
 	[
-		{ icon: 'code-bracket', size: 19, color: 'var(--orange)' },
-		['.java', '.kt', '.kts', '.swift', '.groovy', '.gradle']
-	],
-	[
 		{ icon: 'chart-line', size: 19, color: 'var(--blue)' },
 		['.r', '.rmd', '.jl', '.m4', '.sas', '.do']
 	],
-	[{ icon: 'code-bracket', size: 19, color: 'var(--blue)' }, ['.dart', '.sol', '.pl', '.pm']],
 
 	// Shells and the machines they run on
 	[
@@ -178,7 +182,6 @@ const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 		['.tf', '.tfvars', '.hcl', '.nix', '.bicep']
 	],
 	[{ icon: 'package', size: 19, color: 'var(--blue)' }, ['.dockerfile', '.containerfile']],
-	[{ icon: 'cog', size: 19, color: 'var(--gray-800)' }, ['.mk', '.cmake', '.bazel', '.bzl']],
 
 	// Media
 	[
@@ -210,10 +213,7 @@ const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 		{ icon: 'audio', size: 19, color: 'var(--purple)' },
 		['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.opus', '.mid']
 	],
-	[
-		{ icon: 'font', size: 19, color: 'var(--orange)' },
-		['.ttf', '.otf', '.woff', '.woff2', '.eot']
-	],
+	[{ icon: 'font', size: 19, color: 'var(--orange)' }, ['.ttf', '.otf', '.woff', '.woff2', '.eot']],
 
 	// Everything that arrives packed, signed or compiled
 	[
@@ -226,20 +226,7 @@ const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 	],
 	[
 		{ icon: 'binary', size: 19, color: 'var(--gray-800)' },
-		[
-			'.exe',
-			'.dll',
-			'.so',
-			'.dylib',
-			'.bin',
-			'.wasm',
-			'.o',
-			'.a',
-			'.class',
-			'.pyc',
-			'.dat',
-			'.pak'
-		]
+		['.exe', '.dll', '.so', '.dylib', '.bin', '.wasm', '.o', '.a', '.class', '.pyc', '.dat', '.pak']
 	],
 	[
 		{ icon: 'package', size: 19, color: 'var(--gray-800)' },

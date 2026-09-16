@@ -74,12 +74,9 @@
 		}
 
 		if (!dbInstance) return;
-		const hasSchema = dbInstance.children && dbInstance.children.length > 0;
-		if (!hasSchema) {
-			void loadSchemaIfEmpty(dbInstance).then(() => readSchemaFile());
-		} else {
-			readSchemaFile();
-		}
+		// loadSchemaIfEmpty returns at once when the schema is already there, so
+		// the file is read either way and only this knows when.
+		void loadSchemaIfEmpty(dbInstance).then(() => readSchemaFile());
 	});
 
 	const onDatabaseChange = (value: string | string[]) => {
@@ -111,7 +108,7 @@
 
 	const onRefresh = async () => {
 		if (!dbInstance) return;
-		await loadSchema({ database: dbInstance, noCache: true });
+		await loadSchema({ database: dbInstance });
 		await readSchemaFile();
 	};
 </script>
