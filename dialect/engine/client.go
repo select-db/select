@@ -37,12 +37,12 @@ func (client *Client) Stream(
 	SetStreamingResult(key, result)
 
 	cancelCtx, cancelFunc := context.WithCancel(ctx)
-	RegisterCancel(key, cancelFunc)
+	unregisterCancel := RegisterCancel(key, cancelFunc)
 
 	sink := NewStreamingSink(result, listener)
 
 	go func() {
-		defer UnregisterCancel(key)
+		defer unregisterCancel()
 
 		if instance.Proxified {
 			stream, err := client.Transport.OpenStream(
