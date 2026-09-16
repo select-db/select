@@ -132,13 +132,13 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		tunnelCache.Delete(key)
 		existing.Close()
 		tunnelCache.Set(key, tunnel)
-		tunnelKeyToWorkspace[key] = workspaceID
+		indexTunnel(key, workspaceID)
 		tunnelCacheMu.Unlock()
 		DeleteConnsByAddr(addr)
 		return tunnel, nil
 	}
 	tunnelCache.Set(key, tunnel)
-	tunnelKeyToWorkspace[key] = workspaceID
+	indexTunnel(key, workspaceID)
 	tunnelCacheMu.Unlock()
 	return tunnel, nil
 }

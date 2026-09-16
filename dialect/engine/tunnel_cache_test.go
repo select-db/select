@@ -1,6 +1,10 @@
 package engine
 
-import "testing"
+import (
+	"fmt"
+	"sync"
+	"testing"
+)
 
 // stubTunnel stands in for a dialled tunnel: the cache only ever hands its
 // value back, and these tests are about what the cache does around it.
@@ -63,5 +67,36 @@ func TestCloseWorkspaceTunnelsClosesOnlyThatWorkspace(t *testing.T) {
 	}
 	if _, ok := indexedWorkspace("deleted-key"); ok {
 		t.Error("the index kept the closed tunnel")
+	}
+}
+
+// The index has its own mutex because the cache prunes it from a goroutine of
+// its own. A write to it under any other lock is a concurrent map write, which
+// is not an error to handle but the end of the process.
+func TestTunnelWorkspaceIndexIsWrittenUnderOneLock(t *testing.T) {
+	ClearTunnelCache()
+	defer ClearTunnelCache()
+
+	var writers sync.WaitGroup
+	for worker := range 8 {
+		writers.Add(1)
+		go func() {
+			defer writers.Done()
+			for i := range 200 {
+				key := fmt.Sprintf("key-%d-%d", worker, i)
+				tunnelCacheMu.Lock()
+				tunnelCache.Set(key, &stubTunnel{})
+				indexTunnel(key, "ws-1")
+				tunnelCacheMu.Unlock()
+
+				// What expiry does, from a goroutine that holds neither lock.
+				tunnelCache.Delete(key)
+			}
+		}()
+	}
+	writers.Wait()
+
+	if _, ok := indexedWorkspace("key-0-0"); ok {
+		t.Error("the index kept a key the cache dropped")
 	}
 }
