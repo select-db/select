@@ -35,6 +35,13 @@ export const selectedRows = (page: Page) =>
 /** One open tab, named by the label it shows. */
 export const tab = (page: Page, name: string) => testId(page, 'tabs.tab', name);
 
+/**
+ * The handle between a query and its results. Its own, not the split or side
+ * bar resizers: all of them carry the class, and only this one sets how many
+ * rows are on screen.
+ */
+export const resultsResizer = (page: Page) => testId(page, 'results.resizer');
+
 /** The tabs on screen, in the order they are laid out. */
 export const tabs = (page: Page) => testId(page, 'tabs.tab');
 

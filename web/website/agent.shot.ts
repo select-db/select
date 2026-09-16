@@ -3,6 +3,7 @@ import {
 	shotsEnabled,
 	holdSession,
 	shotsDirFor,
+	viewportFor,
 	THEMES,
 	expect,
 	test,
@@ -33,7 +34,7 @@ test.skip(!shotsEnabled(), 'set SHOTS=1 (wails3 task shots) to capture screensho
  * shown at 550px, and this is captured at 520 CSS wide: near enough to display
  * size that the text stays readable.
  */
-const FRAMING: Framing = { name: 'agent', width: 1840, height: 820, density: 2 };
+const FRAMING: Framing = { name: 'agent', width: 1840, height: 820, density: 2, appZoom: 1.2 };
 
 /**
  * Read the schema, then try to read the column, then explain the refusal. The
@@ -71,10 +72,7 @@ const REPLIES: ModelReply[] = [
 
 for (const theme of THEMES) {
 	test.describe(`agent ${theme}`, () => {
-		test.use({
-			viewport: { width: FRAMING.width, height: FRAMING.height },
-			deviceScaleFactor: FRAMING.density ?? 1.5
-		});
+		test.use(viewportFor(FRAMING));
 
 		test('an agent refused the column its role does not grant', async ({ page, signIn }, info) => {
 			await holdSession(page);

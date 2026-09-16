@@ -4,6 +4,7 @@ import {
 	hideFileTreeChildren,
 	holdSession,
 	shotsDirFor,
+	viewportFor,
 	THEMES,
 	expect,
 	test,
@@ -15,7 +16,7 @@ import {
 	modelWillReply,
 	type ModelReply
 } from '../../app/frontend/tests/e2e/aiProvider';
-import { testId, editor } from '../../app/frontend/tests/e2e/selectors';
+import { testId, editor, resultsResizer } from '../../app/frontend/tests/e2e/selectors';
 
 /**
  * The picture at the top of the landing page, captured from the running
@@ -74,8 +75,8 @@ const FS_WRITE = 2205286156;
  * is also how anyone would actually work at that width.
  */
 const FRAMINGS: (Framing & { chat: boolean })[] = [
-	{ name: 'wide', width: 1440, height: 900, chat: true },
-	{ name: 'narrow', width: 860, height: 760, chat: false }
+	{ name: 'wide', width: 1440, height: 900, chat: true, appZoom: 1.2 },
+	{ name: 'narrow', width: 860, height: 760, chat: false, appZoom: 1.1 }
 ];
 
 /**
@@ -109,16 +110,17 @@ const REPLIES: ModelReply[] = [
 for (const framing of FRAMINGS) {
 	for (const theme of THEMES) {
 		test.describe(`hero ${framing.name} ${theme}`, () => {
-			test.use({
-				viewport: { width: framing.width, height: framing.height },
-				deviceScaleFactor: framing.density ?? 1.5
-			});
+			test.use(viewportFor(framing));
 
 			// One pass per theme rather than one pass photographed twice: switching
 			// theme re-renders the editor, which closes the completion popup and
 			// takes focus with it. Setting it before anything else is driven avoids
 			// having to restore state the repaint destroyed.
 			test('a query, its results, and completion over both', async ({ page, signIn }, info) => {
+				// Zoomed, the window is laid out in fewer CSS pixels than the framing
+				// names, and every coordinate below is one of those.
+				const view = viewportFor(framing).viewport;
+
 				await holdSession(page);
 				if (framing.chat) {
 					await modelWillReply(page, ANTHROPIC, REPLIES);
@@ -288,7 +290,7 @@ for (const framing of FRAMINGS) {
 					if (!box) throw new Error('no split resizer: did the chat open beside the editor?');
 					await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 					await page.mouse.down();
-					await page.mouse.move(Math.round(framing.width * 0.71), box.y + box.height / 2, {
+					await page.mouse.move(Math.round(view.width * 0.71), box.y + box.height / 2, {
 						steps: 5
 					});
 					await page.mouse.up();
@@ -296,8 +298,29 @@ for (const framing of FRAMINGS) {
 					// position to assert, not a duration to guess.
 					await expect
 						.poll(async () => Math.round((await resizer.boundingBox())?.x ?? 0))
-						.toBeGreaterThan(Math.round(framing.width * 0.6));
+						.toBeGreaterThan(Math.round(view.width * 0.6));
 				}
+
+				// Zoomed in, the default 195px of results is about three rows. Opened to
+				// roughly two fifths of the window, through the same handle a person
+				// drags. The handle throttles its moves, so the last one is waited on
+				// before the button comes up: released too early it never lands.
+				const rows = resultsResizer(page);
+				const grip = await rows.boundingBox();
+				if (!grip) throw new Error('no results resizer: did the query return?');
+				const restAt = Math.round(view.height * 0.58);
+				await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+				await page.mouse.down();
+				await page.mouse.move(grip.x + grip.width / 2, restAt, { steps: 12 });
+				await expect
+					.poll(async () => Math.round((await rows.boundingBox())?.y ?? view.height))
+					.toBeLessThan(restAt + 12);
+				await page.mouse.up();
+
+				// The handle has no upper stop, so a drag can push the bottom bar out
+				// of the window: the picture is of the whole app, and the app has a
+				// bottom. Asserted rather than trusted to the fraction above.
+				await expect(page.locator('#bottom-bar')).toBeInViewport({ ratio: 1 });
 
 				// Armed before the edit, not after: the debounce fires 200ms after the
 				// last keystroke, which is while the completion popup is still being

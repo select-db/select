@@ -3,6 +3,7 @@ import {
 	shotsEnabled,
 	holdSession,
 	shotsDirFor,
+	viewportFor,
 	THEMES,
 	expect,
 	test,
@@ -27,7 +28,7 @@ test.skip(!shotsEnabled(), 'set SHOTS=1 (wails3 task shots) to capture screensho
  * unreadable. The panel and the diff both have to be in frame, which is what
  * sets the width.
  */
-const FRAMING: Framing = { name: 'git', width: 940, height: 520, density: 2 };
+const FRAMING: Framing = { name: 'git', width: 940, height: 520, density: 2, appZoom: 1.2 };
 
 /** What the seed left uncommitted, and the line it added. */
 const EDITED = 'top_customers.sql';
@@ -36,10 +37,7 @@ const ADDED_LINE = "o.status = 'paid'";
 
 for (const theme of THEMES) {
 	test.describe(`git ${theme}`, () => {
-		test.use({
-			viewport: { width: FRAMING.width, height: FRAMING.height },
-			deviceScaleFactor: FRAMING.density ?? 1.5
-		});
+		test.use(viewportFor(FRAMING));
 
 		test('a branch, a change, and the diff for it', async ({ page, signIn }, info) => {
 			await holdSession(page);
