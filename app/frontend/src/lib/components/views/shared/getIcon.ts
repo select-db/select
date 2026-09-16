@@ -71,17 +71,41 @@ type FileIconDef = { icon: Icons; size: number; color: string };
 
 const SPECIAL_FILENAMES: Record<string, FileIconDef> = {
 	'[edits].sql': { icon: 'db-upload', size: 16, color: 'var(--gray-800)' },
-	'.gitignore': { icon: 'branch', size: 20, color: 'var(--blue)' },
-	'.gitattributes': { icon: 'branch', size: 20, color: 'var(--blue)' },
-	'.dockerignore': { icon: 'package', size: 19, color: 'var(--blue)' },
-	Dockerfile: { icon: 'package', size: 19, color: 'var(--blue)' },
+	'.gitignore': { icon: 'git', size: 19, color: 'var(--orange)' },
+	'.gitattributes': { icon: 'git', size: 19, color: 'var(--orange)' },
+	'.dockerignore': { icon: 'docker', size: 19, color: 'var(--blue)' },
+	Dockerfile: { icon: 'docker', size: 19, color: 'var(--blue)' },
 	Makefile: { icon: 'cog', size: 19, color: 'var(--orange)' },
 	LICENSE: { icon: 'journal', size: 19, color: 'var(--gray-800)' },
 	'go.mod': { icon: 'package', size: 19, color: 'var(--blue)' },
 	'go.sum': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
-	'package.json': { icon: 'package', size: 19, color: 'var(--red)' },
+	'package.json': { icon: 'npm', size: 19, color: 'var(--red)' },
 	'package-lock.json': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
-	'Cargo.toml': { icon: 'package', size: 19, color: 'var(--orange)' }
+	'Cargo.toml': { icon: 'package', size: 19, color: 'var(--orange)' },
+	'Gemfile': { icon: 'lang-ruby', size: 19, color: 'var(--red)' },
+	'Gemfile.lock': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
+	'requirements.txt': { icon: 'lang-python', size: 19, color: 'var(--yellow)' },
+	'pyproject.toml': { icon: 'lang-python', size: 19, color: 'var(--yellow)' },
+	'Pipfile': { icon: 'lang-python', size: 19, color: 'var(--yellow)' },
+	'pom.xml': { icon: 'lang-java', size: 19, color: 'var(--red)' },
+	'build.gradle': { icon: 'lang-groovy', size: 19, color: 'var(--blue)' },
+	'Dockerfile.dev': { icon: 'docker', size: 19, color: 'var(--blue)' },
+	'docker-compose.yml': { icon: 'docker', size: 19, color: 'var(--blue)' },
+	'docker-compose.yaml': { icon: 'docker', size: 19, color: 'var(--blue)' },
+	'deno.json': { icon: 'deno', size: 19, color: 'var(--gray-800)' },
+	'deno.lock': { icon: 'deno', size: 19, color: 'var(--gray-800)' },
+	'.nvmrc': { icon: 'nodejs', size: 19, color: 'var(--green)' },
+	'.npmrc': { icon: 'npm', size: 19, color: 'var(--red)' },
+	'yarn.lock': { icon: 'yarn', size: 19, color: 'var(--blue)' },
+	'pnpm-lock.yaml': { icon: 'npm', size: 19, color: 'var(--orange)' },
+	'vite.config.ts': { icon: 'vite', size: 19, color: 'var(--purple)' },
+	'vite.config.js': { icon: 'vite', size: 19, color: 'var(--purple)' },
+	'svelte.config.js': { icon: 'svelte', size: 19, color: 'var(--orange)' },
+	'tailwind.config.js': { icon: 'tailwind', size: 19, color: 'var(--blue)' },
+	'tailwind.config.ts': { icon: 'tailwind', size: 19, color: 'var(--blue)' },
+	'angular.json': { icon: 'angular', size: 19, color: 'var(--red)' },
+	'.gitmodules': { icon: 'git', size: 19, color: 'var(--orange)' },
+	'.gitkeep': { icon: 'git', size: 19, color: 'var(--orange)' }
 };
 
 /**
@@ -105,14 +129,20 @@ const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 		{ icon: 'db', size: 19, color: 'var(--green)' },
 		['.sqlite', '.sqlite3', '.db', '.duckdb', '.mdb', '.accdb']
 	],
-	[{ icon: 'schema', size: 19, color: 'var(--green)' }, ['.prisma', '.dbml', '.graphql', '.gql']],
+	[{ icon: 'schema', size: 19, color: 'var(--green)' }, ['.dbml']],
+	[{ icon: 'prisma', size: 19, color: 'var(--gray-800)' }, ['.prisma']],
+	[{ icon: 'graphql', size: 19, color: 'var(--purple)' }, ['.graphql', '.gql']],
 
 	// Web
-	[{ icon: 'ts', size: 20, color: 'var(--blue)' }, ['.ts', '.tsx', '.mts', '.cts']],
-	[{ icon: 'js', size: 20, color: 'var(--yellow)' }, ['.js', '.mjs', '.cjs', '.jsx']],
+	[{ icon: 'ts', size: 20, color: 'var(--blue)' }, ['.ts', '.mts', '.cts']],
+	[{ icon: 'js', size: 20, color: 'var(--yellow)' }, ['.js', '.mjs', '.cjs']],
+	[{ icon: 'react', size: 20, color: 'var(--blue)' }, ['.tsx', '.jsx']],
+	[{ icon: 'svelte', size: 19, color: 'var(--orange)' }, ['.svelte']],
+	[{ icon: 'vue', size: 19, color: 'var(--green)' }, ['.vue']],
+	[{ icon: 'astro', size: 19, color: 'var(--purple)' }, ['.astro']],
 	[{ icon: 'html', size: 20, color: 'var(--red)' }, ['.html', '.htm', '.xhtml', '.hbs', '.ejs']],
-	[{ icon: 'html', size: 20, color: 'var(--orange)' }, ['.svelte', '.vue', '.astro']],
-	[{ icon: 'css', size: 20, color: 'var(--blue)' }, ['.css', '.scss', '.sass', '.less', '.styl']],
+	[{ icon: 'css', size: 20, color: 'var(--blue)' }, ['.css', '.less', '.styl', '.pcss']],
+	[{ icon: 'sass', size: 19, color: 'var(--red)' }, ['.scss', '.sass']],
 
 	// Structured text
 	[{ icon: 'json', size: 19, color: 'var(--gray-800)' }, ['.json', '.jsonc', '.json5', '.ndjson']],
@@ -146,42 +176,60 @@ const EXTENSION_GROUPS: [FileIconDef, string[]][] = [
 		['.tsv', '.xls', '.xlsx', '.xlsm', '.ods', '.parquet', '.avro', '.arrow', '.feather']
 	],
 
-	// Languages, grouped by the colour they wear so a mixed folder reads at a
-	// glance. One entry per look, not per language: a recolour is one edit.
+	// Languages, one icon each: a shape a person already knows beats a colour
+	// they have to learn, and the palette has nine colours for sixty languages.
+	[{ icon: 'lang-go', size: 20, color: 'var(--blue)' }, ['.go', '.templ']],
+	[{ icon: 'lang-rust', size: 19, color: 'var(--orange)' }, ['.rs']],
+	[{ icon: 'lang-c', size: 19, color: 'var(--blue)' }, ['.c', '.h']],
 	[
-		{ icon: 'code-bracket', size: 19, color: 'var(--blue)' },
-		['.go', '.dart', '.sol', '.pl', '.pm']
+		{ icon: 'lang-cpp', size: 20, color: 'var(--blue)' },
+		['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.hxx', '.ipp']
 	],
+	[{ icon: 'lang-csharp', size: 20, color: 'var(--purple)' }, ['.cs', '.csx', '.csproj']],
+	[{ icon: 'lang-objc', size: 19, color: 'var(--gray-800)' }, ['.m', '.mm']],
 	[
-		{ icon: 'code-bracket', size: 19, color: 'var(--orange)' },
-		['.rs', '.zig', '.nim', '.java', '.kt', '.kts', '.swift', '.groovy', '.gradle']
+		{ icon: 'lang-python', size: 19, color: 'var(--yellow)' },
+		['.py', '.pyi', '.pyw', '.pyx', '.ipynb']
 	],
-	[{ icon: 'code-bracket', size: 19, color: 'var(--yellow)' }, ['.py', '.pyi', '.ipynb', '.lua']],
-	[{ icon: 'code-bracket', size: 19, color: 'var(--red)' }, ['.rb', '.erb', '.gemspec', '.rake']],
-	[{ icon: 'code-bracket', size: 19, color: 'var(--purple)' }, ['.php', '.cs', '.fs', '.vb']],
+	[{ icon: 'lang-java', size: 19, color: 'var(--red)' }, ['.java', '.jsp', '.jav']],
+	[{ icon: 'lang-kotlin', size: 19, color: 'var(--purple)' }, ['.kt', '.kts']],
+	[{ icon: 'lang-swift', size: 19, color: 'var(--orange)' }, ['.swift']],
+	[{ icon: 'lang-dart', size: 19, color: 'var(--blue)' }, ['.dart']],
+	[{ icon: 'lang-php', size: 19, color: 'var(--purple)' }, ['.php', '.phtml', '.php5']],
+	[{ icon: 'lang-ruby', size: 19, color: 'var(--red)' }, ['.rb', '.erb', '.gemspec', '.rake']],
+	[{ icon: 'lang-lua', size: 19, color: 'var(--blue)' }, ['.lua']],
+	[{ icon: 'lang-perl', size: 19, color: 'var(--purple)' }, ['.pl', '.pm', '.pod']],
+	[{ icon: 'lang-r', size: 19, color: 'var(--blue)' }, ['.r', '.rmd', '.rdata', '.rds']],
+	[{ icon: 'lang-julia', size: 19, color: 'var(--purple)' }, ['.jl']],
+	[{ icon: 'lang-matlab', size: 20, color: 'var(--orange)' }, ['.mlx', '.mat', '.sas', '.do']],
+	[{ icon: 'lang-haskell', size: 19, color: 'var(--purple)' }, ['.hs', '.lhs', '.cabal']],
+	[{ icon: 'lang-elixir', size: 19, color: 'var(--purple)' }, ['.ex', '.exs', '.heex', '.eex']],
+	[{ icon: 'lang-erlang', size: 19, color: 'var(--red)' }, ['.erl', '.hrl', '.beam']],
 	[
-		{ icon: 'code-bracket', size: 19, color: 'var(--green)' },
-		['.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hh', '.m', '.mm']
+		{ icon: 'lang-lisp', size: 20, color: 'var(--green)' },
+		['.clj', '.cljs', '.cljc', '.edn', '.el', '.lisp', '.lsp', '.scm', '.rkt']
 	],
-	[
-		{ icon: 'function', size: 19, color: 'var(--purple)' },
-		['.hs', '.ex', '.exs', '.erl', '.clj', '.cljs', '.scala', '.ml', '.elm']
-	],
-	[
-		{ icon: 'chart-line', size: 19, color: 'var(--blue)' },
-		['.r', '.rmd', '.jl', '.m4', '.sas', '.do']
-	],
+	[{ icon: 'lang-scala', size: 19, color: 'var(--red)' }, ['.scala', '.sc', '.sbt']],
+	[{ icon: 'lang-elm', size: 19, color: 'var(--blue)' }, ['.elm']],
+	[{ icon: 'lang-ocaml', size: 19, color: 'var(--orange)' }, ['.ml', '.mli']],
+	[{ icon: 'lang-fsharp', size: 19, color: 'var(--purple)' }, ['.fs', '.fsx', '.fsi']],
+	[{ icon: 'lang-zig', size: 19, color: 'var(--orange)' }, ['.zig', '.zon']],
+	[{ icon: 'lang-nim', size: 19, color: 'var(--yellow)' }, ['.nim', '.nims', '.nimble']],
+	[{ icon: 'lang-vb', size: 19, color: 'var(--purple)' }, ['.vb', '.bas', '.vbs']],
+	[{ icon: 'lang-groovy', size: 19, color: 'var(--blue)' }, ['.groovy', '.gradle']],
+	[{ icon: 'lang-solidity', size: 19, color: 'var(--gray-800)' }, ['.sol', '.vy']],
+	[{ icon: 'lang-assembly', size: 19, color: 'var(--gray-800)' }, ['.asm', '.s', '.wat']],
 
 	// Shells and the machines they run on
 	[
 		{ icon: 'terminal', size: 19, color: 'var(--green)' },
-		['.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd', '.awk', '.sed']
+		['.sh', '.bash', '.zsh', '.fish', '.bat', '.cmd', '.awk', '.sed', '.exp']
 	],
-	[
-		{ icon: 'server', size: 19, color: 'var(--purple)' },
-		['.tf', '.tfvars', '.hcl', '.nix', '.bicep']
-	],
-	[{ icon: 'package', size: 19, color: 'var(--blue)' }, ['.dockerfile', '.containerfile']],
+	[{ icon: 'powershell', size: 19, color: 'var(--blue)' }, ['.ps1', '.psm1', '.psd1']],
+	[{ icon: 'terraform', size: 19, color: 'var(--purple)' }, ['.tf', '.tfvars', '.tfstate', '.hcl']],
+	[{ icon: 'nix', size: 19, color: 'var(--blue)' }, ['.nix']],
+	[{ icon: 'server', size: 19, color: 'var(--purple)' }, ['.bicep', '.pp', '.sls']],
+	[{ icon: 'docker', size: 19, color: 'var(--blue)' }, ['.dockerfile', '.containerfile']],
 
 	// Media
 	[
