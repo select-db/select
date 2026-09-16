@@ -47,11 +47,38 @@ export type Framing = {
 	/** Render density. 1.5 is ~2x at the size the hero is actually displayed. */
 	density?: number;
 	/**
-	 * App UI scale. Raise it for a doc figure read in a narrow column: fewer
-	 * pixels of chrome, larger text, without shrinking the window.
+	 * Page zoom, as `Cmd/Ctrl +` applies it: the app lays out in fewer CSS
+	 * pixels and draws each one larger. Raise it for a figure read in a narrow
+	 * column, where the app at its own scale is too small to read.
+	 *
+	 * Steps of 1.2 match the app's own (see wails/zoom.ts), so a figure sits at
+	 * a scale a reader can actually reach.
 	 */
 	appZoom?: number;
 };
+
+/**
+ * The viewport and density a framing is captured at.
+ *
+ * Zoom is applied by laying the app out in fewer CSS pixels and rendering more
+ * device pixels for each, which is what page zoom does: the app sees a smaller
+ * window and draws everything larger, and the image comes out the same size.
+ *
+ * Not the CSS `zoom` property, which looks the same in a still and is not the
+ * same thing: monaco positions its popups in unzoomed coordinates, so the
+ * completion list drifts off the caret, and the results grid leaves gaps
+ * between columns. A real window does neither.
+ */
+export function viewportFor(framing: Framing) {
+	const zoom = framing.appZoom ?? 1;
+	return {
+		viewport: {
+			width: Math.round(framing.width / zoom),
+			height: Math.round(framing.height / zoom)
+		},
+		deviceScaleFactor: (framing.density ?? 1.5) * zoom
+	};
+}
 
 export const THEMES = ['light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
@@ -114,15 +141,6 @@ export async function shot(
 	// 550px, where a scaled-down window is unreadable and one pane is not.
 	clip?: Locator
 ) {
-	if (framing.appZoom) {
-		await page.evaluate((z) => {
-			document.documentElement.style.zoom = String(z);
-		}, framing.appZoom);
-		await expect
-			.poll(() => page.evaluate(() => document.documentElement.style.zoom))
-			.toBe(String(framing.appZoom));
-	}
-
 	// Guard, not a workaround: .layout is `overflow: clip` now, so it cannot
 	// scroll. It used to be `hidden`, which still makes a scroll container, and a
 	// scrollIntoView from the tree left the whole app sitting 11px off-centre in

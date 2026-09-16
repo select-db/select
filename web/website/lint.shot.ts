@@ -3,6 +3,7 @@ import {
 	shotsEnabled,
 	holdSession,
 	shotsDirFor,
+	viewportFor,
 	THEMES,
 	expect,
 	test,
@@ -33,10 +34,7 @@ const RULE = 'Avoid SELECT *, list columns explicitly';
 
 for (const theme of THEMES) {
 	test.describe(`lint ${theme}`, () => {
-		test.use({
-			viewport: { width: FRAMING.width, height: FRAMING.height },
-			deviceScaleFactor: FRAMING.density ?? 1.5
-		});
+		test.use(viewportFor(FRAMING));
 
 		test('a rule from the workspace, flagging a draft', async ({ page, signIn }, info) => {
 			await holdSession(page);

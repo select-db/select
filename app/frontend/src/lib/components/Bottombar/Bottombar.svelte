@@ -41,6 +41,9 @@
 		padding-right: var(--space-sm);
 
 		height: 42px;
+		/* Its height is the bar, not a suggestion: as a flex child it would
+		   otherwise give it up to whatever is above it. */
+		flex-shrink: 0;
 
 		z-index: 2;
 	}

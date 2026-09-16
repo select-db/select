@@ -3,11 +3,13 @@ import {
 	shotsEnabled,
 	holdSession,
 	shotsDirFor,
+	viewportFor,
 	THEMES,
 	expect,
 	test,
 	type Framing
 } from '../../app/frontend/tests/e2e/shots';
+import { testId } from '../../app/frontend/tests/e2e/selectors';
 
 /**
  * The picture beside "Stop asking someone for prod": a role that can read the
@@ -22,17 +24,14 @@ test.skip(!shotsEnabled(), 'set SHOTS=1 (wails3 task shots) to capture screensho
 // Wide enough for the last action column. At 940 the results table was cut after
 // UPDATE, and a table sliced down the middle reads as a broken picture
 // whatever it is showing.
-const FRAMING: Framing = { name: 'roles', width: 1180, height: 620, density: 2 };
+const FRAMING: Framing = { name: 'roles', width: 1180, height: 780, density: 2, appZoom: 1.44 };
 
 const ROLE = 'analyst-readonly';
 const DENIED = 'email';
 
 for (const theme of THEMES) {
 	test.describe(`roles ${theme}`, () => {
-		test.use({
-			viewport: { width: FRAMING.width, height: FRAMING.height },
-			deviceScaleFactor: FRAMING.density ?? 1.5
-		});
+		test.use(viewportFor(FRAMING));
 
 		test('a role that cannot read one column', async ({ page, signIn }, info) => {
 			await holdSession(page);
@@ -51,6 +50,12 @@ for (const theme of THEMES) {
 				)
 				.toBe(theme);
 
+			// The settings pane is the whole picture here, and the file tree beside it
+			// belongs to a workspace nobody is looking at. Closed through the bottom
+			// bar's own button, which needs the workspace still open to be there.
+			await page.getByRole('button', { name: 'Files' }).click();
+			await expect(testId(page, 'tree.panel')).toBeHidden();
+
 			await page.getByRole('button', { name: 'Open Settings' }).click();
 			await page.getByRole('button', { name: 'Roles', exact: true }).click();
 
@@ -67,12 +72,26 @@ for (const theme of THEMES) {
 				timeout: 15_000
 			});
 
-			// The results table opens on the workspace-level rules, which are the dullest
-			// thing in it. Scroll the columns into frame: the denial next to its
-			// granted siblings is what this picture is for.
+			// The grid opens on the workspace-level rules, which are the dullest thing
+			// in it. Put the database at the top instead: the rows under it are the
+			// claim this picture makes, and the database, schema and table rows stick
+			// as they scroll, so the column keeps its context above it.
+			await page
+				.getByRole('button', { name: 'warehouse', exact: true })
+				.first()
+				.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+
 			const lastColumn = page.getByText('created_at', { exact: true }).first();
-			await lastColumn.scrollIntoViewIfNeeded();
 			await expect(lastColumn).toBeVisible();
+
+			// The column headers name what the ticks mean, so they have to be in the
+			// frame with them.
+			await expect(page.getByText('select', { exact: true }).first()).toBeVisible();
+
+			// Off the grid before the shutter: a row under the pointer wears its
+			// grant-all affordance, which reads as part of the row rather than as
+			// something hovering put there.
+			await page.mouse.move(0, 0);
 
 			await shot(page, shotsDirFor(info.file), `roles.${theme}`, FRAMING);
 		});
