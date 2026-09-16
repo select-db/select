@@ -31,6 +31,5 @@ func TestCancelQueryCallsAndCleansUp(t *testing.T) {
 	}
 
 	// Re-registering a no-op and immediately cancelling should not call the old func again.
-	engine.RegisterCancel(key, func() {})
-	engine.UnregisterCancel(key)
+	engine.RegisterCancel(key, func() {})()
 }

@@ -18,6 +18,7 @@ import {
 	renameBox,
 	selectedRows,
 	tab,
+	testId,
 	treeRow
 } from '../../../../../tests/e2e/selectors';
 import {
@@ -451,6 +452,11 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await choose(page, 'Delete');
 	await expect(treeRow(page, 'in-db.sql')).toHaveCount(0);
 
+	// Closed again: the root menu below needs empty space under the last row,
+	// and an open database is four rows of tables, schema and config.
+	await treeRow(page, 'warehouse').click();
+	await expect(treeRow(page, 'schema.sql')).toHaveCount(0);
+
 	// --- What happens without the app ---------------------------------------
 
 	// A file removed in a terminal leaves the tree and closes its tab. Nothing
@@ -523,4 +529,108 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	for (const seeded of ['weekly_revenue.sql', 'top_customers.sql', 'cohorts.sql', 'warehouse']) {
 		await expect(treeRow(page, seeded)).toBeVisible();
 	}
+});
+
+/**
+ * A drop target below the fold is reached by holding the drag at the bottom
+ * edge of the panel: the tree scrolls under the pointer rather than making the
+ * person let go, scroll, and pick the row up again.
+ */
+test('the tree scrolls while something is dragged over its edge', async ({
+	page,
+	request,
+	signIn
+}) => {
+	await open(page, signIn);
+	const id = await workspaceId(request);
+
+	// Enough folders to overflow the panel several times, and one last by name
+	// so it sits below every one of them.
+	const filler = Array.from({ length: 80 }, (_, i) => `aa-${String(i).padStart(2, '0')}`);
+	await exec(request, id, 'mkdir', ...filler, 'zz-target');
+
+	const dragged = treeRow(page, 'aa-00');
+	const target = treeRow(page, 'zz-target');
+	await expect(dragged).toBeVisible();
+
+	const panel = testId(page, 'tree.panel');
+	const panelBox = (await panel.boundingBox())!;
+	const from = (await dragged.boundingBox())!;
+
+	// A row below the fold is in the DOM, so what says it is out of reach is
+	// where it is, not whether it rendered.
+	const targetIsOnScreen = async () => {
+		const box = await target.boundingBox();
+		return !!box && box.y >= panelBox.y && box.y + box.height <= panelBox.y + panelBox.height;
+	};
+	// Polled: the folders arrive through the watcher, and the target is only out
+	// of reach once the tree holds all of them.
+	await expect.poll(targetIsOnScreen, { timeout: 15_000 }).toBe(false);
+
+	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+	await page.mouse.down();
+
+	// Onto the bottom edge, in steps: a browser calls it a drag only once it has
+	// seen the pointer travel.
+	await page.mouse.move(panelBox.x + 40, panelBox.y + panelBox.height - 6, { steps: 10 });
+
+	// The pointer stays where it is: the scrolling is the panel's doing, and the
+	// row it is waiting for arrives under it.
+	await expect.poll(targetIsOnScreen, { timeout: 10_000 }).toBe(true);
+	await hoverOver(page, target);
+	await page.mouse.up();
+
+	await expect.poll(() => onDisk(request, id, 'zz-target/aa-00')).toBe(true);
+
+	await exec(request, id, 'rm', '-rf', 'zz-target', ...filler.slice(1));
+	await expect(treeRow(page, 'zz-target')).toHaveCount(0);
+});
+
+/**
+ * The test above passes on a panel that does nothing: Chromium scrolls a
+ * container under a real drag by itself, and Chromium is the only engine this
+ * suite runs. The desktop app is WebKit, where it does not. A synthetic
+ * dragover never reaches that native machinery either, so this is what says the
+ * panel scrolls on its own.
+ */
+test('the panel scrolls under a drag on its own, not only where the engine does it', async ({
+	page,
+	request,
+	signIn
+}) => {
+	await open(page, signIn);
+	const id = await workspaceId(request);
+
+	const filler = Array.from({ length: 80 }, (_, i) => `bb-${String(i).padStart(2, '0')}`);
+	await exec(request, id, 'mkdir', ...filler);
+
+	const panel = testId(page, 'tree.panel');
+	await expect
+		.poll(() => panel.evaluate((el) => el.scrollHeight - el.clientHeight), { timeout: 15_000 })
+		.toBeGreaterThan(0);
+
+	// Held over one edge for a dozen frames, which is what the panel reads as a
+	// drag lingering there.
+	const scrolledOver = (edge: 'top' | 'bottom') =>
+		panel.evaluate(async (el, which) => {
+			const box = el.getBoundingClientRect();
+			const clientY = which === 'bottom' ? box.bottom - 4 : box.top + 4;
+			const before = el.scrollTop;
+
+			for (let i = 0; i < 12; i++) {
+				el.dispatchEvent(
+					new DragEvent('dragover', { bubbles: true, clientX: box.x + 20, clientY })
+				);
+				await new Promise(requestAnimationFrame);
+			}
+			el.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+
+			return el.scrollTop - before;
+		}, edge);
+
+	expect(await scrolledOver('bottom')).toBeGreaterThan(0);
+	expect(await scrolledOver('top')).toBeLessThan(0);
+
+	await exec(request, id, 'rm', '-rf', ...filler);
+	await expect(treeRow(page, 'bb-00')).toHaveCount(0);
 });

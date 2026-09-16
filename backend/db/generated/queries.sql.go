@@ -31,6 +31,22 @@ func (q *Queries) AddAPIKeyRole(ctx context.Context, arg AddAPIKeyRoleParams) er
 	return err
 }
 
+const clearWorkspaceDatasourceSecrets = `-- name: ClearWorkspaceDatasourceSecrets :exec
+UPDATE app.datasource
+SET
+  encrypted_dsn = NULL,
+  encrypted_ssh = NULL,
+  updated_at = NOW()
+WHERE
+  workspace_id = $1
+  AND (encrypted_dsn IS NOT NULL OR encrypted_ssh IS NOT NULL)
+`
+
+func (q *Queries) ClearWorkspaceDatasourceSecrets(ctx context.Context, workspaceID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, clearWorkspaceDatasourceSecrets, workspaceID)
+	return err
+}
+
 const countWorkspaceToUserByUserID = `-- name: CountWorkspaceToUserByUserID :one
 SELECT COUNT(*)
 FROM app.workspace_to_user wtu
@@ -284,9 +300,24 @@ func (q *Queries) ExpireAPIKeyAt(ctx context.Context, arg ExpireAPIKeyAtParams) 
 }
 
 const getAPIKeyByPrefix = `-- name: GetAPIKeyByPrefix :one
-SELECT id, workspace_id, name, prefix, hashed_key, created_by, expires_at, last_used_at, created_at, deleted_at
-FROM auth.api_key
-WHERE prefix = $1 AND deleted_at IS NULL
+SELECT
+  k.id,
+  k.workspace_id,
+  k.name,
+  k.prefix,
+  k.hashed_key,
+  k.created_by,
+  k.expires_at,
+  k.last_used_at,
+  k.created_at,
+  k.deleted_at
+FROM
+  auth.api_key k
+  JOIN app.workspace w ON w.id = k.workspace_id
+WHERE
+  k.prefix = $1
+  AND k.deleted_at IS NULL
+  AND w.deleted_at IS NULL
 `
 
 func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix string) (AuthApiKey, error) {
@@ -432,19 +463,21 @@ func (q *Queries) GetAuditOutboxBatch(ctx context.Context, limit int32) ([]GetAu
 
 const getDatasource = `-- name: GetDatasource :one
 SELECT
-  db_type,
-  name,
-  encrypted_dsn,
-  encrypted_ssh,
-  max_open_conns,
-  max_idle_conns,
-  conn_max_lifetime,
-  conn_max_idle_time
+  d.db_type,
+  d.name,
+  d.encrypted_dsn,
+  d.encrypted_ssh,
+  d.max_open_conns,
+  d.max_idle_conns,
+  d.conn_max_lifetime,
+  d.conn_max_idle_time
 FROM
-  app.datasource
+  app.datasource d
+  JOIN app.workspace w ON w.id = d.workspace_id
 WHERE
-  id = $1
-  AND workspace_id = $2
+  d.id = $1
+  AND d.workspace_id = $2
+  AND w.deleted_at IS NULL
 `
 
 type GetDatasourceParams struct {
@@ -1308,7 +1341,15 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id uuid.UUID) (GetWorksp
 }
 
 const getWorkspaceIDsByUserID = `-- name: GetWorkspaceIDsByUserID :many
-SELECT workspace_id FROM app.workspace_to_user WHERE user_id = $1
+SELECT
+  wtu.workspace_id
+FROM
+  app.workspace_to_user wtu
+  JOIN app.workspace w ON w.id = wtu.workspace_id
+WHERE
+  wtu.user_id = $1
+  AND wtu.deleted_at IS NULL
+  AND w.deleted_at IS NULL
 `
 
 func (q *Queries) GetWorkspaceIDsByUserID(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
@@ -1695,16 +1736,18 @@ func (q *Queries) ListAPIKeysByWorkspace(ctx context.Context, workspaceID uuid.U
 
 const listDatasourcesByWorkspace = `-- name: ListDatasourcesByWorkspace :many
 SELECT
-  id,
-  db_type,
-  name
+  d.id,
+  d.db_type,
+  d.name
 FROM
-  app.datasource
+  app.datasource d
+  JOIN app.workspace w ON w.id = d.workspace_id
 WHERE
-  workspace_id = $1
+  d.workspace_id = $1
+  AND w.deleted_at IS NULL
 ORDER BY
-  name,
-  id
+  d.name,
+  d.id
 `
 
 type ListDatasourcesByWorkspaceRow struct {

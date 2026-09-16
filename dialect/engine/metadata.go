@@ -11,15 +11,25 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-// hashWorkspaceDSN hashes (workspaceID, dsn) so DSNs never live in any
-// cache map. Shared by metadata and connection caches. FNV-1a 64-bit:
-// stdlib, alloc-free, ns-scale. Non-crypto;
-func hashWorkspaceDSN(workspaceID, dsn string) string {
+// workspaceCacheKey is the key every cache in this package uses: the workspace
+// in front, then a hash of (workspaceID, dsn) so no DSN lives in a cache key.
+// FNV-1a 64-bit: stdlib, alloc-free, ns-scale. Non-crypto.
+//
+// The workspace is readable rather than hashed in so that everything one
+// workspace has open can be found and dropped by prefix, which is what a
+// workspace being deleted needs. It is an id that appears in every log line
+// and URL already; the secret is the DSN, and that stays hashed.
+func workspaceCacheKey(workspaceID, dsn string) string {
 	h := fnv.New64a()
 	h.Write([]byte(workspaceID))
 	h.Write([]byte{0})
 	h.Write([]byte(dsn))
-	return strconv.FormatUint(h.Sum64(), 16)
+	return workspaceKeyPrefix(workspaceID) + strconv.FormatUint(h.Sum64(), 16)
+}
+
+// workspaceKeyPrefix is what every cache key of one workspace begins with.
+func workspaceKeyPrefix(workspaceID string) string {
+	return workspaceID + ":"
 }
 
 // defaultMetadataConcurrency bounds how many introspection queries FetchMetadata

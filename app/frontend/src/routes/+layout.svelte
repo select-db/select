@@ -158,8 +158,8 @@
 		display: flex;
 		flex: 1;
 		/* A flex item will not shrink below its content, and this one is the whole
-		   app: without this it holds its ground in a short window and the bottom
-		   bar, which can shrink, is squeezed to nothing instead. */
+		   app: without it the bottom bar is squeezed to nothing in a short window,
+		   and a file tree taller than the window grows past it instead of scrolling. */
 		min-height: 0;
 		/* clip, not hidden: `hidden` still makes this a scroll container, and a
 		   scrollIntoView from the file tree or the editor leaves it scrolled a

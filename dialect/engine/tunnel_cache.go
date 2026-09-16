@@ -13,7 +13,7 @@ import (
 
 // authFingerprint reduces the SSH credential material to a SHA-256 digest so the
 // tunnel cache key changes when credentials change, without any raw secret
-// entering the key (hashWorkspaceDSN is a non-cryptographic hash).
+// entering the key (workspaceCacheKey is a non-cryptographic hash).
 func authFingerprint(config ResolvedSSHConfig) string {
 	h := sha256.New()
 	for _, s := range []string{
@@ -40,12 +40,34 @@ type Tunnel interface {
 
 var (
 	// 20k entries × ~100 KB = ~2GB max
-	tunnelCache   = cache.New(cache.Options{MaxEntries: 20_000, TTL: 20 * time.Minute})
+	tunnelCache = cache.New(cache.Options{
+		MaxEntries: 20_000,
+		TTL:        20 * time.Minute,
+		// Every way out of the cache closes the tunnel: expiry and eviction drop
+		// an entry with nobody on the call stack to do it, and a tunnel dropped
+		// without being closed is a socket into the customer's network that
+		// outlives the entry that named it.
+		OnDelete: closeDeletedTunnel,
+	})
 	tunnelCacheMu sync.Mutex
 )
 
+// closeDeletedTunnel closes a tunnel that has left the cache and flushes the
+// pools opened through it, which are now pointing at a local port nothing
+// answers on. Runs for every deletion, via the cache's OnDelete.
+func closeDeletedTunnel(_ string, value any) {
+	tunnel, ok := value.(Tunnel)
+	if !ok {
+		return
+	}
+
+	addr := tunnel.LocalAddr()
+	tunnel.Close()
+	DeleteConnsByAddr(addr)
+}
+
 // GetOrCreateTunnel returns a live cached tunnel, dialling via StartSSHTunnel on miss.
-// Key is hash(workspaceID, full SSH identity + remote address) scoped per workspace, 
+// Key is hash(workspaceID, full SSH identity + remote address) scoped per workspace,
 // secrets hashed (never stored verbatim). Editing any auth detail changes the key.
 // Dead entries are deleted and their DB connections flushed before redialling.
 // Serialised: only one tunnel per key established under concurrent callers.
@@ -59,22 +81,16 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		strconv.Itoa(remotePort),
 		authFingerprint(config),
 	}, "\x00")
-	key := hashWorkspaceDSN(workspaceID, addrStr)
+	key := workspaceCacheKey(workspaceID, addrStr)
 
 	tunnelCacheMu.Lock()
-	if existing, ok := getTunnel(key); ok {
-		if existing.IsAlive() {
-			tunnelCacheMu.Unlock()
-			return existing, nil
-		}
-		addr := existing.LocalAddr()
-		tunnelCache.Delete(key)
-		existing.Close()
+	if existing, ok := getTunnel(key); ok && existing.IsAlive() {
 		tunnelCacheMu.Unlock()
-		DeleteConnsByAddr(addr)
-	} else {
-		tunnelCacheMu.Unlock()
+		return existing, nil
 	}
+	// Dead or absent: the delete closes it and flushes its connections.
+	tunnelCache.Delete(key)
+	tunnelCacheMu.Unlock()
 
 	tunnel, err := StartSSHTunnel(config, remoteHost, remotePort)
 	if err != nil {
@@ -83,20 +99,14 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 
 	// re-check: another goroutine may have raced the dial
 	tunnelCacheMu.Lock()
-	if existing, ok := getTunnel(key); ok {
-		if existing.IsAlive() {
-			tunnelCacheMu.Unlock()
-			tunnel.Close()
-			return existing, nil
-		}
-		addr := existing.LocalAddr()
-		tunnelCache.Delete(key)
-		existing.Close()
-		tunnelCache.Set(key, tunnel)
+	if existing, ok := getTunnel(key); ok && existing.IsAlive() {
 		tunnelCacheMu.Unlock()
-		DeleteConnsByAddr(addr)
-		return tunnel, nil
+		tunnel.Close()
+		return existing, nil
 	}
+
+	// Set replaces whatever was there, and a replacement is a deletion: the one
+	// it displaces is closed and flushed by OnDelete.
 	tunnelCache.Set(key, tunnel)
 	tunnelCacheMu.Unlock()
 	return tunnel, nil
@@ -106,6 +116,17 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 func DeleteTunnel(key string) {
 	tunnelCacheMu.Lock()
 	tunnelCache.Delete(key)
+	tunnelCacheMu.Unlock()
+}
+
+// CloseWorkspaceTunnels closes every tunnel a workspace opened. Called when the
+// workspace is deleted: a tunnel that outlives it is a live socket into the
+// customer's network.
+func CloseWorkspaceTunnels(workspaceID string) {
+	prefix := workspaceKeyPrefix(workspaceID)
+
+	tunnelCacheMu.Lock()
+	tunnelCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 	tunnelCacheMu.Unlock()
 }
 

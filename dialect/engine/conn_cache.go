@@ -77,22 +77,34 @@ func applyPoolConfig(db *sql.DB, cfg PoolConfig) {
 }
 
 // DeleteConnsByAddr deletes every pool whose DSN contains addr, closing each
-// one through closeDeletedPool. Called when an SSH tunnel dies.
+// one through closeDeletedPool. Called when an SSH tunnel dies: a pool behind a
+// dead tunnel would otherwise linger on a socket that no longer works.
+//
+// The addresses live in the index rather than in the key, so this walks it and
+// deletes afterwards: closeDeletedPool prunes the same index.
 func DeleteConnsByAddr(addr string) {
 	var toDelete []string
+
 	connHashToDSNMu.Lock()
 	for hash, dsn := range connHashToDSN {
 		if strings.Contains(dsn, addr) {
 			toDelete = append(toDelete, hash)
-			delete(connHashToDSN, hash)
 		}
 	}
 	connHashToDSNMu.Unlock()
-	// Delete fires closeDeletedPool, which closes the pool behind the dead
-	// tunnel rather than leaving it to linger on a socket that no longer works.
+
 	for _, hash := range toDelete {
 		connCache.Delete(hash)
 	}
+}
+
+// CloseWorkspaceConns drops every pool opened for a workspace, closing each one
+// through closeDeletedPool. Called when the workspace is deleted: its
+// datasources are gone, and a pool that outlives them is an open connection to
+// a database nobody may reach any more.
+func CloseWorkspaceConns(workspaceID string) {
+	prefix := workspaceKeyPrefix(workspaceID)
+	connCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 }
 
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
@@ -154,7 +166,7 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	if len(pool) > 0 {
 		cfg = pool[0]
 	}
-	hash := hashWorkspaceDSN(workspaceID, dsn)
+	hash := workspaceCacheKey(workspaceID, dsn)
 
 	// GetOrCreate opens at most once per key: concurrent first queries for one
 	// datasource share the open rather than each dialing. A failure is not cached.

@@ -3,6 +3,7 @@ package datasource
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"backend/db"
@@ -111,4 +112,17 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 
 	dsCache.Set(key, ds)
 	return ds, nil
+}
+
+// InvalidateWorkspaceCache drops everything a workspace has in memory: its
+// resolved datasources, its connection pools, its SSH tunnels, and the schema
+// and DDL read through them. Call when the workspace is deleted, because all of
+// it otherwise stands for the rest of its TTL.
+func InvalidateWorkspaceCache(workspaceID string) {
+	prefix := cacheKey(workspaceID, "")
+	dsCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
+
+	engine.CloseWorkspaceTunnels(workspaceID)
+	engine.CloseWorkspaceConns(workspaceID)
+	engine.InvalidateWorkspaceMetadata(workspaceID)
 }

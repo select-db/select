@@ -37,12 +37,12 @@ func (client *Client) Stream(
 	SetStreamingResult(key, result)
 
 	cancelCtx, cancelFunc := context.WithCancel(ctx)
-	RegisterCancel(key, cancelFunc)
+	unregisterCancel := RegisterCancel(key, cancelFunc)
 
 	sink := NewStreamingSink(result, listener)
 
 	go func() {
-		defer UnregisterCancel(key)
+		defer unregisterCancel()
 
 		if instance.Proxified {
 			stream, err := client.Transport.OpenStream(
@@ -127,7 +127,7 @@ func (client *Client) GetMetadata(ctx context.Context, conn Conn, instance DBIns
 	if client.Transport == nil {
 		return nil, fmt.Errorf("instance %s is proxified but no transport is configured", instance.ID)
 	}
-	meta, err := client.Transport.GetMetadata(ctx, workspaceID, instance.ID)
+	meta, err := client.Transport.GetMetadata(ctx, workspaceID, instance.ID, noCache)
 	if err != nil {
 		return nil, err
 	}

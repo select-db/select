@@ -8,25 +8,24 @@ import { tryCatch } from '../tryCatch';
 
 /**
  * Loads a database's schema, reporting failure the way the rest of the app
- * reports failure.
- *
- * There used to be a `silent` option, taken by four of the nine call sites —
- * including both tree-click paths and the explicit "Reload schema" action — and
- * it suppressed the error, not the noise. A database that cannot be read then
- * expanded to nothing with the reason only in the log.
+ * does. A database that cannot be read says so rather than expanding to
+ * nothing with the reason in the log.
  */
 export const loadSchema = async ({
 	database,
-	noCache = false
+	announce = true
 }: {
 	database: graph.DBInstanceNode;
-	noCache?: boolean;
+	/** Says "schema loaded" when it worked. Off for a read nobody asked for. */
+	announce?: boolean;
 }) => {
 	pushToLoadingStore(database.id);
 
+	// Past the cache always: a caller here is either a person asking again or a
+	// database showing nothing, and the cached answer is what both are behind.
 	const [, err] = await tryCatch(QuerySchema, {
 		DatabaseInstanceID: database.id,
-		NoCache: noCache
+		NoCache: true
 	});
 
 	removeFromLoadingStore(database.id);
@@ -38,9 +37,22 @@ export const loadSchema = async ({
 		return;
 	}
 
-	if (noCache)
+	if (announce)
 		notify({
 			type: AlertType.Success,
 			message: `${database.name} schema loaded`
 		});
+};
+
+/**
+ * Loads the schema of a database that is showing nothing, so every click on
+ * such a row is another attempt to open it. Empty is the one state where the
+ * cached answer is the one that produced it.
+ *
+ * Callers asking at once share one read: the backend joins loads of the same
+ * database, and each call resolves when that read does.
+ */
+export const loadSchemaIfEmpty = async (database: graph.DBInstanceNode) => {
+	if (database.children?.length) return;
+	await loadSchema({ database, announce: false });
 };

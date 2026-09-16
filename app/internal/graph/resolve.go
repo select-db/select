@@ -1,9 +1,10 @@
 package graph
 
 // A build lays out a workspace's folders and db instances but not its files. A
-// folder reads its files the first time it is opened and records that in
-// FolderNode.Resolved; a lookup by ID resolves the folders along the path first,
-// so callers never have to know whether a folder has been opened.
+// folder reads its files the first time it is opened, along with the folders
+// directly inside it, and records that in FolderNode.Resolved; a lookup by ID
+// resolves the folders along the path first, so callers never have to know
+// whether a folder has been opened.
 
 import (
 	"fmt"
@@ -94,7 +95,38 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 		EmitWorkspaceGraphUpdated(g)
 	}
 
+	go g.prefetchChildFolders(folderURI)
+
 	return resolvedFolder, nil
+}
+
+// prefetchChildFolders reads the folders directly inside one that has just been
+// opened, so opening one of them shows its files at once.
+//
+// Off the caller's path and on its own turn at the lock: it is a ReadDir per
+// child for directories nobody has asked for, and what it reads arrives with
+// the next graph update.
+func (g *Graph) prefetchChildFolders(folderURI string) {
+	g.mu.Lock()
+
+	folder, ok := g.lookup(folderURI).(*FolderNode)
+	fsCtx, err := g.workspaceFS()
+	if !ok || err != nil {
+		g.mu.Unlock()
+		return
+	}
+
+	resolved := false
+	for _, child := range folder.Folders {
+		if childResolved, _ := g.resolveFolder(child, fsCtx); childResolved {
+			resolved = true
+		}
+	}
+	g.mu.Unlock()
+
+	if resolved {
+		EmitWorkspaceGraphUpdated(g)
+	}
 }
 
 // resolveAlongPath resolves every folder between the workspace root and the

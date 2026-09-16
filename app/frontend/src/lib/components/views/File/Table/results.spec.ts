@@ -72,3 +72,114 @@ test('columns are sized to the rows that arrived', async ({ page, signIn }) => {
 	expect(narrow.width).toBe(MIN_AUTO_COLUMN_WIDTH);
 	expect(wide.width).toBe(MAX_AUTO_COLUMN_WIDTH);
 });
+
+/**
+ * Six columns of 400 hex characters: every one of them is capped at
+ * MAX_AUTO_COLUMN_WIDTH, so the table is several times wider than the pane and
+ * scrolls in both directions.
+ */
+const WIDE_QUERY =
+	'SELECT o1.id AS id, hex(zeroblob(200)) AS aaa, hex(zeroblob(200)) AS bbb, ' +
+	'hex(zeroblob(200)) AS ccc, hex(zeroblob(200)) AS ddd, hex(zeroblob(200)) AS eee ' +
+	'FROM orders o1, orders o2 LIMIT 400;';
+
+/** Pins a column through the pin button its header shows on hover. */
+async function pin(page: Page, column: string) {
+	const header = queryResultTable.header(page, column);
+	await header.hover();
+	await header.getByRole('button').first().click();
+}
+
+/** Every rendered cell of one row, with what it is doing horizontally. */
+async function rowGeometry(page: Page, row: number) {
+	return page.evaluate((index) => {
+		const cells = document.querySelectorAll(`div.table.scrollable tbody tr:nth-child(${index}) td`);
+		return [...cells].map((cell) => ({
+			sticky: cell.classList.contains('sticky'),
+			left: Math.round(cell.getBoundingClientRect().left),
+			width: Math.round(cell.getBoundingClientRect().width)
+		}));
+	}, row);
+}
+
+/**
+ * A pinned column stays put, and it stays put for every row, however far the
+ * table has been scrolled: a row rendered while scrolled is rendered with its
+ * pinned cells like any other.
+ */
+test('a pinned column holds its place through a scroll', async ({ page, signIn }) => {
+	await open(page, signIn);
+	await run(page, WIDE_QUERY);
+	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/400/, AFTER_QUERY);
+
+	await pin(page, 'aaa');
+
+	const pinned = queryResultTable.header(page, 'aaa');
+	const before = (await pinned.boundingBox())!;
+
+	// Right, then down: the rows below were not rendered when the column was
+	// pinned, and the columns to the left have scrolled out from under it.
+	await queryResultTable.scroller(page).evaluate((el) => {
+		el.scrollLeft = 1400;
+		el.scrollTop = 2000;
+	});
+
+	await expect
+		.poll(async () => Math.round((await pinned.boundingBox())!.x))
+		.toBe(Math.round(before.x));
+
+	const cells = await rowGeometry(page, 2);
+	expect(cells[1].sticky).toBe(true);
+	expect(cells[1].left).toBe(Math.round(before.x));
+
+	// The column after it is where the scroll left it, which is what says the
+	// pinned one is holding still rather than the table having stopped moving.
+	expect(cells[2].left).toBeLessThan(cells[1].left);
+});
+
+/**
+ * Dragging a column's edge resizes the header and the rows under it together.
+ * The rows are the point: they are what went on showing the old width until
+ * something forced them to paint again.
+ */
+test('the rows follow the column being resized', async ({ page, signIn }) => {
+	await open(page, signIn);
+	await run(page, WIDE_QUERY);
+	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/400/, AFTER_QUERY);
+
+	// Pinned, so the resize moves a sticky offset as well as a column width.
+	await pin(page, 'aaa');
+
+	const header = queryResultTable.header(page, 'aaa');
+	const box = (await header.boundingBox())!;
+	const narrower = Math.round(box.width) - 200;
+
+	await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width - 2 - 200, box.y + box.height / 2, { steps: 10 });
+	await page.mouse.up();
+
+	// Off the table: hovering a row repaints it, which is what used to be
+	// needed before the rows agreed with their header.
+	await page.mouse.move(2, 2);
+
+	await expect.poll(async () => Math.round((await header.boundingBox())!.width)).toBe(narrower);
+
+	const headers = await page.evaluate(() =>
+		[...document.querySelectorAll('div.table.scrollable thead th')].map((th) => ({
+			left: Math.round(th.getBoundingClientRect().left),
+			width: Math.round(th.getBoundingClientRect().width)
+		}))
+	);
+
+	for (const row of [1, 2, 3]) {
+		const cells = await rowGeometry(page, row);
+		expect(cells).toHaveLength(headers.length);
+		cells.forEach((cell, column) => {
+			expect(
+				{ left: cell.left, width: cell.width },
+				`row ${row} column ${column} does not line up with its header`
+			).toEqual({ left: headers[column].left, width: headers[column].width });
+		});
+	}
+});

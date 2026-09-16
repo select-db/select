@@ -84,10 +84,13 @@ func TestReadWorkspaceConfigRejectsUnusableFiles(t *testing.T) {
 	}
 }
 
-// The config configures the folder; it is not a file to edit from the tree,
-// same as db.config.json.
-func TestWorkspaceConfigIsInternal(t *testing.T) {
-	if !IsInternalWorkspaceFile(WorkspaceConfigFileName) {
-		t.Errorf("%s should be hidden from the workspace tree", WorkspaceConfigFileName)
+// The config is committed and read by people, so the tree shows it, the same as
+// db.config.json. The sidecars SELECT writes for itself stay hidden.
+func TestWorkspaceConfigIsAFile(t *testing.T) {
+	if IsInternalWorkspaceFile(WorkspaceConfigFileName) {
+		t.Errorf("%s should be a row in the workspace tree", WorkspaceConfigFileName)
+	}
+	if !IsInternalWorkspaceFile("weekly.sql.metadata.json") {
+		t.Error("a sidecar should stay hidden")
 	}
 }

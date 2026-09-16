@@ -69,11 +69,15 @@ func SeedWorkspace(t *testing.T, conn *sql.DB, id, ownerID string) {
 	require.NoError(t, err)
 }
 
-func SeedMembership(t *testing.T, conn *sql.DB, workspaceID, userID string) {
+// SeedMembership adds a user to a workspace and returns the membership's id,
+// which is what a sync commit addressing that membership names.
+func SeedMembership(t *testing.T, conn *sql.DB, workspaceID, userID string) string {
 	t.Helper()
+	id := uuid.NewString()
 	_, err := conn.Exec(`INSERT INTO app.workspace_to_user (id, workspace_id, user_id) VALUES ($1::uuid, $2::uuid, $3::uuid)`,
-		uuid.NewString(), workspaceID, userID)
+		id, workspaceID, userID)
 	require.NoError(t, err)
+	return id
 }
 
 func SeedRole(t *testing.T, conn *sql.DB, id, workspaceID, name string) {

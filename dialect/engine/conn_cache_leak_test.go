@@ -44,7 +44,7 @@ func openTestPool(t *testing.T, name string) *sql.DB {
 // these live here rather than in the package: the tests need to place a pool
 // under a key and read it back to exercise the deletion paths.
 func getConn(workspaceID, dsn string) (*sql.DB, bool) {
-	value, ok := connCache.Get(hashWorkspaceDSN(workspaceID, dsn))
+	value, ok := connCache.Get(workspaceCacheKey(workspaceID, dsn))
 	if !ok {
 		return nil, false
 	}
@@ -54,7 +54,7 @@ func getConn(workspaceID, dsn string) (*sql.DB, bool) {
 // setConn writes the index after the cache, because replacing an entry fires
 // closeDeletedPool for the old value and that clears the index for this hash.
 func setConn(workspaceID, dsn string, db *sql.DB) {
-	hash := hashWorkspaceDSN(workspaceID, dsn)
+	hash := workspaceCacheKey(workspaceID, dsn)
 	connCache.Set(hash, db)
 	indexConn(hash, dsn)
 }
@@ -81,7 +81,7 @@ func TestDeletedPoolIsClosed(t *testing.T) {
 		t.Fatal("pool closed while still cached")
 	}
 
-	connCache.Delete(hashWorkspaceDSN("ws1", "dsn-deleted"))
+	connCache.Delete(workspaceCacheKey("ws1", "dsn-deleted"))
 
 	deadline := time.Now().Add(2 * time.Second)
 	for !poolIsClosed(db) {
@@ -102,7 +102,7 @@ func TestDeletionClearsDSNIndex(t *testing.T) {
 
 	db := openTestPool(t, "indexed")
 	setConn("ws1", "dsn-indexed", db)
-	hash := hashWorkspaceDSN("ws1", "dsn-indexed")
+	hash := workspaceCacheKey("ws1", "dsn-indexed")
 
 	connHashToDSNMu.Lock()
 	_, present := connHashToDSN[hash]
@@ -161,7 +161,7 @@ func TestGracePeriodProtectsAnInFlightCaller(t *testing.T) {
 	setConn("ws1", "dsn-inflight", db)
 
 	handed, _ := getConn("ws1", "dsn-inflight")
-	connCache.Delete(hashWorkspaceDSN("ws1", "dsn-inflight"))
+	connCache.Delete(workspaceCacheKey("ws1", "dsn-inflight"))
 
 	// The caller starts its query after the deletion, inside the grace window.
 	time.Sleep(100 * time.Millisecond)
@@ -187,7 +187,7 @@ func TestNoGoroutineLeakAcrossDeletions(t *testing.T) {
 		db := openTestPool(t, fmt.Sprintf("churn%d", i))
 		key := fmt.Sprintf("dsn-churn%d", i)
 		setConn("ws1", key, db)
-		connCache.Delete(hashWorkspaceDSN("ws1", key))
+		connCache.Delete(workspaceCacheKey("ws1", key))
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
@@ -222,7 +222,7 @@ func TestConcurrentDeletionIsSafe(t *testing.T) {
 				db := openTestPool(t, fmt.Sprintf("conc%d_%d", i, j))
 				setConn("ws1", key, db)
 				getConn("ws1", key)
-				connCache.Delete(hashWorkspaceDSN("ws1", key))
+				connCache.Delete(workspaceCacheKey("ws1", key))
 			}
 		}(i)
 	}
@@ -291,7 +291,7 @@ func TestConcurrentFirstQueriesOpenOnePool(t *testing.T) {
 		t.Fatal("the shared pool is not the one left in the cache")
 	}
 	connHashToDSNMu.Lock()
-	_, indexed := connHashToDSN[hashWorkspaceDSN("ws1", dsn)]
+	_, indexed := connHashToDSN[workspaceCacheKey("ws1", dsn)]
 	connHashToDSNMu.Unlock()
 	if !indexed {
 		t.Fatal("the opened pool was not added to the hash → DSN index")
@@ -311,5 +311,42 @@ func TestFailedOpenIsNotCached(t *testing.T) {
 	}
 	if _, ok := getConn("ws1", "dsn-unopenable"); ok {
 		t.Fatal("a failed open was cached")
+	}
+}
+
+// TestCloseWorkspaceConnsClosesOnlyThatWorkspace: deleting a workspace revokes
+// its datasources, and a pool that outlives them is an open connection to a
+// database nobody may reach any more. The other workspace's pool is untouched.
+// Found by prefix on the cache key, which is why the workspace is readable in
+// it rather than hashed in.
+func TestCloseWorkspaceConnsClosesOnlyThatWorkspace(t *testing.T) {
+	restore := poolCloseGrace
+	poolCloseGrace = 10 * time.Millisecond
+	defer func() { poolCloseGrace = restore; ClearConnCache() }()
+	ClearConnCache()
+
+	deleted := openTestPool(t, "ws-deleted")
+	kept := openTestPool(t, "ws-kept")
+	setConn("ws-deleted", "dsn-a", deleted)
+	setConn("ws-kept", "dsn-b", kept)
+
+	CloseWorkspaceConns("ws-deleted")
+
+	if _, ok := getConn("ws-deleted", "dsn-a"); ok {
+		t.Fatal("the deleted workspace still has a cached pool")
+	}
+	if _, ok := getConn("ws-kept", "dsn-b"); !ok {
+		t.Fatal("another workspace's pool was dropped with it")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !poolIsClosed(deleted) {
+		if time.Now().After(deadline) {
+			t.Fatal("the deleted workspace's pool was never closed")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if poolIsClosed(kept) {
+		t.Fatal("another workspace's pool was closed")
 	}
 }

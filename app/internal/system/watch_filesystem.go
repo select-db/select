@@ -135,75 +135,95 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 			if !ok {
 				return
 			}
-
-			if strings.HasSuffix(event.Name, ".metadata.json") {
-				s.handleMetadataEvent(event, user.ID, fsCtx)
-				continue
-			}
-
-			if strings.HasSuffix(event.Name, graph.DBConfigFileName) {
-				s.handleDBConfigEvent(event, user.ID, fsCtx)
-				continue
-			}
-
-			if filepath.Base(event.Name) == ".env" {
-				s.handleEnvFileEvent(event, fsCtx)
-			}
-
-			if filepath.Base(event.Name) == graph.ThemeFileName {
-				s.handleThemeFileEvent(event, fsCtx)
-			}
-
-			if filepath.Base(event.Name) == graph.ConfigFileName {
-				s.handleConfigFileEvent(event, fsCtx)
-			}
-
-			if filepath.Base(event.Name) == graph.LintFileName {
-				s.handleLintFileEvent(event, fsCtx)
-			}
-
-			// Track new directories for deeper-level events.
-			//
-			// The whole subtree, not just this level: a directory can arrive
-			// with children already in it -- mkdir -p, a checkout, an unzip, a
-			// clone -- and those children raise no Create of their own, so
-			// watching only the directory named here leaves them silent.
-			if event.Op&fsnotify.Create != 0 {
-				info, err := os.Stat(event.Name)
-				if err == nil && info.IsDir() {
-					addWatches(watcher, fsCtx, event.Name)
-				}
-			}
-
-			// Rename: full rebuild (fine-grained derivation is error-prone).
-			if event.Op&fsnotify.Rename != 0 {
-				// A watch is registered against a path. A renamed directory
-				// keeps its watch, so its children keep arriving under the old
-				// name -- and land in the graph under a folder that no longer
-				// exists, which is to say nowhere.
-				//
-				// Re-walking on its own does not undo that. The old name and
-				// the new one are the same directory, and adding a directory
-				// that is already watched is a no-op, so the registration keeps
-				// the name it was made under. The names that no longer exist
-				// have to go first; only then does the walk register the new
-				// ones.
-				dropStaleWatches(watcher, fsCtx)
-				addWatches(watcher, fsCtx, fsCtx.WorkspaceRoot)
-				s.rebuildGraphAndEmit()
-				continue
-			}
-
-			if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove) != 0 {
-				s.handleFSEvent(event, user.ID, fsCtx)
-				utils.DebouncedEventsEmit("gitDetailedStatusChanged", 200*time.Millisecond, nil)
-			}
+			s.handleWatchEvent(event, user.ID, watcher, fsCtx)
 		case <-watcher.Errors:
 			// @todo handle error
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+// handleWatchEvent routes one filesystem event to whatever reads that kind of
+// file, and tells the git panel the working tree moved.
+func (s *System) handleWatchEvent(event fsnotify.Event, userID string, watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS) {
+	// First, because a db.config.json, a sidecar and a rename each leave this
+	// function early, and the git panel lists paths: a file it tracks changed
+	// whatever kind of node the app reads it as.
+	//
+	// For every event rather than a chosen set of ops, because git tracks the
+	// executable bit too and the signal is already debounced.
+	s.notifyGitStatusChanged()
+
+	if strings.HasSuffix(event.Name, ".metadata.json") {
+		s.handleMetadataEvent(event, userID, fsCtx)
+		return
+	}
+
+	if strings.HasSuffix(event.Name, graph.DBConfigFileName) {
+		s.handleDBConfigEvent(event, userID, fsCtx)
+		return
+	}
+
+	if filepath.Base(event.Name) == ".env" {
+		s.handleEnvFileEvent(event, fsCtx)
+	}
+
+	if filepath.Base(event.Name) == graph.ThemeFileName {
+		s.handleThemeFileEvent(event, fsCtx)
+	}
+
+	if filepath.Base(event.Name) == graph.ConfigFileName {
+		s.handleConfigFileEvent(event, fsCtx)
+	}
+
+	if filepath.Base(event.Name) == graph.LintFileName {
+		s.handleLintFileEvent(event, fsCtx)
+	}
+
+	// Track new directories for deeper-level events.
+	//
+	// The whole subtree, not just this level: a directory can arrive with
+	// children already in it -- mkdir -p, a checkout, an unzip, a clone -- and
+	// those children raise no Create of their own, so watching only the
+	// directory named here leaves them silent.
+	if event.Op&fsnotify.Create != 0 {
+		info, err := os.Stat(event.Name)
+		if err == nil && info.IsDir() {
+			addWatches(watcher, fsCtx, event.Name)
+		}
+	}
+
+	// Rename: full rebuild (fine-grained derivation is error-prone).
+	if event.Op&fsnotify.Rename != 0 {
+		// A watch is registered against a path. A renamed directory keeps its
+		// watch, so its children keep arriving under the old name -- and land
+		// in the graph under a folder that no longer exists, which is to say
+		// nowhere.
+		//
+		// Re-walking on its own does not undo that. The old name and the new
+		// one are the same directory, and adding a directory that is already
+		// watched is a no-op, so the registration keeps the name it was made
+		// under. The names that no longer exist have to go first; only then
+		// does the walk register the new ones.
+		dropStaleWatches(watcher, fsCtx)
+		addWatches(watcher, fsCtx, fsCtx.WorkspaceRoot)
+		s.rebuildGraphAndEmit()
+		return
+	}
+
+	if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove) != 0 {
+		s.handleFSEvent(event, userID, fsCtx)
+	}
+}
+
+// notifyGitStatusChanged asks the git panel to read the working tree again.
+func (s *System) notifyGitStatusChanged() {
+	if s.gitStatusHook != nil {
+		s.gitStatusHook()
+		return
+	}
+	utils.DebouncedEventsEmit("gitDetailedStatusChanged", 200*time.Millisecond, nil)
 }
 
 // Rebuilds the workspace graph and emits workspaceGraphUpdated.

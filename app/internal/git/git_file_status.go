@@ -94,7 +94,11 @@ func (g *Git) GetGitFileStatus() (*GitFileStatus, error) {
 	// Parse porcelain status.
 	// XY format: X = index (staged), Y = working tree (unstaged).
 	// Leading spaces are significant, do not trim the output.
-	output, err := runGitWithOutput(ctx, root, "status", "--porcelain")
+	// --untracked-files=all, because the default collapses an untracked
+	// directory into one entry for the directory. A new database is a new
+	// directory, so its db.config.json and everything beside it were reported
+	// as "mydb/" and then dropped by the trailing-slash skip below.
+	output, err := runGitWithOutput(ctx, root, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get git status: %w", err)
 	}
@@ -130,7 +134,9 @@ func (g *Git) GetGitFileStatus() (*GitFileStatus, error) {
 			path = path[1 : len(path)-1]
 		}
 
-		// Skip directory entries (trailing slash).
+		// A repository inside the workspace is still reported as a directory
+		// under --untracked-files=all, because git will not descend into
+		// another repository. It is not a file the panel can stage or diff.
 		if strings.HasSuffix(path, "/") {
 			continue
 		}

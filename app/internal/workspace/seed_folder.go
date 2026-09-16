@@ -16,14 +16,29 @@ func (w *Workspace) seedSampleIfEmpty(workspaceID, folder string) error {
 	if err != nil {
 		return fmt.Errorf("read workspace root: %w", err)
 	}
-	for _, entry := range entries {
-		if !graph.IsInternalWorkspaceFile(entry.Name()) {
-			return nil
-		}
+	if !onlySelectsOwn(entries) {
+		return nil
 	}
 
 	if err := sample.Write(workspaceID); err != nil {
 		return fmt.Errorf("seed sample workspace: %w", err)
 	}
 	return nil
+}
+
+// onlySelectsOwn reports whether a folder holds nothing but what SELECT put
+// there itself.
+//
+// The workspace config counts as ours even though the tree shows it as a file:
+// opening the folder wrote it a moment before this runs, so a folder holding
+// only that one is still an empty folder to seed.
+func onlySelectsOwn(entries []os.DirEntry) bool {
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == graph.WorkspaceConfigFileName || graph.IsInternalWorkspaceFile(name) {
+			continue
+		}
+		return false
+	}
+	return true
 }

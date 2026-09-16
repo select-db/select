@@ -5,11 +5,12 @@ import {
 	toggleItemSelection,
 	toggleIsItemExpanded,
 	addToItemSelection,
+	expandItem,
 	setFocusedFsItem,
 	requestFsPanelFocus
 } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-import { loadSchema } from '$lib/utils/query/loadSchema';
+import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { navigateToGitFile } from '$lib/components/views/Git/navigateToGitFile';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
@@ -124,15 +125,32 @@ export const createFileClickHandler = (
 	};
 };
 
+/**
+ * A click on a database row: open it, and read its schema when it has none.
+ *
+ * Open rather than toggle while it is empty, because the schema arrives after
+ * the click that asked for it. Toggling closed the row on the next click, just
+ * as its tables landed, so seeing anything took two clicks and a guess at the
+ * timing. A database that already has its schema toggles like any other row.
+ */
+export const clickDatabase = (database: graph.DBInstanceNode) => {
+	if (database.children?.length) {
+		toggleIsItemExpanded(database.id);
+		return;
+	}
+
+	expandItem(database.id);
+	void loadSchemaIfEmpty(database);
+};
+
 const clickItem = async (item: graph.DBInstanceNode | graph.DBInstanceItemNode) => {
-	toggleIsItemExpanded(item.id);
+	if (item.type === 'db_instance') {
+		clickDatabase(item as graph.DBInstanceNode);
+	} else {
+		toggleIsItemExpanded(item.id);
+	}
 
 	if (!expandableItemTypes.has(item.type)) return;
-
-	const shouldLoadSchema =
-		item.type === 'db_instance' && 'children' in item && item.children.length === 0;
-
-	if (shouldLoadSchema) loadSchema({ database: item as graph.DBInstanceNode });
 
 	setItemSelection([item.id]);
 };

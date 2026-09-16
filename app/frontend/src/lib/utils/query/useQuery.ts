@@ -1,5 +1,3 @@
-import { get } from 'svelte/store';
-
 import { CancelQuery, StartQuery } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 import { Explain, Plan, Query } from '$lib/wails/graph';
 import type * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
@@ -9,7 +7,7 @@ import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
 import { tryCatch } from '../tryCatch';
 import { ensureSSHPassphraseForInstance } from '../ssh/passphrase';
-import { loadingStore, pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
+import { pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
 import { executions, markCancelled, waitForStarted } from './queryStream.svelte';
 import { registerPendingHistory } from './historyRecorder';
 
@@ -21,17 +19,10 @@ type RunOperationParams = RunQueryParams | RunExplainParams | RunPlanParams;
 const runOperation = async <T extends RunOperationParams, R>(
 	params: T,
 	executor: (params: T) => Promise<R>,
-	busyMessage: string,
 	failureMessage: string,
 	retried = false
 ): Promise<R | null> => {
 	const { DbInstanceID, FileID } = params;
-
-	const isLoading = get(loadingStore).some((k) => k.includes(`db:${DbInstanceID}`));
-	if (isLoading) {
-		notifyError(busyMessage);
-		return null;
-	}
 
 	pushToLoadingStore(DbInstanceID, FileID);
 
@@ -42,7 +33,7 @@ const runOperation = async <T extends RunOperationParams, R>(
 	if (err) {
 		// Encrypted SSH key: prompt once for the passphrase, then retry.
 		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, err.message))) {
-			return runOperation(params, executor, busyMessage, failureMessage, true);
+			return runOperation(params, executor, failureMessage, true);
 		}
 		notifyError(failureMessage);
 		return null;
@@ -78,21 +69,10 @@ export const runQuery = async (
 	retried = false
 ): Promise<graph.QueryResult | null> => {
 	if (params.ForExport) {
-		return runOperation(
-			params,
-			(p) => Query(p),
-			'Query already running on this database',
-			'Failed to run query'
-		);
+		return runOperation(params, (p) => Query(p), 'Failed to run query');
 	}
 
 	const { DbInstanceID, FileID } = params;
-
-	const isLoading = get(loadingStore).some((k) => k.includes(`db:${DbInstanceID}`));
-	if (isLoading) {
-		notifyError('Query already running on this database');
-		return null;
-	}
 
 	pushToLoadingStore(DbInstanceID, FileID);
 
@@ -159,20 +139,10 @@ export const runQuery = async (
 };
 
 export const runExplain = async (params: RunExplainParams) =>
-	runOperation(
-		params,
-		(p) => Explain(p),
-		'Query already running on this database',
-		'Failed to run explain'
-	);
+	runOperation(params, (p) => Explain(p), 'Failed to run explain');
 
 export const runPlan = async (params: RunPlanParams) =>
-	runOperation(
-		params,
-		(p) => Plan(p),
-		'Query already running on this database',
-		'Failed to run plan'
-	);
+	runOperation(params, (p) => Plan(p), 'Failed to run plan');
 
 export const cancelQuery = async (params: db_client.CancelQueryParams) => {
 	const { DbInstanceID, FileID } = params;
