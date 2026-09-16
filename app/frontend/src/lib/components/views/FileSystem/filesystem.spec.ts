@@ -580,3 +580,52 @@ test('the tree scrolls while something is dragged over its edge', async ({
 	await exec(request, id, 'rm', '-rf', 'zz-target', ...filler.slice(1));
 	await expect(treeRow(page, 'zz-target')).toHaveCount(0);
 });
+
+/**
+ * The test above passes on a panel that does nothing: Chromium scrolls a
+ * container under a real drag by itself, and Chromium is the only engine this
+ * suite runs. The desktop app is WebKit, where it does not. A synthetic
+ * dragover never reaches that native machinery either, so this is what says the
+ * panel scrolls on its own.
+ */
+test('the panel scrolls under a drag on its own, not only where the engine does it', async ({
+	page,
+	request,
+	signIn
+}) => {
+	await open(page, signIn);
+	const id = await workspaceId(request);
+
+	const filler = Array.from({ length: 80 }, (_, i) => `bb-${String(i).padStart(2, '0')}`);
+	await exec(request, id, 'mkdir', ...filler);
+
+	const panel = testId(page, 'tree.panel');
+	await expect
+		.poll(() => panel.evaluate((el) => el.scrollHeight - el.clientHeight), { timeout: 15_000 })
+		.toBeGreaterThan(0);
+
+	// Held over one edge for a dozen frames, which is what the panel reads as a
+	// drag lingering there.
+	const scrolledOver = (edge: 'top' | 'bottom') =>
+		panel.evaluate(async (el, which) => {
+			const box = el.getBoundingClientRect();
+			const clientY = which === 'bottom' ? box.bottom - 4 : box.top + 4;
+			const before = el.scrollTop;
+
+			for (let i = 0; i < 12; i++) {
+				el.dispatchEvent(
+					new DragEvent('dragover', { bubbles: true, clientX: box.x + 20, clientY })
+				);
+				await new Promise(requestAnimationFrame);
+			}
+			el.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+
+			return el.scrollTop - before;
+		}, edge);
+
+	expect(await scrolledOver('bottom')).toBeGreaterThan(0);
+	expect(await scrolledOver('top')).toBeLessThan(0);
+
+	await exec(request, id, 'rm', '-rf', ...filler);
+	await expect(treeRow(page, 'bb-00')).toHaveCount(0);
+});

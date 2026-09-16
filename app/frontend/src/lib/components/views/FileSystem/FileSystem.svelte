@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
 	import { scrollShadow } from '$lib/actions/scrollShadow';
+	import { dragAutoScroll } from '$lib/actions/dragAutoScroll';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { rootOptions } from './Files/options/rootOptions';
 	import FileItems from './Files/FileItems.svelte';
@@ -269,6 +270,7 @@
 		data-test="tree.panel"
 		bind:this={scrollContainer}
 		use:scrollShadow
+		use:dragAutoScroll
 		onscroll={handleScroll}
 		onkeydown={handleKeydown}
 		ondragover={(e) => {
