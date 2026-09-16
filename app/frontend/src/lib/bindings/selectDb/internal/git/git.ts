@@ -23,7 +23,8 @@ export function CommitChanges(params: $models.CommitParams): $CancellablePromise
 }
 
 /**
- * GetBranches returns a list of all branches (local and remote).
+ * GetBranches returns the branches to pick from, local ones first, each kind
+ * capped at branchLimit and ordered by how recently it was committed to.
  */
 export function GetBranches(): $CancellablePromise<$models.BranchInfo[]> {
     return $Call.ByID(3107412534).then(($result: any) => {

@@ -162,7 +162,7 @@ function positionalKey(e: KeyboardEvent): string {
 	return key.toLowerCase();
 }
 
-/** Modifiers in a fixed order, then the key: internal/keymap's canonical form. */
+/** Modifiers in a fixed order, then the key, as internal/keymap prints a chord. */
 function chord(e: KeyboardEvent, key: string): string {
 	const parts: string[] = [];
 	if (e.ctrlKey) parts.push('ctrl');
