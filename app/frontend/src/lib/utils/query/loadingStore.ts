@@ -1,5 +1,8 @@
 import { writable } from 'svelte/store';
 
+/**
+ * What is running, for display only.
+ */
 export const loadingStore = writable<Array<string>>([]);
 
 export const toKey = (databaseId?: string, fileId?: string): string => {

@@ -45,28 +45,14 @@ export const loadSchema = async ({
 };
 
 /**
- * The read each database has in flight, so the tree, the tabs and the search
- * menu asking at once ask once and all of them wait for that one answer.
- * Dropped when it settles, because a database still empty then is meant to be
- * asked again on the next click.
- */
-const inFlight = new Map<string, Promise<void>>();
-
-/**
  * Loads the schema of a database that is showing nothing, so every click on
  * such a row is another attempt to open it. Empty is the one state where the
  * cached answer is the one that produced it.
+ *
+ * Callers asking at once share one read: the backend joins loads of the same
+ * database, and each call resolves when that read does.
  */
 export const loadSchemaIfEmpty = async (database: graph.DBInstanceNode) => {
 	if (database.children?.length) return;
-
-	const running = inFlight.get(database.id);
-	if (running) return running;
-
-	const read = loadSchema({ database, announce: false }).finally(() =>
-		inFlight.delete(database.id)
-	);
-	inFlight.set(database.id, read);
-
-	return read;
+	await loadSchema({ database, announce: false });
 };
