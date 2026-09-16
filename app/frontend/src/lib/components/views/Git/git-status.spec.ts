@@ -31,6 +31,10 @@ test('a new database shows its config in the tree and in the git panel', async (
 	await treeRow(page, 'db #1').click();
 	await expect(treeRow(page, 'db.config.json')).toBeVisible();
 
+	// The workspace's own config is a row too: a teammate clones it to land in
+	// the same workspace, so it is read and committed like any other file.
+	await expect(treeRow(page, 'select.config.json')).toBeVisible();
+
 	// --- The git panel -------------------------------------------------------
 
 	await page.getByRole('button', { name: 'Source control' }).click();

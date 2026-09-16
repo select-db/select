@@ -201,13 +201,13 @@ func IsInternalWorkspaceFile(name string) bool {
 
 	lower := strings.ToLower(name)
 
-	// Workspace-specific config / sidecar files.
+	// Sidecars SELECT writes for its own use and nobody edits by hand.
 	//
-	// db.config.json is not one of them: it is a file people read, edit and
-	// commit -- it carries the dialect and the $VAR the DSN resolves from --
-	// so the tree shows it inside the database it describes.
-	if name == WorkspaceConfigFileName ||
-		strings.HasSuffix(name, ".metadata.json") ||
+	// The two config files are not among them. db.config.json and
+	// select.config.json are read, edited and committed by people -- one
+	// carries the dialect and the $VAR a DSN resolves from, the other is what
+	// a teammate clones to land in the same workspace -- so both are rows.
+	if strings.HasSuffix(name, ".metadata.json") ||
 		strings.HasPrefix(name, ".selectdb_") {
 		return true
 	}
