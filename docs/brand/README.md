@@ -1,16 +1,51 @@
-# Shrimp mark drafts
+# Logo drafts
 
-Drafts for replacing the bowtie mark with a friendly shrimp. Nothing here
-ships yet: `web/logo.png`, `web/favicon.png` and `app/build/appicon.png` are
-untouched.
+Two directions, neither of them shipped: `web/logo.png`, `web/favicon.png`
+and `app/build/appicon.png` are untouched.
 
-`shrimp.py` generates every SVG in `drafts/`:
+| Generator | Output | Direction |
+| --------- | ------ | --------- |
+| `mark.py` | `drafts-mark/` | Variants on the existing bowtie |
+| `shrimp.py` | `drafts/` | Replacing it with a shrimp mascot |
 
 ```sh
+python3 docs/brand/mark.py
 python3 docs/brand/shrimp.py
 ```
 
-## Colours
+They are not exclusive. A refreshed bowtie as the mark and the shrimp as a
+character is the split Rust uses with its gear-R and Ferris.
+
+## Bowtie variants
+
+Traced off `app/build/appicon.png`, the current mark is two congruent
+triangles related by a 180 degree rotation about the centre, each with a
+full-width base and an apex reaching past the middle, overlapping into a
+sheared hourglass. `mark.py` keeps that construction.
+
+| Draft | Move | Commands |
+| ----- | ---- | -------- |
+| `clean` | Rotation made exact, one flat fill | 8 |
+| `round` | Softened corners | 8 |
+| `grad` | Brand hue given depth | 8 |
+| `cut` | Diagonal gap through the waist | 10 |
+| `funnel` | Symmetric hourglass, reads as a filter | 10 |
+| `chevron` | The diagonals kept as strokes | 6 |
+| `rows` | Three narrowing bars, a filtered result set | 3 |
+| `tile` | Knocked out of the red squircle | 9 |
+| `badge` | Knocked out of a disc | 9 |
+
+Two constraints in that generator:
+
+- Rounded corners come from a round-joined stroke, not from arc commands.
+  A true edge inset would be exact but inverts on an apex this acute, so the
+  polygon is pre-scaled about the mark centre instead.
+- Chevrons are stroked, not outlined. A hand-built chevron outline doubles
+  back on itself at the tips and the fill rule eats the result.
+
+## Shrimp drafts
+
+### Colours
 
 The two the logo already uses, plus the same hue pushed either way:
 
@@ -21,7 +56,7 @@ The two the logo already uses, plus the same hue pushed either way:
 | pupil | `#7C1E22` | pupils and the smile |
 | joint | `#C7484C` | shell lines |
 
-## Variants
+### Variants
 
 Two families. The mark and the character are separate artefacts, not one
 drawing at two sizes, which is how Rust treats its logo and Ferris.
@@ -41,7 +76,7 @@ drawing at two sizes, which is how Rust treats its logo and Ferris.
 | `tile-red` | Knocked out of a brand-red square |
 | `tile-paper` | On the off-white square the icon uses now |
 
-## Silhouette complexity
+### Silhouette complexity
 
 Small-size legibility tracks the number of path commands in the silhouette,
 so the generator is set up to control it. Comparable marks, each reduced to
@@ -61,7 +96,7 @@ Keep the small cut under about 40. `curl-reduced` is 37 against `curl` at
 167, and the two are near-identical at a glance -- almost all of that came
 from the sample count, not from dropping features.
 
-## Editing the geometry
+### Editing the geometry
 
 Bodies are a centreline plus a width profile rather than hand-written
 beziers, because at this scale a hand-drawn taper wobbles and the variants
