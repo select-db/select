@@ -3,12 +3,13 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/selectDb/toolkit/cache"
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/toolkit/cache"
 )
 
 // Metadata cache keyed by hash(workspaceID, dsn).
@@ -38,7 +39,7 @@ func GetOrFetchMetadata(
 	refresh bool,
 	maxConcurrency ...int,
 ) (*core.Metadata, error) {
-	key := hashWorkspaceDSN(workspaceID, dsn)
+	key := workspaceCacheKey(workspaceID, dsn)
 
 	metadataCacheMu.Lock()
 	defer metadataCacheMu.Unlock()
@@ -65,7 +66,7 @@ func GetOrGenerateDump(
 	metadata *core.Metadata,
 	refresh bool,
 ) string {
-	key := hashWorkspaceDSN(workspaceID, dsn)
+	key := workspaceCacheKey(workspaceID, dsn)
 
 	dumpCacheMu.Lock()
 	defer dumpCacheMu.Unlock()
@@ -86,9 +87,25 @@ func GetOrGenerateDump(
 
 // InvalidateMetadata drops metadata and dump entries for (workspaceID, dsn).
 func InvalidateMetadata(workspaceID, dsn string) {
-	key := hashWorkspaceDSN(workspaceID, dsn)
+	key := workspaceCacheKey(workspaceID, dsn)
 	metadataCache.Delete(key)
 	dumpCache.Delete(key)
+}
+
+// InvalidateWorkspaceMetadata drops every metadata and dump entry of one
+// workspace, which is what a workspace being deleted leaves behind otherwise:
+// its schema and its DDL, served from memory for the rest of the TTL.
+func InvalidateWorkspaceMetadata(workspaceID string) {
+	prefix := workspaceKeyPrefix(workspaceID)
+	matches := func(key string) bool { return strings.HasPrefix(key, prefix) }
+
+	metadataCacheMu.Lock()
+	metadataCache.DeleteFunc(matches)
+	metadataCacheMu.Unlock()
+
+	dumpCacheMu.Lock()
+	dumpCache.DeleteFunc(matches)
+	dumpCacheMu.Unlock()
 }
 
 // ClearMetadataCache drops all metadata and dump entries.

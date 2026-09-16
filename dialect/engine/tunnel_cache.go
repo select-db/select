@@ -13,7 +13,7 @@ import (
 
 // authFingerprint reduces the SSH credential material to a SHA-256 digest so the
 // tunnel cache key changes when credentials change, without any raw secret
-// entering the key (hashWorkspaceDSN is a non-cryptographic hash).
+// entering the key (workspaceCacheKey is a non-cryptographic hash).
 func authFingerprint(config ResolvedSSHConfig) string {
 	h := sha256.New()
 	for _, s := range []string{
@@ -43,50 +43,31 @@ var (
 	tunnelCache = cache.New(cache.Options{
 		MaxEntries: 20_000,
 		TTL:        20 * time.Minute,
-		// Expiry and LRU eviction drop an entry without anybody asking, so the
-		// index is pruned from here rather than from the callers that delete.
-		OnDelete: forgetTunnelWorkspace,
+		// Every way out of the cache closes the tunnel: expiry and eviction drop
+		// an entry with nobody on the call stack to do it, and a tunnel dropped
+		// without being closed is a socket into the customer's network that
+		// outlives the entry that named it.
+		OnDelete: closeDeletedTunnel,
 	})
-
-	// secondary index: key → workspace, for CloseWorkspaceTunnels. The key is a
-	// hash, so nothing else can tell whose tunnel an entry is. Under its own
-	// mutex because OnDelete runs from inside calls made holding the other one.
-	tunnelKeyToWorkspace   = make(map[string]string)
-	tunnelKeyToWorkspaceMu sync.Mutex
-
 	tunnelCacheMu sync.Mutex
 )
 
-func indexTunnel(key, workspaceID string) {
-	tunnelKeyToWorkspaceMu.Lock()
-	tunnelKeyToWorkspace[key] = workspaceID
-	tunnelKeyToWorkspaceMu.Unlock()
-}
-
-func forgetTunnelWorkspace(key string, _ any) {
-	tunnelKeyToWorkspaceMu.Lock()
-	delete(tunnelKeyToWorkspace, key)
-	tunnelKeyToWorkspaceMu.Unlock()
-}
-
-// closeTunnelLocked drops the entry for key and closes the tunnel it held. It
-// returns the local address its connections were opened against, for the caller
-// to flush once it has let go of tunnelCacheMu. Callers hold that mutex.
-func closeTunnelLocked(key string) string {
-	tunnel, ok := getTunnel(key)
+// closeDeletedTunnel closes a tunnel that has left the cache and flushes the
+// pools opened through it, which are now pointing at a local port nothing
+// answers on. Runs for every deletion, via the cache's OnDelete.
+func closeDeletedTunnel(_ string, value any) {
+	tunnel, ok := value.(Tunnel)
 	if !ok {
-		tunnelCache.Delete(key)
-		return ""
+		return
 	}
 
 	addr := tunnel.LocalAddr()
-	tunnelCache.Delete(key)
 	tunnel.Close()
-	return addr
+	DeleteConnsByAddr(addr)
 }
 
 // GetOrCreateTunnel returns a live cached tunnel, dialling via StartSSHTunnel on miss.
-// Key is hash(workspaceID, full SSH identity + remote address) scoped per workspace, 
+// Key is hash(workspaceID, full SSH identity + remote address) scoped per workspace,
 // secrets hashed (never stored verbatim). Editing any auth detail changes the key.
 // Dead entries are deleted and their DB connections flushed before redialling.
 // Serialised: only one tunnel per key established under concurrent callers.
@@ -100,20 +81,16 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		strconv.Itoa(remotePort),
 		authFingerprint(config),
 	}, "\x00")
-	key := hashWorkspaceDSN(workspaceID, addrStr)
+	key := workspaceCacheKey(workspaceID, addrStr)
 
 	tunnelCacheMu.Lock()
-	if existing, ok := getTunnel(key); ok {
-		if existing.IsAlive() {
-			tunnelCacheMu.Unlock()
-			return existing, nil
-		}
-		addr := closeTunnelLocked(key)
+	if existing, ok := getTunnel(key); ok && existing.IsAlive() {
 		tunnelCacheMu.Unlock()
-		DeleteConnsByAddr(addr)
-	} else {
-		tunnelCacheMu.Unlock()
+		return existing, nil
 	}
+	// Dead or absent: the delete closes it and flushes its connections.
+	tunnelCache.Delete(key)
+	tunnelCacheMu.Unlock()
 
 	tunnel, err := StartSSHTunnel(config, remoteHost, remotePort)
 	if err != nil {
@@ -122,23 +99,15 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 
 	// re-check: another goroutine may have raced the dial
 	tunnelCacheMu.Lock()
-	if existing, ok := getTunnel(key); ok {
-		if existing.IsAlive() {
-			tunnelCacheMu.Unlock()
-			tunnel.Close()
-			return existing, nil
-		}
-		addr := existing.LocalAddr()
-		tunnelCache.Delete(key)
-		existing.Close()
-		tunnelCache.Set(key, tunnel)
-		indexTunnel(key, workspaceID)
+	if existing, ok := getTunnel(key); ok && existing.IsAlive() {
 		tunnelCacheMu.Unlock()
-		DeleteConnsByAddr(addr)
-		return tunnel, nil
+		tunnel.Close()
+		return existing, nil
 	}
+
+	// Set replaces whatever was there, and a replacement is a deletion: the one
+	// it displaces is closed and flushed by OnDelete.
 	tunnelCache.Set(key, tunnel)
-	indexTunnel(key, workspaceID)
 	tunnelCacheMu.Unlock()
 	return tunnel, nil
 }
@@ -151,33 +120,14 @@ func DeleteTunnel(key string) {
 }
 
 // CloseWorkspaceTunnels closes every tunnel a workspace opened. Called when the
-// workspace is deleted: the tunnel outlives the cache entry otherwise, and it
-// is a live socket into the customer's network.
+// workspace is deleted: a tunnel that outlives it is a live socket into the
+// customer's network.
 func CloseWorkspaceTunnels(workspaceID string) {
-	// The index is read and released before tunnelCacheMu is taken. A cache
-	// deletion prunes the index from OnDelete, so holding both in the other
-	// order here is how the two meet in a deadlock.
-	var keys []string
-	tunnelKeyToWorkspaceMu.Lock()
-	for key, id := range tunnelKeyToWorkspace {
-		if id == workspaceID {
-			keys = append(keys, key)
-		}
-	}
-	tunnelKeyToWorkspaceMu.Unlock()
+	prefix := workspaceKeyPrefix(workspaceID)
 
-	var addrs []string
 	tunnelCacheMu.Lock()
-	for _, key := range keys {
-		if addr := closeTunnelLocked(key); addr != "" {
-			addrs = append(addrs, addr)
-		}
-	}
+	tunnelCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 	tunnelCacheMu.Unlock()
-
-	for _, addr := range addrs {
-		DeleteConnsByAddr(addr)
-	}
 }
 
 // ClearTunnelCache drops all entries.

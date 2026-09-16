@@ -229,18 +229,18 @@ func TestGetOrFetchMetadata_InvalidateForcesFresh(t *testing.T) {
 }
 
 func TestHashWorkspaceDSN_StableAndScoped(t *testing.T) {
-	if hashWorkspaceDSN("ws-1", "dsn-1") != hashWorkspaceDSN("ws-1", "dsn-1") {
+	if workspaceCacheKey("ws-1", "dsn-1") != workspaceCacheKey("ws-1", "dsn-1") {
 		t.Fatal("key must be stable for the same inputs")
 	}
-	if hashWorkspaceDSN("ws-1", "dsn-1") == hashWorkspaceDSN("ws-2", "dsn-1") {
+	if workspaceCacheKey("ws-1", "dsn-1") == workspaceCacheKey("ws-2", "dsn-1") {
 		t.Fatal("workspace must be part of the key")
 	}
-	if hashWorkspaceDSN("ws-1", "dsn-1") == hashWorkspaceDSN("ws-1", "dsn-2") {
+	if workspaceCacheKey("ws-1", "dsn-1") == workspaceCacheKey("ws-1", "dsn-2") {
 		t.Fatal("dsn must be part of the key")
 	}
 	// Defence-in-depth: the literal DSN must not appear in the key.
 	const sneakyDSN = "postgres://user:secret@host/db"
-	k := hashWorkspaceDSN("ws", sneakyDSN)
+	k := workspaceCacheKey("ws", sneakyDSN)
 	if k == sneakyDSN {
 		t.Fatal("DSN leaked verbatim into cache key")
 	}

@@ -31,6 +31,22 @@ func (q *Queries) AddAPIKeyRole(ctx context.Context, arg AddAPIKeyRoleParams) er
 	return err
 }
 
+const clearWorkspaceDatasourceSecrets = `-- name: ClearWorkspaceDatasourceSecrets :exec
+UPDATE app.datasource
+SET
+  encrypted_dsn = NULL,
+  encrypted_ssh = NULL,
+  updated_at = NOW()
+WHERE
+  workspace_id = $1
+  AND (encrypted_dsn IS NOT NULL OR encrypted_ssh IS NOT NULL)
+`
+
+func (q *Queries) ClearWorkspaceDatasourceSecrets(ctx context.Context, workspaceID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, clearWorkspaceDatasourceSecrets, workspaceID)
+	return err
+}
+
 const countWorkspaceToUserByUserID = `-- name: CountWorkspaceToUserByUserID :one
 SELECT COUNT(*)
 FROM app.workspace_to_user wtu

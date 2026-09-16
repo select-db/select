@@ -15,32 +15,21 @@ func (t *stubTunnel) LocalAddr() string       { return "127.0.0.1:1" }
 func (t *stubTunnel) LocalPort() (int, error) { return 1, nil }
 func (t *stubTunnel) Close()                  { t.closed = true }
 
-func indexedWorkspace(key string) (string, bool) {
-	tunnelKeyToWorkspaceMu.Lock()
-	defer tunnelKeyToWorkspaceMu.Unlock()
-	id, ok := tunnelKeyToWorkspace[key]
-	return id, ok
-}
-
-// Nothing asks before a TTL expiry or an LRU eviction, so an index pruned only
-// by the callers that delete deliberately grows for the life of the process.
-func TestTunnelWorkspaceIndexIsPrunedByTheCache(t *testing.T) {
+// A TTL expiry and an LRU eviction drop an entry with nobody on the call stack
+// to close what it held, and an unclosed tunnel is a socket into the customer's
+// network that outlives the entry naming it.
+func TestATunnelLeavingTheCacheIsClosed(t *testing.T) {
 	ClearTunnelCache()
 	defer ClearTunnelCache()
 
-	const key = "tunnel-key"
-	tunnelCache.Set(key, &stubTunnel{})
-	indexTunnel(key, "ws-1")
-
-	if _, ok := indexedWorkspace(key); !ok {
-		t.Fatal("the index does not hold an entry that was just added")
-	}
+	tunnel := &stubTunnel{}
+	tunnelCache.Set(workspaceCacheKey("ws-1", "tunnel"), tunnel)
 
 	// What expiry and eviction do, without waiting twenty minutes for it.
-	tunnelCache.Delete(key)
+	tunnelCache.Delete(workspaceCacheKey("ws-1", "tunnel"))
 
-	if id, ok := indexedWorkspace(key); ok {
-		t.Errorf("the index kept %q => %q after the cache dropped the entry", key, id)
+	if !tunnel.closed {
+		t.Error("a tunnel dropped from the cache was left open")
 	}
 }
 
@@ -49,10 +38,10 @@ func TestCloseWorkspaceTunnelsClosesOnlyThatWorkspace(t *testing.T) {
 	defer ClearTunnelCache()
 
 	deleted, kept := &stubTunnel{}, &stubTunnel{}
-	tunnelCache.Set("deleted-key", deleted)
-	indexTunnel("deleted-key", "ws-deleted")
-	tunnelCache.Set("kept-key", kept)
-	indexTunnel("kept-key", "ws-kept")
+	deletedKey := workspaceCacheKey("ws-deleted", "tunnel")
+	keptKey := workspaceCacheKey("ws-kept", "tunnel")
+	tunnelCache.Set(deletedKey, deleted)
+	tunnelCache.Set(keptKey, kept)
 
 	CloseWorkspaceTunnels("ws-deleted")
 
@@ -62,18 +51,18 @@ func TestCloseWorkspaceTunnelsClosesOnlyThatWorkspace(t *testing.T) {
 	if kept.closed {
 		t.Error("another workspace's tunnel was closed with it")
 	}
-	if _, ok := getTunnel("kept-key"); !ok {
+	if _, ok := getTunnel(keptKey); !ok {
 		t.Error("another workspace's tunnel was dropped from the cache")
 	}
-	if _, ok := indexedWorkspace("deleted-key"); ok {
-		t.Error("the index kept the closed tunnel")
+	if _, ok := getTunnel(deletedKey); ok {
+		t.Error("the deleted workspace's tunnel is still cached")
 	}
 }
 
-// The index has its own mutex because the cache prunes it from a goroutine of
-// its own. A write to it under any other lock is a concurrent map write, which
-// is not an error to handle but the end of the process.
-func TestTunnelWorkspaceIndexIsWrittenUnderOneLock(t *testing.T) {
+// The cache is written by callers holding tunnelCacheMu and swept by its own
+// goroutine holding none of it, so everything it keeps has to be the cache's
+// own state and nothing beside it.
+func TestTunnelCacheTakesConcurrentWritesAndSweeps(t *testing.T) {
 	ClearTunnelCache()
 	defer ClearTunnelCache()
 
@@ -83,10 +72,9 @@ func TestTunnelWorkspaceIndexIsWrittenUnderOneLock(t *testing.T) {
 		go func() {
 			defer writers.Done()
 			for i := range 200 {
-				key := fmt.Sprintf("key-%d-%d", worker, i)
+				key := workspaceCacheKey("ws-1", fmt.Sprintf("tunnel-%d-%d", worker, i))
 				tunnelCacheMu.Lock()
 				tunnelCache.Set(key, &stubTunnel{})
-				indexTunnel(key, "ws-1")
 				tunnelCacheMu.Unlock()
 
 				// What expiry does, from a goroutine that holds neither lock.
@@ -96,7 +84,7 @@ func TestTunnelWorkspaceIndexIsWrittenUnderOneLock(t *testing.T) {
 	}
 	writers.Wait()
 
-	if _, ok := indexedWorkspace("key-0-0"); ok {
-		t.Error("the index kept a key the cache dropped")
+	if _, ok := getTunnel(workspaceCacheKey("ws-1", "tunnel-0-0")); ok {
+		t.Error("the cache kept a key it was told to drop")
 	}
 }
