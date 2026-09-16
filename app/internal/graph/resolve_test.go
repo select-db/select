@@ -5,7 +5,37 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+// resolvedFolder reads a folder's state under the lock the prefetch writes it
+// under, so a poll for it is not a race with the goroutine doing the reading.
+func resolvedFolder(g *Graph, uri string) (*FolderNode, bool) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	folder, ok := g.lookup(uri).(*FolderNode)
+	if !ok {
+		return nil, false
+	}
+	return folder, folder.Resolved
+}
+
+// awaitResolved waits for the prefetch, which runs off the caller's path.
+func awaitResolved(t *testing.T, g *Graph, uri string) *FolderNode {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if folder, ok := resolvedFolder(g, uri); ok {
+			return folder
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s was never read", uri)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
 
 // Opening a folder reads the folders inside it too, so clicking one of them
 // shows its files at once rather than after another round trip. One level, not
@@ -53,22 +83,22 @@ func TestResolveFolder_ReadsOneLevelAhead(t *testing.T) {
 		t.Fatalf("ResolveFolder: %v", err)
 	}
 
-	drafts, _ := g.lookup(rootURI + "/reports/drafts").(*FolderNode)
-	if drafts == nil {
-		t.Fatalf("drafts folder is not in the graph")
-	}
-	if !drafts.Resolved {
-		t.Errorf("drafts should be read with the folder holding it")
-	}
-	if len(drafts.Files) != 1 || drafts.Files[0].Name != "draft.sql" {
-		t.Errorf("drafts contents mismatch: %+v", drafts.Files)
-	}
+	drafts := awaitResolved(t, g, rootURI+"/reports/drafts")
 
-	archiveNode, _ := g.lookup(rootURI + "/reports/drafts/archive").(*FolderNode)
-	if archiveNode == nil {
-		t.Fatalf("archive folder is not in the graph")
+	g.mu.RLock()
+	draftFiles := len(drafts.Files)
+	firstName := ""
+	if draftFiles > 0 {
+		firstName = drafts.Files[0].Name
 	}
-	if archiveNode.Resolved {
+	g.mu.RUnlock()
+
+	_, archiveResolved := resolvedFolder(g, rootURI+"/reports/drafts/archive")
+
+	if draftFiles != 1 || firstName != "draft.sql" {
+		t.Errorf("drafts contents mismatch: %d files, first %q", draftFiles, firstName)
+	}
+	if archiveResolved {
 		t.Errorf("archive is two levels down and should stay unread")
 	}
 }

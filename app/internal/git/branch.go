@@ -60,23 +60,10 @@ func (g *Git) GetBranches() ([]BranchInfo, error) {
 
 	var branches []BranchInfo
 
-	hasCommits, _ := hasAnyCommits(ctx, root)
-
-	if !hasCommits {
-		// No local commits yet, only show remote branches.
-		for _, name := range branchNames(ctx, root, "refs/remotes/origin") {
-			branches = append(branches, BranchInfo{
-				Name:     strings.TrimPrefix(name, "origin/"),
-				IsRemote: true,
-			})
-		}
-		return branches, nil
-	}
-
-	current := ""
-	if out, err := runGitWithOutput(ctx, root, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
-		current = strings.TrimSpace(out)
-	}
+	// Empty on an unborn HEAD, which is a repository with no commits: there are
+	// no local branches to list and nothing to mark as current, and the remote
+	// loop below is then the whole answer.
+	current, _ := getCurrentBranch(ctx, root)
 
 	localSet := make(map[string]bool, branchLimit)
 	for _, name := range branchNames(ctx, root, "refs/heads") {
@@ -86,7 +73,7 @@ func (g *Git) GetBranches() ([]BranchInfo, error) {
 
 	// The branch you are on belongs in the list whether or not it is among the
 	// most recent: it is the one the picker marks as current.
-	if current != "" && current != "HEAD" && !localSet[current] {
+	if current != "" && !localSet[current] {
 		localSet[current] = true
 		branches = append([]BranchInfo{{Name: current, IsCurrent: true}}, branches...)
 	}

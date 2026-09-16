@@ -150,9 +150,11 @@ func (s *System) handleWatchEvent(event fsnotify.Event, userID string, watcher *
 	// First, because a db.config.json, a sidecar and a rename each leave this
 	// function early, and the git panel lists paths: a file it tracks changed
 	// whatever kind of node the app reads it as.
-	if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) != 0 {
-		s.notifyGitStatusChanged()
-	}
+	//
+	// For every event rather than a list of the interesting ops: git tracks the
+	// executable bit too, so a chmod moves the working tree, and a list is one
+	// more thing to keep right for a signal that is already debounced.
+	s.notifyGitStatusChanged()
 
 	if strings.HasSuffix(event.Name, ".metadata.json") {
 		s.handleMetadataEvent(event, userID, fsCtx)

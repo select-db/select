@@ -85,19 +85,6 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 	}
 
 	resolved, err := g.resolveFolder(folder, fsCtx)
-
-	// The children too, so opening one of them shows its files at once instead
-	// of after another round trip. One ReadDir each, on a directory the walk
-	// has already listed, against a click that would otherwise read an empty
-	// folder and fill it in later.
-	if err == nil {
-		for _, child := range folder.Folders {
-			if childResolved, childErr := g.resolveFolder(child, fsCtx); childErr == nil && childResolved {
-				resolved = true
-			}
-		}
-	}
-
 	resolvedFolder := folder.Clone()
 	g.mu.Unlock()
 
@@ -108,7 +95,40 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 		EmitWorkspaceGraphUpdated(g)
 	}
 
+	go g.prefetchChildFolders(folderURI)
+
 	return resolvedFolder, nil
+}
+
+// prefetchChildFolders reads the folders directly inside one that has just been
+// opened, so opening one of them shows its files at once instead of after
+// another round trip.
+//
+// Off the caller's path and on its own turn at the lock: this is a ReadDir per
+// child on directories nobody has asked for yet, and the graph is held for
+// every one of them. What it reads arrives the way everything else does, with
+// the next graph update.
+func (g *Graph) prefetchChildFolders(folderURI string) {
+	g.mu.Lock()
+
+	folder, ok := g.lookup(folderURI).(*FolderNode)
+	fsCtx, err := g.workspaceFS()
+	if !ok || err != nil {
+		g.mu.Unlock()
+		return
+	}
+
+	resolved := false
+	for _, child := range folder.Folders {
+		if childResolved, _ := g.resolveFolder(child, fsCtx); childResolved {
+			resolved = true
+		}
+	}
+	g.mu.Unlock()
+
+	if resolved {
+		EmitWorkspaceGraphUpdated(g)
+	}
 }
 
 // resolveAlongPath resolves every folder between the workspace root and the
