@@ -83,23 +83,30 @@ func applyPoolConfig(db *sql.DB, cfg PoolConfig) {
 	}
 }
 
-// DeleteConnsByAddr deletes every pool whose DSN contains addr, closing each
-// one through closeDeletedPool. Called when an SSH tunnel dies.
-func DeleteConnsByAddr(addr string) {
+// deleteConns drops every pool whose indexed entry matches, closing each one
+// through closeDeletedPool -- which is also what prunes the indexes, and is why
+// the deletions happen after the lock is released rather than inside the walk.
+func deleteConns(matches func(hash, dsn, workspaceID string) bool) {
 	var toDelete []string
+
 	connHashToDSNMu.Lock()
 	for hash, dsn := range connHashToDSN {
-		if strings.Contains(dsn, addr) {
+		if matches(hash, dsn, connHashToWorkspace[hash]) {
 			toDelete = append(toDelete, hash)
-			delete(connHashToDSN, hash)
 		}
 	}
 	connHashToDSNMu.Unlock()
-	// Delete fires closeDeletedPool, which closes the pool behind the dead
-	// tunnel rather than leaving it to linger on a socket that no longer works.
+
 	for _, hash := range toDelete {
 		connCache.Delete(hash)
 	}
+}
+
+// DeleteConnsByAddr deletes every pool whose DSN contains addr, closing each
+// one through closeDeletedPool. Called when an SSH tunnel dies: a pool behind a
+// dead tunnel would otherwise linger on a socket that no longer works.
+func DeleteConnsByAddr(addr string) {
+	deleteConns(func(_, dsn, _ string) bool { return strings.Contains(dsn, addr) })
 }
 
 // CloseWorkspaceConns drops every pool opened for a workspace, closing each one
@@ -107,18 +114,7 @@ func DeleteConnsByAddr(addr string) {
 // datasources are gone, and a pool that outlives them is an open connection to
 // a database nobody may reach any more.
 func CloseWorkspaceConns(workspaceID string) {
-	var toDelete []string
-	connHashToDSNMu.Lock()
-	for hash, id := range connHashToWorkspace {
-		if id == workspaceID {
-			toDelete = append(toDelete, hash)
-		}
-	}
-	connHashToDSNMu.Unlock()
-
-	for _, hash := range toDelete {
-		connCache.Delete(hash)
-	}
+	deleteConns(func(_, _, id string) bool { return id == workspaceID })
 }
 
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.

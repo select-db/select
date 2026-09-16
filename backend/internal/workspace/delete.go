@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"net/http"
 
 	"backend/db"
@@ -10,6 +11,25 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// SoftDelete marks a workspace deleted and revokes what it had open.
+//
+// The row is the one place a datasource's standing is written: reads join it,
+// and membership is derived from it, so writing it takes both away. What it
+// does not take away is what is already open -- a decrypted DSN in the cache, a
+// connection pool, an SSH tunnel -- and those stand for the rest of their TTL
+// unless they are dropped here.
+//
+// Both ways a workspace is deleted come through this: the handler below, and
+// the delete commit the app sends over /sync.
+func SoftDelete(ctx context.Context, workspaceID uuid.UUID) error {
+	if err := db.Queries.SetWorkspaceDeletedAt(ctx, workspaceID); err != nil {
+		return err
+	}
+
+	datasource.InvalidateWorkspaceCache(workspaceID.String())
+	return nil
+}
 
 func DeleteHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -49,20 +69,12 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		if err := db.Queries.SetWorkspaceDeletedAt(r.Context(), workspaceUUID); err != nil {
+		if err := SoftDelete(r.Context(), workspaceUUID); err != nil {
 			http.Error(w, "failed to delete workspace", http.StatusInternalServerError)
 			return
 		}
 
 		_ = db.Queries.DeleteUserRefreshTokens(r.Context(), userUUID)
-
-		// The workspace row is the one place a datasource's standing is
-		// written: reads join it, and membership is derived from it, so the
-		// deletion above already takes both away. What it does not take away is
-		// what is already open -- a decrypted DSN in the cache, a pool, an SSH
-		// tunnel -- and those stand for the rest of their TTL unless they are
-		// dropped here.
-		datasource.InvalidateWorkspaceCache(workspaceID)
 
 		audit.EmitAction(r.Context(), audit.WorkspaceDeleted, audit.Record{
 			WorkspaceID: workspaceID,

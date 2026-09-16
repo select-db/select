@@ -119,7 +119,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 // workspace is deleted: the entries hold decrypted DSNs and the pools hold live
 // sockets, and both would otherwise stand for the rest of their TTL.
 func InvalidateWorkspaceCache(workspaceID string) {
-	prefix := workspaceID + ":"
+	prefix := cacheKey(workspaceID, "")
 	dsCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 
 	engine.CloseWorkspaceTunnels(workspaceID)
