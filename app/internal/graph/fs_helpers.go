@@ -202,8 +202,11 @@ func IsInternalWorkspaceFile(name string) bool {
 	lower := strings.ToLower(name)
 
 	// Workspace-specific config / sidecar files.
-	if name == DBConfigFileName ||
-		name == WorkspaceConfigFileName ||
+	//
+	// db.config.json is not one of them: it is a file people read, edit and
+	// commit -- it carries the dialect and the $VAR the DSN resolves from --
+	// so the tree shows it inside the database it describes.
+	if name == WorkspaceConfigFileName ||
 		strings.HasSuffix(name, ".metadata.json") ||
 		strings.HasPrefix(name, ".selectdb_") {
 		return true

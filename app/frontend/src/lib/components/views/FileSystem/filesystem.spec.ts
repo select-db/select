@@ -452,6 +452,11 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	await choose(page, 'Delete');
 	await expect(treeRow(page, 'in-db.sql')).toHaveCount(0);
 
+	// Closed again: the root menu below needs empty space under the last row,
+	// and an open database is four rows of tables, schema and config.
+	await treeRow(page, 'warehouse').click();
+	await expect(treeRow(page, 'schema.sql')).toHaveCount(0);
+
 	// --- What happens without the app ---------------------------------------
 
 	// A file removed in a terminal leaves the tree and closes its tab. Nothing

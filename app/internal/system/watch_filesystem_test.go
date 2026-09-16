@@ -3,6 +3,7 @@ package system
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,13 +68,24 @@ func TestHandleDBConfigEvent_Insert(t *testing.T) {
 
 	s.handleDBConfigEvent(ev, "user-1", fsCtx)
 
-	if len(commits) != 1 {
-		t.Fatalf("expected 1 commit, got %d", len(commits))
+	// The folder scan that follows the db_instance sends the config itself as a
+	// file, which is the row the tree draws for it.
+	var c generated.MutationCommit
+	sawConfigFile := false
+	for _, commit := range commits {
+		if commit.TableName == "db_instance" {
+			c = commit
+		}
+		if commit.TableName == "file" && strings.HasSuffix(commit.ObjectID, "/db.config.json") {
+			sawConfigFile = true
+		}
 	}
 
-	c := commits[0]
 	if c.TableName != "db_instance" || c.Operation != "insert" {
-		t.Fatalf("unexpected commit: %+v", c)
+		t.Fatalf("no db_instance insert in %+v", commits)
+	}
+	if !sawConfigFile {
+		t.Errorf("db.config.json did not arrive as a file: %+v", commits)
 	}
 
 	if c.ObjectID != "db-1" {

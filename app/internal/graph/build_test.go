@@ -193,16 +193,18 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		t.Errorf("db instance folderID mismatch: got %q want %q", db.FolderID, folderDbURI)
 	}
 
-	// Files inside the DB instance folder must be attached to the DB node.
-	if len(db.Files) != 2 {
-		t.Errorf("expected 2 files in db instance (schema.sql, init.sql), got %d: %+v", len(db.Files), db.Files)
+	// Files inside the DB instance folder must be attached to the DB node, the
+	// config that makes it a database included: it is a file people read and
+	// commit, so it is a row like the queries beside it.
+	if len(db.Files) != 3 {
+		t.Errorf("expected 3 files in db instance (schema.sql, init.sql, db.config.json), got %d: %+v", len(db.Files), db.Files)
 	} else {
 		names := map[string]bool{}
 		for _, f := range db.Files {
 			names[f.Name] = true
 		}
-		if !names["schema.sql"] || !names["init.sql"] {
-			t.Errorf("db instance files missing schema.sql or init.sql: %+v", db.Files)
+		if !names["schema.sql"] || !names["init.sql"] || !names["db.config.json"] {
+			t.Errorf("db instance files missing schema.sql, init.sql or db.config.json: %+v", db.Files)
 		}
 	}
 }
