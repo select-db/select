@@ -151,9 +151,8 @@ func (s *System) handleWatchEvent(event fsnotify.Event, userID string, watcher *
 	// function early, and the git panel lists paths: a file it tracks changed
 	// whatever kind of node the app reads it as.
 	//
-	// For every event rather than a list of the interesting ops: git tracks the
-	// executable bit too, so a chmod moves the working tree, and a list is one
-	// more thing to keep right for a signal that is already debounced.
+	// For every event rather than a chosen set of ops, because git tracks the
+	// executable bit too and the signal is already debounced.
 	s.notifyGitStatusChanged()
 
 	if strings.HasSuffix(event.Name, ".metadata.json") {

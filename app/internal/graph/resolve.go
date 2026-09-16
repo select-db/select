@@ -101,12 +101,10 @@ func (g *Graph) ResolveFolder(folderURI string) (*FolderNode, error) {
 }
 
 // prefetchChildFolders reads the folders directly inside one that has just been
-// opened, so opening one of them shows its files at once instead of after
-// another round trip.
+// opened, so opening one of them shows its files at once.
 //
-// Off the caller's path and on its own turn at the lock: this is a ReadDir per
-// child on directories nobody has asked for yet, and the graph is held for
-// every one of them. What it reads arrives the way everything else does, with
+// Off the caller's path and on its own turn at the lock: it is a ReadDir per
+// child for directories nobody has asked for, and what it reads arrives with
 // the next graph update.
 func (g *Graph) prefetchChildFolders(folderURI string) {
 	g.mu.Lock()

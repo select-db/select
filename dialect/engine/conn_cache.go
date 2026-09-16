@@ -84,7 +84,7 @@ func applyPoolConfig(db *sql.DB, cfg PoolConfig) {
 }
 
 // deleteConns drops every pool whose indexed entry matches, closing each one
-// through closeDeletedPool -- which is also what prunes the indexes, and is why
+// through closeDeletedPool. That is also what prunes the indexes, which is why
 // the deletions happen after the lock is released rather than inside the walk.
 func deleteConns(matches func(hash, dsn, workspaceID string) bool) {
 	var toDelete []string

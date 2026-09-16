@@ -14,11 +14,10 @@ type BranchInfo struct {
 	IsRemote  bool   `json:"isRemote"`
 }
 
-// branchLimit caps how many branches of each kind the picker asks git for. A
+// branchLimit caps how many branches of each kind the picker asks git for: a
 // repository with thousands of them spent the difference building a menu nobody
-// reads to the end, and the ones a person switches to are the ones committed to
-// recently. A branch past the cap is still reachable: SwitchBranch takes a name
-// the picker never listed. A var so tests can lower it.
+// reads to the end. A branch past the cap is still reachable, since SwitchBranch
+// takes a name the picker never listed. A var so tests can lower it.
 var branchLimit = 100
 
 // branchNames lists the branches under a ref prefix, most recently committed to
@@ -60,9 +59,8 @@ func (g *Git) GetBranches() ([]BranchInfo, error) {
 
 	var branches []BranchInfo
 
-	// Empty on an unborn HEAD, which is a repository with no commits: there are
-	// no local branches to list and nothing to mark as current, and the remote
-	// loop below is then the whole answer.
+	// Empty on an unborn HEAD. A repository with no commits has no local refs
+	// either, so the remote loop below is then the whole answer.
 	current, _ := getCurrentBranch(ctx, root)
 
 	localSet := make(map[string]bool, branchLimit)

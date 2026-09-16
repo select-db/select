@@ -110,10 +110,9 @@ const keyByCode: Record<string, string> = {
 const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta', 'CapsLock']);
 
 /**
- * The punctuation a binding may name: the symbols a US layout prints without
- * shift, which are exactly the one-character names in keyByCode above. Read
- * from there rather than written out again, because a key added to one list and
- * not the other is a binding the config accepts and no keystroke ever matches.
+ * The punctuation a binding may name: the symbols a US layout prints unshifted,
+ * which are the one-character names in keyByCode. Read from there rather than
+ * listed again, so the two cannot disagree.
  */
 const bindableCharacters = new Set(Object.values(keyByCode).filter((name) => name.length === 1));
 
@@ -122,13 +121,11 @@ function isBindableCharacter(key: string): boolean {
 }
 
 /**
- * The key a keystroke prints, when that is something a binding can name.
+ * The key a keystroke prints, when a binding can name that.
  *
- * This is what somebody reads off their own keyboard: a French layout prints
- * "-" on the key a US layout prints "=" on, and a binding written for "-" is
- * the one they expect that key to run. Empty when the character is not one a
- * binding can be written for -- "&" on AZERTY, "é", a dead key -- and the
- * position below answers for those.
+ * What somebody reads off their own keyboard: a French layout prints "-" where
+ * a US one prints "=", and "cmd+-" is what they expect that key to run. Empty
+ * for a character no binding can name, which the position below answers for.
  */
 function printedKey(e: KeyboardEvent): string {
 	const key = (e.key ?? '').toLowerCase();
@@ -138,13 +135,10 @@ function printedKey(e: KeyboardEvent): string {
 }
 
 /**
- * The key a keystroke sits on.
+ * The key a keystroke sits on, named by where it is rather than what it prints.
  *
- * Named by where it is, so a binding written for a key in one place is answered
- * by the key in the same place on a layout that prints something else there.
- * This is what a keystroke falls back to: the digit row needs shift on AZERTY,
- * holding alt prints another character again on macOS, and neither of those
- * prints a name a binding could be written for.
+ * What a keystroke falls back to: the AZERTY digit row needs shift and alt
+ * prints something else again on macOS, and neither prints a bindable name.
  */
 function positionalKey(e: KeyboardEvent): string {
 	const code = e.code ?? '';
@@ -176,13 +170,8 @@ function chord(e: KeyboardEvent, key: string): string {
 }
 
 /**
- * The chords a keystroke answers to, in the order they are tried: what the key
- * prints first, where the key sits second.
- *
- * The two are the same string on a US layout and differ on every other, which
- * is the whole point: on AZERTY the key printed "-" answers "cmd+-" rather than
- * running whatever is bound to the key in that position, and a key that prints
- * nothing a binding could name still answers for its position.
+ * The chords a keystroke answers to: what the key prints first, where it sits
+ * second. The two are one string on a US layout and differ on every other.
  */
 function chordsFromEvent(e: KeyboardEvent): string[] {
 	const printed = printedKey(e);
@@ -386,12 +375,8 @@ function findMatchingKeybinding(chord: string, context: KeybindingsContext): Key
 }
 
 /**
- * The binding a keystroke runs.
- *
- * Every binding is tried against what the key prints before any of them is
- * tried against where the key sits, so a layout that prints "-" somewhere else
- * runs the binding written for "-" from that key, and a key printing nothing a
- * binding could name still runs what its position is bound to.
+ * The binding a keystroke runs. Every binding is tried against what the key
+ * prints before any is tried against where the key sits.
  */
 export function keybindingForEvent(
 	e: KeyboardEvent,

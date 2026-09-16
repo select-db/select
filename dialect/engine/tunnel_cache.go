@@ -49,10 +49,8 @@ var (
 	})
 
 	// secondary index: key → workspace, for CloseWorkspaceTunnels. The key is a
-	// hash, so nothing else can tell whose tunnel an entry is.
-	//
-	// Under its own mutex, not tunnelCacheMu: OnDelete runs from inside a cache
-	// call that the functions below make while holding that one.
+	// hash, so nothing else can tell whose tunnel an entry is. Under its own
+	// mutex because OnDelete runs from inside calls made holding the other one.
 	tunnelKeyToWorkspace   = make(map[string]string)
 	tunnelKeyToWorkspaceMu sync.Mutex
 
@@ -71,9 +69,9 @@ func forgetTunnelWorkspace(key string, _ any) {
 	tunnelKeyToWorkspaceMu.Unlock()
 }
 
-// closeTunnelLocked drops the entry for key and closes the tunnel it held,
-// returning the local address its connections were opened against so the caller
-// can flush them once it has let go of tunnelCacheMu. Callers hold that mutex.
+// closeTunnelLocked drops the entry for key and closes the tunnel it held. It
+// returns the local address its connections were opened against, for the caller
+// to flush once it has let go of tunnelCacheMu. Callers hold that mutex.
 func closeTunnelLocked(key string) string {
 	tunnel, ok := getTunnel(key)
 	if !ok {
@@ -156,9 +154,9 @@ func DeleteTunnel(key string) {
 // workspace is deleted: the tunnel outlives the cache entry otherwise, and it
 // is a live socket into the customer's network.
 func CloseWorkspaceTunnels(workspaceID string) {
-	// The index is read and released before tunnelCacheMu is taken: a cache
-	// deletion prunes the index from OnDelete, and holding both here in the
-	// other order is how that meets itself coming back.
+	// The index is read and released before tunnelCacheMu is taken. A cache
+	// deletion prunes the index from OnDelete, so holding both in the other
+	// order here is how the two meet in a deadlock.
 	var keys []string
 	tunnelKeyToWorkspaceMu.Lock()
 	for key, id := range tunnelKeyToWorkspace {
