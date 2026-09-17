@@ -745,7 +745,7 @@ export class PermissionEntry {
     "ColumnName": string | null;
 
     /**
-     * "select" | "insert" | "update" | "delete" | "ddl"
+     * "select" | "insert" | "update" | "delete" | "see" | "manage"
      */
     "Action": string;
 

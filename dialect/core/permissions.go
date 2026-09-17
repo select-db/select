@@ -22,7 +22,6 @@ const (
 	ActionInsert = "insert"
 	ActionUpdate = "update"
 	ActionDelete = "delete"
-	ActionDDL    = "ddl"
 	ActionSee    = "see"
 )
 
@@ -34,7 +33,7 @@ type PermissionEntry struct {
 	SchemaName   *string
 	TableName    *string
 	ColumnName   *string
-	Action       string // "select" | "insert" | "update" | "delete" | "ddl"
+	Action       string // "select" | "insert" | "update" | "delete" | "see" | "manage"
 	Effect       string // "allow" | "deny"
 	RoleName     string
 }
@@ -52,9 +51,14 @@ type PermissionDeniedError struct {
 
 func (e *PermissionDeniedError) Error() string {
 	var target string
-	if e.Column != "" {
+	switch {
+	case e.Table == "":
+		// A statement we could not resolve names nothing to blame; the
+		// connection is what the manage rule is granted on anyway.
+		target = "this connection"
+	case e.Column != "":
 		target = fmt.Sprintf("%s.%s.%s", e.Schema, e.Table, e.Column)
-	} else {
+	default:
 		target = fmt.Sprintf("%s.%s", e.Schema, e.Table)
 	}
 	if e.RoleName != "" {
@@ -187,6 +191,22 @@ func CheckQueryPermissions(statements []InspectStatement, dbInstanceID string, c
 func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	action := operationToAction(stmt.Operation)
 
+	// Manage is granted on the whole instance, so it is one check rather than
+	// one per table. It has to run before the loop below: a statement we could
+	// not resolve names no table, and a loop over no tables checks nothing.
+	if action == ActionManage {
+		allowed, role := compiledPermissions.isAllowed(dbInstanceID, "", "", "", ActionManage)
+		if !allowed {
+			return &PermissionDeniedError{
+				Action:   action,
+				Schema:   schemaOf(stmt),
+				Table:    tableOf(stmt),
+				RoleName: role,
+			}
+		}
+		return checkSubqueries(stmt, dbInstanceID, compiledPermissions)
+	}
+
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
 			return &PermissionDeniedError{
@@ -199,7 +219,7 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 			}
 		}
 
-		if action == "ddl" || len(stmt.Fields) == 0 {
+		if len(stmt.Fields) == 0 {
 			allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, "", action)
 			if !allowed {
 				return &PermissionDeniedError{
@@ -242,13 +262,35 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 		}
 	}
 
+	return checkSubqueries(stmt, dbInstanceID, compiledPermissions)
+}
+
+// checkSubqueries checks the statements nested in stmt. A CREATE TABLE AS or an
+// INSERT ... SELECT carries its source query here, so holding manage never
+// stands in for the select the source still needs.
+func checkSubqueries(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	for _, sub := range stmt.Subqueries {
 		if err := checkStatement(sub, dbInstanceID, compiledPermissions); err != nil {
 			return err
 		}
 	}
-
 	return nil
+}
+
+// schemaOf and tableOf name the first relation a statement touches, so a denial
+// says what was refused. Both are empty for a statement we could not resolve.
+func schemaOf(stmt InspectStatement) string {
+	if len(stmt.Tables) == 0 {
+		return ""
+	}
+	return stmt.Tables[0].Schema
+}
+
+func tableOf(stmt InspectStatement) string {
+	if len(stmt.Tables) == 0 {
+		return ""
+	}
+	return stmt.Tables[0].Name
 }
 
 // EvaluateSee returns which driver-column positions to mask, or errors
@@ -331,19 +373,21 @@ func fieldOutputName(f InspectField, driverCol string) bool {
 	return strings.EqualFold(name, driverCol)
 }
 
+// operationToAction maps an inspected operation to the permission it needs.
+// Only the four operations we fully resolve down to columns are data actions;
+// everything else, the unknown statement included, needs manage. New operations
+// are refused until someone classifies them, rather than admitted by silence.
 func operationToAction(op InspectOperation) string {
 	switch op {
 	case InspectOpSelect:
-		return "select"
+		return ActionSelect
 	case InspectOpInsert:
-		return "insert"
+		return ActionInsert
 	case InspectOpUpdate:
-		return "update"
+		return ActionUpdate
 	case InspectOpDelete:
-		return "delete"
-	case InspectOpCreate, InspectOpAlter, InspectOpDrop, InspectOpTruncate:
-		return "ddl"
+		return ActionDelete
 	default:
-		return string(op)
+		return ActionManage
 	}
 }

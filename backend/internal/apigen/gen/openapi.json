@@ -1150,7 +1150,7 @@
           "permission"
         ],
         "summary": "List permissions",
-        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `role_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `db_instance_id` | string | Database instance the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `schema_name` | string | Schema the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `table_name` | string | Table the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `column_name` | string | Column the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string (select, insert, update, delete, ddl, see, manage) | SQL action the rule applies to. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `effect` | string (allow, deny) | Whether the rule allows or denies the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `role_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `db_instance_id` | string | Database instance the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `schema_name` | string | Schema the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `table_name` | string | Table the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `column_name` | string | Column the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string (select, insert, update, delete, see, manage) | SQL action the rule applies to. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `effect` | string (allow, deny) | Whether the rule allows or denies the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
         "operationId": "listPermission",
         "parameters": [
           {
@@ -3624,7 +3624,6 @@
               "insert",
               "update",
               "delete",
-              "ddl",
               "see",
               "manage"
             ],
@@ -3684,7 +3683,6 @@
               "insert",
               "update",
               "delete",
-              "ddl",
               "see",
               "manage"
             ]
@@ -3737,7 +3735,6 @@
               "insert",
               "update",
               "delete",
-              "ddl",
               "see",
               "manage"
             ]

@@ -30,7 +30,7 @@ var updateBodySchema = validate.Schema{Fields: []validate.Field{
 	{Name: "schema_name", Kind: query.KindText, Nullable: true},
 	{Name: "table_name", Kind: query.KindText, Nullable: true},
 	{Name: "column_name", Kind: query.KindText, Nullable: true},
-	{Name: "action", Kind: query.KindText, Enum: []string{"select", "insert", "update", "delete", "ddl", "see", "manage"}},
+	{Name: "action", Kind: query.KindText, Enum: []string{"select", "insert", "update", "delete", "see", "manage"}},
 	{Name: "effect", Kind: query.KindText, Enum: []string{"allow", "deny"}},
 }}
 
