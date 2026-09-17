@@ -35,31 +35,13 @@
   <link rel="alternate" type="text/plain" href="/llms.txt" title="Site index for language models">
   <!-- Picks the app's own light/dark palette before first paint, from the same
      localStorage key the docs site writes: a reader who chose dark over there
-     does not get flashed white here. -->
+     does not get flashed white here. This one line has to run before the body
+     exists; everything else the page needs is in /theme.js, loaded at the end,
+     so the toggle, the screenshot swap and the keycap labels have one
+     definition rather than one per surface. -->
   <script>
     document.documentElement.dataset.theme =
       localStorage.getItem("doc-theme") || (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
-
-    // The screenshots come in a light cut and a dark cut. <picture> art-directs on
-    // width on its own, but its media queries only ever see the system preference,
-    // never a choice made here, so the toggle renames the files itself. They
-    // differ by one word: hero.<framing>.<theme>.png.
-    function paintShots(theme) {
-      document.querySelectorAll("picture[data-shot] source, picture[data-shot] img").forEach(el => {
-        const attr = el.tagName === "IMG" ? "src" : "srcset";
-        const next = el[attr].replace(/\.(light|dark)\.png/, "." + theme + ".png");
-        if (next !== el[attr]) el[attr] = next;
-      });
-    }
-
-    function toggleTheme() {
-      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-      document.documentElement.dataset.theme = next;
-      localStorage.setItem("doc-theme", next);
-      paintShots(next);
-    }
-
-    addEventListener("DOMContentLoaded", () => paintShots(document.documentElement.dataset.theme));
   </script>
   <style>
     /*THEME*/
@@ -166,6 +148,31 @@
 
     .mono {
       font-family: var(--m)
+    }
+
+    /* Keycaps, in the docs' treatment, so a shortcut looks the same whichever
+   page a reader meets it on. The cap is authored in the Mac spelling and
+   /theme.js relabels data-mod off a Mac, exactly as in the docs. */
+    kbd {
+      display: inline-block;
+      min-width: 1.4em;
+      margin: 0 .1em;
+      padding: .15em .45em;
+      font: 500 .8em/1.4 var(--m);
+      text-align: center;
+      color: var(--gray-1000);
+      background: var(--gray-100);
+      border: var(--border);
+      border-bottom-width: 2px;
+      border-radius: var(--br-sm);
+      box-shadow: var(--shadow-subtle);
+      white-space: nowrap
+    }
+
+    /* --shadow-subtle is black at 6%, which is nothing against a near-black
+   page, and a keycap with no lift is a bordered box. */
+    :root[data-theme=dark] kbd {
+      box-shadow: 0 1px 2px -2px lch(100% 0 0 / .22)
     }
 
     /* header */
@@ -981,7 +988,7 @@
             two joins, the CTE you stopped using, the <span class="mono">= NULL</span> that silently matches
             nothing.</p>
           <p>Your own rules go in a file in the repo, scoped by path, so the
-            rule your team agreed on is the rule everyone gets. <span class="mono">⌘↵</span> runs. Nothing
+            rule your team agreed on is the rule everyone gets. <kbd data-mod="cmd">Cmd</kbd>+<kbd>Enter</kbd> runs. Nothing
             here needs the mouse.</p>
           <a href="/docs/sql/lint-rules/">Lint rules →</a>
         </div>
@@ -1151,6 +1158,8 @@
   </main>
 
   <!--FOOTER-->
+
+  <script src="/theme.js"></script>
 
 </body>
 

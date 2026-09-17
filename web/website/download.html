@@ -7,15 +7,12 @@
 <meta name="description" content="Download SELECT for macOS, Windows or Linux. Free for solo use, open source, one native binary.">
 <link rel="canonical" href="https://select-db.com/download/">
 <link rel="icon" href="/favicon.png">
+<!-- Before first paint, so a reader who chose dark on the docs is not flashed
+     white here. The toggle itself is in /theme.js at the end of the body, where
+     the docs get it too. -->
 <script>
 document.documentElement.dataset.theme =
   localStorage.getItem("doc-theme") || (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
-
-function toggleTheme() {
-  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  localStorage.setItem("doc-theme", next);
-}
 </script>
 <style>
 /*THEME*/
@@ -124,5 +121,6 @@ footer .logo{font:600 1rem/1 var(--f);letter-spacing:-.02em}
 </div></main>
 
 <!--FOOTER-->
+<script src="/theme.js"></script>
 </body>
 </html>

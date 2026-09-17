@@ -11,7 +11,7 @@ directory. Your files stay where you put them.
 
 Signing in with no folder open leaves you in the app itself, with the folders
 you opened recently where your files would be. Open one from there, or with the
-button in the top left corner -- `Cmd+O` on macOS, `Ctrl+O` elsewhere.
+button in the top left corner -- `Cmd+O`.
 
 ![The app with no folder open: recent folders where the files would be, and the workspace button in the top left corner.](/shots/folder.start.light.png)
 
