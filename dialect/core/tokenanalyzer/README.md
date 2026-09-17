@@ -63,8 +63,13 @@ echo '{"action":"lint","sql":"SELECT 1","dialect":"postgres","schema":{}}' | uv 
 cd dialect/core/tokenanalyzer/python
 uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
 
-# Go tests (skip automatically when the venv is absent. See testutil.NewTestAnalyzer)
-cd dialect && go test ./core/tokenanalyzer/...
+# Go tests. Ten test files drive the analyzer and skip when the venv is
+# absent, so run `uv sync` first or they pass without testing anything.
+cd dialect && go test ./...
+
+# What CI runs. SELECT_REQUIRE_ANALYZER turns that skip into a failure, so a
+# venv that did not get built cannot look like a green run.
+cd dialect && SELECT_REQUIRE_ANALYZER=1 go test ./...
 ```
 
 ## Production build (packaged app)

@@ -49,6 +49,9 @@ cd <module>
 golangci-lint run ./...
 go test ./...
 ```
+> The `dialect` tests that drive the Python analyzer skip when its venv is
+> missing, so `uv sync` in `dialect/core/tokenanalyzer/python` first. CI sets
+> `SELECT_REQUIRE_ANALYZER=1`, which makes that skip a failure instead.
 > The `app` module embeds the frontend build output; stub it when testing Go only:
 > `mkdir -p app/frontend/build && touch app/frontend/build/.keep`
 >

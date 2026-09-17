@@ -10,7 +10,6 @@ venv/
 env/
 
 # uv / pip
-uv.lock
 *.egg-info/
 dist/
 build/
