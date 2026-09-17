@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from sqlglot import exp
 from sqlglot.dialects.dialect import Dialect as SqlglotDialect
+from sqlglot.errors import TokenError
 from sqlglot.schema import MappingSchema
 
 # Map Go dialect names → sqlglot dialect names
@@ -31,7 +32,22 @@ def tokenize(sql: str, sg_dialect: str) -> list:
     """
     if not sg_dialect:
         raise ValueError("tokenize requires a dialect name")
-    return list(SqlglotDialect.get_or_raise(sg_dialect).tokenize(sql))
+
+    tokenizer_class = SqlglotDialect.get_or_raise(sg_dialect).tokenizer_class
+    try:
+        return list(tokenizer_class().tokenize(sql))
+    except TokenError:
+        pass
+
+    # A quote the caret is still inside is unterminated, which is the normal
+    # state of an identifier being typed. Closing it costs nothing: the added
+    # character sits past the caret, so no earlier token shifts.
+    for closer in dict.fromkeys(tokenizer_class._IDENTIFIERS.values()):
+        try:
+            return list(tokenizer_class().tokenize(sql + closer))
+        except TokenError:
+            continue
+    return list(tokenizer_class().tokenize(sql))
 
 
 def pos(node: exp.Expression) -> tuple[int, int]:
