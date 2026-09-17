@@ -4,9 +4,12 @@ import "strings"
 
 // CompletionTestCase represents a single completion test case
 type CompletionTestCase struct {
-	Name     string
-	SQL      string
-	Expected []CompletionTestExpectation
+	Name string
+	SQL  string
+	// SkipDialects names dialects where the SQL is not valid syntax, so the
+	// case says nothing about their completion. Matches ReferencesTest.
+	SkipDialects []string
+	Expected     []CompletionTestExpectation
 }
 
 // CompletionTestExpectation represents an expected candidate in a test case
@@ -94,6 +97,8 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 		{
 			Name: "simple table columns",
 			SQL:  "SELECT \"t1\".| FROM \"t1\"",
+			// A double-quoted word is a string literal in MySQL, not an identifier.
+			SkipDialects: []string{"mysql"},
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
 				{Type: CandidateTypeColumn, Text: "c2"},
@@ -102,6 +107,8 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 		{
 			Name: "simple table columns",
 			SQL:  "SELECT \"t1\".|",
+			// A double-quoted word is a string literal in MySQL, not an identifier.
+			SkipDialects: []string{"mysql"},
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
 				{Type: CandidateTypeColumn, Text: "c2"},

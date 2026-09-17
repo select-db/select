@@ -30,7 +30,7 @@ func (d *Dialect) Complete(
 	}
 
 	completionCtx, err := coreRefs.ParseCompletionContextFromPython(
-		d.analyzer, sql, caretLine, caretOffset, meta,
+		d.analyzer, sql, d, caretLine, caretOffset, meta,
 	)
 	if err != nil {
 		return nil, err
