@@ -164,10 +164,13 @@ var operatorFamily = map[string]string{
 	"int": "numeric", "integer": "numeric", "bigint": "numeric",
 	"decimal": "numeric", "dec": "numeric", "numeric": "numeric",
 	"fixed": "numeric", "float": "numeric", "double": "numeric", "real": "numeric",
+	"bit": "numeric",
 
 	"char": "text", "varchar": "text", "binary": "text", "varbinary": "text",
 	"tinytext": "text", "text": "text", "mediumtext": "text", "longtext": "text",
 	"tinyblob": "text", "blob": "text", "mediumblob": "text", "longblob": "text",
+	// MySQL compares ENUM and SET as strings, so they take the pattern operators.
+	"enum": "text", "set": "text",
 
 	"json": "json",
 

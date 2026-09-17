@@ -49,13 +49,13 @@ func TestGetOperatorsForType(t *testing.T) {
 			// Enum values are part of the type string. "paint" contains "int"
 			// and must not make this numeric.
 			columnType: "enum('paint','wall')",
-			wants:      []string{"=", "IN"},
+			wants:      []string{"=", "IN", "LIKE", "REGEXP"},
 			rejects:    []string{"BETWEEN", "<=>", "IS TRUE"},
 		},
 		{
 			// Likewise "bool" inside a set value must not make this boolean.
 			columnType: "set('bool','x')",
-			wants:      []string{"=", "IN"},
+			wants:      []string{"=", "IN", "LIKE"},
 			rejects:    []string{"IS TRUE", "BETWEEN"},
 		},
 		{

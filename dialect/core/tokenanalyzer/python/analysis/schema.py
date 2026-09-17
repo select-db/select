@@ -33,21 +33,28 @@ def tokenize(sql: str, sg_dialect: str) -> list:
     if not sg_dialect:
         raise ValueError("tokenize requires a dialect name")
 
-    tokenizer_class = SqlglotDialect.get_or_raise(sg_dialect).tokenizer_class
+    # Dialect.tokenize binds the tokenizer to the dialect. Building the class
+    # directly leaves it on the generic settings, which differ in more than
+    # quoting: MySQL allows an identifier to start with a digit, so 2fa reads
+    # as the number 2 followed by fa.
+    dialect = SqlglotDialect.get_or_raise(sg_dialect)
     try:
-        return list(tokenizer_class().tokenize(sql))
+        return list(dialect.tokenize(sql))
     except TokenError:
-        pass
-
-    # A quote the caret is still inside is unterminated, which is the normal
-    # state of an identifier being typed. Closing it costs nothing: the added
-    # character sits past the caret, so no earlier token shifts.
-    for closer in dict.fromkeys(tokenizer_class._IDENTIFIERS.values()):
-        try:
-            return list(tokenizer_class().tokenize(sql + closer))
-        except TokenError:
-            continue
-    return list(tokenizer_class().tokenize(sql))
+        # A quote the caret sits inside is unterminated, which is the normal
+        # state of an identifier or a string being typed. Closing it costs
+        # nothing: the added character lands past the caret, so no earlier
+        # token moves.
+        closers = {
+            **dialect.tokenizer_class._IDENTIFIERS,
+            **dialect.tokenizer_class._QUOTES,
+        }
+        for closer in dict.fromkeys(closers.values()):
+            try:
+                return list(dialect.tokenize(sql + closer))
+            except TokenError:
+                continue
+        raise
 
 
 def pos(node: exp.Expression) -> tuple[int, int]:

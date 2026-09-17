@@ -41,10 +41,18 @@ class TestTokenize:
         ("SELECT * FROM [ord", "sqlite"),
         ('SELECT * FROM "', "postgres"),
         ('SELECT * FROM "ord', "postgres"),
+        ("SELECT * FROM t WHERE c = '", "mysql"),
+        ("SELECT * FROM t WHERE c IN ('", "postgres"),
     ])
     def test_unterminated_quote_still_tokenizes(self, sql, sg_dialect):
         tokens = tokenize(sql, sg_dialect)
         assert [t.text for t in tokens][:1] == ["SELECT"]
+
+    def test_tokenizer_is_bound_to_the_dialect(self):
+        # MySQL lets an identifier start with a digit. An unbound tokenizer
+        # keeps the generic rule and splits this into the number 2 and fa.
+        texts = [t.text for t in tokenize("SELECT * FROM t WHERE 2fa ", "mysql")]
+        assert "2fa" in texts
 
     def test_repair_does_not_shift_earlier_offsets(self):
         closed = tokenize("SELECT * FROM `t1`", "mysql")
