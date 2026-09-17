@@ -41,3 +41,7 @@ go.work.sum
 
 # No binary files
 **/bin/**
+
+# sqlprobe dev binary, built by `go build ./cmd/sqlprobe`
+/sqlprobe
+
