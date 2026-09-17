@@ -14,7 +14,7 @@ DSN format depends on dialect:
 | MySQL      | `user:password@tcp(host:3306)/dbname?parseTime=true`                    |
 | SQLite     | `file:./local.db` or `/path/to/database.sqlite`                        |
 
-![The connection form for a PostgreSQL database: dialect, name, the proxy checkbox, the DSN and SSH tunnel modes, and a DSN written from $VAR references.](/shots/dbform.local.light.png)
+![The connection form for a PostgreSQL database: dialect, name, the proxy checkbox, the DSN and SSH tunnel modes, and a DSN written from $VAR references.](/shots/dbform.local.light.webp)
 
 > [!TIP]
 > DSN fields support **environment variables** (`$VAR_NAME`), resolved from your workspace `.env` at connection time. Write the DSN as `host=$PG_HOST password=$PG_PASS ...` and the password never enters `db.config.json`, which is what makes that file safe to commit.

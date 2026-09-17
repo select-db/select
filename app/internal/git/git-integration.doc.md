@@ -9,7 +9,7 @@ it.
 When you work with a team, git becomes useful: keep files in sync across members
 and use branches to version your work.
 
-![The source control panel beside a diff: a branch, staged and unstaged changes, and the working copy of a query against its last commit.](/shots/git.light.png)
+![The source control panel beside a diff: a branch, staged and unstaged changes, and the working copy of a query against its last commit.](/shots/git.light.webp)
 
 ## Getting started
 
@@ -20,7 +20,7 @@ your editor does:
 - **A folder you cloned**: clone the repository yourself, then open that folder.
   Its remote, its branches and its history are already there.
 - **A folder you want to version**: run `git init` in it, from your shell or from
-  the built-in terminal (`Ctrl+\``). The panel picks it up.
+  the built-in terminal (`` Ctrl+` ``). The panel picks it up.
 
 Whoever cloned the folder chose its remote, and `git remote` is where that choice
 lives. SELECT never rewrites it, and never re-materializes your working tree from
@@ -40,7 +40,7 @@ still gets staging, commits, branches and diffs.
 - **Revert**: discard changes to a file or revert all uncommitted changes
 - **Branches**: list branches and switch between them
 
-You can also use the **built-in terminal** (`Ctrl+\``) for any git operation you prefer to run manually.
+You can also use the **built-in terminal** (`` Ctrl+` ``) for any git operation you prefer to run manually.
 
 ## Workspace files
 

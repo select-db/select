@@ -19,6 +19,7 @@
 #   ./dev.sh web start             build the site, serve on :3333, rebuild on save
 #   ./dev.sh web build             build the site into web/dist once
 #   ./dev.sh web shots             recapture the product screenshots
+#   ./dev.sh web og                re-render the link preview card
 #
 #   ./dev.sh backend start         db up, migrate, generate, run the server
 #   ./dev.sh backend test          go test ./... (wants the dev DB up)
@@ -102,9 +103,27 @@ web_start() {
 # driving the app. Through the task, never `npm run shots`: playwright launches
 # build/bin/select-server without ever building it, so a stale binary does not
 # fail the run, it republishes pictures of the previous build.
+# The link preview card is HTML, not a picture of the app, so it needs the
+# browser and nothing else. Through the task for the same reason as the shots:
+# playwright lives under app/frontend, and that is where it resolves.
+web_og() {
+  command -v wails3 >/dev/null 2>&1 || {
+    echo "wails3 not found. Install it: go install github.com/wailsapp/wails/v3/cmd/wails3@latest" >&2
+    exit 1
+  }
+  step "Web -- re-rendering the link preview card"
+  (cd "$ROOT/app" && wails3 task og)
+  done_ "web og -- look at web/og.png before committing it"
+}
+
 web_shots() {
   command -v wails3 >/dev/null 2>&1 || {
     echo "wails3 not found. Install it: go install github.com/wailsapp/wails/v3/cmd/wails3@latest" >&2
+    exit 1
+  }
+  # The captures are written as lossless WebP, the format the site serves.
+  command -v cwebp >/dev/null 2>&1 || {
+    echo "cwebp not found. Install libwebp: brew install webp, or apt install webp" >&2
     exit 1
   }
   step "Web — recapturing screenshots (builds the app first)"
@@ -118,7 +137,8 @@ web() {
     build) web_build ;;
     start) web_start ;;
     shots) web_shots ;;
-    *) echo "unknown web subcommand: '${sub:-}' (want: build|start|shots)" >&2; exit 1 ;;
+    og) web_og ;;
+    *) echo "unknown web subcommand: '${sub:-}' (want: build|start|shots|og)" >&2; exit 1 ;;
   esac
 }
 

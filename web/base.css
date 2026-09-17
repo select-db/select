@@ -34,8 +34,10 @@
 }
 
 /* Subtle elevation shadow (mirrors the app's --shadow-subtle per theme) */
-:root[data-theme="light"] { --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / 0.02), 0px 1px 1px 0px lch(80% 0 0 / 0.02); }
-:root[data-theme="dark"]  { --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / 0.06), 0px 1px 1px 0px lch(0% 0 0 / 0.06); }
+/* --orange is an accent for fills and borders; as small text on a near-white
+   page it lands at 2.6:1. Same hue, weight that passes. */
+:root[data-theme="light"] { --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / 0.02), 0px 1px 1px 0px lch(80% 0 0 / 0.02); --orange-text: hsl(24, 88%, 34%); --red-text: rgb(190, 38, 38); }
+:root[data-theme="dark"]  { --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / 0.06), 0px 1px 1px 0px lch(0% 0 0 / 0.06); --orange-text: var(--orange); --red-text: var(--red); }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

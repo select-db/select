@@ -6,7 +6,7 @@ When your database is behind a bastion or jump host, SELECT can open an **SSH tu
 
 In the connection form, switch the connection mode to **DSN + SSH tunnel**. This reveals the SSH configuration fields:
 
-![The connection form in tunnel mode: the DSN, then the tunnel's own user, host, port and authentication method.](/shots/dbform.ssh.light.png)
+![The connection form in tunnel mode: the DSN, then the tunnel's own user, host, port and authentication method.](/shots/dbform.ssh.light.webp)
 
 | Field           | Description                                              |
 |-----------------|----------------------------------------------------------|

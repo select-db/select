@@ -2,7 +2,7 @@
 
 Each workspace has its own set of users. Users are identified by their account (name, email, avatar) and can be members of multiple workspaces.
 
-![The workspace's users: five people with their email, the roles each one holds, and the group they belong to. The first is marked Owner.](/shots/team.users.light.png)
+![The workspace's users: five people with their email, the roles each one holds, and the group they belong to. The first is marked Owner.](/shots/team.users.light.webp)
 
 ## Workspace owner
 

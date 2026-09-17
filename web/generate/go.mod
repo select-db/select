@@ -6,3 +6,5 @@ require (
 	github.com/andybalholm/brotli v1.2.2
 	github.com/yuin/goldmark v1.8.2
 )
+
+require golang.org/x/image v0.46.0

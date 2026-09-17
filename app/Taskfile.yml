@@ -227,6 +227,16 @@ tasks:
     cmds:
       - npx playwright test --project=e2e {{.CLI_ARGS}}
 
+  og:
+    summary: Re-renders web/og.png, the image link previews show
+    # Only the browser, not the app: the card is HTML, not a screenshot of
+    # anything running.
+    deps:
+      - install:frontend
+    dir: frontend
+    cmds:
+      - node ../../web/og/render.mjs
+
   shots:
     summary: Recaptures the product screenshots the website shows
     # Same dependencies as the suite above, and for a sharper reason: playwright
