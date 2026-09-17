@@ -70,6 +70,8 @@ doc-sidebar {
   margin-bottom: var(--space-sm-md);
 }
 
+.sidebar-header .logo:hover { opacity: .72; }
+
 .logo-icon { width: 22px; height: 22px; border-radius: var(--br-xs); }
 .logo-text { height: 18px; color: var(--gray-1000); }
 
@@ -119,7 +121,7 @@ doc-sidebar {
 .theme-toggle,
 .menu-toggle {
   box-shadow: var(--shadow-subtle);
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+  transition: background .1s linear, border-color .1s linear, color .1s linear, transform .1s linear;
 }
 
 .search-trigger:hover,
@@ -148,7 +150,8 @@ doc-sidebar {
 }
 
 /* Search input: highlight the field while typing */
-.search-box { transition: border-color 0.15s ease; }
+.search-box { transition: border-color .1s linear; }
+.search-box:hover { border-bottom-color: var(--gray-550); }
 .search-box:focus-within { border-bottom-color: var(--red); }
 
 /* Nav tree */
@@ -246,7 +249,7 @@ main {
   font-weight: var(--fw-normal);
   opacity: 0;
   margin-left: var(--space-xs);
-  transition: opacity 0.15s;
+  transition: opacity .1s linear;
 }
 
 .content h1:hover .anchor,
@@ -425,7 +428,7 @@ main {
   box-shadow: var(--shadow-subtle);
   font-size: var(--fs-sm);
   line-height: 1.6;
-  transition: border-color 0.15s ease;
+  transition: border-color .1s linear;
 }
 
 .content h2.cards + ul li:hover { border-color: var(--red); }
@@ -687,7 +690,7 @@ main {
 .scrollable { scrollbar-width: thin; scrollbar-color: var(--gray-700) transparent; }
 .scrollable::-webkit-scrollbar { width: 5px; height: 5px; }
 .scrollable::-webkit-scrollbar-track { background: transparent; }
-.scrollable::-webkit-scrollbar-thumb { background-color: var(--gray-700); background-clip: content-box; transition: background-color 0.2s; }
+.scrollable::-webkit-scrollbar-thumb { background-color: var(--gray-700); background-clip: content-box; transition: background-color .1s linear; }
 .scrollable::-webkit-scrollbar-thumb:hover { background-color: var(--gray-800); }
 .scrollable::-webkit-scrollbar-track:vertical { border-left: var(--border); }
 .scrollable::-webkit-scrollbar-track:horizontal { border-top: var(--border); }
