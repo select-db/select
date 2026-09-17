@@ -355,32 +355,29 @@ def _collect_from_scopes(
 def _from_clause_keys(expression) -> list[str]:
     """The names a statement's FROM and JOIN clauses reference, in source order.
 
-    Scope.sources cannot answer this. It also carries every CTE visible to the
-    statement, used or not, and an aliased reference appears twice, once under
-    the CTE name and once under the alias. Its order is dict order, not the
-    order the tables were written. Subquery bodies are not descended into, so
-    only top level references are returned.
+    Subquery bodies are not descended into, so only top level references are
+    returned. See _ordered_sources for when this is used instead of sqlglot.
     """
     keys: list[str] = []
 
-    def add(node) -> None:
+    def add_entry(node) -> None:
         if node is None:
             return
         name = node.alias_or_name
         if name not in keys:
             keys.append(name)
         for join in node.args.get("joins") or []:
-            add(join.this)
+            add_entry(join.this)
 
     from_node = expression.args.get("from_") or expression.args.get("from")
     if from_node is not None:
-        add(from_node.this)
+        add_entry(from_node.this)
     elif isinstance(expression, (exp.Table, exp.Subquery)):
-        # An UPDATE's root scope is the FROM entry itself rather than a SELECT
-        # that has one, so the entry is the expression we were handed.
-        add(expression)
+        # The scope expression is the FROM entry itself rather than a statement
+        # that has one, which is the shape UPDATE and DELETE USING produce.
+        add_entry(expression)
     for join in expression.args.get("joins") or []:
-        add(join.this)
+        add_entry(join.this)
     return keys
 
 
@@ -411,9 +408,9 @@ def _cte_name_for(source) -> str:
     """The CTE a source is, when it is one. An aliased reference arrives keyed
     by its alias, which does not say which CTE it names.
     """
-    parent = getattr(source, "expression", None)
-    parent = parent.parent if parent is not None else None
-    return parent.alias if isinstance(parent, exp.CTE) else ""
+    expression = getattr(source, "expression", None)
+    owner = expression.parent if expression is not None else None
+    return owner.alias if isinstance(owner, exp.CTE) else ""
 
 
 def _collect_dml_target(
