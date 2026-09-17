@@ -132,14 +132,10 @@ func TestCompletion(t *testing.T) {
 			if len(meta.Schemas) > 0 {
 				meta.Schemas[0].Name = di.defaultSchema
 			}
-			testCases := core.GetCompletionTestCases(di.defaultSchema)
+			testCases := core.GetCompletionTestCases(di.defaultSchema, di.identifierQuote)
 
 			for _, tc := range testCases {
 				t.Run(tc.Name, func(t *testing.T) {
-					if shouldSkip(tc.SkipDialects, di.name) {
-						t.Skipf("not valid %s syntax", di.name)
-					}
-
 					text, caretCharPos := removeCaret(tc.SQL)
 					caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
 

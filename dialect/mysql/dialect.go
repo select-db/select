@@ -73,8 +73,6 @@ func (d *Dialect) CreateParser(stream antlr.TokenStream) antlr.Parser {
 	return parser
 }
 
-
-
 func (d *Dialect) GetReservedKeywords() map[string]bool {
 	return d.reservedKeywords
 }
@@ -137,32 +135,7 @@ func (d *Dialect) IsValidUnquotedIdentifier(s string) bool {
 	return true
 }
 
-
-
-
-
 // Syntax token queries for context-aware parsing
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // WalkFromClause walks the FROM clause using the MySQL parser
 func (d *Dialect) WalkFromClause(parser antlr.Parser, listener core.RelationRefListener) {
@@ -181,12 +154,49 @@ func (d *Dialect) InferColumnsFromSubquery(parser antlr.Parser, meta core.Metada
 	return []core.Column{}
 }
 
+// operatorFamily groups MySQL types that accept the same operators. Keys are
+// bare type names, matched exactly, so no type can be claimed by another whose
+// spelling it happens to contain.
+var operatorFamily = map[string]string{
+	"bool": "boolean", "boolean": "boolean",
 
+	"tinyint": "numeric", "smallint": "numeric", "mediumint": "numeric",
+	"int": "numeric", "integer": "numeric", "bigint": "numeric",
+	"decimal": "numeric", "dec": "numeric", "numeric": "numeric",
+	"fixed": "numeric", "float": "numeric", "double": "numeric", "real": "numeric",
+
+	"char": "text", "varchar": "text", "binary": "text", "varbinary": "text",
+	"tinytext": "text", "text": "text", "mediumtext": "text", "longtext": "text",
+	"tinyblob": "text", "blob": "text", "mediumblob": "text", "longblob": "text",
+
+	"json": "json",
+
+	"date": "datetime", "datetime": "datetime", "timestamp": "datetime",
+	"time": "datetime", "year": "datetime",
+}
+
+// splitColumnType reduces a MySQL column_type to its bare name and parameter
+// list. Introspection stores the declaration whole, so "tinyint(1) unsigned"
+// and "enum('paint','wall')" arrive with the width, the values and the
+// modifiers attached, and substring matching on that string reads "int" inside
+// both the modifier list and the enum values.
+func splitColumnType(columnType string) (name, args string) {
+	name = strings.ToLower(strings.TrimSpace(columnType))
+	if open := strings.Index(name, "("); open != -1 {
+		if close := strings.LastIndex(name, ")"); close > open {
+			args = name[open+1 : close]
+		}
+		name = name[:open]
+	}
+	name = strings.TrimSpace(name)
+	if space := strings.IndexByte(name, ' '); space != -1 {
+		name = name[:space]
+	}
+	return name, args
+}
 
 // GetOperatorsForType returns operators valid for a given MySQL column type
 func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
-	typeLower := strings.ToLower(columnType)
-
 	// Common comparison operators for all types
 	common := []core.OperatorInfo{
 		{Text: "=", InsertText: "= $0", Description: "Equal to"},
@@ -197,21 +207,22 @@ func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
 		{Text: "IN", InsertText: "IN ($0)", Description: "Matches any value in list"},
 	}
 
-	// Boolean (TINYINT(1) or BOOLEAN). Must precede the numeric test:
-	// "tinyint(1)" contains "int", so numeric would otherwise claim it.
-	if strings.Contains(typeLower, "bool") || typeLower == "tinyint(1)" {
+	name, args := splitColumnType(columnType)
+	// MySQL spells boolean as a one-wide tinyint, and reports it that way.
+	if name == "tinyint" && args == "1" {
+		name = "boolean"
+	}
+
+	switch operatorFamily[name] {
+	case "boolean":
 		return append(common,
 			core.OperatorInfo{Text: "IS TRUE", InsertText: "IS TRUE", Description: "Value is true"},
 			core.OperatorInfo{Text: "IS FALSE", InsertText: "IS FALSE", Description: "Value is false"},
 			core.OperatorInfo{Text: "IS NOT TRUE", InsertText: "IS NOT TRUE", Description: "Value is not true"},
 			core.OperatorInfo{Text: "IS NOT FALSE", InsertText: "IS NOT FALSE", Description: "Value is not false"},
 		)
-	}
 
-	// Numeric types
-	if strings.Contains(typeLower, "int") || strings.Contains(typeLower, "decimal") ||
-		strings.Contains(typeLower, "numeric") || strings.Contains(typeLower, "float") ||
-		strings.Contains(typeLower, "double") || strings.Contains(typeLower, "real") {
+	case "numeric":
 		return append(common,
 			core.OperatorInfo{Text: "<", InsertText: "< $0", Description: "Less than"},
 			core.OperatorInfo{Text: ">", InsertText: "> $0", Description: "Greater than"},
@@ -220,11 +231,8 @@ func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
 			core.OperatorInfo{Text: "BETWEEN", InsertText: "BETWEEN $1 AND $0", Description: "Within range (inclusive)"},
 			core.OperatorInfo{Text: "<=>", InsertText: "<=> $0", Description: "NULL-safe equal"},
 		)
-	}
 
-	// Text types
-	if strings.Contains(typeLower, "char") || strings.Contains(typeLower, "text") ||
-		strings.Contains(typeLower, "varchar") || strings.Contains(typeLower, "blob") {
+	case "text":
 		return append(common,
 			core.OperatorInfo{Text: "<", InsertText: "< $0", Description: "Less than (alphabetically)"},
 			core.OperatorInfo{Text: ">", InsertText: "> $0", Description: "Greater than (alphabetically)"},
@@ -236,21 +244,16 @@ func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
 			core.OperatorInfo{Text: "RLIKE", InsertText: "RLIKE '$0'", Description: "Regular expression match (alias)"},
 			core.OperatorInfo{Text: "SOUNDS LIKE", InsertText: "SOUNDS LIKE '$0'", Description: "Phonetic match (Soundex)"},
 		)
-	}
 
-	// JSON type
-	if strings.Contains(typeLower, "json") {
+	case "json":
 		return append(common,
 			core.OperatorInfo{Text: "->", InsertText: "-> '$0'", Description: "Get JSON object field (as JSON)"},
 			core.OperatorInfo{Text: "->>", InsertText: "->> '$0'", Description: "Get JSON object field (as text)"},
 			core.OperatorInfo{Text: "JSON_CONTAINS", InsertText: "JSON_CONTAINS($0)", Description: "Check if JSON contains value"},
 			core.OperatorInfo{Text: "JSON_OVERLAPS", InsertText: "JSON_OVERLAPS($0)", Description: "Check if JSONs share elements"},
 		)
-	}
 
-	// Date/time types
-	if strings.Contains(typeLower, "date") || strings.Contains(typeLower, "time") ||
-		strings.Contains(typeLower, "year") {
+	case "datetime":
 		return append(common,
 			core.OperatorInfo{Text: "<", InsertText: "< $0", Description: "Before"},
 			core.OperatorInfo{Text: ">", InsertText: "> $0", Description: "After"},

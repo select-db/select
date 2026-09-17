@@ -4,6 +4,7 @@ Schema construction and shared utilities used across lint rule modules.
 from __future__ import annotations
 
 from sqlglot import exp
+from sqlglot.dialects.dialect import Dialect as SqlglotDialect
 from sqlglot.schema import MappingSchema
 
 # Map Go dialect names → sqlglot dialect names
@@ -13,6 +14,22 @@ DIALECT_MAP = {
     "mysql":      "mysql",
     "sqlite":     "sqlite",
 }
+
+
+def sqlglot_dialect_name(go_dialect: str) -> str:
+    """Map a Go dialect name onto sqlglot's. An unknown name passes through so
+    sqlglot raises, rather than being parsed as some other dialect in silence.
+    """
+    name = (go_dialect or "").lower()
+    return DIALECT_MAP.get(name, name)
+
+
+def tokenize(sql: str, sg_dialect: str) -> list:
+    """Tokenize with the dialect's own tokenizer. The generic one knows only
+    double quotes, so MySQL backticks and SQLite brackets arrive as UNKNOWN
+    tokens and disappear from every scan that looks for an identifier.
+    """
+    return list(SqlglotDialect.get_or_raise(sg_dialect or "postgres").tokenize(sql))
 
 
 def pos(node: exp.Expression) -> tuple[int, int]:

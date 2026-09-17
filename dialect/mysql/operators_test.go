@@ -1,14 +1,10 @@
 package mysql
 
-import (
-	"testing"
-
-	core "github.com/selectDb/dialect/core"
-)
+import "testing"
 
 // TestGetOperatorsForType pins the type-to-operator mapping directly, without
-// going through completion. The boolean and numeric families overlap textually
-// ("tinyint(1)" contains "int"), so the order of the checks is load-bearing.
+// going through completion. Introspection hands these strings over whole, so
+// the width, the enum values and the modifiers are all part of the input.
 func TestGetOperatorsForType(t *testing.T) {
 	d := NewDialect()
 
@@ -23,9 +19,10 @@ func TestGetOperatorsForType(t *testing.T) {
 			rejects:    []string{"<", ">", "BETWEEN", "LIKE"},
 		},
 		{
-			columnType: "TINYINT(1)",
+			// The same column with a modifier attached, as MySQL reports it.
+			columnType: "TINYINT(1) UNSIGNED",
 			wants:      []string{"IS TRUE", "IS FALSE"},
-			rejects:    []string{"BETWEEN"},
+			rejects:    []string{"BETWEEN", "LIKE"},
 		},
 		{
 			columnType: "boolean",
@@ -33,24 +30,49 @@ func TestGetOperatorsForType(t *testing.T) {
 			rejects:    []string{"BETWEEN"},
 		},
 		{
+			// A wider tinyint is an ordinary integer, not a boolean.
 			columnType: "tinyint(4)",
 			wants:      []string{"<", ">", "BETWEEN"},
 			rejects:    []string{"IS TRUE"},
 		},
 		{
-			columnType: "int",
-			wants:      []string{"<", ">", "BETWEEN", "<=>"},
+			columnType: "bigint(20) unsigned",
+			wants:      []string{"<", "BETWEEN", "<=>"},
 			rejects:    []string{"IS TRUE", "LIKE"},
 		},
 		{
-			columnType: "bigint unsigned",
-			wants:      []string{"<", "BETWEEN"},
-			rejects:    []string{"IS TRUE"},
-		},
-		{
-			columnType: "text",
+			columnType: "varchar(255)",
 			wants:      []string{"LIKE", "REGEXP", "SOUNDS LIKE"},
 			rejects:    []string{"IS TRUE", "BETWEEN"},
+		},
+		{
+			// Enum values are part of the type string. "paint" contains "int"
+			// and must not make this numeric.
+			columnType: "enum('paint','wall')",
+			wants:      []string{"=", "IN"},
+			rejects:    []string{"BETWEEN", "<=>", "IS TRUE"},
+		},
+		{
+			// Likewise "bool" inside a set value must not make this boolean.
+			columnType: "set('bool','x')",
+			wants:      []string{"=", "IN"},
+			rejects:    []string{"IS TRUE", "BETWEEN"},
+		},
+		{
+			// A geometry type contains "int" and is not a number.
+			columnType: "point",
+			wants:      []string{"=", "IN"},
+			rejects:    []string{"BETWEEN", "<=>"},
+		},
+		{
+			columnType: "datetime",
+			wants:      []string{"<", ">", "BETWEEN"},
+			rejects:    []string{"LIKE", "<=>"},
+		},
+		{
+			columnType: "json",
+			wants:      []string{"->", "->>", "JSON_CONTAINS"},
+			rejects:    []string{"BETWEEN", "LIKE"},
 		},
 	}
 
@@ -72,6 +94,4 @@ func TestGetOperatorsForType(t *testing.T) {
 			}
 		})
 	}
-
-	var _ core.SQLDialect = d
 }

@@ -4,18 +4,22 @@ import "strings"
 
 // CompletionTestCase represents a single completion test case
 type CompletionTestCase struct {
-	Name string
-	SQL  string
-	// SkipDialects names dialects where the SQL is not valid syntax, so the
-	// case says nothing about their completion. Matches ReferencesTest.
-	SkipDialects []string
-	Expected     []CompletionTestExpectation
+	Name     string
+	SQL      string
+	Expected []CompletionTestExpectation
 }
 
 // CompletionTestExpectation represents an expected candidate in a test case
 type CompletionTestExpectation struct {
 	Type CandidateType
 	Text string
+}
+
+// quoteIdentifiersInText replaces the ~ placeholder with the dialect's
+// identifier quote, so one case covers quoting in every dialect rather than
+// naming one dialect's spelling and skipping the rest.
+func quoteIdentifiersInText(text, identifierQuote string) string {
+	return strings.ReplaceAll(text, "~", identifierQuote)
 }
 
 // replaceSchemaInText replaces "main" with the target schema in text
@@ -55,9 +59,10 @@ func GetCompletionTestMetadata() Metadata {
 	}
 }
 
-// GetCompletionTestCases returns the standard completion test cases
-// defaultSchema is used to replace "main" schema references in SQL and expected outputs
-func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
+// GetCompletionTestCases returns the standard completion test cases.
+// defaultSchema replaces "main" schema references in SQL and expected outputs,
+// and identifierQuote replaces the ~ placeholder around quoted identifiers.
+func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionTestCase {
 	return []CompletionTestCase{
 		{
 			Name: "SELECT without FROM",
@@ -79,7 +84,7 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 			},
 		},
 		{
-			Name: "simple table columns",
+			Name: "qualified table columns",
 			SQL:  "SELECT t1.| FROM t1",
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
@@ -87,7 +92,7 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 			},
 		},
 		{
-			Name: "simple table columns",
+			Name: "qualified table columns without FROM",
 			SQL:  "SELECT t1.|",
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
@@ -95,20 +100,16 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 			},
 		},
 		{
-			Name: "simple table columns",
-			SQL:  "SELECT \"t1\".| FROM \"t1\"",
-			// A double-quoted word is a string literal in MySQL, not an identifier.
-			SkipDialects: []string{"mysql"},
+			Name: "quoted table columns",
+			SQL:  quoteIdentifiersInText("SELECT ~t1~.| FROM ~t1~", identifierQuote),
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
 				{Type: CandidateTypeColumn, Text: "c2"},
 			},
 		},
 		{
-			Name: "simple table columns",
-			SQL:  "SELECT \"t1\".|",
-			// A double-quoted word is a string literal in MySQL, not an identifier.
-			SkipDialects: []string{"mysql"},
+			Name: "quoted table columns without FROM",
+			SQL:  quoteIdentifiersInText("SELECT ~t1~.|", identifierQuote),
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
 				{Type: CandidateTypeColumn, Text: "c2"},

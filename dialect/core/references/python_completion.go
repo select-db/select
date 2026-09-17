@@ -62,7 +62,7 @@ func ParseCompletionContextFromPython(
 		Targets:           resp.Targets,
 		SchemaFilter:      resp.SchemaFilter,
 		TargetTable:       resp.TargetTable,
-		KeywordContext:     resp.KeywordContext,
+		KeywordContext:    resp.KeywordContext,
 		InsertTargetTable: resp.InsertTargetTable,
 		ValuePosition:     resp.ValuePosition,
 	}

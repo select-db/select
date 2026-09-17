@@ -4,10 +4,9 @@ Scans tokens backward from caret to determine what to complete.
 """
 from __future__ import annotations
 
-from sqlglot.dialects.dialect import Dialect as SqlglotDialect
 from sqlglot.tokens import TokenType
 
-from analysis.schema import DIALECT_MAP
+from analysis.schema import tokenize
 
 # Must match Go constants
 TARGET_SCHEMA   = 1 << 0
@@ -30,10 +29,10 @@ def detect_completion_context(
     caret_line: int,
     caret_col: int,
     schema_names: list[str],
-    dialect: str = "postgresql",
+    sg_dialect: str,
 ) -> dict:
     caret_offset = _line_col_to_offset(sql, caret_line, caret_col)
-    tokens = _tokenize_up_to(sql, caret_offset, dialect)
+    tokens = _tokenize_up_to(sql, caret_offset, sg_dialect)
 
     if _detect_setting_context(tokens, sql, caret_offset):
         return {
@@ -109,17 +108,8 @@ def _line_col_to_offset(sql: str, line: int, col: int) -> int:
     return len(sql)
 
 
-def _tokenize_up_to(sql: str, caret_offset: int, dialect: str = "postgresql") -> list:
-    all_tokens = list(_tokenizer_for(dialect).tokenize(sql))
-    return [t for t in all_tokens if t.start < caret_offset]
-
-
-def _tokenizer_for(dialect: str):
-    """The dialect's own tokenizer. The generic one does not know MySQL
-    backticks or SQLite brackets, and emits UNKNOWN tokens for them, which
-    hides the quoted identifier from every backward scan in this module."""
-    name = DIALECT_MAP.get((dialect or "").lower(), "postgres")
-    return SqlglotDialect.get_or_raise(name).tokenizer_class()
+def _tokenize_up_to(sql: str, caret_offset: int, sg_dialect: str) -> list:
+    return [t for t in tokenize(sql, sg_dialect) if t.start < caret_offset]
 
 
 # --- Qualified identifier parsing ---
