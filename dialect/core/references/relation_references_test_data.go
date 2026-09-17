@@ -106,17 +106,61 @@ func GetReferencesSelectTests(schema string) []ReferencesTest {
 			},
 		},
 		{
+			// The parenthesized join arrives as an unaliased subquery around
+			// t2, so walking the FROM clause for names does not reach t2 or t3.
+			Name:          "parenthesized join",
+			SQL:           "SELECT * FROM t1 JOIN (t2 JOIN t3 ON t2.c1 = t3.c31) ON t1.c1 = t2.c1",
+			DefaultSchema: schema,
+			ExpectedRefs: []RelationRef{
+				{Schema: schema, Table: "t1", Alias: ""},
+				{Schema: schema, Table: "t2", Alias: ""},
+				{Schema: schema, Table: "t3", Alias: ""},
+			},
+		},
+		{
 			// The alias is the only name the FROM clause gives, and sqlglot
 			// reports the CTE under both its own name and the alias.
 			Name:          "CTE referenced under an alias",
 			SQL:           "WITH cte AS (SELECT c1 FROM t1) SELECT * FROM cte tt1",
 			DefaultSchema: schema,
 			ExpectedRefs: []RelationRef{
-				{Schema: schema, Table: "t1", Alias: "", ScopeStartPos: 8, ScopeEndPos: 14, NestingLevel: 1},
-				{Schema: "", Table: "cte", Alias: "tt1", ScopeStartPos: 16, ScopeEndPos: -1, NestingLevel: 0},
+				{Schema: schema, Table: "t1", Alias: ""},
+				{Schema: "", Table: "cte", Alias: "tt1"},
 			},
 			ExpectedVtabs: []RelationRef{
-				{Table: "cte", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}, ScopeStartPos: 15, ScopeEndPos: -1, NestingLevel: 0},
+				{Table: "cte", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}},
+			},
+		},
+		{
+			// The same aliasing one scope down. Nothing reaches a subquery
+			// body unless the scope it belongs to asks the same question.
+			Name:          "CTE referenced under an alias inside a subquery",
+			SQL:           "WITH cte AS (SELECT c1 FROM t1) SELECT * FROM (SELECT * FROM cte tt1) s",
+			DefaultSchema: schema,
+			ExpectedRefs: []RelationRef{
+				{Schema: schema, Table: "t1", Alias: ""},
+				{Schema: "", Table: "s", Alias: ""},
+				{Schema: "", Table: "cte", Alias: "tt1"},
+			},
+			ExpectedVtabs: []RelationRef{
+				{Table: "cte", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}},
+				{Table: "s", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}},
+			},
+		},
+		{
+			// A CTE reading another CTE under an alias. The alias is not a
+			// relation of its own, and star expansion must not count the
+			// columns once per name the source is known by.
+			Name:          "CTE reading another CTE under an alias",
+			SQL:           "WITH a AS (SELECT c1 FROM t1), b AS (SELECT * FROM a aa) SELECT * FROM b",
+			DefaultSchema: schema,
+			ExpectedRefs: []RelationRef{
+				{Schema: schema, Table: "t1", Alias: ""},
+				{Schema: "", Table: "b", Alias: ""},
+			},
+			ExpectedVtabs: []RelationRef{
+				{Table: "a", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}},
+				{Table: "b", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}},
 			},
 		},
 		{
@@ -126,14 +170,14 @@ func GetReferencesSelectTests(schema string) []ReferencesTest {
 			SQL:           "WITH used AS (SELECT c1 FROM t1), unused AS (SELECT c2 FROM t2) SELECT * FROM used",
 			DefaultSchema: schema,
 			ExpectedRefs: []RelationRef{
-				{Schema: schema, Table: "t1", Alias: "", NestingLevel: 1},
-				{Schema: schema, Table: "t2", Alias: "", NestingLevel: 1},
-				{Schema: "", Table: "used", Alias: "", NestingLevel: 0},
+				{Schema: schema, Table: "t1", Alias: ""},
+				{Schema: schema, Table: "t2", Alias: ""},
+				{Schema: "", Table: "used", Alias: ""},
 			},
 			// Both are still definitions, and both stay completable by name.
 			ExpectedVtabs: []RelationRef{
-				{Table: "used", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}, ScopeStartPos: 32, ScopeEndPos: -1, NestingLevel: 0},
-				{Table: "unused", Columns: []Column{{Name: "c2", Type: "int", Nullable: false}}, ScopeStartPos: 63, ScopeEndPos: -1, NestingLevel: 0},
+				{Table: "used", Columns: []Column{{Name: "c1", Type: "int", Nullable: false}}},
+				{Table: "unused", Columns: []Column{{Name: "c2", Type: "int", Nullable: false}}},
 			},
 		},
 		{
