@@ -24,7 +24,7 @@ func ApplyCustomRules(sql string, rules []CustomRule) []Diagnostic {
 		if err != nil {
 			continue
 		}
-		severity := parseCustomSeverity(rule.Severity)
+		severity := ParseSeverity(rule.Severity)
 		for _, loc := range re.FindAllStringIndex(sql, -1) {
 			startLine, startCol := offsetToLineCol(sql, loc[0])
 			endLine, endCol := offsetToLineCol(sql, loc[1])
@@ -57,15 +57,4 @@ func offsetToLineCol(s string, offset int) (line, col int) {
 		}
 	}
 	return line, col
-}
-
-func parseCustomSeverity(s string) Severity {
-	switch s {
-	case "error":
-		return SeverityError
-	case "hint":
-		return SeverityHint
-	default:
-		return SeverityWarning
-	}
 }

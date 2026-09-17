@@ -41,3 +41,7 @@ go.work.sum
 
 # No binary files
 **/bin/**
+
+# `go build ./cmd/sqlprobe` drops a binary here. dev.sh uses `go run`, but a
+# stray build is a 50MB file one `git add -A` away from the history.
+/sqlprobe
