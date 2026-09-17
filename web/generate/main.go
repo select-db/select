@@ -459,13 +459,6 @@ func build(cfg buildConfig) error {
 		}
 	}
 
-	// Without a homepage the root still redirects into the docs. Once
-	// site/index.html exists it is the root, and the redirect is dropped.
-	if !home && len(pages) > 0 {
-		redirect := fmt.Sprintf("/ /%s/ 301\n", pages[0].HTMLFile)
-		os.WriteFile(filepath.Join(cfg.outDir, "_redirects"), []byte(redirect), 0o644)
-	}
-
 	searchJSON, _ := json.Marshal(searchIndex)
 	os.WriteFile(filepath.Join(cfg.outDir, "search-index.json"), searchJSON, 0o644)
 	writeSitemap(cfg.outDir, pages, marketing)
@@ -510,10 +503,7 @@ func build(cfg buildConfig) error {
 `
 	os.WriteFile(filepath.Join(cfg.outDir, "_headers"), []byte(headers), 0o644)
 
-	// /docs/ is the parent of every docs URL and the address anyone truncating
-	// one lands on. There is no page there, so it goes to the first one.
-	os.WriteFile(filepath.Join(cfg.outDir, "_redirects"),
-		[]byte("/docs /docs/getting-started/ 301\n/docs/ /docs/getting-started/ 301\n"), 0o644)
+	os.WriteFile(filepath.Join(cfg.outDir, "_redirects"), []byte(redirects(pages, home)), 0o644)
 
 	if err := verifyLinks(cfg.outDir); err != nil {
 		return err
@@ -907,6 +897,40 @@ func productFacts(page []byte) []string {
 		return out
 	}
 	return nil
+}
+
+// redirects is the whole _redirects file. Every rule that belongs in it is
+// assembled here, because a static host reads one file and the last writer
+// would otherwise silently drop the others.
+func redirects(pages []*SidebarNode, home bool) string {
+	if len(pages) == 0 {
+		return ""
+	}
+	first := pages[0].HTMLFile
+
+	var b strings.Builder
+	// Without a homepage the root still leads into the docs. Once
+	// website/index.html exists it is the root, and this rule is dropped.
+	if !home {
+		fmt.Fprintf(&b, "/ /%s/ 301\n", first)
+	}
+	// /docs/ is the parent of every docs URL and the address anyone truncating
+	// one lands on. There is no page there, so it goes to the first one.
+	fmt.Fprintf(&b, "/docs /%s/ 301\n/docs/ /%s/ 301\n", first, first)
+
+	// The docs were served without the /docs prefix before, and those URLs are
+	// the ones search engines still hand out: the first result for this
+	// product's own description was a 404. A page that moves without a
+	// redirect loses the ranking it had and drops whoever follows it nowhere.
+	// Both spellings, because a host matches the path it was given.
+	for _, p := range pages {
+		old, moved := strings.CutPrefix(p.HTMLFile, "docs/")
+		if !moved {
+			continue
+		}
+		fmt.Fprintf(&b, "/%s /%s/ 301\n/%s/ /%s/ 301\n", old, p.HTMLFile, old, p.HTMLFile)
+	}
+	return b.String()
 }
 
 // tagline is the one-line summary at the top of llms.txt and llms-full.txt.
