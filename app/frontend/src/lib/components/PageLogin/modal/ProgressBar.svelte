@@ -50,8 +50,10 @@
 		return interpolateColor(from, to, ratio);
 	}
 
+	const elapsed = () => Date.now() - startedAt;
+
 	function animate() {
-		const ratio = Math.min((Date.now() - startedAt) / DURATION_MS, 1);
+		const ratio = Math.min(elapsed() / DURATION_MS, 1);
 
 		progress = START_PROGRESS + (END_PROGRESS - START_PROGRESS) * ratio;
 		color = interpolateMultiStepColor(COLOR_STEPS, ratio);
@@ -67,7 +69,7 @@
 		color = 'rgb(255, 60, 60)';
 	}
 
-	const remaining = () => Math.max(0, Math.ceil((startedAt + DURATION_MS - Date.now()) / 1000));
+	const remaining = () => Math.max(0, Math.ceil((DURATION_MS - elapsed()) / 1000));
 
 	let timeLeft = remaining();
 	let interval: ReturnType<typeof setInterval>;

@@ -4,15 +4,14 @@ import { tryCatch } from '$lib/utils/tryCatch';
 
 import type { LoginProvider } from './loginProviders';
 
-export type LoginFlowStatus = 'starting' | 'waiting' | 'done' | 'error';
-
 export type LoginFlow = {
 	provider: LoginProvider;
-	status: LoginFlowStatus;
+	/** Still waiting on the provider: neither finished nor failed. */
+	running: boolean;
 	/** The code the user types at the provider, once there is one. */
 	userCode: string;
 	verificationUri: string;
-	/** When polling began, so the countdown survives the modal being closed. */
+	/** When the attempt began, so the countdown survives the modal being closed. */
 	startedAt: number;
 	error: string | null;
 };
@@ -30,31 +29,31 @@ export const loginFlowStore = writable<LoginFlow | null>(null);
 
 // Bumped by every start and every cancel, so a superseded attempt cannot write
 // its result over the one that replaced it.
-let generation = 0;
+let latestAttempt = 0;
 
-function update(flow: Partial<LoginFlow>) {
-	loginFlowStore.update((current) => (current ? { ...current, ...flow } : current));
+function patchFlow(fields: Partial<LoginFlow>) {
+	loginFlowStore.update((current) => (current ? { ...current, ...fields } : current));
 }
 
-/** An attempt still worth reattaching to rather than replacing. */
-const live = (flow: LoginFlow | null) => flow?.status === 'starting' || flow?.status === 'waiting';
-
 /**
- * Starts signing in with `provider`, or leaves a live attempt alone: reopening
- * the modal reattaches to the code already on screen instead of asking the
- * provider for a second one.
+ * Starts signing in with `provider`, or leaves a running attempt alone:
+ * reopening the modal reattaches to the code already on screen instead of
+ * asking the provider for a second one.
  */
 export async function startLogin(provider: LoginProvider): Promise<void> {
 	const current = get(loginFlowStore);
-	if (live(current) && current?.provider.id === provider.id) return;
+	if (current?.running) {
+		if (current.provider.id === provider.id) return;
+		// Switching methods mid-attempt: the old poll has to be told.
+		cancelLogin();
+	}
 
-	cancelLogin();
-	const attempt = ++generation;
-	const superseded = () => attempt !== generation;
+	const thisAttempt = ++latestAttempt;
+	const superseded = () => thisAttempt !== latestAttempt;
 
 	loginFlowStore.set({
 		provider,
-		status: 'starting',
+		running: true,
 		userCode: '',
 		verificationUri: '',
 		startedAt: Date.now(),
@@ -64,34 +63,29 @@ export async function startLogin(provider: LoginProvider): Promise<void> {
 	const [codes, codeErr] = await tryCatch(provider.getDeviceCode);
 	if (superseded()) return;
 	if (codeErr || !codes) {
-		update({ status: 'error', error: `Failed to initiate ${provider.name} login.` });
+		patchFlow({ running: false, error: `Failed to initiate ${provider.name} login.` });
 		return;
 	}
 
-	update({
-		status: 'waiting',
-		userCode: codes.user_code,
-		verificationUri: codes.verification_uri,
-		startedAt: Date.now()
-	});
+	patchFlow({ userCode: codes.user_code, verificationUri: codes.verification_uri });
 
 	const [, pollErr] = await tryCatch(provider.startPolling, codes.device_code);
 	if (superseded()) return;
 	if (pollErr) {
 		provider.cancelPolling();
 		const reason = pollErr.message ? `: ${pollErr.message}` : '';
-		update({ status: 'error', error: `Authorization failed or timed out${reason}` });
+		patchFlow({ running: false, error: `Authorization failed or timed out${reason}` });
 		return;
 	}
 
 	// Signed in. The code stays on screen until the session wall closes the modal,
 	// which it does once the workbench is ready.
-	update({ status: 'done' });
+	patchFlow({ running: false });
 }
 
 /** Stops the attempt for good. Closing the modal does not do this. */
 export function cancelLogin(): void {
-	generation++;
+	latestAttempt++;
 	const current = get(loginFlowStore);
 	if (!current) return;
 	current.provider.cancelPolling();

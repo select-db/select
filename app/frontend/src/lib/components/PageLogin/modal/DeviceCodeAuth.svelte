@@ -47,7 +47,7 @@
 	<div class="wrapper">
 		<ModalHeader icon={flow.provider.icon} title="Sign in with {flow.provider.name}" />
 
-		<ProgressBar error={flow.status === 'error'} startedAt={flow.startedAt}></ProgressBar>
+		<ProgressBar error={flow.error !== null} startedAt={flow.startedAt}></ProgressBar>
 
 		<div class="content">
 			{#if flow.error}

@@ -35,14 +35,13 @@ func (s *System) closeOpenFolder() {
 	}
 }
 
-// CheckForLogout is polled twice a second, so a keyring that answers "I cannot
-// tell you" once is not a reason to end the session: only credentials the
-// keyring reports as gone are.
+// CheckForLogout ends the session only on credentials the keyring reports as
+// gone. A keyring that cannot answer is not a sign-out.
 func (s *System) CheckForLogout() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if api.CredentialsCleared() {
+	if api.ReadCredentialStatus() == api.CredentialsMissing {
 		s.closeOpenFolder()
 		desktop.Emit("logout")
 	}
@@ -52,10 +51,7 @@ func (s *System) CheckForLogin() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, accessErr := api.LoadAccessToken()
-	_, refreshErr := api.LoadRefreshToken()
-
-	if accessErr != nil || refreshErr != nil {
+	if api.ReadCredentialStatus() != api.CredentialsPresent {
 		return
 	}
 
