@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/selectDb/dialect/core"
 	coreRefs "github.com/selectDb/dialect/core/references"
@@ -107,6 +108,11 @@ func loadMetadata(metaPath string) (core.Metadata, error) {
 	if err := json.Unmarshal(rawJSON, &meta); err != nil {
 		return core.Metadata{}, fmt.Errorf("parsing -meta: %w", err)
 	}
+	// Every path that builds a catalog from a real database runs this, and
+	// without it a column typed as a named enum has no values, so the probe
+	// reports no enum completion and no enum diagnostic for a catalog that
+	// would produce both.
+	core.EnrichEnumValues(&meta)
 	return meta, nil
 }
 
@@ -120,17 +126,37 @@ func readArg(value string) (string, error) {
 	return string(fileContents), err
 }
 
-// cutCaret removes the first | and reports where it was, as the 1-based line
-// and 0-based column the dialect layer expects. Returns line 0 when absent.
+// cutCaret removes the caret marker and reports where it was, as the 1-based
+// line and 0-based column the dialect layer expects. Returns line 0 when there
+// is no marker.
 func cutCaret(sql string) (string, int, int) {
-	markerIndex := strings.Index(sql, "|")
+	markerIndex := caretMarkerIndex(sql)
 	if markerIndex == -1 {
 		return sql, 0, 0
 	}
 	beforeCaret := sql[:markerIndex]
 	line := strings.Count(beforeCaret, "\n") + 1
-	col := len(beforeCaret) - (strings.LastIndex(beforeCaret, "\n") + 1)
+	lineStart := strings.LastIndex(beforeCaret, "\n") + 1
+	// The analyzer counts characters, so a multi-byte identifier earlier on the
+	// line would move the caret if this counted bytes.
+	col := utf8.RuneCountInString(beforeCaret[lineStart:])
 	return beforeCaret + sql[markerIndex+1:], line, col
+}
+
+// caretMarkerIndex finds the caret marker, stepping over || so a concatenation
+// operator is not mistaken for one.
+func caretMarkerIndex(sql string) int {
+	for i := 0; i < len(sql); i++ {
+		if sql[i] != '|' {
+			continue
+		}
+		if i+1 < len(sql) && sql[i+1] == '|' {
+			i++
+			continue
+		}
+		return i
+	}
+	return -1
 }
 
 func (p probe) printSQL() {

@@ -347,7 +347,19 @@ dialect_test() {
 
 # No step/done_ wrapper: the probe's output is the point, not its exit status.
 dialect_probe() {
-  (cd "$ROOT/dialect" && go run ./cmd/sqlprobe "$@")
+  # go run needs the module directory, but the caller's -meta and @file paths
+  # are relative to where they are standing, so resolve them before moving.
+  local resolved=() arg prefix path
+  for arg in "$@"; do
+    prefix=""; path="$arg"
+    case "$arg" in @*) prefix="@"; path="${arg#@}" ;; esac
+    if [ -e "$path" ]; then
+      path="$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
+      arg="${prefix}${path}"
+    fi
+    resolved+=("$arg")
+  done
+  (cd "$ROOT/dialect" && go run ./cmd/sqlprobe "${resolved[@]}")
 }
 
 dialect() {

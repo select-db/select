@@ -23,10 +23,13 @@ func FindDevAnalyzer() (pythonPath, script string, ok bool) {
 	}
 
 	venvBinDir := "bin"
+	interpreterNames := []string{"python3", "python"}
 	if runtime.GOOS == "windows" {
 		venvBinDir = "Scripts"
+		// A Windows venv has no extensionless interpreter.
+		interpreterNames = []string{"python.exe", "python3.exe"}
 	}
-	for _, interpreterName := range []string{"python3", "python"} {
+	for _, interpreterName := range interpreterNames {
 		interpreterPath := filepath.Join(pythonDir, ".venv", venvBinDir, interpreterName)
 		if _, err := os.Stat(interpreterPath); err == nil {
 			return interpreterPath, script, true
