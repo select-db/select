@@ -114,14 +114,18 @@ def collect_references(
         except Exception:
             scopes = []
 
+        root_refs_start = len(relations)
         if scopes:
-            _collect_from_scopes(
+            root_refs_start = _collect_from_scopes(
                 scopes, schema_dict, default_schema,
                 relations, virtual_tables, seen_rels, seen_vtabs,
                 stmt_idx, bounds,
             )
 
-        _collect_dml_target(stmt, scopes, default_schema, relations, seen_rels, stmt_idx, bounds)
+        _collect_dml_target(
+            stmt, scopes, default_schema, relations, seen_rels, stmt_idx, bounds,
+            insert_index=root_refs_start,
+        )
 
     return {"relations": relations, "virtual_tables": virtual_tables}
 
@@ -136,7 +140,10 @@ def _collect_from_scopes(
     seen_vtabs: set[str],
     stmt_idx: int = 0,
     bounds: _ScopeBounds | None = None,
-) -> None:
+) -> int:
+    """Collect relation references. Returns the index in relations where this
+    statement's root level refs begin, which is where a DML target belongs.
+    """
     # First pass: build CTE definitions and compute their body ranges
     cte_defs: dict[str, dict] = {}
     cte_ranges: dict[str, tuple[int, int]] = {}  # cte_name -> (open_paren_offset, close_paren_offset)
@@ -236,15 +243,20 @@ def _collect_from_scopes(
                     seen_vtabs.add(cte_name)
                     virtual_tables.append(vtab)
 
+    # Everything added from here on is root level, so this is where an UPDATE
+    # or DELETE target goes: after the CTE bodies, before the FROM tables.
+    root_refs_start = len(relations)
+
     # Sub-pass 2: ROOT scopes, subquery refs first, then tables
     for scope in scopes:
         if scope.scope_type != ScopeType.ROOT:
             continue
         nesting = _nesting_level(scope)
         root_start, root_end = _root_scope_range(scope)
-        for alias, source in scope.sources.items():
+        ordered = _ordered_sources(scope)
+        for alias, source in ordered:
             if isinstance(source, Scope):
-                source_name = alias.lower()
+                source_name = (_cte_name_for(scope, source) or alias).lower()
                 if source_name in cte_defs:
                     cte_table = cte_defs[source_name]["table"]
                     effective_alias = alias if alias.lower() != cte_table.lower() else ""
@@ -264,7 +276,8 @@ def _collect_from_scopes(
                         vtab["nesting_level"] = 0  # available at root level
                         seen_vtabs.add(source_name)
                         virtual_tables.append(vtab)
-            elif isinstance(source, exp.Table):
+        for alias, source in ordered:
+            if isinstance(source, exp.Table):
                 _add_table_ref(
                     source, alias, nesting, default_schema, relations, seen_rels, stmt_idx,
                     scope_start_offset=root_start, scope_end_offset=root_end,
@@ -337,6 +350,58 @@ def _collect_from_scopes(
             scope_start_offset=sstart, scope_end_offset=send,
         )
 
+    return root_refs_start
+
+
+def _from_clause_keys(expression) -> list[str]:
+    """The names a statement's FROM and JOIN clauses reference, in source order.
+
+    Scope.sources cannot answer this. It also carries every CTE visible to the
+    statement, used or not, and an aliased reference appears twice, once under
+    the CTE name and once under the alias. Its order is dict order, not the
+    order the tables were written. Subquery bodies are not descended into, so
+    only top level references are returned.
+    """
+    keys: list[str] = []
+
+    def add(node) -> None:
+        if node is None:
+            return
+        name = node.alias_or_name
+        if name and name not in keys:
+            keys.append(name)
+        for join in node.args.get("joins") or []:
+            add(join.this)
+
+    from_node = expression.args.get("from_") or expression.args.get("from")
+    if from_node is not None:
+        add(from_node.this)
+    elif isinstance(expression, (exp.Table, exp.Subquery)):
+        # An UPDATE's root scope is the FROM entry itself rather than a SELECT
+        # that has one, so the entry is the expression we were handed.
+        add(expression)
+    for join in expression.args.get("joins") or []:
+        add(join.this)
+    return keys
+
+
+def _ordered_sources(scope) -> list[tuple]:
+    """Scope sources that the FROM clause actually references, in source order."""
+    keys = _from_clause_keys(scope.expression)
+    if not keys:
+        return list(scope.sources.items())
+    return [(key, scope.sources[key]) for key in keys if key in scope.sources]
+
+
+def _cte_name_for(scope, source) -> str:
+    """The CTE this source is, when it is one. An aliased reference arrives
+    keyed by its alias, which tells us nothing about which CTE it names.
+    """
+    for cte_name, cte_scope in scope.cte_sources.items():
+        if cte_scope is source:
+            return cte_name
+    return ""
+
 
 def _collect_dml_target(
     stmt: exp.Expression,
@@ -346,8 +411,16 @@ def _collect_dml_target(
     seen: set[tuple],
     stmt_idx: int = 0,
     bounds: _ScopeBounds | None = None,
+    insert_index: int | None = None,
 ) -> None:
-    """Extract tables from UPDATE/INSERT/DELETE when traverse_scope misses them."""
+    """Extract tables from UPDATE/INSERT/DELETE when traverse_scope misses them.
+
+    traverse_scope does not report the target of an UPDATE or DELETE, only the
+    tables its FROM clause reads, so appending here would put the target after
+    the tables it is being updated from. Callers pass insert_index to place it
+    in source order instead, which matters because an unqualified column
+    resolves to the first reference that has it.
+    """
     if not isinstance(stmt, (exp.Update, exp.Insert, exp.Delete)):
         return
 
@@ -381,6 +454,7 @@ def _collect_dml_target(
             if isinstance(source, exp.Table):
                 scoped_tables.add(source.name.lower())
 
+    insert_at = len(relations) if insert_index is None else insert_index
     for tbl in tables_to_add:
         table_name = tbl.name
         if not table_name or table_name.lower() in scoped_tables:
@@ -406,7 +480,7 @@ def _collect_dml_target(
             dml_end = bounds.find_statement_end(col)
 
         seen.add(key)
-        relations.append({
+        relations.insert(insert_at, {
             "table":              table_name,
             "schema":             schema_name,
             "database":           tbl.catalog or "",
@@ -419,6 +493,7 @@ def _collect_dml_target(
             "scope_start_offset": dml_start,
             "scope_end_offset":   dml_end,
         })
+        insert_at += 1
 
 
 def _first_token_meta(expr: exp.Expression) -> dict | None:
