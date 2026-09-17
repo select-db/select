@@ -34,7 +34,7 @@ func (r *LintRunner) Run(sql string, d core.SQLDialect, meta core.Metadata, cfg 
 			if override.Severity == "off" {
 				continue
 			}
-			diag.Severity = parseCustomSeverity(override.Severity)
+			diag.Severity = ParseSeverity(override.Severity)
 		}
 		diags = append(diags, diag)
 	}

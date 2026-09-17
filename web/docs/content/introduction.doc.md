@@ -5,7 +5,7 @@ SELECT is an SQL client shaped like an IDE. Schema-aware completion, real-time l
 
 This guide takes you from download to your first query in about five minutes.
 
-![The application: the schema tree opened down to a table's columns, a query mid-completion with the column list over it, its results in the grid below, and the chat answering a question about that same query.](/shots/hero.wide.light.png)
+![The application: the schema tree opened down to a table's columns, a query mid-completion with the column list over it, its results in the grid below, and the chat answering a question about that same query.](/shots/hero.wide.light.webp)
 
 ## 1. Download
 
@@ -62,7 +62,7 @@ SELECT supports **PostgreSQL**, **MySQL**, and **SQLite**.
 
 3. Click **Test connection** to check it. There is nothing to save: the form writes `db.config.json` for you once the connection is valid.
 
-![The connection form: dialect, name, and a DSN written as $WAREHOUSE_DSN rather than a literal connection string.](/shots/getting-started.database.light.png)
+![The connection form: dialect, name, and a DSN written as $WAREHOUSE_DSN rather than a literal connection string.](/shots/getting-started.database.light.webp)
 
 > [!TIP]
 > DSN fields support environment variables (`$VAR_NAME`), resolved from your workspace `.env` file at connection time. Keep credentials in `.env` so you can safely commit your connection config to git.
@@ -74,7 +74,7 @@ For full details, see [Connecting a Database](/docs/databases/connecting/).
 1. Right-click your database folder and choose **New file...** to create a `.sql` file. (In a hurry? `Cmd+N` opens a [scratch tab](/docs/sql/sql-files/#scratch-files) you can save later.)
 2. Press `Cmd+Shift+D` to open the database picker and associate the file with the connection you just created.
 
-   ![The database picker open over a SQL file, with the warehouse connection ticked.](/shots/getting-started.picker.light.png)
+   ![The database picker open over a SQL file, with the warehouse connection ticked.](/shots/getting-started.picker.light.webp)
 3. Start typing. Completion comes from the schema SELECT just read off your
    database, so after `FROM` you get your own tables, and after a table you get
    its columns with their types. Misspell one and the linter marks it before
@@ -86,7 +86,7 @@ For full details, see [Connecting a Database](/docs/databases/connecting/).
 
 4. Press `Cmd+Enter` to run. Results appear in a table below the editor.
 
-   ![A query run: twelve rows of weekly revenue in the result grid, with the time it took beside the row count.](/shots/getting-started.result.light.png)
+   ![A query run: twelve rows of weekly revenue in the result grid, with the time it took beside the row count.](/shots/getting-started.result.light.webp)
 
 You're up and running.
 

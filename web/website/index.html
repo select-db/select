@@ -14,6 +14,17 @@
   <meta property="og:description"
     content="Schema-aware completion, real-time linting, and a workspace that is a folder in your repo.">
   <meta property="og:url" content="https://select-db.com/">
+  <!-- The link preview card. Without an image a shared link renders as a line
+     of text in Slack, on X and in every other unfurl. -->
+  <meta property="og:image" content="https://select-db.com/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="SELECT: the SQL client that lives in your repo. PostgreSQL, MySQL, SQLite.">
+  <meta property="og:site_name" content="SELECT">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SELECT: the SQL client that lives in your repo">
+  <meta name="twitter:description" content="Schema-aware completion, real-time linting, and a workspace that is a folder in your repo.">
+  <meta name="twitter:image" content="https://select-db.com/og.png">
   <!-- The facts on this page, stated once more in a form a machine can read
      without inferring them from the layout: what the product is, where it
      runs, and what the two shipping editions cost. Kept in this file, beside
@@ -32,34 +43,24 @@
 {"@type":"Offer","name":"Solo","price":"0","priceCurrency":"USD","description":"Free forever, not a trial. The full client, git collaboration through your own remote."},
 {"@type":"Offer","name":"Teams","price":"12","priceCurrency":"USD","description":"Per seat per month, beta price, normally 17. Proxified connections, centralised roles, audit log, MCP and API keys."}]}
 </script>
+  <script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"Organization","@id":"https://select-db.com/#org","name":"SELECT",
+"url":"https://select-db.com/","logo":"https://select-db.com/og.png",
+"sameAs":["https://github.com/select-db/select"]},
+{"@type":"WebSite","@id":"https://select-db.com/#site","name":"SELECT",
+"url":"https://select-db.com/","publisher":{"@id":"https://select-db.com/#org"}}]}
+</script>
   <link rel="alternate" type="text/plain" href="/llms.txt" title="Site index for language models">
   <!-- Picks the app's own light/dark palette before first paint, from the same
      localStorage key the docs site writes: a reader who chose dark over there
-     does not get flashed white here. -->
+     does not get flashed white here. This one line has to run before the body
+     exists; everything else the page needs is in /theme.js, loaded at the end,
+     so the toggle, the screenshot swap and the keycap labels have one
+     definition rather than one per surface. -->
   <script>
     document.documentElement.dataset.theme =
       localStorage.getItem("doc-theme") || (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
-
-    // The screenshots come in a light cut and a dark cut. <picture> art-directs on
-    // width on its own, but its media queries only ever see the system preference,
-    // never a choice made here, so the toggle renames the files itself. They
-    // differ by one word: hero.<framing>.<theme>.png.
-    function paintShots(theme) {
-      document.querySelectorAll("picture[data-shot] source, picture[data-shot] img").forEach(el => {
-        const attr = el.tagName === "IMG" ? "src" : "srcset";
-        const next = el[attr].replace(/\.(light|dark)\.png/, "." + theme + ".png");
-        if (next !== el[attr]) el[attr] = next;
-      });
-    }
-
-    function toggleTheme() {
-      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-      document.documentElement.dataset.theme = next;
-      localStorage.setItem("doc-theme", next);
-      paintShots(next);
-    }
-
-    addEventListener("DOMContentLoaded", () => paintShots(document.documentElement.dataset.theme));
   </script>
   <style>
     /*THEME*/
@@ -91,12 +92,23 @@
       --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / .02), 0px 1px 1px 0px lch(80% 0 0 / .02);
       /* .theme has no darker step for the accent, and lightening a solid red
      button drops white text under 4.5:1, so the hover deepens it instead. */
-      --red-hover: rgb(190, 38, 38)
+      --red-hover: rgb(190, 38, 38);
+      /* --orange is an accent for fills and borders; as small text on a
+     near-white page it lands at 2.6:1. Same hue, weight that passes. */
+      --orange-text: hsl(24, 88%, 34%);
+      /* Same story for the accent: 4.3:1 as link text, one step deeper passes. */
+      --red-text: rgb(190, 38, 38);
+      /* The wash behind the top of the page. Faint here: the ground is nearly
+     white, and anything stronger reads as a print fault rather than as light. */
+      --glow: rgba(172, 45, 49, .12)
     }
 
     :root[data-theme=dark] {
       --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / .06), 0px 1px 1px 0px lch(0% 0 0 / .06);
-      --red-hover: var(--red-glow)
+      --red-hover: var(--red-glow);
+      --orange-text: var(--orange);
+      --red-text: var(--red);
+      --glow: rgba(172, 45, 49, .34)
     }
 
     *,
@@ -113,6 +125,16 @@
       -webkit-font-smoothing: antialiased
     }
 
+    /* The same wash the link preview card carries, behind the headline.
+   On main rather than on .hero so it crosses into the screenshot below
+   without a seam, sized in pixels so it stays a glow at the top rather than
+   stretching with the page, and centred low enough that it has faded out
+   before main's top edge -- the header above it is opaque, so any colour
+   left at that line shows up as a step across the page. */
+    main {
+      background: radial-gradient(900px 560px at 20% 420px, var(--glow), transparent 68%) no-repeat
+    }
+
     h1,
     h2,
     h3 {
@@ -127,7 +149,7 @@
     }
 
     a {
-      color: var(--red)
+      color: var(--red-text)
     }
 
     /* Every hoverable surface answers at the same speed. The properties are
@@ -157,15 +179,42 @@
       border-bottom: var(--border)
     }
 
+    /* --gray-700 is 3.1:1 against the page at this size. One step down the
+   same scale passes, and the label is still quieter than the prose. */
     .k {
       font: 500 var(--t1)/1.4 var(--m);
       letter-spacing: .14em;
       text-transform: uppercase;
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .mono {
       font-family: var(--m)
+    }
+
+    /* Keycaps, in the docs' treatment, so a shortcut looks the same whichever
+   page a reader meets it on. The cap is authored in the Mac spelling and
+   /theme.js relabels data-mod off a Mac, exactly as in the docs. */
+    kbd {
+      display: inline-block;
+      min-width: 1.4em;
+      margin: 0 .1em;
+      padding: .15em .45em;
+      font: 500 .8em/1.4 var(--m);
+      text-align: center;
+      color: var(--gray-1000);
+      background: var(--gray-100);
+      border: var(--border);
+      border-bottom-width: 2px;
+      border-radius: var(--br-sm);
+      box-shadow: var(--shadow-subtle);
+      white-space: nowrap
+    }
+
+    /* --shadow-subtle is black at 6%, which is nothing against a near-black
+   page, and a keycap with no lift is a bordered box. */
+    :root[data-theme=dark] kbd {
+      box-shadow: 0 1px 2px -2px lch(100% 0 0 / .22)
     }
 
     /* header */
@@ -213,8 +262,8 @@
     .beta {
       font: 700 .58rem/1 var(--m);
       letter-spacing: .14em;
-      color: var(--orange);
-      border: 1px solid var(--orange);
+      color: var(--orange-text);
+      border: 1px solid var(--orange-text);
       border-radius: var(--br-xs);
       padding: 2px 4px;
       vertical-align: 2px
@@ -473,7 +522,7 @@
     .fine {
       margin-top: var(--s3);
       font: var(--t1)/1.6 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     /* product shots, drawn in HTML until the capture pipeline replaces them with
@@ -495,7 +544,7 @@
     figcaption {
       margin-top: var(--s1);
       font: var(--t1)/1.5 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .shot {
@@ -513,7 +562,7 @@
       margin: 0;
       border-bottom: var(--border);
       background: var(--gray-100);
-      color: var(--gray-700);
+      color: var(--gray-800);
       font-size: var(--t1);
       line-height: 1.4
     }
@@ -580,7 +629,7 @@
 
     .cm,
     .dim {
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .shot .warn {
@@ -612,7 +661,7 @@
 
     .rows b {
       font-weight: 400;
-      color: var(--gray-700);
+      color: var(--gray-800);
       white-space: nowrap
     }
 
@@ -639,7 +688,7 @@
       margin: 0;
       border-top: var(--border);
       background: var(--gray-100);
-      color: var(--gray-700);
+      color: var(--gray-800);
       font-size: var(--t1);
       line-height: 1.4
     }
@@ -717,7 +766,7 @@
     /* .row p is the more specific selector, so the aside keeps its own colour
        only if it is named here too. */
     .row p.fine {
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .row a,
@@ -805,7 +854,7 @@
     .amt s,
     .amt span {
       font: var(--t1)/1 var(--m);
-      color: var(--gray-700);
+      color: var(--gray-800);
       letter-spacing: .04em
     }
 
@@ -830,7 +879,7 @@
 
     .note {
       font: var(--t1)/1.5 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .tiers .btn {
@@ -866,12 +915,12 @@
       }
     }
 
-    .fcols h4 {
+    .fcols h3 {
       margin: 0 0 10px;
       font: 500 var(--t1)/1 var(--m);
       letter-spacing: .13em;
       text-transform: uppercase;
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .fcols ul {
@@ -898,7 +947,7 @@
       gap: var(--s2);
       justify-content: space-between;
       font: var(--t1)/1 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
   </style>
 </head>
@@ -936,11 +985,11 @@
       <div class="f" style="padding-bottom: 22px;">
         <figure>
           <picture data-shot>
-            <source media="(min-width:760px) and (prefers-color-scheme:dark)" srcset="/shots/hero.wide.dark.png"
+            <source media="(min-width:760px) and (prefers-color-scheme:dark)" srcset="/shots/hero.wide.dark.webp"
               width="2160" height="1350">
-            <source media="(min-width:760px)" srcset="/shots/hero.wide.light.png" width="2160" height="1350">
-            <source media="(prefers-color-scheme:dark)" srcset="/shots/hero.narrow.dark.png" width="1290" height="1140">
-            <img src="/shots/hero.narrow.light.png" width="1290" height="1140" fetchpriority="high" decoding="async"
+            <source media="(min-width:760px)" srcset="/shots/hero.wide.light.webp" width="2160" height="1350">
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/hero.narrow.dark.webp" width="1290" height="1140">
+            <img src="/shots/hero.narrow.light.webp" width="1290" height="1140" fetchpriority="high" decoding="async"
               alt="A revenue query open in SELECT, run against the warehouse database, with the weekly result grid below it.">
           </picture>
         </figure>
@@ -981,14 +1030,14 @@
             two joins, the CTE you stopped using, the <span class="mono">= NULL</span> that silently matches
             nothing.</p>
           <p>Your own rules go in a file in the repo, scoped by path, so the
-            rule your team agreed on is the rule everyone gets. <span class="mono">⌘↵</span> runs. Nothing
+            rule your team agreed on is the rule everyone gets. <kbd data-mod="cmd">Cmd</kbd>+<kbd>Enter</kbd> runs. Nothing
             here needs the mouse.</p>
           <a href="/docs/sql/lint-rules/">Lint rules →</a>
         </div>
         <figure>
           <picture data-shot>
-            <source media="(prefers-color-scheme:dark)" srcset="/shots/lint.dark.png" width="1280" height="512">
-            <img src="/shots/lint.light.png" width="1280" height="512" loading="lazy" decoding="async"
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/lint.dark.webp" width="1280" height="512">
+            <img src="/shots/lint.light.webp" width="1280" height="512" loading="lazy" decoding="async"
               alt="A draft query in SELECT with SELECT * underlined, and the workspace lint rule that flagged it: avoid SELECT *, list columns explicitly.">
           </picture>
         </figure>
@@ -1012,8 +1061,8 @@
         </div>
         <figure>
           <picture data-shot>
-            <source media="(prefers-color-scheme:dark)" srcset="/shots/git.dark.png" width="1879" height="1039">
-            <img src="/shots/git.light.png" width="1879" height="1039" loading="lazy" decoding="async"
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/git.dark.webp" width="1879" height="1039">
+            <img src="/shots/git.light.webp" width="1879" height="1039" loading="lazy" decoding="async"
               alt="SELECT's source control panel on a feature branch, showing a modified query and its diff against the last commit.">
           </picture>
         </figure>
@@ -1037,8 +1086,8 @@
         </div>
         <figure>
           <picture data-shot>
-            <source media="(prefers-color-scheme:dark)" srcset="/shots/roles.dark.png" width="2359" height="1561">
-            <img src="/shots/roles.light.png" width="2359" height="1561" loading="lazy" decoding="async"
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/roles.dark.webp" width="2359" height="1561">
+            <img src="/shots/roles.light.webp" width="2359" height="1561" loading="lazy" decoding="async"
               alt="A role in SELECT granted read access to a database, with one column, customers.email, denied.">
           </picture>
         </figure>
@@ -1060,8 +1109,8 @@
         </div>
         <figure>
           <picture data-shot>
-            <source media="(prefers-color-scheme:dark)" srcset="/shots/agent.dark.png" width="1469" height="1426">
-            <img src="/shots/agent.light.png" width="1469" height="1426" loading="lazy" decoding="async"
+            <source media="(prefers-color-scheme:dark)" srcset="/shots/agent.dark.webp" width="1469" height="1426">
+            <img src="/shots/agent.light.webp" width="1469" height="1426" loading="lazy" decoding="async"
               alt="SELECT's chat panel, where a query for a customer email column is refused: permission denied for the analyst-readonly role.">
           </picture>
         </figure>
@@ -1105,7 +1154,7 @@
           <div class="mid">
             <h3>Teams</h3>
             <p class="amt"><b>$12</b><span>/ SEAT / MONTH</span><s>$17</s></p>
-            <p class="note" style="color:var(--orange)">BETA PRICE</p>
+            <p class="note" style="color:var(--orange-text)">BETA PRICE</p>
             <ul>
               <li>Everything in Solo</li>
               <li>Proxified connections: credentials off laptops, encrypted server-side</li>
@@ -1119,7 +1168,7 @@
           <div>
             <h3>Enterprise</h3>
             <p class="amt"><b>Talk</b><span>DEDICATED OR ON-PREM</span></p>
-            <p class="note" style="color:var(--orange)">NOT SHIPPED YET</p>
+            <p class="note" style="color:var(--orange-text)">NOT SHIPPED YET</p>
             <p style="font-size:.9rem;color:var(--gray-900)">We are taking design partners now and building
               it with them. Everything in Teams, plus:</p>
             <ul>
@@ -1151,6 +1200,8 @@
   </main>
 
   <!--FOOTER-->
+
+  <script src="/theme.js"></script>
 
 </body>
 

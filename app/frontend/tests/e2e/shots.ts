@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, holdSession as keepSession, test, type Locator, type Page } from './wails';
 import { testId, editor, labelledInput } from './selectors';
 
@@ -176,9 +180,33 @@ export async function shot(
 	// `animations: 'disabled'` waits out CSS animations and transitions, or
 	// fast-forwards them: the settle a trailing sleep used to approximate, done
 	// by the tool that can observe it.
-	const options = { path: `${dir}/${name}.png`, animations: 'disabled' as const };
-	if (clip) await clip.screenshot(options);
-	else await page.screenshot(options);
+	const options = { animations: 'disabled' as const };
+	const png = clip ? await clip.screenshot(options) : await page.screenshot(options);
+	writeWebP(`${dir}/${name}.webp`, png);
+}
+
+/**
+ * Writes the capture as lossless WebP, which is the one format the site serves.
+ *
+ * Playwright only encodes PNG, and these pictures are flat colour and sharp
+ * edges -- the case WebP's lossless mode is built for. Same pixels, about a
+ * third of the bytes. `-z 9` is its slowest setting and its smallest output,
+ * which a capture can afford: it is a deliberate act, not the hot path.
+ */
+function writeWebP(dest: string, png: Buffer) {
+	const tmp = mkdtempSync(join(tmpdir(), 'shot-'));
+	try {
+		const src = join(tmp, 'capture.png');
+		writeFileSync(src, png);
+		execFileSync('cwebp', ['-quiet', '-lossless', '-z', '9', src, '-o', dest]);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+			throw new Error('cwebp not found. Install libwebp: brew install webp, or apt install webp');
+		}
+		throw err;
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
 }
 
 export { expect, test, type Locator, type Page };

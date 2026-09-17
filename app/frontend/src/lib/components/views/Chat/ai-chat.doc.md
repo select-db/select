@@ -4,7 +4,7 @@ The AI chat is an in-app agent that can explore your database schemas, run queri
 
 It inherits the current user's [permissions](/docs/workspace/permissions/), so it can only access what you can.
 
-![The chat having read a query file and proposed a rewrite: the diff open beside it with Allow and Deny, and the same choice in the chat, marked awaiting approval.](/shots/chat.light.png)
+![The chat having read a query file and proposed a rewrite: the diff open beside it with Allow and Deny, and the same choice in the chat, marked awaiting approval.](/shots/chat.light.webp)
 
 ## Setup
 

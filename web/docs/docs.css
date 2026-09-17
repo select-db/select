@@ -17,7 +17,7 @@
   text-decoration: none;
   text-align: center;
 }
-.banner b { color: var(--orange); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 500; }
+.banner b { color: var(--orange-text); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 500; }
 .banner .short { display: none; }
 .banner em { font-style: normal; color: var(--red); }
 .banner:hover { background: var(--gray-200); }
@@ -27,7 +27,7 @@
    carries the same message on its own and the eyebrow and arrow come off. */
 @media (max-width: 980px) {
   .banner .long, .banner b, .banner em { display: none; }
-  .banner .short { display: inline; color: var(--orange); }
+  .banner .short { display: inline; color: var(--orange-text); }
 }
 
 
@@ -279,18 +279,18 @@ main {
 .content strong { font-weight: var(--fw-bold); color: var(--gray-1000); }
 .content em { font-style: italic; }
 .content a {
-  color: var(--red);
+  color: var(--red-text);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
   /* The rule under a link should not compete with the word. */
   text-decoration-color: color-mix(in srgb, var(--red) 35%, transparent);
 }
-.content a:hover { text-decoration-color: var(--red); }
+.content a:hover { text-decoration-color: var(--red-text); }
 .content a:hover { color: var(--gray-1000); }
 .content ul, .content ol { margin-bottom: var(--space-lg); padding-left: var(--space-lg); }
 .content li { margin-bottom: var(--space-sm); padding-left: var(--space-xs); }
-.content li::marker { color: var(--gray-700); }
+.content li::marker { color: var(--gray-800); }
 .content li strong { font-weight: var(--fw-bold); color: var(--gray-1000); }
 /* Tighten the gap where a paragraph leads directly into a list. */
 .content p + ul, .content p + ol { margin-top: calc(-1 * var(--space-xs)); }
@@ -355,7 +355,7 @@ main {
 .content figure.code figcaption {
   padding: var(--space-xs) var(--space-md);
   font: var(--fs-xs) / 1.4 var(--fm);
-  color: var(--gray-700);
+  color: var(--gray-800);
   background: var(--gray-200);
   border: var(--border);
   border-bottom: 0;
@@ -392,7 +392,7 @@ main {
   font: 500 var(--fs-xs) / 1.4 var(--fm);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--gray-700);
+  color: var(--gray-800);
   content: "Note";
 }
 
@@ -471,17 +471,18 @@ main {
   font: 500 var(--fs-xs) / 1.4 var(--fm);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--gray-700);
+  color: var(--gray-800);
 }
 .content td { font-size: var(--fs-md); }
 .content td code { font-size: 0.8em; }
 /* A screenshot in the prose gets the frame the marketing page gives its
    shots, so a figure here and a figure there are the same object. */
-.content img { max-width: 100%; border-radius: var(--br-md); }
+.content img { max-width: 100%; height: auto; border-radius: var(--br-md); }
 .content picture[data-shot] { display: block; margin: var(--space-lg) 0; }
 .content picture[data-shot] img {
   display: block;
   width: 100%;
+  height: auto;
   border: var(--border);
   box-shadow: var(--shadow-subtle);
   background: var(--gray-200);
@@ -503,9 +504,9 @@ main {
   font: 500 var(--fs-xs) / 1.4 var(--fm);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--gray-700);
+  color: var(--gray-800);
 }
-.crumbs a { color: var(--gray-700); text-decoration: none; }
+.crumbs a { color: var(--gray-800); text-decoration: none; }
 .crumbs a:hover { color: var(--red); }
 .crumbs > span:last-child { color: var(--gray-900); }
 
@@ -516,9 +517,9 @@ main {
   gap: var(--space-md);
   margin-top: var(--space-xxl);
   font-size: var(--fs-sm);
-  color: var(--gray-700);
+  color: var(--gray-800);
 }
-.page-meta a { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--gray-700); text-decoration: none; }
+.page-meta a { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--gray-800); text-decoration: none; }
 .page-meta .gh { width: 14px; height: 14px; fill: currentColor; }
 /* Same glyph the sidebar puts on its one outbound entry, and the same job:
    this link leaves the site. Muted, because it reports what the link does
@@ -547,7 +548,7 @@ main {
 
 .toc-label {
   padding: 0 var(--space-sm) var(--space-sm);
-  color: var(--gray-700);
+  color: var(--gray-800);
   font: 500 var(--fs-xs) / 1.4 var(--fm);
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -597,7 +598,7 @@ main {
   width: 16px;
   height: 16px;
   margin-right: var(--space-sm);
-  color: var(--gray-700);
+  color: var(--gray-800);
   flex-shrink: 0;
 }
 
@@ -643,7 +644,7 @@ main {
 
 .search-results .result-text { min-width: 0; flex: 1; }
 .search-results .result-title { color: var(--gray-1000); line-height: 1.5; }
-.search-results .result-path { color: var(--gray-700); font-size: var(--fs-xs); margin-top: 1px; }
+.search-results .result-path { color: var(--gray-800); font-size: var(--fs-xs); margin-top: 1px; }
 .search-results .result-excerpt {
   color: var(--gray-800);
   font-size: var(--fs-xs);
@@ -659,7 +660,7 @@ main {
    without reading it. The accent, not a highlighter: ten results with yellow
    blocks through them is a ransom note. */
 .search-results mark { background: none; color: var(--red); font-weight: var(--fw-bold); }
-.search-results .no-results { padding: var(--space-md); color: var(--gray-700); font-size: var(--fs-sm); text-align: center; }
+.search-results .no-results { padding: var(--space-md); color: var(--gray-800); font-size: var(--fs-sm); text-align: center; }
 
 /* What the keys do, stated once at the bottom rather than guessed at. */
 .search-hints {
@@ -667,7 +668,7 @@ main {
   gap: var(--space-md);
   padding: var(--space-xs-sm) var(--space-md);
   border-top: var(--border);
-  color: var(--gray-700);
+  color: var(--gray-800);
   font-size: var(--fs-xs);
 }
 

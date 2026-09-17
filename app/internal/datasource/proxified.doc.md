@@ -32,7 +32,7 @@ then give a role an allow rule for it.
 
 Proxified connections expose pool tuning:
 
-![The lower half of a proxified connection form: the required host key, the authentication method, and the four pool settings.](/shots/dbform.proxified.light.png)
+![The lower half of a proxified connection form: the required host key, the authentication method, and the four pool settings.](/shots/dbform.proxified.light.webp)
 
 | Setting               | Default | Description                          |
 |-----------------------|---------|--------------------------------------|

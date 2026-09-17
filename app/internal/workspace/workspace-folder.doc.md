@@ -11,9 +11,9 @@ directory. Your files stay where you put them.
 
 Signing in with no folder open leaves you in the app itself, with the folders
 you opened recently where your files would be. Open one from there, or with the
-button in the top left corner -- `Cmd+O` on macOS, `Ctrl+O` elsewhere.
+button in the top left corner -- `Cmd+O`.
 
-![The app with no folder open: recent folders where the files would be, and the workspace button in the top left corner.](/shots/folder.start.light.png)
+![The app with no folder open: recent folders where the files would be, and the workspace button in the top left corner.](/shots/folder.start.light.webp)
 
 What happens next depends on what is in the folder.
 
@@ -24,7 +24,7 @@ the right server and builds the tree.
 Creating it adds that one file and changes nothing else; an empty folder also
 gets a small sample database to start from.
 
-![Opening a folder that is not a workspace yet: its path, the workspace name filled in from the folder, and what creating one will add.](/shots/folder.setup.light.png)
+![Opening a folder that is not a workspace yet: its path, the workspace name filled in from the folder, and what creating one will add.](/shots/folder.setup.light.webp)
 
 **On another server.** Roles and permissions come from the server a workspace
 lives on, so sign out, pick that server, and open the folder again.

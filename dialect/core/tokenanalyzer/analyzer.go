@@ -198,7 +198,7 @@ func responseToDiagnostics(resp response) []Diagnostic {
 	for _, d := range resp.Diagnostics {
 		diags = append(diags, Diagnostic{
 			RuleID:    d.RuleID,
-			Severity:  parseSeverity(d.Severity),
+			Severity:  ParseSeverity(d.Severity),
 			Message:   d.Message,
 			StartLine: d.StartLine,
 			StartCol:  d.StartCol,
@@ -207,15 +207,4 @@ func responseToDiagnostics(resp response) []Diagnostic {
 		})
 	}
 	return diags
-}
-
-func parseSeverity(s string) Severity {
-	switch s {
-	case "error":
-		return SeverityError
-	case "hint":
-		return SeverityHint
-	default:
-		return SeverityWarning
-	}
 }

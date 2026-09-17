@@ -177,7 +177,7 @@ sit in one directory, share one name and change in one diff:
 app/frontend/src/lib/components/views/Chat/
   ai-chat.doc.md          the page
   ai-chat.shot.ts         the shot
-  shots/chat.light.png    what it wrote
+  shots/chat.light.webp   what it wrote
 ```
 
 The spec writes into a `shots/` directory beside itself (`shotsDirFor` reads
@@ -198,6 +198,17 @@ under `app/frontend/`, which is ESM. Without a root declaring the same, a spec
 in `app/internal/` loads as CJS and fails on the first `import`. The file holds
 nothing else; there is no npm project at the root.
 
+Every capture is written as **lossless WebP**, which is the only format the
+site serves: the same pixels playwright hands back, at about a third of the
+bytes, because a screenshot of an interface is flat colour and sharp edges.
+Encoding needs `cwebp` on the machine taking the pictures (`brew install webp`,
+`apt install webp`); nothing else in the repo needs it, and CI never takes
+pictures.
+
+There is no PNG alongside. A browser without WebP (Safari before 14, released
+September 2020) sees a broken image rather than a screenshot -- the cost of one
+format instead of two files per picture in git forever.
+
 Regenerate them with:
 
 ```
@@ -213,6 +224,23 @@ a re-run when the build is already current.
 They never run in CI. The suite is gated behind `SHOTS=1` and its own Playwright
 project, so an ordinary test run cannot write to the repo. Captures are a
 deliberate act: run them, look at the diff, commit the images.
+
+## The link preview card
+
+`web/og.png` is what Slack, X, LinkedIn, Discord and every other unfurl shows
+for a link to this site. Every page points at the one card; none of them has a
+picture of its own.
+
+It is drawn by `web/og/card.html` -- ordinary HTML, no screenshot of anything
+running -- and rendered at 1200x630 with:
+
+```
+./dev.sh web og
+```
+
+X crops the card to 2:1 and Slack draws it about 360px wide, so everything that
+has to survive lives inside the middle 1200x600 and is set large enough to read
+at a third of the size. Edit the HTML, re-render, commit the PNG.
 
 All captures drive one seeded workspace (`app/internal/cmd/e2eseed`), so a spec
 that changes state changes what every later spec photographs. Leave the

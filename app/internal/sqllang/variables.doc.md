@@ -38,7 +38,7 @@ SQL file references are expanded recursively, so referenced files can themselves
 
 When a `$VARIABLE` is not found in any `.env` file or SQL file, SELECT prompts you to fill it in before execution. A form appears with one field per unresolved variable.
 
-![The Set variables form over a query, with a row per unresolved name: $STATUS typed as text, $MIN_CENTS typed as an integer, and Cancel and Run below them.](/shots/variables.light.png)
+![The Set variables form over a query, with a row per unresolved name: $STATUS typed as text, $MIN_CENTS typed as an integer, and Cancel and Run below them.](/shots/variables.light.webp)
 
 Each variable can be typed:
 

@@ -2,9 +2,6 @@
 package testutil
 
 import (
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	ta "github.com/selectDb/dialect/core/tokenanalyzer"
@@ -13,19 +10,9 @@ import (
 // NewTestAnalyzer creates a Python analyzer for tests. Skips if the venv is not found.
 func NewTestAnalyzer(t *testing.T) *ta.Analyzer {
 	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
+	pythonPath, script, ok := ta.FindDevAnalyzer()
 	if !ok {
-		t.Fatal("cannot determine test file path")
+		t.Skip("python venv not found; run `uv sync` in dialect/core/tokenanalyzer/python")
 	}
-	pyDir := filepath.Join(filepath.Dir(thisFile), "..", "tokenanalyzer", "python")
-	script := filepath.Join(pyDir, "main.py")
-	venvBin := "bin"
-	if runtime.GOOS == "windows" {
-		venvBin = "Scripts"
-	}
-	pyPath := filepath.Join(pyDir, ".venv", venvBin, "python3")
-	if _, err := os.Stat(pyPath); err != nil {
-		t.Skipf("python venv not found at %s", pyPath)
-	}
-	return ta.NewAnalyzer(pyPath, script)
+	return ta.NewAnalyzer(pythonPath, script)
 }

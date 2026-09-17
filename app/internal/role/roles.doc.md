@@ -2,7 +2,7 @@
 
 Roles group [permissions](/docs/workspace/permissions/) together and are assigned to [users](/docs/workspace/users/), either directly or through [groups](/docs/workspace/groups/). Each workspace defines its own roles.
 
-![The workspace's roles: three of them, each with the users holding it, the number of groups carrying it, and how many permission rules it is made of.](/shots/team.roles.light.png)
+![The workspace's roles: three of them, each with the users holding it, the number of groups carrying it, and how many permission rules it is made of.](/shots/team.roles.light.webp)
 
 ## Creating roles
 

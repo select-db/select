@@ -30,7 +30,7 @@ if (!isMac) {
 function paintShots(theme) {
   document.querySelectorAll('picture[data-shot] source, picture[data-shot] img').forEach(el => {
     const attr = el.tagName === 'IMG' ? 'src' : 'srcset';
-    const next = el[attr].replace(/\.(light|dark)\.png/, '.' + theme + '.png');
+    const next = el[attr].replace(/\.(light|dark)\.webp/, '.' + theme + '.webp');
     if (next !== el[attr]) el[attr] = next;
   });
 }
