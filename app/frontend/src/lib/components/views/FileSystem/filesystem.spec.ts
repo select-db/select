@@ -280,6 +280,9 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 
 	await treeRow(page, '2026').click();
 	await expect(treeRow(page, 'twin.sql')).toBeVisible();
+	// The tree drops the deleted row before removeTabByUri closes its tab, so
+	// both twins are briefly open and clicking by name is ambiguous.
+	await expect(tab(page, 'twin.sql')).toHaveCount(1);
 	await tab(page, 'twin.sql').click();
 	await expect(editor.line(page, 'SELECT 5 AS five;')).toBeVisible();
 
