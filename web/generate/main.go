@@ -59,6 +59,10 @@ type PageData struct {
 	// SourceURL is this page's markdown on GitHub, so every page can offer an
 	// edit link. Empty when the build has no repository to point at.
 	SourceURL string
+	// BreadcrumbJSON is the crumbs above, as schema.org BreadcrumbList. It is
+	// what puts a trail rather than a bare URL under a search result. Empty for
+	// a page with no trail.
+	BreadcrumbJSON string
 }
 
 type PageLink struct {
@@ -75,6 +79,11 @@ type marketingPage struct {
 	URL         string
 	Title       string
 	Description string
+	// Facts is the page's SoftwareApplication JSON-LD, flattened to lines. The
+	// landing page already states the platforms, the status, the editions and
+	// the feature list for search engines; llms.txt restates them from the same
+	// source rather than from a second copy somebody has to remember to update.
+	Facts []string
 }
 
 // A search hit is the section it points at, not the page: Title is the heading
@@ -251,6 +260,13 @@ func build(cfg buildConfig) error {
 
 	pages := collectPages(tree)
 
+	// Before any page renders: a screenshot's dimensions go into the <img> that
+	// shows it, and the same walk feeds the copy into dist/shots later.
+	shots, err := findShots(cfg)
+	if err != nil {
+		return fmt.Errorf("finding screenshots: %w", err)
+	}
+
 	themeCSS, err := os.ReadFile(cfg.themePath)
 	if err != nil {
 		return fmt.Errorf("reading .theme: %w", err)
@@ -294,8 +310,8 @@ func build(cfg buildConfig) error {
 		goldmark.WithParserOptions(parser.WithASTTransformers(callouts)),
 		// A fence can name the file it belongs in. See codeblock.go.
 		goldmark.WithRendererOptions(renderer.WithNodeRenderers(codeBlocks)),
-		// A screenshot carries both theme cuts. See image.go.
-		goldmark.WithRendererOptions(renderer.WithNodeRenderers(images)),
+		// A screenshot carries both theme cuts and its own box. See image.go.
+		goldmark.WithRendererOptions(renderer.WithNodeRenderers(imagesRenderer(pngSizes(shots)))),
 		// A keystroke in a code span renders as keycaps. See kbd.go.
 		goldmark.WithRendererOptions(renderer.WithNodeRenderers(keystrokes)),
 	)
@@ -347,6 +363,15 @@ func build(cfg buildConfig) error {
 	if err := os.WriteFile(filepath.Join(cfg.outDir, "logo.png"), logo, 0o644); err != nil {
 		return fmt.Errorf("writing logo: %w", err)
 	}
+	// The link preview card. Rendered by web/og/render.mjs and committed, like
+	// a screenshot: nothing in this build draws it.
+	card, err := os.ReadFile(filepath.Join(cfg.webDir, "og.png"))
+	if err != nil {
+		return fmt.Errorf("reading og card: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.outDir, "og.png"), card, 0o644); err != nil {
+		return fmt.Errorf("writing og card: %w", err)
+	}
 	if err := copyAPIAssets(cfg, string(themeCSS)); err != nil {
 		return fmt.Errorf("staging API reference assets: %w", err)
 	}
@@ -372,20 +397,22 @@ func build(cfg buildConfig) error {
 			next = &PageLink{Label: pages[i+1].Label, Href: "/" + pages[i+1].HTMLFile + "/"}
 		}
 
+		crumbs := breadcrumbs(tree, page.HTMLFile)
 		data := PageData{
-			Title:       page.Label,
-			Description: extractDescription(string(src)),
-			Sidebar:     renderSidebar(tree, page.HTMLFile),
-			Content:     string(indentHTML(addHeadingAnchors(buf.String()), "        ")),
-			Styles:      styles,
-			Scripts:     string(scripts),
-			Canonical:   siteURL + "/" + page.HTMLFile + "/",
-			Markdown:    "/" + page.HTMLFile + ".md",
-			BaseURL:     siteURL,
-			PrevPage:    prev,
-			NextPage:    next,
-			Crumbs:      breadcrumbs(tree, page.HTMLFile),
-			SourceURL:   sourceURL + page.Path,
+			Title:          page.Label,
+			Description:    extractDescription(string(src)),
+			Sidebar:        renderSidebar(tree, page.HTMLFile),
+			Content:        string(indentHTML(addHeadingAnchors(buf.String()), "        ")),
+			Styles:         styles,
+			Scripts:        string(scripts),
+			Canonical:      siteURL + "/" + page.HTMLFile + "/",
+			Markdown:       "/" + page.HTMLFile + ".md",
+			BaseURL:        siteURL,
+			PrevPage:       prev,
+			NextPage:       next,
+			Crumbs:         crumbs,
+			BreadcrumbJSON: breadcrumbJSON(crumbs, siteURL+"/"+page.HTMLFile+"/"),
+			SourceURL:      sourceURL + page.Path,
 		}
 
 		outPath := filepath.Join(cfg.outDir, page.HTMLFile, "index.html")
@@ -421,7 +448,7 @@ func build(cfg buildConfig) error {
 		return fmt.Errorf("staging marketing pages: %w", err)
 	}
 
-	if err := collectShots(cfg); err != nil {
+	if err := stageShots(cfg.outDir, shots); err != nil {
 		return fmt.Errorf("staging screenshots: %w", err)
 	}
 
@@ -461,8 +488,32 @@ func build(cfg buildConfig) error {
   Content-Type: text/plain; charset=utf-8
 /llms-full.txt
   Content-Type: text/plain; charset=utf-8
+
+# Without a rule here the host serves every asset must-revalidate, so a second
+# visit spends a round trip per screenshot to be told nothing changed. None of
+# these names carry a content hash, so the window is what a stale copy is worth:
+# a week for a screenshot, an hour for the files a deploy usually touches.
+/shots/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/logo.png
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/favicon.png
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/og.png
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/style.css
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+/bundle.js
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+/theme.js
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
 `
 	os.WriteFile(filepath.Join(cfg.outDir, "_headers"), []byte(headers), 0o644)
+
+	// /docs/ is the parent of every docs URL and the address anyone truncating
+	// one lands on. There is no page there, so it goes to the first one.
+	os.WriteFile(filepath.Join(cfg.outDir, "_redirects"),
+		[]byte("/docs /docs/getting-started/ 301\n/docs/ /docs/getting-started/ 301\n"), 0o644)
 
 	if err := verifyLinks(cfg.outDir); err != nil {
 		return err
@@ -774,6 +825,20 @@ func bundleComponents(dir string) (string, error) {
 // opening and closing literal. Deliberately not a parser: two tags, on pages
 // this repository writes, where a regex over the whole document would be the
 // bigger surprise.
+// metaDescRe finds the description however the page wrote the tag. index.html
+// breaks the line between the two attributes, and the literal prefix match
+// below silently read that as no description: the site root's llms.txt entry
+// was empty and the file's summary fell back to a stub.
+var metaDescRe = regexp.MustCompile(`(?is)<meta\s+name="description"\s+content="([^"]*)"`)
+
+func metaDescription(page []byte) string {
+	m := metaDescRe.FindSubmatch(page)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(m[1]))
+}
+
 func metaContent(page []byte, open, close string) string {
 	i := bytes.Index(page, []byte(open))
 	if i < 0 {
@@ -803,6 +868,47 @@ func writeSitemap(outDir string, pages []*SidebarNode, marketing []marketingPage
 	os.WriteFile(filepath.Join(outDir, "sitemap.xml"), []byte(b.String()), 0o644)
 }
 
+var ldRe = regexp.MustCompile(`(?is)<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>`)
+
+// productFacts reads the landing page's SoftwareApplication and returns the
+// lines a model needs to answer "what is this": what it runs on, what it
+// costs, what it does. A one-line summary answers none of them.
+func productFacts(page []byte) []string {
+	var app struct {
+		Type            string   `json:"@type"`
+		OperatingSystem string   `json:"operatingSystem"`
+		SoftwareVersion string   `json:"softwareVersion"`
+		FeatureList     []string `json:"featureList"`
+		Offers          []struct {
+			Name          string `json:"name"`
+			Price         string `json:"price"`
+			PriceCurrency string `json:"priceCurrency"`
+			Description   string `json:"description"`
+		} `json:"offers"`
+	}
+	for _, m := range ldRe.FindAllSubmatch(page, -1) {
+		if err := json.Unmarshal(m[1], &app); err != nil || app.Type != "SoftwareApplication" {
+			continue
+		}
+		var out []string
+		if app.OperatingSystem != "" {
+			out = append(out, "Platforms: "+app.OperatingSystem)
+		}
+		if app.SoftwareVersion != "" {
+			out = append(out, "Status: "+app.SoftwareVersion)
+		}
+		for _, o := range app.Offers {
+			out = append(out, fmt.Sprintf("%s edition: %s %s. %s",
+				o.Name, o.Price, o.PriceCurrency, o.Description))
+		}
+		if len(app.FeatureList) > 0 {
+			out = append(out, "Features: "+strings.Join(app.FeatureList, "; "))
+		}
+		return out
+	}
+	return nil
+}
+
 // tagline is the one-line summary at the top of llms.txt and llms-full.txt.
 // Taken from the homepage's own meta description so there is one sentence
 // describing this product, not two that drift.
@@ -822,6 +928,7 @@ func writeLLMsTxt(cfg buildConfig, pages []*SidebarNode, marketing []marketingPa
 	var b strings.Builder
 	b.WriteString("# SELECT\n\n")
 	b.WriteString("> " + tagline(marketing) + "\n\n")
+	writeFacts(&b, marketing)
 
 	if len(marketing) > 0 {
 		b.WriteString("## Product\n\n")
@@ -845,10 +952,27 @@ func writeLLMsTxt(cfg buildConfig, pages []*SidebarNode, marketing []marketingPa
 	os.WriteFile(filepath.Join(cfg.outDir, "llms.txt"), []byte(b.String()), 0o644)
 }
 
+// writeFacts puts the landing page's own product facts under the summary. A
+// reader that quotes only the blockquote gets a sentence; one that reads on
+// gets the platforms, the price and the feature list without guessing.
+func writeFacts(b *strings.Builder, marketing []marketingPage) {
+	for _, m := range marketing {
+		if m.URL != "/" || len(m.Facts) == 0 {
+			continue
+		}
+		for _, line := range m.Facts {
+			b.WriteString("- " + line + "\n")
+		}
+		b.WriteString("\n")
+		return
+	}
+}
+
 func writeLLMsFullTxt(cfg buildConfig, pages []*SidebarNode, marketing []marketingPage) {
 	var b strings.Builder
 	b.WriteString("# SELECT\n\n")
 	b.WriteString("> " + tagline(marketing) + "\n\n")
+	writeFacts(&b, marketing)
 	for _, p := range pages {
 		src, _ := os.ReadFile(filepath.Join(cfg.rootDir, p.Path))
 		// The URL as well as the label: a model quoting this file can then cite
@@ -1227,7 +1351,7 @@ func formatStars(n int) string {
 // a doc page writes in its markdown, so two files of the same name anywhere in
 // the tree are a collision: the build says which two rather than letting the
 // second quietly win.
-func collectShots(cfg buildConfig) error {
+func findShots(cfg buildConfig) (map[string]string, error) {
 	skip := map[string]bool{
 		"node_modules": true, "build": true,
 		".svelte-kit": true, ".git": true, "test-results": true,
@@ -1239,7 +1363,6 @@ func collectShots(cfg buildConfig) error {
 	isOutput := func(path, name string) bool {
 		return strings.HasPrefix(name, "dist") && filepath.Dir(path) == cfg.webDir
 	}
-	dst := filepath.Join(cfg.outDir, "shots")
 	from := map[string]string{}
 
 	err := filepath.WalkDir(cfg.rootDir, func(path string, d fs.DirEntry, err error) error {
@@ -1270,22 +1393,29 @@ func collectShots(cfg buildConfig) error {
 				return fmt.Errorf("two screenshots named %s: %s and %s (the site serves one flat /shots/)", name, rel(prev), rel(src))
 			}
 			from[name] = src
-
-			data, err := os.ReadFile(src)
-			if err != nil {
-				return err
-			}
-			if err := os.MkdirAll(dst, 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(filepath.Join(dst, name), data, 0o644); err != nil {
-				return err
-			}
 		}
 		return fs.SkipDir
 	})
 	if err != nil {
+		return nil, err
+	}
+	return from, nil
+}
+
+// stageShots copies what findShots found into the flat /shots/ the site serves.
+func stageShots(outDir string, from map[string]string) error {
+	dst := filepath.Join(outDir, "shots")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
+	}
+	for name, src := range from {
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), data, 0o644); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1308,19 +1438,31 @@ func copyDir(src, dst string) error {
 	})
 }
 
+// extractDescription is a page's first paragraph, as a search result and an
+// llms.txt entry show it. Stripped, because nothing renders it: without this a
+// snippet reads "SELECT supports **PostgreSQL**" and "[git-based](/docs/...)".
 func extractDescription(md string) string {
-	lines := strings.Split(md, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(md, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if len(trimmed) > 160 {
-			return trimmed[:157] + "..."
-		}
-		return trimmed
+		return truncate(stripMarkdown(trimmed), 160)
 	}
 	return ""
+}
+
+// truncate cuts at a word boundary. A description ending mid-word reads as a
+// fault in the result rather than as an excerpt of a longer page.
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := strings.ToValidUTF8(s[:max-3], "")
+	if i := strings.LastIndexByte(cut, ' '); i > max/2 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,;:-") + "..."
 }
 
 var linkRe = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
@@ -1444,7 +1586,8 @@ func copyMarketingPages(cfg buildConfig, themeCSS, stars string) ([]marketingPag
 		pages = append(pages, marketingPage{
 			URL:         url,
 			Title:       metaContent(out, "<title>", "</title>"),
-			Description: metaContent(out, `<meta name="description" content="`, `">`),
+			Description: metaDescription(out),
+			Facts:       productFacts(out),
 		})
 	}
 
@@ -1467,6 +1610,13 @@ func copyMarketingPages(cfg buildConfig, themeCSS, stars string) ([]marketingPag
 // blank screen. It is a wall, not a score — there is nothing to win by shaving
 // a page from 6 KB to 3 KB, and plenty to lose if the copy suffers for it.
 const pageBudget = 14 * 1024
+
+// cdnBrotliQuality is what the budget is measured at, because the budget is
+// about the bytes that cross the wire and the CDN is what compresses them. It
+// compresses on the fly at around this level, not at brotli's maximum: at
+// maximum the check reported 10.3 KB for a page the CDN was actually serving
+// in 13.2 KB, which is 3 KB of headroom that does not exist.
+const cdnBrotliQuality = 5
 
 // A page may link anywhere it likes — <a href> and <link rel=canonical> cost
 // nothing. What matters is what the browser must *fetch* to render: media and
@@ -1508,7 +1658,7 @@ func checkMarketingBudget(cfg buildConfig, paths []string) error {
 		name, _ := filepath.Rel(cfg.outDir, path)
 
 		var buf bytes.Buffer
-		w := brotli.NewWriterLevel(&buf, brotli.BestCompression)
+		w := brotli.NewWriterLevel(&buf, cdnBrotliQuality)
 		if _, err := w.Write(data); err != nil {
 			return err
 		}
@@ -1542,6 +1692,44 @@ func checkMarketingBudget(cfg buildConfig, paths []string) error {
 //
 // The last crumb is the page itself and is not a link; nor is a bare section
 // heading like "Special Files", which has no page of its own to link to.
+// breadcrumbJSON renders the trail as schema.org BreadcrumbList. The last
+// crumb carries no Href because the reader is already there, so it takes the
+// page's own URL.
+func breadcrumbJSON(crumbs []PageLink, pageURL string) string {
+	if len(crumbs) == 0 {
+		return ""
+	}
+	type item struct {
+		Type     string `json:"@type"`
+		Position int    `json:"position"`
+		Name     string `json:"name"`
+		Item     string `json:"item,omitempty"`
+	}
+	items := make([]item, 0, len(crumbs))
+	for i, c := range crumbs {
+		// A section in sidebar.txt is a grouping, not a page, so it has no URL
+		// to give. Naming the page's own URL there would be a lie repeated on
+		// every crumb above the leaf.
+		url := ""
+		switch {
+		case c.Href != "":
+			url = siteURL + c.Href
+		case i == len(crumbs)-1:
+			url = pageURL
+		}
+		items = append(items, item{"ListItem", i + 1, c.Label, url})
+	}
+	out, err := json.Marshal(map[string]any{
+		"@context":        "https://schema.org",
+		"@type":           "BreadcrumbList",
+		"itemListElement": items,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
 func breadcrumbs(tree []*SidebarNode, activePath string) []PageLink {
 	var trail []PageLink
 

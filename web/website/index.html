@@ -14,6 +14,17 @@
   <meta property="og:description"
     content="Schema-aware completion, real-time linting, and a workspace that is a folder in your repo.">
   <meta property="og:url" content="https://select-db.com/">
+  <!-- The link preview card. Without an image a shared link renders as a line
+     of text in Slack, on X and in every other unfurl. -->
+  <meta property="og:image" content="https://select-db.com/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="SELECT: the SQL client that lives in your repo. PostgreSQL, MySQL, SQLite.">
+  <meta property="og:site_name" content="SELECT">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SELECT: the SQL client that lives in your repo">
+  <meta name="twitter:description" content="Schema-aware completion, real-time linting, and a workspace that is a folder in your repo.">
+  <meta name="twitter:image" content="https://select-db.com/og.png">
   <!-- The facts on this page, stated once more in a form a machine can read
      without inferring them from the layout: what the product is, where it
      runs, and what the two shipping editions cost. Kept in this file, beside
@@ -31,6 +42,14 @@
 "offers":[
 {"@type":"Offer","name":"Solo","price":"0","priceCurrency":"USD","description":"Free forever, not a trial. The full client, git collaboration through your own remote."},
 {"@type":"Offer","name":"Teams","price":"12","priceCurrency":"USD","description":"Per seat per month, beta price, normally 17. Proxified connections, centralised roles, audit log, MCP and API keys."}]}
+</script>
+  <script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"Organization","@id":"https://select-db.com/#org","name":"SELECT",
+"url":"https://select-db.com/","logo":"https://select-db.com/og.png",
+"sameAs":["https://github.com/select-db/select"]},
+{"@type":"WebSite","@id":"https://select-db.com/#site","name":"SELECT",
+"url":"https://select-db.com/","publisher":{"@id":"https://select-db.com/#org"}}]}
 </script>
   <link rel="alternate" type="text/plain" href="/llms.txt" title="Site index for language models">
   <!-- Picks the app's own light/dark palette before first paint, from the same
@@ -73,12 +92,19 @@
       --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / .02), 0px 1px 1px 0px lch(80% 0 0 / .02);
       /* .theme has no darker step for the accent, and lightening a solid red
      button drops white text under 4.5:1, so the hover deepens it instead. */
-      --red-hover: rgb(190, 38, 38)
+      --red-hover: rgb(190, 38, 38);
+      /* --orange is an accent for fills and borders; as small text on a
+     near-white page it lands at 2.6:1. Same hue, weight that passes. */
+      --orange-text: hsl(24, 88%, 34%);
+      /* Same story for the accent: 4.3:1 as link text, one step deeper passes. */
+      --red-text: rgb(190, 38, 38)
     }
 
     :root[data-theme=dark] {
       --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / .06), 0px 1px 1px 0px lch(0% 0 0 / .06);
-      --red-hover: var(--red-glow)
+      --red-hover: var(--red-glow);
+      --orange-text: var(--orange);
+      --red-text: var(--red)
     }
 
     *,
@@ -109,7 +135,7 @@
     }
 
     a {
-      color: var(--red)
+      color: var(--red-text)
     }
 
     /* Every hoverable surface answers at the same speed. The properties are
@@ -139,11 +165,13 @@
       border-bottom: var(--border)
     }
 
+    /* --gray-700 is 3.1:1 against the page at this size. One step down the
+   same scale passes, and the label is still quieter than the prose. */
     .k {
       font: 500 var(--t1)/1.4 var(--m);
       letter-spacing: .14em;
       text-transform: uppercase;
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .mono {
@@ -220,8 +248,8 @@
     .beta {
       font: 700 .58rem/1 var(--m);
       letter-spacing: .14em;
-      color: var(--orange);
-      border: 1px solid var(--orange);
+      color: var(--orange-text);
+      border: 1px solid var(--orange-text);
       border-radius: var(--br-xs);
       padding: 2px 4px;
       vertical-align: 2px
@@ -480,7 +508,7 @@
     .fine {
       margin-top: var(--s3);
       font: var(--t1)/1.6 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     /* product shots, drawn in HTML until the capture pipeline replaces them with
@@ -502,7 +530,7 @@
     figcaption {
       margin-top: var(--s1);
       font: var(--t1)/1.5 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .shot {
@@ -520,7 +548,7 @@
       margin: 0;
       border-bottom: var(--border);
       background: var(--gray-100);
-      color: var(--gray-700);
+      color: var(--gray-800);
       font-size: var(--t1);
       line-height: 1.4
     }
@@ -587,7 +615,7 @@
 
     .cm,
     .dim {
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .shot .warn {
@@ -619,7 +647,7 @@
 
     .rows b {
       font-weight: 400;
-      color: var(--gray-700);
+      color: var(--gray-800);
       white-space: nowrap
     }
 
@@ -646,7 +674,7 @@
       margin: 0;
       border-top: var(--border);
       background: var(--gray-100);
-      color: var(--gray-700);
+      color: var(--gray-800);
       font-size: var(--t1);
       line-height: 1.4
     }
@@ -724,7 +752,7 @@
     /* .row p is the more specific selector, so the aside keeps its own colour
        only if it is named here too. */
     .row p.fine {
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .row a,
@@ -812,7 +840,7 @@
     .amt s,
     .amt span {
       font: var(--t1)/1 var(--m);
-      color: var(--gray-700);
+      color: var(--gray-800);
       letter-spacing: .04em
     }
 
@@ -837,7 +865,7 @@
 
     .note {
       font: var(--t1)/1.5 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .tiers .btn {
@@ -873,12 +901,12 @@
       }
     }
 
-    .fcols h4 {
+    .fcols h3 {
       margin: 0 0 10px;
       font: 500 var(--t1)/1 var(--m);
       letter-spacing: .13em;
       text-transform: uppercase;
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
 
     .fcols ul {
@@ -905,7 +933,7 @@
       gap: var(--s2);
       justify-content: space-between;
       font: var(--t1)/1 var(--m);
-      color: var(--gray-700)
+      color: var(--gray-800)
     }
   </style>
 </head>
@@ -1112,7 +1140,7 @@
           <div class="mid">
             <h3>Teams</h3>
             <p class="amt"><b>$12</b><span>/ SEAT / MONTH</span><s>$17</s></p>
-            <p class="note" style="color:var(--orange)">BETA PRICE</p>
+            <p class="note" style="color:var(--orange-text)">BETA PRICE</p>
             <ul>
               <li>Everything in Solo</li>
               <li>Proxified connections: credentials off laptops, encrypted server-side</li>
@@ -1126,7 +1154,7 @@
           <div>
             <h3>Enterprise</h3>
             <p class="amt"><b>Talk</b><span>DEDICATED OR ON-PREM</span></p>
-            <p class="note" style="color:var(--orange)">NOT SHIPPED YET</p>
+            <p class="note" style="color:var(--orange-text)">NOT SHIPPED YET</p>
             <p style="font-size:.9rem;color:var(--gray-900)">We are taking design partners now and building
               it with them. Everything in Teams, plus:</p>
             <ul>
