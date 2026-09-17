@@ -23,18 +23,16 @@ func main() {
 	dialectName := flag.String("dialect", "postgresql", "postgresql, mysql or sqlite")
 	sqlInput := flag.String("sql", "", "SQL to probe, or @file. A | marks the caret")
 	metaPath := flag.String("meta", "", "core.Metadata JSON file")
-	dsn := flag.String("dsn", "", "introspect a live database instead of reading -meta")
-	dumpMeta := flag.String("dump-meta", "", "write the catalog to this JSON file, for replay with -meta")
 	showRaw := flag.Bool("raw", false, "also dump what the analyzer returned")
 	flag.Parse()
 
-	if err := run(*dialectName, *sqlInput, *metaPath, *dsn, *dumpMeta, *showRaw); err != nil {
+	if err := run(*dialectName, *sqlInput, *metaPath, *showRaw); err != nil {
 		fmt.Fprintf(os.Stderr, "sqlprobe: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(dialectName, sqlInput, metaPath, dsn, dumpMeta string, showRaw bool) error {
+func run(dialectName, sqlInput, metaPath string, showRaw bool) error {
 	d := engine.GetDialect(dialectName)
 	if d == nil {
 		return fmt.Errorf("unknown dialect %q (want postgresql, mysql or sqlite)", dialectName)
@@ -48,15 +46,9 @@ func run(dialectName, sqlInput, metaPath, dsn, dumpMeta string, showRaw bool) er
 		return fmt.Errorf("-sql is required")
 	}
 
-	meta, err := loadMetadata(d, metaPath, dsn)
+	meta, err := loadMetadata(metaPath)
 	if err != nil {
 		return err
-	}
-	if dumpMeta != "" {
-		if err := writeMetadata(meta, dumpMeta); err != nil {
-			return err
-		}
-		fmt.Printf("wrote catalog to %s\n", dumpMeta)
 	}
 
 	pythonPath, script, ok := tokenanalyzer.FindDevAnalyzer()
@@ -82,51 +74,19 @@ func run(dialectName, sqlInput, metaPath, dsn, dumpMeta string, showRaw bool) er
 	return nil
 }
 
-// loadMetadata reads a saved catalog, or introspects a live database through
-// the same FetchMetadata the app uses.
-func loadMetadata(d core.SQLDialect, metaPath, dsn string) (core.Metadata, error) {
-	switch {
-	case metaPath != "" && dsn != "":
-		return core.Metadata{}, fmt.Errorf("pass -meta or -dsn, not both")
-
-	case dsn != "":
-		db, err := d.OpenDB(dsn)
-		if err != nil {
-			return core.Metadata{}, fmt.Errorf("opening -dsn: %w", err)
-		}
-		defer func() { _ = db.Close() }()
-
-		meta, err := engine.FetchMetadata(context.Background(), db, d, "")
-		if err != nil {
-			return core.Metadata{}, fmt.Errorf("introspecting -dsn: %w", err)
-		}
-		return *meta, nil
-
-	case metaPath != "":
-		raw, err := os.ReadFile(metaPath)
-		if err != nil {
-			return core.Metadata{}, fmt.Errorf("reading -meta: %w", err)
-		}
-		var meta core.Metadata
-		if err := json.Unmarshal(raw, &meta); err != nil {
-			return core.Metadata{}, fmt.Errorf("parsing -meta: %w", err)
-		}
-		return meta, nil
-
-	default:
-		return core.Metadata{}, fmt.Errorf("-meta or -dsn is required")
+func loadMetadata(metaPath string) (core.Metadata, error) {
+	if metaPath == "" {
+		return core.Metadata{}, fmt.Errorf("-meta is required")
 	}
-}
-
-func writeMetadata(meta core.Metadata, path string) error {
-	raw, err := json.MarshalIndent(meta, "", "  ")
+	raw, err := os.ReadFile(metaPath)
 	if err != nil {
-		return fmt.Errorf("encoding catalog: %w", err)
+		return core.Metadata{}, fmt.Errorf("reading -meta: %w", err)
 	}
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		return fmt.Errorf("writing -dump-meta: %w", err)
+	var meta core.Metadata
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return core.Metadata{}, fmt.Errorf("parsing -meta: %w", err)
 	}
-	return nil
+	return meta, nil
 }
 
 // readArg returns the literal value, or the file contents when it starts with @.
