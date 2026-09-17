@@ -9,6 +9,20 @@ const (
 	SeverityHint                    // Code style issues
 )
 
+// String names the severity, matching the values the .lint file accepts.
+func (s Severity) String() string {
+	switch s {
+	case SeverityError:
+		return "error"
+	case SeverityWarning:
+		return "warning"
+	case SeverityHint:
+		return "hint"
+	default:
+		return "unknown"
+	}
+}
+
 // Diagnostic is a single lint finding with source location.
 type Diagnostic struct {
 	RuleID   string

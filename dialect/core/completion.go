@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 )
@@ -23,6 +24,38 @@ const (
 	CandidateTypeEnumValue
 	CandidateTypeSetting
 )
+
+// String names the candidate type, for probes and test failure output.
+func (t CandidateType) String() string {
+	switch t {
+	case CandidateTypeKeyword:
+		return "keyword"
+	case CandidateTypeSchema:
+		return "schema"
+	case CandidateTypeTable:
+		return "table"
+	case CandidateTypeForeignTable:
+		return "foreign table"
+	case CandidateTypeView:
+		return "view"
+	case CandidateTypeMaterializedView:
+		return "materialized view"
+	case CandidateTypeColumn:
+		return "column"
+	case CandidateTypeOperator:
+		return "operator"
+	case CandidateTypeType:
+		return "type"
+	case CandidateTypeFunction:
+		return "function"
+	case CandidateTypeEnumValue:
+		return "enum value"
+	case CandidateTypeSetting:
+		return "setting"
+	default:
+		return "candidate(" + strconv.Itoa(int(t)) + ")"
+	}
+}
 
 // Candidate is a completion suggestion item
 type Candidate struct {

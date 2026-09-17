@@ -1,8 +1,8 @@
-// Command sqlprobe runs one SQL string, against one hand-written catalog,
-// through every dialect-level language feature at once and prints what each
-// produced. It is the isolation step for a suspected completion or lint bug:
-// shrink the case here until exactly one layer is wrong, then write the
-// regression test against that layer.
+// Command sqlprobe runs one SQL string, against one catalog, through every
+// dialect-level language feature at once and prints what each produced. It is
+// the isolation step for a suspected completion or lint bug: shrink the case
+// until exactly one layer is wrong, then write the regression test against that
+// layer.
 package main
 
 import (
@@ -14,35 +14,30 @@ import (
 	"strings"
 
 	"github.com/selectDb/dialect/core"
+	coreRefs "github.com/selectDb/dialect/core/references"
 	"github.com/selectDb/dialect/core/tokenanalyzer"
 	"github.com/selectDb/dialect/engine"
 )
 
 func main() {
 	dialectName := flag.String("dialect", "postgresql", "postgresql, mysql or sqlite")
-	schemaDSL := flag.String("schema", "", "catalog in probe notation, or @file")
 	sqlInput := flag.String("sql", "", "SQL to probe, or @file. A | marks the caret")
-	defaultSchema := flag.String("default-schema", "", "default schema (per-dialect default when empty)")
-	metaJSON := flag.String("meta", "", "core.Metadata JSON file, instead of -schema")
-	showRaw := flag.Bool("raw", false, "also dump the raw analyzer responses")
+	metaPath := flag.String("meta", "", "core.Metadata JSON file")
+	dsn := flag.String("dsn", "", "introspect a live database instead of reading -meta")
+	dumpMeta := flag.String("dump-meta", "", "write the catalog to this JSON file, for replay with -meta")
+	showRaw := flag.Bool("raw", false, "also dump what the analyzer returned")
 	flag.Parse()
 
-	if err := run(*dialectName, *schemaDSL, *sqlInput, *defaultSchema, *metaJSON, *showRaw); err != nil {
+	if err := run(*dialectName, *sqlInput, *metaPath, *dsn, *dumpMeta, *showRaw); err != nil {
 		fmt.Fprintf(os.Stderr, "sqlprobe: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(dialectName, schemaDSL, sqlInput, defaultSchema, metaJSON string, showRaw bool) error {
+func run(dialectName, sqlInput, metaPath, dsn, dumpMeta string, showRaw bool) error {
 	d := engine.GetDialect(dialectName)
 	if d == nil {
 		return fmt.Errorf("unknown dialect %q (want postgresql, mysql or sqlite)", dialectName)
-	}
-	if defaultSchema == "" {
-		defaultSchema = d.DefaultSchemaName()
-		if defaultSchema == "" {
-			defaultSchema = "def" // MySQL has no schemas; give the catalog one bucket
-		}
 	}
 
 	sqlText, err := readArg(sqlInput)
@@ -53,9 +48,15 @@ func run(dialectName, schemaDSL, sqlInput, defaultSchema, metaJSON string, showR
 		return fmt.Errorf("-sql is required")
 	}
 
-	meta, err := loadMetadata(schemaDSL, metaJSON, defaultSchema)
+	meta, err := loadMetadata(d, metaPath, dsn)
 	if err != nil {
 		return err
+	}
+	if dumpMeta != "" {
+		if err := writeMetadata(meta, dumpMeta); err != nil {
+			return err
+		}
+		fmt.Printf("wrote catalog to %s\n", dumpMeta)
 	}
 
 	pythonPath, script, ok := tokenanalyzer.FindDevAnalyzer()
@@ -68,23 +69,41 @@ func run(dialectName, schemaDSL, sqlInput, defaultSchema, metaJSON string, showR
 
 	sqlText, caretLine, caretCol := cutCaret(sqlText)
 
-	fmt.Printf("== dialect %s   default schema %s\n", d.Name(), meta.DefaultSchema)
+	fmt.Printf("== dialect %s   default schema %s\n", d.Name(), core.GetDefaultSchema(meta))
 	printSQL(sqlText, caretLine, caretCol)
-	printCatalog(meta)
 	printLint(analyzer, d, meta, sqlText)
 	if caretLine > 0 {
 		printCompletion(d, meta, sqlText, caretLine, caretCol)
 	}
 	printInspect(d, meta, sqlText)
 	if showRaw {
-		printRaw(analyzer, d, meta, sqlText, caretLine, caretCol)
+		printAnalyzerView(analyzer, d, meta, sqlText, caretLine, caretCol)
 	}
 	return nil
 }
 
-func loadMetadata(schemaDSL, metaJSON, defaultSchema string) (core.Metadata, error) {
-	if metaJSON != "" {
-		raw, err := os.ReadFile(metaJSON)
+// loadMetadata reads a saved catalog, or introspects a live database through
+// the same FetchMetadata the app uses.
+func loadMetadata(d core.SQLDialect, metaPath, dsn string) (core.Metadata, error) {
+	switch {
+	case metaPath != "" && dsn != "":
+		return core.Metadata{}, fmt.Errorf("pass -meta or -dsn, not both")
+
+	case dsn != "":
+		db, err := d.OpenDB(dsn)
+		if err != nil {
+			return core.Metadata{}, fmt.Errorf("opening -dsn: %w", err)
+		}
+		defer func() { _ = db.Close() }()
+
+		meta, err := engine.FetchMetadata(context.Background(), db, d, "")
+		if err != nil {
+			return core.Metadata{}, fmt.Errorf("introspecting -dsn: %w", err)
+		}
+		return *meta, nil
+
+	case metaPath != "":
+		raw, err := os.ReadFile(metaPath)
 		if err != nil {
 			return core.Metadata{}, fmt.Errorf("reading -meta: %w", err)
 		}
@@ -93,13 +112,21 @@ func loadMetadata(schemaDSL, metaJSON, defaultSchema string) (core.Metadata, err
 			return core.Metadata{}, fmt.Errorf("parsing -meta: %w", err)
 		}
 		return meta, nil
-	}
 
-	dsl, err := readArg(schemaDSL)
-	if err != nil {
-		return core.Metadata{}, fmt.Errorf("reading -schema: %w", err)
+	default:
+		return core.Metadata{}, fmt.Errorf("-meta or -dsn is required")
 	}
-	return parseSchemaDSL(dsl, defaultSchema)
+}
+
+func writeMetadata(meta core.Metadata, path string) error {
+	raw, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding catalog: %w", err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		return fmt.Errorf("writing -dump-meta: %w", err)
+	}
+	return nil
 }
 
 // readArg returns the literal value, or the file contents when it starts with @.
@@ -135,34 +162,6 @@ func printSQL(sql string, caretLine, caretCol int) {
 	}
 }
 
-func printCatalog(meta core.Metadata) {
-	fmt.Println("\n== catalog")
-	for _, s := range meta.Schemas {
-		relations := len(s.Tables) + len(s.Views) + len(s.MaterializedViews)
-		if relations == 0 && len(s.Functions) == 0 {
-			continue
-		}
-		fmt.Printf("  schema %s: %d relation(s), %d function(s)\n", s.Name, relations, len(s.Functions))
-		for _, t := range allRelations(s) {
-			var cols []string
-			for _, c := range t.Columns {
-				label := c.Name + ":" + c.Type
-				if len(c.EnumValues) > 0 {
-					label += "{" + strings.Join(c.EnumValues, "|") + "}"
-				}
-				cols = append(cols, label)
-			}
-			fmt.Printf("    %s(%s)\n", t.Name, strings.Join(cols, ", "))
-		}
-	}
-}
-
-func allRelations(s core.Schema) []core.Table {
-	all := append([]core.Table{}, s.Tables...)
-	all = append(all, s.Views...)
-	return append(all, s.MaterializedViews...)
-}
-
 func printLint(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta core.Metadata, sql string) {
 	runner := tokenanalyzer.NewLintRunner()
 	runner.Analyzer = analyzer
@@ -173,20 +172,9 @@ func printLint(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta core.Me
 	fmt.Printf("\n== lint (%d)\n", len(diagnostics))
 	for _, diag := range diagnostics {
 		fmt.Printf("  %-7s %-28s %d:%d-%d:%d  %s\n",
-			severityName(diag.Severity), diag.RuleID,
+			diag.Severity, diag.RuleID,
 			diag.StartLine, diag.StartCol, diag.EndLine, diag.EndCol,
 			diag.Message)
-	}
-}
-
-func severityName(s tokenanalyzer.Severity) string {
-	switch s {
-	case tokenanalyzer.SeverityError:
-		return "error"
-	case tokenanalyzer.SeverityWarning:
-		return "warning"
-	default:
-		return "hint"
 	}
 }
 
@@ -197,54 +185,22 @@ func printCompletion(d core.SQLDialect, meta core.Metadata, sql string, caretLin
 		return
 	}
 
-	byType := map[string][]string{}
-	var order []string
+	byType := map[core.CandidateType][]string{}
+	var order []core.CandidateType
 	for _, c := range candidates {
-		name := candidateTypeName(c.Type)
-		if _, seen := byType[name]; !seen {
-			order = append(order, name)
+		if _, seen := byType[c.Type]; !seen {
+			order = append(order, c.Type)
 		}
 		label := c.Text
 		if c.InsertText != "" && c.InsertText != c.Text {
 			label += " -> " + c.InsertText
 		}
-		byType[name] = append(byType[name], label)
+		byType[c.Type] = append(byType[c.Type], label)
 	}
 
 	fmt.Printf("\n== complete @ %d:%d (%d)\n", caretLine, caretCol, len(candidates))
-	for _, name := range order {
-		fmt.Printf("  %-9s %s\n", name, strings.Join(byType[name], ", "))
-	}
-}
-
-func candidateTypeName(t core.CandidateType) string {
-	switch t {
-	case core.CandidateTypeKeyword:
-		return "keyword"
-	case core.CandidateTypeSchema:
-		return "schema"
-	case core.CandidateTypeTable:
-		return "table"
-	case core.CandidateTypeForeignTable:
-		return "fgntable"
-	case core.CandidateTypeView:
-		return "view"
-	case core.CandidateTypeMaterializedView:
-		return "matview"
-	case core.CandidateTypeColumn:
-		return "column"
-	case core.CandidateTypeOperator:
-		return "operator"
-	case core.CandidateTypeType:
-		return "type"
-	case core.CandidateTypeFunction:
-		return "function"
-	case core.CandidateTypeEnumValue:
-		return "enumval"
-	case core.CandidateTypeSetting:
-		return "setting"
-	default:
-		return fmt.Sprintf("type%d", int(t))
+	for _, t := range order {
+		fmt.Printf("  %-17s %s\n", t, strings.Join(byType[t], ", "))
 	}
 }
 
@@ -261,7 +217,7 @@ func printInspectStatement(stmt core.InspectStatement, indent string) {
 	for _, t := range stmt.Tables {
 		tables = append(tables, qualify(t.Schema, t.Name))
 	}
-	fmt.Printf("%s%v tables=[%s] fields=[%s] where=[%s]\n",
+	fmt.Printf("%s%s tables=[%s] fields=[%s] where=[%s]\n",
 		indent, stmt.Operation, strings.Join(tables, ", "),
 		strings.Join(fieldNames(stmt.Fields), ", "),
 		strings.Join(fieldNames(stmt.Where), ", "))
@@ -285,37 +241,57 @@ func qualify(prefix, name string) string {
 	return prefix + "." + name
 }
 
-// printRaw shows the analyzer's own answers, which separates a Python parsing
-// bug from a Go bug in the layer that consumes it. The requests mirror the ones
-// core/references sends, field for field, so what the probe prints is what the
-// real completion path saw.
-func printRaw(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta core.Metadata, sql string, caretLine, caretCol int) {
-	schemaDict := core.MetaToSchemaDict(meta)
-	defaultSchema := core.GetDefaultSchema(meta)
-
-	requests := []map[string]any{
-		{"action": "collect_references", "sql": sql, "dialect": d.Name(), "schema": schemaDict, "default_schema": defaultSchema},
-		{"action": "collect_column_refs", "sql": sql, "dialect": d.Name(), "schema": schemaDict, "default_schema": defaultSchema},
-		{"action": "lint", "sql": sql, "dialect": d.Name(), "schema": schemaDict, "default_schema": defaultSchema},
-	}
+// printAnalyzerView shows what the analyzer answered, which separates a sqlglot
+// parsing bug from a Go bug in the layer consuming it. It goes through the same
+// core/references calls the dialects use, so the probe cannot drift from the
+// requests the real completion path sends.
+func printAnalyzerView(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta core.Metadata, sql string, caretLine, caretCol int) {
+	var opts []any
 	if caretLine > 0 {
-		for _, req := range requests[:2] {
-			req["caret_line"] = caretLine
-			req["caret_col"] = caretCol
-		}
-		requests = append(requests, map[string]any{
-			"action": "complete_context", "sql": sql,
-			"caret_line": caretLine, "caret_col": caretCol, "schema": schemaDict,
-		})
+		opts = append(opts, &coreRefs.CompletionCaret{Line: caretLine, Col: caretCol})
 	}
 
-	fmt.Println("\n== raw analyzer")
-	for _, req := range requests {
-		resp, err := analyzer.Call(req)
-		if err != nil {
-			fmt.Printf("  %s: FAILED: %v\n", req["action"], err)
-			continue
+	fmt.Println("\n== analyzer")
+
+	refs, virtual, err := coreRefs.CollectReferencesFromPython(analyzer, sql, d, meta, opts...)
+	if err != nil {
+		fmt.Printf("  references: FAILED: %v\n", err)
+	} else {
+		for _, r := range refs {
+			fmt.Printf("  relation   %s alias=%q virtual=%t level=%d at %d:%d\n",
+				qualify(r.Schema, r.Table), r.Alias, r.IsVirtual, r.NestingLevel, r.Line, r.Col)
 		}
-		fmt.Printf("  %s: %s\n", req["action"], string(resp))
+		for _, v := range virtual {
+			fmt.Printf("  cte        %s columns=%d\n", v.Table, len(v.Columns))
+		}
 	}
+
+	columnRefs, aliases, err := coreRefs.CollectColumnRefsFromPython(analyzer, sql, d, meta, opts...)
+	if err != nil {
+		fmt.Printf("  column refs: FAILED: %v\n", err)
+	} else {
+		for _, c := range columnRefs {
+			fmt.Printf("  column ref %s qualified=%t resolved=%t level=%d at %d:%d\n",
+				c.Column, c.Qualified, c.Resolved, c.NestingLevel, c.Line, c.Col)
+		}
+		for _, a := range aliases {
+			fmt.Printf("  alias      %s\n", a.Alias)
+		}
+	}
+
+	if caretLine == 0 {
+		return
+	}
+	completionCtx, err := coreRefs.ParseCompletionContextFromPython(analyzer, sql, caretLine, caretCol, meta)
+	if err != nil {
+		fmt.Printf("  context: FAILED: %v\n", err)
+		return
+	}
+	precedingColumn := "none"
+	if completionCtx.PrecedingColumn != nil {
+		precedingColumn = completionCtx.PrecedingColumn.Name
+	}
+	fmt.Printf("  context    targets=%d parts=%v afterDot=%t table=%q preceding=%s valuePos=%t\n",
+		completionCtx.Targets, completionCtx.Parts, completionCtx.CaretAfterDot,
+		completionCtx.TargetTable, precedingColumn, completionCtx.ValuePosition)
 }
