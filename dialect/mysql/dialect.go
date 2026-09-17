@@ -197,6 +197,17 @@ func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
 		{Text: "IN", InsertText: "IN ($0)", Description: "Matches any value in list"},
 	}
 
+	// Boolean (TINYINT(1) or BOOLEAN). Must precede the numeric test:
+	// "tinyint(1)" contains "int", so numeric would otherwise claim it.
+	if strings.Contains(typeLower, "bool") || typeLower == "tinyint(1)" {
+		return append(common,
+			core.OperatorInfo{Text: "IS TRUE", InsertText: "IS TRUE", Description: "Value is true"},
+			core.OperatorInfo{Text: "IS FALSE", InsertText: "IS FALSE", Description: "Value is false"},
+			core.OperatorInfo{Text: "IS NOT TRUE", InsertText: "IS NOT TRUE", Description: "Value is not true"},
+			core.OperatorInfo{Text: "IS NOT FALSE", InsertText: "IS NOT FALSE", Description: "Value is not false"},
+		)
+	}
+
 	// Numeric types
 	if strings.Contains(typeLower, "int") || strings.Contains(typeLower, "decimal") ||
 		strings.Contains(typeLower, "numeric") || strings.Contains(typeLower, "float") ||
@@ -208,16 +219,6 @@ func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
 			core.OperatorInfo{Text: ">=", InsertText: ">= $0", Description: "Greater than or equal"},
 			core.OperatorInfo{Text: "BETWEEN", InsertText: "BETWEEN $1 AND $0", Description: "Within range (inclusive)"},
 			core.OperatorInfo{Text: "<=>", InsertText: "<=> $0", Description: "NULL-safe equal"},
-		)
-	}
-
-	// Boolean (TINYINT(1) or BOOLEAN)
-	if strings.Contains(typeLower, "bool") || typeLower == "tinyint(1)" {
-		return append(common,
-			core.OperatorInfo{Text: "IS TRUE", InsertText: "IS TRUE", Description: "Value is true"},
-			core.OperatorInfo{Text: "IS FALSE", InsertText: "IS FALSE", Description: "Value is false"},
-			core.OperatorInfo{Text: "IS NOT TRUE", InsertText: "IS NOT TRUE", Description: "Value is not true"},
-			core.OperatorInfo{Text: "IS NOT FALSE", InsertText: "IS NOT FALSE", Description: "Value is not false"},
 		)
 	}
 

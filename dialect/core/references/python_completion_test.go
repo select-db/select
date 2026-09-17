@@ -9,6 +9,9 @@ import (
 	core "github.com/selectDb/dialect/core"
 	coreRefs "github.com/selectDb/dialect/core/references"
 	"github.com/selectDb/dialect/core/testutil"
+	"github.com/selectDb/dialect/mysql"
+	"github.com/selectDb/dialect/postgresql"
+	"github.com/selectDb/dialect/sqlite"
 )
 
 func TestParseCompletionContextFromPython(t *testing.T) {
@@ -24,6 +27,7 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 	tests := []struct {
 		name             string
 		sql              string
+		dialect          core.SQLDialect // nil means PostgreSQL
 		wantTargets      core.CompletionTarget
 		wantSchemaFilter string
 		wantTargetTable  string
@@ -54,14 +58,27 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 		{name: "enum value equality", sql: "SELECT * FROM t1 WHERE c1 = '|'", wantTargets: core.CompletionTargetEnumValue},
 		{name: "enum value in list", sql: "SELECT * FROM t1 WHERE c1 IN ('|')", wantTargets: core.CompletionTargetEnumValue},
 		{name: "enum value update set", sql: "UPDATE t1 SET c1 = '|'", wantTargets: core.CompletionTargetEnumValue},
+		{name: "quoted column operator context (postgresql)", sql: "SELECT * FROM t1 WHERE \"c1\" |",
+			dialect: postgresql.NewDialect(), wantTargets: core.CompletionTargetOperator},
+		{name: "quoted column operator context (mysql)", sql: "SELECT * FROM t1 WHERE `c1` |",
+			dialect: mysql.NewDialect(), wantTargets: core.CompletionTargetOperator},
+		{name: "quoted column operator context (sqlite)", sql: "SELECT * FROM t1 WHERE [c1] |",
+			dialect: sqlite.NewDialect(), wantTargets: core.CompletionTargetOperator},
+		{name: "quoted column enum value (mysql)", sql: "SELECT * FROM t1 WHERE `c1` = '|'",
+			dialect: mysql.NewDialect(), wantTargets: core.CompletionTargetEnumValue},
+		{name: "quoted column enum value (sqlite)", sql: "SELECT * FROM t1 WHERE [c1] = '|'",
+			dialect: sqlite.NewDialect(), wantTargets: core.CompletionTargetEnumValue},
+		{name: "quoted table qualified column (mysql)", sql: "SELECT `t1`.| FROM t1",
+			dialect: mysql.NewDialect(), wantTargets: core.CompletionTargetColumn,
+			wantParts: []string{"t1"}, wantCaretDot: true, wantTargetTable: "t1"},
 		{name: "SELECT mid-word typing", sql: "SELECT cus| FROM t1", wantTargets: core.CompletionTargetAll},
 		{name: "WHERE mid-word typing", sql: "SELECT * FROM t1 WHERE cus|", wantTargets: core.CompletionTargetTableAndColumn},
 		{name: "SELECT empty quoted identifier", sql: "SELECT \"|\" FROM t1", wantTargets: core.CompletionTargetAll},
-		{name: "MySQL @@ system variable", sql: "SELECT @@|", wantTargets: core.CompletionTargetSetting},
-		{name: "MySQL @@ partial", sql: "SELECT @@vers|", wantTargets: core.CompletionTargetSetting},
+		{name: "MySQL @@ system variable", sql: "SELECT @@|", dialect: mysql.NewDialect(), wantTargets: core.CompletionTargetSetting},
+		{name: "MySQL @@ partial", sql: "SELECT @@vers|", dialect: mysql.NewDialect(), wantTargets: core.CompletionTargetSetting},
 		{name: "Postgres SHOW", sql: "SHOW |", wantTargets: core.CompletionTargetSetting},
 		{name: "Postgres SHOW partial", sql: "SHOW time|", wantTargets: core.CompletionTargetSetting},
-		{name: "SQLite PRAGMA", sql: "PRAGMA |", wantTargets: core.CompletionTargetSetting},
+		{name: "SQLite PRAGMA", sql: "PRAGMA |", dialect: sqlite.NewDialect(), wantTargets: core.CompletionTargetSetting},
 		{name: "Single @ user variable does not trigger Setting", sql: "SELECT @my|", wantTargets: core.CompletionTargetAll},
 	}
 
@@ -70,7 +87,12 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 			text, caretCharPos := removeCaret(tt.sql)
 			caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
 
-			ctx, err := coreRefs.ParseCompletionContextFromPython(analyzer, text, caretLine, caretOffset, meta)
+			d := tt.dialect
+			if d == nil {
+				d = postgresql.NewDialect()
+			}
+
+			ctx, err := coreRefs.ParseCompletionContextFromPython(analyzer, text, d, caretLine, caretOffset, meta)
 			if err != nil {
 				t.Fatalf("Python call failed: %v", err)
 			}

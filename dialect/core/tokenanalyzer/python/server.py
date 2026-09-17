@@ -151,6 +151,7 @@ def _complete_context(req: dict) -> dict:
     caret_line = req.get("caret_line", 1)
     caret_col = req.get("caret_col", 0)
     schema_names = list(req.get("schema", {}).keys())
+    dialect = req.get("dialect", "postgresql")
 
     if not sql:
         return {"parts": [], "caret_after_dot": False, "targets": 0,
@@ -158,7 +159,7 @@ def _complete_context(req: dict) -> dict:
                 "keyword_context": 0, "preceding_column": None,
                 "insert_target_table": ""}
 
-    return detect_completion_context(sql, caret_line, caret_col, schema_names)
+    return detect_completion_context(sql, caret_line, caret_col, schema_names, dialect)
 
 
 def serve() -> None:
