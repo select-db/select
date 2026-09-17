@@ -9,7 +9,7 @@ it.
 When you work with a team, git becomes useful: keep files in sync across members
 and use branches to version your work.
 
-![The source control panel beside a diff: a branch, staged and unstaged changes, and the working copy of a query against its last commit.](/shots/git.light.png)
+![The source control panel beside a diff: a branch, staged and unstaged changes, and the working copy of a query against its last commit.](/shots/git.light.webp)
 
 ## Getting started
 

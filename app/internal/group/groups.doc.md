@@ -2,7 +2,7 @@
 
 Groups collect [users](/docs/workspace/users/) together and grant them [roles](/docs/workspace/roles/). Add someone to a group once, and they inherit every role attached to it, instead of assigning roles to each user one by one. Each workspace defines its own groups.
 
-![The workspace's groups: two of them, each with the members it holds and the number of roles it grants them.](/shots/team.groups.light.png)
+![The workspace's groups: two of them, each with the members it holds and the number of roles it grants them.](/shots/team.groups.light.webp)
 
 ## Groups vs roles
 

@@ -121,6 +121,11 @@ web_shots() {
     echo "wails3 not found. Install it: go install github.com/wailsapp/wails/v3/cmd/wails3@latest" >&2
     exit 1
   }
+  # The captures are written as lossless WebP, the format the site serves.
+  command -v cwebp >/dev/null 2>&1 || {
+    echo "cwebp not found. Install libwebp: brew install webp, or apt install webp" >&2
+    exit 1
+  }
   step "Web — recapturing screenshots (builds the app first)"
   (cd "$ROOT/app" && wails3 task shots)
   done_ "web shots — look at the diff before committing the images"

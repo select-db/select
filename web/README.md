@@ -177,7 +177,7 @@ sit in one directory, share one name and change in one diff:
 app/frontend/src/lib/components/views/Chat/
   ai-chat.doc.md          the page
   ai-chat.shot.ts         the shot
-  shots/chat.light.png    what it wrote
+  shots/chat.light.webp   what it wrote
 ```
 
 The spec writes into a `shots/` directory beside itself (`shotsDirFor` reads
@@ -197,6 +197,17 @@ file from the nearest `package.json`, and the harness the specs share lives
 under `app/frontend/`, which is ESM. Without a root declaring the same, a spec
 in `app/internal/` loads as CJS and fails on the first `import`. The file holds
 nothing else; there is no npm project at the root.
+
+Every capture is written as **lossless WebP**, which is the only format the
+site serves: the same pixels playwright hands back, at about a third of the
+bytes, because a screenshot of an interface is flat colour and sharp edges.
+Encoding needs `cwebp` on the machine taking the pictures (`brew install webp`,
+`apt install webp`); nothing else in the repo needs it, and CI never takes
+pictures.
+
+There is no PNG alongside. A browser without WebP (Safari before 14, released
+September 2020) sees a broken image rather than a screenshot -- the cost of one
+format instead of two files per picture in git forever.
 
 Regenerate them with:
 

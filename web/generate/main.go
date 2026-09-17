@@ -311,7 +311,7 @@ func build(cfg buildConfig) error {
 		// A fence can name the file it belongs in. See codeblock.go.
 		goldmark.WithRendererOptions(renderer.WithNodeRenderers(codeBlocks)),
 		// A screenshot carries both theme cuts and its own box. See image.go.
-		goldmark.WithRendererOptions(renderer.WithNodeRenderers(imagesRenderer(pngSizes(shots)))),
+		goldmark.WithRendererOptions(renderer.WithNodeRenderers(imagesRenderer(shotSizes(shots)))),
 		// A keystroke in a code span renders as keycaps. See kbd.go.
 		goldmark.WithRendererOptions(renderer.WithNodeRenderers(keystrokes)),
 	)
@@ -589,7 +589,7 @@ func watch(cfg buildConfig) {
 				// build reads from outside web/, and a recaptured figure is the
 				// commonest reason to want a rebuild after running the shots.
 				isInput := strings.HasSuffix(path, ".doc.md") ||
-					(strings.HasSuffix(path, ".png") && filepath.Base(filepath.Dir(path)) == "shots")
+					(strings.HasSuffix(path, ".webp") && filepath.Base(filepath.Dir(path)) == "shots")
 				if isInput && info.ModTime().After(lastMod) {
 					trigger = path
 					return filepath.SkipAll
@@ -1384,7 +1384,7 @@ func findShots(cfg buildConfig) (map[string]string, error) {
 		}
 		for _, e := range entries {
 			name := e.Name()
-			if e.IsDir() || !strings.HasSuffix(name, ".png") {
+			if e.IsDir() || !strings.HasSuffix(name, ".webp") {
 				continue
 			}
 			src := filepath.Join(path, name)
