@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/selectDb/dialect/core"
@@ -70,8 +71,16 @@ func (c *Analyzer) ensure() error {
 	c.cmd = cmd
 	c.stdin = stdin
 	c.stdout = bufio.NewScanner(stdout)
+	// One response is one line, and bufio caps a line at 64 KiB by default.
+	// Six kilobytes of SQL already lints to more than that, so the default
+	// turns an ordinary file into a read failure.
+	c.stdout.Buffer(make([]byte, 0, 64<<10), maxResponseBytes)
 	return nil
 }
+
+// maxResponseBytes caps one response. Large enough for a whole file's
+// diagnostics, small enough that a runaway analyzer cannot exhaust memory.
+const maxResponseBytes = 8 << 20
 
 type diagnostic struct {
 	RuleID    string `json:"rule_id"`
@@ -113,6 +122,9 @@ func (c *Analyzer) callLocked(req map[string]any) (json.RawMessage, error) {
 
 	if !c.stdout.Scan() {
 		c.kill()
+		if err := c.stdout.Err(); err != nil {
+			return nil, fmt.Errorf("analyzer read: %w", err)
+		}
 		return nil, fmt.Errorf("analyzer read: no response")
 	}
 
@@ -124,29 +136,19 @@ func (c *Analyzer) callLocked(req map[string]any) (json.RawMessage, error) {
 	return json.RawMessage(raw), nil
 }
 
-// responseError reports what the subprocess said went wrong, if anything.
-// Every failure in it arrives as a response carrying an error key: a malformed
-// request, an unknown action, or an exception raised while handling one. No
-// successful response has that key.
-//
-// Checking here rather than per action is what makes the failure visible at
-// all. A caller unmarshals the response into its own type, which has no error
-// field, so it reads an exception as a zero value and reports no completions
-// rather than a failure.
+// responseError reports what the subprocess said went wrong. It reports every
+// failure in band, as a response carrying an error key; no successful response
+// has one, so a caller decoding into its own type reads one as zero values.
 func responseError(raw []byte) error {
 	var resp struct {
 		Error     string `json:"error"`
 		Traceback string `json:"traceback"`
 	}
-	// A response this cannot parse is left to the caller, whose unmarshal
-	// reports it against the type it expected.
+	// Unparseable, or no error in it: nothing for this to report either way.
 	if err := json.Unmarshal(raw, &resp); err != nil || resp.Error == "" {
 		return nil
 	}
-	if resp.Traceback != "" {
-		return fmt.Errorf("analyzer: %s\n%s", resp.Error, resp.Traceback)
-	}
-	return fmt.Errorf("analyzer: %s", resp.Error)
+	return fmt.Errorf("analyzer: %s", strings.TrimSpace(resp.Error+"\n"+resp.Traceback))
 }
 
 // CallWithTimeout sends a request to the subprocess with a context deadline.

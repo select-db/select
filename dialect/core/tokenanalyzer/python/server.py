@@ -4,14 +4,16 @@ stdin/stdout JSON server loop.
 Protocol: newline-delimited JSON.
 
 Request fields:
-  action      , "lint" (default; future: "format", "rewrite", …)
+  action      , "lint" (default; future: "format", "rewrite", ...)
   sql         , SQL string to analyse
   dialect     , "postgresql" | "mysql" | "sqlite"
   schema      , { schema: { table: { col: type } } }
   default_schema, optional, defaults to "public"
   functions   , optional list of user-defined function names
 
-Response: JSON object whose shape depends on the action.
+Response: JSON object whose shape depends on the action. "error" is reserved:
+a response carrying it is a failure, with "traceback" set when an exception
+produced it, and no successful response has either key.
 
 All positions are 1-based line, 0-based col (matching ANTLR convention used by
 the Go layer).

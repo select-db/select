@@ -3,13 +3,13 @@ package tokenanalyzer_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/selectDb/dialect/core/testutil"
-	"github.com/selectDb/dialect/core/tokenanalyzer"
 )
 
 func TestCall_Ping(t *testing.T) {
@@ -73,12 +73,7 @@ func TestCallWithTimeout_Expired(t *testing.T) {
 }
 
 func BenchmarkCall_Ping(b *testing.B) {
-	pythonPath, script, ok := tokenanalyzer.FindDevAnalyzer()
-	if !ok {
-		b.Skip("python venv not found; run `uv sync` in dialect/core/tokenanalyzer/python")
-	}
-
-	a := tokenanalyzer.NewAnalyzer(pythonPath, script)
+	a := testutil.NewTestAnalyzer(b)
 	defer a.Close()
 
 	// Warm up
@@ -94,10 +89,9 @@ func BenchmarkCall_Ping(b *testing.B) {
 	}
 }
 
-// TestCall_SurfacesAnalyzerError covers the failure the subprocess reports in
-// band. Every error it raises comes back as a response carrying an error key,
-// and a caller that unmarshals such a response into its own type reads it as
-// zero values, so completion showed nothing rather than reporting a failure.
+// TestCall_SurfacesAnalyzerError pins that a failure the subprocess reports in
+// band reaches the caller. It answers with an error key rather than a broken
+// pipe, so a caller decoding into its own type reads a failure as zero values.
 func TestCall_SurfacesAnalyzerError(t *testing.T) {
 	a := testutil.NewTestAnalyzer(t)
 	defer a.Close()
@@ -105,19 +99,19 @@ func TestCall_SurfacesAnalyzerError(t *testing.T) {
 	tests := []struct {
 		name string
 		req  map[string]any
-		want string
+		want []string
 	}{
 		{
 			name: "unknown action",
 			req:  map[string]any{"action": "no_such_action"},
-			want: "Unknown action",
+			want: []string{"analyzer:", "Unknown action", "no_such_action"},
 		},
 		{
 			// An exception raised mid-dispatch, which is what a bug in the
 			// analyzer, or a caller sending the wrong shape, looks like here.
 			name: "exception while handling a known action",
 			req:  map[string]any{"action": "lint", "sql": "SELECT 1", "dialect": "postgresql", "schema": "not a dict"},
-			want: "analyzer:",
+			want: []string{"analyzer:", "Traceback"},
 		},
 	}
 
@@ -127,8 +121,10 @@ func TestCall_SurfacesAnalyzerError(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected an error, got response %s", string(raw))
 			}
-			if !strings.Contains(err.Error(), tt.want) {
-				t.Errorf("error = %q, want it to contain %q", err, tt.want)
+			for _, want := range tt.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to contain %q", err, want)
+				}
 			}
 		})
 	}
@@ -145,14 +141,30 @@ func TestCall_KeepsServingAfterAnError(t *testing.T) {
 		t.Fatal("expected an error from an unknown action")
 	}
 
-	raw, err := a.Call(map[string]any{"action": "ping"})
-	if err != nil {
+	if _, err := a.Call(map[string]any{"action": "ping"}); err != nil {
 		t.Fatalf("ping after an error: %v", err)
 	}
-	var resp struct {
-		OK bool `json:"ok"`
+}
+
+// TestAnalyze_LargeFile pins the read buffer. One response is one line, and
+// bufio's 64 KiB default cap turned a few kilobytes of SQL into a read failure
+// that lint and completion swallowed as "nothing here".
+func TestAnalyze_LargeFile(t *testing.T) {
+	a := testutil.NewTestAnalyzer(t)
+	defer a.Close()
+
+	var sql strings.Builder
+	for i := 0; i < 600; i++ {
+		fmt.Fprintf(&sql, "SELECT %d FROM no_such_table_%d;\n", i, i)
 	}
-	if err := json.Unmarshal(raw, &resp); err != nil || !resp.OK {
-		t.Errorf("ping after an error returned %s", string(raw))
+	raw, err := a.Call(map[string]any{
+		"action": "lint", "sql": sql.String(), "dialect": "postgresql",
+		"schema": map[string]any{}, "default_schema": "public",
+	})
+	if err != nil {
+		t.Fatalf("lint a large file: %v", err)
+	}
+	if len(raw) <= 64<<10 {
+		t.Fatalf("response is %d bytes, under the old 64 KiB cap: the test no longer covers it", len(raw))
 	}
 }
