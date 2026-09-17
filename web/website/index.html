@@ -97,14 +97,18 @@
      near-white page it lands at 2.6:1. Same hue, weight that passes. */
       --orange-text: hsl(24, 88%, 34%);
       /* Same story for the accent: 4.3:1 as link text, one step deeper passes. */
-      --red-text: rgb(190, 38, 38)
+      --red-text: rgb(190, 38, 38);
+      /* The wash behind the top of the page. Faint here: the ground is nearly
+     white, and anything stronger reads as a print fault rather than as light. */
+      --glow: rgba(172, 45, 49, .12)
     }
 
     :root[data-theme=dark] {
       --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / .06), 0px 1px 1px 0px lch(0% 0 0 / .06);
       --red-hover: var(--red-glow);
       --orange-text: var(--orange);
-      --red-text: var(--red)
+      --red-text: var(--red);
+      --glow: rgba(172, 45, 49, .34)
     }
 
     *,
@@ -119,6 +123,16 @@
       color: var(--gray-1000);
       font: var(--t3)/1.6 var(--f);
       -webkit-font-smoothing: antialiased
+    }
+
+    /* The same wash the link preview card carries, behind the headline.
+   On main rather than on .hero so it crosses into the screenshot below
+   without a seam, sized in pixels so it stays a glow at the top rather than
+   stretching with the page, and centred low enough that it has faded out
+   before main's top edge -- the header above it is opaque, so any colour
+   left at that line shows up as a step across the page. */
+    main {
+      background: radial-gradient(900px 560px at 20% 420px, var(--glow), transparent 68%) no-repeat
     }
 
     h1,
