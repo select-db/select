@@ -150,6 +150,10 @@ func spliceTheme(src []byte, themeCSS, name string) ([]byte, error) {
 	}
 }
 
+// notFoundPage is what a static host serves for an address that matches
+// nothing. It keeps its file name at the root rather than becoming /404/.
+const notFoundPage = "404.html"
+
 // starsMarker is where a marketing page carries the GitHub star count. The
 // count is read once per build and written in, because the alternative is the
 // page calling api.github.com from the reader's browser: a third-party request
@@ -1589,6 +1593,18 @@ func copyMarketingPages(cfg buildConfig, themeCSS, stars string) ([]marketingPag
 		out = bytes.ReplaceAll(out, []byte(headerMarker), header)
 		out = bytes.ReplaceAll(out, []byte(footerMarker), footer)
 		out = bytes.ReplaceAll(out, []byte(starsMarker), []byte(stars))
+
+		// The host serves 404.html for anything it cannot find, by that name at
+		// the root. It is staged like any other page and listed like none of
+		// them: an address nobody chose does not belong in a sitemap.
+		if name == notFoundPage {
+			dst := filepath.Join(cfg.outDir, name)
+			if err := os.WriteFile(dst, out, 0o644); err != nil {
+				return nil, err
+			}
+			staged = append(staged, dst)
+			continue
+		}
 
 		// index.html is the site root; any other page gets a directory so its
 		// URL has no extension.
