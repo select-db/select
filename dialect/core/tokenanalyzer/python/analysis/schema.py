@@ -29,7 +29,9 @@ def tokenize(sql: str, sg_dialect: str) -> list:
     double quotes, so MySQL backticks and SQLite brackets arrive as UNKNOWN
     tokens and disappear from every scan that looks for an identifier.
     """
-    return list(SqlglotDialect.get_or_raise(sg_dialect or "postgres").tokenize(sql))
+    if not sg_dialect:
+        raise ValueError("tokenize requires a dialect name")
+    return list(SqlglotDialect.get_or_raise(sg_dialect).tokenize(sql))
 
 
 def pos(node: exp.Expression) -> tuple[int, int]:
