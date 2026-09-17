@@ -16,20 +16,20 @@ func FindDevAnalyzer() (pythonPath, script string, ok bool) {
 		return "", "", false
 	}
 
-	pyDir := filepath.Join(filepath.Dir(thisFile), "python")
-	script = filepath.Join(pyDir, "main.py")
+	pythonDir := filepath.Join(filepath.Dir(thisFile), "python")
+	script = filepath.Join(pythonDir, "main.py")
 	if _, err := os.Stat(script); err != nil {
 		return "", "", false
 	}
 
-	venvBin := "bin"
+	venvBinDir := "bin"
 	if runtime.GOOS == "windows" {
-		venvBin = "Scripts"
+		venvBinDir = "Scripts"
 	}
-	for _, name := range []string{"python3", "python"} {
-		candidate := filepath.Join(pyDir, ".venv", venvBin, name)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, script, true
+	for _, interpreterName := range []string{"python3", "python"} {
+		interpreterPath := filepath.Join(pythonDir, ".venv", venvBinDir, interpreterName)
+		if _, err := os.Stat(interpreterPath); err == nil {
+			return interpreterPath, script, true
 		}
 	}
 	return "", "", false

@@ -99,15 +99,12 @@ type probe struct {
 func (p probe) hasCaret() bool { return p.caretLine > 0 }
 
 func loadMetadata(metaPath string) (core.Metadata, error) {
-	if metaPath == "" {
-		return core.Metadata{}, fmt.Errorf("-meta is required")
-	}
-	raw, err := os.ReadFile(metaPath)
+	rawJSON, err := os.ReadFile(metaPath)
 	if err != nil {
 		return core.Metadata{}, fmt.Errorf("reading -meta: %w", err)
 	}
 	var meta core.Metadata
-	if err := json.Unmarshal(raw, &meta); err != nil {
+	if err := json.Unmarshal(rawJSON, &meta); err != nil {
 		return core.Metadata{}, fmt.Errorf("parsing -meta: %w", err)
 	}
 	return meta, nil
@@ -119,21 +116,21 @@ func readArg(value string) (string, error) {
 	if !isFile {
 		return value, nil
 	}
-	raw, err := os.ReadFile(path)
-	return string(raw), err
+	fileContents, err := os.ReadFile(path)
+	return string(fileContents), err
 }
 
 // cutCaret removes the first | and reports where it was, as the 1-based line
 // and 0-based column the dialect layer expects. Returns line 0 when absent.
 func cutCaret(sql string) (string, int, int) {
-	idx := strings.Index(sql, "|")
-	if idx == -1 {
+	markerIndex := strings.Index(sql, "|")
+	if markerIndex == -1 {
 		return sql, 0, 0
 	}
-	before := sql[:idx]
-	line := strings.Count(before, "\n") + 1
-	col := len(before) - (strings.LastIndex(before, "\n") + 1)
-	return before + sql[idx+1:], line, col
+	beforeCaret := sql[:markerIndex]
+	line := strings.Count(beforeCaret, "\n") + 1
+	col := len(beforeCaret) - (strings.LastIndex(beforeCaret, "\n") + 1)
+	return beforeCaret + sql[markerIndex+1:], line, col
 }
 
 func (p probe) printSQL() {
@@ -176,9 +173,9 @@ func (p probe) printCompletion() {
 	}
 
 	fmt.Printf("\n== complete @ %d:%d (%d)\n", p.caretLine, p.caretCol, len(candidates))
-	for t := core.CandidateTypeKeyword; t <= core.CandidateTypeSetting; t++ {
-		if labels := byType[t]; len(labels) > 0 {
-			fmt.Printf("  %-17s %s\n", t, strings.Join(labels, ", "))
+	for candidateType := core.CandidateTypeKeyword; candidateType <= core.CandidateTypeSetting; candidateType++ {
+		if labels := byType[candidateType]; len(labels) > 0 {
+			fmt.Printf("  %-17s %s\n", candidateType, strings.Join(labels, ", "))
 		}
 	}
 }
@@ -232,15 +229,15 @@ func (p probe) printAnalyzerView() {
 
 	fmt.Println("\n== analyzer")
 
-	refs, virtual, err := coreRefs.CollectReferencesFromPython(p.analyzer, p.sql, p.dialect, p.meta, opts...)
+	relations, virtualTables, err := coreRefs.CollectReferencesFromPython(p.analyzer, p.sql, p.dialect, p.meta, opts...)
 	if err != nil {
 		fmt.Printf("  references: FAILED: %v\n", err)
 	} else {
-		for _, r := range refs {
+		for _, r := range relations {
 			fmt.Printf("  relation   %s alias=%q virtual=%t level=%d at %d:%d\n",
 				qualify(r.Schema, r.Table), r.Alias, r.IsVirtual, r.NestingLevel, r.Line, r.Col)
 		}
-		for _, v := range virtual {
+		for _, v := range virtualTables {
 			fmt.Printf("  cte        %s columns=%d\n", v.Table, len(v.Columns))
 		}
 	}
