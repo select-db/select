@@ -68,13 +68,43 @@ func LoadRefreshToken() (string, error) {
 	return loadStringFromKeyring(tokenKey("refresh-token", domain))
 }
 
-// ClearRefreshToken deletes the refresh token for the current server domain.
+// ClearRefreshToken deletes the refresh token for the current server domain,
+// in-process copy included, so a signed-out token is never presented on the
+// session that follows.
 func ClearRefreshToken() error {
+	forgetRefreshToken()
 	domain, err := server.ReadCurrentDomain()
 	if err != nil {
 		return err
 	}
 	return keyring.Delete(keyringService, tokenKey("refresh-token", domain))
+}
+
+// CredentialStatus is what the keyring can say about the stored session. The
+// third case is the one that matters: a keyring that cannot be read has not
+// said the user is signed out.
+type CredentialStatus int
+
+const (
+	CredentialsUnreadable CredentialStatus = iota
+	CredentialsPresent
+	CredentialsMissing
+)
+
+// ReadCredentialStatus reports whether the current server's tokens are both
+// there, positively gone, or unreadable. Sign-in and sign-out ask the same
+// question and differ only in which answer they act on.
+func ReadCredentialStatus() CredentialStatus {
+	accessToken, accessErr := LoadAccessToken()
+	refreshToken, refreshErr := LoadRefreshToken()
+	switch {
+	case accessErr == nil && refreshErr == nil && accessToken != "" && refreshToken != "":
+		return CredentialsPresent
+	case errors.Is(accessErr, keyring.ErrNotFound) || errors.Is(refreshErr, keyring.ErrNotFound):
+		return CredentialsMissing
+	default:
+		return CredentialsUnreadable
+	}
 }
 
 // LoadDeviceID loads the device ID string or generates/stores a new one if missing

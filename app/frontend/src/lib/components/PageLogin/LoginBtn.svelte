@@ -2,21 +2,30 @@
 	import Button from '$lib/system/Button/Button.svelte';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 
-	import GithubDeviceCode from './modal/GithubDeviceCode.svelte';
+	import { startLogin } from './loginFlowStore';
+	import { loginProviders, type LoginProvider } from './loginProviders';
 
-	const openModal = () => {
+	import DeviceCodeAuth from './modal/DeviceCodeAuth.svelte';
+
+	function openModal(provider: LoginProvider) {
+		// Not awaited: it resolves when the provider authorizes, which is the
+		// whole point of the modal being able to close in the meantime.
+		void startLogin(provider);
 		modalStore.set({
-			content: () => GithubDeviceCode,
+			content: () => DeviceCodeAuth,
 			props: {},
 			width: 300
 		});
-	};
+	}
 </script>
 
-<Button
-	onclick={openModal}
-	content="Log in with Github"
-	leftIcon="github"
-	iconSize={16}
-	emphasis="high"
-/>
+{#each loginProviders as provider (provider.id)}
+	<Button
+		onclick={() => openModal(provider)}
+		content="Log in with {provider.name}"
+		leftIcon={provider.icon}
+		iconSize={16}
+		emphasis="high"
+		noLoader
+	/>
+{/each}
