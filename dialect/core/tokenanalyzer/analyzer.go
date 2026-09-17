@@ -29,7 +29,6 @@ func NewAnalyzer(execPath string, args ...string) *Analyzer {
 	return &Analyzer{execPath: execPath, args: args}
 }
 
-
 // Close shuts down the subprocess cleanly.
 func (c *Analyzer) Close() {
 	c.mu.Lock()
@@ -48,7 +47,6 @@ func (c *Analyzer) kill() {
 	}
 	c.stdout = nil
 }
-
 
 // ensure starts the subprocess if it is not already running.
 func (c *Analyzer) ensure() error {
@@ -120,7 +118,35 @@ func (c *Analyzer) callLocked(req map[string]any) (json.RawMessage, error) {
 
 	raw := make([]byte, len(c.stdout.Bytes()))
 	copy(raw, c.stdout.Bytes())
+	if err := responseError(raw); err != nil {
+		return nil, err
+	}
 	return json.RawMessage(raw), nil
+}
+
+// responseError reports what the subprocess said went wrong, if anything.
+// Every failure in it arrives as a response carrying an error key: a malformed
+// request, an unknown action, or an exception raised while handling one. No
+// successful response has that key.
+//
+// Checking here rather than per action is what makes the failure visible at
+// all. A caller unmarshals the response into its own type, which has no error
+// field, so it reads an exception as a zero value and reports no completions
+// rather than a failure.
+func responseError(raw []byte) error {
+	var resp struct {
+		Error     string `json:"error"`
+		Traceback string `json:"traceback"`
+	}
+	// A response this cannot parse is left to the caller, whose unmarshal
+	// reports it against the type it expected.
+	if err := json.Unmarshal(raw, &resp); err != nil || resp.Error == "" {
+		return nil
+	}
+	if resp.Traceback != "" {
+		return fmt.Errorf("analyzer: %s\n%s", resp.Error, resp.Traceback)
+	}
+	return fmt.Errorf("analyzer: %s", resp.Error)
 }
 
 // CallWithTimeout sends a request to the subprocess with a context deadline.
