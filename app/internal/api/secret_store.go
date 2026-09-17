@@ -68,13 +68,25 @@ func LoadRefreshToken() (string, error) {
 	return loadStringFromKeyring(tokenKey("refresh-token", domain))
 }
 
-// ClearRefreshToken deletes the refresh token for the current server domain.
+// ClearRefreshToken deletes the refresh token for the current server domain,
+// in-process copy included, so a signed-out token is never presented on the
+// session that follows.
 func ClearRefreshToken() error {
+	forgetRefreshToken()
 	domain, err := server.ReadCurrentDomain()
 	if err != nil {
 		return err
 	}
 	return keyring.Delete(keyringService, tokenKey("refresh-token", domain))
+}
+
+// CredentialsCleared reports whether the keyring positively holds no session. A
+// keyring that cannot be read is not an answer, and reading it as one signs the
+// user out of a session that is still good.
+func CredentialsCleared() bool {
+	_, accessErr := LoadAccessToken()
+	_, refreshErr := LoadRefreshToken()
+	return errors.Is(accessErr, keyring.ErrNotFound) || errors.Is(refreshErr, keyring.ErrNotFound)
 }
 
 // LoadDeviceID loads the device ID string or generates/stores a new one if missing

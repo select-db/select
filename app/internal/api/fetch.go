@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,9 +47,13 @@ var (
 
 	loadDeviceIDFunc = LoadDeviceID
 
-	refreshMu     sync.Mutex
-	refreshedAt   time.Time
-	refreshFailed bool
+	refreshMu   sync.Mutex
+	refreshedAt time.Time
+
+	// Why the last refresh failed, or nil. Requests that queued behind it are
+	// handed this rather than a guess, so a network blip is never reported as a
+	// session that ended.
+	refreshErr error
 
 	// In-process fallback for the rotated refresh token. The backend rotates and
 	// deletes the old refresh token on every refresh, so if the keyring write of the
@@ -59,6 +64,40 @@ var (
 	memRefreshToken string
 )
 
+// errSessionExpired is returned only once the server has been handed a complete
+// refresh credential set and has rejected it. Every caller that surfaces a
+// logout keys off this.
+var errSessionExpired = errors.New("session expired, please log in again")
+
+// refreshCreds is everything the server needs to run its refresh path: the
+// expired access token names the session, the rotated refresh token and the
+// device ID authorize the new pair. Missing any one of them, the server answers
+// 401 without ever looking at the session.
+type refreshCreds struct {
+	accessToken  string
+	refreshToken string
+	deviceID     string
+}
+
+// loadRefreshCreds reports whether a refresh is worth attempting at all. A
+// keyring that cannot be read is not an expired session, so the caller keeps the
+// server's 401 instead of destroying credentials it never managed to present.
+func loadRefreshCreds() (refreshCreds, bool) {
+	accessToken, err := loadAccessTokenFunc()
+	if err != nil || accessToken == "" {
+		return refreshCreds{}, false
+	}
+	refreshToken, err := currentRefreshToken()
+	if err != nil || refreshToken == "" {
+		return refreshCreds{}, false
+	}
+	deviceID, err := loadDeviceIDFunc()
+	if err != nil || deviceID == "" {
+		return refreshCreds{}, false
+	}
+	return refreshCreds{accessToken: accessToken, refreshToken: refreshToken, deviceID: deviceID}, true
+}
+
 // rememberRefreshToken persists the rotated refresh token to the keyring, falling
 // back to in-process memory when the keyring write fails so the session survives.
 func rememberRefreshToken(token string) {
@@ -68,6 +107,14 @@ func rememberRefreshToken(token string) {
 		memTokenMu.Unlock()
 		return
 	}
+	memTokenMu.Lock()
+	memRefreshToken = ""
+	memTokenMu.Unlock()
+}
+
+// forgetRefreshToken drops the in-process copy, so a token never outlives the
+// session it belongs to and is never presented on the next one.
+func forgetRefreshToken() {
 	memTokenMu.Lock()
 	memRefreshToken = ""
 	memTokenMu.Unlock()
@@ -177,6 +224,12 @@ func GetBaseURL() (string, error) {
 
 // Retries on 401 with token refresh. Concurrent 401s are serialized:
 // first goroutine refreshes, others wait then retry.
+//
+// A 401 only ends the session when the server was handed a complete refresh
+// credential set and still refused it. A 401 we could attach no credentials to,
+// one the endpoint itself returned after the server had refreshed, and a refresh
+// that never reached the server all leave the stored credentials alone: treating
+// them as proof of expiry signed people out of live sessions.
 func doWithRetry(
 	ctx context.Context,
 	client *http.Client,
@@ -185,15 +238,7 @@ func doWithRetry(
 	payload interface{},
 	headers map[string]string,
 ) (*http.Response, error) {
-	resp, err := doRequest(
-		ctx,
-		client,
-		method,
-		endpoint,
-		payload,
-		headers,
-		false,
-	)
+	resp, err := doRequest(ctx, client, method, endpoint, payload, headers, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -202,11 +247,18 @@ func doWithRetry(
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		// Request succeeded with the current access token; clear any prior
-		// refresh-failure latch. Done under the lock since refreshFailed is also
-		// written by the refresh path below.
+		// refresh failure. Done under the lock since refreshErr is also written by
+		// the refresh path below.
 		refreshMu.Lock()
-		refreshFailed = false
+		refreshErr = nil
 		refreshMu.Unlock()
+		return resp, nil
+	}
+
+	creds, ok := loadRefreshCreds()
+	if !ok {
+		// Nothing to refresh with, so this 401 is the server's answer to the
+		// request, not a verdict on the session.
 		return resp, nil
 	}
 	_ = resp.Body.Close()
@@ -215,19 +267,21 @@ func doWithRetry(
 
 	refreshMu.Lock()
 	if refreshedAt.After(beforeRefresh) {
-		// Another goroutine already refreshed while we waited. Capture the latch
+		// Another goroutine already refreshed while we waited. Capture the outcome
 		// before unlocking so the read stays synchronized with the refresh path.
-		failed := refreshFailed
+		failure := refreshErr
 		refreshMu.Unlock()
-		if failed {
-			return nil, fmt.Errorf("session expired, please log in again")
+		if failure != nil {
+			return nil, failure
 		}
-		return doRequest(ctx, client, method, endpoint, payload, headers, false)
+		return doRequest(ctx, client, method, endpoint, payload, headers, nil)
 	}
 
-	resp, err = doRequest(ctx, client, method, endpoint, payload, headers, true)
+	resp, err = doRequest(ctx, client, method, endpoint, payload, headers, &creds)
 	if err != nil {
-		refreshFailed = true
+		// The server never answered, so nothing is known about the refresh token.
+		// Waiters get this error rather than a logout.
+		refreshErr = err
 		refreshedAt = time.Now()
 		refreshMu.Unlock()
 		return nil, err
@@ -235,17 +289,20 @@ func doWithRetry(
 
 	saveTokensFromResponse(resp)
 
-	if resp.StatusCode == http.StatusUnauthorized {
+	// A new access token means the server ran its refresh path, so a 401 behind it
+	// belongs to the endpoint and says nothing about the session.
+	if resp.StatusCode == http.StatusUnauthorized && resp.Header.Get("X-New-Access-Token") == "" {
 		_ = resp.Body.Close()
 		_ = clearAccessTokenFunc()
 		_ = clearRefreshTokenFunc()
-		refreshFailed = true
+		forgetRefreshToken()
+		refreshErr = errSessionExpired
 		refreshedAt = time.Now()
 		refreshMu.Unlock()
-		return nil, fmt.Errorf("session expired, please log in again")
+		return nil, errSessionExpired
 	}
 
-	refreshFailed = false
+	refreshErr = nil
 	refreshedAt = time.Now()
 	refreshMu.Unlock()
 	return resp, nil
@@ -258,7 +315,7 @@ func doRequest(
 	endpoint string,
 	payload interface{},
 	headers map[string]string,
-	includeRefresh bool,
+	refresh *refreshCreds,
 ) (*http.Response, error) {
 	apiURL, err := GetBaseURL()
 	if err != nil {
@@ -285,17 +342,13 @@ func doRequest(
 
 	req.Header.Set("Content-Type", "application/json")
 
-	if accessToken, err := loadAccessTokenFunc(); err == nil {
+	if refresh != nil {
+		req.Header.Set("Authorization", "Bearer "+refresh.accessToken)
+		req.Header.Set("X-Refresh-Token", refresh.refreshToken)
+		req.Header.Set("X-Device-ID", refresh.deviceID)
+	} else if accessToken, err := loadAccessTokenFunc(); err == nil {
+		// Best effort: the login endpoints are reached before there is one.
 		req.Header.Set("Authorization", "Bearer "+accessToken)
-	}
-
-	if includeRefresh {
-		if refreshToken, err := currentRefreshToken(); err == nil {
-			req.Header.Set("X-Refresh-Token", refreshToken)
-		}
-		if deviceID, err := loadDeviceIDFunc(); err == nil {
-			req.Header.Set("X-Device-ID", deviceID)
-		}
 	}
 
 	for k, v := range headers {

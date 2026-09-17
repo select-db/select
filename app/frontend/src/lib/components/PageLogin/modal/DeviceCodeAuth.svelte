@@ -1,94 +1,39 @@
-<script context="module" lang="ts">
-	export type DeviceCodeResult = {
-		user_code: string;
-		device_code: string;
-		verification_uri: string;
-	};
-
-	export type DeviceCodeAuthProps = {
-		/** Modal title, e.g. "Sign in with GitHub" */
-		title: string;
-		/** Icon name for the header (e.g. "github") */
-		icon: import('$lib/system/Icon/types').Icons;
-		/** Label for the "open verification URL" button */
-		openUrlLabel: string;
-		/** Label for the copy code button */
-		copyCodeLabel?: string;
-		/** Message when getDeviceCode fails */
-		initErrorLabel?: string;
-		/** Message when auth fails or times out */
-		authErrorLabel?: string;
-		/** Message when opening URL fails */
-		openUrlErrorLabel?: string;
-		/** Fetch device code from the provider */
-		getDeviceCode: () => Promise<DeviceCodeResult | null>;
-		/** Start polling for token; backend will emit "login" on success */
-		startPolling: (deviceCode: string) => Promise<void>;
-		/** Cancel any ongoing polling */
-		cancelPolling: () => void;
-	};
-</script>
-
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
-
 	import { OpenURL } from '$lib/bindings/selectDb/internal/system/system';
 
 	import Alert from '$lib/system/Alert/Alert.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
 	import { AlertType } from '$lib/system/Alert/types';
-	import type { Icons } from '$lib/system/Icon/types';
 	import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';
 	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
 
 	import { tryCatch } from '$lib/utils/tryCatch';
 
+	import { cancelLogin, loginFlowStore } from '../loginFlowStore';
+
 	import ProgressBar from './ProgressBar.svelte';
 
-	export let title: string;
-	export let icon: Icons;
-	export let openUrlLabel: string;
-	export let copyCodeLabel = 'Copy code';
-	export let initErrorLabel = 'Failed to initiate login.';
-	export let authErrorLabel = 'Authorization failed or timed out';
-	export let openUrlErrorLabel = 'Failed to open the login page. Please open the URL manually';
-	export let getDeviceCode: () => Promise<DeviceCodeResult | null>;
-	export let startPolling: (deviceCode: string) => Promise<void>;
-	export let cancelPolling: () => void;
+	// Supplied by Modal. Closing leaves the flow running: only Cancel stops it.
+	export let onClose: () => void = () => {};
 
-	let userCode: string = '0000-0000';
-	let verificationURI: string | null = null;
-	let deviceCode: string | null = null;
-	let error: string | null = null;
+	const PLACEHOLDER_CODE = '0000-0000';
 
-	onMount(async () => {
-		const [r, err] = await tryCatch(getDeviceCode);
-		if (err || !r) {
-			error = initErrorLabel;
-			return;
-		}
-		userCode = r.user_code;
-		deviceCode = r.device_code;
-		verificationURI = r.verification_uri;
+	$: flow = $loginFlowStore;
+	$: userCode = flow?.userCode || PLACEHOLDER_CODE;
 
-		// Backend emits "login" on success; sessionWall is the only handler (init graph + close modal).
-		if (deviceCode) {
-			const [, pollErr] = await tryCatch(startPolling, deviceCode);
-			if (!pollErr) return;
-
-			error = pollErr?.message ? `${authErrorLabel}: ${pollErr.message}` : authErrorLabel;
-			cancelPolling();
-		}
-	});
-
-	onDestroy(() => {
-		cancelPolling();
-	});
+	function cancel() {
+		cancelLogin();
+		onClose();
+	}
 
 	async function openVerificationUrl() {
-		if (!verificationURI) return;
-		const [, err] = await tryCatch(OpenURL, verificationURI);
-		if (err) return notifyError(openUrlErrorLabel);
+		if (!flow?.verificationUri) return;
+		const [, err] = await tryCatch(OpenURL, flow.verificationUri);
+		if (err) {
+			notifyError(
+				`Failed to open the ${flow.provider.name} login page. Please open the URL manually`
+			);
+		}
 	}
 
 	async function copyCodeToClipboard() {
@@ -98,17 +43,17 @@
 	}
 </script>
 
-<div class="wrapper">
-	<ModalHeader {icon} {title} />
+{#if flow}
+	<div class="wrapper">
+		<ModalHeader icon={flow.provider.icon} title="Sign in with {flow.provider.name}" />
 
-	<ProgressBar error={!!error}></ProgressBar>
+		<ProgressBar error={flow.status === 'error'} startedAt={flow.startedAt}></ProgressBar>
 
-	<div class="content">
-		{#if error}
-			<Alert message={error} type={AlertType.Error} noPulse />
-		{/if}
-		{#if userCode}
-			<div class="code">
+		<div class="content">
+			{#if flow.error}
+				<Alert message={flow.error} type={AlertType.Error} noPulse />
+			{/if}
+			<div class="code" data-test="login.code">
 				<p class="digit">{userCode[0]}</p>
 				<p class="digit">{userCode[1]}</p>
 				<p class="digit">{userCode[2]}</p>
@@ -119,14 +64,16 @@
 				<p class="digit">{userCode[7]}</p>
 				<p class="digit">{userCode[8]}</p>
 			</div>
-		{/if}
-	</div>
+		</div>
 
-	<div class="footer">
-		<Button content={copyCodeLabel} emphasis="low" onclick={copyCodeToClipboard}></Button>
-		<Button content={openUrlLabel} emphasis="high" onclick={openVerificationUrl}></Button>
+		<div class="footer">
+			<Button content="Cancel" emphasis="low" onclick={cancel}></Button>
+			<Button content="Copy code" emphasis="low" onclick={copyCodeToClipboard}></Button>
+			<Button content="Go to {flow.provider.name}" emphasis="high" onclick={openVerificationUrl}
+			></Button>
+		</div>
 	</div>
-</div>
+{/if}
 
 <style>
 	.wrapper {

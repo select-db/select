@@ -111,7 +111,7 @@ func TestFetchRefreshRotationDesync(t *testing.T) {
 		clearAccessTokenFunc = func() error { return nil }
 		clearRefreshTokenFunc = func() error { return nil }
 		refreshedAt = time.Time{}
-		refreshFailed = false
+		refreshErr = nil
 		resetMemRefreshToken()
 
 		return srv, httpSrv.Close
@@ -174,7 +174,7 @@ func TestFetchWithRetry(t *testing.T) {
 		clearAccessTokenFunc = func() error { return nil }
 		clearRefreshTokenFunc = func() error { return nil }
 		refreshedAt = time.Time{}
-		refreshFailed = false
+		refreshErr = nil
 	}
 	resetTestState()
 
@@ -349,8 +349,10 @@ func TestFetchWithRetry(t *testing.T) {
 		}
 	})
 
-	t.Run("no access token still retries and expires", func(t *testing.T) {
+	t.Run("no access token surfaces the server's 401", func(t *testing.T) {
 		resetTestState()
+		// Nothing to identify the session with, so the refresh is never attempted
+		// and the 401 stands on its own. See TestFetchKeepsSessionOnUnprovenFailure.
 		loadAccessTokenFunc = func() (string, error) { return "", errors.New("no token") }
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -359,8 +361,8 @@ func TestFetchWithRetry(t *testing.T) {
 		os.Setenv("API_URL", srv.URL)
 
 		err := Fetch(context.Background(), "GET", "/", nil, nil, nil)
-		if err == nil || !strings.Contains(err.Error(), "session expired") {
-			t.Fatalf("expected session expired error, got %v", err)
+		if err == nil || !strings.Contains(err.Error(), "API error 401") {
+			t.Fatalf("expected the API 401 to surface, got %v", err)
 		}
 	})
 
@@ -410,6 +412,190 @@ func TestFetchWithRetry(t *testing.T) {
 
 		if got := refreshCount.Load(); got != 1 {
 			t.Fatalf("expected exactly 1 refresh request, got %d", got)
+		}
+	})
+}
+
+// sessionProbe swaps the credential accessors for in-memory ones and records
+// whether the session was wiped, which is what the app reads as a logout.
+type sessionProbe struct {
+	access  string
+	refresh string
+	device  string
+
+	accessErr  error
+	refreshErr error
+	deviceErr  error
+
+	cleared bool
+}
+
+func (p *sessionProbe) install(t *testing.T) {
+	t.Helper()
+
+	origLoadAccess, origLoadRefresh, origLoadDevice := loadAccessTokenFunc, loadRefreshTokenFunc, loadDeviceIDFunc
+	origSaveAccess, origSaveRefresh := saveAccessTokenFunc, saveRefreshTokenFunc
+	origClearAccess, origClearRefresh := clearAccessTokenFunc, clearRefreshTokenFunc
+	t.Cleanup(func() {
+		loadAccessTokenFunc, loadRefreshTokenFunc, loadDeviceIDFunc = origLoadAccess, origLoadRefresh, origLoadDevice
+		saveAccessTokenFunc, saveRefreshTokenFunc = origSaveAccess, origSaveRefresh
+		clearAccessTokenFunc, clearRefreshTokenFunc = origClearAccess, origClearRefresh
+	})
+
+	loadAccessTokenFunc = func() (string, error) { return p.access, p.accessErr }
+	loadRefreshTokenFunc = func() (string, error) { return p.refresh, p.refreshErr }
+	loadDeviceIDFunc = func() (string, error) { return p.device, p.deviceErr }
+	saveAccessTokenFunc = func(tok string) error { p.access = tok; return nil }
+	saveRefreshTokenFunc = func(tok string) error { p.refresh = tok; return nil }
+	clearAccessTokenFunc = func() error { p.cleared = true; p.access = ""; return nil }
+	clearRefreshTokenFunc = func() error { p.cleared = true; p.refresh = ""; return nil }
+
+	refreshMu.Lock()
+	refreshedAt = time.Time{}
+	refreshErr = nil
+	refreshMu.Unlock()
+	resetMemRefreshToken()
+}
+
+// newProbe returns a probe holding a complete, working credential set.
+func newProbe(t *testing.T) *sessionProbe {
+	p := &sessionProbe{access: "accessX", refresh: "refreshX", device: "deviceX"}
+	p.install(t)
+	return p
+}
+
+// serve points the client at a test server for the duration of the test.
+func serve(t *testing.T, handler http.HandlerFunc) {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	os.Setenv("API_URL", srv.URL)
+}
+
+// TestFetchKeepsSessionOnUnprovenFailure pins the fix for the production
+// "logged out every few minutes" report. A 401 is only proof that the stored
+// session is dead when the server was actually given the material to refresh it
+// and rejected it. Every other 401 -- one we could not attach credentials to,
+// and one the endpoint itself returned after the server had refreshed -- used to
+// wipe the keyring and drop the user on the login screen.
+func TestFetchKeepsSessionOnUnprovenFailure(t *testing.T) {
+	t.Run("unreadable access token is not a dead session", func(t *testing.T) {
+		p := newProbe(t)
+		p.access, p.accessErr = "", errors.New("keyring read failed")
+
+		// The server never sees a bearer token, so it can only answer 401: it has
+		// no idea which session is asking, let alone that it has expired.
+		serve(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+
+		err := Fetch(context.Background(), "GET", "/", nil, nil, nil)
+		if err == nil || strings.Contains(err.Error(), "session expired") {
+			t.Fatalf("expected the server's 401 to surface as-is, got %v", err)
+		}
+		if p.cleared {
+			t.Fatal("a keyring that could not be read must not cost the user the session")
+		}
+	})
+
+	t.Run("unreadable device id is not a dead session", func(t *testing.T) {
+		p := newProbe(t)
+		p.device, p.deviceErr = "", errors.New("keyring read failed")
+
+		// Without X-Device-ID the server cannot hash the refresh token, so the
+		// retry is doomed before it is sent.
+		serve(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+
+		err := Fetch(context.Background(), "GET", "/", nil, nil, nil)
+		if err == nil || strings.Contains(err.Error(), "session expired") {
+			t.Fatalf("expected the server's 401 to surface as-is, got %v", err)
+		}
+		if p.cleared {
+			t.Fatal("a missing device id must not cost the user the session")
+		}
+	})
+
+	t.Run("endpoint's own 401 after a successful refresh is not a dead session", func(t *testing.T) {
+		p := newProbe(t)
+
+		// The server refreshes -- it hands back a new pair -- and the handler
+		// behind it answers 401 for its own reasons.
+		serve(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("X-Refresh-Token") != "" {
+				w.Header().Set("X-New-Access-Token", "freshAccess")
+				w.Header().Set("X-New-Refresh-Token", "freshRefresh")
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+
+		err := Fetch(context.Background(), "GET", "/", nil, nil, nil)
+		if err == nil || strings.Contains(err.Error(), "session expired") {
+			t.Fatalf("expected the endpoint's 401 to surface as-is, got %v", err)
+		}
+		if p.cleared {
+			t.Fatal("an endpoint's 401 must not cost the user the session")
+		}
+		if p.access != "freshAccess" {
+			t.Fatalf("the refreshed access token should still be kept, got %q", p.access)
+		}
+	})
+
+	t.Run("a refresh that never reached the server is not a dead session", func(t *testing.T) {
+		p := newProbe(t)
+
+		// 401 first, then drop the connection on the refresh: a network blip in
+		// the one window where the client is most exposed.
+		serve(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("X-Refresh-Token") == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			conn, _, hijackErr := w.(http.Hijacker).Hijack()
+			if hijackErr != nil {
+				t.Errorf("hijack: %v", hijackErr)
+				return
+			}
+			_ = conn.Close()
+		})
+
+		err := Fetch(context.Background(), "GET", "/", nil, nil, nil)
+		if err == nil || strings.Contains(err.Error(), "session expired") {
+			t.Fatalf("expected the transport error to surface, got %v", err)
+		}
+		if p.cleared {
+			t.Fatal("a network failure must not cost the user the session")
+		}
+
+		// Requests that queued behind this refresh are told the same thing, so a
+		// blip never reads as a logout anywhere.
+		refreshMu.Lock()
+		latched := refreshErr
+		refreshMu.Unlock()
+		if latched == nil || strings.Contains(latched.Error(), "session expired") {
+			t.Fatalf("waiters should inherit the transport error, got %v", latched)
+		}
+	})
+
+	t.Run("control: a rejected refresh token ends the session", func(t *testing.T) {
+		p := newProbe(t)
+
+		// The server is given everything it needs and still says no: the refresh
+		// token is gone, and there is nothing left to log in with.
+		serve(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+
+		err := Fetch(context.Background(), "GET", "/", nil, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "session expired") {
+			t.Fatalf("expected session expired, got %v", err)
+		}
+		if !p.cleared {
+			t.Fatal("a rejected refresh token should clear the stored session")
+		}
+		if memRefreshToken != "" {
+			t.Fatal("the in-process refresh token should be dropped with the session")
 		}
 	})
 }
