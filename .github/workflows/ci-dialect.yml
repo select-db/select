@@ -44,7 +44,10 @@ jobs:
 
   tests:
     name: Tests
-    if: inputs.go-dialect
+    # Also on a python-only change. The plan keeps the analyzer out of
+    # go-dialect, but ten Go test files drive the analyzer, so a change to it
+    # breaks Go tests and nothing else would run them.
+    if: inputs.go-dialect || inputs.python
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,8 +55,18 @@ jobs:
         with:
           go-version-file: dialect/go.mod
           cache-dependency-path: dialect/go.sum
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      # Without the venv the analyzer-backed tests skip themselves, which is
+      # how six of them stayed red unseen until #236.
+      - run: uv sync
+        working-directory: dialect/core/tokenanalyzer/python
       - run: go test ./...
         working-directory: dialect
+        # Skipping for a missing analyzer is right on a fresh checkout and
+        # wrong here, where it would quietly stop testing what this job exists
+        # to test.
+        env:
+          SELECT_REQUIRE_ANALYZER: "1"
 
   analyzer-tests:
     name: Analyzer tests
