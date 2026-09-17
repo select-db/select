@@ -14,15 +14,15 @@ const requireAnalyzerEnv = "SELECT_REQUIRE_ANALYZER"
 
 // NewTestAnalyzer creates a Python analyzer for tests. A fresh checkout has no
 // venv until `uv sync` runs, so the default is to skip.
-func NewTestAnalyzer(t *testing.T) *ta.Analyzer {
-	t.Helper()
+func NewTestAnalyzer(tb testing.TB) *ta.Analyzer {
+	tb.Helper()
 	pythonPath, script, ok := ta.FindDevAnalyzer()
 	if !ok {
 		const missing = "python venv not found; run `uv sync` in dialect/core/tokenanalyzer/python"
 		if os.Getenv(requireAnalyzerEnv) != "" {
-			t.Fatalf("%s is set: %s", requireAnalyzerEnv, missing)
+			tb.Fatalf("%s is set: %s", requireAnalyzerEnv, missing)
 		}
-		t.Skip(missing)
+		tb.Skip(missing)
 	}
 	return ta.NewAnalyzer(pythonPath, script)
 }
