@@ -51,6 +51,15 @@ a {
   cursor: pointer !important;
 }
 
+/* Every hoverable surface answers at the same speed. The properties are named
+   rather than left at "all": transitioning geometry shifts the page under the
+   pointer. */
+a,
+button {
+  transition: color .1s linear, background-color .1s linear, border-color .1s linear,
+    box-shadow .1s linear, opacity .1s linear, text-decoration-color .1s linear;
+}
+
 *:not(pre) {
   overscroll-behavior: none;
 }

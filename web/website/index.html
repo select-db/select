@@ -88,11 +88,15 @@
     }
 
     :root[data-theme=light] {
-      --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / .02), 0px 1px 1px 0px lch(80% 0 0 / .02)
+      --shadow-subtle: 0px 4px 4px -1px lch(80% 0 0 / .02), 0px 1px 1px 0px lch(80% 0 0 / .02);
+      /* .theme has no darker step for the accent, and lightening a solid red
+     button drops white text under 4.5:1, so the hover deepens it instead. */
+      --red-hover: rgb(190, 38, 38)
     }
 
     :root[data-theme=dark] {
-      --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / .06), 0px 1px 1px 0px lch(0% 0 0 / .06)
+      --shadow-subtle: 0px 4px 4px -1px lch(0% 0 0 / .06), 0px 1px 1px 0px lch(0% 0 0 / .06);
+      --red-hover: var(--red-glow)
     }
 
     *,
@@ -124,6 +128,15 @@
 
     a {
       color: var(--red)
+    }
+
+    /* Every hoverable surface answers at the same speed. The properties are
+   named rather than left at "all": transitioning geometry makes the page
+   shift under the pointer. */
+    a,
+    button {
+      transition: color .1s linear, background-color .1s linear, border-color .1s linear,
+        box-shadow .1s linear, opacity .1s linear, text-decoration-color .1s linear
     }
 
     ul {
@@ -179,6 +192,10 @@
       gap: .5rem;
       color: var(--gray-1000);
       text-decoration: none
+    }
+
+    a.logo:hover {
+      opacity: .72
     }
 
     .logo img {
@@ -342,9 +359,40 @@
       border-color: var(--gray-550)
     }
 
+    .btn:hover {
+      background: var(--red-hover);
+      border-color: var(--red-hover)
+    }
+
+    /* Restates background so it beats .btn:hover, which carries the same
+   specificity and sits above it. */
     .btn.g:hover {
+      background: var(--gray-200);
       border-color: var(--red);
       color: var(--red)
+    }
+
+    /* The third weight: no box at all, for a tier that cannot be bought yet and
+   should not compete with the two that can. */
+    .btn.q {
+      background: none;
+      border-color: transparent;
+      box-shadow: none;
+      color: var(--gray-900);
+      padding-inline: 0;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 3px
+    }
+
+    /* The dark-mode halo is set on .btn by a selector that outranks .btn.q. */
+    :root[data-theme=dark] .btn.q {
+      box-shadow: none
+    }
+
+    .btn.q:hover {
+      color: var(--red);
+      text-decoration-color: currentColor
     }
 
     .btn.b {
@@ -677,12 +725,16 @@
       display: inline-block;
       margin-top: var(--s2);
       font: var(--t2)/1 var(--m);
-      text-decoration: none
+      /* text-decoration-line cannot animate, so the underline is always drawn
+     and only its colour moves. */
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 3px
     }
 
     .row a:hover,
     .arg .f>a:hover {
-      text-decoration: underline
+      text-decoration-color: currentColor
     }
 
     .row figure {
@@ -1062,7 +1114,7 @@
               <li>MCP server and API keys, bounded by the same roles</li>
             </ul>
             <p class="note">US East today · EU region next</p>
-            <a class="btn" href="mailto:sales@select-db.com">Request access</a>
+            <a class="btn" href="mailto:sales@select-db.com">Start a team</a>
           </div>
           <div>
             <h3>Enterprise</h3>
@@ -1076,7 +1128,7 @@
               <li>Priority fixes, SLA and a direct line to the maintainers</li>
               <li>Security review and procurement support</li>
             </ul>
-            <a class="btn g" href="mailto:sales@select-db.com">Contact us</a>
+            <a class="btn q" href="mailto:sales@select-db.com">Contact us →</a>
           </div>
         </div>
         <p class="note" style="margin-top:var(--s2)">Teams is $12 a seat at the beta price, and everyone
