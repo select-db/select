@@ -9,12 +9,17 @@ import (
 	core "github.com/selectDb/dialect/core"
 	coreRefs "github.com/selectDb/dialect/core/references"
 	"github.com/selectDb/dialect/core/testutil"
+	"github.com/selectDb/dialect/postgresql"
 )
 
 func TestParseCompletionContextFromPython(t *testing.T) {
 	analyzer := testutil.NewTestAnalyzer(t)
 	defer analyzer.Close()
 
+	// These cases are spelled the same in every dialect, so one stands in for
+	// all three. Per-dialect quoting and settings syntax live in the dialect
+	// packages, next to the code that defines them.
+	dialect := postgresql.NewDialect()
 	meta := core.GetCompletionTestMetadata()
 	meta.DefaultSchema = "public"
 	if len(meta.Schemas) > 0 {
@@ -57,12 +62,6 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 		{name: "SELECT mid-word typing", sql: "SELECT cus| FROM t1", wantTargets: core.CompletionTargetAll},
 		{name: "WHERE mid-word typing", sql: "SELECT * FROM t1 WHERE cus|", wantTargets: core.CompletionTargetTableAndColumn},
 		{name: "SELECT empty quoted identifier", sql: "SELECT \"|\" FROM t1", wantTargets: core.CompletionTargetAll},
-		{name: "MySQL @@ system variable", sql: "SELECT @@|", wantTargets: core.CompletionTargetSetting},
-		{name: "MySQL @@ partial", sql: "SELECT @@vers|", wantTargets: core.CompletionTargetSetting},
-		{name: "Postgres SHOW", sql: "SHOW |", wantTargets: core.CompletionTargetSetting},
-		{name: "Postgres SHOW partial", sql: "SHOW time|", wantTargets: core.CompletionTargetSetting},
-		{name: "SQLite PRAGMA", sql: "PRAGMA |", wantTargets: core.CompletionTargetSetting},
-		{name: "Single @ user variable does not trigger Setting", sql: "SELECT @my|", wantTargets: core.CompletionTargetAll},
 	}
 
 	for _, tt := range tests {
@@ -70,7 +69,7 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 			text, caretCharPos := removeCaret(tt.sql)
 			caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
 
-			ctx, err := coreRefs.ParseCompletionContextFromPython(analyzer, text, caretLine, caretOffset, meta)
+			ctx, err := coreRefs.ParseCompletionContextFromPython(analyzer, text, dialect, caretLine, caretOffset, meta)
 			if err != nil {
 				t.Fatalf("Python call failed: %v", err)
 			}
@@ -110,7 +109,7 @@ func TestCompletion(t *testing.T) {
 			if len(meta.Schemas) > 0 {
 				meta.Schemas[0].Name = di.defaultSchema
 			}
-			testCases := core.GetCompletionTestCases(di.defaultSchema)
+			testCases := core.GetCompletionTestCases(di.defaultSchema, di.identifierQuote)
 
 			for _, tc := range testCases {
 				t.Run(tc.Name, func(t *testing.T) {

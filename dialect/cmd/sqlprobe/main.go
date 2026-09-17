@@ -284,7 +284,7 @@ func (p probe) printAnalyzerView() {
 	if !p.hasCaret() {
 		return
 	}
-	completionCtx, err := coreRefs.ParseCompletionContextFromPython(p.analyzer, p.sql, p.caretLine, p.caretCol, p.meta)
+	completionCtx, err := coreRefs.ParseCompletionContextFromPython(p.analyzer, p.sql, p.dialect, p.caretLine, p.caretCol, p.meta)
 	if err != nil {
 		fmt.Printf("  context: FAILED: %v\n", err)
 		return

@@ -52,15 +52,15 @@ def _dispatch(req: dict) -> dict:
     return {"error": f"Unknown action: {action!r}"}
 
 
-def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, dict, str]:
-    """Parse SQL from a request, returning (sql, stmts, schema_dict, default_schema).
+def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, dict, str, str]:
+    """Parse SQL from a request, returning (sql, stmts, schema_dict, default_schema, sg_dialect).
 
     Handles $var replacement, dialect mapping, and empty-SQL short-circuit.
     Returns empty stmts list if SQL is blank.
     """
     import re
     from analysis.analyze import _parse_sql
-    from analysis.schema import DIALECT_MAP
+    from analysis.schema import sqlglot_dialect_name
 
     sql = req.get("sql", "")
     dialect = req.get("dialect", "postgresql")
@@ -68,7 +68,7 @@ def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, di
     default_schema = req.get("default_schema", "public")
 
     if not sql or not sql.strip():
-        return sql, [], schema_dict, default_schema
+        return sql, [], schema_dict, default_schema, sqlglot_dialect_name(dialect)
 
     var_re = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
     sql = var_re.sub("NULL", sql)
@@ -78,9 +78,9 @@ def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, di
         caret_col = req.get("caret_col", 0)
         sql = _sanitize_for_completion(sql, caret_line, caret_col)
 
-    sg_dialect = DIALECT_MAP.get(dialect.lower(), dialect.lower())
+    sg_dialect = sqlglot_dialect_name(dialect)
     stmts, _, _ = _parse_sql(sql, sg_dialect)
-    return sql, stmts, schema_dict, default_schema
+    return sql, stmts, schema_dict, default_schema, sg_dialect
 
 
 def _sanitize_for_completion(sql: str, caret_line: int, caret_col: int) -> str:
@@ -125,17 +125,17 @@ def _collect_references(req: dict) -> dict:
     from completion.scope_references import collect_references
 
     for_completion = "caret_line" in req
-    sql, stmts, schema_dict, default_schema = _prepare_sql(req, for_completion=for_completion)
+    sql, stmts, schema_dict, default_schema, sg_dialect = _prepare_sql(req, for_completion=for_completion)
     if not stmts:
         return {"relations": [], "virtual_tables": []}
-    return collect_references(sql, stmts, schema_dict, default_schema)
+    return collect_references(sql, stmts, schema_dict, default_schema, sg_dialect)
 
 
 def _collect_column_refs(req: dict) -> dict:
     from completion.column_resolution import collect_resolved_column_refs, collect_column_aliases
 
     for_completion = "caret_line" in req
-    sql, stmts, schema_dict, default_schema = _prepare_sql(req, for_completion=for_completion)
+    sql, stmts, schema_dict, default_schema, _ = _prepare_sql(req, for_completion=for_completion)
     if not stmts:
         return {"column_refs": [], "column_aliases": []}
     return {
@@ -145,12 +145,14 @@ def _collect_column_refs(req: dict) -> dict:
 
 
 def _complete_context(req: dict) -> dict:
+    from analysis.schema import sqlglot_dialect_name
     from completion.completion_context import detect_completion_context
 
     sql = req.get("sql", "")
     caret_line = req.get("caret_line", 1)
     caret_col = req.get("caret_col", 0)
     schema_names = list(req.get("schema", {}).keys())
+    sg_dialect = sqlglot_dialect_name(req.get("dialect", "postgresql"))
 
     if not sql:
         return {"parts": [], "caret_after_dot": False, "targets": 0,
@@ -158,7 +160,7 @@ def _complete_context(req: dict) -> dict:
                 "keyword_context": 0, "preceding_column": None,
                 "insert_target_table": ""}
 
-    return detect_completion_context(sql, caret_line, caret_col, schema_names)
+    return detect_completion_context(sql, caret_line, caret_col, schema_names, sg_dialect)
 
 
 def serve() -> None:

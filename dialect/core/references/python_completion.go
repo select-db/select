@@ -28,6 +28,7 @@ type pyPrecedingColumnInfo struct {
 func ParseCompletionContextFromPython(
 	analyzer core.Analyzer,
 	sql string,
+	dialect core.SQLDialect,
 	caretLine int,
 	caretCol int,
 	meta core.Metadata,
@@ -39,6 +40,7 @@ func ParseCompletionContextFromPython(
 	req := map[string]any{
 		"action":     "complete_context",
 		"sql":        sql,
+		"dialect":    dialect.Name(),
 		"caret_line": caretLine,
 		"caret_col":  caretCol,
 		"schema":     core.MetaToSchemaDict(meta),
@@ -60,7 +62,7 @@ func ParseCompletionContextFromPython(
 		Targets:           resp.Targets,
 		SchemaFilter:      resp.SchemaFilter,
 		TargetTable:       resp.TargetTable,
-		KeywordContext:     resp.KeywordContext,
+		KeywordContext:    resp.KeywordContext,
 		InsertTargetTable: resp.InsertTargetTable,
 		ValuePosition:     resp.ValuePosition,
 	}

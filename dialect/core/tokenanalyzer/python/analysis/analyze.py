@@ -23,7 +23,7 @@ from lint_rules.references import (
     analyze_unknown_tables,
     analyze_update_columns,
 )
-from analysis.schema import DIALECT_MAP, build_schema, collect_virtual_names
+from analysis.schema import build_schema, collect_virtual_names, sqlglot_dialect_name
 from lint_rules.structure import (
     analyze_duplicate_columns,
     analyze_ordinal_violations,
@@ -115,7 +115,7 @@ def analyze(
 
     schema_dict = schema_dict or {}
     enum_dict   = enum_dict or {}
-    sg_dialect  = DIALECT_MAP.get(dialect.lower(), dialect.lower())
+    sg_dialect  = sqlglot_dialect_name(dialect)
     schema      = build_schema(schema_dict, sg_dialect)
 
     statements, parse_errors, arity_diags = _parse_sql(sql, sg_dialect)

@@ -15,17 +15,17 @@ from __future__ import annotations
 
 from sqlglot import exp
 from sqlglot.optimizer.scope import Scope, ScopeType, traverse_scope
-from sqlglot.tokens import Tokenizer, TokenType
+from sqlglot.tokens import TokenType
 
-from analysis.schema import pos, span
+from analysis.schema import pos, span, tokenize
 
 
 class _ScopeBounds:
     """Pre-computed scope boundary character offsets from the SQLGlot tokenizer."""
 
-    def __init__(self, sql: str) -> None:
+    def __init__(self, sql: str, sg_dialect: str) -> None:
         self.sql = sql
-        tokens = list(Tokenizer().tokenize(sql))
+        tokens = tokenize(sql, sg_dialect)
         self._tokens = tokens
 
         # Matching paren pairs: maps open_offset -> close_offset and vice versa
@@ -97,13 +97,14 @@ def collect_references(
     stmts: list,
     schema_dict: dict,
     default_schema: str,
+    sg_dialect: str,
 ) -> dict:
     """Collect scope-aware relation references from parsed statements."""
     relations: list[dict] = []
     virtual_tables: list[dict] = []
     seen_rels: set[tuple] = set()
     seen_vtabs: set[str] = set()
-    bounds = _ScopeBounds(sql)
+    bounds = _ScopeBounds(sql, sg_dialect)
 
     for stmt_idx, stmt in enumerate(stmts):
         if stmt is None:
