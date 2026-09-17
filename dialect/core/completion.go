@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 )
@@ -53,7 +52,7 @@ func (t CandidateType) String() string {
 	case CandidateTypeSetting:
 		return "setting"
 	default:
-		return "candidate(" + strconv.Itoa(int(t)) + ")"
+		return "unknown"
 	}
 }
 

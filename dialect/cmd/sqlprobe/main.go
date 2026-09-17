@@ -33,6 +33,13 @@ func main() {
 }
 
 func run(dialectName, sqlInput, metaPath string, showRaw bool) error {
+	if strings.TrimSpace(sqlInput) == "" {
+		return fmt.Errorf("-sql is required")
+	}
+	if metaPath == "" {
+		return fmt.Errorf("-meta is required")
+	}
+
 	d := engine.GetDialect(dialectName)
 	if d == nil {
 		return fmt.Errorf("unknown dialect %q (want postgresql, mysql or sqlite)", dialectName)
@@ -42,10 +49,6 @@ func run(dialectName, sqlInput, metaPath string, showRaw bool) error {
 	if err != nil {
 		return fmt.Errorf("reading -sql: %w", err)
 	}
-	if strings.TrimSpace(sqlText) == "" {
-		return fmt.Errorf("-sql is required")
-	}
-
 	meta, err := loadMetadata(metaPath)
 	if err != nil {
 		return err
@@ -60,19 +63,40 @@ func run(dialectName, sqlInput, metaPath string, showRaw bool) error {
 	d.SetAnalyzer(analyzer)
 
 	sqlText, caretLine, caretCol := cutCaret(sqlText)
+	p := probe{
+		analyzer:  analyzer,
+		dialect:   d,
+		meta:      meta,
+		sql:       sqlText,
+		caretLine: caretLine,
+		caretCol:  caretCol,
+	}
 
 	fmt.Printf("== dialect %s   default schema %s\n", d.Name(), core.GetDefaultSchema(meta))
-	printSQL(sqlText, caretLine, caretCol)
-	printLint(analyzer, d, meta, sqlText)
-	if caretLine > 0 {
-		printCompletion(d, meta, sqlText, caretLine, caretCol)
+	p.printSQL()
+	p.printLint()
+	if p.hasCaret() {
+		p.printCompletion()
 	}
-	printInspect(d, meta, sqlText)
+	p.printInspect()
 	if showRaw {
-		printAnalyzerView(analyzer, d, meta, sqlText, caretLine, caretCol)
+		p.printAnalyzerView()
 	}
 	return nil
 }
+
+// probe is one case: a dialect, a catalog, a statement, and where the caret sits
+// in it. Fixed once run builds it, so the printers take no arguments.
+type probe struct {
+	analyzer  *tokenanalyzer.Analyzer
+	dialect   core.SQLDialect
+	meta      core.Metadata
+	sql       string
+	caretLine int // 1-based, 0 when the SQL carried no caret marker
+	caretCol  int // 0-based
+}
+
+func (p probe) hasCaret() bool { return p.caretLine > 0 }
 
 func loadMetadata(metaPath string) (core.Metadata, error) {
 	if metaPath == "" {
@@ -112,22 +136,19 @@ func cutCaret(sql string) (string, int, int) {
 	return before + sql[idx+1:], line, col
 }
 
-func printSQL(sql string, caretLine, caretCol int) {
+func (p probe) printSQL() {
 	fmt.Println("\n== sql")
-	for i, line := range strings.Split(sql, "\n") {
+	for i, line := range strings.Split(p.sql, "\n") {
 		fmt.Printf("  %2d | %s\n", i+1, line)
-		if i+1 == caretLine {
-			fmt.Printf("     | %s^ caret %d:%d\n", strings.Repeat(" ", caretCol), caretLine, caretCol)
+		if i+1 == p.caretLine {
+			fmt.Printf("     | %s^ caret %d:%d\n", strings.Repeat(" ", p.caretCol), p.caretLine, p.caretCol)
 		}
 	}
 }
 
-func printLint(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta core.Metadata, sql string) {
-	runner := tokenanalyzer.NewLintRunner()
-	runner.Analyzer = analyzer
-	diagnostics := runner.Run(sql, d, meta, tokenanalyzer.ResolvedLintConfig{
-		Rules: map[string]tokenanalyzer.LintRuleConfig{},
-	})
+func (p probe) printLint() {
+	runner := &tokenanalyzer.LintRunner{Analyzer: p.analyzer}
+	diagnostics := runner.Run(p.sql, p.dialect, p.meta, tokenanalyzer.ResolvedLintConfig{})
 
 	fmt.Printf("\n== lint (%d)\n", len(diagnostics))
 	for _, diag := range diagnostics {
@@ -138,19 +159,15 @@ func printLint(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta core.Me
 	}
 }
 
-func printCompletion(d core.SQLDialect, meta core.Metadata, sql string, caretLine, caretCol int) {
-	candidates, err := d.Complete(context.Background(), sql, caretLine, caretCol, meta)
+func (p probe) printCompletion() {
+	candidates, err := p.dialect.Complete(context.Background(), p.sql, p.caretLine, p.caretCol, p.meta)
 	if err != nil {
 		fmt.Printf("\n== complete: FAILED: %v\n", err)
 		return
 	}
 
 	byType := map[core.CandidateType][]string{}
-	var order []core.CandidateType
 	for _, c := range candidates {
-		if _, seen := byType[c.Type]; !seen {
-			order = append(order, c.Type)
-		}
 		label := c.Text
 		if c.InsertText != "" && c.InsertText != c.Text {
 			label += " -> " + c.InsertText
@@ -158,14 +175,16 @@ func printCompletion(d core.SQLDialect, meta core.Metadata, sql string, caretLin
 		byType[c.Type] = append(byType[c.Type], label)
 	}
 
-	fmt.Printf("\n== complete @ %d:%d (%d)\n", caretLine, caretCol, len(candidates))
-	for _, t := range order {
-		fmt.Printf("  %-17s %s\n", t, strings.Join(byType[t], ", "))
+	fmt.Printf("\n== complete @ %d:%d (%d)\n", p.caretLine, p.caretCol, len(candidates))
+	for t := core.CandidateTypeKeyword; t <= core.CandidateTypeSetting; t++ {
+		if labels := byType[t]; len(labels) > 0 {
+			fmt.Printf("  %-17s %s\n", t, strings.Join(labels, ", "))
+		}
 	}
 }
 
-func printInspect(d core.SQLDialect, meta core.Metadata, sql string) {
-	statements := d.Inspect(meta, sql)
+func (p probe) printInspect() {
+	statements := p.dialect.Inspect(p.meta, p.sql)
 	fmt.Printf("\n== inspect (%d)\n", len(statements))
 	for _, stmt := range statements {
 		printInspectStatement(stmt, "  ")
@@ -173,7 +192,7 @@ func printInspect(d core.SQLDialect, meta core.Metadata, sql string) {
 }
 
 func printInspectStatement(stmt core.InspectStatement, indent string) {
-	var tables []string
+	tables := make([]string, 0, len(stmt.Tables))
 	for _, t := range stmt.Tables {
 		tables = append(tables, qualify(t.Schema, t.Name))
 	}
@@ -205,15 +224,15 @@ func qualify(prefix, name string) string {
 // parsing bug from a Go bug in the layer consuming it. It goes through the same
 // core/references calls the dialects use, so the probe cannot drift from the
 // requests the real completion path sends.
-func printAnalyzerView(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta core.Metadata, sql string, caretLine, caretCol int) {
+func (p probe) printAnalyzerView() {
 	var opts []any
-	if caretLine > 0 {
-		opts = append(opts, &coreRefs.CompletionCaret{Line: caretLine, Col: caretCol})
+	if p.hasCaret() {
+		opts = append(opts, &coreRefs.CompletionCaret{Line: p.caretLine, Col: p.caretCol})
 	}
 
 	fmt.Println("\n== analyzer")
 
-	refs, virtual, err := coreRefs.CollectReferencesFromPython(analyzer, sql, d, meta, opts...)
+	refs, virtual, err := coreRefs.CollectReferencesFromPython(p.analyzer, p.sql, p.dialect, p.meta, opts...)
 	if err != nil {
 		fmt.Printf("  references: FAILED: %v\n", err)
 	} else {
@@ -226,7 +245,7 @@ func printAnalyzerView(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta
 		}
 	}
 
-	columnRefs, aliases, err := coreRefs.CollectColumnRefsFromPython(analyzer, sql, d, meta, opts...)
+	columnRefs, aliases, err := coreRefs.CollectColumnRefsFromPython(p.analyzer, p.sql, p.dialect, p.meta, opts...)
 	if err != nil {
 		fmt.Printf("  column refs: FAILED: %v\n", err)
 	} else {
@@ -239,10 +258,10 @@ func printAnalyzerView(analyzer *tokenanalyzer.Analyzer, d core.SQLDialect, meta
 		}
 	}
 
-	if caretLine == 0 {
+	if !p.hasCaret() {
 		return
 	}
-	completionCtx, err := coreRefs.ParseCompletionContextFromPython(analyzer, sql, caretLine, caretCol, meta)
+	completionCtx, err := coreRefs.ParseCompletionContextFromPython(p.analyzer, p.sql, p.caretLine, p.caretCol, p.meta)
 	if err != nil {
 		fmt.Printf("  context: FAILED: %v\n", err)
 		return

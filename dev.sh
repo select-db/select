@@ -32,6 +32,8 @@
 #   ./dev.sh backend generate      codegen: apigen (schema -> sql+glue) then sqlc
 #
 #   ./dev.sh dialect test          go test ./... for the dialect module
+#   ./dev.sh dialect probe <args>  run one SQL string through lint, completion
+#                                  and inspect (-h for the flags)
 #   ./dev.sh test                  every module's tests, the way CI runs them
 #
 # `app test` and `app e2e` compile the app's Go code, which links the webview.
@@ -343,11 +345,17 @@ dialect_test() {
   done_ "dialect test"
 }
 
+# No step/done_ wrapper: the probe's output is the point, not its exit status.
+dialect_probe() {
+  (cd "$ROOT/dialect" && go run ./cmd/sqlprobe "$@")
+}
+
 dialect() {
   local sub="${1:-}"; shift || true
   case "$sub" in
     test) dialect_test ;;
-    *) echo "unknown dialect subcommand: '${sub:-}' (want: test)" >&2; exit 1 ;;
+    probe) dialect_probe "$@" ;;
+    *) echo "unknown dialect subcommand: '${sub:-}' (want: test, probe)" >&2; exit 1 ;;
   esac
 }
 

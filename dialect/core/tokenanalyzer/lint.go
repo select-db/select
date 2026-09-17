@@ -9,18 +9,30 @@ const (
 	SeverityHint                    // Code style issues
 )
 
-// String names the severity, matching the values the .lint file accepts.
+// severityNames is the single table behind String and ParseSeverity. The
+// strings are the values a .lint file accepts.
+var severityNames = [...]string{
+	SeverityError:   "error",
+	SeverityWarning: "warning",
+	SeverityHint:    "hint",
+}
+
 func (s Severity) String() string {
-	switch s {
-	case SeverityError:
-		return "error"
-	case SeverityWarning:
-		return "warning"
-	case SeverityHint:
-		return "hint"
-	default:
+	if s < 0 || int(s) >= len(severityNames) {
 		return "unknown"
 	}
+	return severityNames[s]
+}
+
+// ParseSeverity maps a .lint severity string to a Severity. An unrecognised
+// name is a warning rather than an error, so a typo cannot silence a rule.
+func ParseSeverity(name string) Severity {
+	for severity, candidate := range severityNames {
+		if candidate == name {
+			return Severity(severity)
+		}
+	}
+	return SeverityWarning
 }
 
 // Diagnostic is a single lint finding with source location.
