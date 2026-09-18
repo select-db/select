@@ -145,6 +145,9 @@ func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.Inspect
 	if createStmt := stmt.Create_table_stmt(); createStmt != nil {
 		return i.inspectCreate(createStmt)
 	}
+	if viewStmt := stmt.Create_view_stmt(); viewStmt != nil {
+		return i.inspectCreateView(viewStmt)
+	}
 	if alterStmt := stmt.Alter_table_stmt(); alterStmt != nil {
 		return i.inspectAlterTable(alterStmt)
 	}
@@ -419,7 +422,38 @@ func (i *Inspector) inspectCreate(stmt sqlite.ICreate_table_stmtContext) *core.I
 		table := i.dialect.NormalizeIdentifier(stmt.Table_name().Any_name().GetText())
 		result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 	}
+	result.Subqueries = i.sourceQuery(stmt.Select_stmt())
 	return result
+}
+
+// inspectCreateView analyzes CREATE VIEW ... AS SELECT. Creating the view needs
+// manage; the query behind it reads its own tables, which manage does not stand
+// in for.
+func (i *Inspector) inspectCreateView(stmt sqlite.ICreate_view_stmtContext) *core.InspectStatement {
+	result := &core.InspectStatement{Operation: core.InspectOpCreate}
+	schema := i.meta.CurrentSchema
+	if schema == "" {
+		schema = i.meta.DefaultSchema
+	}
+	if stmt.Schema_name() != nil {
+		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
+	}
+	if stmt.View_name() != nil {
+		view := i.dialect.NormalizeIdentifier(stmt.View_name().GetText())
+		result.Tables = []core.InspectTable{{Name: view, Schema: schema}}
+	}
+	result.Subqueries = i.sourceQuery(stmt.Select_stmt())
+	return result
+}
+
+// sourceQuery is the query a statement is filled from, as its own statement.
+// A query we failed to read becomes unknown rather than nothing, so the check
+// refuses it instead of finding no source to check.
+func (i *Inspector) sourceQuery(selectStmt sqlite.ISelect_stmtContext) []core.InspectStatement {
+	if selectStmt == nil {
+		return nil
+	}
+	return []core.InspectStatement{core.OrUnknown(i.inspectSelect(selectStmt))}
 }
 
 // inspectAlterTable analyzes an ALTER TABLE statement.

@@ -638,8 +638,36 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 				result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 			}
 		}
+		if as := ct.DuplicateAsQueryExpression(); as != nil {
+			result.Subqueries = i.sourceQuery(as.QueryExpressionOrParens())
+		}
+	}
+	if cv := stmt.CreateView(); cv != nil {
+		if vn := cv.ViewName(); vn != nil {
+			schema, view := splitQualifiedName(i.dialect, vn.GetText(), core.GetDefaultSchema(i.meta))
+			if view != "" {
+				result.Tables = []core.InspectTable{{Name: view, Schema: schema}}
+			}
+		}
+		if tail := cv.ViewTail(); tail != nil {
+			if vs := tail.ViewSelect(); vs != nil {
+				result.Subqueries = i.sourceQuery(vs.QueryExpressionOrParens())
+			}
+		}
 	}
 	return result
+}
+
+// sourceQuery is the query a CREATE TABLE ... AS or a CREATE VIEW is filled
+// from, as its own statement. Creating the table needs manage; the query still
+// reads its own tables, which manage does not stand in for. A query we failed
+// to read becomes unknown rather than nothing, so the check refuses it instead
+// of finding no source to check.
+func (i *Inspector) sourceQuery(source mysql.IQueryExpressionOrParensContext) []core.InspectStatement {
+	if source == nil {
+		return nil
+	}
+	return []core.InspectStatement{core.OrUnknown(i.inspectQueryExpressionOrParens(source))}
 }
 
 // ============================================

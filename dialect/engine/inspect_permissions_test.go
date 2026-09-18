@@ -177,3 +177,173 @@ type silentDialect struct {
 }
 
 func (silentDialect) Inspect(core.Metadata, string) []core.InspectStatement { return nil }
+
+// holding is a role with exactly the actions named, on every table.
+func holding(actions ...string) core.CompiledPermissions {
+	var entries []core.PermissionEntry
+	for _, a := range actions {
+		entries = append(entries, core.PermissionEntry{Action: a, Effect: "allow", RoleName: "test-role"})
+	}
+	return compileFor(permDBID, entries...)
+}
+
+// nestedCase is a statement carrying another statement, and the permissions a
+// role must hold for it to run: anything less is refused, all of them run.
+type nestedCase struct {
+	dialect string
+	sql     string
+	needs   []string
+	why     string
+}
+
+// TestPermissions_NestedStatementsAreChecked pins the statements that carry
+// another statement inside them. A nested statement the inspector did not
+// report is a statement nobody checked, and the outer one being refused is no
+// help when the outer one is the part that passes.
+func TestPermissions_NestedStatementsAreChecked(t *testing.T) {
+	tests := []nestedCase{
+		{
+			dialect: "postgresql",
+			sql:     "WITH x AS (DELETE FROM t1 RETURNING c1) SELECT c1 FROM x",
+			needs:   []string{core.ActionSelect, core.ActionDelete},
+			why:     "the CTE deletes; it used to run under a policy granting nothing at all",
+		},
+		{
+			dialect: "postgresql",
+			sql:     "WITH x AS (UPDATE t1 SET c2 = 'x' RETURNING c1) SELECT c1 FROM x",
+			needs:   []string{core.ActionSelect, core.ActionUpdate},
+			why:     "same shape, an update",
+		},
+		{
+			dialect: "postgresql",
+			sql:     "WITH x AS (INSERT INTO t1 (c1) VALUES (1) RETURNING c1) SELECT c1 FROM x",
+			needs:   []string{core.ActionSelect, core.ActionInsert},
+			why:     "same shape, an insert",
+		},
+		{
+			dialect: "postgresql",
+			sql:     "UPDATE t2 SET c1 = t1.c1 FROM t1",
+			needs:   []string{core.ActionUpdate, core.ActionSelect},
+			why:     "t1 is read to fill t2, and update does not cover reading it",
+		},
+		{
+			dialect: "postgresql",
+			sql:     "DELETE FROM t2 USING t1 WHERE t2.c1 = t1.c1",
+			needs:   []string{core.ActionDelete, core.ActionSelect},
+			why:     "USING reads t1 the same way",
+		},
+		{
+			dialect: "postgresql",
+			sql:     "COPY (SELECT c1 FROM t1) TO '/tmp/x.csv'",
+			needs:   []string{core.ActionManage, core.ActionSelect},
+			why:     "writing the server's filesystem takes manage, reading t1 takes select",
+		},
+		{
+			dialect: "postgresql",
+			sql:     "CREATE MATERIALIZED VIEW mv AS SELECT c1 FROM t1",
+			needs:   []string{core.ActionManage, core.ActionSelect},
+			why:     "a materialized view holds the rows it read",
+		},
+	}
+
+	for _, dialect := range []string{"postgresql", "mysql", "sqlite"} {
+		for _, sql := range []string{
+			"CREATE TABLE t9 AS SELECT c1 FROM t1",
+			"CREATE VIEW v AS SELECT c1 FROM t1",
+		} {
+			tests = append(tests, nestedCase{
+				dialect: dialect,
+				sql:     sql,
+				needs:   []string{core.ActionManage, core.ActionSelect},
+				why:     "creating it takes manage, and the query it is filled from still reads t1",
+			})
+		}
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if len(inspected) == 0 {
+				t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+			}
+
+			// Every action but one: each is necessary, so each is refused.
+			for _, missing := range tt.needs {
+				var rest []string
+				for _, a := range tt.needs {
+					if a != missing {
+						rest = append(rest, a)
+					}
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holding(rest...)); err == nil {
+					t.Errorf("ran without %q. %s", missing, tt.why)
+				}
+			}
+
+			// All of them together: the statement is allowed, so the test is
+			// not passing because everything is refused.
+			if err := core.CheckQueryPermissions(inspected, permDBID, holding(tt.needs...)); err != nil {
+				t.Errorf("holding %v still refused it: %v", tt.needs, err)
+			}
+		})
+	}
+}
+
+// TestPermissions_ACTEBodyIsCheckedAgainstItsOwnTable pins where a nested write
+// lands. Granting the outer statement's table says nothing about the table the
+// CTE writes, and a check that never saw the CTE cannot tell them apart.
+func TestPermissions_ACTEBodyIsCheckedAgainstItsOwnTable(t *testing.T) {
+	const schema = "main"
+	// Everything on t2, nothing at all on t1.
+	onT2Only := compileFor(permDBID,
+		core.PermissionEntry{SchemaName: sptr(schema), TableName: sptr("t2"), Action: core.ActionSelect, Effect: "allow", RoleName: "writer"},
+		core.PermissionEntry{SchemaName: sptr(schema), TableName: sptr("t2"), Action: core.ActionDelete, Effect: "allow", RoleName: "writer"},
+	)
+
+	refused := []string{
+		"WITH x AS (DELETE FROM t1 RETURNING c1) DELETE FROM t2 WHERE c1 = 1",
+		"WITH x AS (DELETE FROM t1 RETURNING c1) SELECT c1 FROM x",
+		"DELETE FROM t2 USING t1 WHERE t2.c1 = t1.c1",
+	}
+	for _, sql := range refused {
+		t.Run("refused: "+sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect("postgresql"), permMeta(), sql)
+			if err := core.CheckQueryPermissions(inspected, permDBID, onT2Only); err == nil {
+				t.Error("reached t1 while holding nothing on t1")
+			}
+		})
+	}
+
+	// The same role's own work still runs, so the refusals above are not a
+	// policy that refuses everything.
+	for _, sql := range []string{
+		"DELETE FROM t2 WHERE c1 = 1",
+		"SELECT c1 FROM t2",
+	} {
+		t.Run("allowed: "+sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect("postgresql"), permMeta(), sql)
+			if err := core.CheckQueryPermissions(inspected, permDBID, onT2Only); err != nil {
+				t.Errorf("want allowed, got %v", err)
+			}
+		})
+	}
+}
+
+// TestPermissions_ACTEIsNotAnUnresolvedTable pins the other direction: a name a
+// CTE defines is not a table, so the statements that read one keep working.
+func TestPermissions_ACTEIsNotAnUnresolvedTable(t *testing.T) {
+	perms := dataActionsOnly()
+	for _, sql := range []string{
+		"WITH x AS (SELECT c1 FROM t1) UPDATE t2 SET c1 = x.c1 FROM x",
+		"WITH x AS (SELECT c1 FROM t1) DELETE FROM t2 USING x WHERE t2.c1 = x.c1",
+		"UPDATE t2 SET c1 = s.c1 FROM (SELECT c1 FROM t1) s",
+		"UPDATE t2 SET c1 = a.c1 FROM t1 a WHERE t2.c1 = a.c1",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect("postgresql"), permMeta(), sql)
+			if err := core.CheckQueryPermissions(inspected, permDBID, perms); err != nil {
+				t.Errorf("want allowed, got %v", err)
+			}
+		})
+	}
+}

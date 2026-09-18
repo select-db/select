@@ -117,6 +117,30 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 		return i.inspectCreate(createStmt)
 	}
 
+	if createAsStmt := stmt.Createasstmt(); createAsStmt != nil {
+		var name pg.IQualified_nameContext
+		if target := createAsStmt.Create_as_target(); target != nil {
+			name = target.Qualified_name()
+		}
+		return i.inspectCreateFrom(name, createAsStmt.Selectstmt())
+	}
+
+	if viewStmt := stmt.Viewstmt(); viewStmt != nil {
+		return i.inspectCreateFrom(viewStmt.Qualified_name(), viewStmt.Selectstmt())
+	}
+
+	if matViewStmt := stmt.Creatematviewstmt(); matViewStmt != nil {
+		var name pg.IQualified_nameContext
+		if target := matViewStmt.Create_mv_target(); target != nil {
+			name = target.Qualified_name()
+		}
+		return i.inspectCreateFrom(name, matViewStmt.Selectstmt())
+	}
+
+	if copyStmt := stmt.Copystmt(); copyStmt != nil {
+		return i.inspectCopy(copyStmt)
+	}
+
 	return nil
 }
 
@@ -267,6 +291,9 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 		}
 	}
 
+	_, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+
 	// INSERT … SELECT: the grammar always wraps the source as a Selectstmt.
 	// When it's a real SELECT (has tables), attach as subquery.
 	// When it's VALUES, the Selectstmt has no FROM, so Tables is empty, skip.
@@ -351,6 +378,52 @@ func (i *Inspector) inspectCreate(stmt pg.ICreatestmtContext) *core.InspectState
 	return result
 }
 
+// inspectCreateFrom analyzes the statements that create something and fill it
+// from a query: CREATE TABLE ... AS, CREATE VIEW, CREATE MATERIALIZED VIEW.
+// Creating it needs manage; the query still reads its own tables, and manage
+// does not stand in for that read.
+func (i *Inspector) inspectCreateFrom(name pg.IQualified_nameContext, source pg.ISelectstmtContext) *core.InspectStatement {
+	result := &core.InspectStatement{Operation: core.InspectOpCreate}
+	if schema, table := i.resolveQualifiedName(name); table != "" {
+		result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
+	}
+	if source != nil {
+		result.Subqueries = []core.InspectStatement{core.OrUnknown(i.inspectSelect(source))}
+	}
+	return result
+}
+
+// inspectCopy analyzes COPY, which moves rows between a table and the server's
+// own filesystem. That stays unclassified so it needs manage; the COPY (query)
+// form also reads the query's tables, and that read is checked on its own.
+func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement {
+	result := core.UnknownStatement()
+	if source := stmt.Preparablestmt(); source != nil {
+		result.Subqueries = append(result.Subqueries, i.inspectPreparable(source))
+	}
+	return &result
+}
+
+// inspectPreparable inspects a statement nested inside another one: a CTE body
+// or a COPY source. The grammar allows any of five statements there, and a
+// nested write is still a write.
+func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.InspectStatement {
+	if stmt == nil {
+		return core.UnknownStatement()
+	}
+	switch {
+	case stmt.Selectstmt() != nil:
+		return core.OrUnknown(i.inspectSelect(stmt.Selectstmt()))
+	case stmt.Insertstmt() != nil:
+		return core.OrUnknown(i.inspectInsert(stmt.Insertstmt()))
+	case stmt.Updatestmt() != nil:
+		return core.OrUnknown(i.inspectUpdate(stmt.Updatestmt()))
+	case stmt.Deletestmt() != nil:
+		return core.OrUnknown(i.inspectDelete(stmt.Deletestmt()))
+	}
+	return core.UnknownStatement()
+}
+
 // resolveAnyName extracts (schema, table) from an any_name node (used in DROP statements).
 // any_name = colid attrs? where attrs = ('.' attr_name)*
 func (i *Inspector) resolveAnyName(anyName pg.IAny_nameContext) (schema, table string) {
@@ -423,6 +496,13 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
+	ctes, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+
+	if fromClause := stmt.From_clause(); fromClause != nil {
+		result.Subqueries = append(result.Subqueries, i.readSources(fromClause.From_list(), ctes)...)
+	}
+
 	// The target table ref used for column resolution.
 	targetRef := core.RelationRef{Table: tableName, Schema: schema}
 
@@ -481,6 +561,13 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
+	ctes, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+
+	if usingClause := stmt.Using_clause(); usingClause != nil {
+		result.Subqueries = append(result.Subqueries, i.readSources(usingClause.From_list(), ctes)...)
+	}
+
 	if whereClause := stmt.Where_or_current_clause(); whereClause != nil {
 		if expr := whereClause.A_expr(); expr != nil {
 			listener := &whereColumnExtractorListener{
@@ -509,7 +596,7 @@ func (i *Inspector) extractRelationRefsFromPrimary(primary pg.ISimple_select_pra
 		return nil, nil
 	}
 	fw := &fromWalker{dialect: i.dialect, meta: i.meta}
-	return fw.walk(fromClause)
+	return fw.walk(fromClause.From_list())
 }
 
 // extractSelectFieldsWithResolution extracts fields and resolves virtual tables to underlying tables
@@ -1297,6 +1384,16 @@ func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables m
 	return tables
 }
 
+// inspectWithClause reads the CTEs an INSERT, UPDATE or DELETE carries. Their
+// bodies are statements of their own, and their names are not tables, so a
+// clause referring to one must not read as a table nobody can resolve.
+func (i *Inspector) inspectWithClause(opt pg.IOpt_with_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
+	if opt == nil {
+		return nil, nil
+	}
+	return i.extractCTEsWithSubqueries(opt.With_clause())
+}
+
 // extractCTEsWithSubqueries extracts CTE definitions and inspects their bodies
 func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
 	if withClause == nil {
@@ -1323,21 +1420,18 @@ func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext)
 			cteName = i.dialect.NormalizeIdentifier(nameCtx.GetText())
 		}
 
-		// Inspect the CTE body to get its InspectStatement and columns
+		// A CTE body is any preparable statement, so WITH x AS (DELETE ...) is a
+		// delete the outer statement never mentions. One subquery per CTE also
+		// keeps the two slices index-aligned for cteToSubqueryMap.
+		body := i.inspectPreparable(cteEl.Preparablestmt())
+		subqueries = append(subqueries, body)
+
 		var cteColumns []core.Column
-		if preparableStmt := cteEl.Preparablestmt(); preparableStmt != nil {
-			if selectStmt := preparableStmt.Selectstmt(); selectStmt != nil {
-				if subResult := i.inspectSelect(selectStmt); subResult != nil {
-					subqueries = append(subqueries, *subResult)
-					// Extract column names from the subquery's fields
-					for _, field := range subResult.Fields {
-						cteColumns = append(cteColumns, core.Column{
-							Name: field.Name,
-							Type: "unknown",
-						})
-					}
-				}
-			}
+		for _, field := range body.Fields {
+			cteColumns = append(cteColumns, core.Column{
+				Name: field.Name,
+				Type: "unknown",
+			})
 		}
 
 		// Add CTE with its columns
@@ -1360,14 +1454,41 @@ func (i *Inspector) extractFromSubqueriesFromPrimary(primary pg.ISimple_select_p
 	if fromClause == nil {
 		return nil
 	}
-	return i.extractSubqueriesFromFromClause(fromClause)
+	return i.extractSubqueriesFromFromList(fromClause.From_list())
 }
 
-// extractSubqueriesFromFromClause recursively finds subqueries in FROM clause
-func (i *Inspector) extractSubqueriesFromFromClause(fromClause pg.IFrom_clauseContext) []core.InspectStatement {
+// readSources is the read an UPDATE ... FROM or a DELETE ... USING performs on
+// the relations it joins against. Those rows are read, not written, so the
+// statement's own update or delete does not cover them.
+func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.RelationRef) []core.InspectStatement {
+	if fromList == nil {
+		return nil
+	}
+	fw := &fromWalker{dialect: i.dialect, meta: i.meta}
+	refs, subqueryColumns := fw.walk(fromList)
+
+	virtualTables := make(map[string]bool)
+	for name := range subqueryColumns {
+		virtualTables[i.dialect.NormalizeIdentifier(name)] = true
+	}
+	for _, cte := range ctes {
+		virtualTables[i.dialect.NormalizeIdentifier(cte.Table)] = true
+	}
+
+	reads := i.extractSubqueriesFromFromList(fromList)
+	if tables := i.convertRelationRefs(refs, virtualTables); len(tables) > 0 {
+		reads = append(reads, core.InspectStatement{
+			Operation: core.InspectOpSelect,
+			Tables:    tables,
+		})
+	}
+	return reads
+}
+
+// extractSubqueriesFromFromList recursively finds subqueries in a FROM list
+func (i *Inspector) extractSubqueriesFromFromList(fromList pg.IFrom_listContext) []core.InspectStatement {
 	var subqueries []core.InspectStatement
 
-	fromList := fromClause.From_list()
 	if fromList == nil {
 		return subqueries
 	}
@@ -1436,12 +1557,7 @@ type fromWalker struct {
 	meta    core.Metadata
 }
 
-func (fw *fromWalker) walk(fromClause pg.IFrom_clauseContext) ([]core.RelationRef, map[string][]core.Column) {
-	if fromClause == nil {
-		return nil, nil
-	}
-
-	fromList := fromClause.From_list()
+func (fw *fromWalker) walk(fromList pg.IFrom_listContext) ([]core.RelationRef, map[string][]core.Column) {
 	if fromList == nil {
 		return nil, nil
 	}
@@ -1535,7 +1651,7 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 					var nestedSubqueryColumns map[string][]core.Column
 					if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
 						// Recursively parse the FROM clause
-						subqueryRefs, nestedSubqueryCols := fw.walk(fromClause)
+						subqueryRefs, nestedSubqueryCols := fw.walk(fromClause.From_list())
 						refs = append(refs, subqueryRefs...)
 						nestedSubqueryColumns = nestedSubqueryCols
 					}
@@ -1555,7 +1671,7 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 						// Get table references from the subquery for SELECT * expansion
 						var subqueryRelationRefs []core.RelationRef
 						if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
-							subqueryRelationRefs, nestedSubqueryColumns = fw.walk(fromClause)
+							subqueryRelationRefs, nestedSubqueryColumns = fw.walk(fromClause.From_list())
 						}
 
 						for _, targetEl := range targetElements {
