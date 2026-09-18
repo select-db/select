@@ -7,7 +7,12 @@ set -uo pipefail
 mode=${1:-}
 input=$(cat)
 
-command -v jq >/dev/null 2>&1 || exit 0
+# A pull request opened outside this session, from the Claude Code UI or the
+# GitHub web interface, produces no tool call, so nothing arms the gate.
+if ! command -v jq >/dev/null 2>&1; then
+	[ "$mode" = stop ] && printf '{"systemMessage":"pr-review-gate: jq is missing, so the review gate did not run."}\n'
+	exit 0
+fi
 
 json() { printf '%s' "$input" | jq -r "$1" 2>/dev/null; }
 
@@ -17,6 +22,8 @@ session=$(json '.session_id // empty')
 state="$gitdir/pr-review-gate/${session:-nosession}"
 
 required='codebase-design code-review'
+# Blocking forever would wedge the session, so give up after this many tries.
+max_blocks=3
 
 case "$mode" in
 pr-opened)
@@ -39,19 +46,27 @@ skill-ran)
 	;;
 stop)
 	[ -f "$state/pending" ] || exit 0
-	[ "$(json '.stop_hook_active // false')" = "true" ] && exit 0
 	missing=''
 	for want in $required; do
 		[ -f "$state/$want" ] || missing="$missing $want"
 	done
-	if [ -n "$missing" ]; then
-		jq -n --arg missing "${missing# }" '{
-			decision: "block",
-			reason: ("A pull request was opened in this session and these skills have not run over the diff yet: " + $missing + ". Run each one against the branch base, report the findings, then finish.")
-		}'
+	if [ -z "$missing" ]; then
+		rm -rf "$state"
 		exit 0
 	fi
-	rm -f "$state/pending"
+	blocks=$(cat "$state/blocks" 2>/dev/null || echo 0)
+	if [ "$blocks" -ge "$max_blocks" ]; then
+		jq -n --arg missing "${missing# }" --arg tries "$max_blocks" '{
+			systemMessage: ("pr-review-gate: giving up after " + $tries + " attempts; these skills never ran: " + $missing)
+		}'
+		rm -rf "$state"
+		exit 0
+	fi
+	echo $((blocks + 1)) >"$state/blocks"
+	jq -n --arg missing "${missing# }" '{
+		decision: "block",
+		reason: ("A pull request was opened in this session and these skills have not run over the diff yet: " + $missing + ". Run each one against the branch base, report the findings, then finish.")
+	}'
 	;;
 esac
 exit 0

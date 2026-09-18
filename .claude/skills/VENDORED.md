@@ -18,6 +18,20 @@ Two local changes, both from this repository's own rules:
 To refresh, copy the upstream files again, reapply both changes, and update the
 commit above.
 
+## Unmet upstream dependencies
+
+The copies are verbatim, so they still reference files that live in upstream
+skills this repository does not vendor:
+
+- `code-review/SKILL.md` reads `docs/agents/issue-tracker.md` to resolve issue
+  references, and tells the reader to run `/setup-matt-pocock-skills` when it is
+  absent. Neither exists here, so the Spec axis has no issue tracker to query and
+  falls back to whatever spec it is handed.
+- `codebase-design/DESIGN-IT-TWICE.md` cites a `CONTEXT.md` for domain
+  vocabulary, which comes from the upstream `domain-modeling` skill.
+
+Vendoring `setup-matt-pocock-skills` would close the first one.
+
 ## Name collision
 
 `code-review/` shadows the `code-review` skill that ships with Claude Code.
