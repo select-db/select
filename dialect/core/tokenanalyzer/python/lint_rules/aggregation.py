@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from sqlglot import exp
 
-from analysis.schema import pos, span
+from analysis.schema import span
 
 
 def analyze_aggregation_rules(stmt: exp.Expression, user_agg_names: set[str]) -> list[dict]:
@@ -48,13 +48,13 @@ def _a002(stmt: exp.Expression) -> list[dict]:
     for select in stmt.find_all(exp.Select):
         if select.args.get("having") and not select.args.get("group"):
             having = select.args["having"]
-            line, col = pos(having)
+            line, col, end_col = span(having)
             results.append({
                 "rule_id":    "having-without-group-by",
                 "severity":   "error",
                 "message":    "HAVING without GROUP BY: use WHERE or add a GROUP BY clause",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   col,
+                "end_line":   line, "end_col":   end_col,
             })
     return results
 

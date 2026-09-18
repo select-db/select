@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from sqlglot import exp
 
-from analysis.schema import pos, span
+from analysis.schema import span
 
 
 def analyze_ordinal_violations(stmt: exp.Expression) -> list[dict]:
@@ -57,7 +57,7 @@ def analyze_window_in_where(stmt: exp.Expression) -> list[dict]:
 
     for where in stmt.find_all(exp.Where):
         for window in where.find_all(exp.Window):
-            line, col = pos(window)
+            line, col, end_col = span(window)
             key = (line, col)
             if key not in seen:
                 seen.add(key)
@@ -66,7 +66,7 @@ def analyze_window_in_where(stmt: exp.Expression) -> list[dict]:
                     "severity":   "error",
                     "message":    "window functions are not allowed in WHERE clauses",
                     "start_line": line, "start_col": col,
-                    "end_line":   line, "end_col":   col,
+                    "end_line":   line, "end_col":   end_col,
                 })
 
     return results
