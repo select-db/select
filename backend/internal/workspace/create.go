@@ -69,9 +69,6 @@ func CreateHandler() http.HandlerFunc {
 			return
 		}
 
-		// Revoke tokens so the next JWT refresh includes the new workspace in claims.
-		_ = db.Queries.DeleteUserRefreshTokens(r.Context(), userUUID)
-
 		audit.EmitAction(r.Context(), audit.WorkspaceCreated, audit.Record{
 			WorkspaceID: workspaceID.String(),
 			TargetID:    workspaceID.String(),

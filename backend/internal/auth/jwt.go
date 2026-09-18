@@ -193,9 +193,13 @@ func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 }
 
 // CreateRefreshToken creates a refresh token, stores the hashed version in DB.
-// Runs in a transaction: insert first, then delete old tokens, so a failed insert
-// does not leave the user with no refresh tokens. ctx is used for DB calls so creation
+// Runs in a transaction: insert first, then reap, so a failed insert does not
+// leave the user with no refresh tokens. ctx is used for DB calls so creation
 // can be cancelled if the client disconnects.
+//
+// The reap is scoped to expired rows. A token is hashed with the device id that
+// asked for it, so the user's other devices hold rows of their own, and
+// clearing those here signed every other device out on each rotation.
 func CreateRefreshToken(ctx context.Context, userID uuid.UUID, deviceID string, issuedIP string) (*string, error) {
 	plainToken := GenerateRandomString(64)
 	expiry := time.Now().Add(refreshTokenTTL)
@@ -222,11 +226,7 @@ func CreateRefreshToken(ctx context.Context, userID uuid.UUID, deviceID string, 
 	if err != nil {
 		return nil, err
 	}
-	err = q.DeleteUserRefreshTokensExcept(ctx, generated.DeleteUserRefreshTokensExceptParams{
-		UserID:      userID,
-		HashedToken: hashedToken,
-	})
-	if err != nil {
+	if err = q.DeleteExpiredUserRefreshTokens(ctx, userID); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
