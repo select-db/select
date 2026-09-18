@@ -1,0 +1,20 @@
+# SSH reachable over NetBird only. Installed by lockdown.sh.
+#
+# The chain policy is accept and the rules match port 22 alone, so this table
+# adds one rule to whatever firewall the host already runs instead of replacing
+# it. A drop in any table is final, so this holds even if another table accepts.
+#
+# The priority sits ahead of filter so the decision is made before NetBird's own
+# tables see the packet.
+
+define nb_iface = "wt0"
+
+table inet select_ssh_guard {
+	chain input {
+		type filter hook input priority filter - 10; policy accept;
+
+		tcp dport 22 iifname { "lo", $nb_iface } accept
+		tcp dport 22 ip saddr 100.64.0.0/10 accept
+		tcp dport 22 drop
+	}
+}

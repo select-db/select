@@ -1,0 +1,15 @@
+[Unit]
+Description=SSH reachable over NetBird only
+Documentation=https://github.com/select-db/select/blob/dev/infra/netbird/netbird-ssh.doc.md
+# Loaded before the network comes up, so port 22 is never briefly open at boot.
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/select-ssh-guard.nft
+ExecStop=/usr/sbin/nft delete table inet select_ssh_guard
+
+[Install]
+WantedBy=multi-user.target
