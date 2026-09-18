@@ -1,19 +1,19 @@
 # Local dev Postgres with pg_partman available.
 #
-# pg_partman is pinned to 4.7.4, the only version OVH managed Postgres (prod)
-# offers, and built from source since PGDG only ships 5.x. Staging pins the same.
-# NO_BGW: maintenance runs from pg_cron, so the background worker is not needed.
-FROM postgres:17
+# Postgres 18 and pg_partman 5.2.4 match OVH managed Postgres (prod). pg_partman
+# is built from source to pin the exact version; staging and CI pin the same.
+# NO_BGW: the backend runs maintenance, so the background worker is not needed.
+FROM postgres:18
 
-ARG PG_PARTMAN_VERSION=4.7.4
-ARG PG_PARTMAN_SHA256=e81e9b4edbd36490be6389e2a593cac9a55b1694ba84f8fd4b08df5b17d6233e
+ARG PG_PARTMAN_VERSION=5.2.4
+ARG PG_PARTMAN_SHA256=462464d83389ef20256b982960646a1572341c0beb09eeff32b4a69f04e31b76
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates make gcc postgresql-server-dev-17 \
+    && apt-get install -y --no-install-recommends curl ca-certificates make gcc postgresql-server-dev-18 \
     && curl -fsSL -o /tmp/pg_partman.tar.gz "https://github.com/pgpartman/pg_partman/archive/refs/tags/v${PG_PARTMAN_VERSION}.tar.gz" \
     && echo "${PG_PARTMAN_SHA256}  /tmp/pg_partman.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/pg_partman.tar.gz -C /tmp \
     && make -C "/tmp/pg_partman-${PG_PARTMAN_VERSION}" NO_BGW=1 install \
     && rm -rf /tmp/pg_partman* \
-    && apt-get purge -y --auto-remove curl make gcc postgresql-server-dev-17 \
+    && apt-get purge -y --auto-remove curl make gcc postgresql-server-dev-18 \
     && rm -rf /var/lib/apt/lists/*

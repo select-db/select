@@ -102,26 +102,23 @@ jobs:
       # of real monthly partitions, not the DEFAULT partition fallback. The
       # harness reads TEST_PG_*, and packages without those use embedded
       # Postgres. The port is derived because the runner's own cluster holds
-      # 5432. Postgres 17 and pg_partman 4.7.4 match OVH managed Postgres
-      # (prod); PGDG only ships partman 5.x, so it is built from source.
-      - name: Postgres 17 + pg_partman 4.7.4
+      # 5432. Postgres 18 and pg_partman 5.2.4 match OVH managed Postgres
+      # (prod); partman is built from source to pin the exact version.
+      - name: Postgres 18 + pg_partman 5.2.4
         env:
-          PG_PARTMAN_VERSION: "4.7.4"
-          PG_PARTMAN_SHA256: e81e9b4edbd36490be6389e2a593cac9a55b1694ba84f8fd4b08df5b17d6233e
+          PG_PARTMAN_VERSION: "5.2.4"
+          PG_PARTMAN_SHA256: 462464d83389ef20256b982960646a1572341c0beb09eeff32b4a69f04e31b76
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-          sudo apt-get install -y postgresql-17 postgresql-server-dev-17
+          sudo apt-get install -y postgresql-18 postgresql-server-dev-18
           curl -fsSL -o /tmp/pg_partman.tar.gz "https://github.com/pgpartman/pg_partman/archive/refs/tags/v${PG_PARTMAN_VERSION}.tar.gz"
           echo "${PG_PARTMAN_SHA256}  /tmp/pg_partman.tar.gz" | sha256sum -c -
           tar -xzf /tmp/pg_partman.tar.gz -C /tmp
-          sudo make -C "/tmp/pg_partman-${PG_PARTMAN_VERSION}" NO_BGW=1 PG_CONFIG=/usr/lib/postgresql/17/bin/pg_config install
-          # OVH lets the non-superuser app role create pg_partman; pgtestdb migrates
-          # as a NOSUPERUSER role too, and 4.x's control file requires superuser.
-          echo "superuser = false" | sudo tee -a /usr/share/postgresql/17/extension/pg_partman.control
-          sudo pg_createcluster --start 17 main || sudo pg_ctlcluster 17 main start || true
-          PORT=$(pg_lsclusters -h | awk '$1==17 {print $3}')
+          sudo make -C "/tmp/pg_partman-${PG_PARTMAN_VERSION}" NO_BGW=1 PG_CONFIG=/usr/lib/postgresql/18/bin/pg_config install
+          sudo pg_createcluster --start 18 main || sudo pg_ctlcluster 18 main start || true
+          PORT=$(pg_lsclusters -h | awk '$1==18 {print $3}')
           sudo -u postgres psql -p "$PORT" -c "ALTER USER postgres PASSWORD 'postgres';"
           {
             echo "TEST_PG_HOST=localhost"
