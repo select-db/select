@@ -5,10 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"backend/db"
 	"backend/internal/syncer/types"
 )
 
@@ -27,22 +25,6 @@ func syncAsOwner(t *testing.T, ownerID, wsID string, c types.Commit) {
 		PendingCommits: []types.Commit{c},
 	})
 	require.NoError(t, err)
-}
-
-// effectiveRoles is the standing a request would be given for this user right
-// now: the roles they hold in the workspace, keyed by id. It reads what
-// buildAuthContext reads, so it is what the next request would enforce.
-func effectiveRoles(t *testing.T, userID, wsID string) map[string]string {
-	t.Helper()
-	grants, err := db.Queries.GetRoleGrantsByUserID(context.Background(), uuid.MustParse(userID))
-	require.NoError(t, err)
-	roles := map[string]string{}
-	for _, g := range grants {
-		if g.WorkspaceID.String() == wsID {
-			roles[g.RoleID.String()] = g.RoleName
-		}
-	}
-	return roles
 }
 
 func TestSync_UserToGroupInsert_ReachesMember(t *testing.T) {
@@ -67,8 +49,8 @@ func TestSync_UserToGroupInsert_ReachesMember(t *testing.T) {
 		"the group's role must reach the new member")
 }
 
-// The fan-out case: a group's role set changes, so every current member's next
-// token carries it, and every one of them keeps their session.
+// The fan-out case: a group's role set changes, so every current member's
+// standing changes with it on their next request.
 func TestSync_GroupToRoleInsert_ReachesAllMembers(t *testing.T) {
 	conn := newTestDB(t)
 	ownerID, wsID, roleID, groupID := newID(), newID(), newID(), newID()

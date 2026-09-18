@@ -88,6 +88,25 @@ func SeedRole(t *testing.T, conn *sql.DB, id, workspaceID, name string) {
 	require.NoError(t, err)
 }
 
+// SeedPermission grants a role one workspace-level action.
+func SeedPermission(t *testing.T, conn *sql.DB, roleID, workspaceID, action string) {
+	t.Helper()
+	_, err := conn.Exec(
+		`INSERT INTO app.permission (id, role_id, workspace_id, action, effect) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'allow')`,
+		uuid.NewString(), roleID, workspaceID, action)
+	require.NoError(t, err)
+}
+
+// SeedRoleWithPermission returns a new role in the workspace carrying one
+// action, for tests that ask whether somebody may act rather than what they hold.
+func SeedRoleWithPermission(t *testing.T, conn *sql.DB, workspaceID, name, action string) string {
+	t.Helper()
+	roleID := uuid.NewString()
+	SeedRole(t, conn, roleID, workspaceID, name)
+	SeedPermission(t, conn, roleID, workspaceID, action)
+	return roleID
+}
+
 func SeedUserRole(t *testing.T, conn *sql.DB, userID, roleID, workspaceID string) {
 	t.Helper()
 	_, err := conn.Exec(

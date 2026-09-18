@@ -8,9 +8,38 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"backend/db"
+	"backend/internal/auth"
 
 	"github.com/google/uuid"
 )
+
+// grantsIn returns this user's role grants in the workspace, one entry per row
+// the query returns, so a test can see whether a role granted two ways arrives
+// once or twice.
+func grantsIn(t *testing.T, userID, wsID string) []auth.RoleRef {
+	t.Helper()
+	rows, err := db.Queries.GetRoleGrantsByUserID(context.Background(), uuid.MustParse(userID))
+	require.NoError(t, err)
+	var grants []auth.RoleRef
+	for _, g := range rows {
+		if g.WorkspaceID.String() == wsID {
+			grants = append(grants, auth.RoleRef{ID: g.RoleID.String(), Name: g.RoleName})
+		}
+	}
+	return grants
+}
+
+// effectiveRoles is the standing a request would be given for this user right
+// now, keyed by role id. It reads what buildAuthContext reads, so it is what
+// the next request would enforce.
+func effectiveRoles(t *testing.T, userID, wsID string) map[string]string {
+	t.Helper()
+	roles := map[string]string{}
+	for _, g := range grantsIn(t, userID, wsID) {
+		roles[g.ID] = g.Name
+	}
+	return roles
+}
 
 func seedUserToRole(t *testing.T, conn *sql.DB, id, userID, roleID, workspaceID string) {
 	t.Helper()
@@ -98,10 +127,8 @@ func TestStanding_DedupesRoleGrantedBothWays(t *testing.T) {
 	seedGroupToRole(t, conn, newID(), groupID, roleID, wsID)
 
 	count := 0
-	grants, err := db.Queries.GetRoleGrantsByUserID(context.Background(), uuid.MustParse(userID))
-	require.NoError(t, err)
-	for _, g := range grants {
-		if g.WorkspaceID.String() == wsID && g.RoleID.String() == roleID {
+	for _, g := range grantsIn(t, userID, wsID) {
+		if g.ID == roleID {
 			count++
 		}
 	}

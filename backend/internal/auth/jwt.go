@@ -86,10 +86,10 @@ func (rsaSignerMethod) Verify(signingString string, sig []byte, key any) error {
 
 var jwtSigningMethod = rsaSignerMethod{}
 
-// CustomClaims is identity, and nothing that can go stale. Membership,
-// ownership and roles are all re-derived per request from the database, so a
-// change to any of them takes effect on the next request rather than when the
-// token naming it expires.
+// CustomClaims is identity only: nothing here is authorised against. Membership,
+// ownership and roles are re-derived per request from the database, so a change
+// to any of them takes effect on the next request rather than when the token
+// naming it expires. Name is a display label and may lag a rename by one token.
 type CustomClaims struct {
 	UserID string `json:"sub"`
 	Name   string `json:"name,omitempty"`

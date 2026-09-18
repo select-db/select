@@ -12,8 +12,6 @@ type RoleRef struct {
 	Name string
 }
 
-// WorkspaceStanding is what the caller is to one workspace: a member, possibly
-// its owner, holding some roles in it.
 type WorkspaceStanding struct {
 	ID      string
 	IsOwner bool

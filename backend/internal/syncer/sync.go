@@ -77,7 +77,6 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 		}
 
 		if applied {
-			// Drop any authz cache this write dirties (see side_effects.go).
 			applyCommitSideEffects(ctx, c)
 		}
 

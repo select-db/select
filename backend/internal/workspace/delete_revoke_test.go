@@ -115,11 +115,7 @@ func TestRemovedMember_LosesAccess(t *testing.T) {
 func TestDeleteWorkspace_RevokesAPIKeys(t *testing.T) {
 	f := e2e.Setup(t)
 
-	rec := e2e.Do(t, f.H, http.MethodPost, "/apikeys", f.Actor.Token, map[string]any{
-		"workspace_id": f.Actor.WorkspaceID,
-		"name":         "ci",
-		"role_ids":     []string{f.Actor.RoleID},
-	})
+	rec := e2e.CreateAPIKey(t, f.H, f.Actor.Token, f.Actor.WorkspaceID, f.Actor.RoleID, "ci")
 	require.Equalf(t, http.StatusOK, rec.Code, "create key: %s", rec.Body.String())
 
 	var created struct {
@@ -140,56 +136,22 @@ func TestDeleteWorkspace_RevokesAPIKeys(t *testing.T) {
 		"an API key still reaches the datasources of a deleted workspace: %s", rec.Body.String())
 }
 
-// What a manager taking access away reaches, and when. Three things can be
-// taken and all three land on the next request, so each is pinned here against
-// the token the person is already holding rather than a fresh one.
-//
-// Taking a role off a person is the third, covered by
-// TestRoleRemoval_ReachesMemberAtOnceWithoutSigningThemOut, which asserts the
-// session survives it in the same breath.
-
-// seedManagedRole gives the member a role carrying one workspace permission,
-// and returns the role id and the user_to_role row id.
-func seedManagedRole(t *testing.T, f e2e.Fixture, memberID, action string) (roleID, grantID string) {
-	t.Helper()
-	roleID = uuid.NewString()
-	e2e.SeedRole(t, f.Conn, roleID, f.Actor.WorkspaceID, "Key Manager")
-	_, err := f.Conn.Exec(
-		`INSERT INTO app.permission (id, role_id, workspace_id, action, effect)
-		 VALUES ($1::uuid,$2::uuid,$3::uuid,$4,'allow')`,
-		uuid.NewString(), roleID, f.Actor.WorkspaceID, action)
-	require.NoError(t, err)
-	e2e.SeedUserRole(t, f.Conn, memberID, roleID, f.Actor.WorkspaceID)
-	require.NoError(t, f.Conn.QueryRow(
-		`SELECT id FROM app.user_to_role WHERE user_id=$1::uuid AND role_id=$2::uuid`,
-		memberID, roleID).Scan(&grantID))
-	return roleID, grantID
-}
-
-// createsAPIKey reports whether the token may mint an API key, a route gated on
-// the workspace/api-keys.manage permission.
-func createsAPIKey(t *testing.T, f e2e.Fixture, token, roleID, name string) int {
-	t.Helper()
-	return e2e.Do(t, f.H, http.MethodPost, "/apikeys", token, map[string]any{
-		"workspace_id": f.Actor.WorkspaceID,
-		"name":         name,
-		"role_ids":     []string{roleID},
-	}).Code
-}
-
 // Permissions are read from the database on each request, behind a cache the
 // sync invalidates, so editing what a role may do reaches the people holding it
-// at once, without waiting for any token.
+// at once, without waiting for any token. Taking the role itself away is the
+// other half, in TestRoleRemoval_ReachesMemberAtOnceWithoutSigningThemOut.
 func TestPermissionRemoved_TakesEffectOnTheTokenAlreadyHeld(t *testing.T) {
 	f := e2e.Setup(t)
 
 	memberID := uuid.NewString()
 	e2e.SeedUser(t, f.Conn, memberID)
 	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
-	roleID, _ := seedManagedRole(t, f, memberID, "workspace/api-keys.manage")
+	roleID := e2e.SeedRoleWithPermission(t, f.Conn, f.Actor.WorkspaceID, "Key Manager", "workspace/api-keys.manage")
+	e2e.SeedUserRole(t, f.Conn, memberID, roleID, f.Actor.WorkspaceID)
 
 	held := e2e.MintJWT(t, memberID)
-	require.Equal(t, http.StatusOK, createsAPIKey(t, f, held, roleID, "before"),
+	require.Equal(t, http.StatusOK,
+		e2e.CreateAPIKey(t, f.H, held, f.Actor.WorkspaceID, roleID, "before").Code,
 		"the role grants this before the manager touches it")
 
 	var permID string
@@ -199,6 +161,7 @@ func TestPermissionRemoved_TakesEffectOnTheTokenAlreadyHeld(t *testing.T) {
 		"id": permID, "workspace_id": f.Actor.WorkspaceID,
 	})
 
-	require.NotEqual(t, http.StatusOK, createsAPIKey(t, f, held, roleID, "after"),
+	require.NotEqual(t, http.StatusOK,
+		e2e.CreateAPIKey(t, f.H, held, f.Actor.WorkspaceID, roleID, "after").Code,
 		"a permission the manager removed is still granted to a token already issued")
 }

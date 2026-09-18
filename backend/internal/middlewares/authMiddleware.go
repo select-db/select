@@ -128,15 +128,8 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// buildAuthContext attaches identity and per-workspace standing, all of it
-// re-derived from the DB. The token carries identity only: a role taken away
-// has to stop granting on the next request, not when the access token that
-// named it happens to expire.
-//
-// Two queries rather than one join, because both are driven by an index on the
-// caller's own rows. Joining the roles on the workspace instead would read every
-// tenant's roles on every authenticated request: app.role is indexed on neither
-// workspace_id nor anything else useful here.
+// buildAuthContext attaches identity and per-workspace standing, the latter
+// re-derived from the DB on every request. See auth.WorkspaceStanding.
 func buildAuthContext(ctx context.Context, userID, name string) (context.Context, error) {
 	ctx = context.WithValue(ctx, userIDKey, userID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
@@ -267,7 +260,7 @@ func Authenticated() func(http.Handler) http.Handler {
 					http.Error(w, "Invalid access token", http.StatusUnauthorized)
 					return
 				}
-				newTokens, userID, refreshErr := handleTokenRefresh(r, claims.UserID)
+				newTokens, refreshErr := handleTokenRefresh(r, claims.UserID)
 				if refreshErr != nil {
 					http.Error(w, "Failed to refresh token", http.StatusUnauthorized)
 					return
@@ -276,16 +269,13 @@ func Authenticated() func(http.Handler) http.Handler {
 				w.Header().Set("X-New-Access-Token", newTokens.AccessToken)
 				w.Header().Set("X-New-Refresh-Token", newTokens.RefreshToken)
 
-				_, newClaims, parseErr := auth.ValidateJWT(newTokens.AccessToken)
-				var (
-					ctx    context.Context
-					ctxErr error
-				)
-				if parseErr == nil && newClaims != nil {
-					ctx, ctxErr = buildAuthContext(r.Context(), newClaims.UserID, newClaims.Name)
-				} else {
-					ctx, ctxErr = buildAuthContext(r.Context(), userID, "")
+				// Prefer the name off the token just minted, which picks up a
+				// rename; the expired token names the same user either way.
+				name := claims.Name
+				if _, newClaims, parseErr := auth.ValidateJWT(newTokens.AccessToken); parseErr == nil && newClaims != nil {
+					name = newClaims.Name
 				}
+				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, name)
 				if ctxErr != nil {
 					http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 					return
@@ -301,19 +291,14 @@ func Authenticated() func(http.Handler) http.Handler {
 	}
 }
 
-func handleTokenRefresh(r *http.Request, userID string) (*TokenResponse, string, error) {
+func handleTokenRefresh(r *http.Request, userID string) (*TokenResponse, error) {
 	refreshToken := r.Header.Get("X-Refresh-Token")
 	deviceID := r.Header.Get("X-Device-ID")
 
 	if refreshToken == "" || deviceID == "" {
-		return nil, "", errors.New("missing refresh token or device ID")
+		return nil, errors.New("missing refresh token or device ID")
 	}
-
-	newTokens, err := TryRefreshToken(r, refreshToken, deviceID, userID)
-	if err != nil {
-		return nil, "", err
-	}
-	return newTokens, userID, nil
+	return TryRefreshToken(r, refreshToken, deviceID, userID)
 }
 
 func TryRefreshToken(r *http.Request, refreshToken string, deviceID string, userID string) (*TokenResponse, error) {

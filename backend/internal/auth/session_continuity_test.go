@@ -43,25 +43,14 @@ func grantRole(t *testing.T, f e2e.Fixture, memberID, roleID string) string {
 // can ask whether a person may act rather than what their token says.
 func seedKeyManagerRole(t *testing.T, f e2e.Fixture) string {
 	t.Helper()
-	roleID := uuid.NewString()
-	e2e.SeedRole(t, f.Conn, roleID, f.Actor.WorkspaceID, "Key Manager")
-	_, err := f.Conn.Exec(
-		`INSERT INTO app.permission (id, role_id, workspace_id, action, effect)
-		 VALUES ($1::uuid,$2::uuid,$3::uuid,'workspace/api-keys.manage','allow')`,
-		uuid.NewString(), roleID, f.Actor.WorkspaceID)
-	require.NoError(t, err)
-	return roleID
+	return e2e.SeedRoleWithPermission(t, f.Conn, f.Actor.WorkspaceID, "Key Manager", "workspace/api-keys.manage")
 }
 
 // mayManageKeys reports whether this token reaches a route gated on the
 // workspace/api-keys.manage permission.
 func mayManageKeys(t *testing.T, f e2e.Fixture, token, roleID, name string) bool {
 	t.Helper()
-	return e2e.Do(t, f.H, http.MethodPost, "/apikeys", token, map[string]any{
-		"workspace_id": f.Actor.WorkspaceID,
-		"name":         name,
-		"role_ids":     []string{roleID},
-	}).Code == http.StatusOK
+	return e2e.CreateAPIKey(t, f.H, token, f.Actor.WorkspaceID, roleID, name).Code == http.StatusOK
 }
 
 // A person signed in on a laptop and a desktop holds one refresh token per
@@ -149,15 +138,19 @@ func TestRoleRemoval_ReachesMemberAtOnceWithoutSigningThemOut(t *testing.T) {
 func TestGroupRoleGrant_ReachesEveryMemberAtOnceWithoutSigningThemOut(t *testing.T) {
 	f := e2e.Setup(t)
 
-	firstID, first := newMemberDevice(t, f, "laptop")
-	secondID, second := newMemberDevice(t, f, "desktop")
 	roleID := seedKeyManagerRole(t, f)
 
-	// Taken before the commit: the point is that it reaches the token they are
-	// already holding, which one minted afterwards would not prove.
-	heldBy := map[string]string{
-		"first":  e2e.MintJWT(t, firstID),
-		"second": e2e.MintJWT(t, secondID),
+	type member struct {
+		device *e2e.Device
+		id     string
+		held   string
+	}
+	var members []member
+	for _, deviceID := range []string{"laptop", "desktop"} {
+		id, device := newMemberDevice(t, f, deviceID)
+		// Held from before the commit: the point is that it reaches the token
+		// they already have, which one minted afterwards would not prove.
+		members = append(members, member{device: device, id: id, held: e2e.MintJWT(t, id)})
 	}
 
 	groupID := uuid.NewString()
@@ -165,11 +158,11 @@ func TestGroupRoleGrant_ReachesEveryMemberAtOnceWithoutSigningThemOut(t *testing
 		`INSERT INTO app."group" (id, workspace_id, name) VALUES ($1::uuid,$2::uuid,$3)`,
 		groupID, f.Actor.WorkspaceID, "Engineering")
 	require.NoError(t, err)
-	for _, memberID := range []string{firstID, secondID} {
+	for _, m := range members {
 		utgID := uuid.NewString()
 		e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "user_to_group", utgID, map[string]any{
 			"id":           utgID,
-			"user_id":      memberID,
+			"user_id":      m.id,
 			"group_id":     groupID,
 			"workspace_id": f.Actor.WorkspaceID,
 		})
@@ -183,11 +176,11 @@ func TestGroupRoleGrant_ReachesEveryMemberAtOnceWithoutSigningThemOut(t *testing
 		"workspace_id": f.Actor.WorkspaceID,
 	})
 
-	for name, device := range map[string]*e2e.Device{"first": first, "second": second} {
-		require.Truef(t, mayManageKeys(t, f, heldBy[name], roleID, "after-"+name),
-			"the group's role did not reach the token the %s member is holding", name)
-		_, err := device.Refresh(t)
-		require.NoErrorf(t, err, "giving the group a role signed the %s member out", name)
+	for _, m := range members {
+		require.Truef(t, mayManageKeys(t, f, m.held, roleID, "after-"+m.device.DeviceID),
+			"the group's role did not reach the token the %s member is holding", m.device.DeviceID)
+		_, err := m.device.Refresh(t)
+		require.NoErrorf(t, err, "giving the group a role signed the %s member out", m.device.DeviceID)
 	}
 }
 
@@ -213,26 +206,15 @@ func TestPermissionChange_DoesNotSignMembersOut(t *testing.T) {
 	require.NoError(t, err, "a permission change signed its author out")
 }
 
-// Making a workspace is not a reason to be sent back to the login screen.
-func TestCreateWorkspace_DoesNotSignTheAuthorOut(t *testing.T) {
+// The token the author holds predates the workspace they just made, and it
+// still reaches it as owner on the next request, with nothing re-minted and
+// nobody sent back to the login screen.
+func TestCreateWorkspace_MakesTheAuthorItsOwnerWithoutSigningThemOut(t *testing.T) {
 	f := e2e.Setup(t)
 
 	device := e2e.SignIn(t, f.Actor.UserID, "laptop")
-
-	rec := e2e.Do(t, f.H, http.MethodPost, "/workspaces", f.Actor.Token, map[string]any{"name": "Second"})
-	require.Equalf(t, http.StatusOK, rec.Code, "create workspace: %s", rec.Body.String())
-
-	_, err := device.Refresh(t)
-	require.NoError(t, err, "creating a workspace signed its author out")
-}
-
-// Creating a workspace makes you its owner, and the token you are holding
-// predates it. Standing is derived per request, so that token reaches the new
-// workspace as its owner on the next request, with nothing re-minted.
-func TestCreateWorkspace_MakesTheAuthorItsOwnerAtOnce(t *testing.T) {
-	f := e2e.Setup(t)
-
 	held := f.Actor.Token
+
 	rec := e2e.Do(t, f.H, http.MethodPost, "/workspaces", held, map[string]any{"name": "Second"})
 	require.Equalf(t, http.StatusOK, rec.Code, "create workspace: %s", rec.Body.String())
 
@@ -251,6 +233,9 @@ func TestCreateWorkspace_MakesTheAuthorItsOwnerAtOnce(t *testing.T) {
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code,
 		"the author cannot use the workspace they just made: %s", rec.Body.String())
+
+	_, err := device.Refresh(t)
+	require.NoError(t, err, "creating a workspace signed its author out")
 }
 
 // Nor is deleting one. Access to the deleted workspace stops because membership
