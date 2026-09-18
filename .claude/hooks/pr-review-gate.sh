@@ -27,6 +27,13 @@ max_blocks=3
 
 case "$mode" in
 pr-opened)
+	# The Bash matcher's `if` filter does not reliably narrow to the pull
+	# request command, so check the command here. An MCP tool call carries no
+	# command at all.
+	cmd=$(json '.tool_input.command // empty')
+	if [ -n "$cmd" ] && ! printf '%s' "$cmd" | grep -Eq '(^|[^[:alnum:]_-])gh[[:space:]]+pr[[:space:]]+create'; then
+		exit 0
+	fi
 	mkdir -p "$state" || exit 0
 	: >"$state/pending"
 	jq -n '{
