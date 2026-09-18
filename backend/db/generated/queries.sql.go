@@ -227,6 +227,16 @@ func (q *Queries) DeleteDatasource(ctx context.Context, arg DeleteDatasourcePara
 	return err
 }
 
+const deleteExpiredUserRefreshTokens = `-- name: DeleteExpiredUserRefreshTokens :exec
+DELETE FROM auth.refresh_token
+WHERE user_id = $1 AND expires_at < now()
+`
+
+func (q *Queries) DeleteExpiredUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredUserRefreshTokens, userID)
+	return err
+}
+
 const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
 DELETE FROM auth.refresh_token
 WHERE hashed_token = $1
@@ -234,31 +244,6 @@ WHERE hashed_token = $1
 
 func (q *Queries) DeleteRefreshToken(ctx context.Context, hashedToken string) error {
 	_, err := q.db.ExecContext(ctx, deleteRefreshToken, hashedToken)
-	return err
-}
-
-const deleteUserRefreshTokens = `-- name: DeleteUserRefreshTokens :exec
-DELETE FROM auth.refresh_token
-WHERE user_id = $1
-`
-
-func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteUserRefreshTokens, userID)
-	return err
-}
-
-const deleteUserRefreshTokensExcept = `-- name: DeleteUserRefreshTokensExcept :exec
-DELETE FROM auth.refresh_token
-WHERE user_id = $1 AND hashed_token != $2
-`
-
-type DeleteUserRefreshTokensExceptParams struct {
-	UserID      uuid.UUID
-	HashedToken string
-}
-
-func (q *Queries) DeleteUserRefreshTokensExcept(ctx context.Context, arg DeleteUserRefreshTokensExceptParams) error {
-	_, err := q.db.ExecContext(ctx, deleteUserRefreshTokensExcept, arg.UserID, arg.HashedToken)
 	return err
 }
 
@@ -1043,35 +1028,6 @@ func (q *Queries) GetUserGroupRolesWithNames(ctx context.Context, userID uuid.UU
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getUserIDsByGroupID = `-- name: GetUserIDsByGroupID :many
-SELECT user_id
-FROM app.user_to_group
-WHERE group_id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetUserIDsByGroupID(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getUserIDsByGroupID, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_id uuid.UUID
-		if err := rows.Scan(&user_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

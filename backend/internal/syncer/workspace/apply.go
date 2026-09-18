@@ -25,7 +25,6 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 		return false, nil, fmt.Errorf("workspace: invalid id %q: %w", id, err)
 	}
 
-	var oldOwnerID db_types.JSONNullUUID
 	res, err := patch.Apply(ctx, c, patch.Handler[generated.GetWorkspaceByIDRow, generated.UpsertWorkspaceParams]{
 		TableName: "workspace",
 		Fetch: func(ctx context.Context) (generated.GetWorkspaceByIDRow, error) {
@@ -60,7 +59,6 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			return types.ToRestoredPayload(r)
 		},
 		Merge: func(existing generated.GetWorkspaceByIDRow, isNew bool, payload map[string]any) (generated.UpsertWorkspaceParams, error) {
-			oldOwnerID = existing.OwnerID
 			name := utils.PatchValue(payload, "name", existing.Name, utils.MapGetString(payload, "name"))
 			if isNew && name == "" {
 				name = "My workspace"
@@ -87,14 +85,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 			}, nil
 		},
 		Upsert: func(ctx context.Context, params generated.UpsertWorkspaceParams) error {
-			if err := db.Queries.UpsertWorkspace(ctx, params); err != nil {
-				return err
-			}
-			// Revoke old owner's tokens so their JWT gets fresh OwnedWorkspaceIDs
-			if oldOwnerID.Valid && (!params.OwnerID.Valid || oldOwnerID.String() != params.OwnerID.String()) {
-				_ = db.Queries.DeleteUserRefreshTokens(ctx, oldOwnerID.UUID)
-			}
-			return nil
+			return db.Queries.UpsertWorkspace(ctx, params)
 		},
 	})
 	return res.Applied, res.Restored, err

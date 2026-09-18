@@ -78,10 +78,9 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 		}
 
 		if applied {
-			// Run the hand-written auth side effects this write triggers (token
-			// revocation, permission-cache invalidation; see side_effects.go) so
-			// the change is enforced immediately, and signal the caller to refresh
-			// their own token.
+			// Drop any authz cache this write dirties (see side_effects.go), and
+			// signal the caller to refresh their own token so their UI has the new
+			// claims without waiting for the access token to expire.
 			applyCommitSideEffects(ctx, c)
 			if c.TableName == "user_to_role" || c.TableName == "permission" ||
 				c.TableName == "user_to_group" || c.TableName == "group_to_role" {

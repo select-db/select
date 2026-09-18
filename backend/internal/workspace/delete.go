@@ -55,12 +55,6 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		userUUID, err := uuid.Parse(userID)
-		if err != nil {
-			http.Error(w, "invalid user id", http.StatusInternalServerError)
-			return
-		}
-
 		workspaceUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusBadRequest)
@@ -83,8 +77,6 @@ func DeleteHandler() http.HandlerFunc {
 			http.Error(w, "failed to delete workspace", http.StatusInternalServerError)
 			return
 		}
-
-		_ = db.Queries.DeleteUserRefreshTokens(r.Context(), userUUID)
 
 		audit.EmitAction(r.Context(), audit.WorkspaceDeleted, audit.Record{
 			WorkspaceID: workspaceID,
