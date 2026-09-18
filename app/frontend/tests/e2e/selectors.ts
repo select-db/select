@@ -96,6 +96,13 @@ export const editor = {
 export const queryResultTable = {
 	/** The element that scrolls when the table is wider than its pane. */
 	scroller: (page: Page) => page.locator('div.table.scrollable'),
+	/**
+	 * The table once its columns are sized to the rows rather than to the
+	 * placeholder width. A result's row count reaches the toolbar before the rows
+	 * themselves arrive, so it is this, not the count, that says the geometry is
+	 * final.
+	 */
+	sized: (page: Page) => page.locator('div.table.scrollable[data-test-widths="measured"]'),
 	/** A column's header cell, named by the column the query selects. */
 	header: (page: Page, column: string) =>
 		page
