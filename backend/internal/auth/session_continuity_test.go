@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"backend/e2e"
-	"backend/internal/auth"
 )
 
 // What a session has to survive. Each test drives the real refresh the
@@ -26,18 +25,43 @@ func newMemberDevice(t *testing.T, f e2e.Fixture, deviceID string) (string, *e2e
 	return memberID, e2e.SignIn(t, memberID, deviceID)
 }
 
-// grantRole gives the member the fixture's role through the real sync endpoint,
-// and returns the commit's object id so a later test can take it back.
-func grantRole(t *testing.T, f e2e.Fixture, memberID string) string {
+// grantRole gives the member a role through the real sync endpoint, and returns
+// the commit's object id so a later test can take it back.
+func grantRole(t *testing.T, f e2e.Fixture, memberID, roleID string) string {
 	t.Helper()
 	utrID := uuid.NewString()
 	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "user_to_role", utrID, map[string]any{
 		"id":           utrID,
 		"user_id":      memberID,
-		"role_id":      f.Actor.RoleID,
+		"role_id":      roleID,
 		"workspace_id": f.Actor.WorkspaceID,
 	})
 	return utrID
+}
+
+// seedKeyManagerRole returns a role carrying one workspace permission, so a test
+// can ask whether a person may act rather than what their token says.
+func seedKeyManagerRole(t *testing.T, f e2e.Fixture) string {
+	t.Helper()
+	roleID := uuid.NewString()
+	e2e.SeedRole(t, f.Conn, roleID, f.Actor.WorkspaceID, "Key Manager")
+	_, err := f.Conn.Exec(
+		`INSERT INTO app.permission (id, role_id, workspace_id, action, effect)
+		 VALUES ($1::uuid,$2::uuid,$3::uuid,'workspace/api-keys.manage','allow')`,
+		uuid.NewString(), roleID, f.Actor.WorkspaceID)
+	require.NoError(t, err)
+	return roleID
+}
+
+// mayManageKeys reports whether this token reaches a route gated on the
+// workspace/api-keys.manage permission.
+func mayManageKeys(t *testing.T, f e2e.Fixture, token, roleID, name string) bool {
+	t.Helper()
+	return e2e.Do(t, f.H, http.MethodPost, "/apikeys", token, map[string]any{
+		"workspace_id": f.Actor.WorkspaceID,
+		"name":         name,
+		"role_ids":     []string{roleID},
+	}).Code == http.StatusOK
 }
 
 // A person signed in on a laptop and a desktop holds one refresh token per
@@ -76,56 +100,65 @@ func TestRefreshToken_IsBoundToItsDevice(t *testing.T) {
 	require.Error(t, err, "a refresh token must not work from a different device")
 }
 
-// Granting somebody a role has to reach them, and the way it reaches them is
-// the next token they are issued. Their session is not the thing that changed.
-func TestRoleGrant_ReachesMemberWithoutSigningThemOut(t *testing.T) {
+// Granting somebody a role reaches them on the request after the commit, on the
+// token they are already holding, because standing is derived per request. And
+// it costs them nothing: their session is not what changed.
+func TestRoleGrant_ReachesMemberAtOnceWithoutSigningThemOut(t *testing.T) {
 	f := e2e.Setup(t)
 
 	memberID, member := newMemberDevice(t, f, "laptop")
-
-	before, err := member.Refresh(t)
-	require.NoError(t, err)
-	require.NotContains(t, e2e.RolesInWorkspace(t, before.AccessToken, f.Actor.WorkspaceID), f.Actor.RoleID,
+	roleID := seedKeyManagerRole(t, f)
+	held := e2e.MintJWT(t, memberID)
+	require.False(t, mayManageKeys(t, f, held, roleID, "before"),
 		"the member starts without the role")
 
-	grantRole(t, f, memberID)
+	grantRole(t, f, memberID, roleID)
 
-	after, err := member.Refresh(t)
+	require.True(t, mayManageKeys(t, f, held, roleID, "after"),
+		"the granted role did not reach the token the member is holding")
+	_, err := member.Refresh(t)
 	require.NoError(t, err, "granting a role signed the member out")
-	require.Contains(t, e2e.RolesInWorkspace(t, after.AccessToken, f.Actor.WorkspaceID), f.Actor.RoleID,
-		"the granted role did not reach the member's next token")
 }
 
-// And taking one away reaches them the same way.
-func TestRoleRemoval_ReachesMemberWithoutSigningThemOut(t *testing.T) {
+// And taking one away stops granting on the same request, rather than when the
+// token that named it happens to expire.
+func TestRoleRemoval_ReachesMemberAtOnceWithoutSigningThemOut(t *testing.T) {
 	f := e2e.Setup(t)
 
 	memberID, member := newMemberDevice(t, f, "laptop")
-	utrID := grantRole(t, f, memberID)
-
-	before, err := member.Refresh(t)
-	require.NoError(t, err)
-	require.Contains(t, e2e.RolesInWorkspace(t, before.AccessToken, f.Actor.WorkspaceID), f.Actor.RoleID,
+	roleID := seedKeyManagerRole(t, f)
+	grantID := grantRole(t, f, memberID, roleID)
+	held := e2e.MintJWT(t, memberID)
+	require.True(t, mayManageKeys(t, f, held, roleID, "before"),
 		"the member starts with the role")
 
-	e2e.SyncCommit(t, f.H, f.Actor, "delete", "user_to_role", utrID, map[string]any{
-		"id":           utrID,
+	e2e.SyncCommit(t, f.H, f.Actor, "delete", "user_to_role", grantID, map[string]any{
+		"id":           grantID,
 		"workspace_id": f.Actor.WorkspaceID,
 	})
 
-	after, err := member.Refresh(t)
+	require.False(t, mayManageKeys(t, f, held, roleID, "after"),
+		"the removed role is still granted to the token the member is holding")
+	_, err := member.Refresh(t)
 	require.NoError(t, err, "removing a role signed the member out")
-	require.NotContains(t, e2e.RolesInWorkspace(t, after.AccessToken, f.Actor.WorkspaceID), f.Actor.RoleID,
-		"the removed role is still in the member's next token")
 }
 
-// A group's role set changes every current member's standing at once, so this is
-// the widest a single commit reaches. None of them may lose their session for it.
-func TestGroupRoleGrant_ReachesEveryMemberWithoutSigningThemOut(t *testing.T) {
+// A group's role set changes every current member's standing at once, so this
+// is the widest a single commit reaches. All of them gain it, none of them lose
+// their session for it.
+func TestGroupRoleGrant_ReachesEveryMemberAtOnceWithoutSigningThemOut(t *testing.T) {
 	f := e2e.Setup(t)
 
 	firstID, first := newMemberDevice(t, f, "laptop")
 	secondID, second := newMemberDevice(t, f, "desktop")
+	roleID := seedKeyManagerRole(t, f)
+
+	// Taken before the commit: the point is that it reaches the token they are
+	// already holding, which one minted afterwards would not prove.
+	heldBy := map[string]string{
+		"first":  e2e.MintJWT(t, firstID),
+		"second": e2e.MintJWT(t, secondID),
+	}
 
 	groupID := uuid.NewString()
 	_, err := f.Conn.Exec(
@@ -146,15 +179,15 @@ func TestGroupRoleGrant_ReachesEveryMemberWithoutSigningThemOut(t *testing.T) {
 	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "group_to_role", gtrID, map[string]any{
 		"id":           gtrID,
 		"group_id":     groupID,
-		"role_id":      f.Actor.RoleID,
+		"role_id":      roleID,
 		"workspace_id": f.Actor.WorkspaceID,
 	})
 
 	for name, device := range map[string]*e2e.Device{"first": first, "second": second} {
-		tokens, err := device.Refresh(t)
+		require.Truef(t, mayManageKeys(t, f, heldBy[name], roleID, "after-"+name),
+			"the group's role did not reach the token the %s member is holding", name)
+		_, err := device.Refresh(t)
 		require.NoErrorf(t, err, "giving the group a role signed the %s member out", name)
-		require.Containsf(t, e2e.RolesInWorkspace(t, tokens.AccessToken, f.Actor.WorkspaceID), f.Actor.RoleID,
-			"the group's role did not reach the %s member's next token", name)
 	}
 }
 
@@ -193,15 +226,14 @@ func TestCreateWorkspace_DoesNotSignTheAuthorOut(t *testing.T) {
 	require.NoError(t, err, "creating a workspace signed its author out")
 }
 
-// Creating a workspace makes you its owner, and the claim the caller is holding
-// predates it, so the handler has to hand back a token that says so. Without it
-// the creator is a member of their new workspace with no roles and no ownership
-// until their access token expires, and every owner-gated route in it refuses
-// them for five minutes.
+// Creating a workspace makes you its owner, and the token you are holding
+// predates it. Standing is derived per request, so that token reaches the new
+// workspace as its owner on the next request, with nothing re-minted.
 func TestCreateWorkspace_MakesTheAuthorItsOwnerAtOnce(t *testing.T) {
 	f := e2e.Setup(t)
 
-	rec := e2e.Do(t, f.H, http.MethodPost, "/workspaces", f.Actor.Token, map[string]any{"name": "Second"})
+	held := f.Actor.Token
+	rec := e2e.Do(t, f.H, http.MethodPost, "/workspaces", held, map[string]any{"name": "Second"})
 	require.Equalf(t, http.StatusOK, rec.Code, "create workspace: %s", rec.Body.String())
 
 	var created struct {
@@ -209,29 +241,16 @@ func TestCreateWorkspace_MakesTheAuthorItsOwnerAtOnce(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
 
-	token := rec.Header().Get("X-New-Access-Token")
-	require.NotEmpty(t, token, "creating a workspace must hand back a token that knows about it")
-
-	_, claims, err := auth.ValidateJWT(token)
-	require.NoError(t, err)
-	var owned bool
-	for _, ws := range claims.Workspaces {
-		if ws.ID == created.ID {
-			owned = ws.IsOwner
-		}
-	}
-	require.True(t, owned, "the new token does not make the author owner of the workspace they just made")
-
-	// And it works on a route the new workspace grants no other way: with no
-	// roles in it yet, only ownership passes this gate.
-	rec = e2e.Do(t, f.H, http.MethodPut, "/datasources/"+uuid.NewString(), token, map[string]any{
+	// A route gated on IsOwner or CanManage: with no roles in the new workspace
+	// yet, only ownership passes it.
+	rec = e2e.Do(t, f.H, http.MethodPut, "/datasources/"+uuid.NewString(), held, map[string]any{
 		"workspace_id": created.ID,
 		"db_type":      "postgresql",
 		"name":         "warehouse",
 		"dsn":          e2e.TargetDSN(t, f.Conn),
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code,
-		"the author cannot use their own new workspace: %s", rec.Body.String())
+		"the author cannot use the workspace they just made: %s", rec.Body.String())
 }
 
 // Nor is deleting one. Access to the deleted workspace stops because membership

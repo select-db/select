@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"backend/internal/auth"
+	"backend/db"
 
 	"github.com/google/uuid"
 )
@@ -73,12 +73,11 @@ func seedGroupToRole(t *testing.T, conn *sql.DB, id, groupID, roleID, workspaceI
 	require.NoError(t, err)
 }
 
-// TestCreateJWT_UnionsDirectAndGroupRoles is the proxified-path analogue of the
-// client-side TestGroupRoleFlow_AppliesToLocalPermissions: a proxified backend
-// derives a user's authority from the JWT, so the token must embed BOTH
-// directly-assigned roles (user_to_role) and roles granted through a group
-// (user_to_group -> group_to_role).
-func TestCreateJWT_UnionsDirectAndGroupRoles(t *testing.T) {
+// A user's effective roles are the union of the directly-assigned ones
+// (user_to_role) and those granted through a group (user_to_group ->
+// group_to_role). The union is what a request is given, so both paths have to
+// reach it.
+func TestStanding_UnionsDirectAndGroupRoles(t *testing.T) {
 	localSigner(t)
 	conn := newTestDB(t)
 
@@ -96,29 +95,22 @@ func TestCreateJWT_UnionsDirectAndGroupRoles(t *testing.T) {
 	seedRole(t, conn, groupRoleID, wsID, "group-role")
 	seedGroup(t, conn, groupID, wsID, "engineering")
 
-	// membership so the workspace appears in the token
+	// membership so the workspace appears at all
 	seedMembership(t, conn, wsID, userID)
 
 	seedUserToRole(t, conn, newID(), userID, directRoleID, wsID)
 	seedUserToGroup(t, conn, newID(), userID, groupID, wsID)
 	seedGroupToRole(t, conn, newID(), groupID, groupRoleID, wsID)
 
-	tok, err := auth.CreateJWT(context.Background(), uuid.MustParse(userID))
-	require.NoError(t, err)
-
-	_, claims, err := auth.ValidateJWT(tok)
-	require.NoError(t, err)
-
-	got := claims.RolesIn(wsID)
-	require.Contains(t, got, directRoleID, "direct role must be in the token")
-	require.Contains(t, got, groupRoleID, "group-granted role must be in the token")
+	got := effectiveRoles(t, userID, wsID)
+	require.Contains(t, got, directRoleID, "direct role must be in the standing")
+	require.Contains(t, got, groupRoleID, "group-granted role must be in the standing")
 	require.Equal(t, "direct-role", got[directRoleID])
 	require.Equal(t, "group-role", got[groupRoleID])
 }
 
-// TestCreateJWT_DedupesRoleGrantedBothWays proves the per-workspace dedup: a
-// role assigned directly AND through a group appears exactly once in the claim.
-func TestCreateJWT_DedupesRoleGrantedBothWays(t *testing.T) {
+// A role assigned directly AND through a group is one grant, not two.
+func TestStanding_DedupesRoleGrantedBothWays(t *testing.T) {
 	localSigner(t)
 	conn := newTestDB(t)
 
@@ -141,30 +133,20 @@ func TestCreateJWT_DedupesRoleGrantedBothWays(t *testing.T) {
 	seedUserToGroup(t, conn, newID(), userID, groupID, wsID)
 	seedGroupToRole(t, conn, newID(), groupID, roleID, wsID)
 
-	tok, err := auth.CreateJWT(context.Background(), uuid.MustParse(userID))
-	require.NoError(t, err)
-
-	_, claims, err := auth.ValidateJWT(tok)
-	require.NoError(t, err)
-
 	count := 0
-	for _, ws := range claims.Workspaces {
-		if ws.ID != wsID {
-			continue
-		}
-		for _, r := range ws.Roles {
-			if r.ID == roleID {
-				count++
-			}
+	rows, err := db.Queries.GetWorkspaceStandingByUserID(context.Background(), uuid.MustParse(userID))
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.WorkspaceID.String() == wsID && row.RoleID.Valid && row.RoleID.UUID.String() == roleID {
+			count++
 		}
 	}
-	require.Equal(t, 1, count, "role granted both directly and via group must appear once")
+	require.Equal(t, 1, count, "role granted both directly and via group must be counted once")
 }
 
-// TestCreateJWT_SoftDeletedGroupGrantsNoRoles guards the same soft-delete bug on
-// the token path that TestGroupRoles_SoftDeletedGroupGrantsNoRoles guards on the
-// query path: deleting the group must drop its roles from freshly-issued tokens.
-func TestCreateJWT_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
+// Deleting a group is a soft delete, and the FK cascade only fires on hard
+// deletes, so its still-live membership rows must not keep granting its roles.
+func TestStanding_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
 	localSigner(t)
 	conn := newTestDB(t)
 
@@ -189,12 +171,6 @@ func TestCreateJWT_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
 	_, err := conn.Exec(`UPDATE app."group" SET deleted_at = now() WHERE id = $1::uuid`, groupID)
 	require.NoError(t, err)
 
-	tok, err := auth.CreateJWT(context.Background(), uuid.MustParse(userID))
-	require.NoError(t, err)
-
-	_, claims, err := auth.ValidateJWT(tok)
-	require.NoError(t, err)
-
-	got := claims.RolesIn(wsID)
-	require.NotContains(t, got, groupRoleID, "soft-deleted group must not grant roles in the token")
+	got := effectiveRoles(t, userID, wsID)
+	require.NotContains(t, got, groupRoleID, "soft-deleted group must grant no roles")
 }

@@ -42,12 +42,3 @@ func (d *Device) Refresh(t *testing.T) (*middlewares.TokenResponse, error) {
 	}
 	return tokens, err
 }
-
-// RolesInWorkspace is the set of role ids an access token grants in one
-// workspace, keyed by id.
-func RolesInWorkspace(t *testing.T, accessToken, workspaceID string) map[string]string {
-	t.Helper()
-	_, claims, err := auth.ValidateJWT(accessToken)
-	require.NoError(t, err)
-	return claims.RolesIn(workspaceID)
-}

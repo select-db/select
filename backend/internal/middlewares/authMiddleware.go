@@ -128,10 +128,11 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// buildAuthContext attaches identity and per-workspace standing. Membership is
-// re-derived from the DB for tenant isolation (not trusted from the token);
-// roles/ownership for each member workspace come from the token claim.
-func buildAuthContext(ctx context.Context, userID, name string, claimWorkspaces []auth.WorkspaceClaim) (context.Context, error) {
+// buildAuthContext attaches identity and per-workspace standing, all of it
+// re-derived from the DB. The token carries identity only: a role taken away
+// has to stop granting on the next request, not when the access token that
+// named it happens to expire.
+func buildAuthContext(ctx context.Context, userID, name string) (context.Context, error) {
 	ctx = context.WithValue(ctx, userIDKey, userID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
 
@@ -142,20 +143,34 @@ func buildAuthContext(ctx context.Context, userID, name string, claimWorkspaces 
 	if err != nil {
 		return ctx, fmt.Errorf("invalid user id: %w", err)
 	}
-	ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, uid)
+	rows, err := db.Queries.GetWorkspaceStandingByUserID(ctx, uid)
 	if err != nil {
 		return ctx, fmt.Errorf("workspace lookup failed: %w", err)
 	}
 
-	claimByWS := make(map[string]auth.WorkspaceClaim, len(claimWorkspaces))
-	for _, w := range claimWorkspaces {
-		claimByWS[w.ID] = w
+	// One row per (workspace, role), and a role-less row for a workspace the
+	// caller holds no role in, so the workspace still lands in the set.
+	order := make([]string, 0, len(rows))
+	byWorkspace := make(map[string]*auth.WorkspaceClaim, len(rows))
+	for _, row := range rows {
+		id := row.WorkspaceID.String()
+		claim, seen := byWorkspace[id]
+		if !seen {
+			claim = &auth.WorkspaceClaim{ID: id, IsOwner: row.IsOwner}
+			byWorkspace[id] = claim
+			order = append(order, id)
+		}
+		if row.RoleID.Valid {
+			claim.Roles = append(claim.Roles, auth.RoleRef{
+				ID:   row.RoleID.UUID.String(),
+				Name: row.RoleName.ValueOrEmpty(),
+			})
+		}
 	}
-	workspaces := make([]auth.WorkspaceClaim, 0, len(ids))
-	for _, u := range ids {
-		id := u.String()
-		c := claimByWS[id] // zero value if the token predates this membership
-		workspaces = append(workspaces, auth.WorkspaceClaim{ID: id, IsOwner: c.IsOwner, Roles: c.Roles})
+
+	workspaces := make([]auth.WorkspaceClaim, 0, len(order))
+	for _, id := range order {
+		workspaces = append(workspaces, *byWorkspace[id])
 	}
 	return context.WithValue(ctx, workspacesKey, workspaces), nil
 }
@@ -234,7 +249,7 @@ func Authenticated() func(http.Handler) http.Handler {
 			token, claims, err := auth.ValidateJWT(tokenStr)
 			switch {
 			case err == nil && token.Valid:
-				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, claims.Name, claims.Workspaces)
+				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, claims.Name)
 				if ctxErr != nil {
 					http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 					return
@@ -262,9 +277,9 @@ func Authenticated() func(http.Handler) http.Handler {
 					ctxErr error
 				)
 				if parseErr == nil && newClaims != nil {
-					ctx, ctxErr = buildAuthContext(r.Context(), newClaims.UserID, newClaims.Name, newClaims.Workspaces)
+					ctx, ctxErr = buildAuthContext(r.Context(), newClaims.UserID, newClaims.Name)
 				} else {
-					ctx, ctxErr = buildAuthContext(r.Context(), userID, "", nil)
+					ctx, ctxErr = buildAuthContext(r.Context(), userID, "")
 				}
 				if ctxErr != nil {
 					http.Error(w, "Service unavailable", http.StatusServiceUnavailable)

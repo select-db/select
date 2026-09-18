@@ -140,9 +140,13 @@ func TestDeleteWorkspace_RevokesAPIKeys(t *testing.T) {
 		"an API key still reaches the datasources of a deleted workspace: %s", rec.Body.String())
 }
 
-// What a manager taking access away actually reaches, and when. Three things
-// can be taken, and they do not take effect at the same moment, so each is
-// pinned here against the token the person is already holding.
+// What a manager taking access away reaches, and when. Three things can be
+// taken and all three land on the next request, so each is pinned here against
+// the token the person is already holding rather than a fresh one.
+//
+// Taking a role off a person is the third, covered by
+// TestRoleRemoval_ReachesMemberAtOnceWithoutSigningThemOut, which asserts the
+// session survives it in the same breath.
 
 // seedManagedRole gives the member a role carrying one workspace permission,
 // and returns the role id and the user_to_role row id.
@@ -197,34 +201,4 @@ func TestPermissionRemoved_TakesEffectOnTheTokenAlreadyHeld(t *testing.T) {
 
 	require.NotEqual(t, http.StatusOK, createsAPIKey(t, f, held, roleID, "after"),
 		"a permission the manager removed is still granted to a token already issued")
-}
-
-// Which roles a person holds is baked into their access token, so taking a role
-// away reaches them when that token turns over and not before. The pair below
-// is the contract: enforced on the next token, and not on the one in hand.
-//
-// The window is accessTokenTTL, five minutes. It is not what revoking their
-// refresh token would have shortened: an unexpired access token is accepted on
-// its signature without the refresh token being read at all.
-func TestRoleRemoved_IsEnforcedOnTheNextTokenAndNotBefore(t *testing.T) {
-	f := e2e.Setup(t)
-
-	memberID := uuid.NewString()
-	e2e.SeedUser(t, f.Conn, memberID)
-	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
-	roleID, grantID := seedManagedRole(t, f, memberID, "workspace/api-keys.manage")
-
-	held := e2e.MintJWT(t, memberID)
-	require.Equal(t, http.StatusOK, createsAPIKey(t, f, held, roleID, "before"),
-		"the role grants this before the manager takes it away")
-
-	e2e.SyncCommit(t, f.H, f.Actor, "delete", "user_to_role", grantID, map[string]any{
-		"id": grantID, "workspace_id": f.Actor.WorkspaceID,
-	})
-
-	require.Equal(t, http.StatusOK, createsAPIKey(t, f, held, roleID, "during-the-window"),
-		"the window closed early, which is a better guarantee than this pins: widen it deliberately")
-
-	require.NotEqual(t, http.StatusOK, createsAPIKey(t, f, e2e.MintJWT(t, memberID), roleID, "after"),
-		"the removed role is still granted by a token minted after the removal")
 }

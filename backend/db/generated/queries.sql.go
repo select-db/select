@@ -633,34 +633,6 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 	return items, nil
 }
 
-const getOwnedWorkspaceIDsByUserID = `-- name: GetOwnedWorkspaceIDsByUserID :many
-SELECT id FROM app.workspace
-WHERE owner_id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetOwnedWorkspaceIDsByUserID(ctx context.Context, ownerID db_types.JSONNullUUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getOwnedWorkspaceIDsByUserID, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getPermissionByID = `-- name: GetPermissionByID :one
 SELECT id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at, deleted_at
 FROM app.permission
@@ -994,50 +966,6 @@ func (q *Queries) GetUserByProviderIdentity(ctx context.Context, arg GetUserByPr
 	return i, err
 }
 
-const getUserGroupRolesWithNames = `-- name: GetUserGroupRolesWithNames :many
-SELECT DISTINCT r.id, r.name, r.workspace_id
-FROM app.role r
-JOIN app.group_to_role gr ON gr.role_id = r.id AND gr.deleted_at IS NULL
-JOIN app.user_to_group ug ON ug.group_id = gr.group_id AND ug.deleted_at IS NULL
-JOIN app."group" g ON g.id = gr.group_id AND g.deleted_at IS NULL
-WHERE ug.user_id = $1 AND r.deleted_at IS NULL
-`
-
-type GetUserGroupRolesWithNamesRow struct {
-	ID          uuid.UUID
-	Name        string
-	WorkspaceID uuid.UUID
-}
-
-// Roles a user holds indirectly, via group membership: user_to_group -> group_to_role -> role.
-// Unioned with GetUserRolesWithNames (direct roles) to form the effective role set baked
-// into the access token.
-// The group's own soft-delete must be honored: deletion is a soft delete and the
-// FK ON DELETE CASCADE only fires on hard deletes, so a deleted group would
-// otherwise keep granting its roles through still-live membership rows.
-func (q *Queries) GetUserGroupRolesWithNames(ctx context.Context, userID uuid.UUID) ([]GetUserGroupRolesWithNamesRow, error) {
-	rows, err := q.db.QueryContext(ctx, getUserGroupRolesWithNames, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetUserGroupRolesWithNamesRow
-	for rows.Next() {
-		var i GetUserGroupRolesWithNamesRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.WorkspaceID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getUserNameByID = `-- name: GetUserNameByID :one
 SELECT name, email FROM app."user" WHERE id = $1
 `
@@ -1052,42 +980,6 @@ func (q *Queries) GetUserNameByID(ctx context.Context, id uuid.UUID) (GetUserNam
 	var i GetUserNameByIDRow
 	err := row.Scan(&i.Name, &i.Email)
 	return i, err
-}
-
-const getUserRolesWithNames = `-- name: GetUserRolesWithNames :many
-SELECT r.id, r.name, r.workspace_id
-FROM app.role r
-JOIN app.user_to_role utr ON utr.role_id = r.id
-WHERE utr.user_id = $1 AND utr.deleted_at IS NULL AND r.deleted_at IS NULL
-`
-
-type GetUserRolesWithNamesRow struct {
-	ID          uuid.UUID
-	Name        string
-	WorkspaceID uuid.UUID
-}
-
-func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID uuid.UUID) ([]GetUserRolesWithNamesRow, error) {
-	rows, err := q.db.QueryContext(ctx, getUserRolesWithNames, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetUserRolesWithNamesRow
-	for rows.Next() {
-		var i GetUserRolesWithNamesRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.WorkspaceID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getUserToGroupByID = `-- name: GetUserToGroupByID :one
@@ -1296,41 +1188,6 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id uuid.UUID) (GetWorksp
 	return i, err
 }
 
-const getWorkspaceIDsByUserID = `-- name: GetWorkspaceIDsByUserID :many
-SELECT
-  wtu.workspace_id
-FROM
-  app.workspace_to_user wtu
-  JOIN app.workspace w ON w.id = wtu.workspace_id
-WHERE
-  wtu.user_id = $1
-  AND wtu.deleted_at IS NULL
-  AND w.deleted_at IS NULL
-`
-
-func (q *Queries) GetWorkspaceIDsByUserID(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getWorkspaceIDsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var workspace_id uuid.UUID
-		if err := rows.Scan(&workspace_id); err != nil {
-			return nil, err
-		}
-		items = append(items, workspace_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getWorkspaceOwnerID = `-- name: GetWorkspaceOwnerID :one
 SELECT owner_id FROM app.workspace WHERE id = $1
 `
@@ -1340,6 +1197,77 @@ func (q *Queries) GetWorkspaceOwnerID(ctx context.Context, id uuid.UUID) (db_typ
 	var owner_id db_types.JSONNullUUID
 	err := row.Scan(&owner_id)
 	return owner_id, err
+}
+
+const getWorkspaceStandingByUserID = `-- name: GetWorkspaceStandingByUserID :many
+SELECT
+  wtu.workspace_id,
+  COALESCE(w.owner_id = $1::uuid, false)::boolean AS is_owner,
+  r.id AS role_id,
+  r.name AS role_name
+FROM app.workspace_to_user wtu
+  JOIN app.workspace w ON w.id = wtu.workspace_id AND w.deleted_at IS NULL
+  LEFT JOIN app.role r
+    ON r.workspace_id = wtu.workspace_id
+    AND r.deleted_at IS NULL
+    AND (
+      EXISTS (
+        SELECT 1 FROM app.user_to_role utr
+        WHERE utr.role_id = r.id AND utr.user_id = $1 AND utr.deleted_at IS NULL
+      )
+      OR EXISTS (
+        -- The group's own soft-delete must be honored: deletion is a soft delete
+        -- and the FK ON DELETE CASCADE only fires on hard deletes, so a deleted
+        -- group would otherwise keep granting its roles through live membership.
+        SELECT 1 FROM app.group_to_role gr
+          JOIN app.user_to_group ug ON ug.group_id = gr.group_id AND ug.deleted_at IS NULL
+          JOIN app."group" g ON g.id = gr.group_id AND g.deleted_at IS NULL
+        WHERE gr.role_id = r.id AND gr.deleted_at IS NULL AND ug.user_id = $1
+      )
+    )
+WHERE wtu.user_id = $1 AND wtu.deleted_at IS NULL
+`
+
+type GetWorkspaceStandingByUserIDRow struct {
+	WorkspaceID uuid.UUID
+	IsOwner     bool
+	RoleID      db_types.JSONNullUUID
+	RoleName    db_types.JSONNullString
+}
+
+// The caller's standing in every workspace they are a member of: whether they
+// own it, and the roles they hold there, directly or through a group. One row
+// per (workspace, role), and one role-less row for a workspace they hold no
+// role in, so membership is the spine rather than the roles.
+//
+// A role granted both directly and through a group is one row, not two: the
+// grants are an OR over the same role rather than a join per path.
+func (q *Queries) GetWorkspaceStandingByUserID(ctx context.Context, userID uuid.UUID) ([]GetWorkspaceStandingByUserIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getWorkspaceStandingByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetWorkspaceStandingByUserIDRow
+	for rows.Next() {
+		var i GetWorkspaceStandingByUserIDRow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.IsOwner,
+			&i.RoleID,
+			&i.RoleName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getWorkspaceToUserByID = `-- name: GetWorkspaceToUserByID :one
