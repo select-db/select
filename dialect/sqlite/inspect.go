@@ -40,6 +40,10 @@ func (i *Inspector) normalizeEquals(a, b string) bool {
 
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
+	if strings.TrimSpace(sql) == "" {
+		return nil
+	}
+
 	lexer := i.dialect.CreateLexer(sql)
 	tokenStream := antlr.NewCommonTokenStream(lexer, 0)
 	tokenStream.Fill() // pre-fill for compound-operator detection
@@ -51,12 +55,6 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		stmtLists = root.AllSql_stmt_list()
 	}
 	if len(stmtLists) == 0 {
-		// Nothing parsed out of text that is not blank: we cannot say what it
-		// does, and a caller reading an empty result as "nothing to check" is
-		// how an unsupported statement gets run unchecked.
-		if strings.TrimSpace(sql) == "" {
-			return nil
-		}
 		return []core.InspectStatement{core.UnknownStatement()}
 	}
 

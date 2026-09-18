@@ -24,6 +24,24 @@ func pe(dbID, schema, table, column, action, effect string) PermissionEntry {
 	}
 }
 
+// dataActionsOnly allows the four actions a statement resolves down to, and
+// nothing else. Manage is what the tests around it add or withhold.
+func dataActionsOnly() []PermissionEntry {
+	return []PermissionEntry{
+		pe(testDBID, "*", "*", "*", ActionSelect, "allow"),
+		pe(testDBID, "*", "*", "*", ActionInsert, "allow"),
+		pe(testDBID, "*", "*", "*", ActionUpdate, "allow"),
+		pe(testDBID, "*", "*", "*", ActionDelete, "allow"),
+	}
+}
+
+func opRes(op InspectOperation, schema, table string) InspectStatement {
+	return InspectStatement{
+		Operation: op,
+		Tables:    []InspectTable{{Name: table, Schema: schema}},
+	}
+}
+
 func selectRes(schema, table string, columns ...string) InspectStatement {
 	r := InspectStatement{
 		Operation: InspectOpSelect,
@@ -212,31 +230,22 @@ func getPermissionTestCases() []permTestCase {
 
 		// --- DDL ---
 		{
-			name: "select permission does not grant a drop",
-			results: []InspectStatement{{
-				Operation: InspectOpDrop,
-				Tables:    []InspectTable{{Name: "t1", Schema: "public"}},
-			}},
+			name:    "select permission does not grant a drop",
+			results: []InspectStatement{opRes(InspectOpDrop, "public", "t1")},
 			entries: []PermissionEntry{pe(testDBID, "public", "t1", "", ActionSelect, "allow")},
 			wantErr: true,
 		},
 		{
-			name: "manage allows a drop",
-			results: []InspectStatement{{
-				Operation: InspectOpDrop,
-				Tables:    []InspectTable{{Name: "t1", Schema: "public"}},
-			}},
+			name:    "manage allows a drop",
+			results: []InspectStatement{opRes(InspectOpDrop, "public", "t1")},
 			entries: []PermissionEntry{pe(testDBID, "*", "*", "*", ActionManage, "allow")},
 			wantErr: false,
 		},
 		{
 			// Manage is granted on the connection, so a rule scoped to one
 			// table is not the rule this check reads.
-			name: "manage scoped to one table does not allow a drop",
-			results: []InspectStatement{{
-				Operation: InspectOpDrop,
-				Tables:    []InspectTable{{Name: "t1", Schema: "public"}},
-			}},
+			name:    "manage scoped to one table does not allow a drop",
+			results: []InspectStatement{opRes(InspectOpDrop, "public", "t1")},
 			entries: []PermissionEntry{pe(testDBID, "public", "t1", "", ActionManage, "allow")},
 			wantErr: true,
 		},
@@ -251,22 +260,12 @@ func TestCheckQueryPermissions_NonDataOperationsNeedManage(t *testing.T) {
 		InspectOpCreate, InspectOpAlter, InspectOpDrop, InspectOpTruncate,
 		InspectOpGrant, InspectOpRevoke, InspectOpUnknown,
 	}
-	everyDataAction := []PermissionEntry{
-		pe(testDBID, "*", "*", "*", ActionSelect, "allow"),
-		pe(testDBID, "*", "*", "*", ActionInsert, "allow"),
-		pe(testDBID, "*", "*", "*", ActionUpdate, "allow"),
-		pe(testDBID, "*", "*", "*", ActionDelete, "allow"),
-	}
-	manage := append(append([]PermissionEntry(nil), everyDataAction...),
-		pe(testDBID, "*", "*", "*", ActionManage, "allow"))
+	manage := append(dataActionsOnly(), pe(testDBID, "*", "*", "*", ActionManage, "allow"))
 
 	for _, op := range ops {
 		t.Run(string(op), func(t *testing.T) {
-			stmt := []InspectStatement{{
-				Operation: op,
-				Tables:    []InspectTable{{Name: "t1", Schema: "public"}},
-			}}
-			if err := CheckQueryPermissions(stmt, testDBID, Compile(everyDataAction)); err == nil {
+			stmt := []InspectStatement{opRes(op, "public", "t1")}
+			if err := CheckQueryPermissions(stmt, testDBID, Compile(dataActionsOnly())); err == nil {
 				t.Error("every data action allowed: want denied, got allowed")
 			}
 			if err := CheckQueryPermissions(stmt, testDBID, Compile(manage)); err != nil {
@@ -280,15 +279,8 @@ func TestCheckQueryPermissions_NonDataOperationsNeedManage(t *testing.T) {
 // loop has nothing to iterate. It is refused on the connection instead: this is
 // the check that stops an unsupported statement from running unexamined.
 func TestCheckQueryPermissions_UnresolvedStatementIsRefused(t *testing.T) {
-	everythingButManage := []PermissionEntry{
-		pe(testDBID, "*", "*", "*", ActionSelect, "allow"),
-		pe(testDBID, "*", "*", "*", ActionInsert, "allow"),
-		pe(testDBID, "*", "*", "*", ActionUpdate, "allow"),
-		pe(testDBID, "*", "*", "*", ActionDelete, "allow"),
-	}
-
 	stmt := []InspectStatement{UnknownStatement()}
-	err := CheckQueryPermissions(stmt, testDBID, Compile(everythingButManage))
+	err := CheckQueryPermissions(stmt, testDBID, Compile(dataActionsOnly()))
 	if err == nil {
 		t.Fatal("unresolved statement was allowed")
 	}
@@ -297,7 +289,7 @@ func TestCheckQueryPermissions_UnresolvedStatementIsRefused(t *testing.T) {
 		t.Errorf("error = %q, want %q", err, want)
 	}
 
-	withManage := append(everythingButManage, pe(testDBID, "*", "*", "*", ActionManage, "allow"))
+	withManage := append(dataActionsOnly(), pe(testDBID, "*", "*", "*", ActionManage, "allow"))
 	if err := CheckQueryPermissions(stmt, testDBID, Compile(withManage)); err != nil {
 		t.Errorf("manage holder: want allowed, got %v", err)
 	}

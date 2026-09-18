@@ -7,13 +7,16 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-// permMeta is a catalog the inspectors can resolve names against, in the
-// spelling each dialect uses for its default schema.
-func permMeta(defaultSchema string) *core.Metadata {
+const permDBID = "inst-1"
+
+// permMeta is a catalog the inspectors resolve names against. One schema name
+// serves all three dialects: an inspector resolves against meta.DefaultSchema,
+// not against a default of its own.
+func permMeta() *core.Metadata {
 	return &core.Metadata{
-		DefaultSchema: defaultSchema,
+		DefaultSchema: "main",
 		Schemas: []core.Schema{{
-			Name: defaultSchema,
+			Name: "main",
 			Tables: []core.Table{{
 				Name:    "users",
 				Columns: []core.Column{{Name: "id", Type: "integer"}, {Name: "bio", Type: "text"}},
@@ -25,21 +28,15 @@ func permMeta(defaultSchema string) *core.Metadata {
 	}
 }
 
-// everyDataAction allows the four actions a statement can be resolved down to,
+// dataActionsOnly allows the four actions a statement can be resolved down to,
 // and nothing else. A statement that passes under it is one we understood.
-func everyDataAction(dbID string) core.CompiledPermissions {
-	star := "*"
+func dataActionsOnly() core.CompiledPermissions {
 	var entries []core.PermissionEntry
 	for _, a := range []string{core.ActionSelect, core.ActionInsert, core.ActionUpdate, core.ActionDelete} {
-		entries = append(entries, core.PermissionEntry{
-			DbInstanceID: &dbID, SchemaName: &star, TableName: &star, ColumnName: &star,
-			Action: a, Effect: "allow", RoleName: "analyst",
-		})
+		entries = append(entries, core.PermissionEntry{Action: a, Effect: "allow", RoleName: "analyst"})
 	}
-	return core.Compile(entries)
+	return compileFor(permDBID, entries...)
 }
-
-const permDBID = "inst-1"
 
 // TestPermissions_StatementsThatNeedManage pins the statements that used to run
 // unchecked. Each one inspected to nothing, and a check that iterates statements
@@ -47,13 +44,11 @@ const permDBID = "inst-1"
 // that grants no manage.
 func TestPermissions_StatementsThatNeedManage(t *testing.T) {
 	tests := []struct {
-		dialect       string
-		defaultSchema string
-		sql           []string
+		dialect string
+		sql     []string
 	}{
 		{
-			dialect:       "postgresql",
-			defaultSchema: "public",
+			dialect: "postgresql",
 			sql: []string{
 				"COPY users FROM '/tmp/x.csv'",
 				"COPY users TO '/tmp/x.csv'",
@@ -75,8 +70,7 @@ func TestPermissions_StatementsThatNeedManage(t *testing.T) {
 			},
 		},
 		{
-			dialect:       "mysql",
-			defaultSchema: "shop",
+			dialect: "mysql",
 			sql: []string{
 				"LOAD DATA INFILE '/tmp/x' INTO TABLE users",
 				"GRANT SELECT ON users TO bob",
@@ -86,8 +80,7 @@ func TestPermissions_StatementsThatNeedManage(t *testing.T) {
 			},
 		},
 		{
-			dialect:       "sqlite",
-			defaultSchema: "main",
+			dialect: "sqlite",
 			sql: []string{
 				"ATTACH DATABASE '/tmp/evil.db' AS e",
 				"DROP TABLE users",
@@ -102,12 +95,11 @@ func TestPermissions_StatementsThatNeedManage(t *testing.T) {
 			if d == nil {
 				t.Fatalf("no dialect %q", tt.dialect)
 			}
-			meta := permMeta(tt.defaultSchema)
-			perms := everyDataAction(permDBID)
+			perms := dataActionsOnly()
 
 			for _, sql := range tt.sql {
 				t.Run(sql, func(t *testing.T) {
-					inspected := Inspect(d, meta, sql)
+					inspected := Inspect(d, permMeta(), sql)
 					if len(inspected) == 0 {
 						t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
 					}
@@ -130,11 +122,7 @@ func TestPermissions_StatementsThatNeedManage(t *testing.T) {
 func TestPermissions_DataStatementsAreUnaffected(t *testing.T) {
 	for _, dialect := range []string{"postgresql", "mysql", "sqlite"} {
 		t.Run(dialect, func(t *testing.T) {
-			defaultSchema := map[string]string{"postgresql": "public", "mysql": "shop", "sqlite": "main"}[dialect]
-			d := GetDialect(dialect)
-			meta := permMeta(defaultSchema)
-			perms := everyDataAction(permDBID)
-
+			perms := dataActionsOnly()
 			for _, sql := range []string{
 				"SELECT id FROM users",
 				"SELECT u.id FROM users u JOIN orders o ON u.id = o.user_id",
@@ -143,7 +131,7 @@ func TestPermissions_DataStatementsAreUnaffected(t *testing.T) {
 				"DELETE FROM users WHERE id = 1",
 			} {
 				t.Run(sql, func(t *testing.T) {
-					inspected := Inspect(d, meta, sql)
+					inspected := Inspect(GetDialect(dialect), permMeta(), sql)
 					if err := core.CheckQueryPermissions(inspected, permDBID, perms); err != nil {
 						t.Errorf("want allowed, got %v", err)
 					}
@@ -158,12 +146,35 @@ func TestPermissions_DataStatementsAreUnaffected(t *testing.T) {
 func TestInspect_BlankSQLStaysEmpty(t *testing.T) {
 	for _, dialect := range []string{"postgresql", "mysql", "sqlite"} {
 		t.Run(dialect, func(t *testing.T) {
-			defaultSchema := map[string]string{"postgresql": "public", "mysql": "shop", "sqlite": "main"}[dialect]
 			for _, sql := range []string{"", "   ", "\n\t "} {
-				if got := Inspect(GetDialect(dialect), permMeta(defaultSchema), sql); len(got) != 0 {
+				if got := Inspect(GetDialect(dialect), permMeta(), sql); len(got) != 0 {
 					t.Errorf("Inspect(%q) = %d statements, want 0", sql, len(got))
 				}
 			}
 		})
 	}
 }
+
+// A dialect registered from outside this module is not one this package can
+// audit, so engine.Inspect puts a floor under an empty result rather than
+// trusting every implementation to have read the contract.
+func TestInspect_ForeignDialectCannotReturnNothing(t *testing.T) {
+	RegisterDialect("silent-test-dialect", silentDialect{})
+	t.Cleanup(func() { RegisterDialect("silent-test-dialect", nil) })
+
+	got := Inspect(GetDialect("silent-test-dialect"), permMeta(), "DROP TABLE users")
+	if len(got) != 1 || got[0].Operation != core.InspectOpUnknown {
+		t.Fatalf("got %+v, want one unknown statement", got)
+	}
+	if err := core.CheckQueryPermissions(got, permDBID, dataActionsOnly()); err == nil {
+		t.Error("a dialect that inspects to nothing ran unchecked")
+	}
+}
+
+// silentDialect inspects to nothing, the way a dialect written against the old
+// contract does.
+type silentDialect struct {
+	core.SQLDialect
+}
+
+func (silentDialect) Inspect(core.Metadata, string) []core.InspectStatement { return nil }

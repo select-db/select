@@ -135,8 +135,16 @@ func (idx CompiledPermissions) WithDenyUnmanaged() CompiledPermissions {
 }
 
 func (idx CompiledPermissions) CanManage(dbInstanceID string) bool {
-	allowed, _ := idx.isAllowed(dbInstanceID, "", "", "", "manage")
+	allowed, _ := idx.manageAllowed(dbInstanceID)
 	return allowed
+}
+
+// manageAllowed reports whether dbInstanceID may be administrated, and the role
+// that decided it. Manage is granted on the connection, so schema, table and
+// column are empty here; one lookup is what stops running a statement and
+// editing the connection disagreeing about who holds it.
+func (idx CompiledPermissions) manageAllowed(dbInstanceID string) (bool, string) {
+	return idx.isAllowed(dbInstanceID, "", "", "", ActionManage)
 }
 
 // IsAllowed checks a workspace-level action (no db_instance_id)
@@ -191,22 +199,42 @@ func CheckQueryPermissions(statements []InspectStatement, dbInstanceID string, c
 func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	action := operationToAction(stmt.Operation)
 
-	// Manage is granted on the whole instance, so it is one check rather than
-	// one per table. It has to run before the loop below: a statement we could
-	// not resolve names no table, and a loop over no tables checks nothing.
+	var err error
 	if action == ActionManage {
-		allowed, role := compiledPermissions.isAllowed(dbInstanceID, "", "", "", ActionManage)
-		if !allowed {
-			return &PermissionDeniedError{
-				Action:   action,
-				Schema:   schemaOf(stmt),
-				Table:    tableOf(stmt),
-				RoleName: role,
-			}
-		}
-		return checkSubqueries(stmt, dbInstanceID, compiledPermissions)
+		err = checkInstance(stmt, dbInstanceID, compiledPermissions)
+	} else {
+		err = checkTables(stmt, action, dbInstanceID, compiledPermissions)
+	}
+	if err != nil {
+		return err
 	}
 
+	// A CREATE TABLE AS or an INSERT ... SELECT carries its source query here,
+	// so holding manage never stands in for the select the source still needs.
+	for _, sub := range stmt.Subqueries {
+		if err := checkStatement(sub, dbInstanceID, compiledPermissions); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkInstance checks manage, which is granted on the connection rather than
+// per table. It is also the only check a statement we could not resolve can
+// get: that statement names no table, so a per-table walk would see nothing.
+func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
+	allowed, role := compiledPermissions.manageAllowed(dbInstanceID)
+	if allowed {
+		return nil
+	}
+	denied := &PermissionDeniedError{Action: ActionManage, RoleName: role}
+	if len(stmt.Tables) > 0 {
+		denied.Schema, denied.Table = stmt.Tables[0].Schema, stmt.Tables[0].Name
+	}
+	return denied
+}
+
+func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
 			return &PermissionDeniedError{
@@ -262,35 +290,7 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 		}
 	}
 
-	return checkSubqueries(stmt, dbInstanceID, compiledPermissions)
-}
-
-// checkSubqueries checks the statements nested in stmt. A CREATE TABLE AS or an
-// INSERT ... SELECT carries its source query here, so holding manage never
-// stands in for the select the source still needs.
-func checkSubqueries(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
-	for _, sub := range stmt.Subqueries {
-		if err := checkStatement(sub, dbInstanceID, compiledPermissions); err != nil {
-			return err
-		}
-	}
 	return nil
-}
-
-// schemaOf and tableOf name the first relation a statement touches, so a denial
-// says what was refused. Both are empty for a statement we could not resolve.
-func schemaOf(stmt InspectStatement) string {
-	if len(stmt.Tables) == 0 {
-		return ""
-	}
-	return stmt.Tables[0].Schema
-}
-
-func tableOf(stmt InspectStatement) string {
-	if len(stmt.Tables) == 0 {
-		return ""
-	}
-	return stmt.Tables[0].Name
 }
 
 // EvaluateSee returns which driver-column positions to mask, or errors

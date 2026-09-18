@@ -52,9 +52,6 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		queries = root.AllQuery()
 	}
 	if len(queries) == 0 {
-		// Nothing parsed out of text that is not blank: we cannot say what it
-		// does, and a caller reading an empty result as "nothing to check" is
-		// how an unsupported statement gets run unchecked.
 		return []core.InspectStatement{core.UnknownStatement()}
 	}
 

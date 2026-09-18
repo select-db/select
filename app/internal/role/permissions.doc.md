@@ -28,7 +28,7 @@ Permissions are defined per action:
 | **INSERT** | Add new rows                             |
 | **UPDATE** | Modify existing rows                     |
 | **DELETE** | Remove rows                              |
-| **DDL**    | Schema changes (CREATE, ALTER, DROP)     |
+| **MANAGE** | Administrate the connection, and run every statement that is not one of the four above: schema changes, COPY, GRANT, anything we cannot classify |
 
 App-level actions cover workspace administration:
 
@@ -54,7 +54,13 @@ Evaluation order:
 4. If an allow matches, access is granted
 5. If neither matches, access is refused (default deny)
 
-This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `DDL` for production databases. A user with both roles cannot run DDL on production.
+This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `MANAGE` for production databases. A user with both roles cannot change the schema on production.
+
+MANAGE is granted on a connection, not on a schema or a table: a rule scoped
+below the connection never matches. It is what a statement needs when it is not
+a plain read or write of rows, so it also covers anything the parser cannot
+classify, and a statement nobody has taught us to read is refused rather than
+allowed through unexamined.
 
 ## Databases nobody has written a rule for
 
@@ -86,5 +92,5 @@ A typical team might have:
 |-------------|-------------|----------------------|--------|
 | Developer   | dev-db      | SELECT, INSERT, UPDATE, DELETE | allow |
 | Developer   | prod-db     | SELECT               | allow  |
-| DBA         | *           | SELECT, INSERT, UPDATE, DELETE, DDL | allow |
+| DBA         | *           | SELECT, INSERT, UPDATE, DELETE, MANAGE | allow |
 | Analyst     | prod-db     | SELECT               | allow  |
