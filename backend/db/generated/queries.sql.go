@@ -777,66 +777,6 @@ func (q *Queries) GetRoleByID(ctx context.Context, arg GetRoleByIDParams) (AppRo
 	return i, err
 }
 
-const getRoleGrantsByUserID = `-- name: GetRoleGrantsByUserID :many
-SELECT r.id AS role_id, r.name AS role_name, r.workspace_id
-FROM app.user_to_role utr
-  JOIN app.role r
-    ON r.id = utr.role_id AND r.workspace_id = utr.workspace_id AND r.deleted_at IS NULL
-WHERE utr.user_id = $1 AND utr.deleted_at IS NULL
-UNION
-SELECT r.id, r.name, r.workspace_id
-FROM app.user_to_group ug
-  JOIN app."group" g ON g.id = ug.group_id AND g.deleted_at IS NULL
-  JOIN app.group_to_role gr ON gr.group_id = ug.group_id AND gr.deleted_at IS NULL
-  JOIN app.role r
-    ON r.id = gr.role_id AND r.workspace_id = gr.workspace_id AND r.deleted_at IS NULL
-WHERE ug.user_id = $1 AND ug.deleted_at IS NULL
-`
-
-type GetRoleGrantsByUserIDRow struct {
-	RoleID      uuid.UUID
-	RoleName    string
-	WorkspaceID uuid.UUID
-}
-
-// Every role the caller holds, directly or through a group, with the workspace
-// it belongs to.
-//
-// Driven from the caller's own grants, which are indexed on (user_id,
-// workspace_id), rather than from app.role, which is indexed on neither and
-// would make every authenticated request scan every tenant's roles. The UNION
-// is also what dedups a role held both ways.
-//
-// Each branch matches the grant row's workspace against the role's own. The
-// syncer's apply guards already refuse a grant pointing at another workspace's
-// role, but this is the only query standing is derived from: it should not
-// grant across tenants on the strength of an invariant held two layers away.
-// The group's own soft-delete must be honored: deletion is a soft delete and the
-// FK ON DELETE CASCADE only fires on hard deletes, so a deleted group would
-// otherwise keep granting its roles through live membership rows.
-func (q *Queries) GetRoleGrantsByUserID(ctx context.Context, userID uuid.UUID) ([]GetRoleGrantsByUserIDRow, error) {
-	rows, err := q.db.QueryContext(ctx, getRoleGrantsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetRoleGrantsByUserIDRow
-	for rows.Next() {
-		var i GetRoleGrantsByUserIDRow
-		if err := rows.Scan(&i.RoleID, &i.RoleName, &i.WorkspaceID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getRolesForUserSince = `-- name: GetRolesForUserSince :many
 SELECT r.id, r.workspace_id, r.name, r.updated_at, r.deleted_at
 FROM app.role r
@@ -865,6 +805,84 @@ func (q *Queries) GetRolesForUserSince(ctx context.Context, arg GetRolesForUserS
 			&i.UpdatedAt,
 			&i.DeletedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStandingByUserID = `-- name: GetStandingByUserID :many
+SELECT
+  wtu.workspace_id,
+  COALESCE(w.owner_id = $1::uuid, false)::boolean AS is_owner,
+  COALESCE(g.roles, '[]'::json)::json AS roles
+FROM app.workspace_to_user wtu
+  JOIN app.workspace w ON w.id = wtu.workspace_id AND w.deleted_at IS NULL
+  LEFT JOIN (
+    SELECT
+      grant_rows.workspace_id,
+      json_agg(json_build_object('id', grant_rows.role_id, 'name', grant_rows.role_name)) AS roles
+    FROM (
+      SELECT r.id AS role_id, r.name AS role_name, r.workspace_id
+      FROM app.user_to_role utr
+        JOIN app.role r
+          ON r.id = utr.role_id AND r.workspace_id = utr.workspace_id AND r.deleted_at IS NULL
+      WHERE utr.user_id = $1 AND utr.deleted_at IS NULL
+      UNION
+      -- The group's own soft-delete must be honored: deletion is a soft delete
+      -- and the FK ON DELETE CASCADE only fires on hard deletes, so a deleted
+      -- group would otherwise keep granting its roles through live membership.
+      SELECT r.id, r.name, r.workspace_id
+      FROM app.user_to_group ug
+        JOIN app."group" gp ON gp.id = ug.group_id AND gp.deleted_at IS NULL
+        JOIN app.group_to_role gr ON gr.group_id = ug.group_id AND gr.deleted_at IS NULL
+        JOIN app.role r
+          ON r.id = gr.role_id AND r.workspace_id = gr.workspace_id AND r.deleted_at IS NULL
+      WHERE ug.user_id = $1 AND ug.deleted_at IS NULL
+    ) grant_rows
+    GROUP BY grant_rows.workspace_id
+  ) g ON g.workspace_id = wtu.workspace_id
+WHERE wtu.user_id = $1 AND wtu.deleted_at IS NULL
+`
+
+type GetStandingByUserIDRow struct {
+	WorkspaceID uuid.UUID
+	IsOwner     bool
+	Roles       json.RawMessage
+}
+
+// The caller's standing: one row per workspace they belong to, whether they own
+// it, and the roles they hold in it.
+//
+// Membership is the spine, so the grants come in on a LEFT JOIN: a workspace
+// the caller holds no role in still has to appear. The roles arrive aggregated
+// rather than one row per grant, which keeps it one row per workspace and lets
+// COALESCE type the column honestly (sqlc reads a LEFT JOIN's plain columns as
+// NOT NULL and the role-less row then fails to scan).
+//
+// Driven from the caller's own grants, which are indexed on (user_id,
+// workspace_id), rather than from app.role, which is indexed on neither and
+// would make every authenticated request scan every tenant's roles. The UNION
+// dedups a role held both directly and through a group, and each branch matches
+// the grant row's workspace against the role's own so a grant cannot reach
+// across tenants.
+func (q *Queries) GetStandingByUserID(ctx context.Context, userID uuid.UUID) ([]GetStandingByUserIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getStandingByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetStandingByUserIDRow
+	for rows.Next() {
+		var i GetStandingByUserIDRow
+		if err := rows.Scan(&i.WorkspaceID, &i.IsOwner, &i.Roles); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1197,45 +1215,6 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id uuid.UUID) (GetWorksp
 		&i.DeletedAt,
 	)
 	return i, err
-}
-
-const getWorkspaceMembershipsByUserID = `-- name: GetWorkspaceMembershipsByUserID :many
-SELECT
-  wtu.workspace_id,
-  COALESCE(w.owner_id = $1::uuid, false)::boolean AS is_owner
-FROM app.workspace_to_user wtu
-  JOIN app.workspace w ON w.id = wtu.workspace_id AND w.deleted_at IS NULL
-WHERE wtu.user_id = $1 AND wtu.deleted_at IS NULL
-`
-
-type GetWorkspaceMembershipsByUserIDRow struct {
-	WorkspaceID uuid.UUID
-	IsOwner     bool
-}
-
-// The workspaces the caller belongs to, and whether they own each one. The
-// spine of their standing: a workspace they hold no role in still belongs here.
-func (q *Queries) GetWorkspaceMembershipsByUserID(ctx context.Context, userID uuid.UUID) ([]GetWorkspaceMembershipsByUserIDRow, error) {
-	rows, err := q.db.QueryContext(ctx, getWorkspaceMembershipsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetWorkspaceMembershipsByUserIDRow
-	for rows.Next() {
-		var i GetWorkspaceMembershipsByUserIDRow
-		if err := rows.Scan(&i.WorkspaceID, &i.IsOwner); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getWorkspaceOwnerID = `-- name: GetWorkspaceOwnerID :one

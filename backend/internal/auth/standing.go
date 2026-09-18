@@ -6,10 +6,11 @@ package auth
 // stop granting on the next request rather than when a token expires.
 
 // RoleRef names a role the caller holds. The name rides along so audit and the
-// UI can label one without a lookup.
+// UI can label one without a lookup. The tags are what GetStandingByUserID's
+// aggregated roles column unmarshals into.
 type RoleRef struct {
-	ID   string
-	Name string
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type WorkspaceStanding struct {

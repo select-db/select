@@ -3,6 +3,7 @@ package syncer
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,48 +14,35 @@ import (
 	"github.com/google/uuid"
 )
 
-// grantsIn returns this user's role grants in the workspace, one entry per row
-// the query returns, so a test can see whether a role granted two ways arrives
-// once or twice.
+// grantsIn returns the roles the standing query hands back for this workspace,
+// in the order it aggregates them, so a test can see whether a role granted two
+// ways arrives once or twice. Empty when the user is not a member: the query
+// only emits rows for workspaces they belong to.
 func grantsIn(t *testing.T, userID, wsID string) []auth.RoleRef {
 	t.Helper()
-	rows, err := db.Queries.GetRoleGrantsByUserID(context.Background(), uuid.MustParse(userID))
+	rows, err := db.Queries.GetStandingByUserID(context.Background(), uuid.MustParse(userID))
 	require.NoError(t, err)
-	var grants []auth.RoleRef
-	for _, g := range rows {
-		if g.WorkspaceID.String() == wsID {
-			grants = append(grants, auth.RoleRef{ID: g.RoleID.String(), Name: g.RoleName})
+	for _, row := range rows {
+		if row.WorkspaceID.String() != wsID {
+			continue
 		}
+		var roles []auth.RoleRef
+		require.NoError(t, json.Unmarshal(row.Roles, &roles))
+		return roles
 	}
-	return grants
+	return nil
 }
 
-// effectiveRoles reads the two queries standing is derived from and applies the
-// same membership spine, keyed by role id. It is a second copy of that rule, so
-// it pins the queries rather than buildAuthContext itself: the e2e tests in
+// effectiveRoles is what grantsIn returns keyed by role id. It reads the query
+// standing is derived from, not buildAuthContext itself: the e2e tests in
 // internal/auth and internal/workspace are what cover the assembly.
 func effectiveRoles(t *testing.T, userID, wsID string) map[string]string {
 	t.Helper()
 	roles := map[string]string{}
-	if !isMember(t, userID, wsID) {
-		return roles
-	}
 	for _, g := range grantsIn(t, userID, wsID) {
 		roles[g.ID] = g.Name
 	}
 	return roles
-}
-
-func isMember(t *testing.T, userID, wsID string) bool {
-	t.Helper()
-	memberships, err := db.Queries.GetWorkspaceMembershipsByUserID(context.Background(), uuid.MustParse(userID))
-	require.NoError(t, err)
-	for _, m := range memberships {
-		if m.WorkspaceID.String() == wsID {
-			return true
-		}
-	}
-	return false
 }
 
 func seedUserToRole(t *testing.T, conn *sql.DB, id, userID, roleID, workspaceID string) {

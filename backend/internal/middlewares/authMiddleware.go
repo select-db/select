@@ -4,6 +4,7 @@ import (
 	"backend/db"
 	"backend/db/generated"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -129,7 +130,8 @@ type TokenResponse struct {
 }
 
 // buildAuthContext attaches identity and per-workspace standing, the latter
-// re-derived from the DB on every request. See auth.WorkspaceStanding.
+// re-derived from the DB on every request, in one query. See
+// auth.WorkspaceStanding.
 func buildAuthContext(ctx context.Context, userID, name string) (context.Context, error) {
 	ctx = context.WithValue(ctx, userIDKey, userID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
@@ -141,33 +143,21 @@ func buildAuthContext(ctx context.Context, userID, name string) (context.Context
 	if err != nil {
 		return ctx, fmt.Errorf("invalid user id: %w", err)
 	}
-	memberships, err := db.Queries.GetWorkspaceMembershipsByUserID(ctx, uid)
+	rows, err := db.Queries.GetStandingByUserID(ctx, uid)
 	if err != nil {
-		return ctx, fmt.Errorf("workspace lookup failed: %w", err)
-	}
-	grants, err := db.Queries.GetRoleGrantsByUserID(ctx, uid)
-	if err != nil {
-		return ctx, fmt.Errorf("role lookup failed: %w", err)
+		return ctx, fmt.Errorf("standing lookup failed: %w", err)
 	}
 
-	rolesByWorkspace := make(map[string][]auth.RoleRef, len(memberships))
-	for _, g := range grants {
-		ws := g.WorkspaceID.String()
-		rolesByWorkspace[ws] = append(rolesByWorkspace[ws], auth.RoleRef{
-			ID:   g.RoleID.String(),
-			Name: g.RoleName,
-		})
-	}
-
-	// Membership is the spine: a role in a workspace the caller does not belong
-	// to grants nothing, so only memberships become standing.
-	workspaces := make([]auth.WorkspaceStanding, 0, len(memberships))
-	for _, m := range memberships {
-		id := m.WorkspaceID.String()
+	workspaces := make([]auth.WorkspaceStanding, 0, len(rows))
+	for _, row := range rows {
+		var roles []auth.RoleRef
+		if err := json.Unmarshal(row.Roles, &roles); err != nil {
+			return ctx, fmt.Errorf("standing roles for workspace %s: %w", row.WorkspaceID, err)
+		}
 		workspaces = append(workspaces, auth.WorkspaceStanding{
-			ID:      id,
-			IsOwner: m.IsOwner,
-			Roles:   rolesByWorkspace[id],
+			ID:      row.WorkspaceID.String(),
+			IsOwner: row.IsOwner,
+			Roles:   roles,
 		})
 	}
 	return context.WithValue(ctx, workspacesKey, workspaces), nil
