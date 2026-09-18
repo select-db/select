@@ -323,7 +323,9 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
-	result.Subqueries = append(result.Subqueries, i.readSources(stmt)...)
+	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+	result.Subqueries = append(result.Subqueries, i.readSources(stmt, ctes)...)
 
 	// SET column names, AllColumn_name() returns the LHS of each assignment.
 	for _, cn := range stmt.AllColumn_name() {
@@ -362,7 +364,31 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 
 // readSources is the read an UPDATE ... FROM performs on the relations it joins
 // against. Those rows are read, not written, so the update does not cover them.
-func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext) []core.InspectStatement {
+func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
+	if with == nil {
+		return nil, nil
+	}
+	names := with.AllCte_table_name()
+	bodies := with.AllSelect_stmt()
+
+	ctes := make([]core.RelationRef, 0, len(names))
+	subqueries := make([]core.InspectStatement, 0, len(names))
+	for idx, name := range names {
+		if name.Table_name() == nil {
+			continue
+		}
+		ctes = append(ctes, core.RelationRef{
+			Table:     i.dialect.NormalizeIdentifier(name.Table_name().GetText()),
+			IsVirtual: true,
+		})
+		if idx < len(bodies) {
+			subqueries = append(subqueries, core.OrUnknown(i.inspectSelect(bodies[idx])))
+		}
+	}
+	return ctes, subqueries
+}
+
+func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.RelationRef) []core.InspectStatement {
 	// A FROM list is either a comma list of relations or a join clause, and
 	// only the relations under it are read; the target table is not.
 	relations := make([]antlr.ParseTree, 0, len(stmt.AllTable_or_subquery())+1)
@@ -386,7 +412,7 @@ func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext) []core.InspectS
 		reads = append(reads, i.extractFromSubqueries(relation, nil)...)
 	}
 
-	if tables := i.convertRelationRefs(refs, i.virtualNames(nil, subqueryColumns)); len(tables) > 0 {
+	if tables := i.convertRelationRefs(refs, i.virtualNames(ctes, subqueryColumns)); len(tables) > 0 {
 		reads = append(reads, core.InspectStatement{
 			Operation: core.InspectOpSelect,
 			Tables:    tables,
@@ -453,10 +479,7 @@ func (i *Inspector) inspectCreate(stmt sqlite.ICreate_table_stmtContext) *core.I
 // in for.
 func (i *Inspector) inspectCreateView(stmt sqlite.ICreate_view_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpCreate}
-	schema := i.meta.CurrentSchema
-	if schema == "" {
-		schema = i.meta.DefaultSchema
-	}
+	schema := i.effectiveSchema()
 	if stmt.Schema_name() != nil {
 		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
 	}

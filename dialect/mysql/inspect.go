@@ -237,6 +237,10 @@ func (i *Inspector) inspectQueryPrimary(
 	if prim == nil {
 		return nil
 	}
+	// TABLE t1 is SELECT * FROM t1, and it reaches none of the target-list path.
+	if explicit := prim.ExplicitTable(); explicit != nil {
+		return i.inspectTableShorthand(explicit.TableRef())
+	}
 	spec := prim.QuerySpecification()
 	if spec == nil {
 		return nil
@@ -279,6 +283,22 @@ func (i *Inspector) inspectQueryPrimary(
 		Fields:     fields,
 		Where:      where,
 		Subqueries: subqueries,
+	}
+}
+
+// inspectTableShorthand analyzes TABLE t1, which is SELECT * FROM t1.
+func (i *Inspector) inspectTableShorthand(ref mysql.ITableRefContext) *core.InspectStatement {
+	unknown := core.UnknownStatement()
+	schema, table := i.resolveTableRef(ref)
+	if table == "" {
+		return &unknown
+	}
+	if !core.TableExistsInMetadata(i.meta, schema, table, i.dialect) {
+		schema = ""
+	}
+	return &core.InspectStatement{
+		Operation: core.InspectOpSelect,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
 	}
 }
 

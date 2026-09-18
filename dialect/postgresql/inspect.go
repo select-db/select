@@ -205,6 +205,15 @@ func (i *Inspector) inspectSelectPrimary(
 		return nil
 	}
 
+	// A branch is not always a target list. A parenthesized query and the TABLE
+	// shorthand both read tables, and neither reaches the target-list path.
+	if nested := primary.Select_with_parens(); nested != nil {
+		return i.inspectSelectWithParens(nested)
+	}
+	if primary.TABLE() != nil {
+		return i.inspectTableShorthand(primary.Relation_expr())
+	}
+
 	relationRefs, subqueryColumns := i.extractRelationRefsFromPrimary(primary)
 
 	fromSubqueries := i.extractFromSubqueriesFromPrimary(primary)
@@ -232,6 +241,25 @@ func (i *Inspector) inspectSelectPrimary(
 		Fields:     fields,
 		Where:      where,
 		Subqueries: subqueries,
+	}
+}
+
+// inspectTableShorthand analyzes TABLE t1, which is SELECT * FROM t1.
+func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *core.InspectStatement {
+	unknown := core.UnknownStatement()
+	if relation == nil {
+		return &unknown
+	}
+	schema, table := i.resolveQualifiedName(relation.Qualified_name())
+	if table == "" {
+		return &unknown
+	}
+	if !core.TableExistsInMetadata(i.meta, schema, table, i.dialect) {
+		schema = ""
+	}
+	return &core.InspectStatement{
+		Operation: core.InspectOpSelect,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
 	}
 }
 

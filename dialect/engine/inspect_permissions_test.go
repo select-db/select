@@ -242,6 +242,18 @@ func TestPermissions_NestedStatementsAreChecked(t *testing.T) {
 			why:      "a materialized view holds the rows it read",
 		},
 		{
+			dialects: []string{"postgresql"},
+			sql:      "CREATE TABLE t9 AS (SELECT c1 FROM t1)",
+			needs:    []string{core.ActionManage, core.ActionSelect},
+			why:      "a parenthesized source is the same read as an unparenthesized one",
+		},
+		{
+			dialects: []string{"postgresql"},
+			sql:      "CREATE TABLE t9 AS TABLE t1",
+			needs:    []string{core.ActionManage, core.ActionSelect},
+			why:      "TABLE t1 is SELECT * FROM t1",
+		},
+		{
 			dialects: []string{"sqlite"},
 			sql:      "UPDATE t2 SET c1 = t1.c1 FROM t1",
 			needs:    []string{core.ActionUpdate, core.ActionSelect},
@@ -331,17 +343,65 @@ func TestPermissions_ACTEBodyIsCheckedAgainstItsOwnTable(t *testing.T) {
 // CTE defines is not a table, so the statements that read one keep working.
 func TestPermissions_ACTEIsNotAnUnresolvedTable(t *testing.T) {
 	perms := dataActionsOnly()
-	for _, sql := range []string{
-		"WITH x AS (SELECT c1 FROM t1) UPDATE t2 SET c1 = x.c1 FROM x",
-		"WITH x AS (SELECT c1 FROM t1) DELETE FROM t2 USING x WHERE t2.c1 = x.c1",
-		"UPDATE t2 SET c1 = s.c1 FROM (SELECT c1 FROM t1) s",
-		"UPDATE t2 SET c1 = a.c1 FROM t1 a WHERE t2.c1 = a.c1",
-	} {
-		t.Run(sql, func(t *testing.T) {
-			inspected := Inspect(GetDialect("postgresql"), permMeta(), sql)
-			if err := core.CheckQueryPermissions(inspected, permDBID, perms); err != nil {
-				t.Errorf("want allowed, got %v", err)
-			}
-		})
+	cases := map[string][]string{
+		"postgresql": {
+			"WITH x AS (SELECT c1 FROM t1) UPDATE t2 SET c1 = x.c1 FROM x",
+			"WITH x AS (SELECT c1 FROM t1) DELETE FROM t2 USING x WHERE t2.c1 = x.c1",
+			"UPDATE t2 SET c1 = s.c1 FROM (SELECT c1 FROM t1) s",
+			"UPDATE t2 SET c1 = a.c1 FROM t1 a WHERE t2.c1 = a.c1",
+		},
+		"sqlite": {
+			"WITH x AS (SELECT c1 FROM t1) UPDATE t2 SET c1 = x.c1 FROM x",
+			"UPDATE t2 SET c1 = s.c1 FROM (SELECT c1 FROM t1) s",
+			"UPDATE t2 SET c1 = a.c1 FROM t1 a WHERE t2.c1 = a.c1",
+		},
+	}
+	for _, dialect := range []string{"postgresql", "sqlite"} {
+		for _, sql := range cases[dialect] {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				if err := core.CheckQueryPermissions(inspected, permDBID, perms); err != nil {
+					t.Errorf("want allowed, got %v", err)
+				}
+			})
+		}
+	}
+}
+
+// TestPermissions_AReadNamesWhatItReads pins the shapes that resolved to a
+// select over no tables. A select naming no table is checked against nothing
+// and runs under any policy, which is correct for SELECT 1 and a bypass for
+// everything else.
+func TestPermissions_AReadNamesWhatItReads(t *testing.T) {
+	nothingGranted := core.Compile(nil).WithDenyUnmanaged()
+
+	refused := map[string][]string{
+		"postgresql": {"(SELECT c1 FROM t1)", "((SELECT c1 FROM t1))", "TABLE t1"},
+		"mysql":      {"TABLE t1"},
+	}
+	for _, dialect := range []string{"postgresql", "mysql"} {
+		for _, sql := range refused[dialect] {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				if err := core.CheckQueryPermissions(inspected, permDBID, nothingGranted); err == nil {
+					t.Error("read t1 under a policy granting nothing")
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holding(core.ActionSelect)); err != nil {
+					t.Errorf("select alone should run it, got %v", err)
+				}
+			})
+		}
+	}
+
+	// A query that reads no table is not a bypass, and must keep running.
+	for _, dialect := range BuiltinDialects() {
+		for _, sql := range []string{"SELECT 1", "SELECT 1 + 1"} {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				if err := core.CheckQueryPermissions(inspected, permDBID, nothingGranted); err != nil {
+					t.Errorf("a query naming no table was refused: %v", err)
+				}
+			})
+		}
 	}
 }
