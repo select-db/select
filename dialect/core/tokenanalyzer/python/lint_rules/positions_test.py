@@ -13,8 +13,8 @@ SCHEMA = {"main": {
 }}
 
 
-def _diags(sql):
-    return analyze(sql, dialect="postgresql", schema_dict=SCHEMA,
+def _diags(sql, dialect="postgresql"):
+    return analyze(sql, dialect=dialect, schema_dict=SCHEMA,
                    default_schema="main")["diagnostics"]
 
 
@@ -31,8 +31,8 @@ def _marked(sql, diag):
     )
 
 
-def _mark(sql, rule_id):
-    diag = next((d for d in _diags(sql) if d["rule_id"] == rule_id), None)
+def _mark(sql, rule_id, dialect="postgresql"):
+    diag = next((d for d in _diags(sql, dialect) if d["rule_id"] == rule_id), None)
     assert diag is not None, f"{rule_id} did not fire on {sql!r}"
     return _marked(sql, diag)
 
@@ -40,7 +40,6 @@ def _mark(sql, rule_id):
 # Every rule whose position this change moved, plus the ones that were already
 # right, so a change to the shared helper cannot fix one by breaking another.
 CASES = [
-    ("SELECT c1 FROM t1 OFFSET 10", "offset-without-limit", "10"),
     ("SELECT c1 FROM t1 LIMIT 5", "limit-without-order-by", "5"),
     ("SELECT c1 FROM t1 WHERE c2 = NULL", "null-equality", "c2"),
     ("SELECT c1 FROM t1 WHERE c2 <> NULL", "null-inequality", "c2"),
@@ -69,10 +68,21 @@ CASES = [
 ]
 
 
+# Rules that only fire on some dialects, so the one they fire on is named.
+DIALECT_CASES = [
+    ("SELECT c1 FROM t1 ORDER BY c1 OFFSET 10", "offset-without-limit", "10", "mysql"),
+    ("SELECT c1 FROM t1 OFFSET 10", "limit-without-order-by", "10", "postgresql"),
+]
+
+
 def test_each_rule_marks_its_own_clause():
     for sql, rule_id, want in CASES:
         got = _mark(sql, rule_id)
         assert got == want, f"{rule_id} on {sql!r} marked {got!r}, want {want!r}"
+
+    for sql, rule_id, want, dialect in DIALECT_CASES:
+        got = _mark(sql, rule_id, dialect)
+        assert got == want, f"{rule_id} on {sql!r} ({dialect}) marked {got!r}, want {want!r}"
 
 
 class TestRangesThatCrossLines:

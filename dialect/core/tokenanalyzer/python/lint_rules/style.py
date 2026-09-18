@@ -18,7 +18,7 @@ from sqlglot import exp
 from sqlglot.dialects.dialect import Dialect as SqlglotDialect
 from sqlglot.tokens import TokenType
 
-from analysis.schema import span
+from analysis.schema import span, unquoted_identifier_case
 
 _TRAILING_COMMA_NEXT = {
     TokenType.FROM, TokenType.WHERE, TokenType.GROUP_BY, TokenType.ORDER_BY,
@@ -69,13 +69,12 @@ def _s010(sql: str, sg_dialect: str) -> list[dict]:
     return results
 
 
-# Dialects that do not fold unquoted identifiers to lowercase.
-_NO_FOLD_DIALECTS = {"mysql"}
-
-
 def _s011(stmt: exp.Expression, sg_dialect: str) -> list[dict]:
-    """S011, unquoted identifier with mixed/upper case will be silently lowercased."""
-    if sg_dialect in _NO_FOLD_DIALECTS:
+    """S011, an unquoted identifier whose case the database will not keep."""
+    folds_to = unquoted_identifier_case(sg_dialect)
+    if folds_to is None:
+        # Nothing is folded, so the case written is the case stored and there
+        # is no surprise to warn about.
         return []
 
     results = []
@@ -85,7 +84,8 @@ def _s011(stmt: exp.Expression, sg_dialect: str) -> list[dict]:
         if ident.quoted:
             continue
         name = ident.name
-        if not name or name == name.lower():
+        folded = name.lower() if folds_to == "lower" else name.upper()
+        if not name or name == folded:
             continue
         # Skip short single-word aliases like table alias 't', 'u', already lowercase
         line, col, end_line, end_col = span(ident)
@@ -96,7 +96,7 @@ def _s011(stmt: exp.Expression, sg_dialect: str) -> list[dict]:
         results.append({
             "rule_id":    "unquoted-uppercase",
             "severity":   "warning",
-            "message":    f"unquoted identifier {name!r} contains uppercase letters; the database will lowercase it. Use \"{name}\" to preserve case",
+            "message":    f"unquoted identifier {name!r} is stored as {folded!r}; quote it to keep the case written",
             "start_line": line, "start_col": col,
             "end_line":   end_line, "end_col":   end_col,
         })

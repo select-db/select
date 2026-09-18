@@ -25,6 +25,35 @@ def sqlglot_dialect_name(go_dialect: str) -> str:
     return DIALECT_MAP.get(name, name)
 
 
+# Dialects whose grammar accepts OFFSET only as part of a LIMIT clause, so
+# OFFSET on its own does not parse. PostgreSQL takes the two independently.
+_OFFSET_NEEDS_LIMIT = {"mysql", "sqlite"}
+
+
+def offset_requires_limit(sg_dialect: str) -> bool:
+    """Whether OFFSET without LIMIT is a syntax error rather than a style choice."""
+    return sg_dialect in _OFFSET_NEEDS_LIMIT
+
+
+def unquoted_identifier_case(sg_dialect: str) -> str | None:
+    """
+    The case an unquoted identifier is folded to, or None if it is left alone.
+
+    sqlglot decides this to parse at all, so asking it keeps one answer per
+    dialect rather than a list here that has to be remembered.
+    """
+    try:
+        strategy = SqlglotDialect.get_or_raise(sg_dialect or "postgres").NORMALIZATION_STRATEGY
+    except Exception:
+        return None
+    name = getattr(strategy, "name", "")
+    if name == "LOWERCASE":
+        return "lower"
+    if name in ("UPPERCASE", "CASE_INSENSITIVE_UPPERCASE"):
+        return "upper"
+    return None
+
+
 def tokenize(sql: str, sg_dialect: str) -> list:
     """Tokenize with the dialect's own tokenizer. The generic one knows only
     double quotes, so MySQL backticks and SQLite brackets arrive as UNKNOWN
