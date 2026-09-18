@@ -30,15 +30,30 @@ func grantsIn(t *testing.T, userID, wsID string) []auth.RoleRef {
 }
 
 // effectiveRoles is the standing a request would be given for this user right
-// now, keyed by role id. It reads what buildAuthContext reads, so it is what
-// the next request would enforce.
+// now, keyed by role id. It reads both queries buildAuthContext reads and
+// applies the same membership spine, so it is what the next request enforces.
 func effectiveRoles(t *testing.T, userID, wsID string) map[string]string {
 	t.Helper()
 	roles := map[string]string{}
+	if !isMember(t, userID, wsID) {
+		return roles
+	}
 	for _, g := range grantsIn(t, userID, wsID) {
 		roles[g.ID] = g.Name
 	}
 	return roles
+}
+
+func isMember(t *testing.T, userID, wsID string) bool {
+	t.Helper()
+	memberships, err := db.Queries.GetWorkspaceMembershipsByUserID(context.Background(), uuid.MustParse(userID))
+	require.NoError(t, err)
+	for _, m := range memberships {
+		if m.WorkspaceID.String() == wsID {
+			return true
+		}
+	}
+	return false
 }
 
 func seedUserToRole(t *testing.T, conn *sql.DB, id, userID, roleID, workspaceID string) {
@@ -192,4 +207,23 @@ func TestStanding_IgnoresGrantPointingAtAnotherWorkspacesRole(t *testing.T) {
 		"a grant written in one workspace granted a role in another")
 	require.NotContains(t, effectiveRoles(t, userID, mine), theirRoleID,
 		"a grant naming another workspace's role granted it locally")
+}
+
+// Nothing validates that a user_to_role names somebody who belongs to the
+// workspace, so an owner can write a grant for any user id at all. Membership
+// is what keeps it from being enforced, and it is the only thing that does.
+func TestStanding_GrantToNonMemberReachesNothing(t *testing.T) {
+	conn := newTestDB(t)
+
+	outsiderID, ownerID, wsID, roleID := newID(), newID(), newID(), newID()
+	seedUser(t, conn, outsiderID, "outsider")
+	seedUser(t, conn, ownerID, "owner")
+	seedWorkspace(t, conn, wsID, "ws", ownerID)
+	seedRole(t, conn, roleID, wsID, "admin")
+
+	// The grant, with no workspace_to_user row to go with it.
+	seedUserToRole(t, conn, newID(), outsiderID, roleID, wsID)
+
+	require.NotContains(t, effectiveRoles(t, outsiderID, wsID), roleID,
+		"a role granted to somebody who does not belong to the workspace still reaches them")
 }

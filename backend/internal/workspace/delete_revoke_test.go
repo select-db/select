@@ -165,3 +165,21 @@ func TestPermissionRemoved_TakesEffectOnTheTokenAlreadyHeld(t *testing.T) {
 		e2e.CreateAPIKey(t, f.H, held, f.Actor.WorkspaceID, roleID, "after").Code,
 		"a permission the manager removed is still granted to a token already issued")
 }
+
+// Nothing validates that a user_to_role names somebody who belongs to the
+// workspace, so a manager can write a grant for any user id at all. Membership
+// is what keeps it from being enforced, and it is the only thing that does.
+func TestGrantWithoutMembership_ReachesNothing(t *testing.T) {
+	f := e2e.Setup(t)
+
+	outsiderID := uuid.NewString()
+	e2e.SeedUser(t, f.Conn, outsiderID)
+	roleID := e2e.SeedRoleWithPermission(t, f.Conn, f.Actor.WorkspaceID, "Key Manager", "workspace/api-keys.manage")
+
+	// The grant, with no workspace_to_user row to go with it.
+	e2e.SeedUserRole(t, f.Conn, outsiderID, roleID, f.Actor.WorkspaceID)
+
+	rec := e2e.CreateAPIKey(t, f.H, e2e.MintJWT(t, outsiderID), f.Actor.WorkspaceID, roleID, "outsider")
+	require.NotEqualf(t, http.StatusOK, rec.Code,
+		"a role granted to a non-member let them act in the workspace: %s", rec.Body.String())
+}
