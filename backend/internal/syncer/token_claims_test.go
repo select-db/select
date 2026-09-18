@@ -34,19 +34,18 @@ func syncAsOwner(t *testing.T, ownerID, wsID string, c types.Commit) {
 // buildAuthContext reads, so it is what the next request would enforce.
 func effectiveRoles(t *testing.T, userID, wsID string) map[string]string {
 	t.Helper()
-	rows, err := db.Queries.GetWorkspaceStandingByUserID(context.Background(), uuid.MustParse(userID))
+	grants, err := db.Queries.GetRoleGrantsByUserID(context.Background(), uuid.MustParse(userID))
 	require.NoError(t, err)
 	roles := map[string]string{}
-	for _, row := range rows {
-		if row.WorkspaceID.String() == wsID && row.RoleID.Valid {
-			roles[row.RoleID.UUID.String()] = row.RoleName.ValueOrEmpty()
+	for _, g := range grants {
+		if g.WorkspaceID.String() == wsID {
+			roles[g.RoleID.String()] = g.RoleName
 		}
 	}
 	return roles
 }
 
 func TestSync_UserToGroupInsert_ReachesMember(t *testing.T) {
-	localSigner(t)
 	conn := newTestDB(t)
 	ownerID, wsID, groupID, roleID := newID(), newID(), newID(), newID()
 	memberID, utgID := newID(), newID()
@@ -65,13 +64,12 @@ func TestSync_UserToGroupInsert_ReachesMember(t *testing.T) {
 	})
 
 	require.Contains(t, effectiveRoles(t, memberID, wsID), roleID,
-		"the group's role must reach the new member's next token")
+		"the group's role must reach the new member")
 }
 
 // The fan-out case: a group's role set changes, so every current member's next
 // token carries it, and every one of them keeps their session.
 func TestSync_GroupToRoleInsert_ReachesAllMembers(t *testing.T) {
-	localSigner(t)
 	conn := newTestDB(t)
 	ownerID, wsID, roleID, groupID := newID(), newID(), newID(), newID()
 	m1, m2, outsider, gtrID := newID(), newID(), newID(), newID()
@@ -94,14 +92,13 @@ func TestSync_GroupToRoleInsert_ReachesAllMembers(t *testing.T) {
 		Payload: map[string]any{"id": gtrID, "group_id": groupID, "role_id": roleID, "workspace_id": wsID},
 	})
 
-	require.Contains(t, effectiveRoles(t, m1, wsID), roleID, "m1's next token carries the role")
-	require.Contains(t, effectiveRoles(t, m2, wsID), roleID, "m2's next token carries the role")
+	require.Contains(t, effectiveRoles(t, m1, wsID), roleID, "m1's standing has the role")
+	require.Contains(t, effectiveRoles(t, m2, wsID), roleID, "m2's standing has the role")
 	require.NotContains(t, effectiveRoles(t, outsider, wsID), roleID,
 		"a non-member gains nothing from the group's role")
 }
 
 func TestSync_GroupToRoleDelete_ReachesAllMembers(t *testing.T) {
-	localSigner(t)
 	conn := newTestDB(t)
 	ownerID, wsID, roleID, groupID := newID(), newID(), newID(), newID()
 	m1, m2, gtrID := newID(), newID(), newID()
@@ -129,7 +126,6 @@ func TestSync_GroupToRoleDelete_ReachesAllMembers(t *testing.T) {
 }
 
 func TestSync_GroupDelete_ReachesAllMembers(t *testing.T) {
-	localSigner(t)
 	conn := newTestDB(t)
 	ownerID, wsID, groupID, roleID := newID(), newID(), newID(), newID()
 	m1, m2 := newID(), newID()

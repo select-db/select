@@ -2,14 +2,7 @@ package syncer
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"database/sql"
-	"encoding/pem"
-	"os"
-	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,33 +11,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-// localSigner points auth.CreateJWT at an in-process RSA key. Done once per
-// process: auth caches its signer behind a sync.Once, so a second key would be
-// generated and then ignored.
-var signerOnce sync.Once
-
-func localSigner(t *testing.T) {
-	t.Helper()
-	signerOnce.Do(func() { generateLocalSigner(t) })
-}
-
-func generateLocalSigner(t *testing.T) {
-	t.Helper()
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	der := x509.MarshalPKCS1PrivateKey(priv)
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
-	// The key and the env outlive the test that generated them, so neither
-	// t.TempDir nor t.Setenv will do: the first would be swept while later tests
-	// still need the path, the second restored while they still need the value.
-	dir, err := os.MkdirTemp("", "jwt-signer-*")
-	require.NoError(t, err)
-	path := filepath.Join(dir, "jwt.pem")
-	require.NoError(t, os.WriteFile(path, pemBytes, 0o600))
-	require.NoError(t, os.Setenv("SELECTDB_KEK", "dev")) // localMode -> in-process signer
-	require.NoError(t, os.Setenv("PRIVATE_KEY_PATH", path))
-}
 
 func seedUserToRole(t *testing.T, conn *sql.DB, id, userID, roleID, workspaceID string) {
 	t.Helper()
@@ -78,7 +44,6 @@ func seedGroupToRole(t *testing.T, conn *sql.DB, id, groupID, roleID, workspaceI
 // group_to_role). The union is what a request is given, so both paths have to
 // reach it.
 func TestStanding_UnionsDirectAndGroupRoles(t *testing.T) {
-	localSigner(t)
 	conn := newTestDB(t)
 
 	userID := newID()
@@ -111,7 +76,6 @@ func TestStanding_UnionsDirectAndGroupRoles(t *testing.T) {
 
 // A role assigned directly AND through a group is one grant, not two.
 func TestStanding_DedupesRoleGrantedBothWays(t *testing.T) {
-	localSigner(t)
 	conn := newTestDB(t)
 
 	userID := newID()
@@ -134,10 +98,10 @@ func TestStanding_DedupesRoleGrantedBothWays(t *testing.T) {
 	seedGroupToRole(t, conn, newID(), groupID, roleID, wsID)
 
 	count := 0
-	rows, err := db.Queries.GetWorkspaceStandingByUserID(context.Background(), uuid.MustParse(userID))
+	grants, err := db.Queries.GetRoleGrantsByUserID(context.Background(), uuid.MustParse(userID))
 	require.NoError(t, err)
-	for _, row := range rows {
-		if row.WorkspaceID.String() == wsID && row.RoleID.Valid && row.RoleID.UUID.String() == roleID {
+	for _, g := range grants {
+		if g.WorkspaceID.String() == wsID && g.RoleID.String() == roleID {
 			count++
 		}
 	}
@@ -147,7 +111,6 @@ func TestStanding_DedupesRoleGrantedBothWays(t *testing.T) {
 // Deleting a group is a soft delete, and the FK cascade only fires on hard
 // deletes, so its still-live membership rows must not keep granting its roles.
 func TestStanding_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
-	localSigner(t)
 	conn := newTestDB(t)
 
 	userID := newID()

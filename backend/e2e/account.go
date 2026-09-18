@@ -44,8 +44,9 @@ func NewAccount(t *testing.T, conn *sql.DB) Actor {
 	}
 }
 
-// MintJWT issues an access token for userID, embedding whatever workspaces/roles
-// are seeded at call time (CreateJWT reads them from the DB). Seed first.
+// MintJWT issues an access token naming userID. It carries identity only:
+// workspaces, ownership and roles are derived per request, so when a token was
+// minted relative to a seed makes no difference to what it reaches.
 func MintJWT(t *testing.T, userID string) string {
 	t.Helper()
 	uid, err := uuid.Parse(userID)

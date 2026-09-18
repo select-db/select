@@ -44,12 +44,12 @@ func MustGetUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // GetWorkspaces returns the caller's per-workspace standing, the source every
 // other workspace getter derives from.
-func GetWorkspaces(r *http.Request) ([]auth.WorkspaceClaim, bool) {
-	ws, ok := r.Context().Value(workspacesKey).([]auth.WorkspaceClaim)
+func GetWorkspaces(r *http.Request) ([]auth.WorkspaceStanding, bool) {
+	ws, ok := r.Context().Value(workspacesKey).([]auth.WorkspaceStanding)
 	return ws, ok
 }
 
-func workspaceIDsOf(ws []auth.WorkspaceClaim) []string {
+func workspaceIDsOf(ws []auth.WorkspaceStanding) []string {
 	ids := make([]string, 0, len(ws))
 	for _, w := range ws {
 		ids = append(ids, w.ID)
@@ -93,16 +93,16 @@ type Principal struct {
 	ID         string
 	Name       string
 	IsAPIKey   bool
-	Workspaces []auth.WorkspaceClaim
+	Workspaces []auth.WorkspaceStanding
 }
 
-func (p Principal) Workspace(workspaceID string) (auth.WorkspaceClaim, bool) {
+func (p Principal) Workspace(workspaceID string) (auth.WorkspaceStanding, bool) {
 	for _, w := range p.Workspaces {
 		if w.ID == workspaceID {
 			return w, true
 		}
 	}
-	return auth.WorkspaceClaim{}, false
+	return auth.WorkspaceStanding{}, false
 }
 
 // GetPrincipal returns the caller's identity in one read.
@@ -110,7 +110,7 @@ func GetPrincipal(r *http.Request) Principal {
 	ctx := r.Context()
 	id, _ := ctx.Value(userIDKey).(string)
 	name, _ := ctx.Value(principalNameKey).(string)
-	ws, _ := ctx.Value(workspacesKey).([]auth.WorkspaceClaim)
+	ws, _ := ctx.Value(workspacesKey).([]auth.WorkspaceStanding)
 	return Principal{
 		ID:         id,
 		Name:       name,
@@ -132,6 +132,11 @@ type TokenResponse struct {
 // re-derived from the DB. The token carries identity only: a role taken away
 // has to stop granting on the next request, not when the access token that
 // named it happens to expire.
+//
+// Two queries rather than one join, because both are driven by an index on the
+// caller's own rows. Joining the roles on the workspace instead would read every
+// tenant's roles on every authenticated request: app.role is indexed on neither
+// workspace_id nor anything else useful here.
 func buildAuthContext(ctx context.Context, userID, name string) (context.Context, error) {
 	ctx = context.WithValue(ctx, userIDKey, userID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
@@ -143,34 +148,34 @@ func buildAuthContext(ctx context.Context, userID, name string) (context.Context
 	if err != nil {
 		return ctx, fmt.Errorf("invalid user id: %w", err)
 	}
-	rows, err := db.Queries.GetWorkspaceStandingByUserID(ctx, uid)
+	memberships, err := db.Queries.GetWorkspaceMembershipsByUserID(ctx, uid)
 	if err != nil {
 		return ctx, fmt.Errorf("workspace lookup failed: %w", err)
 	}
-
-	// One row per (workspace, role), and a role-less row for a workspace the
-	// caller holds no role in, so the workspace still lands in the set.
-	order := make([]string, 0, len(rows))
-	byWorkspace := make(map[string]*auth.WorkspaceClaim, len(rows))
-	for _, row := range rows {
-		id := row.WorkspaceID.String()
-		claim, seen := byWorkspace[id]
-		if !seen {
-			claim = &auth.WorkspaceClaim{ID: id, IsOwner: row.IsOwner}
-			byWorkspace[id] = claim
-			order = append(order, id)
-		}
-		if row.RoleID.Valid {
-			claim.Roles = append(claim.Roles, auth.RoleRef{
-				ID:   row.RoleID.UUID.String(),
-				Name: row.RoleName.ValueOrEmpty(),
-			})
-		}
+	grants, err := db.Queries.GetRoleGrantsByUserID(ctx, uid)
+	if err != nil {
+		return ctx, fmt.Errorf("role lookup failed: %w", err)
 	}
 
-	workspaces := make([]auth.WorkspaceClaim, 0, len(order))
-	for _, id := range order {
-		workspaces = append(workspaces, *byWorkspace[id])
+	rolesByWorkspace := make(map[string][]auth.RoleRef, len(memberships))
+	for _, g := range grants {
+		ws := g.WorkspaceID.String()
+		rolesByWorkspace[ws] = append(rolesByWorkspace[ws], auth.RoleRef{
+			ID:   g.RoleID.String(),
+			Name: g.RoleName,
+		})
+	}
+
+	// Membership is the spine: a role in a workspace the caller does not belong
+	// to grants nothing, so only memberships become standing.
+	workspaces := make([]auth.WorkspaceStanding, 0, len(memberships))
+	for _, m := range memberships {
+		id := m.WorkspaceID.String()
+		workspaces = append(workspaces, auth.WorkspaceStanding{
+			ID:      id,
+			IsOwner: m.IsOwner,
+			Roles:   rolesByWorkspace[id],
+		})
 	}
 	return context.WithValue(ctx, workspacesKey, workspaces), nil
 }
@@ -219,7 +224,7 @@ func buildAPIKeyContext(ctx context.Context, token string) (context.Context, err
 func ContextWithAPIKeyPrincipal(ctx context.Context, principalID, name, workspaceID string, roles []auth.RoleRef) context.Context {
 	ctx = context.WithValue(ctx, userIDKey, principalID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
-	ctx = context.WithValue(ctx, workspacesKey, []auth.WorkspaceClaim{{ID: workspaceID, Roles: roles}})
+	ctx = context.WithValue(ctx, workspacesKey, []auth.WorkspaceStanding{{ID: workspaceID, Roles: roles}})
 	ctx = context.WithValue(ctx, ctxWorkspaceID, workspaceID)
 	ctx = context.WithValue(ctx, apiKeyPrincipalKey, true)
 	return ctx

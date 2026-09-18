@@ -86,22 +86,6 @@ func (rsaSignerMethod) Verify(signingString string, sig []byte, key any) error {
 
 var jwtSigningMethod = rsaSignerMethod{}
 
-// Name is carried alongside the id so audit and the UI need no role lookup to
-// label one.
-type RoleRef struct {
-	ID   string `json:"id"`
-	Name string `json:"name,omitempty"`
-}
-
-// WorkspaceClaim is the caller's standing in one workspace. It is request
-// state, derived per request for a signed-in user and read off the key row for
-// an API key. It is not in the token: see CustomClaims.
-type WorkspaceClaim struct {
-	ID      string
-	IsOwner bool
-	Roles   []RoleRef
-}
-
 // CustomClaims is identity, and nothing that can go stale. Membership,
 // ownership and roles are all re-derived per request from the database, so a
 // change to any of them takes effect on the next request rather than when the
