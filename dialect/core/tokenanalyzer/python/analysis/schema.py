@@ -58,38 +58,59 @@ def tokenize(sql: str, sg_dialect: str) -> list:
 
 
 def pos(node: exp.Expression) -> tuple[int, int]:
-    """
-    Return the start (line, col) for a node using sqlglot token metadata.
-
-    sqlglot stores position on the token that was consumed when the node was
-    created. For compound nodes (Column, Table, Window, …) the meta lives on
-    the primary child Identifier (node.this), not on the parent itself.
-    meta["col"] is the *exclusive-end* column offset; we derive start col as:
-        start_col = meta["col"] - (meta["end"] - meta["start"] + 1)
-    Falls back to (1, 0) when no position is available.
-    """
-    line, start_col, _ = span(node)
-    return line, start_col
+    """Where a node starts. Use span to mark a range. Falls back to (1, 0)."""
+    line, col, _, _ = span(node)
+    return line, col
 
 
-def span(node: exp.Expression) -> tuple[int, int, int]:
+def span(node: exp.Expression) -> tuple[int, int, int, int]:
     """
-    Return (line, start_col, end_col) for a node.
+    Return (start_line, start_col, end_line, end_col) covering node in the source.
 
-    end_col is derived from the actual token length in the source, so quoted
-    identifiers like "typo" correctly include both surrounding quotes.
-    Falls back to (1, 0, 0) when no position is available.
+    The end column comes from the token's own length, so a quoted identifier
+    includes its quotes. Falls back to (1, 0, 1, 0) when nothing is tagged.
     """
-    for candidate in (node, node.this if isinstance(node, exp.Expression) else None):
-        if not isinstance(candidate, exp.Expression):
-            continue
-        m = candidate.meta
-        if m and "line" in m:
-            token_len = m["end"] - m["start"] + 1
-            start_col = m["col"] - token_len
-            start_col = max(0, int(start_col))
-            return int(m["line"]), start_col, start_col + token_len
-    return 1, 0, 0
+    if not isinstance(node, exp.Expression):
+        return 1, 0, 1, 0
+
+    for candidate in (node, node.this):
+        if isinstance(candidate, exp.Expression):
+            extent = _token_extent(candidate)
+            if extent is not None:
+                return extent
+
+    return _subtree_extent(node)
+
+
+def _token_extent(node: exp.Expression) -> tuple[int, int, int, int] | None:
+    """The span of the token sqlglot consumed to build node, if it kept one."""
+    m = node.meta
+    if not m or "line" not in m:
+        return None
+    token_len = m["end"] - m["start"] + 1
+    start_col = max(0, m["col"] - token_len)
+    return m["line"], start_col, m["line"], start_col + token_len
+
+
+def _subtree_extent(node: exp.Expression) -> tuple[int, int, int, int]:
+    """
+    The span of node's tagged descendants, first token to last.
+
+    sqlglot tags the token it consumed, so a node built from a keyword keeps
+    none: OFFSET, HAVING and every operator carry theirs on the operands below.
+    """
+    starts, ends = [], []
+    for descendant in node.walk():
+        extent = _token_extent(descendant)
+        if extent is not None:
+            starts.append((extent[0], extent[1]))
+            ends.append((extent[2], extent[3]))
+    if not starts:
+        return 1, 0, 1, 0
+
+    start_line, start_col = min(starts)
+    end_line, end_col = max(ends)
+    return start_line, start_col, end_line, end_col
 
 
 def build_schema(schema_dict: dict, dialect: str) -> MappingSchema | None:

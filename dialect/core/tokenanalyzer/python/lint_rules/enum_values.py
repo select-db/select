@@ -82,7 +82,7 @@ def analyze_enum_values(stmt, enum_dict: dict, default_schema: str) -> list[dict
     seen: set[tuple] = set()
 
     def _emit(value: str, orig_col: str, allowed: list[str], node) -> None:
-        line, col, end_col = span(node)
+        line, col, end_line, end_col = span(node)
         key = (line, col, value)
         if key in seen:
             return
@@ -93,7 +93,7 @@ def analyze_enum_values(stmt, enum_dict: dict, default_schema: str) -> list[dict
             "severity":   "warning",
             "message":    f"{value!r} is not a valid value for enum column {orig_col!r} (allowed: {shown})",
             "start_line": line, "start_col": col,
-            "end_line":   line, "end_col":   end_col,
+            "end_line":   end_line, "end_col":   end_col,
         })
 
     def _check(col_node, value_node) -> None:

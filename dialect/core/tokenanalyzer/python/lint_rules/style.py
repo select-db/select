@@ -18,7 +18,7 @@ from sqlglot import exp
 from sqlglot.dialects.dialect import Dialect as SqlglotDialect
 from sqlglot.tokens import TokenType
 
-from analysis.schema import pos, span
+from analysis.schema import span
 
 _TRAILING_COMMA_NEXT = {
     TokenType.FROM, TokenType.WHERE, TokenType.GROUP_BY, TokenType.ORDER_BY,
@@ -88,7 +88,7 @@ def _s011(stmt: exp.Expression, sg_dialect: str) -> list[dict]:
         if not name or name == name.lower():
             continue
         # Skip short single-word aliases like table alias 't', 'u', already lowercase
-        line, col, end_col = span(ident)
+        line, col, end_line, end_col = span(ident)
         key = (line, col)
         if key in seen:
             continue
@@ -98,7 +98,7 @@ def _s011(stmt: exp.Expression, sg_dialect: str) -> list[dict]:
             "severity":   "warning",
             "message":    f"unquoted identifier {name!r} contains uppercase letters; the database will lowercase it. Use \"{name}\" to preserve case",
             "start_line": line, "start_col": col,
-            "end_line":   line, "end_col":   end_col,
+            "end_line":   end_line, "end_col":   end_col,
         })
 
     return results
@@ -113,14 +113,14 @@ def _s001_s002(stmt: exp.Expression) -> list[dict]:
         val = pattern.this
         has_wildcard = "%" in val or "_" in val
         leading_wildcard = val and val[0] in ("%", "_")
-        line, col, end_col = span(pattern)
+        line, col, end_line, end_col = span(pattern)
         if not has_wildcard:
             results.append({
                 "rule_id":    "like-no-wildcard",
                 "severity":   "warning",
                 "message":    "LIKE pattern has no wildcard; use = for a plain equality check",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
         elif leading_wildcard:
             results.append({
@@ -128,7 +128,7 @@ def _s001_s002(stmt: exp.Expression) -> list[dict]:
                 "severity":   "hint",
                 "message":    "LIKE pattern starts with a wildcard, preventing index use",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results
 
@@ -149,13 +149,13 @@ def _s003(stmt: exp.Expression) -> list[dict]:
                 continue
         else:
             continue
-        line, col = pos(left)
+        line, col, end_line, end_col = span(left)
         results.append({
             "rule_id":    "tautological-predicate",
             "severity":   "warning",
             "message":    f"Tautological predicate: {left.sql()} = {right.sql()} is always true",
             "start_line": line, "start_col": col,
-            "end_line":   line, "end_col":   col,
+            "end_line":   end_line, "end_col":   end_col,
         })
     return results
 
@@ -167,13 +167,13 @@ def _s004(stmt: exp.Expression) -> list[dict]:
         if node.args.get("query"):
             continue
         if not node.expressions:
-            line, col = pos(node)
+            line, col, end_line, end_col = span(node)
             results.append({
                 "rule_id":    "empty-in-list",
                 "severity":   "error",
                 "message":    "Empty IN list never matches any row",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results
 
@@ -193,13 +193,13 @@ def _s005(stmt: exp.Expression) -> list[dict]:
         except ValueError:
             continue
         if lo_val > hi_val:
-            line, col = pos(lo)
+            line, col, end_line, end_col = span(lo)
             results.append({
                 "rule_id":    "reversed-between",
                 "severity":   "error",
                 "message":    f"BETWEEN bounds are reversed: {lo.this} > {hi.this}; this condition can never match",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results
 
@@ -216,26 +216,28 @@ def _s006_s007(stmt: exp.Expression) -> list[dict]:
         for item in node.expressions:
             if isinstance(item, exp.Null):
                 if not is_not_in:
-                    line, col = pos(item)
+                    # sqlglot keeps no position for the NULL keyword, so the
+                    # list the rule is about is what a reader is pointed at.
+                    line, col, end_line, end_col = span(node)
                     results.append({
                         "rule_id":    "null-in-list",
                         "severity":   "warning",
                         "message":    "NULL in IN list never matches via IN; use OR col IS NULL explicitly",
                         "start_line": line, "start_col": col,
-                        "end_line":   line, "end_col":   col,
+                        "end_line":   end_line, "end_col":   end_col,
                     })
                 continue
             if not isinstance(item, exp.Literal):
                 continue
             key = item.this.upper()
-            line, col = pos(item)
+            line, col, end_line, end_col = span(item)
             if key in seen:
                 results.append({
                     "rule_id":    "duplicate-in-value",
                     "severity":   "warning",
                     "message":    f"Duplicate value {item.sql()} in IN list",
                     "start_line": line, "start_col": col,
-                    "end_line":   line, "end_col":   col,
+                    "end_line":   end_line, "end_col":   end_col,
                 })
             else:
                 seen[key] = (line, col)
@@ -250,13 +252,13 @@ def _s008(stmt: exp.Expression) -> list[dict]:
         if isinstance(divisor, exp.Literal) and divisor.is_number:
             try:
                 if float(divisor.this) == 0:
-                    line, col = pos(node)
+                    line, col, end_line, end_col = span(node)
                     results.append({
                         "rule_id":    "division-by-zero",
                         "severity":   "error",
                         "message":    "Division by zero literal",
                         "start_line": line, "start_col": col,
-                        "end_line":   line, "end_col":   col,
+                        "end_line":   end_line, "end_col":   end_col,
                     })
             except ValueError:
                 pass
@@ -279,13 +281,15 @@ def _s009(stmt: exp.Expression) -> list[dict]:
         if lc is None or rc is None or lc != rc:
             continue
         if _contradictory(type(left), lv, type(right), rv):
-            line, col = pos(left)
+            # The contradiction is between the two sides, so the diagnostic
+            # covers both rather than blaming the first one it read.
+            line, col, end_line, end_col = span(node)
             results.append({
                 "rule_id":    "contradictory-predicate",
                 "severity":   "error",
                 "message":    f"Contradictory predicate: {left.sql()} AND {right.sql()} can never both be true",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results
 
