@@ -58,64 +58,59 @@ def tokenize(sql: str, sg_dialect: str) -> list:
 
 
 def pos(node: exp.Expression) -> tuple[int, int]:
-    """
-    Return where a node starts, for a caller that wants a point rather than a
-    range: a reference position, not something to underline. Rules that mark
-    source use span, so that what a reader sees covers the clause.
-
-    Falls back to (1, 0) when no position is available.
-    """
-    line, start_col, _ = span(node)
-    return line, start_col
+    """Where a node starts. Use span to mark a range. Falls back to (1, 0)."""
+    line, col, _, _ = span(node)
+    return line, col
 
 
-def span(node: exp.Expression) -> tuple[int, int, int]:
+def span(node: exp.Expression) -> tuple[int, int, int, int]:
     """
-    Return (line, start_col, end_col) for a node.
+    Return (start_line, start_col, end_line, end_col) covering node in the source.
 
-    end_col is derived from the actual token length in the source, so quoted
-    identifiers like "typo" correctly include both surrounding quotes.
-    Falls back to (1, 0, 0) when no position is available.
+    The end column comes from the token's own length, so a quoted identifier
+    includes its quotes. Falls back to (1, 0, 1, 0) when nothing is tagged.
     """
-    for candidate in (node, node.this if isinstance(node, exp.Expression) else None):
-        if not isinstance(candidate, exp.Expression):
-            continue
-        extent = _token_extent(candidate)
-        if extent is not None:
-            return extent
+    if not isinstance(node, exp.Expression):
+        return 1, 0, 1, 0
+
+    for candidate in (node, node.this):
+        if isinstance(candidate, exp.Expression):
+            extent = _token_extent(candidate)
+            if extent is not None:
+                return extent
+
     return _subtree_extent(node)
 
 
-def _token_extent(node: exp.Expression) -> tuple[int, int, int] | None:
-    """Return the span of the token sqlglot consumed to build node, if it kept one."""
+def _token_extent(node: exp.Expression) -> tuple[int, int, int, int] | None:
+    """The span of the token sqlglot consumed to build node, if it kept one."""
     m = node.meta
     if not m or "line" not in m:
         return None
-    token_len = int(m["end"]) - int(m["start"]) + 1
-    start_col = max(0, int(m["col"]) - token_len)
-    return int(m["line"]), start_col, start_col + token_len
+    token_len = m["end"] - m["start"] + 1
+    start_col = max(0, m["col"] - token_len)
+    return m["line"], start_col, m["line"], start_col + token_len
 
 
-def _subtree_extent(node: exp.Expression) -> tuple[int, int, int]:
+def _subtree_extent(node: exp.Expression) -> tuple[int, int, int, int]:
     """
-    Return the span of node's tagged descendants, on the line the first one is on.
+    The span of node's tagged descendants, first token to last.
 
     sqlglot tags the token it consumed, so a node built from a keyword keeps
-    none: OFFSET, LIMIT, HAVING and every operator carry their position on the
-    operands underneath. Without this a rule about one of them reports 1:0,
-    which puts the diagnostic at the start of the file rather than on the
-    clause it is about.
+    none: OFFSET, HAVING and every operator carry theirs on the operands below.
     """
-    if not isinstance(node, exp.Expression):
-        return 1, 0, 0
+    starts, ends = [], []
+    for descendant in node.walk():
+        extent = _token_extent(descendant)
+        if extent is not None:
+            starts.append((extent[0], extent[1]))
+            ends.append((extent[2], extent[3]))
+    if not starts:
+        return 1, 0, 1, 0
 
-    extents = [e for e in (_token_extent(d) for d in node.walk()) if e is not None]
-    if not extents:
-        return 1, 0, 0
-
-    line, start_col, _ = min(extents)
-    end_col = max(e[2] for e in extents if e[0] == line)
-    return line, start_col, end_col
+    start_line, start_col = min(starts)
+    end_line, end_col = max(ends)
+    return start_line, start_col, end_line, end_col
 
 
 def build_schema(schema_dict: dict, dialect: str) -> MappingSchema | None:

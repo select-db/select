@@ -30,13 +30,13 @@ def analyze_unknown_functions(
         if not name or name in user_functions or name in seen:
             continue
         seen.add(name)
-        line, col, end_col = span(func)
+        line, col, end_line, end_col = span(func)
         results.append({
             "rule_id":    "unknown-function",
             "severity":   "warning",
             "message":    f"unknown function {func.name!r} (not in loaded catalog or dialect builtins)",
             "start_line": line, "start_col": col,
-            "end_line":   line, "end_col":   end_col,
+            "end_line":   end_line, "end_col":   end_col,
         })
 
     return results

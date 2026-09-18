@@ -480,8 +480,7 @@ def _collect_dml_target(
         if key in seen:
             continue
 
-        line, col = pos(tbl)
-        _, _, end_col = span(tbl)
+        line, col, _, end_col = span(tbl)
 
         # DML target scope: from statement start to end
         dml_start, dml_end = -1, -1
@@ -541,8 +540,7 @@ def _add_table_ref(
     schema_name = source.db or default_schema
     db_name = source.catalog or ""
     effective_alias = alias if alias.lower() != table_name.lower() else ""
-    line, col = pos(source)
-    _, _, end_col = span(source)
+    line, col, _, end_col = span(source)
 
     key = (schema_name.lower(), table_name.lower(), effective_alias.lower(), nesting, stmt_idx)
     if key in seen:

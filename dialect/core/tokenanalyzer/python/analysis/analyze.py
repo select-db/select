@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import re
 from typing import Any
 
@@ -88,6 +90,44 @@ def _parse_sql(sql: str, sg_dialect: str) -> tuple[list, list[dict], list[dict]]
     return statements, parse_errors, arity_diags
 
 
+def _undrawable(diag: dict, sql: str) -> str | None:
+    """Say why an editor could not draw this range, or None if it can."""
+    start = (diag["start_line"], diag["start_col"])
+    end = (diag["end_line"], diag["end_col"])
+    if start == end:
+        return "empty range"
+    if end < start:
+        return "range ends before it starts"
+    if (diag["start_line"], diag["start_col"], diag["end_col"]) == (1, 0, 0):
+        return "fell back to the start of the file"
+
+    lines = sql.splitlines() or [""]
+    if not 1 <= diag["start_line"] <= len(lines) or not 1 <= diag["end_line"] <= len(lines):
+        return "line is not in the source"
+    if diag["end_col"] > len(lines[diag["end_line"] - 1]):
+        return "ends past the end of its line"
+    return None
+
+
+def _drawable(diag: dict, sql: str) -> dict:
+    """
+    Make a range an editor can draw, or say so when running the suite.
+
+    A rule reaching this point has already decided what it is about, so
+    dropping the diagnostic loses a real finding and one character is the least
+    that can be seen. Under SELECT_STRICT_DIAGNOSTICS it raises instead, so a
+    rule that cannot point at its own clause fails a test rather than shipping
+    a squiggle nobody can see.
+    """
+    problem = _undrawable(diag, sql)
+    if problem is None:
+        return diag
+    if os.getenv("SELECT_STRICT_DIAGNOSTICS"):
+        raise AssertionError(f"{diag['rule_id']}: {problem} ({diag})")
+    diag["end_col"] = max(diag["end_col"], diag["start_col"] + 1)
+    return diag
+
+
 def analyze(
     sql: str,
     dialect: str = "postgresql",
@@ -130,7 +170,7 @@ def analyze(
             key = (item["rule_id"], item["start_line"], item["start_col"])
             if key not in seen_diag:
                 seen_diag.add(key)
-                result["diagnostics"].append(item)
+                result["diagnostics"].append(_drawable(item, sql))
 
     _add(arity_diags)
 

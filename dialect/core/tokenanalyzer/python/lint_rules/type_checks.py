@@ -32,7 +32,7 @@ def analyze_type_mismatches(
     seen: set[tuple] = set()
 
     def _emit(rule_id: str, severity: str, message: str, node: exp.Expression) -> None:
-        line, col, end_col = span(node)
+        line, col, end_line, end_col = span(node)
         key = (rule_id, str(node)[:80])
         if key not in seen:
             seen.add(key)
@@ -41,7 +41,7 @@ def analyze_type_mismatches(
                 "severity":   severity,
                 "message":    message,
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     try:
@@ -162,7 +162,7 @@ def analyze_arity_errors(stmt: exp.Expression) -> list[dict]:
         except Exception:
             func_name = type(func).__name__.upper()
 
-        line, col, end_col = span(func)
+        line, col, end_line, end_col = span(func)
         key = (func_name, line, col)
         if key not in seen:
             seen.add(key)
@@ -171,7 +171,7 @@ def analyze_arity_errors(stmt: exp.Expression) -> list[dict]:
                 "severity":   "error",
                 "message":    f"{func_name} requires at least one argument",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     return results

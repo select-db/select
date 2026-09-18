@@ -10,7 +10,7 @@ from __future__ import annotations
 from sqlglot import exp
 from sqlglot.optimizer.scope import Scope, ScopeType, traverse_scope
 
-from analysis.schema import pos, span
+from analysis.schema import span
 
 
 def collect_resolved_column_refs(
@@ -46,8 +46,7 @@ def collect_resolved_column_refs(
                 qualified = qualifier != ""
                 resolved = _is_resolved(name, qualifier, visible)
 
-                line, start_col = pos(col)
-                _, _, end_col = span(col)
+                line, start_col, _, end_col = span(col)
 
                 results.append({
                     "column":        name,

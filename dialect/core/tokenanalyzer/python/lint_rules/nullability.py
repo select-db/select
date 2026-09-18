@@ -27,13 +27,13 @@ def _n001(stmt: exp.Expression) -> list[dict]:
     for node in stmt.find_all(exp.EQ):
         for side in (node.left, node.right):
             if isinstance(side, exp.Null):
-                line, col, end_col = span(node.left)
+                line, col, end_line, end_col = span(node.left)
                 results.append({
                     "rule_id":    "null-equality",
                     "severity":   "error",
                     "message":    "Use IS NULL instead of = NULL",
                     "start_line": line, "start_col": col,
-                    "end_line":   line, "end_col":   end_col,
+                    "end_line":   end_line, "end_col":   end_col,
                 })
                 break
     return results
@@ -45,13 +45,13 @@ def _n002(stmt: exp.Expression) -> list[dict]:
     for node in stmt.find_all((exp.NEQ,)):
         for side in (node.left, node.right):
             if isinstance(side, exp.Null):
-                line, col, end_col = span(node.left)
+                line, col, end_line, end_col = span(node.left)
                 results.append({
                     "rule_id":    "null-inequality",
                     "severity":   "error",
                     "message":    "Use IS NOT NULL instead of <> NULL / != NULL",
                     "start_line": line, "start_col": col,
-                    "end_line":   line, "end_col":   end_col,
+                    "end_line":   end_line, "end_col":   end_col,
                 })
                 break
     return results
@@ -68,13 +68,15 @@ def _n003(stmt: exp.Expression) -> list[dict]:
             continue  # subquery, not a literal list
         for item in inner.expressions:
             if isinstance(item, exp.Null):
-                line, col, end_col = span(inner)
+                # sqlglot keeps no position for the NULL keyword, so the list
+                # the rule is about is what a reader is pointed at.
+                line, col, end_line, end_col = span(inner)
                 results.append({
                     "rule_id":    "null-in-not-in",
                     "severity":   "warning",
                     "message":    "NULL in NOT IN list causes the predicate to never match any row",
                     "start_line": line, "start_col": col,
-                    "end_line":   line, "end_col":   end_col,
+                    "end_line":   end_line, "end_col":   end_col,
                 })
     return results
 
@@ -86,12 +88,12 @@ def _n004(stmt: exp.Expression) -> list[dict]:
         # sqlglot: Coalesce(this=first_arg, expressions=[rest...])
         extra = node.args.get("expressions", [])
         if len(extra) == 0:
-            line, col, end_col = span(node)
+            line, col, end_line, end_col = span(node)
             results.append({
                 "rule_id":    "coalesce-single-arg",
                 "severity":   "warning",
                 "message":    "COALESCE with only one argument always returns that argument; use the expression directly",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results

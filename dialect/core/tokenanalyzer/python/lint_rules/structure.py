@@ -35,13 +35,13 @@ def analyze_ordinal_violations(stmt: exp.Expression) -> list[dict]:
                     except ValueError:
                         continue
                     if ordinal > col_count:
-                        line, col, end_col = span(inner)
+                        line, col, end_line, end_col = span(inner)
                         results.append({
                             "rule_id":    rule_id,
                             "severity":   "error",
                             "message":    f"{clause_name} ordinal {ordinal} exceeds the number of SELECT columns ({col_count})",
                             "start_line": line, "start_col": col,
-                            "end_line":   line, "end_col":   end_col,
+                            "end_line":   end_line, "end_col":   end_col,
                         })
 
         _check_clause(select.args.get("group"), "GROUP BY", "ordinal-out-of-range")
@@ -57,7 +57,7 @@ def analyze_window_in_where(stmt: exp.Expression) -> list[dict]:
 
     for where in stmt.find_all(exp.Where):
         for window in where.find_all(exp.Window):
-            line, col, end_col = span(window)
+            line, col, end_line, end_col = span(window)
             key = (line, col)
             if key not in seen:
                 seen.add(key)
@@ -66,7 +66,7 @@ def analyze_window_in_where(stmt: exp.Expression) -> list[dict]:
                     "severity":   "error",
                     "message":    "window functions are not allowed in WHERE clauses",
                     "start_line": line, "start_col": col,
-                    "end_line":   line, "end_col":   end_col,
+                    "end_line":   end_line, "end_col":   end_col,
                 })
 
     return results
@@ -83,14 +83,14 @@ def analyze_duplicate_columns(stmt: exp.Expression) -> list[dict]:
             if not name:
                 continue
             key = name.lower()
-            line, col, end_col = span(expr)
+            line, col, end_line, end_col = span(expr)
             if key in seen:
                 results.append({
                     "rule_id":    "duplicate-column",
                     "severity":   "warning",
                     "message":    f"duplicate output column name {name!r}",
                     "start_line": line, "start_col": col,
-                    "end_line":   line, "end_col":   end_col,
+                    "end_line":   end_line, "end_col":   end_col,
                 })
             else:
                 seen[key] = (line, col)
