@@ -253,3 +253,41 @@ func TestDeleteWorkspace_DoesNotSignTheOwnerOut(t *testing.T) {
 	_, err := device.Refresh(t)
 	require.NoError(t, err, "deleting a workspace signed the owner out")
 }
+
+// Taking somebody out of a group is the everyday way a manager withdraws access
+// granted through a team, and it is the one grant path whose removal the rest
+// of these do not exercise.
+func TestGroupMembershipRemoved_ReachesMemberAtOnceWithoutSigningThemOut(t *testing.T) {
+	f := e2e.Setup(t)
+
+	memberID, member := newMemberDevice(t, f, "laptop")
+	roleID := seedKeyManagerRole(t, f)
+
+	groupID := uuid.NewString()
+	_, err := f.Conn.Exec(
+		`INSERT INTO app."group" (id, workspace_id, name) VALUES ($1::uuid,$2::uuid,$3)`,
+		groupID, f.Actor.WorkspaceID, "Engineering")
+	require.NoError(t, err)
+
+	utgID := uuid.NewString()
+	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "user_to_group", utgID, map[string]any{
+		"id": utgID, "user_id": memberID, "group_id": groupID, "workspace_id": f.Actor.WorkspaceID,
+	})
+	gtrID := uuid.NewString()
+	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "group_to_role", gtrID, map[string]any{
+		"id": gtrID, "group_id": groupID, "role_id": roleID, "workspace_id": f.Actor.WorkspaceID,
+	})
+
+	held := e2e.MintJWT(t, memberID)
+	require.True(t, mayManageKeys(t, f, held, roleID, "before"),
+		"the group grants this before the manager touches it")
+
+	e2e.SyncCommit(t, f.H, f.Actor, "delete", "user_to_group", utgID, map[string]any{
+		"id": utgID, "workspace_id": f.Actor.WorkspaceID,
+	})
+
+	require.False(t, mayManageKeys(t, f, held, roleID, "after"),
+		"the group's role still reaches somebody the manager took out of it")
+	_, err = member.Refresh(t)
+	require.NoError(t, err, "leaving a group signed the member out")
+}

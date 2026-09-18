@@ -22,8 +22,10 @@ import (
 )
 
 const (
-	issuer          = "selectdb"
-	audience        = "selectdb-client"
+	// Issuer and Audience are required on every token ValidateJWT accepts, so
+	// anything that signs one for this service has to set both.
+	Issuer          = "selectdb"
+	Audience        = "selectdb-client"
 	accessTokenTTL  = 5 * time.Minute
 	refreshTokenTTL = 10 * 24 * time.Hour
 )
@@ -117,8 +119,8 @@ func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 		UserID: userID.String(),
 		Name:   displayName,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    issuer,
-			Audience:  jwt.ClaimStrings{audience},
+			Issuer:    Issuer,
+			Audience:  jwt.ClaimStrings{Audience},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -184,7 +186,7 @@ func ValidateJWT(tokenStr string) (*jwt.Token, *CustomClaims, error) {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return pubKey, nil
-	}, jwt.WithAudience(audience), jwt.WithIssuer(issuer))
+	}, jwt.WithAudience(Audience), jwt.WithIssuer(Issuer))
 
 	if err != nil {
 		// When the token is expired, the library still parses and fills claims;

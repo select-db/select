@@ -138,8 +138,9 @@ func TestDeleteWorkspace_RevokesAPIKeys(t *testing.T) {
 
 // Permissions are read from the database on each request, behind a cache the
 // sync invalidates, so editing what a role may do reaches the people holding it
-// at once, without waiting for any token. Taking the role itself away is the
-// other half, in TestRoleRemoval_ReachesMemberAtOnceWithoutSigningThemOut.
+// at once, without waiting for any token. That was already true before standing
+// moved off the token; this pins it. Taking the role itself away is the half
+// that did change, in TestRoleRemoval_ReachesMemberAtOnceWithoutSigningThemOut.
 func TestPermissionRemoved_TakesEffectOnTheTokenAlreadyHeld(t *testing.T) {
 	f := e2e.Setup(t)
 
@@ -182,4 +183,86 @@ func TestGrantWithoutMembership_ReachesNothing(t *testing.T) {
 	rec := e2e.CreateAPIKey(t, f.H, e2e.MintJWT(t, outsiderID), f.Actor.WorkspaceID, roleID, "outsider")
 	require.NotEqualf(t, http.StatusOK, rec.Code,
 		"a role granted to a non-member let them act in the workspace: %s", rec.Body.String())
+}
+
+// TestRemovedMember_LosesAccess passes on a 400: the person is left with no
+// workspaces at all, so the request never reaches an authorization decision.
+// The realistic case is somebody who belongs to several and is removed from
+// one, which has to be a 403 on a non-empty set.
+func TestRemovedMember_LosesAccessToThatWorkspaceOnly(t *testing.T) {
+	f := e2e.Setup(t)
+
+	memberID := uuid.NewString()
+	e2e.SeedUser(t, f.Conn, memberID)
+	membershipID := e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
+
+	elsewhere := uuid.NewString()
+	e2e.SeedWorkspace(t, f.Conn, elsewhere, memberID)
+	e2e.SeedMembership(t, f.Conn, elsewhere, memberID)
+
+	roleID := e2e.SeedRoleWithPermission(t, f.Conn, f.Actor.WorkspaceID, "Key Manager", "workspace/api-keys.manage")
+	e2e.SeedUserRole(t, f.Conn, memberID, roleID, f.Actor.WorkspaceID)
+
+	held := e2e.MintJWT(t, memberID)
+	require.Equalf(t, http.StatusOK,
+		e2e.CreateAPIKey(t, f.H, held, f.Actor.WorkspaceID, roleID, "before").Code,
+		"the member starts able to act here")
+
+	e2e.SyncCommit(t, f.H, f.Actor, "delete", "workspace_to_user", membershipID, map[string]any{
+		"id":           membershipID,
+		"workspace_id": f.Actor.WorkspaceID,
+		"user_id":      memberID,
+	})
+
+	require.Equalf(t, http.StatusForbidden,
+		e2e.CreateAPIKey(t, f.H, held, f.Actor.WorkspaceID, roleID, "after").Code,
+		"a removed member still acts in the workspace on the token they held")
+}
+
+// An API key's standing is its roles, re-read on every request the same way a
+// person's is. Taking a role off the key has to reach the key already issued,
+// not the next one somebody rotates. The gate is a route that denies rather
+// than filters: the list route returns an empty 200 to a key with no roles.
+func TestAPIKeyRolesRemoved_ReachesTheKeyInHand(t *testing.T) {
+	f := e2e.Setup(t)
+
+	dsID := uuid.NewString()
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+dsID, f.Actor.Token, map[string]any{
+		"workspace_id": f.Actor.WorkspaceID,
+		"db_type":      "postgresql",
+		"name":         "warehouse",
+		"dsn":          e2e.TargetDSN(t, f.Conn),
+	})
+	require.Equalf(t, http.StatusNoContent, rec.Code, "upsert datasource: %s", rec.Body.String())
+
+	// Scoped to this one datasource, which is the shape SeedPermission does not
+	// cover: a key is never an owner, so only the permission opens the route.
+	roleID := uuid.NewString()
+	e2e.SeedRole(t, f.Conn, roleID, f.Actor.WorkspaceID, "Datasource Manager")
+	_, err := f.Conn.Exec(
+		`INSERT INTO app.permission (id, role_id, workspace_id, db_instance_id, action, effect)
+		 VALUES ($1::uuid,$2::uuid,$3::uuid,$4,'manage','allow')`,
+		uuid.NewString(), roleID, f.Actor.WorkspaceID, dsID)
+	require.NoError(t, err)
+
+	rec = e2e.CreateAPIKey(t, f.H, f.Actor.Token, f.Actor.WorkspaceID, roleID, "ci")
+	require.Equalf(t, http.StatusOK, rec.Code, "create key: %s", rec.Body.String())
+	var created struct {
+		ID  string `json:"id"`
+		Key string `json:"key"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+
+	rec = e2e.Do(t, f.H, http.MethodGet, "/datasources/"+dsID, created.Key, nil)
+	require.Equalf(t, http.StatusOK, rec.Code, "the key starts able to read it: %s", rec.Body.String())
+
+	rec = e2e.Do(t, f.H, http.MethodPut, "/apikeys/"+created.ID+"/roles", f.Actor.Token, map[string]any{
+		"workspace_id": f.Actor.WorkspaceID,
+		"role_ids":     []string{},
+	})
+	require.Equalf(t, http.StatusNoContent, rec.Code, "set roles: %s", rec.Body.String())
+
+	rec = e2e.Do(t, f.H, http.MethodGet, "/datasources/"+dsID, created.Key, nil)
+	require.Equalf(t, http.StatusForbidden, rec.Code,
+		"a key still reads with a role the manager took off it: %s", rec.Body.String())
 }

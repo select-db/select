@@ -29,9 +29,10 @@ func grantsIn(t *testing.T, userID, wsID string) []auth.RoleRef {
 	return grants
 }
 
-// effectiveRoles is the standing a request would be given for this user right
-// now, keyed by role id. It reads both queries buildAuthContext reads and
-// applies the same membership spine, so it is what the next request enforces.
+// effectiveRoles reads the two queries standing is derived from and applies the
+// same membership spine, keyed by role id. It is a second copy of that rule, so
+// it pins the queries rather than buildAuthContext itself: the e2e tests in
+// internal/auth and internal/workspace are what cover the assembly.
 func effectiveRoles(t *testing.T, userID, wsID string) map[string]string {
 	t.Helper()
 	roles := map[string]string{}
@@ -226,4 +227,25 @@ func TestStanding_GrantToNonMemberReachesNothing(t *testing.T) {
 
 	require.NotContains(t, effectiveRoles(t, outsiderID, wsID), roleID,
 		"a role granted to somebody who does not belong to the workspace still reaches them")
+}
+
+// A role is soft-deleted too, and the direct branch carries its own predicate
+// for it. TestStanding_SoftDeletedGroupGrantsNoRoles covers the group's.
+func TestStanding_SoftDeletedRoleGrantsNothing(t *testing.T) {
+	conn := newTestDB(t)
+
+	userID, ownerID, wsID, roleID := newID(), newID(), newID(), newID()
+	seedUser(t, conn, userID, "member")
+	seedUser(t, conn, ownerID, "owner")
+	seedWorkspace(t, conn, wsID, "ws", ownerID)
+	seedRole(t, conn, roleID, wsID, "direct-role")
+	seedMembership(t, conn, wsID, userID)
+	seedUserToRole(t, conn, newID(), userID, roleID, wsID)
+	require.Contains(t, effectiveRoles(t, userID, wsID), roleID, "role held before the delete")
+
+	_, err := conn.Exec(`UPDATE app.role SET deleted_at = now() WHERE id = $1::uuid`, roleID)
+	require.NoError(t, err)
+
+	require.NotContains(t, effectiveRoles(t, userID, wsID), roleID,
+		"a soft-deleted role is still granted")
 }
