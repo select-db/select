@@ -28,7 +28,7 @@ Permissions are defined per action:
 | **INSERT** | Add new rows                             |
 | **UPDATE** | Modify existing rows                     |
 | **DELETE** | Remove rows                              |
-| **MANAGE** | Administrate the connection, and run every statement that is not one of the four above: schema changes, COPY, GRANT, anything we cannot classify |
+| **MANAGE** | Change the database itself: its structure, its access, its configuration |
 
 App-level actions cover workspace administration:
 
@@ -56,11 +56,15 @@ Evaluation order:
 
 This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `MANAGE` for production databases. A user with both roles cannot change the schema on production.
 
-MANAGE is granted on a connection, not on a schema or a table: a rule scoped
-below the connection never matches. It is what a statement needs when it is not
-a plain read or write of rows, so it also covers anything the parser cannot
-classify, and a statement nobody has taught us to read is refused rather than
-allowed through unexamined.
+The first four actions are about the rows in a table. MANAGE is about the
+database itself: creating, altering and dropping tables, granting access,
+loading and exporting in bulk, and running procedures. It is granted on a
+connection, not on a schema or a table, so a rule scoped below the connection
+never matches.
+
+Anything that is not plainly one of the four row actions needs MANAGE. That is
+deliberate: granting the four never quietly grants more than reading and
+writing rows, so an unusual statement is refused rather than let through.
 
 ## Databases nobody has written a rule for
 
