@@ -117,6 +117,9 @@ jobs:
           echo "${PG_PARTMAN_SHA256}  /tmp/pg_partman.tar.gz" | sha256sum -c -
           tar -xzf /tmp/pg_partman.tar.gz -C /tmp
           sudo make -C "/tmp/pg_partman-${PG_PARTMAN_VERSION}" NO_BGW=1 PG_CONFIG=/usr/lib/postgresql/17/bin/pg_config install
+          # OVH lets the non-superuser app role create pg_partman; pgtestdb migrates
+          # as a NOSUPERUSER role too, and 4.x's control file requires superuser.
+          echo "superuser = false" | sudo tee -a /usr/share/postgresql/17/extension/pg_partman.control
           sudo pg_createcluster --start 17 main || sudo pg_ctlcluster 17 main start || true
           PORT=$(pg_lsclusters -h | awk '$1==17 {print $3}')
           sudo -u postgres psql -p "$PORT" -c "ALTER USER postgres PASSWORD 'postgres';"
