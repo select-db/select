@@ -4,11 +4,10 @@ CREATE SCHEMA IF NOT EXISTS audit;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- pg_partman manages the monthly partitions and retention;
--- Maintenance runs via pg_cron in the cluster's default
--- Gated on availability so the schema still applies on a 
--- dev/test Postgres that lacks the extension (it
--- falls back to default partitions below).
+-- pg_partman manages the monthly partitions and retention; the backend runs
+-- its maintenance daily. Gated on availability so the schema still applies on
+-- a dev/test Postgres that lacks the extension (it falls back to default
+-- partitions below).
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_partman') THEN
@@ -102,8 +101,10 @@ BEGIN
         -- One year for all; override per domain to keep security streams longer:
         --   UPDATE partman.part_config SET retention = '3 years'
         --    WHERE parent_table IN ('audit.event_iam', 'audit.event_auth');
+        -- infinite_time_partitions: premake relative to now, not to the newest row,
+        -- so a quiet domain still gets its partitions instead of filling DEFAULT.
         UPDATE partman.part_config
-           SET retention = '1 year', retention_keep_table = false
+           SET retention = '1 year', retention_keep_table = false, infinite_time_partitions = true
          WHERE parent_table IN ('audit.event_query', 'audit.event_auth', 'audit.event_iam', 'audit.event_datasource');
     ELSE
         CREATE TABLE IF NOT EXISTS audit.event_query_default      PARTITION OF audit.event_query      DEFAULT;
