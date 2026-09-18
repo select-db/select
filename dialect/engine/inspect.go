@@ -7,13 +7,23 @@ import (
 )
 
 // Inspect parses sql against meta and returns one InspectStatement per
-// top-level statement. Returns nil when dialect or meta is nil, or when
-// the dialect does not support inspection.
+// top-level statement. Returns nil when dialect or meta is nil, or when sql
+// is blank.
+//
+// The floor on an empty result is for dialects registered from outside this
+// module, which RegisterDialect accepts and this package cannot audit: a
+// permission check reads no statements as nothing to check, so sql that ran
+// through a dialect and came back with none is reported as one unknown
+// statement rather than as nothing.
 func Inspect(dialect core.SQLDialect, meta *core.Metadata, sql string) []core.InspectStatement {
 	if dialect == nil || meta == nil {
 		return nil
 	}
-	return dialect.Inspect(*meta, sql)
+	stmts := dialect.Inspect(*meta, sql)
+	if len(stmts) == 0 && strings.TrimSpace(sql) != "" {
+		return []core.InspectStatement{core.UnknownStatement()}
+	}
+	return stmts
 }
 
 // FirstSelectStatement returns the first SELECT in stmts. Convenience for
@@ -32,7 +42,7 @@ func FirstSelectStatement(stmts []core.InspectStatement) (core.InspectStatement,
 // primary key, and every primary-key column appears in the SELECT.
 //
 // Result length matches len(stmt.Fields). The mapping from Field index to
-// driver column position is approximate for non-trivial queries — derived
+// driver column position is approximate for non-trivial queries. Derived
 // expressions, multi-arg functions, and SELECT * with stale metadata can
 // drift. Callers that need exact driver-position alignment should compare
 // names against rows.Columns().

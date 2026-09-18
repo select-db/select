@@ -1,4 +1,4 @@
-import { toolDefinition } from '@tanstack/ai';
+import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
 import { loadDatabase } from '../helpers';
 
@@ -46,11 +46,11 @@ async function getDatabaseSchemasImpl(args: unknown) {
 		};
 	}
 
-	const schemaList = (node!.children ?? [])
+	const schemaList = node!.children
 		.filter((c) => c.type === 'schema')
 		.map((schemaNode) => {
-			const tablesGroup = (schemaNode.children ?? []).find((c) => c.type === 'tables');
-			const viewsGroup = (schemaNode.children ?? []).find((c) => c.type === 'views');
+			const tablesGroup = schemaNode.children.find((c) => c.type === 'tables');
+			const viewsGroup = schemaNode.children.find((c) => c.type === 'views');
 			const tableNames = (tablesGroup?.children ?? []).map((c) => c.name ?? '').filter(Boolean);
 			const viewNames = (viewsGroup?.children ?? []).map((c) => c.name ?? '').filter(Boolean);
 			const tables = [...tableNames, ...viewNames];

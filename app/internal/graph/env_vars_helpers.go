@@ -165,8 +165,7 @@ func unescapeValue(s string) string {
 // SQL file refs use same-folder only.
 // Implements sqllang.VarReplacer.
 func (g *Graph) ResolveVariable(varName string, folderID string) (value string, isSqlFile bool, err error) {
-	wsGraph, err := g.GetWorkspaceGraph()
-	if err != nil {
+	if _, err := EnsureWorkspaceGraph(g); err != nil {
 		return "", false, fmt.Errorf("workspace graph not initialized: %w", err)
 	}
 
@@ -179,13 +178,8 @@ func (g *Graph) ResolveVariable(varName string, folderID string) (value string, 
 		}
 		visited[currentFolderID] = true
 
-		nodes := FindNodesByIds(wsGraph, []string{currentFolderID})
-		if len(nodes) == 0 {
-			break
-		}
-
-		folder, ok := nodes[0].(*FolderNode)
-		if !ok {
+		folder := g.GetFolderNodeByID(currentFolderID)
+		if folder == nil {
 			break
 		}
 
@@ -212,60 +206,75 @@ func (g *Graph) ResolveVariable(varName string, folderID string) (value string, 
 // readSqlFileContentByRefName finds a .sql file in the given folder whose name (without extension)
 // equals refName, and returns its content. Same-folder only.
 func (g *Graph) readSqlFileContentByRefName(folderID string, refName string) (string, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
+	wsGraph, err := EnsureWorkspaceGraph(g)
 	if err != nil {
 		return "", err
 	}
 
-	nodes := FindNodesByIds(wsGraph, []string{folderID})
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("folder not found")
-	}
-	folder, ok := nodes[0].(*FolderNode)
-	if !ok {
-		return "", fmt.Errorf("folder not found")
+	files, err := g.sqlFilesInFolder(folderID)
+	if err != nil {
+		return "", err
 	}
 
-	for _, f := range folder.Files {
-		if !strings.HasSuffix(f.Name, ".sql") {
+	wfs, err := NewWorkspaceFS(wsGraph.ID)
+	if err != nil {
+		return "", err
+	}
+
+	for _, f := range files {
+		if strings.TrimSuffix(f.Name, ".sql") != refName {
 			continue
 		}
-		nameNoExt := strings.TrimSuffix(f.Name, ".sql")
-		if nameNoExt == refName {
-			wfs, err := NewWorkspaceFS(wsGraph.ID)
-			if err != nil {
-				return "", err
-			}
-			rel := strings.TrimPrefix(f.URI, wfs.RootURI+"/")
-			if rel == f.URI {
-				rel = f.URI
-			}
-			fullPath := filepath.Join(wfs.WorkspaceRoot, filepath.FromSlash(rel))
-			data, err := os.ReadFile(fullPath)
-			if err != nil {
-				return "", fmt.Errorf("reading SQL file %s: %w", f.Name, err)
-			}
-			return string(data), nil
+
+		path, ok := wfs.Path(f.URI)
+		if !ok {
+			return "", fmt.Errorf("SQL file %s is not in this workspace", f.Name)
 		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("reading SQL file %s: %w", f.Name, err)
+		}
+		return string(data), nil
 	}
 	return "", fmt.Errorf("no SQL file %s.sql in folder", refName)
 }
 
-// LoadFolderEnvFile loads the .env file for a folder and updates its Variables map.
-func (g *Graph) LoadFolderEnvFile(folderNode *FolderNode, wfs *WorkspaceFS) error {
-	rel, ok := wfs.Rel(folderNode.URI)
-	if !ok {
-		rel = strings.TrimPrefix(folderNode.URI, wfs.RootURI+"/")
-		if rel == folderNode.URI {
-			rel = ""
-		}
-	}
+// LoadFolderEnvFile reads the folder's .env into its node.
+//
+// Addressed by URI, and the write is taken under the graph's lock: a node
+// pointer written to from outside is one the snapshot's maps.Clone can be
+// reading at the same time, which is a fatal concurrent map access rather than
+// a recoverable panic.
+func (g *Graph) LoadFolderEnvFile(folderURI string, wfs *WorkspaceFS) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
-	var folderPath string
-	if rel == "" || rel == "." {
-		folderPath = wfs.WorkspaceRoot
-	} else {
-		folderPath = filepath.Join(wfs.WorkspaceRoot, filepath.FromSlash(rel))
+	folder, ok := g.lookup(folderURI).(*FolderNode)
+	if !ok {
+		return fmt.Errorf("folder %s is not in this workspace", folderURI)
+	}
+	return loadFolderEnvInto(folder, wfs)
+}
+
+// SetFolderVariables replaces a folder's variables under the graph's lock. A
+// package function, not a method: internal to the app, not frontend API.
+func SetFolderVariables(g *Graph, folderURI string, vars map[string]string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	folder, ok := g.lookup(folderURI).(*FolderNode)
+	if !ok {
+		return fmt.Errorf("folder %s is not in this workspace", folderURI)
+	}
+	folder.Variables = vars
+	return nil
+}
+
+// loadFolderEnvInto is the body, for callers already holding the write lock.
+func loadFolderEnvInto(folder *FolderNode, wfs *WorkspaceFS) error {
+	folderPath, ok := wfs.Path(folder.URI)
+	if !ok {
+		return fmt.Errorf("folder %s is not in this workspace", folder.URI)
 	}
 
 	vars, err := ReadEnvFile(filepath.Join(folderPath, ".env"))
@@ -273,13 +282,13 @@ func (g *Graph) LoadFolderEnvFile(folderNode *FolderNode, wfs *WorkspaceFS) erro
 		return err
 	}
 
-	folderNode.Variables = vars
+	folder.Variables = vars
 	return nil
 }
 
 // GetEnvFilePath returns the path to the .env file for a given folder URI.
 func (g *Graph) GetEnvFilePath(folderURI string) (string, error) {
-	wsGraph, err := g.GetWorkspaceGraph()
+	wsGraph, err := EnsureWorkspaceGraph(g)
 	if err != nil {
 		return "", fmt.Errorf("workspace graph not initialized: %w", err)
 	}
@@ -289,16 +298,9 @@ func (g *Graph) GetEnvFilePath(folderURI string) (string, error) {
 		return "", fmt.Errorf("failed to create workspace fs: %w", err)
 	}
 
-	rel := strings.TrimPrefix(folderURI, wfs.RootURI+"/")
-	if rel == folderURI {
-		rel = ""
-	}
-
-	var folderPath string
-	if rel == "" || rel == "." {
-		folderPath = wfs.WorkspaceRoot
-	} else {
-		folderPath = filepath.Join(wfs.WorkspaceRoot, filepath.FromSlash(rel))
+	folderPath, ok := wfs.Path(folderURI)
+	if !ok {
+		return "", fmt.Errorf("folder %s is not in this workspace", folderURI)
 	}
 
 	return filepath.Join(folderPath, ".env"), nil

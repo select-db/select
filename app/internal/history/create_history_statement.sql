@@ -8,7 +8,10 @@ INSERT INTO history (
     affected_rows,
     row_count,
     duration_ms,
-    errors
+    errors,
+    workspace_id,
+    db_instance_id,
+    created_at
 ) VALUES (
     :id,
     :dsn,
@@ -17,6 +20,9 @@ INSERT INTO history (
     :affected_rows,
     :row_count,
     :duration_ms,
-    :errors
+    :errors,
+    :workspace_id,
+    :db_instance_id,
+    CURRENT_TIMESTAMP
 )
-RETURNING *;
+RETURNING id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, db_instance_id;

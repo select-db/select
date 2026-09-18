@@ -5,8 +5,11 @@ import (
 	"fmt"
 
 	"backend/db"
-	"backend/db/db_types"
+	"backend/internal/audit"
 	"backend/internal/syncer/types"
+	"backend/internal/workspace"
+
+	"github.com/google/uuid"
 )
 
 // ApplyDelete sets deleted_at and updated_at for the workspace identified by the commit.
@@ -19,7 +22,7 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if id == "" {
 		return false, nil, fmt.Errorf("workspace: missing id")
 	}
-	idUUID, err := db_types.NewJSONNullUUIDFromString(id)
+	idUUID, err := uuid.Parse(id)
 	if err != nil {
 		return false, nil, fmt.Errorf("workspace: invalid id %q: %w", id, err)
 	}
@@ -32,8 +35,12 @@ func ApplyDelete(ctx context.Context, userID string, c types.Commit) (bool, *typ
 	if ownerID.String() != userID {
 		return false, nil, fmt.Errorf("workspace: only the owner can delete the workspace")
 	}
-	if err := db.Queries.SetWorkspaceDeletedAt(ctx, idUUID); err != nil {
+	// Through workspace.SoftDelete, not the query: deleting a workspace also
+	// revokes the datasources it had open, and that has to hold whichever way
+	// the delete arrived.
+	if err := workspace.SoftDelete(ctx, idUUID); err != nil {
 		return false, nil, fmt.Errorf("workspace: set deleted_at: %w", err)
 	}
+	audit.EmitChange(ctx, audit.WorkspaceDeleted, id, id, nil, nil)
 	return true, nil, nil
 }

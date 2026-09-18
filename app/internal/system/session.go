@@ -5,8 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"selectDb/internal/api"
+	"selectDb/internal/graph"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 func (s *System) Logout() error {
@@ -16,19 +17,33 @@ func (s *System) Logout() error {
 	_ = api.ClearAccessToken()
 	_ = api.ClearRefreshToken()
 
-	runtime.EventsEmit(s.ctx, "logout")
+	// The next person to sign in here is not necessarily the last one.
+	s.closeOpenFolder()
+
+	desktop.Emit("logout")
 	return nil
 }
 
+func (s *System) closeOpenFolder() {
+	graph.ClearOpenWorkspace()
+	if s.Graph != nil {
+		s.Graph.InvalidateWorkspaceGraph()
+	}
+	if s.fileWatcherCancel != nil {
+		s.fileWatcherCancel()
+		s.fileWatcherCancel = nil
+	}
+}
+
+// CheckForLogout ends the session only on credentials the keyring reports as
+// gone. A keyring that cannot answer is not a sign-out.
 func (s *System) CheckForLogout() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, accessErr := api.LoadAccessToken()
-	_, refreshErr := api.LoadRefreshToken()
-
-	if accessErr != nil || refreshErr != nil {
-		runtime.EventsEmit(s.ctx, "logout")
+	if api.ReadCredentialStatus() == api.CredentialsMissing {
+		s.closeOpenFolder()
+		desktop.Emit("logout")
 	}
 }
 
@@ -36,10 +51,7 @@ func (s *System) CheckForLogin() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, accessErr := api.LoadAccessToken()
-	_, refreshErr := api.LoadRefreshToken()
-
-	if accessErr != nil || refreshErr != nil {
+	if api.ReadCredentialStatus() != api.CredentialsPresent {
 		return
 	}
 
@@ -55,5 +67,5 @@ func (s *System) CheckForLogin() {
 		}
 		return
 	}
-	runtime.EventsEmit(s.ctx, "login")
+	desktop.Emit("login")
 }

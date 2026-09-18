@@ -36,17 +36,12 @@ if ! command -v sqlite3 &>/dev/null; then
   exit 1
 fi
 
-# If DB does not exist, create it from schema (so first-time reinit works)
-SCHEMA_PATH="$APP_BACKEND_DIR/db/schema.sql"
+# If the DB does not exist, create it the way the app does, so a first-time
+# reinit works. Running the migrations rather than replaying a schema dump also
+# leaves goose's version table populated, which a dump did not.
 if [[ ! -f "$DB_PATH" ]]; then
-  if [[ ! -f "$SCHEMA_PATH" ]]; then
-    echo "Error: DB file not found: $DB_PATH" >&2
-    echo "Schema not found at $SCHEMA_PATH either. Run the app once to create the DB." >&2
-    exit 1
-  fi
-  echo "Creating DB at $DB_PATH (from schema)"
-  mkdir -p "$(dirname "$DB_PATH")"
-  sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
+  echo "Creating DB at $DB_PATH (running migrations)"
+  (cd "$APP_ROOT" && go run ./internal/cmd/initdb "$DB_PATH")
 fi
 
 echo "Clearing data in: $DB_PATH"

@@ -9,25 +9,17 @@ import (
 	"github.com/selectDb/dialect/engine"
 )
 
-type dumpRequest struct {
-	ID string `json:"id"`
-}
-
 func DumpHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req dumpRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if req.ID == "" {
+		id := r.PathValue("id")
+		if id == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
 
 		workspaceID := middlewares.MemberWorkspaceID(r)
 
-		ds, err := GetOrLoadDatasource(r.Context(), req.ID, workspaceID)
+		ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
 		if err != nil {
 			http.Error(w, "datasource not found", http.StatusNotFound)
 			return
@@ -35,7 +27,7 @@ func DumpHandler() http.HandlerFunc {
 
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, req.ID), http.StatusBadGateway)
+			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 
@@ -47,7 +39,7 @@ func DumpHandler() http.HandlerFunc {
 
 		meta, err := engine.GetOrFetchMetadata(r.Context(), workspaceID, ds.DSN, dbConn, dialect, "", false)
 		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, req.ID), http.StatusBadGateway)
+			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 
@@ -55,7 +47,7 @@ func DumpHandler() http.HandlerFunc {
 		// validated endpoint as the driver
 		dumpDSN, err := engine.ResolveDumpDSN(workspaceID, ds.DBType, ds.DSN, ds.SSH)
 		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, req.ID), http.StatusBadGateway)
+			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 

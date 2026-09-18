@@ -1,12 +1,13 @@
 package syncer
 
 import (
-	"backend/db/db_types"
 	"backend/internal/auth"
 	"backend/internal/middlewares"
 	"backend/internal/syncer/types"
 	"encoding/json"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
 func Handler() http.HandlerFunc {
@@ -19,13 +20,14 @@ func Handler() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		roleIDs := middlewares.GetRoleIDs(r)
-		ownedWorkspaceIDs := middlewares.GetOwnedWorkspaceIDs(r)
-
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
+		// Flatten role ids across workspaces for authorizeCommit's per-commit checks.
+		var roleIDs []string
+		for _, ws := range middlewares.GetPrincipal(r).Workspaces {
+			for _, role := range ws.Roles {
+				roleIDs = append(roleIDs, role.ID)
+			}
 		}
+		ownedWorkspaceIDs := middlewares.GetOwnedWorkspaceIDs(r)
 
 		var req types.SyncRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -33,6 +35,9 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
+		// The audit principal resolver is installed once by the authenticated
+		// middleware (see internal/api), so Sync's emit sites resolve the actor
+		// from the request context — no per-handler wiring needed here.
 		resp, needsTokenRefresh, err := Sync(r.Context(), userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -40,7 +45,7 @@ func Handler() http.HandlerFunc {
 		}
 
 		if needsTokenRefresh {
-			uid, err := db_types.NewJSONNullUUIDFromString(userID)
+			uid, err := uuid.Parse(userID)
 			if err == nil {
 				if token, err := auth.CreateJWT(r.Context(), uid); err == nil {
 					w.Header().Set("X-New-Access-Token", token)

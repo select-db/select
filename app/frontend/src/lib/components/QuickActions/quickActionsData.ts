@@ -4,11 +4,12 @@ import {
 	addSchemaTab,
 	addChatTab,
 	addTerminalTab,
-	addSettingsTab
+	openSettingsSection
 } from '$lib/components/Layout/layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+import { settingsSections } from '$lib/components/views/Settings/sections';
 import type { ResourceMenuOption } from '$lib/components/ResourceMenu/types';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 function createQuickActionNode(type: string, name: string): graph.FileNode {
 	return {
@@ -23,6 +24,9 @@ function createQuickActionNode(type: string, name: string): graph.FileNode {
 	} as unknown as graph.FileNode;
 }
 
+const SETTINGS_SECTION_PREFIX = 'quick-action-settings-';
+
+// Primary actions shown in the tabs empty-state view.
 export const quickActions: ResourceMenuOption[] = [
 	{
 		id: 'quick-action-new-query',
@@ -61,6 +65,15 @@ export const quickActions: ResourceMenuOption[] = [
 	}
 ];
 
+// Per-section settings shortcuts. Surfaced only in search, not the empty state.
+export const settingsQuickActions: ResourceMenuOption[] = settingsSections.map((s) => ({
+	id: `${SETTINGS_SECTION_PREFIX}${s.id}`,
+	label: `Settings: ${s.label}`,
+	type: 'quick_action' as const,
+	uri: '',
+	node: createQuickActionNode('quick_action:settings', `Settings: ${s.label}`)
+}));
+
 export function executeQuickAction(option: ResourceMenuOption): void {
 	if (option.type !== 'quick_action') return;
 	const workspace = get(workspaceGraphStore);
@@ -74,6 +87,8 @@ export function executeQuickAction(option: ResourceMenuOption): void {
 	} else if (option.id === 'quick-action-open-terminal') {
 		addTerminalTab();
 	} else if (option.id === 'quick-action-open-settings') {
-		addSettingsTab();
+		openSettingsSection();
+	} else if (option.id.startsWith(SETTINGS_SECTION_PREFIX)) {
+		openSettingsSection(option.id.slice(SETTINGS_SECTION_PREFIX.length));
 	}
 }

@@ -36,7 +36,7 @@
 		<Button
 			content="Reset to remote (discard my local commits)"
 			size="sm"
-			emphasis="low"
+			emphasis="warning"
 			onclick={() => handle('reset')}
 		/>
 	</div>

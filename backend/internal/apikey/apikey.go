@@ -10,9 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"backend/internal/authz"
-	"backend/internal/middlewares"
-
 	core "github.com/selectDb/dialect/core"
 )
 
@@ -21,35 +18,14 @@ const (
 	rotateGraceWindow = 24 * time.Hour       // old key stays valid this long after rotate
 )
 
+// manageAPIKeys is the permission that — besides workspace ownership —
+// authorizes managing API keys.
+const manageAPIKeys = core.ActionWorkspaceApiKeysManage
+
 var (
 	errBadExpiry    = errors.New("expires_at must be a future RFC3339 timestamp")
 	errExpiryTooFar = errors.New("expires_at exceeds the maximum allowed lifetime")
 )
-
-// guard enforces method, principal type, and the manage permission. It returns
-// the validated workspace ID (from Membership) and the acting user ID.
-func guard(w http.ResponseWriter, r *http.Request) (workspaceID, userID string, ok bool) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return "", "", false
-	}
-	if middlewares.IsAPIKeyPrincipal(r) {
-		http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
-		return "", "", false
-	}
-	userID, ok = middlewares.MustGetUserID(w, r)
-	if !ok {
-		return "", "", false
-	}
-	workspaceID = middlewares.MemberWorkspaceID(r)
-	if !authz.IsWorkspaceOwner(r, workspaceID) {
-		if !authz.CompiledFromRequest(r).IsAllowed(core.ActionWorkspaceApiKeysManage) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return "", "", false
-		}
-	}
-	return workspaceID, userID, true
-}
 
 // resolveExpiry maps an optional RFC3339 string to a stored value. nil/empty =
 // never expires; a value must be in the future and within maxExpiry.

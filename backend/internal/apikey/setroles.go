@@ -7,13 +7,15 @@ import (
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
+	"backend/internal/authz"
 	"backend/internal/syncer/scope"
+
+	"github.com/google/uuid"
 )
 
 type setRolesRequest struct {
-	ID      string   `json:"id"`
 	RoleIDs []string `json:"role_ids"`
 }
 
@@ -22,22 +24,30 @@ type setRolesRequest struct {
 // allowed (the key then has no access) to match the user toggle UX.
 func SetRolesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			audit.EmitDenied(r.Context(), audit.APIKeySetRoles, a.WorkspaceID, "")
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			audit.EmitDenied(r.Context(), audit.APIKeySetRoles, a.WorkspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
 
 		var req setRolesRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		idUUID, err := db_types.NewJSONNullUUIDFromString(req.ID)
+		idUUID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -56,9 +66,9 @@ func SetRolesHandler() http.HandlerFunc {
 			return
 		}
 
-		roleUUIDs := make([]db_types.JSONNullUUID, 0, len(req.RoleIDs))
+		roleUUIDs := make([]uuid.UUID, 0, len(req.RoleIDs))
 		for _, rid := range req.RoleIDs {
-			ru, err := db_types.NewJSONNullUUIDFromString(rid)
+			ru, err := uuid.Parse(rid)
 			if err != nil {
 				http.Error(w, "invalid role id", http.StatusBadRequest)
 				return
@@ -100,6 +110,13 @@ func SetRolesHandler() http.HandlerFunc {
 			http.Error(w, "failed to set roles", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeySetRoles, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    idUUID.String(),
+			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"role_ids": req.RoleIDs},
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

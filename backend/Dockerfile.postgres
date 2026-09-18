@@ -1,0 +1,15 @@
+# Local dev Postgres with pg_partman available. Matches staging/prod (PG 17).
+#
+# The app manages audit-log partition retention with pg_partman when the
+# extension is present (falling back to an in-app sweeper otherwise). Baking it
+# into the dev image means the app's boot-time CREATE EXTENSION just works, with
+# no per-machine build. pg_partman ships in the PGDG apt repo that the official
+# postgres image already configures.
+#
+# pg_partman's background worker would need shared_preload_libraries, but the app
+# drives maintenance itself (pg_cron in prod), so plain availability is enough.
+FROM postgres:17
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-17-partman \
+    && rm -rf /var/lib/apt/lists/*

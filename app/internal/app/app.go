@@ -8,6 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/ngrok/sqlmw"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"modernc.org/sqlite"
 
 	commands "selectDb/internal/cmd/cli"
@@ -23,6 +24,7 @@ import (
 	db_client "selectDb/internal/db_client"
 	fs_provider "selectDb/internal/fs_provider"
 	git "selectDb/internal/git"
+	group "selectDb/internal/group"
 	history "selectDb/internal/history"
 	role "selectDb/internal/role"
 	search "selectDb/internal/search"
@@ -51,6 +53,7 @@ type App struct {
 	User       *user.User
 	Workspace  *workspace.Workspace
 	Role       *role.Role
+	Group      *group.Group
 	History    *history.History
 	Datasource *datasource.Datasource
 	APIKey     *apikey.APIKey
@@ -88,18 +91,18 @@ func NewApp() *App {
 	Queries := generated.New(db.NewLiveDB())
 	Graph := graph.New(Queries)
 
-	FSProvider := fs_provider.New()
-	if currentDomain != "" {
-		serverRoot, err := server.ServerRootPath(currentDomain)
-		if err != nil {
-			log.Fatal("Failed to get server root: ", err)
-		}
-		FSProvider.SetRoot(serverRoot)
+	FSProvider := fs_provider.New(graph.WorkspaceRootPath)
+
+	// Seed the per-user config defaults (.theme, .config keybindings/snippets)
+	// outside every workspace. Existing files are preserved.
+	if userDir, err := graph.UserConfigDir(); err != nil {
+		log.Printf("Failed to resolve user config dir: %v", err)
+	} else if err := graph.SeedUserDefaultFiles(userDir); err != nil {
+		log.Printf("Failed to seed user config defaults: %v", err)
 	}
 
 	Server := server.New(
-		func(root string) {
-			FSProvider.SetRoot(root)
+		func() {
 			Graph.InvalidateWorkspaceGraph()
 		},
 		db.RunMigrationsAt,
@@ -107,9 +110,10 @@ func NewApp() *App {
 	)
 
 	Role := role.New(Queries)
+	Group := group.New(Queries)
 	DbClient := db_client.New(Queries, Graph, FSProvider)
 	SqlLang := sqllang.New(Graph, Queries, DbClient.GetMeta, DbClient.InspectStatement)
-	Workspace := workspace.New(Queries, FSProvider)
+	Workspace := workspace.New(Queries, Graph)
 
 	System := system.New(Queries, Graph, DbClient, FSProvider)
 	Graph.AfterWorkspaceGraphBuild = func(ws *graph.WorkspaceNode) {
@@ -117,7 +121,7 @@ func NewApp() *App {
 	}
 
 	Git := git.New(Queries, FSProvider, Graph)
-	Syncer := syncer.New(Queries, Graph, Workspace, Git)
+	Syncer := syncer.New(Queries, Graph)
 	internalDb := db.New(Queries, Syncer)
 	GlobalInterceptor.Db = internalDb
 
@@ -127,12 +131,13 @@ func NewApp() *App {
 		Graph:      Graph,
 
 		System:     System,
-		GithubAuth: auth.New(Queries, Workspace, Syncer),
+		GithubAuth: auth.New(Queries, Syncer),
 		Git:        Git,
 		Search:     search.New(Graph),
 		User:       user.New(Queries),
 		Workspace:  Workspace,
 		Role:       Role,
+		Group:      Group,
 		History:    history.New(Queries),
 
 		Datasource: datasource.New(Queries),
@@ -141,55 +146,47 @@ func NewApp() *App {
 		DbClient:   DbClient,
 		SqlLang:    SqlLang,
 		FSProvider: FSProvider,
-		Terminal:   terminal.New(Graph),
+		Terminal:   terminal.New(),
 		Server:     Server,
 		Updater:    updater.New(),
 	}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
-func (a *App) Startup(ctx context.Context) {
+// ServiceStartup is called by Wails when the application starts. The context
+// stays valid until shutdown, and is saved so long-running work can be tied to
+// the application's lifetime.
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 
 	a.InternalDb.Syncer.SetContext(ctx)
 	a.Syncer.SetContext(ctx)
-	a.Syncer.SwitchOrLogout = &switchOrLogoutHandler{app: a}
+	a.Syncer.WorkspaceGone = &workspaceGoneHandler{app: a}
 	a.Syncer.EmitRolesUpdated = func() {
-		utils.DebouncedEventsEmit(a.ctx, "rolesUpdated", 100*time.Millisecond)
-	}
-	a.Syncer.EmitWorkspaceRepoChanged = func(res git.ReconcileResult) {
-		if a.ctx == nil {
-			return
-		}
-		utils.DebouncedEventsEmit(a.ctx, "workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
-		utils.DebouncedEventsEmit(a.ctx, "workspaceRepoChanged", 100*time.Millisecond, res)
+		utils.DebouncedEventsEmit("rolesUpdated", 100*time.Millisecond)
 	}
 	a.Workspace.PullFunc = a.Syncer.Pull
 	a.Workspace.ReloadHooks = &workspace.ReloadHooks{
 		BuildWorkspaceGraph: a.Graph.RebuildWorkspaceGraph,
 		EmitWorkspaceGraphUpdated: func() {
-			utils.DebouncedEventsEmit(a.ctx, "workspaceGraphUpdated", 100*time.Millisecond, a.Graph.WorkspaceGraph)
+			graph.EmitWorkspaceGraphUpdated(a.Graph)
 		},
-		RunSwitchOrLogout: a.Syncer.RunSwitchOrLogout,
-		ReconcileGitRemote: func(workspaceID string) {
-			ws, err := a.Git.Queries.GetWorkspaceByID(context.Background(), workspaceID)
-			if err != nil {
-				return
-			}
-			_, _ = a.Git.ReconcileWorkspaceRemote(workspaceID, ws.GitRemoteUrl.Ptr())
+		EmitWorkspaceClosed: func() {
+			utils.DebouncedEventsEmit("workspaceClosed", 100*time.Millisecond)
 		},
+		StopWatchingFolder: a.System.StopFileWatcher,
 	}
-	a.GithubAuth.SetContext(ctx)
 	a.Git.SetContext(ctx)
 	a.Search.SetContext(ctx)
 
 	a.DbClient.SetContext(ctx)
 
-	a.Terminal.SetContext(ctx)
-
 	a.System.SetContext(ctx)
 	go a.System.WatchNetworkQuality()
 
+	// Trim stale local query history (older than 7 days / beyond 100 per workspace).
+	go a.History.PruneOnStartup()
+
 	a.Updater.SetContext(ctx)
+
+	return nil
 }

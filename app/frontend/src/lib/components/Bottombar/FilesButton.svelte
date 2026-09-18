@@ -5,6 +5,7 @@
 
 <Button
 	leftIcon="files"
+	label="Files"
 	iconSize={17}
 	size="sm"
 	emphasis={$isLeftbarOpened && $leftPanelTab === 'files' ? 'high' : 'low'}

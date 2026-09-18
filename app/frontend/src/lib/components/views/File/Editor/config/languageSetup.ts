@@ -7,7 +7,7 @@ import { createSqlHoverProvider } from '../providers/sqlHoverProvider';
 import { createSqlSnippetProvider } from '../providers/sqlSnippetProvider';
 import { createVariableCompletionProvider } from '../providers/variableCompletionProvider';
 import { createSqlLintCodeActionsProvider } from '../providers/sqlLintCodeActionsProvider';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 // Track whether languages have been initialized to prevent duplicate registration
 let languagesInitialized = false;
@@ -88,7 +88,7 @@ export function initializeLanguages() {
 
 	// Register JSON schemas for .lint and .config so Monaco validates and
 	// autocompletes their fields automatically.
-	monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+	monaco.json.jsonDefaults.setDiagnosticsOptions({
 		validate: true,
 		schemas: [
 			{
@@ -166,17 +166,6 @@ export function initializeLanguages() {
 				schema: {
 					type: 'object',
 					properties: {
-						statement_timeout_ms: {
-							type: 'integer',
-							description: 'Timeout in milliseconds for all database queries including schema loading (default: 30000).',
-							minimum: 1
-						},
-						max_result_size_mb: {
-							type: 'integer',
-							description: 'Maximum result size in MB per query (default: 100, max: 500).',
-							minimum: 1,
-							maximum: 500
-						},
 						keybindings: {
 							type: 'object',
 							description: 'Keybindings grouped by category (workbench, editor, modal, menu).',

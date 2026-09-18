@@ -1,7 +1,9 @@
 import { writable, derived } from 'svelte/store';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
-const ITEM_HEIGHT = 30;
+// Read by ItemDisplay too: the windowing divides scroll offsets by it, so a row
+// of another height would put the window somewhere the rows are not.
+export const ROW_HEIGHT = 32;
 const OVERSCAN = 50;
 
 type Context = 'fs' | 'search' | 'git';
@@ -104,7 +106,7 @@ export function buildVisibilityIndex(
 			flatIds.push(db.id);
 
 			if (expandedIds.get(db.id)) {
-				walk(db.folders ?? [], db.files ?? [], [], visibleChildren(db.id, db.children ?? []));
+				walk(db.folders, db.files, [], visibleChildren(db.id, db.children));
 			}
 
 			recordRange(db.id, myIndex + 1);
@@ -115,7 +117,7 @@ export function buildVisibilityIndex(
 			flatIds.push(folder.id);
 
 			if (expandedIds.get(folder.id)) {
-				walk(folder.folders ?? [], folder.files ?? [], folder.db_instances ?? [], []);
+				walk(folder.folders, folder.files, folder.db_instances, []);
 			}
 
 			recordRange(folder.id, myIndex + 1);
@@ -139,8 +141,8 @@ export function buildVisibilityIndex(
 }
 
 export function updateScrollWindow(ctx: Context, scrollTop: number, viewportHeight: number): void {
-	const start = Math.max(0, ((scrollTop / ITEM_HEIGHT) | 0) - OVERSCAN);
-	const end = start + ((viewportHeight / ITEM_HEIGHT) | 0) + OVERSCAN * 2 + 1;
+	const start = Math.max(0, ((scrollTop / ROW_HEIGHT) | 0) - OVERSCAN);
+	const end = start + ((viewportHeight / ROW_HEIGHT) | 0) + OVERSCAN * 2 + 1;
 
 	contextStatesStore.update((states) => {
 		const current = states.get(ctx)!;

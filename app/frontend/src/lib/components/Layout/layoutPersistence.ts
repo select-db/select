@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import type { Layout } from './layoutStore';
 import { layoutStore, createInitialLayout } from './layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
@@ -69,11 +69,15 @@ export function initLayoutPersistence(): () => void {
 		const key = userId && workspaceId ? `${userId}:${workspaceId}` : null;
 
 		if (!key) {
+			// Save before forgetting whose layout this was, then start clean: the
+			// tabs of a closed workspace name files the app can no longer resolve.
+			flushSave();
 			lastKey = null;
 			lastUserId = undefined;
 			lastWorkspaceId = undefined;
 			layoutUnsub?.();
 			layoutUnsub = undefined;
+			layoutStore.set(createInitialLayout());
 			return;
 		}
 

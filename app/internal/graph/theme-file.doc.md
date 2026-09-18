@@ -1,12 +1,30 @@
 # Theme File
 
-The `.theme` file controls the visual appearance of SELECT. It lives at the root of your workspace and uses standard CSS custom properties.
+The `.theme` file controls the visual appearance of SELECT and uses standard CSS
+custom properties.
+
+## Personal and not shared
+
+Your theme is **personal to you**, not team policy, so `.theme` lives in
+SELECT's per-user config directory **outside** every workspace. It is **never
+committed to git**, and it follows you across all your workspaces (a team cannot
+dictate your appearance through the shared repo).
+
+Location:
+
+- **macOS**: `~/Library/Application Support/selectDb/<env>/user-config/.theme`
+- **Linux**: `$XDG_CONFIG_HOME/selectDb/<env>/user-config/.theme` (defaults to
+  `~/.config/...`)
+- **Windows**: `%APPDATA%\selectDb\<env>\user-config\.theme`
+
+You don't need to find it on disk: open it from the global resource menu like any
+other file.
 
 ## Format
 
 The file has three sections: **shared** variables (applied in both modes), **light** mode colors, and **dark** mode colors.
 
-```css
+```css .theme
 :root {
   --fs-sm: 0.75rem;
   --fw-normal: 400;

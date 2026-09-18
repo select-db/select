@@ -3,10 +3,10 @@ package datasource
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 
 	"github.com/google/uuid"
@@ -58,8 +58,8 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	}
 
 	row, err := db.Queries.GetDatasource(ctx, generated.GetDatasourceParams{
-		ID:          db_types.NewJSONNullUUID(parsedID),
-		WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
+		ID:          parsedID,
+		WorkspaceID: parsedWorkspaceID,
 	})
 	if err != nil {
 		return nil, err
@@ -75,14 +75,14 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	}
 
 	ds := &ResolvedDatasource{
-		DBType: row.DbType.String,
-		Name:   row.Name.String,
+		DBType: row.DbType,
+		Name:   row.Name,
 		DSN:    dsn,
 		Pool: engine.PoolConfig{
-			MaxOpenConns:    int(row.MaxOpenConns.Int64),
-			MaxIdleConns:    int(row.MaxIdleConns.Int64),
-			ConnMaxLifetime: time.Duration(row.ConnMaxLifetime.Int64) * time.Second,
-			ConnMaxIdleTime: time.Duration(row.ConnMaxIdleTime.Int64) * time.Second,
+			MaxOpenConns:    int(row.MaxOpenConns),
+			MaxIdleConns:    int(row.MaxIdleConns),
+			ConnMaxLifetime: time.Duration(row.ConnMaxLifetime) * time.Second,
+			ConnMaxIdleTime: time.Duration(row.ConnMaxIdleTime) * time.Second,
 		},
 	}
 
@@ -112,4 +112,17 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 
 	dsCache.Set(key, ds)
 	return ds, nil
+}
+
+// InvalidateWorkspaceCache drops everything a workspace has in memory: its
+// resolved datasources, its connection pools, its SSH tunnels, and the schema
+// and DDL read through them. Call when the workspace is deleted, because all of
+// it otherwise stands for the rest of its TTL.
+func InvalidateWorkspaceCache(workspaceID string) {
+	prefix := cacheKey(workspaceID, "")
+	dsCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
+
+	engine.CloseWorkspaceTunnels(workspaceID)
+	engine.CloseWorkspaceConns(workspaceID)
+	engine.InvalidateWorkspaceMetadata(workspaceID)
 }

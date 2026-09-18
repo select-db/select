@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Button from '$lib/system/Button/Button.svelte';
 	import ItemIcon from '$lib/components/views/shared/ItemIcon.svelte';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
 		node: graph.FileNode;

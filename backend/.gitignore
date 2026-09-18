@@ -1,4 +1,6 @@
 # Binaries and build output
+/apigen
+/server
 *.exe
 *.exe~
 *.dll
@@ -38,3 +40,4 @@ vendor/
 # Go coverage and profiling
 coverage.*
 *.prof
+

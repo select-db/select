@@ -1,4 +1,4 @@
-import { GetOSPathFromURI } from '$lib/wailsjs/go/fs_provider/FSProvider';
+import { GetOSPathFromURI } from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 import { tryCatch } from '$lib/utils/tryCatch';
 import type { ChatContext } from '../tools/context';
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import Button from '$lib/system/Button/Button.svelte';
 	import { getDbIds } from '$lib/utils/query/helpers';
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
@@ -29,26 +29,38 @@
 
 {#if explain}
 	<Button
+		emphasis="high"
 		disabled={isLoading}
 		leftIcon="chart"
-		iconSize={17}
+		iconSize={16}
 		label="Analyze (execute)"
+		classes="sql-action-btn"
 		{onclick}
 	/>
 {:else if plan}
 	<Button
+		emphasis="high"
 		disabled={isLoading}
 		leftIcon="map"
-		iconSize={18}
+		iconSize={17}
 		label="Plan (no execution)"
+		classes="sql-action-btn"
 		{onclick}
 	/>
 {:else}
 	<Button
+		emphasis="high"
 		leftIcon={isLoading ? 'pause' : 'play'}
-		iconSize={17}
+		iconSize={16}
+		label={isLoading ? 'Cancel' : 'Run'}
+		classes="sql-action-btn"
 		{onclick}
 		noLoader
-		label={isLoading ? 'Cancel' : 'Run'}
 	/>
 {/if}
+
+<style>
+	:global(button.sql-action-btn) {
+		margin-left: var(--space-xxs);
+	}
+</style>

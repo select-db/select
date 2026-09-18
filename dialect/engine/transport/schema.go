@@ -6,21 +6,18 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-type schemaRequest struct {
-	ID          string `json:"id"`
-	WorkspaceID string `json:"workspace_id"`
-}
-
 func (t *HTTPTransport) GetMetadata(
 	ctx context.Context,
 	workspaceID,
 	instanceID string,
+	noCache bool,
 ) (*core.Metadata, error) {
+	path := "datasources/" + instanceID + "/schema"
+	if noCache {
+		path += "?no_cache=true"
+	}
 	var meta core.Metadata
-	if err := t.Fetch(ctx, "POST", "datasource/schema", schemaRequest{
-		ID:          instanceID,
-		WorkspaceID: workspaceID,
-	}, &meta); err != nil {
+	if err := t.Fetch(ctx, "GET", path, nil, workspaceHeader(workspaceID), &meta); err != nil {
 		return nil, err
 	}
 	return &meta, nil

@@ -10,13 +10,16 @@
 		clearable?: boolean;
 		onkeydown?: (e: KeyboardEvent) => void;
 		oninput?: (e: Event) => void;
+		/** Fired when the field loses focus, after the internal bookkeeping. */
+		onblur?: (e: FocusEvent) => void;
 		onclear?: () => void;
 
-		type?: 'text' | 'number' | 'password';
+		type?: 'text' | 'number' | 'password' | 'date' | 'time' | 'datetime-local';
 		multiline?: boolean;
 		rows?: number;
 		min?: number;
 		max?: number;
+		step?: number | 'any';
 		style?: string;
 		size?: 'md' | 'lg';
 		emphasis?: 'high' | 'low';
@@ -33,6 +36,7 @@
 		clearable = false,
 		onkeydown,
 		oninput,
+		onblur,
 		onclear,
 
 		type = 'text',
@@ -40,6 +44,7 @@
 		rows = 3,
 		min,
 		max,
+		step,
 		style,
 		size = 'md',
 		emphasis = 'high',
@@ -62,8 +67,9 @@
 	export const focus = () => inputRef?.focus();
 
 	const handleFocus = () => setContext('inputFocus', true);
-	const handleBlur = () => {
+	const handleBlur = (e: FocusEvent) => {
 		setContext('inputFocus', false);
+		onblur?.(e);
 	};
 
 	function clear() {
@@ -80,6 +86,9 @@
 </script>
 
 {#snippet inputEl()}
+	<!-- The caller opts in, and the desktop app's modals and pickers rely on it
+	     to be usable from the keyboard alone. -->
+	<!-- svelte-ignore a11y_autofocus -->
 	<input
 		bind:this={inputRef}
 		bind:value
@@ -91,6 +100,7 @@
 		type={effectiveType}
 		{min}
 		{max}
+		{step}
 		class={size}
 		class:noRadius
 		class:noBorder
@@ -106,6 +116,7 @@
 {/snippet}
 
 {#snippet textareaEl()}
+	<!-- svelte-ignore a11y_autofocus -->
 	<textarea
 		bind:value
 		{placeholder}
@@ -122,8 +133,7 @@
 		autocomplete="off"
 		spellcheck="false"
 		onfocus={handleFocus}
-		onblur={handleBlur}
-	></textarea>
+		onblur={handleBlur}></textarea>
 {/snippet}
 
 {#if needsWrap}
@@ -180,9 +190,11 @@
 <style>
 	input,
 	textarea {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		border: var(--border);
 		transition: all 0.2s;
+		box-shadow: var(--shadow-subtle);
+		color: var(--gray-800);
 	}
 
 	input::placeholder,
@@ -192,7 +204,7 @@
 
 	input:not(.noRadius),
 	textarea:not(.noRadius) {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 	}
 
 	input.noBorder,
@@ -204,18 +216,18 @@
 	input:focus,
 	textarea:hover,
 	textarea:focus {
-		background-color: var(--gray-100);
+		background-color: var(--gray-300);
+		color: var(--gray-1000);
 	}
 	input:focus:not(.noBorder),
 	textarea:focus:not(.noBorder) {
-		border-color: var(--gray-700);
+		border-color: var(--gray-600);
 	}
 
 	input.low,
 	textarea.low {
 		background-color: transparent;
 		border: 0.5px solid transparent;
-		color: var(--gray-800);
 	}
 	input.low::placeholder,
 	textarea.low::placeholder {
@@ -227,7 +239,6 @@
 	textarea.low:focus {
 		background-color: var(--gray-100);
 		border-color: var(--border-color);
-		color: var(--gray-1000);
 	}
 
 	input.md,
@@ -301,7 +312,7 @@
 		padding: 0;
 		background: none;
 		border: none;
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		color: var(--gray-700);
 		opacity: 0;
 		transition:
@@ -331,7 +342,7 @@
 		padding: var(--space-xs);
 		background: none;
 		border: none;
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		color: var(--gray-700);
 	}
 
@@ -364,5 +375,10 @@
 	.has-error :global(input:focus),
 	.has-error :global(textarea:focus) {
 		background-color: var(--red-100, rgba(255, 0, 0, 0.05));
+	}
+
+	.has-error :global(input:focus::placeholder),
+	.has-error :global(textarea:focus::placeholder) {
+		color: var(--gray-1000);
 	}
 </style>

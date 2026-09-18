@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
 )
 
 // updateRoleCommit builds a role UPDATE commit with an explicit CreatedAt.
@@ -176,14 +177,14 @@ func TestApply_Permission_NullableFieldsOmitted(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Confirmed, 1)
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(permID)
+	idUUID, err := uuid.Parse(permID)
 	require.NoError(t, err)
-	wsUUID, err := db_types.NewJSONNullUUIDFromString(wsID)
+	wsUUID, err := uuid.Parse(wsID)
 	require.NoError(t, err)
 	perm, err := db.Queries.GetPermissionByID(context.Background(), generated.GetPermissionByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)
-	assert.Equal(t, "select", perm.Action.String)
-	assert.Equal(t, "allow", perm.Effect.String)
+	assert.Equal(t, "select", perm.Action)
+	assert.Equal(t, "allow", perm.Effect)
 	assert.False(t, perm.DbInstanceID.Valid, "db_instance_id must be NULL when omitted")
 	assert.False(t, perm.SchemaName.Valid, "schema_name must be NULL when omitted")
 	assert.False(t, perm.TableName.Valid, "table_name must be NULL when omitted")
@@ -222,9 +223,9 @@ func TestApply_Permission_NullableFieldsStored(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Confirmed, 1)
 
-	idUUID, err := db_types.NewJSONNullUUIDFromString(permID)
+	idUUID, err := uuid.Parse(permID)
 	require.NoError(t, err)
-	wsUUID, err := db_types.NewJSONNullUUIDFromString(wsID)
+	wsUUID, err := uuid.Parse(wsID)
 	require.NoError(t, err)
 	perm, err := db.Queries.GetPermissionByID(context.Background(), generated.GetPermissionByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)

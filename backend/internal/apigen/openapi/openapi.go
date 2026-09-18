@@ -1,0 +1,575 @@
+// Package openapi projects the apigen entity model into an OpenAPI 3.0 document.
+// Like the capabilities projection it is pure - no SQL, no sqlc, no runtime - so
+// the spec is derived entirely from the schema IR (@app.api ops, field kinds,
+// @app.values enums, and the convention columns).
+//
+// Endpoints are REST: a plural collection path (/roles) and an item path
+// (/roles/{id}), each op mapped to its proper HTTP method - list=GET,
+// create=POST, get=GET, update=PATCH (a partial merge), delete=DELETE. Auth is
+// the shared bearer token (a user JWT or an slct_ API key in the Authorization
+// header); per-op required workspace actions are surfaced in the operation
+// description and as an x-required-actions extension. List filtering uses an
+// OData $filter expression (and/or/not + grouping over the exposed fields).
+package openapi
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"backend/internal/apigen/codegen"
+	"backend/internal/apigen/schema"
+)
+
+// Version and base URL of the documented API. Both are assumptions a reviewer
+// can adjust in one place; they do not affect any generated Go.
+const (
+	apiVersion   = "v1"
+	apiServerURL = "https://api.select-db.com"
+)
+
+// --- OpenAPI 3.0 document (the minimal subset this projection emits) ---
+
+type Document struct {
+	OpenAPI    string               `json:"openapi"`
+	Info       Info                 `json:"info"`
+	Servers    []Server             `json:"servers,omitempty"`
+	Tags       []Tag                `json:"tags,omitempty"`
+	Security   []SecurityReq        `json:"security,omitempty"`
+	Paths      map[string]*PathItem `json:"paths"`
+	Components Components           `json:"components"`
+}
+
+type Info struct {
+	Title       string `json:"title"`
+	Version     string `json:"version"`
+	Description string `json:"description,omitempty"`
+}
+
+type Server struct {
+	URL         string `json:"url"`
+	Description string `json:"description,omitempty"`
+}
+
+type Tag struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// SecurityReq is one entry in a security list: scheme name -> required scopes
+// (empty for our bearer token).
+type SecurityReq map[string][]string
+
+// PathItem holds the operations defined on one path, keyed by HTTP method.
+type PathItem struct {
+	Get    *Operation `json:"get,omitempty"`
+	Post   *Operation `json:"post,omitempty"`
+	Patch  *Operation `json:"patch,omitempty"`
+	Delete *Operation `json:"delete,omitempty"`
+}
+
+type Operation struct {
+	Tags            []string            `json:"tags,omitempty"`
+	Summary         string              `json:"summary,omitempty"`
+	Description     string              `json:"description,omitempty"`
+	OperationID     string              `json:"operationId,omitempty"`
+	Parameters      []Parameter         `json:"parameters,omitempty"`
+	RequestBody     *RequestBody        `json:"requestBody,omitempty"`
+	Responses       map[string]Response `json:"responses"`
+	RequiredActions []string            `json:"x-required-actions,omitempty"`
+}
+
+type Parameter struct {
+	Name        string  `json:"name"`
+	In          string  `json:"in"` // "path" or "query"
+	Required    bool    `json:"required,omitempty"`
+	Description string  `json:"description,omitempty"`
+	Schema      *Schema `json:"schema,omitempty"`
+}
+
+type RequestBody struct {
+	Required bool                 `json:"required,omitempty"`
+	Content  map[string]MediaType `json:"content"`
+}
+
+type MediaType struct {
+	Schema *Schema `json:"schema,omitempty"`
+}
+
+type Response struct {
+	Description string               `json:"description"`
+	Content     map[string]MediaType `json:"content,omitempty"`
+}
+
+type Components struct {
+	Schemas         map[string]*Schema        `json:"schemas,omitempty"`
+	SecuritySchemes map[string]SecurityScheme `json:"securitySchemes,omitempty"`
+}
+
+type SecurityScheme struct {
+	Type         string `json:"type"`
+	Scheme       string `json:"scheme,omitempty"`
+	BearerFormat string `json:"bearerFormat,omitempty"`
+	Description  string `json:"description,omitempty"`
+}
+
+// Schema is the subset of JSON Schema OpenAPI 3.0 needs for this projection.
+type Schema struct {
+	Ref         string             `json:"$ref,omitempty"`
+	Type        string             `json:"type,omitempty"`
+	Format      string             `json:"format,omitempty"`
+	Nullable    bool               `json:"nullable,omitempty"`
+	ReadOnly    bool               `json:"readOnly,omitempty"`
+	Enum        []string           `json:"enum,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Items       *Schema            `json:"items,omitempty"`
+	Properties  map[string]*Schema `json:"properties,omitempty"`
+	Required    []string           `json:"required,omitempty"`
+}
+
+const bearerScheme = "bearerAuth"
+
+// EmitOpenAPI renders the OpenAPI document for every API-exposed entity (those
+// with at least one @app.api op). Returns indented JSON.
+func EmitOpenAPI(entities []schema.Entity) ([]byte, error) {
+	doc := Document{
+		OpenAPI: "3.0.3",
+		Info: Info{
+			Title:       "Select API",
+			Version:     apiVersion,
+			Description: "Workspace-scoped REST API generated from the Select schema. Authenticate with a user access token or an `slct_` API key in the `Authorization: Bearer <token>` header.",
+		},
+		Servers:  []Server{{URL: apiServerURL}},
+		Security: []SecurityReq{{bearerScheme: {}}},
+		Paths:    map[string]*PathItem{},
+		Components: Components{
+			Schemas: map[string]*Schema{"Error": errorSchema(), "ValidationError": validationErrorSchema()},
+			SecuritySchemes: map[string]SecurityScheme{
+				bearerScheme: {
+					Type:         "http",
+					Scheme:       "bearer",
+					BearerFormat: "JWT or slct_ API key",
+					Description:  "A workspace user access token or an `slct_`-prefixed API key.",
+				},
+			},
+		},
+	}
+
+	for _, e := range entities {
+		if len(e.API) == 0 {
+			continue // not exposed over HTTP
+		}
+		model := codegen.Pascal(e.Name)
+		coll := "/" + codegen.Plural(e.Name)
+		item := coll + "/{id}"
+		doc.Tags = append(doc.Tags, Tag{Name: e.Name, Description: fmt.Sprintf("Operations on %s.", codegen.Plural(e.Name))})
+
+		// Component schemas: the response object plus create/update request bodies.
+		doc.Components.Schemas[model] = responseSchema(e)
+		if schema.HasOp(e, "create") {
+			doc.Components.Schemas[model+"CreateRequest"] = writeSchema(e, true)
+		}
+		if schema.HasOp(e, "update") {
+			doc.Components.Schemas[model+"UpdateRequest"] = writeSchema(e, false)
+		}
+
+		for _, op := range e.API {
+			path, method := route(coll, item, op.Op)
+			pi := doc.Paths[path]
+			if pi == nil {
+				pi = &PathItem{}
+				doc.Paths[path] = pi
+			}
+			o := operationFor(e, model, op)
+			switch method {
+			case "get":
+				pi.Get = o
+			case "post":
+				pi.Post = o
+			case "patch":
+				pi.Patch = o
+			case "delete":
+				pi.Delete = o
+			}
+		}
+	}
+	return json.MarshalIndent(doc, "", "  ")
+}
+
+// route maps an op to its (path, HTTP method): collection ops (list, create) on
+// the plural path, item ops (get, update, delete) on the /{id} path. The op
+// method/collection semantics are single-sourced in schema (shared with the
+// handler emitter); OpenAPI wants the method lowercased.
+func route(coll, item, op string) (path, method string) {
+	method = strings.ToLower(schema.RESTMethod(op))
+	if schema.OnCollection(op) {
+		return coll, method
+	}
+	return item, method
+}
+
+// operationFor builds the operation for one op on one entity: its parameters
+// (path id / list query), request body (create/update), and responses.
+func operationFor(e schema.Entity, model string, op schema.APIOp) *Operation {
+	o := &Operation{
+		Tags:            []string{e.Name},
+		Summary:         summary(op.Op, e.Name),
+		OperationID:     op.Op + model,
+		RequiredActions: op.Requires,
+		Responses:       responsesFor(model, op.Op),
+	}
+	var desc []string
+	if len(op.Requires) > 0 {
+		desc = append(desc, "Requires workspace action(s): "+strings.Join(op.Requires, ", ")+".")
+	}
+	if op.Op == "list" {
+		desc = append(desc, filterFieldsDoc(e))
+	}
+	if len(desc) > 0 {
+		o.Description = strings.Join(desc, "\n\n")
+	}
+	switch op.Op {
+	case "get", "update", "delete":
+		o.Parameters = []Parameter{pathIDParam()}
+	case "list":
+		o.Parameters = listParams(e)
+	}
+	switch op.Op {
+	case "create":
+		o.RequestBody = jsonBodyRef(model + "CreateRequest")
+	case "update":
+		o.RequestBody = jsonBodyRef(model + "UpdateRequest")
+	}
+	return o
+}
+
+// responsesFor documents exactly the responses schema.ResponseCodes lists for the
+// op — the single source shared with the handler-alignment test, so the doc and
+// the API can't drift. "resource" in each description is swapped for the model.
+func responsesFor(model, op string) map[string]Response {
+	res := map[string]Response{}
+	for _, r := range schema.ResponseCodes(op) {
+		res[strconv.Itoa(r.Status)] = responseFor(model, r)
+	}
+	return res
+}
+
+// responseFor renders one APIResponse into an OpenAPI Response, attaching the
+// body schema its kind calls for.
+func responseFor(model string, r schema.APIResponse) Response {
+	desc := strings.ReplaceAll(r.Desc, "resource", strings.ToLower(model))
+	entityRef := &Schema{Ref: "#/components/schemas/" + model}
+	switch r.Body {
+	case schema.RespNone:
+		return Response{Description: desc}
+	case schema.RespResource:
+		return jsonResponse(desc, entityRef)
+	case schema.RespPage:
+		return jsonResponse(desc, listEnvelope(entityRef))
+	case schema.RespValidation:
+		return jsonResponse(desc, &Schema{Ref: "#/components/schemas/ValidationError"})
+	default: // RespError
+		return jsonResponse(desc, &Schema{Ref: "#/components/schemas/Error"})
+	}
+}
+
+// listEnvelope wraps a page of results in {data, next_cursor} — the cursor-
+// pagination shape the handlers return. next_cursor is absent on the last page;
+// pass it back as the `cursor` query param to fetch the next page.
+func listEnvelope(items *Schema) *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"data":        {Type: "array", Items: items},
+			"next_cursor": {Type: "string", Description: "Opaque cursor for the next page; omitted on the last page."},
+		},
+		Required: []string{"data"},
+	}
+}
+
+// responseSchema is the object returned for an entity: every exposed field, with
+// the system-managed ones (id, cursor) marked read-only.
+func responseSchema(e schema.Entity) *Schema {
+	s := &Schema{Type: "object", Properties: map[string]*Schema{}}
+	for _, f := range e.Fields {
+		if !f.Exposed {
+			continue
+		}
+		fs := fieldSchema(f)
+		fs.Description = f.Description
+		if f.IsPK || f.Column == schema.CursorColumn {
+			fs.ReadOnly = true
+		}
+		s.Properties[f.Name] = fs
+	}
+	return s
+}
+
+// writeSchema is the create/update request body. create takes an optional
+// client-supplied id (a uuid; the server generates one when omitted) plus every
+// NOT NULL writable column without a default; update patches by id-in-path, so
+// its body carries only the (optional) writable columns.
+func writeSchema(e schema.Entity, create bool) *Schema {
+	s := &Schema{Type: "object", Properties: map[string]*Schema{}}
+	if create {
+		s.Properties["id"] = &Schema{Type: "string", Format: "uuid", Description: "Optional client-supplied id; the server generates one when omitted."}
+	}
+	for _, f := range e.Fields {
+		if !schema.IsWritable(f) {
+			continue
+		}
+		s.Properties[f.Name] = fieldSchema(f)
+		if create && schema.RequiredOnCreate(f) {
+			s.Required = append(s.Required, f.Name)
+		}
+	}
+	return s
+}
+
+// scalarSchema is a field's bare JSON type/format/enum, without nullability -
+// the value shape used for filter operands.
+func scalarSchema(f schema.Field) *Schema {
+	s := &Schema{}
+	switch f.Kind {
+	case schema.KindUUID:
+		s.Type, s.Format = "string", "uuid"
+	case schema.KindTime:
+		s.Type, s.Format = "string", "date-time"
+	case schema.KindInt:
+		s.Type = "integer"
+	case schema.KindBool:
+		s.Type = "boolean"
+	case schema.KindJSON:
+		s.Type = "object"
+	case schema.KindInet:
+		s.Type = "string"
+	default: // text
+		s.Type = "string"
+	}
+	if len(f.Values) > 0 {
+		s.Enum = f.Values
+	}
+	return s
+}
+
+// fieldSchema is the scalar schema plus nullability, used for body/response
+// properties.
+func fieldSchema(f schema.Field) *Schema {
+	s := scalarSchema(f)
+	s.Nullable = f.Nullable
+	return s
+}
+
+func pathIDParam() Parameter {
+	return Parameter{
+		Name:        "id",
+		In:          "path",
+		Required:    true,
+		Description: "Resource id (UUID).",
+		Schema:      &Schema{Type: "string", Format: "uuid"},
+	}
+}
+
+// listParams is the query parameters for a list op: a single OData $filter
+// expression (AND/OR/NOT + grouping over the filterable fields), plus sort and
+// cursor pagination.
+func listParams(e schema.Entity) []Parameter {
+	return []Parameter{
+		{Name: "$filter", In: "query", Description: filterDoc(e), Schema: &Schema{Type: "string"}},
+		{Name: "sort", In: "query", Description: sortDoc(e), Schema: &Schema{Type: "string"}},
+		{Name: "limit", In: "query", Description: "Maximum rows to return (default 50, max 200).", Schema: &Schema{Type: "integer"}},
+		{Name: "cursor", In: "query", Description: "Opaque pagination cursor; pass a previous page's next_cursor.", Schema: &Schema{Type: "string"}},
+	}
+}
+
+// sortDoc documents the sort param and the resource's default (which applies
+// when sort is omitted), keeping the spec in step with the @app.sort tag.
+func sortDoc(e schema.Entity) string {
+	s := "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`)."
+	if e.DefaultSort != "" {
+		s += " Defaults to `" + e.DefaultSort + "`."
+	}
+	return s
+}
+
+// filterDoc documents the OData $filter grammar for one entity: the logical
+// operators, the comparison/string/null operators, the filterable fields, and
+// worked examples built from the entity's own columns.
+func filterDoc(e schema.Entity) string {
+	var b strings.Builder
+	b.WriteString("OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. ")
+	b.WriteString("Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. ")
+	b.WriteString("See the endpoint description for the filterable fields and their types.")
+	if ex := filterExamples(e); len(ex) > 0 {
+		b.WriteString(" Examples: " + strings.Join(ex, "; "))
+	}
+	return b.String()
+}
+
+// filterFieldsDoc is the markdown table of an entity's filterable fields - name,
+// type (with enum values), and description - rendered in the list endpoint
+// description so a caller knows exactly what is queryable. The OData operators
+// each field accepts are folded into the description cell (as an italic suffix)
+// rather than a column of their own, so the table stays readable when rendered
+// narrow.
+func filterFieldsDoc(e schema.Entity) string {
+	var b strings.Builder
+	b.WriteString("**Filterable fields**\n\n")
+	b.WriteString("| Field | Type | Description |\n|---|---|---|\n")
+	for _, f := range e.Fields {
+		if !f.Exposed {
+			continue
+		}
+		desc := mdCell(f.Description)
+		if ops := strings.Join(schema.ODataOperators(f), ", "); ops != "" {
+			note := "_Operators: " + ops + "._"
+			if desc != "" {
+				desc += " " + note
+			} else {
+				desc = note
+			}
+		}
+		b.WriteString("| `" + f.Name + "` | " + typeLabel(f) + " | " + desc + " |\n")
+	}
+	return b.String()
+}
+
+// mdCell makes a string safe inside a one-line markdown table cell.
+func mdCell(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.ReplaceAll(s, "|", "\\|")
+}
+
+// typeLabel is a human type name for a field, with any @app.values enum inline.
+func typeLabel(f schema.Field) string {
+	var t string
+	switch f.Kind {
+	case schema.KindUUID:
+		t = "uuid"
+	case schema.KindTime:
+		t = "date-time"
+	case schema.KindInt:
+		t = "integer"
+	case schema.KindBool:
+		t = "boolean"
+	case schema.KindJSON:
+		t = "json"
+	case schema.KindInet:
+		t = "ip"
+	default:
+		t = "string"
+	}
+	if len(f.Values) > 0 {
+		t += " (" + strings.Join(f.Values, ", ") + ")"
+	}
+	return t
+}
+
+// filterExamples builds one AND and one OR/NOT example from the entity's first
+// couple of business (non-PK) filterable fields.
+func filterExamples(e schema.Entity) []string {
+	var fs []schema.Field
+	for _, f := range e.Fields {
+		if f.Exposed && !f.IsPK {
+			fs = append(fs, f)
+			if len(fs) == 2 {
+				break
+			}
+		}
+	}
+	switch len(fs) {
+	case 0:
+		return nil
+	case 1:
+		lit := exampleLit(fs[0])
+		return []string{
+			fs[0].Name + " eq " + lit,
+			"not (" + fs[0].Name + " eq " + lit + ")",
+		}
+	default:
+		a, b := fs[0].Name+" eq "+exampleLit(fs[0]), fs[1].Name+" eq "+exampleLit(fs[1])
+		return []string{
+			a + " and " + b,
+			"(" + a + " or " + b + ") and not (" + a + ")",
+		}
+	}
+}
+
+// exampleLit is a literal of the right OData shape for a field's kind: unquoted
+// numbers/booleans/timestamps, quoted strings otherwise.
+func exampleLit(f schema.Field) string {
+	switch f.Kind {
+	case schema.KindInt:
+		return "100"
+	case schema.KindBool:
+		return "true"
+	case schema.KindTime:
+		return "2024-01-01T00:00:00Z"
+	default: // text, uuid, inet, json
+		return "'value'"
+	}
+}
+
+func jsonBodyRef(name string) *RequestBody {
+	return &RequestBody{Required: true, Content: map[string]MediaType{
+		"application/json": {Schema: &Schema{Ref: "#/components/schemas/" + name}},
+	}}
+}
+
+func errorSchema() *Schema {
+	return &Schema{
+		Type:       "object",
+		Properties: map[string]*Schema{"error": {Type: "string", Description: "Human-readable error message."}},
+		Required:   []string{"error"},
+	}
+}
+
+// validationErrorSchema is the 422 body: an {error} summary always, plus a
+// field-level issue list when the failure is per-field (body validation or a
+// cross-workspace FK). fields is optional — a generic write rejection carries
+// only error — so this schema covers both, matching rest.WriteValidationError /
+// WriteWriteError.
+func validationErrorSchema() *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"error": {Type: "string", Description: "Human-readable summary."},
+			"fields": {
+				Type:        "array",
+				Description: "The offending fields and why each was rejected (present for per-field failures).",
+				Items: &Schema{
+					Type: "object",
+					Properties: map[string]*Schema{
+						"field":   {Type: "string"},
+						"message": {Type: "string"},
+					},
+					Required: []string{"field", "message"},
+				},
+			},
+		},
+		Required: []string{"error"},
+	}
+}
+
+func jsonResponse(desc string, s *Schema) Response {
+	return Response{Description: desc, Content: map[string]MediaType{"application/json": {Schema: s}}}
+}
+
+// summary is a human title for an op on a resource, e.g. list+role -> "List roles".
+func summary(op, name string) string {
+	switch op {
+	case "list":
+		return "List " + codegen.Plural(name)
+	case "get":
+		return "Get " + name
+	case "create":
+		return "Create " + name
+	case "update":
+		return "Update " + name
+	case "delete":
+		return "Delete " + name
+	default:
+		return codegen.Pascal(op) + " " + name
+	}
+}

@@ -2,7 +2,7 @@
 	import type { Tab } from '$lib/components/Layout/layoutStore';
 	import { updateTab } from '$lib/components/Layout/layoutStore';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import { loadSchema } from '$lib/utils/query/loadSchema';
+	import { loadSchema, loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 	import { getTableDDL, getSchemaTableOptionGroups } from './getTableDDL';
 	import SqlViewer from '$lib/system/SqlViewer/SqlViewer.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
@@ -10,7 +10,7 @@
 	import type { SelectOption } from '$lib/system/Select/Select.types';
 	import DatabasePicker from '$lib/components/views/File/Header/DatabasePicker.svelte';
 	import { tryCatch } from '$lib/utils/tryCatch';
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 
 	type Props = {
@@ -26,7 +26,7 @@
 	const selectedSchemaTable = $derived(tab.schema?.selectedSchemaTable ?? '');
 
 	const dbInstance = $derived(
-		$workspaceGraphStore?.db_instances?.find((dbi) => dbi.id === databaseId)
+		($workspaceGraphStore?.db_instances ?? []).find((dbi) => dbi.id === databaseId)
 	);
 
 	const schemaFileUri = $derived(
@@ -74,17 +74,14 @@
 		}
 
 		if (!dbInstance) return;
-		const hasSchema = dbInstance.children && dbInstance.children.length > 0;
-		if (!hasSchema) {
-			void loadSchema({ database: dbInstance }).then(() => readSchemaFile());
-		} else {
-			readSchemaFile();
-		}
+		// loadSchemaIfEmpty returns at once when the schema is already there, so
+		// the file is read either way and only this knows when.
+		void loadSchemaIfEmpty(dbInstance).then(() => readSchemaFile());
 	});
 
 	const onDatabaseChange = (value: string | string[]) => {
 		const newDatabaseId = Array.isArray(value) ? (value[0] ?? '') : value;
-		const newDbInstance = $workspaceGraphStore?.db_instances?.find(
+		const newDbInstance = ($workspaceGraphStore?.db_instances ?? []).find(
 			(dbi) => dbi.id === newDatabaseId
 		);
 		updateTab({
@@ -111,7 +108,7 @@
 
 	const onRefresh = async () => {
 		if (!dbInstance) return;
-		await loadSchema({ database: dbInstance, noCache: true });
+		await loadSchema({ database: dbInstance });
 		await readSchemaFile();
 	};
 </script>
@@ -187,16 +184,13 @@
 		flex-direction: column;
 
 		height: 100%;
-		background-color: var(--gray-100);
 	}
 
 	.header {
 		display: flex;
 		align-items: start;
 
-		min-height: 35px;
-		background-color: var(--gray-0);
-		padding: var(--space-xs-sm) var(--space-sm) 0 var(--space-sm);
+		padding: var(--space-xs-sm) var(--space-sm) var(--space-sm) var(--space-sm);
 		border-bottom: var(--border);
 	}
 

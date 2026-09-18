@@ -110,6 +110,35 @@ func TestMapOrdinalToField(t *testing.T) {
 			wantTableName: "file",
 			wantOperation: "update",
 			wantArgs:      []string{"name", "id"},
+		}, {
+			// "group" is a reserved word so its table name is quoted; the tracked
+			// table must resolve to plain "group" (not `"group"`) or it won't sync.
+			name:  "INSERT into quoted reserved-word table",
+			query: `INSERT INTO "group" (id, workspace_id, name) VALUES (?1, ?2, ?3) RETURNING id, workspace_id, name`,
+			args: []driver.NamedValue{
+				{Ordinal: 1}, {Ordinal: 2}, {Ordinal: 3},
+			},
+			wantTableName: "group",
+			wantOperation: "insert",
+			wantArgs:      []string{"id", "workspace_id", "name"},
+		}, {
+			name:  "UPDATE quoted reserved-word table",
+			query: `UPDATE "group" SET name = ?2 WHERE id = ?1`,
+			args: []driver.NamedValue{
+				{Ordinal: 1}, {Ordinal: 2},
+			},
+			wantTableName: "group",
+			wantOperation: "update",
+			wantArgs:      []string{"id", "name"},
+		}, {
+			name:  "DELETE from quoted reserved-word table",
+			query: `DELETE FROM "group" WHERE id = ?1`,
+			args: []driver.NamedValue{
+				{Ordinal: 1},
+			},
+			wantTableName: "group",
+			wantOperation: "delete",
+			wantArgs:      []string{"id"},
 		},
 	}
 

@@ -8,7 +8,7 @@ import (
 	"selectDb/internal/utils"
 
 	"github.com/selectDb/dialect/engine"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 type QueryParams struct {
@@ -101,7 +101,7 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		out.Errors = []string{err.Error()}
 		// Emit an immediate error event so the frontend can surface it
 		// through the same event channel as live failures.
-		runtime.EventsEmit(dbc.ctx, "query:error", queryErrorEvent{
+		desktop.Emit("query:error", queryErrorEvent{
 			ExecutionID:  executionID,
 			DbInstanceID: params.DbInstanceID,
 			FileID:       params.FileID,
@@ -127,6 +127,7 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 	engineClient.Stream(
 		ctx,
 		queryKey(params.DbInstanceID, params.FileID),
+		executionID,
 		p.conn,
 		p.instance,
 		p.dbInstance.WorkspaceID,
@@ -137,14 +138,6 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		},
 		listener,
 	)
-
-	runtime.EventsEmit(
-		dbc.ctx,
-		"databaseAvailability", map[string]interface{}{
-			"databases": []map[string]interface{}{
-				{"id": params.DbInstanceID},
-			},
-		})
 
 	return out
 }
@@ -171,6 +164,16 @@ func (dbc *DbClient) GetResultPage(params GetResultPageParams) graph.QueryResult
 	)
 	if !ok {
 		queryResult.Errors = []string{"Result not found in cache or expired. Please re-run the query."}
+		queryResult.Status = pageStatusString(PageStatusReady)
+		return queryResult
+	}
+
+	// The cache is keyed by (db, file), so a second run of the same file takes
+	// over the slot. A caller holding the earlier execution's id would other-
+	// wise be handed the newer rows while still showing the earlier columns,
+	// which renders every value under the wrong heading. Say so instead.
+	if params.ResultID != "" && page.ID != "" && page.ID != params.ResultID {
+		queryResult.Errors = []string{"This result was replaced by a newer run of the same file. Please re-run the query."}
 		queryResult.Status = pageStatusString(PageStatusReady)
 		return queryResult
 	}

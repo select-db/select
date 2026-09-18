@@ -5,6 +5,20 @@ import (
 	"time"
 )
 
+// FieldError is a client-caused write rejection tied to a specific request field
+// — most commonly a foreign key that doesn't resolve to a row in the caller's
+// workspace. The generated syncer Apply returns it so the REST layer can surface
+// a precise, safe 422 ({field, message}) instead of an opaque one; the sync path
+// treats it as any other apply error. The message is deliberately
+// workspace-relative ("… in this workspace") and never reveals whether the id
+// exists in a different workspace.
+type FieldError struct {
+	Field   string
+	Message string
+}
+
+func (e *FieldError) Error() string { return e.Field + ": " + e.Message }
+
 // ToRestoredPayload converts a typed row to the interface{} form used in RestoredItem.ServerPayload
 // (marshal then unmarshal so the API returns a JSON object, not a custom type).
 func ToRestoredPayload(row interface{}) (interface{}, error) {
@@ -61,6 +75,9 @@ type SyncChanges struct {
 	Role            []RoleRow            `json:"role"`
 	UserToRole      []UserToRoleRow      `json:"user_to_role"`
 	Permission      []PermissionRow      `json:"permission"`
+	Group           []GroupRow           `json:"group"`
+	UserToGroup     []UserToGroupRow     `json:"user_to_group"`
+	GroupToRole     []GroupToRoleRow     `json:"group_to_role"`
 }
 
 // UserRow is a minimal user for sync.
@@ -71,55 +88,16 @@ type UserRow struct {
 	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
-// WorkspaceRow is a workspace row for sync.
+// WorkspaceRow is a workspace row for sync. Logo is pull-only: only the logo
+// endpoint writes it, never an applied commit. It carries no omitempty on
+// purpose — a workspace without a logo has to reach clients as an explicit null,
+// or they read the absent key as "keep whatever you have".
 type WorkspaceRow struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
 	GitRemoteURL *string    `json:"git_remote_url"`
+	Logo         *string    `json:"logo"`
 	OwnerID      *string    `json:"owner_id,omitempty"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
-}
-
-// WorkspaceToUserRow is a workspace_to_user row for sync.
-type WorkspaceToUserRow struct {
-	ID          string     `json:"id"`
-	WorkspaceID string     `json:"workspace_id"`
-	UserID      string     `json:"user_id"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
-}
-
-// RoleRow is a role row for sync.
-type RoleRow struct {
-	ID          string     `json:"id"`
-	WorkspaceID string     `json:"workspace_id"`
-	Name        string     `json:"name"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
-}
-
-// UserToRoleRow is a user_to_role row for sync.
-type UserToRoleRow struct {
-	ID          string     `json:"id"`
-	UserID      string     `json:"user_id"`
-	RoleID      string     `json:"role_id"`
-	WorkspaceID string     `json:"workspace_id"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
-}
-
-// PermissionRow is a permission row for sync.
-type PermissionRow struct {
-	ID           string     `json:"id"`
-	RoleID       string     `json:"role_id"`
-	WorkspaceID  string     `json:"workspace_id"`
-	DbInstanceID *string    `json:"db_instance_id,omitempty"`
-	SchemaName   *string    `json:"schema_name,omitempty"`
-	TableName    *string    `json:"table_name,omitempty"`
-	ColumnName   *string    `json:"column_name,omitempty"`
-	Action       string     `json:"action"`
-	Effect       string     `json:"effect"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
 }

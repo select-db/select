@@ -13,10 +13,10 @@ func TestGetUriVariables(t *testing.T) {
 		Name:     "root",
 		FolderID: "",
 		Variables: map[string]string{
-			"ROOT_VAR":  "root_value",
-			"DB_HOST":   "localhost",
-			"SHARED":    "from_root",
-			"API_KEY":   "root_api_key",
+			"ROOT_VAR": "root_value",
+			"DB_HOST":  "localhost",
+			"SHARED":   "from_root",
+			"API_KEY":  "root_api_key",
 		},
 	}
 
@@ -29,7 +29,7 @@ func TestGetUriVariables(t *testing.T) {
 		Variables: map[string]string{
 			"CHILD_VAR": "child_value",
 			"DB_HOST":   "production.example.com", // Override parent
-			"SHARED":    "from_child",              // Override parent
+			"SHARED":    "from_child",             // Override parent
 		},
 	}
 

@@ -1,20 +1,29 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { get } from 'svelte/store';
 import {
 	setItemSelection,
 	toggleItemSelection,
 	toggleIsItemExpanded,
 	addToItemSelection,
+	expandItem,
 	setFocusedFsItem,
 	requestFsPanelFocus
 } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-import { loadSchema } from '$lib/utils/query/loadSchema';
+import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
 import { navigateToGitFile } from '$lib/components/views/Git/navigateToGitFile';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 import { expandableItemTypes } from '$lib/components/views/shared/expandableItemTypes';
 import { navigateToMatch } from '$lib/components/views/Search/navigateToMatch';
+
+/**
+ * A click that means "select", not "open": shift for a range, and the platform's
+ * own multi-select key -- cmd on macOS, ctrl everywhere else, which is why both
+ * are accepted rather than metaKey alone.
+ */
+const isSelectionClick = (event?: MouseEvent) =>
+	!!(event?.shiftKey || event?.metaKey || event?.ctrlKey);
 
 const handleSpecialClick = (
 	itemId: string,
@@ -53,7 +62,7 @@ export const createFolderClickHandler = (
 			return;
 		}
 
-		if (event?.shiftKey || event?.metaKey) {
+		if (isSelectionClick(event)) {
 			handleSpecialClick(folder.id, lastClickedId, event);
 			return;
 		}
@@ -87,7 +96,7 @@ export const createFileClickHandler = (
 			return;
 		}
 
-		if (event?.shiftKey || event?.metaKey) {
+		if (isSelectionClick(event)) {
 			handleSpecialClick(file.id, lastClickedId, event);
 			return;
 		}
@@ -96,7 +105,7 @@ export const createFileClickHandler = (
 		if (file.name === 'schema.sql' && file.folder_id) {
 			const workspace = get(workspaceGraphStore);
 			// Find database whose URI matches the file's folder_id
-			const database = workspace?.db_instances.find((db) => db.uri === file.folder_id);
+			const database = (workspace?.db_instances ?? []).find((db) => db.uri === file.folder_id);
 			if (database) {
 				setItemSelection([file.id]);
 				await navigateToSchema(database.id);
@@ -116,15 +125,32 @@ export const createFileClickHandler = (
 	};
 };
 
+/**
+ * A click on a database row: open it, and read its schema when it has none.
+ *
+ * Open rather than toggle while it is empty, because the schema arrives after
+ * the click that asked for it. Toggling closed the row on the next click, just
+ * as its tables landed, so seeing anything took two clicks and a guess at the
+ * timing. A database that already has its schema toggles like any other row.
+ */
+export const clickDatabase = (database: graph.DBInstanceNode) => {
+	if (database.children?.length) {
+		toggleIsItemExpanded(database.id);
+		return;
+	}
+
+	expandItem(database.id);
+	void loadSchemaIfEmpty(database);
+};
+
 const clickItem = async (item: graph.DBInstanceNode | graph.DBInstanceItemNode) => {
-	toggleIsItemExpanded(item.id);
+	if (item.type === 'db_instance') {
+		clickDatabase(item as graph.DBInstanceNode);
+	} else {
+		toggleIsItemExpanded(item.id);
+	}
 
 	if (!expandableItemTypes.has(item.type)) return;
-
-	const shouldLoadSchema =
-		item.type === 'db_instance' && 'children' in item && item.children.length === 0;
-
-	if (shouldLoadSchema) loadSchema({ database: item as graph.DBInstanceNode, silent: true });
 
 	setItemSelection([item.id]);
 };
@@ -144,7 +170,7 @@ export const createDatabaseClickHandler = (
 			return;
 		}
 
-		if (event?.shiftKey || event?.metaKey) {
+		if (isSelectionClick(event)) {
 			handleSpecialClick(item.id, lastClickedId, event);
 			return;
 		}
@@ -281,3 +307,30 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
 
 	return selectedIds;
 };
+
+/**
+ * Separates single from double clicks on the same item.
+ *
+ * A double-click arrives as two plain clicks first, and on an item that toggles
+ * open the second one shuts it again -- a table visibly expands and collapses
+ * before its data opens. `detail` counts the clicks the browser has grouped
+ * into the current sequence, so the repeat can simply be dropped: the click
+ * that opens the item still acts immediately, and only the ones that would
+ * undo it are ignored.
+ */
+export const createClickGestureHandlers = <T>({
+	shouldDefer,
+	onClick,
+	onDoubleClick
+}: {
+	shouldDefer: (item: T) => boolean;
+	onClick: (item: T, event?: MouseEvent) => void;
+	onDoubleClick: (item: T) => void;
+}) => ({
+	handleClick: (item: T, event?: MouseEvent) => {
+		// No event means a synthetic call, which is a lone click by definition.
+		if (shouldDefer(item) && (event?.detail ?? 1) > 1) return;
+		onClick(item, event);
+	},
+	handleDoubleClick: (item: T) => onDoubleClick(item)
+});

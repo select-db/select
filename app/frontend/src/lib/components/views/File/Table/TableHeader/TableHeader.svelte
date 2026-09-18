@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import * as dbc from '$lib/wailsjs/go/db_client/DbClient';
-	import { db_client } from '$lib/wailsjs/go/models';
-	import * as graphApi from '$lib/wailsjs/go/graph/Graph';
+	import * as dbc from '$lib/bindings/selectDb/internal/db_client/dbclient';
+	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
+	import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 	import Button from '$lib/system/Button/Button.svelte';
 	import SegmentedControl from '$lib/system/SegmentedControl/SegmentedControl.svelte';
 
@@ -51,6 +51,7 @@
 
 	const edits = $derived(tableState?.edits ?? {});
 	const editedRowCount = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set used only to count rows inside a derivation
 		const rows = new Set<number>();
 		for (const key of Object.keys(edits)) {
 			const rowIndex = parseInt(key.split(':')[0], 10);
@@ -299,23 +300,27 @@
 					{
 						id: 'results',
 						icon: 'column-1',
+						iconSize: 17,
 						label: loading && rowCount === 0 ? `...` : rowCount.toLocaleString(),
 						tooltip: 'Run result'
 					},
 					{
 						id: 'graph',
 						icon: 'chart-line',
+						iconSize: 18,
 						tooltip: 'Graph view'
 					},
 
 					{
 						id: 'plan',
 						icon: 'map',
+						iconSize: 17,
 						tooltip: 'Plan result'
 					},
 					{
 						id: 'explain',
 						icon: 'chart',
+
 						tooltip: 'Analyze result'
 					}
 				]}
@@ -380,34 +385,38 @@
 {/if}
 
 <style>
-	.db-badges {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: var(--space-xs);
-		padding: var(--space-sm) 0 var(--space-xxs) 0;
-		margin-bottom: -2px;
+	.headerWrapper {
+		position: relative;
 	}
 
 	.tableHeader {
-		padding: 0 var(--space-xs-sm) 0 var(--space-sm-md);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+
+		padding: var(--space-sm-md) var(--space-md);
 		border-top: var(--border);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 
 		transition: background-color 0.1s ease-in;
 	}
 
 	:global(.tableHeader button) {
-		height: 26px;
+		height: 30px;
 	}
 
 	.tableHeader:hover {
 		background-color: var(--gray-100);
 	}
 
-	.wrapper {
-		height: 43px;
+	.db-badges {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--space-sm);
+	}
 
+	.wrapper {
 		display: flex;
 		gap: var(--space-xs);
 		align-items: center;
@@ -434,10 +443,6 @@
 	.divider.border-top {
 		height: 0;
 		border-top: var(--border);
-	}
-
-	.headerWrapper {
-		position: relative;
 	}
 
 	.right-wrapper {

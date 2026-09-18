@@ -1,12 +1,23 @@
-# Lint File
+# .lint File
 
-The `.lint` file defines custom SQL linting rules for your workspace. It lives at the workspace root and uses a JSON format inspired by ESLint's flat config.
+The `.lint` file is where a workspace tunes its linting: it adds custom rules of
+your own, and overrides the severity of the
+[built-in rules](/docs/sql/lint-rules/). It lives at the workspace root and is
+committed with everything else, so the rules your team agreed on are the rules
+everyone gets.
+
+It uses a JSON format inspired by ESLint's flat config.
+
+> [!NOTE]
+> You do not need this file to get linting. The built-in rules are on by
+> default: unknown columns, ambiguous references, type mismatches, `= NULL`.
+> This file is for the rules only your team knows about.
 
 ## Format
 
 A JSON array of configuration entries. Each entry can define **custom rules**, scope them to specific **files**, or **override** rule severity.
 
-```json
+```json .lint
 [
   {
     "custom": [
@@ -44,7 +55,7 @@ Patterns support multiline matching and are case-sensitive by default. Use `(?i)
 
 Scope rules to specific files using **glob patterns**:
 
-```json
+```json .lint
 [
   {
     "custom": [
@@ -69,6 +80,25 @@ This defines `no-drop-table` globally, then disables it for files under `migrati
 - **rules**: override severity for existing rules by ID
 
 Entries are applied **top to bottom**. Later entries override earlier ones for matching files.
+
+## Overriding a built-in rule
+
+`rules` takes any rule ID, custom or built-in. To relax
+[`unquoted-uppercase`](/docs/sql/lint-rules/#predicates-and-style) under
+`migrations/` while keeping it everywhere else:
+
+```json .lint
+[
+  {
+    "files": ["migrations/**"],
+    "rules": { "unquoted-uppercase": "off" }
+  }
+]
+```
+
+The full list of built-in IDs is on the [Lint rules](/docs/sql/lint-rules/)
+page. For a one-off exception, an inline `-- lint-disable-next-line <rule-id>`
+comment is usually better than a file-wide override.
 
 ## Applying changes
 

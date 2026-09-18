@@ -16,11 +16,12 @@ type Command struct{}
 // RunCommand executes the appropriate script based on the provided command type.
 func (c *Command) Run(cmdType string, arg string) (string, error) {
 	validCommands := map[string]bool{
-		"generate":      true,
-		"migrate:up":    true,
-		"migrate:down":  true,
-		"migrate:reset": true,
-		"migrate:new":   true,
+		"generate":       true,
+		"migrate:up":     true,
+		"migrate:down":   true,
+		"migrate:reset":  true,
+		"migrate:status": true,
+		"migrate:new":    true,
 	}
 
 	if !validCommands[os.Args[1]] {

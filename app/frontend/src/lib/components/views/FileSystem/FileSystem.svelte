@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
 	import { scrollShadow } from '$lib/actions/scrollShadow';
+	import { dragAutoScroll } from '$lib/actions/dragAutoScroll';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { rootOptions } from './Files/options/rootOptions';
 	import FileItems from './Files/FileItems.svelte';
@@ -18,17 +19,21 @@
 	import {
 		buildVisibilityIndex,
 		updateScrollWindow,
-		fsVisibilityIndexStore
+		fsVisibilityIndexStore,
+		ROW_HEIGHT
 	} from './Files/helpers/visibilityStore';
 	import { hiddenChildrenStore } from './Files/helpers/childVisibilityStore';
 
-	let scrollContainer: HTMLDivElement;
+	// Reactive because the effect that builds the visibility index bails out
+	// until this is bound: a plain `let` does not re-run it when the binding
+	// lands, and the index then stays empty for that mount — every row a
+	// placeholder, the tree apparently blank. The search and git panels declare
+	// theirs the same way.
+	let scrollContainer: HTMLDivElement | undefined = $state();
 	let firstItem: HTMLElement | null = null;
 	let firstItemParentIds: string | null = null;
 
 	let ticking = false;
-
-	const ITEM_HEIGHT = 30;
 
 	// Focus the scroll container whenever an item is clicked in the panel
 	$effect(() => {
@@ -47,8 +52,8 @@
 
 	const scrollToIndex = (index: number) => {
 		if (!scrollContainer) return;
-		const top = index * ITEM_HEIGHT;
-		const bottom = top + ITEM_HEIGHT;
+		const top = index * ROW_HEIGHT;
+		const bottom = top + ROW_HEIGHT;
 		if (top < scrollContainer.scrollTop) {
 			scrollContainer.scrollTop = top;
 		} else if (bottom > scrollContainer.scrollTop + scrollContainer.clientHeight) {
@@ -262,8 +267,10 @@
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="scrollable no-scrollbar"
+		data-test="tree.panel"
 		bind:this={scrollContainer}
 		use:scrollShadow
+		use:dragAutoScroll
 		onscroll={handleScroll}
 		onkeydown={handleKeydown}
 		ondragover={(e) => {
@@ -300,18 +307,17 @@
 	:global(.leftbar .sticky) {
 		position: sticky;
 		z-index: 1;
-		background-color: var(--gray-100);
 	}
 
 	:global(.leftbar .sticky .item) {
-		background-color: var(--gray-100);
+		background-color: var(--gray-0);
 	}
 	:global(.leftbar .sticky .item:hover) {
-		background: var(--gray-550);
+		background: var(--gray-300);
 	}
 
 	:global(.leftbar .sticky.last .item) {
 		border-bottom: var(--border) !important;
-		box-shadow: var(--gray-200) 0px 20px 20px -10px;
+		box-shadow: var(--shadow) 0px 20px 20px -10px;
 	}
 </style>

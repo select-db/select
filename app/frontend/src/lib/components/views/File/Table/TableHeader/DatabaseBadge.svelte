@@ -14,7 +14,7 @@
 
 	let { dbId, run, active = false, error = false, onclick }: Props = $props();
 
-	const dbInstances = $derived($workspaceGraphStore?.db_instances ?? []);
+	const dbInstances = $derived(($workspaceGraphStore?.db_instances ?? []));
 	const name = $derived(dbInstances.find((dbi) => dbi.id === dbId)?.name ?? dbId);
 
 	const options = $derived<ContextMenuOption[]>([
@@ -62,7 +62,7 @@
 		gap: var(--space-xs);
 
 		padding: 0 var(--space-sm) 0 var(--space-xs-sm);
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		border: var(--bw) transparent solid;
 
 		transition: border-color 0.15s ease-out;

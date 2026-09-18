@@ -11,7 +11,8 @@ type FetchFunc func(
 	ctx context.Context,
 	method,
 	endpoint string,
-	payload,
+	payload any,
+	headers map[string]string,
 	response any,
 ) error
 
@@ -21,7 +22,16 @@ type FetchStreamFunc func(
 	method,
 	endpoint string,
 	payload any,
+	headers map[string]string,
 ) (io.ReadCloser, error)
+
+// headerWorkspaceID selects the target workspace for workspace-scoped endpoints.
+const headerWorkspaceID = "X-Workspace-Id"
+
+// workspaceHeader scopes a request to a workspace via the X-Workspace-Id header.
+func workspaceHeader(workspaceID string) map[string]string {
+	return map[string]string{headerWorkspaceID: workspaceID}
+}
 
 // HTTPTransport implements engine.Transport via HTTP to the remote backend.
 type HTTPTransport struct {

@@ -1,8 +1,15 @@
 import { writable } from 'svelte/store';
 
-export type RightPanelTab = 'search';
+export type RightPanelTab = 'search' | 'history';
 
 const RIGHT_PANEL_TAB_KEY = 'rightPanelTab';
+
+/** Shared by the bar (reads it) and its resizer (writes it) — keep them in sync. */
+export const RIGHTBAR_WIDTH_KEY = 'rightbarWidth';
+
+export const RIGHTBAR_MIN_WIDTH = 0;
+export const RIGHTBAR_MAX_WIDTH = 420;
+export const RIGHTBAR_DEFAULT_WIDTH = 300;
 
 let internalIsRightbarOpened = JSON.parse(localStorage.getItem('isRightbarOpened') ?? 'false');
 let internalRightPanelTab: RightPanelTab =
@@ -25,12 +32,17 @@ export const updateRightPanelTab = (tab: RightPanelTab) => {
 	rightPanelTab.update(() => tab);
 };
 
-/** Open right panel with search tab, or close if already open. */
-export function toggleSearchPanel(): void {
+/**
+ * Toggles a right-panel tab: opens the panel on that tab if closed, switches to
+ * it if open on another tab, or closes the panel if already showing that tab.
+ */
+export function togglePanelTab(tab: RightPanelTab): void {
 	if (!internalIsRightbarOpened) {
-		updateRightPanelTab('search');
+		updateRightPanelTab(tab);
 		updateIsRightbarOpened(true);
-	} else {
+	} else if (internalRightPanelTab === tab) {
 		updateIsRightbarOpened(false);
+	} else {
+		updateRightPanelTab(tab);
 	}
 }

@@ -45,13 +45,40 @@ func (d *Datasource) GetDatasource(id string) (*GetResult, error) {
 		return nil, err
 	}
 	var result GetResult
-	if err := api.Fetch(ctx, "POST", "datasource/get", map[string]string{
-		"id":           id,
-		"workspace_id": workspaceID,
-	}, nil, &result); err != nil {
+	if err := api.Fetch(ctx, "GET", "datasources/"+id, nil, api.WorkspaceHeader(workspaceID), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
+}
+
+// ListedDatasource is one proxified connection as the connections screen shows
+// it. No DSN: administrating a connection does not require being handed the
+// credential behind it.
+type ListedDatasource struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	DBType string `json:"db_type"`
+}
+
+// ListDatasources returns every proxified connection stored for the workspace,
+// including ones no workspace file names any more.
+//
+// That last case is the reason this exists. The directory naming a connection
+// is replicated through git, so it can be deleted on another machine, in a
+// branch, or outside the app, while the credential stays on the server. Without
+// this list such a connection cannot be seen or revoked, because the id needed
+// to name it lived in the file that was deleted.
+func (d *Datasource) ListDatasources() ([]ListedDatasource, error) {
+	ctx := context.Background()
+	workspaceID, err := d.currentWorkspaceID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var result []ListedDatasource
+	if err := api.Fetch(ctx, "GET", "datasources", nil, api.WorkspaceHeader(workspaceID), &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 type UpsertParams struct {
@@ -85,7 +112,7 @@ func (d *Datasource) UpsertDatasource(params UpsertParams) error {
 	if err != nil {
 		return err
 	}
-	return api.Fetch(ctx, "POST", "datasource/upsert", upsertRemoteParams{
+	return api.Fetch(ctx, "PUT", "datasources/"+params.ID, upsertRemoteParams{
 		ID:              params.ID,
 		WorkspaceID:     workspaceID,
 		DBType:          params.DBType,
@@ -96,7 +123,7 @@ func (d *Datasource) UpsertDatasource(params UpsertParams) error {
 		MaxIdleConns:    params.MaxIdleConns,
 		ConnMaxLifetime: params.ConnMaxLifetime,
 		ConnMaxIdleTime: params.ConnMaxIdleTime,
-	}, nil, nil)
+	}, api.WorkspaceHeader(workspaceID), nil)
 }
 
 type deleteRemoteParams struct {
@@ -110,8 +137,8 @@ func (d *Datasource) DeleteDatasource(id string) error {
 	if err != nil {
 		return err
 	}
-	return api.Fetch(ctx, "POST", "datasource/delete", deleteRemoteParams{
+	return api.Fetch(ctx, "DELETE", "datasources/"+id, deleteRemoteParams{
 		ID:          id,
 		WorkspaceID: workspaceID,
-	}, nil, nil)
+	}, api.WorkspaceHeader(workspaceID), nil)
 }

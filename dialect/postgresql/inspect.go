@@ -36,40 +36,43 @@ func (i *Inspector) normalizeEquals(a, b string) bool {
 
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
+	if strings.TrimSpace(sql) == "" {
+		return nil
+	}
+
 	lexer := i.dialect.CreateLexer(sql)
 	tokenStream := antlr.NewCommonTokenStream(lexer, 0)
 	parser := pg.NewPostgreSQLParser(tokenStream)
 	parser.RemoveErrorListeners()
 
+	statements := topLevelStatements(parser)
+	if len(statements) == 0 {
+		return []core.InspectStatement{core.UnknownStatement()}
+	}
+
+	results := make([]core.InspectStatement, 0, len(statements))
+	for _, stmt := range statements {
+		results = append(results, core.OrUnknown(i.inspectStatement(stmt)))
+	}
+
+	return results
+}
+
+// topLevelStatements returns the statement nodes the parser produced, or nil.
+func topLevelStatements(parser *pg.PostgreSQLParser) []pg.IStmtContext {
 	root := parser.Root()
 	if root == nil {
 		return nil
 	}
-
 	stmtBlock := root.Stmtblock()
 	if stmtBlock == nil {
 		return nil
 	}
-
 	stmtMulti := stmtBlock.Stmtmulti()
 	if stmtMulti == nil {
 		return nil
 	}
-
-	statements := stmtMulti.AllStmt()
-	if len(statements) == 0 {
-		return nil
-	}
-
-	var results []core.InspectStatement
-	for _, stmt := range statements {
-		result := i.inspectStatement(stmt)
-		if result != nil {
-			results = append(results, *result)
-		}
-	}
-
-	return results
+	return stmtMulti.AllStmt()
 }
 
 // inspectStatement dispatches to the appropriate handler based on statement type

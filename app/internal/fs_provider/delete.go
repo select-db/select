@@ -27,5 +27,10 @@ func (fsp *FSProvider) Delete(params DeleteParams) error {
 		return err
 	}
 
+	// A file's result metadata is a sidecar with no entry of its own in the
+	// tree, so nothing else would ever remove it. Rename already moves it with
+	// the file it belongs to; deleting is the same rule from the other side.
+	_ = os.Remove(path + MetadataFileSuffix)
+
 	return nil
 }

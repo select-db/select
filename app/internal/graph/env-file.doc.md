@@ -1,12 +1,12 @@
 # Environment File
 
-Each folder in your workspace can contain a `.env` file. SELECT loads these files and makes their variables available for [variable substitution](/sql/variables/) in database DSN strings and SQL files.
+Each folder in your workspace can contain a `.env` file. SELECT loads these files and makes their variables available for [variable substitution](/docs/sql/variables/) in database DSN strings and SQL files.
 
 ## Format
 
 Standard `KEY=VALUE` pairs, one per line:
 
-```
+```ini .env
 PG_HOST=localhost
 PG_PORT=5432
 PG_USER=admin
@@ -45,4 +45,5 @@ Variables are resolved by walking up the folder hierarchy. A `.env` file in a pa
 
 After editing the `.env` file, click **Apply** to reload variables. To restore the built-in defaults, click **Reset**.
 
+> [!WARNING]
 > Variables from `.env` are **not available in proxified mode**. Proxified connections store credentials server-side.

@@ -1,0 +1,81 @@
+name: Dialect
+
+# The SQL dialect module, including the Python token analyzer under
+# dialect/core/tokenanalyzer/python. Called by ci.yml, which owns the gating.
+#
+# The jobs are independent. Chaining quality to tests made them the second
+# longest path in a run, 1m12 of lint before 1m27 of tests that never read its
+# result.
+
+on:
+  workflow_call:
+    inputs:
+      go-dialect:
+        description: Run the Go legs. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
+      python:
+        description: Run the analyzer. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    if: inputs.go-dialect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: dialect/go.mod
+          cache-dependency-path: dialect/go.sum
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          working-directory: dialect
+          # Skip the JSONSchema fetch from golangci-lint.run. It runs before any
+          # linting, so an outage there fails a build for reasons unrelated to
+          # the code, as it did on #174.
+          verify: false
+
+  tests:
+    name: Tests
+    # Also on a python-only change. The plan keeps the analyzer out of
+    # go-dialect, but ten Go test files drive the analyzer, so a change to it
+    # breaks Go tests and nothing else would run them.
+    if: inputs.go-dialect || inputs.python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: dialect/go.mod
+          cache-dependency-path: dialect/go.sum
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      # Without the venv the analyzer-backed tests skip themselves, which is
+      # how six of them stayed red unseen until #236.
+      - run: uv sync
+        working-directory: dialect/core/tokenanalyzer/python
+      - run: go test ./...
+        working-directory: dialect
+        # Skipping for a missing analyzer is right on a fresh checkout and
+        # wrong here, where it would quietly stop testing what this job exists
+        # to test.
+        env:
+          SELECT_REQUIRE_ANALYZER: "1"
+
+  analyzer-tests:
+    name: Analyzer tests
+    if: inputs.python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync
+        working-directory: dialect/core/tokenanalyzer/python
+      - run: uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
+        working-directory: dialect/core/tokenanalyzer/python

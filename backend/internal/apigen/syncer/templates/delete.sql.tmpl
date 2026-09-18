@@ -1,0 +1,4 @@
+-- name: Set{{.Sing}}DeletedAt :exec
+UPDATE {{.Table}}
+SET {{.SoftDelete}} = now(), {{.Cursor}} = now()
+WHERE {{.PK}} = $1 AND {{.Tenant}} = $2;

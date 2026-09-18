@@ -2,8 +2,8 @@
 from analysis import analyze
 
 
-def _r(sql):
-    return analyze(sql, dialect="postgresql", schema_dict={}, default_schema="public")
+def _r(sql, dialect="postgresql"):
+    return analyze(sql, dialect=dialect, schema_dict={}, default_schema="public")
 
 
 def _diags(r, rule_id):
@@ -15,26 +15,44 @@ def _diags(r, rule_id):
 # ---------------------------------------------------------------------------
 
 class TestO001OffsetWithoutLimit:
+    """
+    MySQL and SQLite take OFFSET only inside a LIMIT clause, so OFFSET alone is
+    a statement the database refuses. PostgreSQL takes the two independently
+    and runs it, so there is nothing to report there.
+    """
+
+    NEEDS_LIMIT = ("mysql", "sqlite")
+
     def test_triggers_offset_no_limit(self):
-        assert len(_diags(_r("SELECT * FROM t ORDER BY id OFFSET 10"), "offset-without-limit")) == 1
+        for dialect in self.NEEDS_LIMIT:
+            assert len(_diags(_r("SELECT * FROM t ORDER BY id OFFSET 10", dialect),
+                              "offset-without-limit")) == 1, dialect
+
+    def test_silent_where_offset_stands_alone(self):
+        assert _diags(_r("SELECT * FROM t ORDER BY id OFFSET 10", "postgresql"),
+                      "offset-without-limit") == []
 
     def test_no_trigger_limit_with_offset(self):
-        assert _diags(_r("SELECT * FROM t ORDER BY id LIMIT 20 OFFSET 10"), "offset-without-limit") == []
+        for dialect in self.NEEDS_LIMIT:
+            assert _diags(_r("SELECT * FROM t ORDER BY id LIMIT 20 OFFSET 10", dialect),
+                          "offset-without-limit") == [], dialect
 
     def test_no_trigger_limit_only(self):
-        assert _diags(_r("SELECT * FROM t ORDER BY id LIMIT 10"), "offset-without-limit") == []
+        assert _diags(_r("SELECT * FROM t ORDER BY id LIMIT 10", "mysql"), "offset-without-limit") == []
 
     def test_no_trigger_neither(self):
-        assert _diags(_r("SELECT * FROM t WHERE x > 5"), "offset-without-limit") == []
+        assert _diags(_r("SELECT * FROM t WHERE x > 5", "mysql"), "offset-without-limit") == []
 
     def test_subquery_offset_no_limit_triggers(self):
-        assert len(_diags(_r("SELECT * FROM (SELECT id FROM t OFFSET 5) sub"), "offset-without-limit")) == 1
+        assert len(_diags(_r("SELECT * FROM (SELECT id FROM t OFFSET 5) sub", "mysql"),
+                          "offset-without-limit")) == 1
 
     def test_subquery_offset_with_limit_no_trigger(self):
-        assert _diags(_r("SELECT * FROM (SELECT id FROM t LIMIT 10 OFFSET 5) sub"), "offset-without-limit") == []
+        assert _diags(_r("SELECT * FROM (SELECT id FROM t LIMIT 10 OFFSET 5) sub", "mysql"),
+                      "offset-without-limit") == []
 
     def test_severity_is_error(self):
-        diags = _diags(_r("SELECT * FROM t ORDER BY id OFFSET 10"), "offset-without-limit")
+        diags = _diags(_r("SELECT * FROM t ORDER BY id OFFSET 10", "mysql"), "offset-without-limit")
         assert diags[0]["severity"] == "error"
 
 

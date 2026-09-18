@@ -1,6 +1,6 @@
 import { addTab } from '$lib/components/Layout/layoutStore';
-import { graph } from '$lib/wailsjs/go/models';
-import { EventsEmit } from '$lib/wailsjs/runtime/runtime';
+import * as graph from '$lib/wails/graph';
+import { EventsEmit } from '$lib/wails/events';
 
 /**
  * Parses a search match URI to extract the file URI, line number, and column.
@@ -38,7 +38,7 @@ export const navigateToMatch = async (searchMatchNode: graph.FileNode) => {
 	const { fileUri, line, column } = parseSearchMatchUri(searchMatchNode.uri);
 
 	addTab(
-		new graph.FileNode({
+		graph.newFileNode({
 			...searchMatchNode,
 			id: fileUri,
 			uri: fileUri,

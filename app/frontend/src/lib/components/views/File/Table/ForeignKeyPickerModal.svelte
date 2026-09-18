@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { LookupForeignKey } from '$lib/wailsjs/go/db_client/DbClient';
-	import { db_client } from '$lib/wailsjs/go/models';
-	import Button from '$lib/system/Button/Button.svelte';
+	import { untrack } from 'svelte';
+	import { LookupForeignKey } from '$lib/wails/graph';
+	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
 	import Input from '$lib/system/Input/Input.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import Menu from '$lib/system/Menu/Menu.svelte';
+	import ModalFooter from '$lib/system/Modal/ModalFooter.svelte';
 	import type { MenuOption } from '$lib/system/Menu/Menu.types';
 	import { notifyError } from '$lib/system/Notifications/notificationsStore';
 	import { debounce } from '$lib/utils/debounce';
@@ -41,7 +42,8 @@
 	const NULL_VALUE = 'NULL';
 	const isNull = (v: string) => v === '' || v === NULL_VALUE;
 
-	let selected = $state<string[]>([...selectedColumns]);
+	// Seeded once: the picker owns the selection while it is open.
+	let selected = $state<string[]>(untrack(() => [...selectedColumns]));
 	let searchQuery = $state('');
 	let columnFilter = $state('');
 	let rows = $state<unknown[][]>([]);
@@ -179,6 +181,14 @@
 		onSave(NULL_VALUE);
 		onClose();
 	}
+
+	async function handleSetNull() {
+		setNull();
+	}
+
+	async function handleCancel() {
+		onClose();
+	}
 </script>
 
 <div class="fk-modal-body">
@@ -247,19 +257,16 @@
 	<p class="option-label truncate">{d.label}</p>
 {/snippet}
 
-<div class="fk-modal-footer">
-	<Button content="Set NULL" emphasis="low" onclick={setNull} />
-	<div class="footer-main">
-		<Button content="Cancel" emphasis="low" onclick={onClose} />
-	</div>
-</div>
+<ModalFooter
+	leftAction={{ label: 'Set NULL', action: handleSetNull }}
+	secondaryAction={{ label: 'Cancel', action: handleCancel }}
+/>
 
 <style>
 	.fk-modal-body {
 		display: flex;
 		flex: 1;
 		min-height: 0;
-		background-color: var(--gray-0);
 	}
 
 	.left-pane {
@@ -307,6 +314,7 @@
 	}
 
 	.right-pane {
+		background-color: var(--gray-200);
 		flex: 1;
 		min-width: 0;
 		display: flex;
@@ -344,20 +352,5 @@
 		font-family: 'JetBrains Mono', monospace;
 		white-space: pre-wrap;
 		max-width: 100%;
-	}
-
-	.fk-modal-footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-sm);
-		background-color: var(--gray-0);
-		padding: var(--space-sm);
-		border-top: var(--border);
-	}
-
-	.footer-main {
-		display: flex;
-		gap: var(--space-sm);
 	}
 </style>

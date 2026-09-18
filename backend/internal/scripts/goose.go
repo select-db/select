@@ -53,14 +53,5 @@ func RunGoose(command string, migrationName ...string) error {
 		return err
 	}
 
-	// Dump schema after up, down or reset, only in dev environment
-	if env == "dev" && (command == "up" || command == "down" || command == "reset") {
-		const outputFile = "./db/schema.sql"
-		if err := DumpSchema(database, outputFile); err != nil {
-			return fmt.Errorf("failed to dump schema after '%s': %w", command, err)
-		}
-		fmt.Printf("[Dump] Schema saved to '%s'\n", outputFile)
-	}
-
 	return nil
 }

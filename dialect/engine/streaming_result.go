@@ -20,7 +20,12 @@ const (
 // Writers use AppendRow / Finalize / Fail under the package's sink helpers.
 // Readers use Page to retrieve a window of rows with completion status.
 type StreamingResult struct {
-	mu             sync.RWMutex
+	mu sync.RWMutex
+	// id names the execution that owns this buffer. The cache is keyed by
+	// (db, file), so a re-run replaces the entry under the same key; readers
+	// carry the id they started with and compare, rather than trusting the
+	// slot to still hold what they asked for.
+	id             string
 	columns        []string
 	columnEditMeta []ColumnEditMeta
 	rows           [][]any
@@ -33,9 +38,17 @@ type StreamingResult struct {
 	durationMs     int64
 }
 
-// NewStreamingResult returns an empty StreamingResult ready for appending.
-func NewStreamingResult() *StreamingResult {
-	return &StreamingResult{}
+// NewStreamingResult returns an empty StreamingResult ready for appending,
+// owned by the execution named by id.
+func NewStreamingResult(id string) *StreamingResult {
+	return &StreamingResult{id: id}
+}
+
+// ID returns the execution that owns this buffer.
+func (s *StreamingResult) ID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.id
 }
 
 // SetColumns is called once when the query's column list is known.
@@ -129,6 +142,9 @@ func (s *StreamingResult) Summary() (rowCount, affected, durationMs int64, errMs
 // PageData is the row window returned by Page. Always carries the columns and
 // summary fields known at read time; rows is nil when no data is available yet.
 type PageData struct {
+	// ID is the execution this page came from. Callers that hold an execution
+	// id must check it: the cache slot may have been taken over since.
+	ID             string
 	Columns        []string
 	Rows           [][]any
 	ColumnEditMeta []ColumnEditMeta
@@ -154,6 +170,7 @@ func (s *StreamingResult) Page(page, pageSize int) (*PageData, PageStatus) {
 	available := int(s.available)
 
 	header := &PageData{
+		ID:             s.id,
 		Columns:        s.columns,
 		ColumnEditMeta: s.columnEditMeta,
 		RowCount:       s.rowCount,

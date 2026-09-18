@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { GetServerManifest } from '$lib/wailsjs/go/server/Server';
+import { GetServerManifest } from '$lib/bindings/selectDb/internal/server/server';
 
 export type ServerManifest = {
 	live: boolean;

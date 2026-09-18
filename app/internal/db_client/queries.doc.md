@@ -1,6 +1,6 @@
 # Query Execution
 
-Run a query with **Cmd+Enter**. SELECT executes the SQL against one or more associated databases and displays results in a table below the editor.
+Run a query with `Cmd+Enter`. SELECT executes the SQL against one or more associated databases and displays results in a table below the editor.
 
 ## Streaming (proxified connections)
 
@@ -10,7 +10,8 @@ For **local connections**, results are fetched in a single round-trip.
 
 ## Limits
 
-Two settings in your `.config` file control execution bounds:
+Two **workspace** settings (configured in **Settings → Workspace**, shared with
+your team) control execution bounds:
 
 | Setting                  | Default | Max   | Description                            |
 |--------------------------|---------|-------|----------------------------------------|

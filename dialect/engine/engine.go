@@ -24,6 +24,7 @@ type Transport interface {
 		ctx context.Context,
 		workspaceID,
 		instanceID string,
+		noCache bool,
 	) (*core.Metadata, error)
 
 	Ping(

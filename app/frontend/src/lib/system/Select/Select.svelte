@@ -20,6 +20,7 @@
 		optionDisplay,
 		summaryDisplay,
 		placeholder = 'Select an option',
+		sortOptions = true,
 		searchEnabled = false,
 		searchPlaceholder = 'Search...',
 		createOptionLabel,
@@ -41,11 +42,15 @@
 	}: Props = $props();
 	let triggerEl = $state<HTMLDivElement | null>(null);
 	let searchQuery = $state('');
-	let internalMenuWidth = $state<number>(menuWidth ?? width ?? 200);
+	// The menu matches an explicit menuWidth, else the trigger it was measured
+	// against, else the field width. Derived so a change to either prop is
+	// followed rather than frozen at whatever they were when the select mounted.
+	let measuredMenuWidth = $state<number | null>(null);
+	const internalMenuWidth = $derived(menuWidth ?? measuredMenuWidth ?? width ?? 200);
 
 	$effect(() => {
 		if (!open || !triggerEl || menuWidth) return;
-		internalMenuWidth = Math.round(triggerEl.getBoundingClientRect().width);
+		measuredMenuWidth = Math.round(triggerEl.getBoundingClientRect().width);
 	});
 
 	const displayLabel = (option: SelectOption | null): string => option?.label ?? '';
@@ -245,7 +250,7 @@
 		<FloatingBox anchor={triggerEl} offset={{ x: 0, y: 4 }} backdrop onBackdropClick={close}>
 			<Menu
 				options={menuOptions}
-				sortOptions={true}
+				{sortOptions}
 				onClose={close}
 				bind:searchQuery
 				{searchEnabled}
@@ -266,6 +271,7 @@
 		align-items: center;
 		gap: 8px;
 		min-width: 0;
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.select-trigger {
@@ -279,7 +285,7 @@
 		align-items: center;
 	}
 	.select-trigger:not(.low) {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		border: var(--border);
 	}
 	.select-trigger.low {
@@ -294,19 +300,19 @@
 		padding: var(--space-xs-sm) var(--space-xs) var(--space-xs-sm) var(--space-sm);
 	}
 	.select-trigger.xs:not(.noRadius) {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 	}
 	.select-trigger.sm {
 		padding: var(--space-sm);
 	}
 	.select-trigger.sm:not(.noRadius) {
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 	}
 
 	.select-container:focus-within .select-trigger,
 	.select-container.open .select-trigger,
 	.select-trigger:hover {
-		background-color: var(--gray-100);
+		background-color: var(--gray-300);
 	}
 	.select-trigger.low:hover,
 	.select-container.open .select-trigger.low {
@@ -314,7 +320,7 @@
 	}
 	.select-container:focus-within .select-trigger,
 	.select-container.open .select-trigger {
-		border-color: var(--gray-700);
+		border-color: var(--gray-600);
 	}
 
 	/* Low emphasis: ensure active/select state uses contrast-light border color */
@@ -325,16 +331,16 @@
 	}
 
 	/* Low emphasis: dimmed text, brighten on hover/focus (applies to all children) */
-	:global(.select-trigger.low p),
-	:global(.select-trigger.low span) {
+	:global(.select-trigger p),
+	:global(.select-trigger span) {
 		color: var(--gray-800);
 	}
-	:global(.select-container:focus-within .select-trigger.low p),
-	:global(.select-container:focus-within .select-trigger.low span),
-	:global(.select-container.open .select-trigger.low p),
-	:global(.select-container.open .select-trigger.low span),
-	:global(.select-trigger.low:hover p),
-	:global(.select-trigger.low:hover span) {
+	:global(.select-container:focus-within .select-trigger p),
+	:global(.select-container:focus-within .select-trigger span),
+	:global(.select-container.open .select-trigger p),
+	:global(.select-container.open .select-trigger span),
+	:global(.select-trigger:hover p),
+	:global(.select-trigger:hover span) {
 		color: var(--gray-1000);
 	}
 

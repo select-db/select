@@ -18,11 +18,11 @@ func TestSSHHostKeyCallback(t *testing.T) {
 	sshPub, _ := ssh.NewPublicKey(pub)
 	authorized := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub)))
 
-	// Valid pinned key -> strict callback + algorithm, no error.
+	// Valid pinned key -> strict callback + single matching algorithm, no error.
 	if r, err := sshHostKeyCallback(authorized); err != nil || r.callback == nil {
 		t.Fatalf("valid host key: result=%v err=%v, want non-nil cb, nil err", r, err)
-	} else if r.algorithm != sshPub.Type() {
-		t.Fatalf("algorithm = %q, want %q", r.algorithm, sshPub.Type())
+	} else if len(r.algorithms) != 1 || r.algorithms[0] != sshPub.Type() {
+		t.Fatalf("algorithms = %v, want [%q]", r.algorithms, sshPub.Type())
 	}
 
 	// Garbage -> error.
@@ -43,8 +43,29 @@ func TestSSHHostKeyCallback(t *testing.T) {
 	// Empty + desktop (guard OFF) -> TOFU-style accept, no error, no algorithm preference.
 	if r, err := sshHostKeyCallback(""); err != nil || r.callback == nil {
 		t.Fatalf("desktop with no host key: result=%v err=%v, want accept", r, err)
-	} else if r.algorithm != "" {
-		t.Fatalf("desktop should have no algorithm preference, got %q", r.algorithm)
+	} else if len(r.algorithms) != 0 {
+		t.Fatalf("desktop should have no algorithm preference, got %v", r.algorithms)
+	}
+}
+
+// TestHostKeyAlgorithmsFor: a pinned RSA host key must also offer the SHA-2
+// signature variants, else negotiation fails against a modern OpenSSH server
+// that no longer advertises legacy SHA-1 "ssh-rsa".
+func TestHostKeyAlgorithmsFor(t *testing.T) {
+	got := hostKeyAlgorithmsFor(ssh.KeyAlgoRSA)
+	want := []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+	if len(got) != len(want) {
+		t.Fatalf("rsa algorithms = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("rsa algorithms = %v, want %v", got, want)
+		}
+	}
+
+	// Non-RSA keys pin exactly their own type.
+	if got := hostKeyAlgorithmsFor(ssh.KeyAlgoED25519); len(got) != 1 || got[0] != ssh.KeyAlgoED25519 {
+		t.Fatalf("ed25519 algorithms = %v, want [%q]", got, ssh.KeyAlgoED25519)
 	}
 }
 

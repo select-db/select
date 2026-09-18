@@ -9,8 +9,10 @@ CREATE TABLE history (
     duration_ms INTEGER,
     errors TEXT NOT NULL DEFAULT '[]',
 
-    uri TEXT NOT NULL DEFAULT "",
-    dsn TEXT NOT NULL DEFAULT ""
+    uri TEXT NOT NULL DEFAULT '',
+    dsn TEXT NOT NULL DEFAULT '',
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- +goose StatementEnd
 

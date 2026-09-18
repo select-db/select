@@ -1,0 +1,20 @@
+package gen
+
+import (
+	"net/http"
+
+	"backend/internal/api/rest"
+
+{{range .Tables -}}
+	{{.}} "backend/internal/api/gen/{{.}}"
+{{end -}}
+)
+
+// RegisterRoutes wires every generated REST resource onto mux with the shared
+// middleware chain (authenticated, WorkspaceFromHeader, limited) the api
+// package supplies.
+func RegisterRoutes(mux *http.ServeMux, wrap rest.Wrap) {
+{{- range .Tables}}
+	{{.}}.Register(mux, wrap)
+{{- end}}
+}

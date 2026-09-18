@@ -4,19 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"backend/internal/middlewares"
-
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/authz"
 
 	"github.com/google/uuid"
 )
-
-type getDatasourceRequest struct {
-	ID string `json:"id"`
-}
 
 type getDatasourceResponse struct {
 	Name            string `json:"name"`
@@ -30,19 +23,16 @@ type getDatasourceResponse struct {
 
 func GetHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req getDatasourceRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if req.ID == "" {
+		id := r.PathValue("id")
+		if id == "" {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
 
-		workspaceID := middlewares.MemberWorkspaceID(r)
+		a := authz.ActorOf(r)
+		workspaceID := a.WorkspaceID
 
-		if !authz.IsWorkspaceOwner(r, workspaceID) && !authz.CompiledFromRequest(r).CanManage(req.ID) {
+		if !a.IsOwner() && !a.CanManage(id) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -53,7 +43,7 @@ func GetHandler() http.HandlerFunc {
 			return
 		}
 
-		parsedID, err := uuid.Parse(req.ID)
+		parsedID, err := uuid.Parse(id)
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
@@ -66,8 +56,8 @@ func GetHandler() http.HandlerFunc {
 		}
 
 		row, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
-			ID:          db_types.NewJSONNullUUID(parsedID),
-			WorkspaceID: db_types.NewJSONNullUUID(parsedWorkspaceID),
+			ID:          parsedID,
+			WorkspaceID: parsedWorkspaceID,
 		})
 		if err != nil {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -87,13 +77,13 @@ func GetHandler() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(getDatasourceResponse{
-			Name:            row.Name.String,
-			DSN:             maskDSN(row.DbType.String, dsn),
+			Name:            row.Name,
+			DSN:             maskDSN(row.DbType, dsn),
 			SSH:             maskSSH(ssh),
-			MaxOpenConns:    row.MaxOpenConns.Int64,
-			MaxIdleConns:    row.MaxIdleConns.Int64,
-			ConnMaxLifetime: row.ConnMaxLifetime.Int64,
-			ConnMaxIdleTime: row.ConnMaxIdleTime.Int64,
+			MaxOpenConns:    int64(row.MaxOpenConns),
+			MaxIdleConns:    int64(row.MaxIdleConns),
+			ConnMaxLifetime: int64(row.ConnMaxLifetime),
+			ConnMaxIdleTime: int64(row.ConnMaxIdleTime),
 		})
 	}
 }

@@ -1,20 +1,17 @@
-export {
-	createChat,
-	fetchServerSentEvents,
-	fetchHttpStream,
-	stream,
-	createChatClientOptions,
-	clientTools
-} from './tanstack-svelte';
+export { createChat, clientTools, convertMessagesToModelMessages } from './chat';
 
 export type {
 	CreateChatOptions,
 	CreateChatReturn,
 	UIMessage,
 	MessagePart,
+	TextPart,
+	ThinkingPart,
 	ToolCallPart,
+	ToolResultPart,
 	ChatRequestBody,
 	ConnectionAdapter,
-	FetchConnectionOptions,
-	InferChatMessages
-} from './tanstack-svelte';
+	ClientTool,
+	AnyClientTool,
+	ModelMessage
+} from './chat';

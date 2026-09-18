@@ -8,6 +8,17 @@ export type ContextMenuOption = {
 	action?: (onClose: () => void, metadata: ContextMenu['metadata']) => void;
 	submenu?: ContextMenuOption[];
 	divider?: boolean;
+	/**
+	 * Run this action when the item is clicked, for an item with nothing to
+	 * expand. A row that opens on a click goes on doing that; this is what the
+	 * rows that cannot answer the gesture that way do with it instead.
+	 */
+	runOnClick?: boolean;
+	/**
+	 * Run this action when the item is double-clicked. At most one option per
+	 * menu carries it, and an item without one simply has no double-click.
+	 */
+	runOnDoubleClick?: boolean;
 };
 
 export type ContextMenu = {

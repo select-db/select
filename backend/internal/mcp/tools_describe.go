@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/internal/authz"
 	"backend/internal/datasource"
 
@@ -33,7 +32,8 @@ func toolListDatasources() Tool {
 			"`deny.select.public.users.password` (deny that one column), " +
 			"`allow.insert.public.events.*` (insert any column of events). " +
 			"Deny rules win at the most specific level they match. " +
-			"Action values: select, insert, update, delete, ddl.",
+			"Action values: select, insert, update, delete. Anything else a statement does, " +
+			"schema changes included, needs manage on the connection.",
 		InputSchema: jsonObjectSchema(nil, nil),
 		Annotations: &ToolAnnotations{
 			ReadOnlyHint:   boolPtr(true),
@@ -44,7 +44,7 @@ func toolListDatasources() Tool {
 			if err != nil {
 				return nil, errBadArgument("invalid workspace id")
 			}
-			rows, err := db.Queries.ListDatasourcesByWorkspace(ctx, db_types.NewJSONNullUUID(parsedWS))
+			rows, err := db.Queries.ListDatasourcesByWorkspace(ctx, parsedWS)
 			if err != nil {
 				return nil, errUpstream("could not list datasources: " + err.Error())
 			}
@@ -76,8 +76,8 @@ func toolListDatasources() Tool {
 				}
 				out = append(out, item{
 					ID:          id,
-					Name:        row.Name.String,
-					Dialect:     row.DbType.String,
+					Name:        row.Name,
+					Dialect:     row.DbType,
 					Permissions: combined,
 				})
 			}

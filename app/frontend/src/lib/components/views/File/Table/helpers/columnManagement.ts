@@ -1,6 +1,14 @@
+import { formatCellValue, type TextMeasurer } from './cellText';
+
 export interface ColumnState {
 	pinnedColumnIdx: Set<number>;
 	columnWidths: number[];
+	/**
+	 * True while `columnWidths` is still the placeholder every column starts at.
+	 * It turns false the moment the widths become real: measured from the rows,
+	 * restored from a previous visit, or dragged by the user.
+	 */
+	widthsPending: boolean;
 }
 
 export interface ColumnOffsets {
@@ -131,7 +139,12 @@ export function getColumnStyle(state: ColumnState, columnIndex: number, maxColum
 }
 
 const INDEX_COLUMN_WIDTH = 57;
+// What a column shows before its rows have been measured. Visible only while a
+// streaming result has yet to deliver a batch to measure.
 const DEFAULT_COLUMN_WIDTH = 280;
+
+/** Floor for a column dragged by its resize handle. */
+export const MIN_COLUMN_WIDTH = 40;
 
 export function resetColumnState(totalColumns?: number): ColumnState {
 	const columnWidths =
@@ -140,7 +153,8 @@ export function resetColumnState(totalColumns?: number): ColumnState {
 			: [];
 	return {
 		pinnedColumnIdx: new Set([0]),
-		columnWidths
+		columnWidths,
+		widthsPending: true
 	};
 }
 
@@ -149,6 +163,61 @@ export function getColumnWidth(state: ColumnState, columnIndex: number): number 
 		state.columnWidths[columnIndex] ??
 		(columnIndex === 0 ? INDEX_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH)
 	);
+}
+
+/**
+ * Widest a column may be sized to from its content. Past this, long values
+ * ellipsize the way they always did: the point of sizing to content is to fit
+ * more columns on screen, not to let one JSON blob push the rest off it.
+ */
+export const MAX_AUTO_COLUMN_WIDTH = 480;
+
+/** Narrowest, so a column of one-character values still shows its header. */
+export const MIN_AUTO_COLUMN_WIDTH = 90;
+
+// Rows of the batch to measure. Past this the widest value is almost always
+// already found, and every extra row is another measureText call.
+const AUTO_SIZE_SAMPLE_ROWS = 100;
+
+// The pin button and the resize handle sit next to a header's label.
+const HEADER_CONTROLS_WIDTH = 28;
+
+// A value this long is already past the cap, so measuring the rest of it is
+// work that cannot change the answer.
+const MAX_MEASURED_CHARS = 200;
+
+// Canvas measurement and layout disagree by a fraction of a pixel -- kerning
+// and `text-rendering: optimizeLegibility` are not part of measureText -- and a
+// column short by half a pixel ellipsizes the text it was sized to fit.
+const SUBPIXEL_SLACK = 2;
+
+/**
+ * Column widths that fit the widest value each column holds in `rows`, clamped
+ * to a readable range. The header counts too, so a narrow column of ids is
+ * still wide enough to read its name.
+ */
+export function computeAutoColumnWidths(
+	columns: string[],
+	rows: unknown[][],
+	measurer: TextMeasurer
+): number[] {
+	const widths = [INDEX_COLUMN_WIDTH];
+	const sample = rows.length > AUTO_SIZE_SAMPLE_ROWS ? rows.slice(0, AUTO_SIZE_SAMPLE_ROWS) : rows;
+
+	for (let col = 0; col < columns.length; col++) {
+		let widest = measurer.measure(columns[col]) + HEADER_CONTROLS_WIDTH;
+
+		for (const row of sample) {
+			if (widest >= MAX_AUTO_COLUMN_WIDTH) break;
+			const measured = measurer.measure(formatCellValue(row[col]).slice(0, MAX_MEASURED_CHARS));
+			if (measured > widest) widest = measured;
+		}
+
+		const padded = Math.ceil(widest + measurer.cellPadding + SUBPIXEL_SLACK);
+		widths.push(Math.min(MAX_AUTO_COLUMN_WIDTH, Math.max(MIN_AUTO_COLUMN_WIDTH, padded)));
+	}
+
+	return widths;
 }
 
 /** Left position (in px) of each column in the table. positions[0] = 0, positions[i] = sum of widths 0..i-1 */

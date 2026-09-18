@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/selectDb/dialect/core"
@@ -29,7 +30,6 @@ func NewAnalyzer(execPath string, args ...string) *Analyzer {
 	return &Analyzer{execPath: execPath, args: args}
 }
 
-
 // Close shuts down the subprocess cleanly.
 func (c *Analyzer) Close() {
 	c.mu.Lock()
@@ -48,7 +48,6 @@ func (c *Analyzer) kill() {
 	}
 	c.stdout = nil
 }
-
 
 // ensure starts the subprocess if it is not already running.
 func (c *Analyzer) ensure() error {
@@ -72,8 +71,16 @@ func (c *Analyzer) ensure() error {
 	c.cmd = cmd
 	c.stdin = stdin
 	c.stdout = bufio.NewScanner(stdout)
+	// One response is one line, and bufio caps a line at 64 KiB by default.
+	// Six kilobytes of SQL already lints to more than that, so the default
+	// turns an ordinary file into a read failure.
+	c.stdout.Buffer(make([]byte, 0, 64<<10), maxResponseBytes)
 	return nil
 }
+
+// maxResponseBytes caps one response. Large enough for a whole file's
+// diagnostics, small enough that a runaway analyzer cannot exhaust memory.
+const maxResponseBytes = 8 << 20
 
 type diagnostic struct {
 	RuleID    string `json:"rule_id"`
@@ -115,12 +122,33 @@ func (c *Analyzer) callLocked(req map[string]any) (json.RawMessage, error) {
 
 	if !c.stdout.Scan() {
 		c.kill()
+		if err := c.stdout.Err(); err != nil {
+			return nil, fmt.Errorf("analyzer read: %w", err)
+		}
 		return nil, fmt.Errorf("analyzer read: no response")
 	}
 
 	raw := make([]byte, len(c.stdout.Bytes()))
 	copy(raw, c.stdout.Bytes())
+	if err := responseError(raw); err != nil {
+		return nil, err
+	}
 	return json.RawMessage(raw), nil
+}
+
+// responseError reports what the subprocess said went wrong. It reports every
+// failure in band, as a response carrying an error key; no successful response
+// has one, so a caller decoding into its own type reads one as zero values.
+func responseError(raw []byte) error {
+	var resp struct {
+		Error     string `json:"error"`
+		Traceback string `json:"traceback"`
+	}
+	// Unparseable, or no error in it: nothing for this to report either way.
+	if err := json.Unmarshal(raw, &resp); err != nil || resp.Error == "" {
+		return nil
+	}
+	return fmt.Errorf("analyzer: %s", strings.TrimSpace(resp.Error+"\n"+resp.Traceback))
 }
 
 // CallWithTimeout sends a request to the subprocess with a context deadline.
@@ -198,7 +226,7 @@ func responseToDiagnostics(resp response) []Diagnostic {
 	for _, d := range resp.Diagnostics {
 		diags = append(diags, Diagnostic{
 			RuleID:    d.RuleID,
-			Severity:  parseSeverity(d.Severity),
+			Severity:  ParseSeverity(d.Severity),
 			Message:   d.Message,
 			StartLine: d.StartLine,
 			StartCol:  d.StartCol,
@@ -207,15 +235,4 @@ func responseToDiagnostics(resp response) []Diagnostic {
 		})
 	}
 	return diags
-}
-
-func parseSeverity(s string) Severity {
-	switch s {
-	case "error":
-		return SeverityError
-	case "hint":
-		return SeverityHint
-	default:
-		return SeverityWarning
-	}
 }

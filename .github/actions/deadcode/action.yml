@@ -1,0 +1,23 @@
+name: deadcode
+description: Puts a pinned deadcode on PATH, built once and cached.
+
+# x/tools ships no binaries, so this one is compiled and cached. The version is
+# pinned because a gate that blocks merges must not change between two runs of
+# the same commit.
+
+inputs:
+  go-version:
+    description: Cache key input, so a toolchain bump rebuilds rather than reuses.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      id: cache
+      with:
+        path: ~/go/bin/deadcode
+        key: deadcode-v0.50.0-${{ runner.os }}-go${{ inputs.go-version }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: go install golang.org/x/tools/cmd/deadcode@v0.50.0

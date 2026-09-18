@@ -11,7 +11,7 @@
 		SetCurrentServer,
 		CreateServer,
 		RemoveServer
-	} from '$lib/wailsjs/go/server/Server';
+	} from '$lib/bindings/selectDb/internal/server/server';
 	import type { Component } from 'svelte';
 	import ConfirmRemoveServerModal from './ConfirmRemoveServerModal.svelte';
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import re
 from typing import Any
 
@@ -8,6 +10,7 @@ from sqlglot.errors import ErrorLevel, ParseError, SqlglotError
 from sqlglot.optimizer.scope import traverse_scope
 
 from lint_rules.aggregation import analyze_aggregation_rules
+from lint_rules.file_level import analyze_file_rules
 from analysis.collect import collect_column_refs, collect_relations
 from lint_rules.enum_values import analyze_enum_values
 from lint_rules.functions import analyze_unknown_functions
@@ -23,7 +26,7 @@ from lint_rules.references import (
     analyze_unknown_tables,
     analyze_update_columns,
 )
-from analysis.schema import DIALECT_MAP, build_schema, collect_virtual_names
+from analysis.schema import build_schema, collect_virtual_names, sqlglot_dialect_name
 from lint_rules.structure import (
     analyze_duplicate_columns,
     analyze_ordinal_violations,
@@ -88,6 +91,44 @@ def _parse_sql(sql: str, sg_dialect: str) -> tuple[list, list[dict], list[dict]]
     return statements, parse_errors, arity_diags
 
 
+def _undrawable(diag: dict, sql: str) -> str | None:
+    """Say why an editor could not draw this range, or None if it can."""
+    start = (diag["start_line"], diag["start_col"])
+    end = (diag["end_line"], diag["end_col"])
+    if start == end:
+        return "empty range"
+    if end < start:
+        return "range ends before it starts"
+    if (diag["start_line"], diag["start_col"], diag["end_col"]) == (1, 0, 0):
+        return "fell back to the start of the file"
+
+    lines = sql.splitlines() or [""]
+    if not 1 <= diag["start_line"] <= len(lines) or not 1 <= diag["end_line"] <= len(lines):
+        return "line is not in the source"
+    if diag["end_col"] > len(lines[diag["end_line"] - 1]):
+        return "ends past the end of its line"
+    return None
+
+
+def _drawable(diag: dict, sql: str) -> dict:
+    """
+    Make a range an editor can draw, or say so when running the suite.
+
+    A rule reaching this point has already decided what it is about, so
+    dropping the diagnostic loses a real finding and one character is the least
+    that can be seen. Under SELECT_STRICT_DIAGNOSTICS it raises instead, so a
+    rule that cannot point at its own clause fails a test rather than shipping
+    a squiggle nobody can see.
+    """
+    problem = _undrawable(diag, sql)
+    if problem is None:
+        return diag
+    if os.getenv("SELECT_STRICT_DIAGNOSTICS"):
+        raise AssertionError(f"{diag['rule_id']}: {problem} ({diag})")
+    diag["end_col"] = max(diag["end_col"], diag["start_col"] + 1)
+    return diag
+
+
 def analyze(
     sql: str,
     dialect: str = "postgresql",
@@ -115,7 +156,7 @@ def analyze(
 
     schema_dict = schema_dict or {}
     enum_dict   = enum_dict or {}
-    sg_dialect  = DIALECT_MAP.get(dialect.lower(), dialect.lower())
+    sg_dialect  = sqlglot_dialect_name(dialect)
     schema      = build_schema(schema_dict, sg_dialect)
 
     statements, parse_errors, arity_diags = _parse_sql(sql, sg_dialect)
@@ -130,9 +171,10 @@ def analyze(
             key = (item["rule_id"], item["start_line"], item["start_col"])
             if key not in seen_diag:
                 seen_diag.add(key)
-                result["diagnostics"].append(item)
+                result["diagnostics"].append(_drawable(item, sql))
 
     _add(arity_diags)
+    _add(analyze_file_rules(sql, sg_dialect))
 
     if not statements:
         return result
@@ -155,9 +197,9 @@ def analyze(
         result["column_refs"].extend(collect_column_refs(stmt))
 
         _add(analyze_null_rules(stmt))
-        _add(analyze_style_rules(stmt, sg_dialect, sql))
+        _add(analyze_style_rules(stmt, sg_dialect))
         _add(analyze_aggregation_rules(stmt, user_agg_names))
-        _add(analyze_orderby_rules(stmt))
+        _add(analyze_orderby_rules(stmt, sg_dialect))
 
         _add(analyze_unknown_tables(stmt, schema_dict, default_schema, virtual_names))
         _add(analyze_unknown_columns(scopes, schema_dict, default_schema, sg_dialect))

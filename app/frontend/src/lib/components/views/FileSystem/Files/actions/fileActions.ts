@@ -1,8 +1,8 @@
 import { get } from 'svelte/store';
 
-import { StageFile, UnstageFile, RevertFile } from '$lib/wailsjs/go/git/Git';
-import type { graph } from '$lib/wailsjs/go/models';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import { StageFile, UnstageFile, RevertFile } from '$lib/bindings/selectDb/internal/git/git';
+import type * as graph from '$lib/wails/graph';
+import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import { getDbIds, runStatement } from '$lib/utils/query/helpers';
@@ -14,6 +14,7 @@ import { loadGitFileStatus } from '$lib/components/views/Git/gitStore';
 import { uriToGitPath } from '$lib/components/views/Git/helpers';
 import { notify } from '$lib/system/Notifications/notificationsStore';
 import type { Icons } from '$lib/system/Icon/types';
+import { removeEntry } from '$lib/components/views/shared/deleteEntries';
 
 export const getFileActions = (file: graph.FileNode, ctx: 'fs' | 'git' | 'search') => {
 	switch (ctx) {
@@ -101,8 +102,7 @@ export const getFileActions = (file: graph.FileNode, ctx: 'fs' | 'git' | 'search
 				actions.push({
 					icon: 'undo' as Icons,
 					onClick: async (file: graph.FileNode) => {
-						await must(tryCatch(fs.Delete, { uri: file.uri, recursive: false }));
-						await tryCatch(fs.Delete, { uri: file.uri + '.metadata.json', recursive: false });
+						await removeEntry(file);
 						notify({ type: AlertType.Success, message: `Deleted ${file.name}` });
 						await loadGitFileStatus();
 					}

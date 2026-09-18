@@ -12,9 +12,12 @@
 	import ItemIcon from './ItemIcon.svelte';
 	import ItemName from './ItemName.svelte';
 	import { expandableItemTypes } from './expandableItemTypes';
-	import { visibleIdsStore } from '$lib/components/views/FileSystem/Files/helpers/visibilityStore';
+	import {
+		visibleIdsStore,
+		ROW_HEIGHT
+	} from '$lib/components/views/FileSystem/Files/helpers/visibilityStore';
 	import ChildVisibilityBadge from '$lib/components/views/FileSystem/Files/ChildVisibilityBadge.svelte';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type DisplayProps<T> = {
 		item: T;
@@ -24,6 +27,7 @@
 			onClick(item: T): void;
 		}[];
 		handleClick(item: T, event?: MouseEvent): void;
+		handleDoubleClick?(item: T, event?: MouseEvent): void;
 		depth?: number;
 		parentIds?: string[];
 		draggable?: boolean;
@@ -47,6 +51,7 @@
 		options,
 		actions,
 		handleClick,
+		handleDoubleClick,
 		depth = 0,
 		parentIds = [],
 		draggable = false,
@@ -62,6 +67,9 @@
 
 		if (item.type === 'folder') {
 			const folder = item as graph.FolderNode;
+			// A folder that has not been opened has not been read from disk, so
+			// holding no files means "unknown", not "empty".
+			if (!folder.resolved) return false;
 			return (
 				folder.files.length === 0 && folder.db_instances.length === 0 && folder.folders.length === 0
 			);
@@ -97,17 +105,25 @@
 	const filterableChildren = $derived.by<{ id: string; name: string }[]>(() => {
 		if (!FILTERABLE_TYPES.has(item.type)) return [];
 		if (!('children' in item)) return [];
-		const children = item.children ?? [];
+		const children = item.children;
 		return children.map((c) => ({ id: c.id, name: c.name }));
 	});
 </script>
 
 {#if visible}
-	<Contextable {options} metadata={item} direction="right" style="height: 32px; display: flex;">
+	<Contextable
+		{options}
+		metadata={item}
+		direction="right"
+		style="height: {ROW_HEIGHT}px; display: flex;"
+	>
 		{@const showActions = !($renamingItemIdStore === item.id) && actions && actions.length > 0}
 
 		<div
 			class="item"
+			data-test="tree.node"
+			data-test-value={item.name}
+			data-test-selected={isSelected}
 			class:selected={isSelected}
 			class:folder={item.type === 'folder'}
 			class:database={item.type === 'db_instance'}
@@ -116,6 +132,10 @@
 			onclick={(e) => {
 				if ($renamingItemIdStore === item.id) return;
 				handleClick(item, e);
+			}}
+			ondblclick={(e) => {
+				if ($renamingItemIdStore === item.id) return;
+				handleDoubleClick?.(item, e);
 			}}
 			role="presentation"
 			data-id={item.id}
@@ -150,7 +170,13 @@
 				</div>
 				<ItemIcon {item} muted={muted()} />
 				<div class="item-name-wrapper">
-					<ItemName id={item.id} name={item.name} muted={muted()} type={item.type} />
+					<ItemName
+						id={item.id}
+						uri={item.uri}
+						name={item.name}
+						muted={muted()}
+						type={item.type}
+					/>
 					{#if filterableChildren.length > 0}
 						<ChildVisibilityBadge parentId={item.id} items={filterableChildren} />
 					{/if}
@@ -181,7 +207,12 @@
 		</div>
 	</Contextable>
 {:else}
-	<div class="item-placeholder" data-id={item.id} data-parent-ids={parentIds.join(',')}></div>
+	<div
+		class="item-placeholder"
+		style="height: {ROW_HEIGHT}px;"
+		data-id={item.id}
+		data-parent-ids={parentIds.join(',')}
+	></div>
 {/if}
 
 <style>
@@ -190,7 +221,7 @@
 		padding-left: var(--space-sm-md);
 
 		width: 100%;
-		height: 32px;
+		height: 100%;
 		min-width: fit-content;
 		display: inline-flex;
 		align-items: stretch;
@@ -206,23 +237,14 @@
 	:global([data-depth='0'] > *:not(:first-child) .item[data-depth='0']) {
 		border-top: var(--bw) transparent solid;
 	}
-	:global([data-depth='0'] > *:not(:first-child) .item[data-depth='0'].selected) {
-		border-top-color: var(--border-color);
-	}
 	.item.selected {
-		background: var(--gray-400) !important;
+		background: var(--gray-300) !important;
 	}
 	.item:not(.selected):hover {
-		background: var(--gray-550) !important;
-	}
-	.item.selected.has-border-top {
-		border-top-color: var(--border-color);
-	}
-	.item.selected {
-		border-bottom-color: var(--border-color);
+		background: var(--gray-300) !important;
 	}
 	.item.hovered-target {
-		background: var(--gray-0) !important;
+		background: var(--gray-300) !important;
 	}
 	.item-name-wrapper {
 		display: flex;
@@ -269,10 +291,10 @@
 		transition: border-left-color 0.3s ease-out;
 	}
 	.item.selected .depth-spacer {
-		border-left-color: var(--gray-600) !important;
+		border-left-color: var(--gray-300) !important;
 	}
 	.item:hover .depth-spacer {
-		border-left-color: var(--gray-550) !important;
+		border-left-color: var(--gray-300) !important;
 	}
 
 	.item .content {
@@ -289,13 +311,16 @@
 		position: sticky;
 	}
 	.item .badge-wrapper .badge {
-		background-color: var(--gray-0);
-		padding: var(--space-xxs) var(--space-xs);
+		background-color: var(--gray-200);
+		padding: var(--space-xs) var(--space-xs-sm);
 		color: var(--gray-800);
 		border-radius: var(--br-xs);
 		height: fit-content;
-		margin-top: 8px;
+		margin-top: 4px;
 		font-size: var(--fs-xs);
+		display: flex;
+		align-items: center;
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.item .action-wrapper {
@@ -320,9 +345,6 @@
 		}
 	}
 
-	.item-placeholder {
-		height: 32px;
-	}
 	.item .indicators-wrapper {
 		position: absolute;
 		right: 100%;

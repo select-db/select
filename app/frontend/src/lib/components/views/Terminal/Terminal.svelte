@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { Terminal as XTerm } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import { WebLinksAddon } from '@xterm/addon-web-links';
 	import '@xterm/xterm/css/xterm.css';
 
-	import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-	import * as TerminalBackend from '$lib/wailsjs/go/terminal/Terminal';
+	import { EventsOn } from '$lib/wails/events';
+	import * as TerminalBackend from '$lib/bindings/selectDb/internal/terminal/terminal';
 	import { type Tab, updateTab } from '$lib/components/Layout/layoutStore';
 	import { getTerminalTheme } from './terminalTheme';
 	import Header from './Header.svelte';
@@ -16,8 +16,12 @@
 	};
 
 	let { tab }: Props = $props();
-	const sessionId = tab.terminal!.sessionId;
-	let currentShell = $state(tab.terminal!.shell);
+	// Read once, as before. Note this component is NOT remounted per tab the way
+	// Chat is ({#key activeTab.id} in GroupRenderer wraps Chat only), so switching
+	// between two terminal tabs reuses it with a new `tab` while these stay on the
+	// first one's session. That predates this change and is left alone here.
+	const sessionId = untrack(() => tab.terminal!.sessionId);
+	let currentShell = $state(untrack(() => tab.terminal!.shell));
 
 	let containerEl: HTMLDivElement;
 	let xterm: XTerm | null = null;
@@ -174,7 +178,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.terminal-container :global(.xterm) {
@@ -185,10 +189,10 @@
 	}
 
 	.terminal-container :global(.xterm .xterm-scrollable-element) {
-		background-color: var(--gray-0) !important;
+		background-color: var(--gray-200) !important;
 	}
 
 	.terminal-container :global(.xterm-viewport) {
-		background-color: var(--gray-0) !important;
+		background-color: var(--gray-200) !important;
 	}
 </style>

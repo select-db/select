@@ -1,12 +1,12 @@
 <script lang="ts">
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import DatabasePicker from './DatabasePicker.svelte';
 	import RunButton from './RunButton.svelte';
 	import VariablePicker from './VariablePicker.svelte';
 	import { updateTab, type Tab } from '$lib/components/Layout/layoutStore';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
 		isTemp?: boolean;
@@ -28,10 +28,9 @@
 		const ids = Array.isArray(value) ? value : value ? [value] : [];
 
 		const graph = $workspaceGraphStore;
-		const databases =
-			graph?.db_instances
-				?.filter((db) => ids.includes(db.id))
-				.map((db) => ({ id: db.id, name: db.name })) ?? [];
+		const databases = (graph?.db_instances ?? [])
+			.filter((db) => ids.includes(db.id))
+			.map((db) => ({ id: db.id, name: db.name }));
 
 		let activeDatabaseId = tab.file?.activeDatabaseId;
 		if (!databases.find(({ id }) => id === activeDatabaseId)) activeDatabaseId = databases[0]?.id;
@@ -61,9 +60,11 @@
 
 <div class="wrapper">
 	<div class="left-wrapper">
-		<RunButton {file} {run} {cancel} />
-		<RunButton {file} {run} {cancel} plan />
-		<RunButton {file} {run} {cancel} explain />
+		<div class="actions-wrapper">
+			<RunButton {file} {run} {cancel} />
+			<RunButton {file} {run} {cancel} plan />
+			<RunButton {file} {run} {cancel} explain />
+		</div>
 		<div class="divider"></div>
 		<DatabasePicker
 			multiple={true}
@@ -82,23 +83,28 @@
 
 <style>
 	.wrapper {
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 
 		display: flex;
 		gap: var(--space-sm);
 		align-items: start;
-		padding: var(--space-xs-sm) var(--space-sm) 0 var(--space-sm);
-		margin-bottom: -2px;
+		padding: var(--space-sm) var(--space-sm-md) 0 var(--space-sm-md);
 	}
 
 	.divider {
-		width: var(--space-xs);
+		width: var(--space-sm);
 	}
 
 	.wrapper .left-wrapper,
+	.wrapper .actions-wrapper,
 	.wrapper .right-wrapper {
 		display: flex;
 		align-items: center;
+	}
+
+	.actions-wrapper {
+		display: flex;
+		gap: var(--space-xs-sm);
 	}
 
 	.wrapper .right-wrapper {

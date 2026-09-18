@@ -1,0 +1,4020 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Select API",
+    "version": "v1",
+    "description": "Workspace-scoped REST API generated from the Select schema. Authenticate with a user access token or an `slct_` API key in the `Authorization: Bearer \u003ctoken\u003e` header."
+  },
+  "servers": [
+    {
+      "url": "https://api.select-db.com"
+    }
+  ],
+  "tags": [
+    {
+      "name": "group",
+      "description": "Operations on groups."
+    },
+    {
+      "name": "group_to_role",
+      "description": "Operations on group_to_roles."
+    },
+    {
+      "name": "permission",
+      "description": "Operations on permissions."
+    },
+    {
+      "name": "role",
+      "description": "Operations on roles."
+    },
+    {
+      "name": "user_to_group",
+      "description": "Operations on user_to_groups."
+    },
+    {
+      "name": "user_to_role",
+      "description": "Operations on user_to_roles."
+    },
+    {
+      "name": "workspace_to_user",
+      "description": "Operations on workspace_to_users."
+    },
+    {
+      "name": "log",
+      "description": "Operations on logs."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/group_to_roles": {
+      "get": {
+        "tags": [
+          "group_to_role"
+        ],
+        "summary": "List group_to_roles",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `group_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `role_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "operationId": "listGroupToRole",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: group_id eq 'value' and role_id eq 'value'; (group_id eq 'value' or role_id eq 'value') and not (group_id eq 'value')",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of grouptoroles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GroupToRole"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "group_to_role"
+        ],
+        "summary": "Create group_to_role",
+        "description": "Requires workspace action(s): groups.manage, roles.manage.",
+        "operationId": "createGroupToRole",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupToRoleCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created grouptorole.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupToRole"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A grouptorole with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage",
+          "roles.manage"
+        ]
+      }
+    },
+    "/group_to_roles/{id}": {
+      "get": {
+        "tags": [
+          "group_to_role"
+        ],
+        "summary": "Get group_to_role",
+        "operationId": "getGroupToRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The grouptorole.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupToRole"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such grouptorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "group_to_role"
+        ],
+        "summary": "Update group_to_role",
+        "description": "Requires workspace action(s): groups.manage, roles.manage.",
+        "operationId": "updateGroupToRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupToRoleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated grouptorole.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupToRole"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such grouptorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The grouptorole was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage",
+          "roles.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "group_to_role"
+        ],
+        "summary": "Delete group_to_role",
+        "description": "Requires workspace action(s): groups.manage, roles.manage.",
+        "operationId": "deleteGroupToRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such grouptorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The grouptorole could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage",
+          "roles.manage"
+        ]
+      }
+    },
+    "/groups": {
+      "get": {
+        "tags": [
+          "group"
+        ],
+        "summary": "List groups",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | Name of the group. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `source` | string | Origin of the group (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `external_id` | string | Identifier of the group in the external provider, when not local. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "operationId": "listGroup",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: name eq 'value' and source eq 'value'; (name eq 'value' or source eq 'value') and not (name eq 'value')",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `name`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Group"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "group"
+        ],
+        "summary": "Create group",
+        "description": "Requires workspace action(s): groups.manage.",
+        "operationId": "createGroup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A group with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage"
+        ]
+      }
+    },
+    "/groups/{id}": {
+      "get": {
+        "tags": [
+          "group"
+        ],
+        "summary": "Get group",
+        "operationId": "getGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "group"
+        ],
+        "summary": "Update group",
+        "description": "Requires workspace action(s): groups.manage.",
+        "operationId": "updateGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The group was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "group"
+        ],
+        "summary": "Delete group",
+        "description": "Requires workspace action(s): groups.manage.",
+        "operationId": "deleteGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such group in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The group could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage"
+        ]
+      }
+    },
+    "/logs": {
+      "get": {
+        "tags": [
+          "log"
+        ],
+        "summary": "List logs",
+        "description": "Requires workspace action(s): audit.read.\n\n**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | Unique identifier of the event. _Operators: eq, ne, in, not in._ |\n| `occurred_at` | date-time | When the event occurred (event time). _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `recorded_at` | date-time | When the event was recorded; may lag occurred_at. _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n| `domain` | string (query, iam, datasource) | Domain of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string | Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `principal_id` | uuid | Identifier of the principal. _Operators: eq, ne, in, not in._ |\n| `principal_type` | string (user, api_key) | Type of the principal that performed the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_type` | string (permission, role, user, datasource) | Type of the target the action was performed on. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `target_id` | uuid | Identifier of the target. _Operators: eq, ne, in, not in._ |\n| `target_label` | string | Label of the target at the time of the event. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `status` | string (success, error, failure, denied) | Outcome of the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `payload` | json | Domain-specific details of the event. _Operators: contains._ |\n| `client_ip` | ip | IP address of the client. _Operators: eq, ne, in, not in._ |\n",
+        "operationId": "listLog",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: recorded_at eq 2024-01-01T00:00:00Z and action eq 'value'; (recorded_at eq 2024-01-01T00:00:00Z or action eq 'value') and not (recorded_at eq 2024-01-01T00:00:00Z)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-occurred_at`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of logs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Log"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "audit.read"
+        ]
+      }
+    },
+    "/logs/{id}": {
+      "get": {
+        "tags": [
+          "log"
+        ],
+        "summary": "Get log",
+        "description": "Requires workspace action(s): audit.read.",
+        "operationId": "getLog",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Log"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such log in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "audit.read"
+        ]
+      }
+    },
+    "/permissions": {
+      "get": {
+        "tags": [
+          "permission"
+        ],
+        "summary": "List permissions",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `role_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `db_instance_id` | string | Database instance the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `schema_name` | string | Schema the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `table_name` | string | Table the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `column_name` | string | Column the rule applies to; null = any. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `action` | string (select, insert, update, delete, see, manage) | SQL action the rule applies to. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `effect` | string (allow, deny) | Whether the rule allows or denies the action. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "operationId": "listPermission",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: role_id eq 'value' and db_instance_id eq 'value'; (role_id eq 'value' or db_instance_id eq 'value') and not (role_id eq 'value')",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Permission"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "permission"
+        ],
+        "summary": "Create permission",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "createPermission",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Permission"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A permission with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      }
+    },
+    "/permissions/{id}": {
+      "get": {
+        "tags": [
+          "permission"
+        ],
+        "summary": "Get permission",
+        "operationId": "getPermission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Permission"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such permission in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "permission"
+        ],
+        "summary": "Update permission",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "updatePermission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Permission"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such permission in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The permission was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "permission"
+        ],
+        "summary": "Delete permission",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "deletePermission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such permission in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The permission could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      }
+    },
+    "/roles": {
+      "get": {
+        "tags": [
+          "role"
+        ],
+        "summary": "List roles",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `name` | string | Name of the role. _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "operationId": "listRole",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: name eq 'value' and updated_at eq 2024-01-01T00:00:00Z; (name eq 'value' or updated_at eq 2024-01-01T00:00:00Z) and not (name eq 'value')",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `name`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of roles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Role"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "role"
+        ],
+        "summary": "Create role",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "createRole",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A role with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      }
+    },
+    "/roles/{id}": {
+      "get": {
+        "tags": [
+          "role"
+        ],
+        "summary": "Get role",
+        "operationId": "getRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such role in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "role"
+        ],
+        "summary": "Update role",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "updateRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such role in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The role was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "role"
+        ],
+        "summary": "Delete role",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "deleteRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such role in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The role could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      }
+    },
+    "/user_to_groups": {
+      "get": {
+        "tags": [
+          "user_to_group"
+        ],
+        "summary": "List user_to_groups",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `user_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `group_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `source` | string | Origin of the membership (e.g. local or an external provider). _Operators: eq, ne, in, not in, contains, startswith, endswith._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "operationId": "listUserToGroup",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: user_id eq 'value' and group_id eq 'value'; (user_id eq 'value' or group_id eq 'value') and not (user_id eq 'value')",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of usertogroups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserToGroup"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "user_to_group"
+        ],
+        "summary": "Create user_to_group",
+        "description": "Requires workspace action(s): groups.manage.",
+        "operationId": "createUserToGroup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserToGroupCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created usertogroup.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A usertogroup with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage"
+        ]
+      }
+    },
+    "/user_to_groups/{id}": {
+      "get": {
+        "tags": [
+          "user_to_group"
+        ],
+        "summary": "Get user_to_group",
+        "operationId": "getUserToGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The usertogroup.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such usertogroup in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "user_to_group"
+        ],
+        "summary": "Update user_to_group",
+        "description": "Requires workspace action(s): groups.manage.",
+        "operationId": "updateUserToGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserToGroupUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated usertogroup.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such usertogroup in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The usertogroup was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "user_to_group"
+        ],
+        "summary": "Delete user_to_group",
+        "description": "Requires workspace action(s): groups.manage.",
+        "operationId": "deleteUserToGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such usertogroup in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The usertogroup could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "groups.manage"
+        ]
+      }
+    },
+    "/user_to_roles": {
+      "get": {
+        "tags": [
+          "user_to_role"
+        ],
+        "summary": "List user_to_roles",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `user_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `role_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "operationId": "listUserToRole",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: user_id eq 'value' and role_id eq 'value'; (user_id eq 'value' or role_id eq 'value') and not (user_id eq 'value')",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of usertoroles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserToRole"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "user_to_role"
+        ],
+        "summary": "Create user_to_role",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "createUserToRole",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserToRoleCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created usertorole.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToRole"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A usertorole with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      }
+    },
+    "/user_to_roles/{id}": {
+      "get": {
+        "tags": [
+          "user_to_role"
+        ],
+        "summary": "Get user_to_role",
+        "operationId": "getUserToRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The usertorole.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToRole"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such usertorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "user_to_role"
+        ],
+        "summary": "Update user_to_role",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "updateUserToRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserToRoleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated usertorole.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToRole"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such usertorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The usertorole was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "user_to_role"
+        ],
+        "summary": "Delete user_to_role",
+        "description": "Requires workspace action(s): roles.manage.",
+        "operationId": "deleteUserToRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such usertorole in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The usertorole could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage"
+        ]
+      }
+    },
+    "/workspace_to_users": {
+      "get": {
+        "tags": [
+          "workspace_to_user"
+        ],
+        "summary": "List workspace_to_users",
+        "description": "**Filterable fields**\n\n| Field | Type | Description |\n|---|---|---|\n| `id` | uuid | _Operators: eq, ne, in, not in._ |\n| `user_id` | uuid | _Operators: eq, ne, in, not in._ |\n| `updated_at` | date-time | _Operators: eq, ne, lt, le, gt, ge, in, not in._ |\n",
+        "operationId": "listWorkspaceToUser",
+        "parameters": [
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "OData $filter expression. Combine conditions with `and`, `or`, `not`, and parentheses. Comparison: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `in`; string match: `contains(field,'x')`, `startswith(field,'x')`, `endswith(field,'x')`; null: `field eq null` / `field ne null`. See the endpoint description for the filterable fields and their types. Examples: user_id eq 'value' and updated_at eq 2024-01-01T00:00:00Z; (user_id eq 'value' or updated_at eq 2024-01-01T00:00:00Z) and not (user_id eq 'value')",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort expression: a field name, `-` prefix for descending (e.g. `-updated_at`). Defaults to `-updated_at`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows to return (default 50, max 200).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque pagination cursor; pass a previous page's next_cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of workspacetousers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WorkspaceToUser"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "description": "Opaque cursor for the next page; omitted on the last page."
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid $filter, sort, or cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "workspace_to_user"
+        ],
+        "summary": "Create workspace_to_user",
+        "description": "Requires workspace action(s): roles.manage, users.manage.",
+        "operationId": "createWorkspaceToUser",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceToUserCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created workspacetouser.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceToUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A workspacetouser with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage",
+          "users.manage"
+        ]
+      }
+    },
+    "/workspace_to_users/{id}": {
+      "get": {
+        "tags": [
+          "workspace_to_user"
+        ],
+        "summary": "Get workspace_to_user",
+        "operationId": "getWorkspaceToUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The workspacetouser.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceToUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such workspacetouser in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "workspace_to_user"
+        ],
+        "summary": "Update workspace_to_user",
+        "description": "Requires workspace action(s): roles.manage, users.manage.",
+        "operationId": "updateWorkspaceToUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceToUserUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated workspacetouser.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceToUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such workspacetouser in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The workspacetouser was modified concurrently; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body failed validation or references a row outside this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage",
+          "users.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "workspace_to_user"
+        ],
+        "summary": "Delete workspace_to_user",
+        "description": "Requires workspace action(s): roles.manage, users.manage.",
+        "operationId": "deleteWorkspaceToUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource id (UUID).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Missing or invalid authentication.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but lacks the required workspace action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such workspacetouser in this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The workspacetouser could not be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-required-actions": [
+          "roles.manage",
+          "users.manage"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message."
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Group": {
+        "type": "object",
+        "properties": {
+          "external_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Identifier of the group in the external provider, when not local."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the group."
+          },
+          "source": {
+            "type": "string",
+            "description": "Origin of the group (e.g. local or an external provider)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        }
+      },
+      "GroupCreateRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "GroupToRole": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        }
+      },
+      "GroupToRoleCreateRequest": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "group_id",
+          "role_id"
+        ]
+      },
+      "GroupToRoleUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "GroupUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "Log": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action performed within its domain. See the [audit log reference](/workspace/audit-logs/) for the full list of actions."
+          },
+          "client_ip": {
+            "type": "string",
+            "nullable": true,
+            "description": "IP address of the client."
+          },
+          "domain": {
+            "type": "string",
+            "readOnly": true,
+            "enum": [
+              "query",
+              "iam",
+              "datasource"
+            ],
+            "description": "Domain of the action."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true,
+            "description": "Unique identifier of the event."
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "description": "When the event occurred (event time)."
+          },
+          "payload": {
+            "type": "object",
+            "description": "Domain-specific details of the event."
+          },
+          "principal_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Identifier of the principal."
+          },
+          "principal_type": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "user",
+              "api_key"
+            ],
+            "description": "Type of the principal that performed the action."
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the event was recorded; may lag occurred_at."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "error",
+              "failure",
+              "denied"
+            ],
+            "description": "Outcome of the action."
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Identifier of the target."
+          },
+          "target_label": {
+            "type": "string",
+            "nullable": true,
+            "description": "Label of the target at the time of the event."
+          },
+          "target_type": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "permission",
+              "role",
+              "user",
+              "datasource"
+            ],
+            "description": "Type of the target the action was performed on."
+          }
+        }
+      },
+      "Permission": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "select",
+              "insert",
+              "update",
+              "delete",
+              "see",
+              "manage"
+            ],
+            "description": "SQL action the rule applies to."
+          },
+          "column_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Column the rule applies to; null = any."
+          },
+          "db_instance_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Database instance the rule applies to; null = any."
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ],
+            "description": "Whether the rule allows or denies the action."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "schema_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Schema the rule applies to; null = any."
+          },
+          "table_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Table the rule applies to; null = any."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        }
+      },
+      "PermissionCreateRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "select",
+              "insert",
+              "update",
+              "delete",
+              "see",
+              "manage"
+            ]
+          },
+          "column_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "db_instance_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "schema_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "table_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "role_id",
+          "action"
+        ]
+      },
+      "PermissionUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "select",
+              "insert",
+              "update",
+              "delete",
+              "see",
+              "manage"
+            ]
+          },
+          "column_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "db_instance_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "schema_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "table_name": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Role": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the role."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        }
+      },
+      "RoleCreateRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "RoleUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UserToGroup": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "source": {
+            "type": "string",
+            "description": "Origin of the membership (e.g. local or an external provider)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "UserToGroupCreateRequest": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "user_id",
+          "group_id"
+        ]
+      },
+      "UserToGroupUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "UserToRole": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "UserToRoleCreateRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "user_id",
+          "role_id"
+        ]
+      },
+      "UserToRoleUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable summary."
+          },
+          "fields": {
+            "type": "array",
+            "description": "The offending fields and why each was rejected (present for per-field failures).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "WorkspaceToUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "WorkspaceToUserCreateRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-supplied id; the server generates one when omitted."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      },
+      "WorkspaceToUserUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT or slct_ API key",
+        "description": "A workspace user access token or an `slct_`-prefixed API key."
+      }
+    }
+  }
+}

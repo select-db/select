@@ -81,8 +81,8 @@
 	:global([data-theme='dark']) .backdrop {
 		background: linear-gradient(
 			180deg,
-			hsla(var(--hue), 12%, 12%, 0.3) 50%,
-			hsla(var(--hue), 12%, 12%, 0.9) 90%
+			hsla(var(--hue), 12%, 8%, 0.3) 50%,
+			hsla(var(--hue), 12%, 8%, 0.9) 90%
 		);
 	}
 
@@ -96,7 +96,7 @@
 	.modal {
 		display: flex;
 		flex-direction: column;
-		box-shadow: var(--gray-200) 0px 7px 29px 0px;
+		box-shadow: var(--shadow) 0px 7px 29px 0px;
 		margin: var(--space-md);
 
 		border: var(--border);

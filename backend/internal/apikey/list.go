@@ -2,9 +2,13 @@ package apikey
 
 import (
 	"net/http"
+	"time"
 
 	"backend/db"
 	"backend/db/db_types"
+	"backend/internal/authz"
+
+	"github.com/google/uuid"
 )
 
 type roleRef struct {
@@ -12,24 +16,32 @@ type roleRef struct {
 	Name string `json:"name"`
 }
 
+// keyEntry is the GET /api-keys response shape, so its JSON is API surface:
+// the field types are chosen to marshal, not for convenience.
 type keyEntry struct {
-	ID         db_types.JSONNullUUID   `json:"id"`
-	Name       db_types.JSONNullString `json:"name"`
-	Prefix     db_types.JSONNullString `json:"prefix"`
-	Roles      []roleRef               `json:"roles"`
-	CreatedBy  db_types.JSONNullUUID   `json:"created_by"`
-	CreatedAt  db_types.JSONNullTime   `json:"created_at"`
-	LastUsedAt db_types.JSONNullTime   `json:"last_used_at"`
-	ExpiresAt  db_types.JSONNullTime   `json:"expires_at"`
+	ID         uuid.UUID             `json:"id"`
+	Name       string                `json:"name"`
+	Prefix     string                `json:"prefix"`
+	Roles      []roleRef             `json:"roles"`
+	CreatedBy  db_types.JSONNullUUID `json:"created_by"`
+	CreatedAt  time.Time             `json:"created_at"`
+	LastUsedAt db_types.JSONNullTime `json:"last_used_at"`
+	ExpiresAt  db_types.JSONNullTime `json:"expires_at"`
 }
 
 func ListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -51,7 +63,7 @@ func ListHandler() http.HandlerFunc {
 			id := rr.ApiKeyID.String()
 			rolesByKey[id] = append(rolesByKey[id], roleRef{
 				ID:   rr.RoleID.String(),
-				Name: rr.RoleName.ValueOrEmpty(),
+				Name: rr.RoleName,
 			})
 		}
 

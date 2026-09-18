@@ -28,17 +28,16 @@
 	);
 </script>
 
-<div class="picker">
+<div class="picker" data-test="database.picker">
 	<Select
 		{multiple}
 		value={internalValue}
-		options={options}
+		{options}
 		placeholder="Select a db..."
 		searchEnabled={true}
 		searchPlaceholder="Search db..."
 		onchange={(v) => onchange?.(v as string | string[])}
 		menuWidth={275}
-		size="xs"
 		emphasis="low"
 		bind:open
 	>

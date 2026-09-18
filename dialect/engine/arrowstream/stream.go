@@ -4,11 +4,28 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/klauspost/compress/zstd"
 )
+
+// decoderPool recycles zstd decoders across streams, mirroring the encoder
+// pool in sink.go. A fresh decoder costs ~9 MiB of allocation and ~1.3 ms per
+// query, which for a small result set is more than decompressing it.
+//
+// Pooled rather than shared: a zstd.Decoder can decode only one *stream* at a
+// time (its stateless DecodeAll is the concurrency-safe entry point, which is
+// why the JSON path in the app can share a single decoder, and this one
+// cannot). Two concurrent queries must never hold the same decoder, so each
+// Stream takes its own and returns it in Close.
+var decoderPool = sync.Pool{
+	New: func() any {
+		d, _ := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+		return d
+	},
+}
 
 // Stream decodes Arrow IPC + zstd from a reader.
 // Implements the read side: Columns → Next* → Summary → Close.
@@ -32,10 +49,13 @@ type Stream struct {
 	streamErr  string
 }
 
-// NewStream wraps a zstd-compressed Arrow IPC response body.
+// NewStream wraps a zstd-compressed Arrow IPC response body. The decoder is
+// taken from a shared pool; Close must be called to return it.
 func NewStream(body io.ReadCloser) (*Stream, error) {
-	zr, err := zstd.NewReader(body)
-	if err != nil {
+	zr := decoderPool.Get().(*zstd.Decoder)
+	if err := zr.Reset(body); err != nil {
+		_ = zr.Reset(nil)
+		decoderPool.Put(zr)
 		_ = body.Close()
 		return nil, fmt.Errorf("zstd reader: %w", err)
 	}
@@ -184,15 +204,28 @@ func (s *Stream) Summary() (rowCount, affected, durationMs int64, err error) {
 	return s.rowCount, s.affected, s.durationMs, nil
 }
 
-// Close releases all resources.
+// Close releases all resources. Idempotent: a second call is a no-op, so a
+// pooled decoder can never be handed to two concurrent streams at once.
 func (s *Stream) Close() error {
 	if s.reader != nil {
 		s.reader.Release()
+		s.reader = nil
 	}
 	if s.zr != nil {
-		s.zr.Close()
+		// Reset rather than Close: Close would retire the decoder permanently.
+		// Reset(nil) drains any in-flight decode, drops the reference to the
+		// response body, and discards buffered plaintext, leaving the decoder
+		// clean for the next query.
+		_ = s.zr.Reset(nil)
+		decoderPool.Put(s.zr)
+		s.zr = nil
 	}
-	return s.body.Close()
+	if s.body == nil {
+		return nil
+	}
+	body := s.body
+	s.body = nil
+	return body.Close()
 }
 
 func (s *Stream) parseSummary(meta arrow.Metadata) {

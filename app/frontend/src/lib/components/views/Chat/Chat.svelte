@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, onDestroy, tick, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	import { createChat } from '$lib/components/views/Chat/core';
 	import {
@@ -14,6 +15,7 @@
 	import { buildContext } from '$lib/components/views/Chat/utils/buildContext';
 	import { tryCatch, must } from '$lib/utils/tryCatch';
 	import { updateTab, type Tab } from '$lib/components/Layout/layoutStore';
+	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import type { UIMessage } from '$lib/components/views/Chat/core';
 
 	import {
@@ -35,6 +37,7 @@
 	import { createQueryRegistry } from './tools/query/queryRegistry.ts';
 	import Alert from '$lib/system/Alert/Alert.svelte';
 	import { AlertType } from '$lib/system/Alert/types.ts';
+	import { scrollShadow } from '$lib/actions/scrollShadow.ts';
 
 	type Props = {
 		tab: Tab;
@@ -42,18 +45,23 @@
 
 	let { tab }: Props = $props();
 
-	const sessionId = tab.chat?.sessionId ?? tab.id;
+	// A chat tab keeps its session for as long as this component lives, so its
+	// stored state is read once here to seed the local state below. Everything
+	// after this point is owned by the component and pushed back to the tab.
+	const { sessionId, initialMessages, initialModel, initialInput } = untrack(() => {
+		const restoredMessages = (tab.chat?.messages ?? []).map((m) => ({
+			id: m.id ?? crypto.randomUUID(),
+			role: m.role as 'system' | 'user' | 'assistant',
+			parts: m.parts ?? []
+		})) as UIMessage[];
 
-	const restoredMessages = (tab.chat?.messages ?? []).map((m) => ({
-		id: m.id ?? crypto.randomUUID(),
-		role: m.role as 'system' | 'user' | 'assistant',
-		parts: m.parts ?? []
-	})) as UIMessage[];
-
-	const task = tab.chat?.task;
-	const initialMessages = [createSystemMessage(task), ...restoredMessages];
-	const initialModel = tab.chat?.selectedModel ?? DEFAULT_MODEL;
-	const initialInput = tab.chat?.inputValue ?? '';
+		return {
+			sessionId: tab.chat?.sessionId ?? tab.id,
+			initialMessages: [createSystemMessage(tab.chat?.task), ...restoredMessages],
+			initialModel: tab.chat?.selectedModel ?? DEFAULT_MODEL,
+			initialInput: tab.chat?.inputValue ?? ''
+		};
+	});
 
 	let selectedValue = $state(initialModel);
 	let inputText = $state(initialInput);
@@ -97,11 +105,14 @@
 	});
 
 	let messagesEl: HTMLDivElement | undefined;
-	const scroll = useChatScroll(tab, {
-		getScrollEl: () => messagesEl,
-		getIsStreaming: () => lastMessageStreaming,
-		getMessages: () => chat.messages
-	});
+	const scroll = useChatScroll(
+		untrack(() => tab),
+		{
+			getScrollEl: () => messagesEl,
+			getIsStreaming: () => lastMessageStreaming,
+			getMessages: () => chat.messages
+		}
+	);
 
 	onMount(() => {
 		scroll.restore();
@@ -149,10 +160,9 @@
 		() => scroll.scrollTop
 	);
 
-	let expandedSections = $state<Set<string>>(new Set());
+	let expandedSections = new SvelteSet<string>();
 
 	function toggleSection(key: string) {
-		expandedSections = new Set(expandedSections);
 		if (expandedSections.has(key)) expandedSections.delete(key);
 		else expandedSections.add(key);
 	}
@@ -187,6 +197,10 @@
 	let workspaceHasApiKey = $state<boolean | null>(null);
 
 	$effect(() => {
+		// Re-check whenever the workspace graph changes — the backend file
+		// watcher emits a new graph when a .env is edited, so the API-key
+		// state updates live without a refresh.
+		void $workspaceGraphStore;
 		void (async () => {
 			workspaceHasApiKey = await hasAnyWorkspaceApiKey();
 		})();
@@ -220,17 +234,19 @@
 	}
 </script>
 
-<div class="chat">
+<div class="chat" data-test="chat.panel">
 	<div
 		class="messages scrollable"
 		bind:this={messagesEl}
 		onscroll={scroll.onScroll}
 		role="region"
 		aria-label="Chat messages"
+		use:scrollShadow={{ axis: 'y', top: true }}
 	>
 		{#if !lastMessageStreaming && visibleMessages.length === 0 && workspaceHasApiKey === false}
 			<EmptyState />
 		{:else}
+			<div class="spacer"></div>
 			{#each visibleMessages as message (message.id)}
 				<MessageBubble
 					{message}
@@ -243,6 +259,7 @@
 				/>
 			{/each}
 			<StatusIndicator status={statusLabel} />
+			<div class="spacer"></div>
 		{/if}
 		{#if displayError}
 			<Alert
@@ -271,7 +288,7 @@
 		flex-direction: column;
 		height: 100%;
 		overflow: hidden;
-		background-color: var(--gray-0);
+		--scroll-shadow-color: var(--gray-200);
 	}
 
 	.messages {
@@ -283,7 +300,9 @@
 		flex-direction: column;
 		gap: var(--space-md);
 
-		padding: var(--space-sm-md) var(--space-md) var(--space-sm-md) var(--space-md);
 		min-width: 275px;
+	}
+	.spacer {
+		margin-top: var(--space-sm-md) 0;
 	}
 </style>

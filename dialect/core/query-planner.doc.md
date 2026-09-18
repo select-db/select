@@ -26,4 +26,5 @@ The plan is displayed as a tree of operations. Each node shows:
 - **High estimated rows with low actual rows** (in analyze mode): the statistics are stale. Run `ANALYZE` on the table.
 - **Nested Loop joins on large datasets**: may indicate a missing index on the join column.
 
-> The planner shows **estimates only**. For actual execution metrics, use [Query Analyze](/sql/query-analyze/).
+> [!NOTE]
+> The planner shows **estimates only**. For actual execution metrics, use [Query Analyze](/docs/sql/query-analyze/).

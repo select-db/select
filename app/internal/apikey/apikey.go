@@ -65,9 +65,7 @@ func (a *APIKey) ListAPIKeys() ([]APIKeyEntry, error) {
 		return nil, err
 	}
 	var result []APIKeyEntry
-	if err := api.Fetch(ctx, "POST", "apikey/list", map[string]string{
-		"workspace_id": workspaceID,
-	}, nil, &result); err != nil {
+	if err := api.Fetch(ctx, "GET", "apikeys", nil, api.WorkspaceHeader(workspaceID), &result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -86,7 +84,7 @@ func (a *APIKey) CreateAPIKey(params CreateParams) (*CreateResult, error) {
 		"expires_at":   params.ExpiresAt,
 	}
 	var result CreateResult
-	if err := api.Fetch(ctx, "POST", "apikey/create", body, nil, &result); err != nil {
+	if err := api.Fetch(ctx, "POST", "apikeys", body, api.WorkspaceHeader(workspaceID), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -98,10 +96,9 @@ func (a *APIKey) RevokeAPIKey(id string) error {
 	if err != nil {
 		return err
 	}
-	return api.Fetch(ctx, "POST", "apikey/revoke", map[string]string{
+	return api.Fetch(ctx, "POST", "apikeys/"+id+"/revoke", map[string]string{
 		"workspace_id": workspaceID,
-		"id":           id,
-	}, nil, nil)
+	}, api.WorkspaceHeader(workspaceID), nil)
 }
 
 func (a *APIKey) SetAPIKeyRoles(id string, roleIDs []string) error {
@@ -113,11 +110,10 @@ func (a *APIKey) SetAPIKeyRoles(id string, roleIDs []string) error {
 	if roleIDs == nil {
 		roleIDs = []string{}
 	}
-	return api.Fetch(ctx, "POST", "apikey/set-roles", map[string]interface{}{
+	return api.Fetch(ctx, "PUT", "apikeys/"+id+"/roles", map[string]interface{}{
 		"workspace_id": workspaceID,
-		"id":           id,
 		"role_ids":     roleIDs,
-	}, nil, nil)
+	}, api.WorkspaceHeader(workspaceID), nil)
 }
 
 func (a *APIKey) RotateAPIKey(id string) (*CreateResult, error) {
@@ -127,10 +123,9 @@ func (a *APIKey) RotateAPIKey(id string) (*CreateResult, error) {
 		return nil, err
 	}
 	var result CreateResult
-	if err := api.Fetch(ctx, "POST", "apikey/rotate", map[string]string{
+	if err := api.Fetch(ctx, "POST", "apikeys/"+id+"/rotate", map[string]string{
 		"workspace_id": workspaceID,
-		"id":           id,
-	}, nil, &result); err != nil {
+	}, api.WorkspaceHeader(workspaceID), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

@@ -23,13 +23,13 @@ func (t *HTTPTransport) OpenStream(
 	sql string,
 	opts engine.Options,
 ) (engine.RowStream, error) {
-	body, err := t.FetchStream(ctx, "POST", "datasource/execute", executeRequest{
+	body, err := t.FetchStream(ctx, "POST", "datasources/"+instanceID+"/execute", executeRequest{
 		ID:          instanceID,
 		WorkspaceID: workspaceID,
 		SQL:         sql,
 		MaxBytes:    opts.MaxBytes,
 		TimeoutMs:   int64(opts.Timeout.Milliseconds()),
-	})
+	}, workspaceHeader(workspaceID))
 	if err != nil {
 		return nil, err
 	}

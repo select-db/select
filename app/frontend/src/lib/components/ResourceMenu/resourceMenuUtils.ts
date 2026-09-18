@@ -1,5 +1,10 @@
-import type { graph } from '$lib/wailsjs/go/models';
-import { getTabLabel, type Tab, type TabGroup, type SplitContainer } from '$lib/components/Layout/layoutStore';
+import type * as graph from '$lib/wails/graph';
+import {
+	getTabLabel,
+	type Tab,
+	type TabGroup,
+	type SplitContainer
+} from '$lib/components/Layout/layoutStore';
 import type { ResourceType, ResourceMenuOption, ResourceSearchScope } from './types';
 import type { RecentItem } from '$lib/stores/recentItemsStore';
 import { resourceOptionInSearchScope } from './resourceMenuScope';
@@ -16,69 +21,41 @@ function dbItemTypePriority(opt: ResourceMenuOption): number {
 	return 2;
 }
 
-// TODO: refacto with back (or front) btree index ?
-export function flattenWorkspaceGraph(
+/**
+ * Menu rows for `types`: every instance in `workspace.db_instances` with its
+ * schema items, plus one row per file in `files`.
+ *
+ * Files are a parameter because the graph holds only opened folders; callers
+ * pass query results or recents.
+ */
+export function resourceMenuOptions(
 	workspace: graph.WorkspaceNode | undefined,
-	types: ResourceType[]
+	types: ResourceType[],
+	files: graph.FileNode[] = []
 ): ResourceMenuOption[] {
 	if (!workspace) return [];
 
 	const options: ResourceMenuOption[] = [];
 
-	const processFolder = (folder: graph.FolderNode) => {
-		if (types.includes('file') && folder.files) {
-			for (const file of folder.files) {
-				options.push({
-					id: file.id,
-					label: file.name,
-					type: 'file',
-					uri: file.uri,
-					node: file,
-					folderId: file.folder_id
-				});
-			}
+	if (types.includes('file')) {
+		for (const file of files) {
+			options.push({
+				id: file.id,
+				label: file.name,
+				type: 'file',
+				uri: file.uri,
+				node: file,
+				folderId: file.folder_id
+			});
 		}
-
-		if (types.includes('db_instance') && folder.db_instances) {
-			for (const db of folder.db_instances) {
-				options.push({
-					id: db.id,
-					label: db.name,
-					type: 'db_instance',
-					uri: db.uri,
-					node: db
-				});
-
-				if (types.includes('db_item') && db.children) {
-					collectDbItems(db.children, options);
-				}
-			}
-		}
-
-		if (folder.folders) {
-			for (const subFolder of folder.folders) {
-				processFolder(subFolder);
-			}
-		}
-	};
-
-	for (const folder of workspace.folders || []) {
-		processFolder(folder);
 	}
 
-	if (types.includes('db_instance') && workspace.db_instances) {
-		for (const db of workspace.db_instances) {
-			options.push({
-				id: db.id,
-				label: db.name,
-				type: 'db_instance',
-				uri: db.uri,
-				node: db
-			});
-
-			if (types.includes('db_item') && db.children) {
-				collectDbItems(db.children, options);
-			}
+	for (const db of workspace.db_instances) {
+		if (types.includes('db_instance')) {
+			options.push({ id: db.id, label: db.name, type: 'db_instance', uri: db.uri, node: db });
+		}
+		if (types.includes('db_item') && db.children) {
+			collectDbItems(db.children, options);
 		}
 	}
 

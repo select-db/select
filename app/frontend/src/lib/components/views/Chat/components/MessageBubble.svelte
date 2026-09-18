@@ -84,13 +84,16 @@
 		flex-direction: column;
 		gap: var(--space-xs);
 		border-radius: var(--br-xs);
+		margin: 0 var(--space-sm-md);
 	}
 
 	.message.user {
 		align-self: flex-end;
 		border: var(--border);
-		background-color: var(--gray-400);
-		padding: var(--space-xs-sm) var(--space-sm);
+		padding: var(--space-sm) var(--space-sm-md);
+		background-color: var(--gray-300);
+		border-radius: var(--br-sm);
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.message.assistant {
@@ -100,7 +103,6 @@
 	.message.user .content :global(p) {
 		color: var(--gray-900);
 		white-space: pre-wrap;
-		font-size: var(--fs-md);
 		line-height: 20px;
 	}
 
@@ -108,6 +110,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm-md);
+
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

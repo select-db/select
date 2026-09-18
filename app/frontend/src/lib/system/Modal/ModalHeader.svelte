@@ -21,7 +21,7 @@
 	.header {
 		display: flex;
 		gap: var(--space-sm);
-		background-color: var(--gray-400);
+		background-color: var(--gray-200);
 		padding: var(--space-sm);
 		border-bottom: var(--border);
 		z-index: 1;

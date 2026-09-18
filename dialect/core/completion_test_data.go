@@ -15,6 +15,13 @@ type CompletionTestExpectation struct {
 	Text string
 }
 
+// quoteIdentifiersInText replaces the ~ placeholder with the dialect's
+// identifier quote, so one case covers quoting in every dialect rather than
+// naming one dialect's spelling and skipping the rest.
+func quoteIdentifiersInText(text, identifierQuote string) string {
+	return strings.ReplaceAll(text, "~", identifierQuote)
+}
+
 // replaceSchemaInText replaces "main" with the target schema in text
 func replaceSchemaInText(text, defaultSchema string) string {
 	if defaultSchema == "main" {
@@ -52,9 +59,10 @@ func GetCompletionTestMetadata() Metadata {
 	}
 }
 
-// GetCompletionTestCases returns the standard completion test cases
-// defaultSchema is used to replace "main" schema references in SQL and expected outputs
-func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
+// GetCompletionTestCases returns the standard completion test cases.
+// defaultSchema replaces "main" schema references in SQL and expected outputs,
+// and identifierQuote replaces the ~ placeholder around quoted identifiers.
+func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionTestCase {
 	return []CompletionTestCase{
 		{
 			Name: "SELECT without FROM",
@@ -76,7 +84,7 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 			},
 		},
 		{
-			Name: "simple table columns",
+			Name: "qualified table columns",
 			SQL:  "SELECT t1.| FROM t1",
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
@@ -84,7 +92,7 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 			},
 		},
 		{
-			Name: "simple table columns",
+			Name: "qualified table columns without FROM",
 			SQL:  "SELECT t1.|",
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
@@ -92,16 +100,16 @@ func GetCompletionTestCases(defaultSchema string) []CompletionTestCase {
 			},
 		},
 		{
-			Name: "simple table columns",
-			SQL:  "SELECT \"t1\".| FROM \"t1\"",
+			Name: "quoted table columns",
+			SQL:  quoteIdentifiersInText("SELECT ~t1~.| FROM ~t1~", identifierQuote),
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
 				{Type: CandidateTypeColumn, Text: "c2"},
 			},
 		},
 		{
-			Name: "simple table columns",
-			SQL:  "SELECT \"t1\".|",
+			Name: "quoted table columns without FROM",
+			SQL:  quoteIdentifiersInText("SELECT ~t1~.|", identifierQuote),
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
 				{Type: CandidateTypeColumn, Text: "c2"},

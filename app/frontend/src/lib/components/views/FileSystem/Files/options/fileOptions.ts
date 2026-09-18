@@ -1,22 +1,25 @@
 import { get } from 'svelte/store';
 
-import { GetOSPathFromURI } from '$lib/wailsjs/go/fs_provider/FSProvider';
-import { RevealInExplorer } from '$lib/wailsjs/go/system/System';
-import { StageFile, UnstageFile, RevertFile } from '$lib/wailsjs/go/git/Git';
-import type { git, graph } from '$lib/wailsjs/go/models';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import { GetOSPathFromURI } from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+import { RevealInExplorer } from '$lib/bindings/selectDb/internal/system/system';
+import { StageFile, UnstageFile, RevertFile } from '$lib/bindings/selectDb/internal/git/git';
+import type * as git from '$lib/bindings/selectDb/internal/git/models';
+import type * as graph from '$lib/wails/graph';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
+import { osStore } from '$lib/utils/platform';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 
 import { AlertType } from '$lib/system/Alert/types';
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { notify } from '$lib/system/Notifications/notificationsStore';
 
-import { addToItemSelection } from '$lib/components/views/shared/sharedStore';
-import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
+import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
+import { removeEntry } from '$lib/components/views/shared/deleteEntries';
+
 import { loadGitFileStatus, gitFileStatusStore } from '$lib/components/views/Git/gitStore';
 import { uriToGitPath } from '$lib/components/views/Git/helpers';
+import { renameOption } from './helpers';
 
 export const uriToRelativePath = (uri: string): string => {
 	const parts = uri.split('/');
@@ -24,10 +27,14 @@ export const uriToRelativePath = (uri: string): string => {
 };
 
 export const getExplorerLabel = () => {
-	const platform = navigator.userAgent.toLowerCase();
-	if (platform.includes('mac')) return 'Reveal in Finder';
-	if (platform.includes('win')) return 'Reveal in File Explorer';
-	return 'Reveal in File Manager';
+	switch (get(osStore)) {
+		case 'macos':
+			return 'Reveal in Finder';
+		case 'windows':
+			return 'Reveal in File Explorer';
+		default:
+			return 'Reveal in File Manager';
+	}
 };
 
 export const fileSystemOptions = [
@@ -70,13 +77,14 @@ export const fileSystemOptions = [
 
 const fsFileOptions = [
 	{
-		label: 'Rename...',
-		action: (onClose, { id }: graph.FileNode) => {
-			renamingItemIdStore.set(id);
-			addToItemSelection(id);
-			onClose?.();
+		label: 'Open',
+		runOnDoubleClick: true,
+		action: async (onClose, file: graph.FileNode) => {
+			await navigateToFile(file);
+			onClose();
 		}
 	},
+	renameOption,
 	...fileSystemOptions,
 	{
 		label: '',
@@ -84,9 +92,8 @@ const fsFileOptions = [
 	},
 	{
 		label: 'Delete',
-		action: async (onClose, { uri }: graph.FileNode) => {
-			await must(tryCatch(fs.Delete, { uri, recursive: false }));
-			await must(tryCatch(fs.Delete, { uri: uri + '.metadata.json', recursive: false }));
+		action: async (onClose, file: graph.FileNode) => {
+			await removeEntry(file);
 			onClose();
 		}
 	}
@@ -144,9 +151,8 @@ const getGitFileOptions = (file: graph.FileNode): ContextMenuOption[] => {
 	if (file.id.startsWith('git::untracked')) {
 		options.push({
 			label: 'Delete',
-			action: async (onClose, { uri }: graph.FileNode) => {
-				await must(tryCatch(fs.Delete, { uri, recursive: false }));
-				await tryCatch(fs.Delete, { uri: uri + '.metadata.json', recursive: false });
+			action: async (onClose, file: graph.FileNode) => {
+				await removeEntry(file);
 				notify({ type: AlertType.Success, message: 'File deleted' });
 				await loadGitFileStatus();
 				onClose();

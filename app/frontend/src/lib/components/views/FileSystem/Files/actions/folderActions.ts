@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 
-import { StageAll, UnstageAll, RevertAll } from '$lib/wailsjs/go/git/Git';
-import type { graph } from '$lib/wailsjs/go/models';
+import { StageAll, UnstageAll, RevertAll } from '$lib/bindings/selectDb/internal/git/git';
+import type * as graph from '$lib/wails/graph';
 
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { must, tryCatch } from '$lib/utils/tryCatch';

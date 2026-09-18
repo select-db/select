@@ -6,65 +6,52 @@ import (
 	"path/filepath"
 	"testing"
 
-	"selectDb/internal/server"
 	"selectDb/internal/utils"
 )
 
-// withTempAppDataDir configures APP_ENV and HOME so that GetAppDataDir points
-// into a test-specific temporary directory, and sets a current server so that
-// WorkspaceRootPath works. It returns the resolved app root and a restore function.
-func withTempAppDataDir(t *testing.T) (string, func()) {
+// withTempAppDataDir configures APP_ENV, HOME and XDG_CONFIG_HOME so that
+// GetAppDataDir points into a test-specific temporary directory. It returns the
+// resolved app root.
+//
+// XDG_CONFIG_HOME as well as HOME: on Linux os.UserConfigDir reads it first and
+// ignores HOME entirely when it is set, which it is on a GitHub runner. Leaving
+// it alone gives every test in the package the same app data directory however
+// carefully HOME is pointed elsewhere.
+func withTempAppDataDir(t *testing.T) string {
 	t.Helper()
 
-	oldHome := os.Getenv("HOME")
-	oldEnv := os.Getenv("APP_ENV")
-
 	tempHome := t.TempDir()
-	if err := os.Setenv("HOME", tempHome); err != nil {
-		t.Fatalf("set HOME: %v", err)
-	}
-	if err := os.Setenv("APP_ENV", "test-build-graph"); err != nil {
-		t.Fatalf("set APP_ENV: %v", err)
-	}
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+	t.Setenv("APP_ENV", "test-build-graph")
 
 	appRoot, err := utils.GetAppDataDir()
 	if err != nil {
 		t.Fatalf("GetAppDataDir: %v", err)
 	}
+	return appRoot
+}
 
-	// Set current server so WorkspaceRootPath works (appRoot/<domain>/workspaces/...)
-	const testDomain = "test.local"
-	serverDir := filepath.Join(appRoot, server.DomainToFolderName(testDomain))
-	if err := os.MkdirAll(serverDir, 0o700); err != nil {
-		t.Fatalf("create server dir: %v", err)
-	}
-	if err := server.WriteCurrentDomain(testDomain); err != nil {
-		t.Fatalf("write current server: %v", err)
-	}
+// openTestWorkspace makes a temp folder the open workspace, as opening one does.
+func openTestWorkspace(t *testing.T, workspaceID string) string {
+	t.Helper()
 
-	restore := func() {
-		_ = os.Setenv("HOME", oldHome)
-		_ = os.Setenv("APP_ENV", oldEnv)
-	}
-
-	return appRoot, restore
+	root := t.TempDir()
+	SetOpenWorkspace(workspaceID, root)
+	t.Cleanup(ClearOpenWorkspace)
+	return root
 }
 
 // TestBuildWorkspaceGraphFromFS_SimpleTree verifies that the filesystem-based
 // graph builder correctly discovers folders, files and db instances under the
 // workspace root.
 func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
-	_, restore := withTempAppDataDir(t)
-	defer restore()
+	withTempAppDataDir(t)
 
 	const workspaceID = "ws-1"
 	rootURI := fmt.Sprintf("selectdb://workspaces/%s", workspaceID)
 
-	serverRoot, err := server.CurrentServerRoot()
-	if err != nil {
-		t.Fatalf("CurrentServerRoot: %v", err)
-	}
-	workspaceRoot := filepath.Join(serverRoot, "workspaces", workspaceID)
+	workspaceRoot := openTestWorkspace(t, workspaceID)
 
 	// Layout:
 	//   workspaces/ws-1/
@@ -151,12 +138,35 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		subIDs[f.ID] = f
 	}
 
+	// A folder below the root is part of the skeleton, but its files are read
+	// when it is opened, not by the build.
 	folderFileURI := rootURI + "/folder-file-1"
 	if ff, ok := subIDs[folderFileURI]; !ok {
 		t.Errorf("missing folder %q under root", folderFileURI)
 	} else {
+		if ff.Resolved {
+			t.Errorf("folder-file-1 should not be resolved by the build")
+		}
+		if len(ff.Files) != 0 {
+			t.Errorf("folder-file-1 should hold no files before it is opened: %+v", ff.Files)
+		}
+
+		if _, err := g.ResolveFolder(folderFileURI); err != nil {
+			t.Fatalf("ResolveFolder failed: %v", err)
+		}
+		if !ff.Resolved {
+			t.Errorf("folder-file-1 should be resolved after opening it")
+		}
 		if len(ff.Files) != 1 || ff.Files[0].Name != "file-child.sql" {
 			t.Errorf("folder-file-1 contents mismatch: %+v", ff.Files)
+		}
+
+		// Opening it again must not duplicate what it already holds.
+		if _, err := g.ResolveFolder(folderFileURI); err != nil {
+			t.Fatalf("second ResolveFolder failed: %v", err)
+		}
+		if len(ff.Files) != 1 {
+			t.Errorf("re-opening folder-file-1 duplicated its files: %+v", ff.Files)
 		}
 	}
 
@@ -173,8 +183,9 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 	db := ws.DBInstances[0]
 
 	expectedDbURI := rootURI + "/folder-db-1/db1"
-	// Name and ID come from db.config.json
-	if db.URI != expectedDbURI || db.Name != "DB1" || db.ID != "db-1" || db.DBType != "sqlite" {
+	// The ID comes from db.config.json. The name is the directory's, and the
+	// "DB1" the config still carries does not get a say.
+	if db.URI != expectedDbURI || db.Name != "db1" || db.ID != "db-1" || db.DBType != "sqlite" {
 		t.Errorf("db instance mismatch: %+v", db)
 	}
 
@@ -182,16 +193,18 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		t.Errorf("db instance folderID mismatch: got %q want %q", db.FolderID, folderDbURI)
 	}
 
-	// Files inside the DB instance folder must be attached to the DB node.
-	if len(db.Files) != 2 {
-		t.Errorf("expected 2 files in db instance (schema.sql, init.sql), got %d: %+v", len(db.Files), db.Files)
+	// Files inside the DB instance folder must be attached to the DB node, the
+	// config that makes it a database included: it is a file people read and
+	// commit, so it is a row like the queries beside it.
+	if len(db.Files) != 3 {
+		t.Errorf("expected 3 files in db instance (schema.sql, init.sql, db.config.json), got %d: %+v", len(db.Files), db.Files)
 	} else {
 		names := map[string]bool{}
 		for _, f := range db.Files {
 			names[f.Name] = true
 		}
-		if !names["schema.sql"] || !names["init.sql"] {
-			t.Errorf("db instance files missing schema.sql or init.sql: %+v", db.Files)
+		if !names["schema.sql"] || !names["init.sql"] || !names["db.config.json"] {
+			t.Errorf("db instance files missing schema.sql, init.sql or db.config.json: %+v", db.Files)
 		}
 	}
 }

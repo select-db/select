@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { EventsOn } from '$lib/wailsjs/runtime';
+	import { EventsOn } from '$lib/wails/events';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import type { Icons } from '$lib/system/Icon/types';
 
@@ -41,7 +41,7 @@
 	};
 
 	onMount(() => {
-		EventsOn('networkQuality', (data) => {
+		EventsOn<{ quality: string }>('networkQuality', (data) => {
 			network = data.quality as Quality;
 		});
 	});

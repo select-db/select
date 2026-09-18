@@ -1,0 +1,5 @@
+-- name: Upsert{{.Sing}} :exec
+INSERT INTO {{.Table}} ({{.InsCols}})
+VALUES ({{.Vals}})
+ON CONFLICT ({{.PK}}) DO UPDATE SET
+{{.SetBlock}}

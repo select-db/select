@@ -2,13 +2,22 @@ package graph
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"selectDb/internal/server"
+	"selectDb/internal/fs_uri"
+	"selectDb/internal/utils"
 )
+
+// UserConfigDir returns the absolute path to the per-user config directory
+// (where personal .theme / .config files live), ensuring it exists. It resolves
+// from the same per-user app data directory used for server/workspace data
+// (utils handles XDG / %APPDATA% per-OS), so personal config is shared across
+// every server and workspace.
+func UserConfigDir() (string, error) {
+	return utils.UserConfigDir()
+}
 
 // WorkspaceFS encapsulates common path/URI computations for a single
 // workspace so that both the initial graph build and the filesystem watcher
@@ -17,19 +26,9 @@ type WorkspaceFS struct {
 	WorkspaceID   string
 	WorkspaceRoot string
 	RootURI       string
-}
 
-// WorkspaceRootPath returns the absolute filesystem path to the workspace root
-// directory for the given workspace ID (under the current server folder).
-func WorkspaceRootPath(workspaceID string) (string, error) {
-	serverRoot, err := server.CurrentServerRoot()
-	if err != nil {
-		return "", err
-	}
-	if serverRoot == "" {
-		return "", fmt.Errorf("no current server")
-	}
-	return filepath.Join(serverRoot, "workspaces", workspaceID), nil
+	// ignore keeps the tree and the watcher out of node_modules and friends.
+	ignore *ignoreMatcher
 }
 
 // NewWorkspaceFS constructs a WorkspaceFS by resolving the workspace root on
@@ -48,7 +47,8 @@ func NewWorkspaceFSFromRoot(workspaceID, workspaceRoot string) *WorkspaceFS {
 	return &WorkspaceFS{
 		WorkspaceID:   workspaceID,
 		WorkspaceRoot: workspaceRoot,
-		RootURI:       fmt.Sprintf("selectdb://workspaces/%s", workspaceID),
+		RootURI:       fs_uri.Scheme + fs_uri.WorkspacePrefix + workspaceID,
+		ignore:        newIgnoreMatcher(workspaceRoot),
 	}
 }
 
@@ -56,7 +56,7 @@ func NewWorkspaceFSFromRoot(workspaceID, workspaceRoot string) *WorkspaceFS {
 // a boolean indicating whether p is inside the workspace.
 func (c *WorkspaceFS) Rel(p string) (string, bool) {
 	rel, err := filepath.Rel(c.WorkspaceRoot, p)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || !fs_uri.Contains(c.WorkspaceRoot, p) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true
@@ -70,6 +70,20 @@ func (c *WorkspaceFS) URI(rel string) string {
 	return c.RootURI + "/" + filepath.ToSlash(rel)
 }
 
+// Path converts a selectdb:// URI back to an absolute path, and reports whether
+// the URI belongs to this workspace.
+func (c *WorkspaceFS) Path(uri string) (string, bool) {
+	if uri == c.RootURI {
+		return c.WorkspaceRoot, true
+	}
+	rel, ok := strings.CutPrefix(uri, c.RootURI+"/")
+	if !ok {
+		return "", false
+	}
+	path, err := fs_uri.Resolve(c.WorkspaceRoot, rel)
+	return path, err == nil
+}
+
 // ParentURI returns the URI of the parent folder for a given workspace-relative
 // path. For items directly under the workspace root, it returns the root URI.
 func (c *WorkspaceFS) ParentURI(rel string) string {
@@ -80,13 +94,19 @@ func (c *WorkspaceFS) ParentURI(rel string) string {
 	return c.URI(parentRel)
 }
 
+// DBConfigFileName is the file that makes a directory a database.
+const DBConfigFileName = "db.config.json"
+
 // FSDBConfig mirrors the on-disk db.config.json structure used for
 // filesystem-backed database instances managed by the workspace graph. It is a
 // lightweight version of the fsDBConfig type in node_db_instance.go, kept here
 // to avoid import cycles.
+//
+// The name is deliberately absent: a database is named by the directory it
+// sits in, and a second copy here would be one nothing reads and every rename
+// would leave behind.
 type FSDBConfig struct {
 	ID        string         `json:"id"`
-	Name      string         `json:"name"`
 	DbType    string         `json:"db_type"`
 	DSN       string         `json:"dsn"`
 	SSH       *FSDBSSHConfig `json:"ssh,omitempty"`
@@ -181,9 +201,13 @@ func IsInternalWorkspaceFile(name string) bool {
 
 	lower := strings.ToLower(name)
 
-	// Workspace-specific config / sidecar files.
-	if name == "db.config.json" ||
-		strings.HasSuffix(name, ".metadata.json") ||
+	// Sidecars SELECT writes for its own use and nobody edits by hand.
+	//
+	// The two config files are not among them. db.config.json and
+	// select.config.json are read, edited and committed by people -- one
+	// carries the dialect and the $VAR a DSN resolves from, the other is what
+	// a teammate clones to land in the same workspace -- so both are rows.
+	if strings.HasSuffix(name, ".metadata.json") ||
 		strings.HasPrefix(name, ".selectdb_") {
 		return true
 	}
@@ -223,7 +247,7 @@ func IsInternalWorkspacePath(rel string) bool {
 // CheckIsDBInstance checks if a directory contains a db.config.json file,
 // indicating it's a database instance directory.
 func CheckIsDBInstance(dirPath string) bool {
-	dbConfigPath := filepath.Join(dirPath, "db.config.json")
+	dbConfigPath := filepath.Join(dirPath, DBConfigFileName)
 	_, err := os.Stat(dbConfigPath)
 	return err == nil
 }

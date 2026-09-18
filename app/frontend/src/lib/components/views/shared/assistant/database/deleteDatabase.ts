@@ -1,4 +1,4 @@
-import type { generated } from '$lib/wailsjs/go/models';
+import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 import { removeTabByUri } from '$lib/components/Layout/layoutStore';
 
 export async function deleteDatabase(commit: generated.MutationCommit) {

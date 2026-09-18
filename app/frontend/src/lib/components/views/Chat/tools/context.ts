@@ -48,7 +48,7 @@ export function getContextForChatTab(tab: Tab): ChatContext {
 	const workspaceId = wsGraph?.id ?? '';
 	const workspaceUri = workspaceId ? `selectdb://workspaces/${workspaceId}` : '';
 	const databases = tab.chat?.databases ?? [];
-	const files = tab.chat?.files ?? [];
+	const files = (tab.chat?.files ?? []);
 	const currentFile = get(currentFileStore);
 	return {
 		workspace: workspaceId ? { id: workspaceId, uri: workspaceUri } : undefined,

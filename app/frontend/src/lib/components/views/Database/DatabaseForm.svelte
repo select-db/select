@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { Ping, ChooseSSHKeyFile } from '$lib/wailsjs/go/db_client/DbClient';
-	import { db_client } from '$lib/wailsjs/go/models';
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import { Ping, ChooseSSHKeyFile } from '$lib/bindings/selectDb/internal/db_client/dbclient';
+	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
+	import { DB_CONFIG_FILE } from '$lib/components/views/FileSystem/Files/options/helpers';
 	import {
-		DeleteDatasource,
 		GetDatasource,
 		UpsertDatasource
-	} from '$lib/wailsjs/go/datasource/Datasource';
+	} from '$lib/bindings/selectDb/internal/datasource/datasource';
 
-	import { must, tryCatch } from '$lib/utils/tryCatch';
+	import { tryCatch } from '$lib/utils/tryCatch';
 	import { debounce } from '$lib/utils/debounce';
 
 	import { AlertType } from '$lib/system/Alert/types';
@@ -21,6 +21,7 @@
 	import type { Icons } from '$lib/system/Icon/types';
 	import { onMount } from 'svelte';
 	import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';
+	import { revokeConnections } from '$lib/components/views/shared/revokeConnections';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 
 	import VariablePicker from '$lib/components/views/File/Header/VariablePicker.svelte';
@@ -50,6 +51,9 @@
 
 	/** Payload passed to onSuccess after a successful save (use to update tab/store). */
 	export type SavedDatabaseData = {
+		/** Identifies which database was saved: the save is async, so the caller
+		 *  can't assume it still is whatever it was looking at when it started. */
+		id: string;
 		name: string;
 		db_type: AvailableDatabases;
 		dsn: string;
@@ -60,7 +64,6 @@
 	type DatabaseFormProps = {
 		id?: string;
 		uri?: string;
-		name?: string;
 		db_type?: AvailableDatabases;
 		dsn?: string;
 		ssh?: SSHConfig;
@@ -68,6 +71,12 @@
 		folder_id?: string;
 
 		onSuccess?: (saved: SavedDatabaseData) => void;
+	};
+
+	const DIALECT_LABELS: Record<AvailableDatabases, string> = {
+		sqlite: 'SQLite',
+		mysql: 'MySQL',
+		postgresql: 'PostgreSQL'
 	};
 
 	const DIALECT_ICONS: Record<AvailableDatabases, Icons> = {
@@ -86,7 +95,6 @@
 	let {
 		id = $bindable(''),
 		uri = $bindable(''),
-		name = $bindable(''),
 		db_type = $bindable<AvailableDatabases>('postgresql'),
 		dsn = $bindable(''),
 		ssh = $bindable<SSHConfig>({
@@ -129,6 +137,10 @@
 	let connMaxLifetime = $state(0);
 	let connMaxIdleTime = $state(0);
 
+	// The directory the database lives in is its name, so there is no copy of it
+	// to keep in step and no second way to change it: renaming is the tree's.
+	const name = $derived(uri.split('/').pop() ?? '');
+
 	const isValid = $derived(!!uri && name.trim().length > 0);
 	const isNetworked = $derived(db_type !== 'sqlite');
 
@@ -136,19 +148,31 @@
 	let remoteError = $state<string | null>(null);
 	let previousDbType = $state(db_type);
 
-	// When switching to a non-networked dialect, clean up proxy and SSH
+	// When switching to a non-networked dialect, clean up proxy and SSH.
+	//
+	// A proxified database is the one case this will not do quietly: the dialect
+	// cannot hold a proxy connection, so the switch would drop the credential the
+	// whole workspace queries through, as a side effect of a dropdown nobody read
+	// as destructive. It sends the person to the checkbox that asks first instead.
 	$effect(() => {
 		if (db_type === previousDbType) return;
-		const wasProxified = proxified;
+		const previous = previousDbType;
+		const target = db_type;
 		previousDbType = db_type;
 
-		if (!isNetworked) {
-			connectionMode = 'dsn';
-			proxified = false;
-			if (wasProxified && id) {
-				tryCatch(DeleteDatasource, id);
-			}
+		if (isNetworked) return;
+
+		if (proxified && id) {
+			previousDbType = previous;
+			db_type = previous;
+			notifyError(
+				`${name || 'This database'} is a shared connection, and ${DIALECT_LABELS[target]} cannot be one. Turn off "Proxy connection" first, which revokes the stored credentials.`
+			);
+			return;
 		}
+
+		connectionMode = 'dsn';
+		proxified = false;
 	});
 	let mounted = $state(false);
 
@@ -191,7 +215,6 @@
 
 	$effect(() => {
 		void [
-			name,
 			db_type,
 			dsnLocal,
 			connectionMode,
@@ -310,12 +333,21 @@
 	};
 
 	const writeConfigFile = async (data: unknown) => {
-		await must(
-			tryCatch(fs.Write, {
-				uri: `${uri}/db.config.json`,
-				content: JSON.stringify(data, null, 2)
-			})
-		);
+		const [, err] = await tryCatch(fs.Write, {
+			uri: `${uri}/${DB_CONFIG_FILE}`,
+			content: JSON.stringify(data, null, 2)
+		});
+		if (!err) return;
+
+		// A save is debounced, so it can land after the database it belongs to
+		// has been deleted. The write refuses to make the folder again -- that is
+		// what used to put the row back seconds after it was removed -- and there
+		// is nothing to report here: what was being edited is gone on purpose.
+		const [, gone] = await tryCatch(fs.Stat, uri);
+		if (gone) return;
+
+		notifyError(err.message);
+		throw err;
 	};
 
 	const save = async () => {
@@ -362,14 +394,12 @@
 			if (err) notifyError(err.message);
 			await writeConfigFile({
 				id,
-				name,
 				db_type,
 				proxified
 			});
 		} else {
 			await writeConfigFile({
 				id,
-				name,
 				db_type,
 				dsn: dsnLocal,
 				ssh: savedSsh,
@@ -378,6 +408,7 @@
 		}
 
 		onSuccess?.({
+			id,
 			name,
 			db_type,
 			dsn: dsnLocal,
@@ -428,11 +459,7 @@
 				<Select
 					bind:value={db_type}
 					width={140}
-					options={[
-						{ value: 'sqlite', label: 'SQLite' },
-						{ value: 'mysql', label: 'MySQL' },
-						{ value: 'postgresql', label: 'PostgreSQL' }
-					]}
+					options={Object.entries(DIALECT_LABELS).map(([value, label]) => ({ value, label }))}
 				>
 					{#snippet optionDisplay(option: SelectOption<string> | null)}
 						{#if option}
@@ -445,11 +472,6 @@
 						{/if}
 					{/snippet}
 				</Select>
-			</div>
-
-			<div class="standalone-input" style="flex: 1">
-				<p class="label">Name</p>
-				<Input bind:value={name} placeholder="Prod read-only (RDS)" />
 			</div>
 		</div>
 	</div>
@@ -467,15 +489,30 @@
 					bind:checked={proxified}
 					onchange={async (checked) => {
 						if (checked) {
-							// cleanup local config file
-							await writeConfigFile({
-								id,
-								name,
-								db_type,
-								proxified: checked
-							});
+							// local -> proxified: dsnLocal holds the real plaintext DSN from the
+							// local config, so it's safe to push to the backend as-is.
+							//
+							// Through save(), not a bare writeConfigFile: the credential has to
+							// reach the server before the local config says it lives there. Writing
+							// the config first left a window, until the debounced save ran, 600ms
+							// later, where the only copy of the DSN was this form's memory, and
+							// where anything reloading the form read `proxified: true` and asked
+							// the server for a datasource it had not been given yet (404).
+							await save();
 						} else {
-							await must(tryCatch(DeleteDatasource, id));
+							// proxified -> local: this drops the credential for everyone, so it asks
+							// first and puts the checkbox back if the answer is no.
+							if (!(await revokeConnections([{ id, name }]))) {
+								proxified = true;
+								return;
+							}
+							// The real secret lived only on the backend and is now gone; the form
+							// holds a masked copy (bullets). Clear the credential fields so the mask
+							// can't be persisted to the local config and the user knowingly
+							// re-enters them.
+							dsnLocal = '';
+							sshPassword = '';
+							sshPrivateKey = '';
 						}
 					}}
 					label="Proxified"
@@ -510,7 +547,7 @@
 		{#if proxified && remoteLoading}
 			<div class="remote-state">
 				<Loader size={18} />
-				<p>Loading credentials…</p>
+				<p>Loading credentials...</p>
 			</div>
 		{:else if proxified && remoteError}
 			<Alert type={AlertType.Error} message={remoteError} noPulse />
@@ -523,7 +560,7 @@
 							<Icon icon="info" size={12} />
 						</button>
 					</p>
-					<div class="action-wrapper">
+					<div class="action-wrapper" data-test="database.dsn">
 						<Input
 							bind:value={dsnLocal}
 							type="text"
@@ -624,7 +661,7 @@
 									<div class="action-wrapper">
 										<Input
 											bind:value={sshHostKey}
-											placeholder="ssh-ed25519 AAAA…"
+											placeholder="ssh-ed25519 AAAA..."
 											style="flex-grow: 1;"
 											validator={validateHostKey}
 										/>
@@ -801,7 +838,7 @@
 		flex-direction: column;
 		align-items: stretch;
 		gap: var(--space-lg);
-		padding: var(--space-md) var(--space-sm-md);
+		padding: var(--space-md);
 	}
 	form .group {
 		display: flex;
@@ -816,8 +853,9 @@
 		padding: none;
 		max-width: none;
 		border: var(--border);
-		border-radius: var(--br-xs);
+		border-radius: var(--br-sm);
 		padding: var(--space-md) var(--space-sm-md);
+		box-shadow: var(--shadow-subtle);
 	}
 	form .input-group {
 		display: flex;
@@ -854,7 +892,6 @@
 		padding: var(--space-sm-md);
 		border-radius: var(--br-md);
 		border: var(--border);
-		border-color: var(--blue);
 	}
 	.proxified .group.ssh {
 		border-color: var(--gray-100);
@@ -903,8 +940,8 @@
 		padding: 0 var(--space-sm);
 		border: var(--border);
 		border-radius: var(--br-xs);
-		background-color: var(--gray-0);
 		color: var(--gray-900);
+		background-color: var(--gray-200);
 		font-size: var(--fs-sm);
 		overflow: hidden;
 		white-space: nowrap;

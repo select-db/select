@@ -80,7 +80,7 @@
 		line-height: 0;
 		border-radius: 2px;
 		overflow: hidden;
-		box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+		box-shadow: inset 0 0 0 0.5px var(--shadow);
 	}
 
 	.region:disabled .flag {

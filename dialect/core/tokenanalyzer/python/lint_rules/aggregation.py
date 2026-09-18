@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from sqlglot import exp
 
-from analysis.schema import pos, span
+from analysis.schema import span
 
 
 def analyze_aggregation_rules(stmt: exp.Expression, user_agg_names: set[str]) -> list[dict]:
@@ -30,14 +30,14 @@ def _a001(stmt: exp.Expression, user_agg_names: set[str]) -> list[dict]:
             # Skip if inside a subquery nested within WHERE
             if _inside_subquery(node, where):
                 continue
-            line, col, end_col = span(node)
+            line, col, end_line, end_col = span(node)
             name = node.name if hasattr(node, "name") and node.name else type(node).__name__
             results.append({
                 "rule_id":    "agg-in-where",
                 "severity":   "error",
                 "message":    f"{name}() is not allowed in a WHERE clause; use HAVING instead",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results
 
@@ -48,13 +48,13 @@ def _a002(stmt: exp.Expression) -> list[dict]:
     for select in stmt.find_all(exp.Select):
         if select.args.get("having") and not select.args.get("group"):
             having = select.args["having"]
-            line, col = pos(having)
+            line, col, end_line, end_col = span(having)
             results.append({
                 "rule_id":    "having-without-group-by",
                 "severity":   "error",
                 "message":    "HAVING without GROUP BY: use WHERE or add a GROUP BY clause",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results
 
@@ -70,14 +70,14 @@ def _a003(stmt: exp.Expression, user_agg_names: set[str]) -> list[dict]:
             if isinstance(node, exp.Anonymous):
                 if node.name.lower() not in user_agg_names:
                     continue
-            line, col, end_col = span(node)
+            line, col, end_line, end_col = span(node)
             name = node.name if hasattr(node, "name") and node.name else type(node).__name__
             results.append({
                 "rule_id":    "agg-in-join",
                 "severity":   "error",
                 "message":    f"{name}() is not allowed in a JOIN ON clause",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
     return results
 

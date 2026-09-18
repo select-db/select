@@ -10,10 +10,12 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/authz"
-	"backend/internal/middlewares"
 
 	core "github.com/selectDb/dialect/core"
+
+	"github.com/google/uuid"
 )
 
 // nameFromEmail extracts a display name from the local part of an email.
@@ -43,10 +45,6 @@ type addUserResponse struct {
 
 func AddUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
 
 		var req addUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -60,24 +58,23 @@ func AddUserHandler() http.HandlerFunc {
 			return
 		}
 
-		workspaceID := middlewares.MemberWorkspaceID(r)
+		a := authz.ActorOf(r)
+		workspaceID := a.WorkspaceID
 
-		if !authz.IsWorkspaceOwner(r, workspaceID) {
-			compiled := authz.CompiledFromRequest(r)
-			if !compiled.IsAllowed(core.ActionWorkspaceUsersManage) {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
+		if !a.IsOwner() && !a.Can(core.ActionWorkspaceUsersManage) {
+			audit.EmitDenied(r.Context(), audit.WorkspaceUserAdded, workspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
 		}
 
-		workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		workspaceUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
 		}
 
 		// Find existing user by email
-		var userUUID db_types.JSONNullUUID
+		var userUUID uuid.UUID
 		row, err := db.Queries.GetUserByEmail(r.Context(), generated.GetUserByEmailParams{
 			Lower:       email,
 			WorkspaceID: workspaceUUID,
@@ -85,7 +82,7 @@ func AddUserHandler() http.HandlerFunc {
 		if errors.Is(err, sql.ErrNoRows) {
 			// No user with this email: create a placeholder
 			userUUID, err = db.Queries.InsertUserPlaceholder(r.Context(), generated.InsertUserPlaceholderParams{
-				Email: db_types.NewJSONNullString(email),
+				Email: email,
 				Name:  db_types.NewJSONNullString(nameFromEmail(email)),
 			})
 			if err != nil {
@@ -122,6 +119,12 @@ func AddUserHandler() http.HandlerFunc {
 			http.Error(w, "failed to reactivate membership", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.WorkspaceUserAdded, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    userUUID.String(),
+			Status:      audit.StatusSuccess,
+		})
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(addUserResponse{

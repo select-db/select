@@ -2,7 +2,6 @@ package apikey
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -10,34 +9,38 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
 	"backend/internal/auth"
-)
+	"backend/internal/authz"
 
-type rotateRequest struct {
-	ID string `json:"id"`
-}
+	"github.com/google/uuid"
+)
 
 // RotateHandler mints a successor carrying the old key's name, roles, and
 // expiry, then shortens the old key to a grace window so a client can swap
 // without an outage.
 func RotateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, userID, ok := guard(w, r)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			audit.EmitDenied(r.Context(), audit.APIKeyRotated, a.WorkspaceID, "")
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			audit.EmitDenied(r.Context(), audit.APIKeyRotated, a.WorkspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
+		userID := a.UserID
 
-		var req rotateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		oldID, err := db_types.NewJSONNullUUIDFromString(req.ID)
+		oldID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -62,7 +65,7 @@ func RotateHandler() http.HandlerFunc {
 		}
 
 		plaintext, prefix, hash := auth.GenerateAPIKey()
-		createdBy, _ := db_types.NewJSONNullUUIDFromString(userID)
+		createdBy, _ := uuid.Parse(userID)
 
 		tx, err := db.GetDB().BeginTx(r.Context(), nil)
 		if err != nil {
@@ -75,9 +78,9 @@ func RotateHandler() http.HandlerFunc {
 		created, err := q.CreateAPIKey(r.Context(), generated.CreateAPIKeyParams{
 			WorkspaceID: wsUUID,
 			Name:        old.Name,
-			Prefix:      db_types.NewJSONNullString(prefix),
-			HashedKey:   db_types.NewJSONNullString(hash),
-			CreatedBy:   createdBy,
+			Prefix:      prefix,
+			HashedKey:   hash,
+			CreatedBy:   db_types.NewJSONNullUUID(createdBy),
 			ExpiresAt:   old.ExpiresAt,
 		})
 		if err != nil {
@@ -94,10 +97,10 @@ func RotateHandler() http.HandlerFunc {
 			}
 		}
 		// Mark the old key so the user can tell them apart
-		oldName := old.Name.ValueOrEmpty()
+		oldName := old.Name
 		if err := q.RenameAPIKey(r.Context(), generated.RenameAPIKeyParams{
 			ID:   oldID,
-			Name: db_types.NewJSONNullString(oldName + " (rotated)"),
+			Name: oldName + " (rotated)",
 		}); err != nil {
 			http.Error(w, "failed to rotate api key", http.StatusInternalServerError)
 			return
@@ -115,9 +118,17 @@ func RotateHandler() http.HandlerFunc {
 			return
 		}
 
+		audit.EmitAction(r.Context(), audit.APIKeyRotated, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    oldID.String(),
+			TargetLabel: old.Name,
+			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"new_api_key_id": created.ID.String()},
+		})
+
 		writeJSON(w, createResponse{
 			ID:     created.ID.String(),
-			Prefix: created.Prefix.ValueOrEmpty(),
+			Prefix: created.Prefix,
 			Key:    plaintext,
 		})
 	}

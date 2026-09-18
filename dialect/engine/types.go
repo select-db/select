@@ -28,14 +28,14 @@ type Options struct {
 	ForExport bool
 
 	// MaxBytes kills the scan loop once this many bytes have been streamed.
-	// 0 = unlimited. Converted from max_result_size_mb in the workspace config.
+	// 0 = unlimited. Converted from the workspace's max_result_size_mb setting.
 	// The engine enforces a hard ceiling of maxResultSizeHardCap regardless of this value.
 	MaxBytes int64
 }
 
 // maxResultSizeHardCap is the absolute ceiling enforced by the engine
 // regardless of what callers pass in MaxBytes. Prevents accidental or
-// malicious bypasses of the workspace config cap.
+// malicious bypasses of the workspace result-size limit.
 const maxResultSizeHardCap = 250 * 1024 * 1024 // 250MB
 
 // ColumnEditMeta is the dialect-side, transport-neutral view of per-column

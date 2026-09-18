@@ -7,6 +7,8 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/audit"
+	"backend/internal/auth"
 	"backend/internal/middlewares"
 
 	"github.com/google/uuid"
@@ -25,10 +27,6 @@ type createResponse struct {
 
 func CreateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
 
 		userID, ok := middlewares.MustGetUserID(w, r)
 		if !ok {
@@ -45,19 +43,19 @@ func CreateHandler() http.HandlerFunc {
 			return
 		}
 
-		userUUID, err := db_types.NewJSONNullUUIDFromString(userID)
+		userUUID, err := uuid.Parse(userID)
 		if err != nil {
 			http.Error(w, "invalid user id", http.StatusInternalServerError)
 			return
 		}
 
-		workspaceID := db_types.NewJSONNullUUID(uuid.New())
-		wtuID := db_types.NewJSONNullUUID(uuid.New())
+		workspaceID := uuid.New()
+		wtuID := uuid.New()
 
 		if err := db.Queries.UpsertWorkspace(r.Context(), generated.UpsertWorkspaceParams{
 			ID:      workspaceID,
-			Name:    db_types.NewJSONNullString(req.Name),
-			OwnerID: userUUID,
+			Name:    req.Name,
+			OwnerID: db_types.NewJSONNullUUID(userUUID),
 		}); err != nil {
 			http.Error(w, "failed to create workspace", http.StatusInternalServerError)
 			return
@@ -72,8 +70,20 @@ func CreateHandler() http.HandlerFunc {
 			return
 		}
 
-		// Revoke tokens so the next JWT refresh includes the new workspace in claims.
-		_ = db.Queries.DeleteUserRefreshTokens(r.Context(), userUUID)
+		audit.EmitAction(r.Context(), audit.WorkspaceCreated, audit.Record{
+			WorkspaceID: workspaceID.String(),
+			TargetID:    workspaceID.String(),
+			TargetLabel: req.Name,
+			Status:      audit.StatusSuccess,
+		})
+
+		// The caller's token predates the workspace, so it carries neither the
+		// ownership nor the roles they now hold in it, and every owner-gated route
+		// there would refuse them until it expired. Hand back one that knows, the
+		// way the syncer does for a commit that shifts the caller's own claims.
+		if token, err := auth.CreateJWT(r.Context(), userUUID); err == nil {
+			w.Header().Set("X-New-Access-Token", token)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(createResponse{

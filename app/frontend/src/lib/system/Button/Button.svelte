@@ -41,7 +41,6 @@
 		rightIcon,
 		iconSize = 22,
 		content,
-		ariaLabel = content,
 		disabled,
 		active = false,
 		emphasis = 'low',
@@ -50,6 +49,12 @@
 		style,
 		classes,
 		label,
+		// Must come after `label`: a destructuring default can only read names
+		// already bound. An icon-only button has no content to name it, and
+		// `label` is only a tooltip — without this it reaches a screen reader, and
+		// getByRole, as an unnamed button. The tooltip is already the words a user
+		// would say.
+		ariaLabel = content ?? label,
 
 		noRadius,
 		noBounce,
@@ -103,6 +108,7 @@
 		onclick={handleClick}
 		onmousedown={handleMouseDown}
 		aria-label={ariaLabel}
+		{disabled}
 		{style}
 	>
 		{#if leftIcon}
@@ -146,6 +152,8 @@
 		transition:
 			background-color 0.1s ease-out 0.03s,
 			transform 0.05s ease;
+
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.button:not(.noRadius) {
@@ -180,37 +188,6 @@
 		transition: stroke 0.1s ease-out 0.05s;
 	}
 
-	.button.high {
-		background-color: var(--gray-550);
-		border: none;
-	}
-	.button.high p {
-		color: var(--gray-900);
-	}
-	/* @css-ignore */
-	:global(.button.high svg) {
-		stroke: var(--gray-900);
-	}
-	.button.high:hover:not(.active) {
-		background-color: var(--gray-0);
-	}
-	.button.high:hover p {
-		color: var(--gray-1000);
-	}
-	:global(.button.high:hover svg) {
-		stroke: var(--gray-1000);
-	}
-
-	.button.high.disabled,
-	.button.high.disabled:hover {
-		background-color: var(--gray-0);
-		color: var(--gray-900);
-		stroke: var(--gray-900);
-	}
-	:global(.button.low.disabled:hover svg) {
-		stroke: var(--gray-900);
-	}
-
 	.button .badge {
 		background-color: var(--gray-600);
 		padding: var(--space-xxs) var(--space-xs);
@@ -224,6 +201,39 @@
 		white-space: nowrap;
 	}
 
+	.button.high {
+		background-color: var(--gray-300);
+		border: 0.5px var(--border-color-contrast) solid;
+	}
+	.button.high p {
+		color: var(--gray-800);
+	}
+	.button.high.active p {
+		color: var(--gray-1000);
+	}
+	/* @css-ignore */
+	:global(.button.high svg) {
+		stroke: var(--gray-800);
+	}
+	.button.high:hover:not(.active) {
+		background-color: var(--gray-400);
+	}
+	.button.high:hover p {
+		color: var(--gray-1000);
+	}
+	:global(.button.high:hover svg) {
+		stroke: var(--gray-1000);
+	}
+	.button.high.disabled,
+	.button.high.disabled:hover {
+		background-color: var(--gray-0);
+		color: var(--gray-900);
+		stroke: var(--gray-900);
+	}
+
+	:global(.button.low.disabled:hover svg) {
+		stroke: var(--gray-900);
+	}
 	.button.low {
 		background-color: transparent;
 		border: none;
@@ -235,7 +245,7 @@
 		stroke: var(--gray-800);
 	}
 	.button.low:hover:not(.active) {
-		background-color: var(--gray-550);
+		background-color: var(--gray-400);
 	}
 	.button.low:hover p {
 		color: var(--gray-1000);

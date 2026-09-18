@@ -40,20 +40,22 @@ func (i *Inspector) normalizeEquals(a, b string) bool {
 
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
+	if strings.TrimSpace(sql) == "" {
+		return nil
+	}
+
 	lexer := i.dialect.CreateLexer(sql)
 	tokenStream := antlr.NewCommonTokenStream(lexer, 0)
 	tokenStream.Fill() // pre-fill for compound-operator detection
 	parser := sqlite.NewSQLiteParser(tokenStream)
 	parser.RemoveErrorListeners()
 
-	root := parser.Parse()
-	if root == nil {
-		return nil
+	var stmtLists []sqlite.ISql_stmt_listContext
+	if root := parser.Parse(); root != nil {
+		stmtLists = root.AllSql_stmt_list()
 	}
-
-	stmtLists := root.AllSql_stmt_list()
 	if len(stmtLists) == 0 {
-		return nil
+		return []core.InspectStatement{core.UnknownStatement()}
 	}
 
 	var results []core.InspectStatement
@@ -68,16 +70,10 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		}
 
 		if len(group) > 1 {
-			result := i.mergeCompoundSelectGroup(group)
-			if result != nil {
-				results = append(results, *result)
-			}
+			results = append(results, core.OrUnknown(i.mergeCompoundSelectGroup(group)))
 		} else {
 			for _, stmt := range group[0].AllSql_stmt() {
-				result := i.inspectStatement(stmt)
-				if result != nil {
-					results = append(results, *result)
-				}
+				results = append(results, core.OrUnknown(i.inspectStatement(stmt)))
 			}
 		}
 		idx++

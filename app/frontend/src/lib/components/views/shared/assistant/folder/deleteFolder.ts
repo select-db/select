@@ -1,4 +1,4 @@
-import type { generated } from '$lib/wailsjs/go/models';
+import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
 
 export function deleteFolder(commit: generated.MutationCommit) {
 	if (commit.operation !== 'delete') return;

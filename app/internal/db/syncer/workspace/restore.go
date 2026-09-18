@@ -9,26 +9,16 @@ import (
 	"selectDb/internal/utils"
 )
 
-// Ensurer ensures a workspace folder exists on disk and can remove it. Optional; set by app wiring.
-type Ensurer interface {
-	EnsureWorkspaceFolderByID(workspaceID, name string) error
-	RemoveWorkspaceFolderByID(workspaceID string) error
-}
-
-// Restore upserts the server-authoritative workspace row, and ensures the
-// workspace folder exists on disk when the workspace is new. Materializing the
-// git repository to match git_remote_url is handled separately by the syncer's
-// reconcile pass, which is idempotent and self-healing.
-func Restore(ctx context.Context, queries *generated.Queries, payload map[string]any, ensurer Ensurer) error {
+// Restore upserts the server-authoritative workspace row. It creates nothing on
+// disk: a workspace has no folder here until somebody opens one.
+func Restore(ctx context.Context, queries *generated.Queries, payload map[string]any) error {
 	id := utils.MapGetString(payload, "id")
 	name := utils.MapGetString(payload, "name")
 	if id == "" || name == "" {
 		return nil
 	}
-	payloadGitRemote := utils.MapGetStringPtr(payload, "git_remote_url")
-
 	existedBefore := true
-	_, err := queries.GetWorkspaceByID(ctx, id)
+	existing, err := queries.GetWorkspaceByID(ctx, id)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return err
@@ -36,27 +26,43 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 		existedBefore = false
 	}
 
-	gitRemote := db_types.JSONNullString{}
-	if payloadGitRemote != nil {
-		gitRemote = db_types.NewJSONNullString(*payloadGitRemote)
-	}
 	ownerID := db_types.JSONNullString{}
 	if oid := utils.MapGetString(payload, "owner_id"); oid != "" {
 		ownerID = db_types.NewJSONNullString(oid)
 	}
+	// Execution limits are server-authoritative once the backend manages them.
+	// Until then a pulled row may omit these fields; in that case we keep the
+	// values already stored locally (defaults for a brand-new workspace) instead
+	// of resetting them.
+	defaultTimeout := 30000
+	defaultSize := 100
+	if existedBefore {
+		defaultTimeout = int(existing.StatementTimeoutMs)
+		defaultSize = int(existing.MaxResultSizeMb)
+	}
+	statementTimeoutMs := utils.MapGetIntOr(payload, "statement_timeout_ms", defaultTimeout)
+	maxResultSizeMB := utils.MapGetIntOr(payload, "max_result_size_mb", defaultSize)
+
+	// Server-authoritative: the pulled value replaces whatever is stored locally.
+	// An explicit null must land as null; only an absent key (a server predating
+	// the column) leaves the local value alone.
+	logo := db_types.JSONNullString{}
+	if payloadLogo := utils.MapGetStringPtr(payload, "logo"); payloadLogo != nil {
+		logo = db_types.NewJSONNullString(*payloadLogo)
+	} else if _, present := payload["logo"]; !present && existedBefore {
+		logo = existing.Logo
+	}
+
 	if err := queries.UpsertWorkspaceForSync(ctx, generated.UpsertWorkspaceForSyncParams{
-		ID:           id,
-		Name:         name,
-		GitRemoteUrl: gitRemote,
-		OwnerID:      ownerID,
+		ID:                 id,
+		Name:               name,
+		OwnerID:            ownerID,
+		StatementTimeoutMs: int64(statementTimeoutMs),
+		MaxResultSizeMb:    int64(maxResultSizeMB),
+		Logo:               logo,
 	}); err != nil {
 		return err
 	}
 
-	if ensurer != nil && !existedBefore {
-		if err := ensurer.EnsureWorkspaceFolderByID(id, name); err != nil {
-			return err
-		}
-	}
 	return nil
 }

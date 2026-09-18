@@ -35,17 +35,31 @@ type Handler[Row any, Params any] struct {
 	Upsert func(ctx context.Context, params Params) error
 }
 
+// Result reports what Apply did so the caller can react — e.g. emit an audit
+// event — without Apply itself knowing about those concerns. Before/After are the
+// row state around the write and are set only when Applied (Before is nil on an
+// insert); Created distinguishes an insert from an update so the caller can pick
+// the right lifecycle event; Restored is set only when the server won and the
+// client must revert.
+type Result struct {
+	Applied  bool
+	Created  bool
+	Restored *types.RestoredItem
+	Before   any
+	After    any
+}
+
 // Apply runs last-write-wins for a single commit using h.
-func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[Row, Params]) (bool, *types.RestoredItem, error) {
+func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[Row, Params]) (Result, error) {
 	payload, ok := c.Payload.(map[string]any)
 	if !ok {
-		return false, nil, fmt.Errorf("%s: payload must be an object", h.TableName)
+		return Result{}, fmt.Errorf("%s: payload must be an object", h.TableName)
 	}
 
 	existing, err := h.Fetch(ctx)
 	isNew := errors.Is(err, sql.ErrNoRows)
 	if err != nil && !isNew {
-		return false, nil, fmt.Errorf("%s: fetch: %w", h.TableName, err)
+		return Result{}, fmt.Errorf("%s: fetch: %w", h.TableName, err)
 	}
 
 	// Server win: row is deleted; reject update and send deleted row so client applies delete locally.
@@ -53,14 +67,14 @@ func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[R
 		if t := h.DeletedAt(existing); t != nil && !t.IsZero() {
 			serverPayload, err := h.Restored(existing)
 			if err != nil {
-				return false, nil, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
+				return Result{}, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
 			}
-			return false, &types.RestoredItem{
+			return Result{Restored: &types.RestoredItem{
 				ObjectID:      c.ObjectID,
 				TableName:     h.TableName,
 				ServerPayload: serverPayload,
 				UpdatedAt:     h.UpdatedAt(existing),
-			}, nil
+			}}, nil
 		}
 	}
 
@@ -74,23 +88,28 @@ func Apply[Row any, Params any](ctx context.Context, c types.Commit, h Handler[R
 	if !isNew && clientTime.Before(h.UpdatedAt(existing)) {
 		serverPayload, err := h.Restored(existing)
 		if err != nil {
-			return false, nil, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
+			return Result{}, fmt.Errorf("%s: restore payload: %w", h.TableName, err)
 		}
-		return false, &types.RestoredItem{
+		return Result{Restored: &types.RestoredItem{
 			ObjectID:      c.ObjectID,
 			TableName:     h.TableName,
 			ServerPayload: serverPayload,
 			UpdatedAt:     h.UpdatedAt(existing),
-		}, nil
+		}}, nil
 	}
 
 	// Client wins: merge and upsert.
 	params, err := h.Merge(existing, isNew, payload)
 	if err != nil {
-		return false, nil, fmt.Errorf("%s: merge: %w", h.TableName, err)
+		return Result{}, fmt.Errorf("%s: merge: %w", h.TableName, err)
 	}
 	if err := h.Upsert(ctx, params); err != nil {
-		return false, nil, fmt.Errorf("%s: upsert: %w", h.TableName, err)
+		return Result{}, fmt.Errorf("%s: upsert: %w", h.TableName, err)
 	}
-	return true, nil, nil
+
+	var before any
+	if !isNew {
+		before = existing
+	}
+	return Result{Applied: true, Created: isNew, Before: before, After: params}, nil
 }

@@ -1,23 +1,5 @@
-<script lang="ts">
-	import { getActiveTab } from '$lib/components/Layout/layoutStore';
-
-	const activeTab = $derived(getActiveTab());
-</script>
-
-{#if activeTab}
-	<p>No file or database selected</p>
-{:else}
-	<div class="empty-state">
-		<p>No file or database selected</p>
-	</div>
-{/if}
-
-<style>
-	.empty-state {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		height: 100%;
-		color: var(--gray-800);
-	}
-</style>
+<!--
+	The app is not routed: its whole surface lives in +layout.svelte, which lays
+	out panes from state rather than from a URL. This page exists so SvelteKit has
+	a route to match at `/`, and renders nothing of its own.
+-->

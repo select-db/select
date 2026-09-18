@@ -8,7 +8,7 @@ import (
 	"github.com/selectDb/toolkit/cache"
 )
 
-// issuedDeviceCodes records codes this server issued so /auth/get-access-token
+// issuedDeviceCodes records codes this server issued so /auth/access-token
 // can't be an open proxy forwarding arbitrary codes to GitHub. In-memory:
 // single backend process behind nginx. 15m TTL covers GitHub's device-code
 // lifetime; MaxEntries bounds memory.

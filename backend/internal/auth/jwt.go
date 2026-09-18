@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -84,61 +86,115 @@ func (rsaSignerMethod) Verify(signingString string, sig []byte, key any) error {
 
 var jwtSigningMethod = rsaSignerMethod{}
 
-// CustomClaims defines JWT claims for access tokens.
-// WorkspaceIDs and RoleIDs are cached at token issuance to avoid DB lookups on every request.
-// When a user's role assignments change, their refresh token is revoked so the next re-auth
-// produces a fresh JWT with correct RoleIDs.
+// Name is cached at issuance so audit/UI need no per-request role lookup.
+type RoleRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
+// Roles are workspace-scoped, so the token groups them per workspace.
+type WorkspaceClaim struct {
+	ID      string    `json:"id"`
+	IsOwner bool      `json:"is_owner,omitempty"`
+	Roles   []RoleRef `json:"roles,omitempty"`
+}
+
+// Roles/ownership are read from the database at issuance, so they are at most
+// accessTokenTTL stale. Membership itself is re-derived per request, not
+// trusted from the token.
 type CustomClaims struct {
-	UserID            string   `json:"sub"`
-	WorkspaceIDs      []string `json:"workspace_ids,omitempty"`
-	RoleIDs           []string `json:"role_ids,omitempty"`
-	OwnedWorkspaceIDs []string `json:"owned_workspace_ids,omitempty"`
+	UserID     string           `json:"sub"`
+	Name       string           `json:"name,omitempty"`
+	Workspaces []WorkspaceClaim `json:"workspaces,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// CreateJWT generates a signed access token for a user. It loads workspace IDs from the DB once and
-// embeds them in the token so the auth middleware can use them without a DB call on every request.
-func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error) {
+// RolesIn returns the roles the token grants in one workspace, keyed by role id.
+func (c *CustomClaims) RolesIn(workspaceID string) map[string]string {
+	roles := map[string]string{}
+	for _, ws := range c.Workspaces {
+		if ws.ID != workspaceID {
+			continue
+		}
+		for _, r := range ws.Roles {
+			roles[r.ID] = r.Name
+		}
+	}
+	return roles
+}
+
+// CreateJWT issues a signed access token embedding per-workspace roles/ownership.
+func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 	signer, err := getSigner()
 	if err != nil {
 		return "", fmt.Errorf("unable to sign JWT: %w", err)
 	}
 
-	workspaceIDs := []string(nil)
-	roleIDs := []string(nil)
-	ownedWorkspaceIDs := []string(nil)
+	displayName := ""
+	var workspaces []WorkspaceClaim
 	if db.Queries != nil {
+		// Membership, ownership, roles. Grouped per workspace below.
+		var workspaceIDs []string
 		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
-			workspaceIDs = make([]string, 0, len(ids))
 			for _, u := range ids {
-				if u.Valid {
-					workspaceIDs = append(workspaceIDs, u.UUID.String())
-				}
+				workspaceIDs = append(workspaceIDs, u.String())
 			}
 		}
-		if ids, err := db.Queries.GetRoleIDsByUserID(ctx, userID); err == nil {
-			roleIDs = make([]string, 0, len(ids))
+
+		owned := map[string]bool{}
+		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, db_types.NewJSONNullUUID(userID)); err == nil {
 			for _, u := range ids {
-				if u.Valid {
-					roleIDs = append(roleIDs, u.UUID.String())
-				}
+				owned[u.String()] = true
 			}
 		}
-		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, userID); err == nil {
-			ownedWorkspaceIDs = make([]string, 0, len(ids))
-			for _, u := range ids {
-				if u.Valid {
-					ownedWorkspaceIDs = append(ownedWorkspaceIDs, u.UUID.String())
-				}
+
+		// A user's effective roles are the union of directly-assigned roles
+		// (user_to_role) and roles granted through group membership
+		// (user_to_group -> group_to_role), deduped per workspace.
+		rolesByWS := map[string][]RoleRef{}
+		seenRole := map[string]map[string]bool{}
+		addRole := func(ws, id, name string) {
+			if seenRole[ws] == nil {
+				seenRole[ws] = map[string]bool{}
+			}
+			if seenRole[ws][id] {
+				return
+			}
+			seenRole[ws][id] = true
+			rolesByWS[ws] = append(rolesByWS[ws], RoleRef{ID: id, Name: name})
+		}
+		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
+			for _, r := range rows {
+				addRole(r.WorkspaceID.String(), r.ID.String(), r.Name)
+			}
+		}
+		if rows, err := db.Queries.GetUserGroupRolesWithNames(ctx, userID); err == nil {
+			for _, r := range rows {
+				addRole(r.WorkspaceID.String(), r.ID.String(), r.Name)
+			}
+		}
+
+		workspaces = make([]WorkspaceClaim, 0, len(workspaceIDs))
+		for _, ws := range workspaceIDs {
+			workspaces = append(workspaces, WorkspaceClaim{
+				ID:      ws,
+				IsOwner: owned[ws],
+				Roles:   rolesByWS[ws],
+			})
+		}
+
+		if u, err := db.Queries.GetUserNameByID(ctx, userID); err == nil {
+			displayName = u.Name.ValueOrEmpty()
+			if displayName == "" {
+				displayName = u.Email
 			}
 		}
 	}
 
 	claims := CustomClaims{
-		UserID:            userID.UUID.String(),
-		WorkspaceIDs:      workspaceIDs,
-		RoleIDs:           roleIDs,
-		OwnedWorkspaceIDs: ownedWorkspaceIDs,
+		UserID:     userID.String(),
+		Name:       displayName,
+		Workspaces: workspaces,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Audience:  jwt.ClaimStrings{audience},
@@ -151,10 +207,14 @@ func CreateJWT(ctx context.Context, userID db_types.JSONNullUUID) (string, error
 }
 
 // CreateRefreshToken creates a refresh token, stores the hashed version in DB.
-// Runs in a transaction: insert first, then delete old tokens, so a failed insert
-// does not leave the user with no refresh tokens. ctx is used for DB calls so creation
+// Runs in a transaction: insert first, then reap, so a failed insert does not
+// leave the user with no refresh tokens. ctx is used for DB calls so creation
 // can be cancelled if the client disconnects.
-func CreateRefreshToken(ctx context.Context, userID db_types.JSONNullUUID, deviceID string, issuedIP string) (*string, error) {
+//
+// The reap is scoped to expired rows: a token is hashed with the device id that
+// asked for it, so each of the user's devices holds a row of its own and a
+// wider delete takes the other devices' sessions with it.
+func CreateRefreshToken(ctx context.Context, userID uuid.UUID, deviceID string, issuedIP string) (*string, error) {
 	plainToken := GenerateRandomString(64)
 	expiry := time.Now().Add(refreshTokenTTL)
 	hashedToken := HashRefreshToken(plainToken, deviceID)
@@ -173,18 +233,14 @@ func CreateRefreshToken(ctx context.Context, userID db_types.JSONNullUUID, devic
 	q := db.Queries.WithTx(tx)
 	err = q.CreateRefreshToken(ctx, generated.CreateRefreshTokenParams{
 		UserID:      userID,
-		HashedToken: db_types.NewJSONNullString(hashedToken),
-		ExpiresAt:   db_types.NewJSONNullTimeFromTime(expiry),
+		HashedToken: hashedToken,
+		ExpiresAt:   expiry,
 		IssuedIp:    db_types.NewJSONNullInet(ip),
 	})
 	if err != nil {
 		return nil, err
 	}
-	err = q.DeleteUserRefreshTokensExcept(ctx, generated.DeleteUserRefreshTokensExceptParams{
-		UserID:      userID,
-		HashedToken: db_types.NewJSONNullString(hashedToken),
-	})
-	if err != nil {
+	if err = q.DeleteExpiredUserRefreshTokens(ctx, userID); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -140,6 +140,9 @@ var trackableTablesMap = map[string]struct{}{
 	"role":              {},
 	"user_to_role":      {},
 	"permission":        {},
+	"group":             {},
+	"user_to_group":     {},
+	"group_to_role":     {},
 }
 
 func isTableTrackable(table string) bool {

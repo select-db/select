@@ -17,24 +17,39 @@ import (
 	"github.com/selectDb/dialect/engine/transport"
 )
 
+// appPoolConfig bounds every pool the desktop app opens to a remote DB. Without
+// it database/sql defaults to unlimited open connections, so schema loads and
+// concurrent queries could open dozens of connections and trip the remote's
+// "too many clients already". MetadataConcurrency=1 (below) keeps a schema load
+// to a single connection; the rest of this budget is for user queries.
+var appPoolConfig = engine.PoolConfig{
+	MaxOpenConns:    4,
+	MaxIdleConns:    2,
+	ConnMaxLifetime: 30 * time.Minute,
+	ConnMaxIdleTime: 5 * time.Minute,
+}
+
 var engineClient = engine.Client{
+	MetadataConcurrency: 1,
 	Transport: &transport.HTTPTransport{
 		Fetch: func(
 			ctx context.Context,
 			method,
 			endpoint string,
-			payload,
+			payload any,
+			headers map[string]string,
 			response any,
 		) error {
-			return api.Fetch(ctx, method, endpoint, payload, nil, response)
+			return api.Fetch(ctx, method, endpoint, payload, headers, response)
 		},
 		FetchStream: func(
 			ctx context.Context,
 			method,
 			endpoint string,
 			payload any,
+			headers map[string]string,
 		) (io.ReadCloser, error) {
-			return api.FetchStream(ctx, method, endpoint, payload)
+			return api.FetchStream(ctx, method, endpoint, payload, headers)
 		},
 	},
 }
@@ -70,7 +85,7 @@ func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, ss
 		return nil, fmt.Errorf("SSH config: %w", err)
 	}
 
-	return engine.GetOrOpenConn(workspaceID, dbType, dsn, resolvedSSH)
+	return engine.GetOrOpenConn(workspaceID, dbType, dsn, resolvedSSH, appPoolConfig)
 }
 
 // getEngineConn returns Conn with DB for local, empty Conn{} for proxified.
@@ -98,11 +113,8 @@ func (dbc *DbClient) getStatementTimeout() time.Duration {
 	if dbc.Graph == nil {
 		return 30 * time.Second
 	}
-	cfg, err := dbc.Graph.LoadWorkspaceConfig()
-	if err != nil || cfg.StatementTimeoutMs <= 0 {
-		return 30 * time.Second
-	}
-	return time.Duration(cfg.StatementTimeoutMs) * time.Millisecond
+	timeoutMs, _ := dbc.Graph.WorkspaceExecutionLimits()
+	return time.Duration(timeoutMs) * time.Millisecond
 }
 
 // getMaxResultSizeBytes returns the workspace max_result_size_mb converted to bytes. Falls back to 100MB.
@@ -110,11 +122,8 @@ func (dbc *DbClient) getMaxResultSizeBytes() int64 {
 	if dbc.Graph == nil {
 		return 100 * 1024 * 1024
 	}
-	cfg, err := dbc.Graph.LoadWorkspaceConfig()
-	if err != nil || cfg.MaxResultSizeMB <= 0 {
-		return 100 * 1024 * 1024
-	}
-	return int64(cfg.MaxResultSizeMB) * 1024 * 1024
+	_, maxSizeMB := dbc.Graph.WorkspaceExecutionLimits()
+	return int64(maxSizeMB) * 1024 * 1024
 }
 
 func (dbc *DbClient) getCachedMetadata(node *graph.DBInstanceNode, noCache bool) (*core.Metadata, error) {

@@ -1,0 +1,115 @@
+/**
+ * The workspace graph as the app sees it.
+ *
+ * The bindings render Go pointer slices (`[]*FileNode`) as `(FileNode | null)[]`
+ * because JSON could carry a null in them; the graph the backend builds never
+ * does. Rather than guard at every read, the nulls are dropped once here — at
+ * the calls and events that bring graph data into the app — and the types
+ * exported below say so.
+ *
+ * Anything new that returns graph data belongs in this module, so the
+ * invariant keeps holding at a single boundary.
+ */
+import * as graphService from '$lib/bindings/selectDb/internal/graph/graph';
+import * as models from '$lib/bindings/selectDb/internal/graph/models';
+import type * as coreModels from '$lib/bindings/github.com/selectDb/dialect/core/models';
+import * as sqlLangService from '$lib/bindings/selectDb/internal/sqllang/sqllang';
+import type * as sqlLangModels from '$lib/bindings/selectDb/internal/sqllang/models';
+import * as dbClientService from '$lib/bindings/selectDb/internal/db_client/dbclient';
+import type * as dbClientModels from '$lib/bindings/selectDb/internal/db_client/models';
+import * as searchService from '$lib/bindings/selectDb/internal/search/search';
+import type * as searchModels from '$lib/bindings/selectDb/internal/search/models';
+
+export type { NonNullItems } from './stripNullItems';
+import { stripNullItems, type NonNullItems } from './stripNullItems';
+
+export { stripNullItems };
+
+export type WorkspaceNode = NonNullItems<models.WorkspaceNode>;
+export type FolderNode = NonNullItems<models.FolderNode>;
+export type FileNode = NonNullItems<models.FileNode>;
+export type DBInstanceNode = NonNullItems<models.DBInstanceNode>;
+export type DBInstanceItemNode = NonNullItems<models.DBInstanceItemNode>;
+export type QueryResult = NonNullItems<models.QueryResult>;
+export type ExplainResult = NonNullItems<models.ExplainResult>;
+export type ColumnMetadata = NonNullItems<models.ColumnMetadata>;
+export type ExplainNode = NonNullItems<coreModels.ExplainNode>;
+export type ResolveResult = NonNullItems<sqlLangModels.ResolveResult>;
+export type SearchResultWithNodes = NonNullItems<searchModels.SearchResultWithNodes>;
+export type FileQuery = models.FileQuery;
+export type DatabaseRef = models.DatabaseRef;
+
+export const GetWorkspaceGraph = async (): Promise<WorkspaceNode | null> =>
+	stripNullItems(await graphService.GetWorkspaceGraph());
+
+export const GetDBInstanceNodeByID = async (dbInstanceID: string): Promise<DBInstanceNode | null> =>
+	stripNullItems(await graphService.GetDBInstanceNodeByID(dbInstanceID));
+
+/**
+ * The shared connections at or under these entries, id and name, which is what
+ * deleting the entries would revoke. Passing no ids asks about the whole
+ * workspace. Containment is answered in Go; see Graph.SharedDatabasesUnder.
+ */
+export const SharedDatabasesUnder = async (ids: string[]): Promise<DatabaseRef[]> =>
+	stripNullItems(await graphService.SharedDatabasesUnder(ids));
+
+export const SearchWithNodes = async (
+	params: searchModels.SearchParams
+): Promise<SearchResultWithNodes | null> =>
+	stripNullItems(await searchService.SearchWithNodes(params));
+
+export const GetFileNodeByID = async (fileID: string): Promise<FileNode | null> =>
+	stripNullItems(await graphService.GetFileNodeByID(fileID));
+
+/**
+ * Reads a folder's files, for the folders the graph has not read yet. Returns
+ * null for a URI that is not a folder in this workspace.
+ */
+export const ResolveFolder = async (folderURI: string): Promise<FolderNode | null> =>
+	stripNullItems(await graphService.ResolveFolder(folderURI));
+
+/**
+ * Files matching a query, best matches first. Reads the workspace rather than
+ * the graph, so it answers for folders that have never been opened, and the
+ * promise is cancellable: a superseded keystroke stops the walk behind it.
+ */
+export const FindFiles = (query: Partial<FileQuery>) =>
+	graphService.FindFiles(new models.FileQuery(query)).then(stripNullItems);
+
+export const FindDbItemNodeById = async (
+	dbInstanceID: string,
+	nodeID: string
+): Promise<DBInstanceItemNode | null> =>
+	stripNullItems(await graphService.FindDbItemNodeById(dbInstanceID, nodeID));
+
+// Query results are graph data too: they carry the explain plan, whose nodes
+// have a nullable child slice.
+export const Query = async (params: dbClientModels.QueryParams): Promise<QueryResult> =>
+	stripNullItems(await dbClientService.Query(params));
+
+export const GetResultPage = async (
+	params: dbClientModels.GetResultPageParams
+): Promise<QueryResult> => stripNullItems(await dbClientService.GetResultPage(params));
+
+export const LookupForeignKey = async (
+	params: dbClientModels.LookupForeignKeyParams
+): Promise<QueryResult> => stripNullItems(await dbClientService.LookupForeignKey(params));
+
+export const Explain = async (params: dbClientModels.ExplainParams): Promise<ExplainResult> =>
+	stripNullItems(await dbClientService.Explain(params));
+
+export const Plan = async (params: dbClientModels.PlanParams): Promise<ExplainResult> =>
+	stripNullItems(await dbClientService.Plan(params));
+
+export const Resolve = async (params: sqlLangModels.PositionParams): Promise<ResolveResult> =>
+	stripNullItems(await sqlLangService.Resolve(params));
+
+/**
+ * Nodes the app synthesises itself — git placeholders, search hits, temp files
+ * — built through the generated classes so they pick up the same defaults.
+ */
+export const newFileNode = (source: Partial<FileNode>): FileNode =>
+	stripNullItems(new models.FileNode(source));
+
+export const newFolderNode = (source: Partial<FolderNode>): FolderNode =>
+	stripNullItems(new models.FolderNode(source));

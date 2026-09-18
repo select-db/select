@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Tab } from '$lib/components/Layout/layoutStore';
 	import { addChatTab } from '$lib/components/Layout/layoutStore';
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
 	import { getExecution } from '$lib/utils/query/queryStream.svelte';
@@ -67,6 +67,11 @@
 		{@const isStreaming = execution?.status === 'streaming'}
 		{@const affectedRows = execution?.affectedRows ?? queryResult?.affectedRows}
 		{@const errorMessage = execution?.error ?? queryResult?.errors?.[0]}
+		{@const affectedOnly =
+			!hasRows &&
+			!isStreaming &&
+			affectedRows !== undefined &&
+			(affectedRows > 0 || !hasColumns)}
 		{#if loading && !execution}
 			<p class="placeholder">Loading...</p>
 		{:else if queryResult}
@@ -77,10 +82,13 @@
 					onRun={() => run('run')}
 				/>
 			{/if}
-			{#if hasRows || (isStreaming && hasColumns)}
-				<ResultsTable {tab} />
-			{:else if affectedRows !== undefined && (affectedRows > 0 || !hasColumns)}
+			{#if affectedOnly}
 				<p class="placeholder">{affectedRows} row(s) affected.</p>
+			{:else if hasColumns}
+				<!-- Also the zero-row case: a header row with nothing under it reads as
+				     "ran, matched nothing", where a text placeholder read like the
+				     not-run-yet state. -->
+				<ResultsTable {tab} />
 			{:else if !errorMessage && !isStreaming}
 				<p class="placeholder muted">No rows returned.</p>
 			{/if}

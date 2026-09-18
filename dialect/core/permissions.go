@@ -11,7 +11,9 @@ const (
 	ActionWorkspaceSettingsWrite = "workspace/settings.write"
 	ActionWorkspaceUsersManage   = "workspace/users.manage"
 	ActionWorkspaceRolesManage   = "workspace/roles.manage"
+	ActionWorkspaceGroupsManage  = "workspace/groups.manage"
 	ActionWorkspaceApiKeysManage = "workspace/api-keys.manage"
+	ActionWorkspaceAuditRead     = "workspace/audit.read"
 )
 
 const (
@@ -20,7 +22,6 @@ const (
 	ActionInsert = "insert"
 	ActionUpdate = "update"
 	ActionDelete = "delete"
-	ActionDDL    = "ddl"
 	ActionSee    = "see"
 )
 
@@ -32,7 +33,7 @@ type PermissionEntry struct {
 	SchemaName   *string
 	TableName    *string
 	ColumnName   *string
-	Action       string // "select" | "insert" | "update" | "delete" | "ddl"
+	Action       string // "select" | "insert" | "update" | "delete" | "see" | "manage"
 	Effect       string // "allow" | "deny"
 	RoleName     string
 }
@@ -50,9 +51,14 @@ type PermissionDeniedError struct {
 
 func (e *PermissionDeniedError) Error() string {
 	var target string
-	if e.Column != "" {
+	switch {
+	case e.Table == "":
+		// A statement we could not resolve names nothing to blame; the
+		// connection is what the manage rule is granted on anyway.
+		target = "this connection"
+	case e.Column != "":
 		target = fmt.Sprintf("%s.%s.%s", e.Schema, e.Table, e.Column)
-	} else {
+	default:
 		target = fmt.Sprintf("%s.%s", e.Schema, e.Table)
 	}
 	if e.RoleName != "" {
@@ -115,15 +121,30 @@ func (idx CompiledPermissions) IsManaged(dbID string) bool {
 	return idx.denyUnmanaged || idx.managedInstances[dbID]
 }
 
-// WithDenyUnmanaged returns a copy where "no rules on a DB" means deny
+// WithDenyUnmanaged returns a copy where "no rules on a DB" means deny.
+//
+// Without it, a database no role has a rule for is unmanaged and every
+// statement against it passes: the right default for a local connection the
+// developer opened with their own DSN, since refusing there would only be
+// refusing them access to their own database. It is the wrong default the
+// moment the query runs on our server against our credentials, so everything
+// server-side compiles with this set. See authz.CompiledForWorkspace.
 func (idx CompiledPermissions) WithDenyUnmanaged() CompiledPermissions {
 	idx.denyUnmanaged = true
 	return idx
 }
 
 func (idx CompiledPermissions) CanManage(dbInstanceID string) bool {
-	allowed, _ := idx.isAllowed(dbInstanceID, "", "", "", "manage")
+	allowed, _ := idx.manageAllowed(dbInstanceID)
 	return allowed
+}
+
+// manageAllowed reports whether dbInstanceID may be administrated, and the role
+// that decided it. Manage is granted on the connection, so schema, table and
+// column are empty here; one lookup is what stops running a statement and
+// editing the connection disagreeing about who holds it.
+func (idx CompiledPermissions) manageAllowed(dbInstanceID string) (bool, string) {
+	return idx.isAllowed(dbInstanceID, "", "", "", ActionManage)
 }
 
 // IsAllowed checks a workspace-level action (no db_instance_id)
@@ -178,6 +199,42 @@ func CheckQueryPermissions(statements []InspectStatement, dbInstanceID string, c
 func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	action := operationToAction(stmt.Operation)
 
+	var err error
+	if action == ActionManage {
+		err = checkInstance(stmt, dbInstanceID, compiledPermissions)
+	} else {
+		err = checkTables(stmt, action, dbInstanceID, compiledPermissions)
+	}
+	if err != nil {
+		return err
+	}
+
+	// A CREATE TABLE AS or an INSERT ... SELECT carries its source query here,
+	// so holding manage never stands in for the select the source still needs.
+	for _, sub := range stmt.Subqueries {
+		if err := checkStatement(sub, dbInstanceID, compiledPermissions); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkInstance checks manage, which is granted on the connection rather than
+// per table. It is also the only check a statement we could not resolve can
+// get: that statement names no table, so a per-table walk would see nothing.
+func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
+	allowed, role := compiledPermissions.manageAllowed(dbInstanceID)
+	if allowed {
+		return nil
+	}
+	denied := &PermissionDeniedError{Action: ActionManage, RoleName: role}
+	if len(stmt.Tables) > 0 {
+		denied.Schema, denied.Table = stmt.Tables[0].Schema, stmt.Tables[0].Name
+	}
+	return denied
+}
+
+func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
 			return &PermissionDeniedError{
@@ -190,7 +247,7 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 			}
 		}
 
-		if action == "ddl" || len(stmt.Fields) == 0 {
+		if len(stmt.Fields) == 0 {
 			allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, "", action)
 			if !allowed {
 				return &PermissionDeniedError{
@@ -230,12 +287,6 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 					EndCol:    endCol,
 				}
 			}
-		}
-	}
-
-	for _, sub := range stmt.Subqueries {
-		if err := checkStatement(sub, dbInstanceID, compiledPermissions); err != nil {
-			return err
 		}
 	}
 
@@ -322,19 +373,21 @@ func fieldOutputName(f InspectField, driverCol string) bool {
 	return strings.EqualFold(name, driverCol)
 }
 
+// operationToAction maps an inspected operation to the permission it needs.
+// Only the four operations we fully resolve down to columns are data actions;
+// everything else, the unknown statement included, needs manage. New operations
+// are refused until someone classifies them, rather than admitted by silence.
 func operationToAction(op InspectOperation) string {
 	switch op {
 	case InspectOpSelect:
-		return "select"
+		return ActionSelect
 	case InspectOpInsert:
-		return "insert"
+		return ActionInsert
 	case InspectOpUpdate:
-		return "update"
+		return ActionUpdate
 	case InspectOpDelete:
-		return "delete"
-	case InspectOpCreate, InspectOpAlter, InspectOpDrop, InspectOpTruncate:
-		return "ddl"
+		return ActionDelete
 	default:
-		return string(op)
+		return ActionManage
 	}
 }

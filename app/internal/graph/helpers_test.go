@@ -38,63 +38,6 @@ func (n *TestNode) RemoveChildByIDs(IDs []string) bool {
 	return false
 }
 
-func TestFindNodesByIds(t *testing.T) {
-	root := &TestNode{
-		ID: "root",
-		Children: []Node{
-			&TestNode{ID: "a"},
-			&TestNode{ID: "b", Children: []Node{
-				&TestNode{ID: "c"},
-				&TestNode{ID: "d"},
-			}},
-		},
-	}
-
-	IDs := []string{"a", "c", "x"}
-	found := FindNodesByIds(root, IDs)
-
-	if len(found) != 2 {
-		t.Errorf("expected 2 nodes, got %d", len(found))
-	}
-}
-
-func TestRemoveNodesByID(t *testing.T) {
-	t.Run("remove single child", func(t *testing.T) {
-		child := &TestNode{ID: "child"}
-		parent := &TestNode{
-			ID:       "parent",
-			Children: []Node{child},
-		}
-		child.ParentIDs = []string{"parent"}
-
-		root := &TestNode{
-			ID:       "root",
-			Children: []Node{parent},
-		}
-
-		ok := RemoveNodesByIDs(root, []string{"child"})
-		if !ok {
-			t.Errorf("expected removal to return true")
-		}
-
-		if len(parent.Children) != 0 {
-			t.Errorf("expected child removed from parent, still has children: %+v", parent.Children)
-		}
-		if !parent.Removed["child"] {
-			t.Errorf("parent.Removed not set correctly")
-		}
-	})
-
-	t.Run("remove non-existing child", func(t *testing.T) {
-		root := &TestNode{ID: "root", Children: []Node{}}
-
-		ok := RemoveNodesByIDs(root, []string{"nonexistent"})
-		if ok {
-			t.Errorf("expected removal of nonexistent child to return false")
-		}
-	})
-}
-
 func TestAssignNonZero(t *testing.T) {
 	type TestStruct struct {
 		Name string

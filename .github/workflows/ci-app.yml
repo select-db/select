@@ -1,0 +1,244 @@
+name: App
+
+# Every check on the desktop client. Called by ci.yml, which owns the gating.
+#
+# The four jobs are independent. Chaining quality to tests only made the wall
+# clock their sum, because neither reads the other's result.
+
+on:
+  workflow_call:
+    inputs:
+      go-app:
+        description: Run the Go legs. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
+      frontend:
+        description: Run the web legs. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # Workflow level env does not cross a workflow_call boundary. This is the
+  # copy the e2e job reads.
+  WAILS_VERSION: v3.0.0-beta.12
+
+jobs:
+  backend-quality:
+    name: Backend quality
+    if: inputs.go-app
+    runs-on: ubuntu-latest
+    # Analysed in the server build: the same Go code with Wails' cgo webview
+    # swapped for an HTTP server, so no job on a pull request installs GTK. The
+    # desktop variant is compiled when this lands on dev and the app is built.
+    env:
+      GOFLAGS: -tags=server
+      CGO_ENABLED: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
+        with:
+          go-version-file: app/go.mod
+          # setup-go keeps the module cache, which go.sum names exactly. The
+          # build cache is layered on below because go.sum does not name build
+          # tags, so setup-go writes one entry and then never again ("Cache hit
+          # occurred on the primary key, not saving cache").
+          cache-dependency-path: app/go.sum
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: go-app-server-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-app-server-${{ hashFiles('app/go.sum') }}-
+            go-app-server-
+      - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          working-directory: app
+          # Skips the JSONSchema fetch from golangci-lint.run, which runs
+          # before any linting. An outage there failed a build on #174.
+          verify: false
+      - uses: ./.github/actions/deadcode
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+      - name: Dead code check
+        run: |
+          # deadcode sets its own -tags, overriding GOFLAGS, so the tag is
+          # repeated here. It exits 0 on a finding, so output is the failure.
+          out=$(deadcode -tags server ./...)
+          if [ -n "$out" ]; then
+            echo "$out"
+            echo "::error::Dead code detected"
+            exit 1
+          fi
+          echo "No dead code found"
+        working-directory: app
+
+      # sqlc reads db/migrations, so db/generated regenerates from committed
+      # sources with no database and drift shows up here as a diff.
+      #
+      # TERM is load bearing. The script calls tput, which fails under set -e
+      # when TERM is unset, as it is on the runner.
+      - uses: ./.github/actions/sqlc
+      - name: Generated sqlc output is up to date
+        working-directory: app/internal
+        env:
+          TERM: xterm
+        run: |
+          ./cmd/cli/generate_queries.sh
+          git diff --exit-code db/generated || {
+            echo "::error::app db/generated is stale. Run app/internal/cmd/cli/generate_queries.sh and commit the result."
+            exit 1
+          }
+
+  backend-tests:
+    name: Backend tests
+    if: inputs.go-app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: app/go.mod
+          # Module cache from setup-go, build cache below. See the backend
+          # quality job.
+          cache-dependency-path: app/go.sum
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Its own entry: this job builds the cgo-free server variant, which
+          # shares no compiled package with the desktop build the lint job caches.
+          path: ~/.cache/go-build
+          key: go-app-server-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-app-server-${{ hashFiles('app/go.sum') }}-
+            go-app-server-
+      # Server mode is the same Go code with the cgo webview swapped for an
+      # HTTP server, so the tests run without GTK. What it does not cover, our
+      # code compiled against the desktop API, the lint job still compiles.
+      - run: go test -tags server ./internal/...
+        working-directory: app
+        env:
+          CGO_ENABLED: 0
+      # Written here because tests compile the widest set of packages, and only
+      # on the default branch. A cache saved from a PR is readable by that PR
+      # alone, so it would fill the 10GB budget and evict the shared entries.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.ref == 'refs/heads/dev'
+        with:
+          path: ~/.cache/go-build
+          key: go-app-server-${{ hashFiles('app/go.sum') }}-${{ github.run_id }}
+
+  frontend-quality:
+    name: Frontend quality
+    if: inputs.frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: app/frontend/package-lock.json
+      # setup-node restores ~/.npm but npm still revalidates it against the
+      # registry, and that round trip stalled the same `npm ci` anywhere from 5s
+      # to 7m03s within one hour. --prefer-offline serves cached entries without
+      # asking and still fetches what is missing, so the lockfile alone decides
+      # versions. The timeout sits above every measurement so a slow day stays
+      # green.
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: app/frontend
+        timeout-minutes: 10
+      - run: npm run check
+        working-directory: app/frontend
+      - run: npm run lint
+        working-directory: app/frontend
+
+  e2e:
+    name: E2E
+    if: inputs.frontend || inputs.go-app
+    runs-on: ubuntu-latest
+    # The suite drives a server mode build, which is the real Go services and
+    # bindings behind an HTTP server. No webview, so no display server.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
+        with:
+          go-version-file: app/go.mod
+          # An entry of its own. This job builds -tags server without cgo, so
+          # nothing the desktop jobs compiled is reusable here.
+          cache: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-e2e-${{ runner.os }}-${{ hashFiles('app/go.sum') }}
+          restore-keys: go-e2e-${{ runner.os }}-
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache-wails
+        with:
+          path: ~/go/bin/wails*
+          # `nocgo` keeps this out of the entry the desktop build writes, which
+          # holds a CLI linked against GTK: restored here it would not start,
+          # because this job installs no GTK runtime for it to find.
+          key: wails-nocgo-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Install Wails
+        if: steps.cache-wails.outputs.cache-hit != 'true'
+        # Built without cgo, which is what keeps this job free of GTK: the CLI
+        # links the webview through cgo by default, and nothing it does here
+        # (`task`, and generating bindings under `-tags server`) needs it.
+        env:
+          CGO_ENABLED: 0
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: app/frontend
+        timeout-minutes: 10
+
+      # The browsers cache but the OS packages behind them do not, so only the
+      # download is skipped. The suite sets neither channel nor headless false,
+      # so --only-shell avoids downloading a 184MB Chrome nothing launches.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache-playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+      - run: npx playwright install-deps chromium
+        working-directory: app/frontend
+      - run: npx playwright install --only-shell chromium
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        working-directory: app/frontend
+
+      - run: wails3 task test:e2e
+        working-directory: app
+
+      # The bindings are committed and building the suite regenerates them. A
+      # Go signature change that was never regenerated shows up as a dirty tree
+      # rather than a runtime type error.
+      - name: Generated bindings are up to date
+        working-directory: app
+        run: |
+          git diff --exit-code frontend/src/lib/bindings || {
+            echo "::error::Bindings are stale. Run 'wails3 task generate:bindings' and commit the result."
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: playwright-report
+          path: app/frontend/playwright-report/
+          retention-days: 7

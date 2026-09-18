@@ -1,0 +1,4 @@
+-- name: Get{{.Sing}}ByID :one
+SELECT {{.Cols}}
+FROM {{.Table}}
+WHERE {{.PK}} = $1 AND {{.Tenant}} = $2;

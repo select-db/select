@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Page not found | SELECT</title>
+<!-- A not-found page that gets indexed competes in search with the pages that
+     do exist, and it has nothing to say. -->
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.png">
+<!-- Before first paint, so a reader who chose dark on the docs is not flashed
+     white on their way to an error. -->
+<script>
+document.documentElement.dataset.theme =
+  localStorage.getItem("doc-theme") || (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
+</script>
+<style>
+/*THEME*/
+/* No header, no footer, no toggle. Their styles live inline in each page that
+   carries them, and a third copy here would be a third place to keep in step
+   for chrome nobody came to this page to use. What is left is the mark, the
+   sentence and the three doors out. */
+:root{
+  --f: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --m: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --border: var(--bw) solid var(--border-color);
+}
+:root[data-theme=light]{--glow:rgba(172, 45, 49, .12);--red-text:rgb(190, 38, 38)}
+:root[data-theme=dark]{--glow:rgba(172, 45, 49, .34);--red-text:var(--red)}
+*,::before,::after{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  background:var(--gray-0);
+  color:var(--gray-1000);
+  font:1rem/1.6 var(--f);
+  -webkit-font-smoothing:antialiased;
+  /* The wash the landing page and the link preview card carry, so an error is
+     still recognisably this site. */
+  background-image:radial-gradient(760px 520px at 28% 34%,var(--glow),transparent 68%);
+  background-repeat:no-repeat
+}
+main{max-width:640px;margin:0 auto;padding:4rem 1.5rem}
+a{color:var(--red-text)}
+a,button{transition:color .1s linear,opacity .1s linear,border-color .1s linear}
+.home{display:inline-flex;align-items:center;gap:.5rem;margin-bottom:3rem;
+  font:600 1rem/1 var(--f);letter-spacing:-.02em;color:var(--gray-1000);text-decoration:none}
+.home:hover{opacity:.72}
+.home img{width:22px;height:22px;border-radius:var(--br-xs);display:block}
+.k{margin:0;font:500 .72rem/1.4 var(--m);letter-spacing:.14em;text-transform:uppercase;color:var(--gray-800)}
+h1{margin:.5rem 0 0;font-size:clamp(1.8rem,4vw,2.4rem);line-height:1.15;letter-spacing:-.025em}
+.lede{margin:1.5rem 0 0;color:var(--gray-900);max-width:52ch}
+.links{margin:2.5rem 0 0;display:flex;flex-wrap:wrap;gap:1.5rem;font:var(--t2, .82rem)/1 var(--m)}
+.links a{text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
+.links a:hover{text-decoration-color:currentColor}
+:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+</style>
+</head>
+<body>
+<main>
+  <a class="home" href="/"><img src="/logo.png" alt="" width="22" height="22">SELECT</a>
+  <p class="k">404</p>
+  <h1>No page at this address.</h1>
+  <p class="lede">The link you followed does not point at anything on this site. If it came
+    from a search result or an old bookmark, it may be an address the documentation used to
+    have.</p>
+  <p class="links">
+    <a href="/docs/getting-started/">Documentation &rarr;</a>
+    <a href="/download/">Download &rarr;</a>
+    <a href="/">Home &rarr;</a>
+  </p>
+</main>
+</body>
+</html>

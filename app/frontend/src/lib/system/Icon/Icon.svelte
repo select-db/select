@@ -6,7 +6,7 @@
 		size = 24,
 		stroke = 'var(--gray-800)',
 		fill = 'none',
-		strokeWidth = 1,
+		strokeWidth = 1.5,
 		class: className = ''
 	}: {
 		icon: Icons;
@@ -29,7 +29,6 @@
 			{fill}
 			{stroke}
 			stroke-width={strokeWidth}
-			stroke-linecap="round"
 			stroke-linejoin="round"
 			shape-rendering="geometricPrecision"
 			preserveAspectRatio="xMidYMid meet"

@@ -1,15 +1,17 @@
 <script lang="ts">
 	import type { Tab } from '$lib/components/Layout/layoutStore';
-	import { GetDefaultThemeContent } from '$lib/wailsjs/go/system/System';
+	import { GetDefaultThemeContent } from '$lib/bindings/selectDb/internal/system/system';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import BaseFileView from './BaseFileView.svelte';
 	import ThemeFileHeader from './ThemeFileHeader.svelte';
 
 	type Props = {
 		tab: Tab;
+		standalone?: boolean;
+		onStateChange?: (viewState: unknown) => void;
 	};
 
-	let { tab }: Props = $props();
+	let { tab, standalone = false, onStateChange }: Props = $props();
 
 	let defaultContent = $state<string | undefined>(undefined);
 	$effect(() => {
@@ -19,7 +21,7 @@
 	});
 </script>
 
-<BaseFileView {tab} language="css" manualSave {defaultContent}>
+<BaseFileView {tab} language="css" manualSave {defaultContent} {standalone} {onStateChange}>
 	{#snippet header({ hasUnsavedChanges, isModifiedFromDefault, saveFile })}
 		<ThemeFileHeader {hasUnsavedChanges} {isModifiedFromDefault} onSave={saveFile} />
 	{/snippet}

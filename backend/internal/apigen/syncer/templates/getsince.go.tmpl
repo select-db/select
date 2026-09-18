@@ -1,0 +1,46 @@
+package {{.Pkg}}
+
+import (
+	"context"
+	"time"
+
+	"backend/db"
+	"backend/db/generated"
+	"backend/internal/syncer/types"
+
+	"github.com/google/uuid"
+)
+
+func GetChangesSince(ctx context.Context, userID string, since time.Time) ([]{{.RowType}}, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Queries.Get{{.Plur}}ForUserSince(ctx, generated.Get{{.Plur}}ForUserSinceParams{
+		UserID:    userUUID,
+		UpdatedAt: since,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]{{.RowType}}, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, {{.MapperFn}}(r))
+	}
+	return out, nil
+}
+
+func {{.MapperFn}}(row generated.{{.Model}}) {{.RowType}} {
+	r := {{.RowType}}{
+{{- range .RowMap}}
+		{{.Key}}: {{.Val}},
+{{- end}}
+	}
+	if row.{{.SoftDeleteField}}.Valid {
+		t := row.{{.SoftDeleteField}}.ValueOrZero()
+		r.{{.SoftDeleteField}} = &t
+	}
+	return r
+}

@@ -29,18 +29,15 @@
 	import ForcePushModal from '$lib/components/views/Git/ForcePushModal.svelte';
 
 	import {
-		LinkExistingRepo,
-		CompleteLinkExistingRepo,
 		PushWorkspaceRepo,
 		PushForceWithLease,
 		CommitChanges,
 		PullWorkspaceRepo,
 		PullWithRebase,
 		ResetBranchToRemote
-	} from '$lib/wailsjs/go/git/Git';
-	import LinkOptionsModal from '$lib/components/views/Git/LinkOptionsModal.svelte';
+	} from '$lib/bindings/selectDb/internal/git/git';
 
-	import { graph } from '$lib/wailsjs/go/models';
+	import * as graph from '$lib/wails/graph';
 	import type { Component } from 'svelte';
 
 	function isPushRejected(err: Error): boolean {
@@ -54,29 +51,7 @@
 	const workspaceGitStatus = $derived($gitWorkspaceStatusStore);
 	const detailedStatus = $derived($gitFileStatusStore);
 
-	let remoteUrl = $state('');
 	let commitMessage = $state('');
-
-	const linkRemote = async () => {
-		const status = await must(tryCatch(LinkExistingRepo, { remoteUrl }));
-		if (status.scenario === 'checkout') {
-			modalStore.set({
-				content: (() => LinkOptionsModal) as () => Component,
-				width: 400,
-				props: {
-					branch: status.branch,
-					onChoice: async (choice: 'checkout' | 'keep') => {
-						await must(tryCatch(CompleteLinkExistingRepo, choice));
-						notify({ type: AlertType.Success, message: 'Remote linked' });
-						await loadGitStatus();
-					}
-				}
-			});
-			return;
-		}
-		notify({ type: AlertType.Success, message: 'Remote linked' });
-		await loadGitStatus();
-	};
 
 	const pushToRemote = async () => {
 		const [, err] = await tryCatch(PushWorkspaceRepo);
@@ -141,7 +116,7 @@
 
 	// Create placeholder folders for git changes
 	const createGitFolder = (name: string, id: string, files: graph.FileNode[]): graph.FolderNode => {
-		return new graph.FolderNode({
+		return graph.newFolderNode({
 			id,
 			uri: id,
 			type: 'folder',
@@ -150,7 +125,7 @@
 			files,
 			folders: [],
 			db_instances: [],
-			badges: [files.length]
+			badges: [String(files.length)]
 		});
 	};
 
@@ -205,7 +180,7 @@
 	};
 </script>
 
-<div class="github-panel">
+<div class="github-panel" data-test="git.panel">
 	{#if !workspaceGitStatus}
 		<div class="section space x y">
 			<Loader />
@@ -213,21 +188,13 @@
 	{:else if !workspaceGitStatus?.gitAvailable}
 		<div class="section space x y">
 			<p class="section-title">Git not available</p>
-			{#if workspaceGitStatus?.configuredRemoteUrl}
-				<p class="hint">
-					This workspace is linked to a Git repository, but its files can’t sync
-					because Git is not installed or not available in your PATH.<br />
-					Install Git, then reopen the workspace to sync.
-				</p>
-			{:else}
-				<p class="hint">
-					Git is not installed or not available in your PATH. <br />
-					Install Git to enable GitHub integration.
-				</p>
-			{/if}
+			<p class="hint">
+				Git is not installed or not available in your PATH. <br />
+				Install Git to enable version control for this folder.
+			</p>
 		</div>
-	{:else if workspaceGitStatus.isGitRepo && workspaceGitStatus.hasRemote}
-		<!-- Staging and commit UI when linked -->
+	{:else if workspaceGitStatus.isGitRepo}
+		<!-- Push and pull need a remote; committing does not. -->
 		{#if detailedStatus}
 			{@const commitsAhead = detailedStatus?.commitsAhead ?? 0}
 			{@const commitsBehind = detailedStatus?.commitsBehind ?? 0}
@@ -246,22 +213,24 @@
 						emphasis={stagedCount > 0 ? 'high' : 'low'}
 						iconSize={14}
 					/>
-					<Button
-						content="Push"
-						size="sm"
-						onclick={pushToRemote}
-						badge={commitsAhead}
-						emphasis={commitsAhead > 0 ? 'high' : 'low'}
-						iconSize={14}
-					/>
-					<Button
-						content="Pull"
-						size="sm"
-						onclick={pullFromRemote}
-						badge={commitsBehind}
-						emphasis={commitsBehind > 0 ? 'high' : 'low'}
-						iconSize={14}
-					/>
+					{#if workspaceGitStatus.hasRemote}
+						<Button
+							content="Push"
+							size="sm"
+							onclick={pushToRemote}
+							badge={commitsAhead}
+							emphasis={commitsAhead > 0 ? 'high' : 'low'}
+							iconSize={14}
+						/>
+						<Button
+							content="Pull"
+							size="sm"
+							onclick={pullFromRemote}
+							badge={commitsBehind}
+							emphasis={commitsBehind > 0 ? 'high' : 'low'}
+							iconSize={14}
+						/>
+					{/if}
 				</div>
 			</div>
 
@@ -298,38 +267,13 @@
 			</div>
 		{/if}
 	{:else}
-		<div class="section space x y" style="border-bottom: var(--border)">
-			<div class="status-header">
-				<p class="section-title">Current status</p>
-			</div>
-
-			{#if !workspaceGitStatus.isGitRepo}
-				<p class="hint">This workspace is not yet a Git repository.</p>
-			{:else if workspaceGitStatus.isGitRepo && !workspaceGitStatus.hasRemote}
-				<p class="hint">Git repository detected with no configured remote.</p>
-			{/if}
-		</div>
-
-		<div class="section space x">
-			<p class="section-title">Link repository</p>
-
-			<div class="field">
-				<p class="label">Remote URL</p>
-				<Input
-					bind:value={remoteUrl}
-					placeholder="git@github.com:owner/repo.git or https://github.com/owner/repo.git"
-				/>
-			</div>
-
-			<div class="actions">
-				<Button
-					content={workspaceGitStatus.isGitRepo ? 'Update remote' : 'Link repository'}
-					emphasis="high"
-					onclick={linkRemote}
-					size="sm"
-					disabled={!remoteUrl}
-				/>
-			</div>
+		<div class="section space x y">
+			<p class="section-title">Not a Git repository</p>
+			<p class="hint">
+				This folder is not under version control. Run <code>git init</code>, or clone an existing
+				repository and open that folder instead. The built-in terminal (<code>Ctrl+`</code>) is a
+				good place to do it.
+			</p>
 		</div>
 	{/if}
 </div>
@@ -365,13 +309,6 @@
 		padding-bottom: var(--space-sm-md);
 	}
 
-	.status-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-xs);
-	}
-
 	.section-title {
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
@@ -394,11 +331,6 @@
 		margin-top: var(--space-xs);
 		display: flex;
 		gap: var(--space-xs);
-	}
-
-	.label {
-		color: var(--gray-800);
-		font-size: var(--fs-xs);
 	}
 
 	:global(.github-panel .title-actions button:first-of-type) {

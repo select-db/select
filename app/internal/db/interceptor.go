@@ -127,20 +127,27 @@ func mapArgsAndOperation(query string, args []driver.NamedValue) (string, []driv
 	case strings.Contains(q, "INSERT"):
 		mapped, table, ok := tryInsertMapping(query, args)
 		if ok {
-			return "insert", mapped, table, nil
+			return "insert", mapped, cleanTableName(table), nil
 		}
 	case strings.Contains(q, "UPDATE"):
 		mapped, table, ok := tryUpdateMapping(query, args)
 		if ok {
-			return "update", mapped, table, nil
+			return "update", mapped, cleanTableName(table), nil
 		}
 	case strings.Contains(q, "DELETE"):
 		mapped, table, ok := tryDeleteMapping(query, args)
 		if ok {
-			return "delete", mapped, table, nil
+			return "delete", mapped, cleanTableName(table), nil
 		}
 	}
 	return "none", nil, "", errors.New("could not map query")
+}
+
+// cleanTableName strips the quoting SQLite requires around reserved-word table
+// names (e.g. "group") so the tracked table matches the plain identifier used in
+// trackableTablesMap and in the sync protocol's table_name.
+func cleanTableName(table string) string {
+	return strings.Trim(table, "\"`[]")
 }
 
 var (

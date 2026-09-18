@@ -1,6 +1,6 @@
-import { GetResultPage } from '$lib/wailsjs/go/db_client/DbClient';
+import { GetResultPage } from '$lib/wails/graph';
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import type { VisibleRange } from './virtualScrolling';
 
 export interface DataLoadingState {
@@ -83,10 +83,16 @@ export async function loadMissingPagesForVisibleRange(
 	totalRows: number
 ): Promise<graph.QueryResult | null> {
 	if (!queryResult) return null;
+	// An empty result set has no page to fetch; without this the zero-row table
+	// would still ask the backend for page 0.
+	if (totalRows <= 0) return null;
 
 	const pageSize = queryResult.pageSize || 75;
 	const firstPageInRange = calculatePageNumber(visibleRange.start, pageSize);
-	const lastPageInRange = calculatePageNumber(Math.max(visibleRange.end - 1, visibleRange.start), pageSize);
+	const lastPageInRange = calculatePageNumber(
+		Math.max(visibleRange.end - 1, visibleRange.start),
+		pageSize
+	);
 	const maxPage = totalRows > 0 ? Math.ceil(totalRows / pageSize) - 1 : -1;
 
 	const candidatePages: number[] = [];
@@ -144,14 +150,35 @@ export function createInitialLoadingStateFromResult(
 	};
 }
 
+function sameColumns(a: string[] | undefined | null, b: string[] | undefined | null): boolean {
+	// A page that carries no column list (an empty or pending window) says
+	// nothing about the schema, so it is not a mismatch.
+	if (!a?.length || !b?.length) return true;
+	return a.length === b.length && a.every((name, i) => name === b[i]);
+}
+
 export function mergeNewPageIntoState(
 	newPageResult: graph.QueryResult,
-	currentLoadingState: DataLoadingState
+	currentLoadingState: DataLoadingState,
+	resultColumns?: string[] | null
 ): DataLoadingState | null {
 	if (newPageResult.page === undefined) return null;
 
 	const status = newPageResult.status ?? 'ready';
 	const incomingRows = newPageResult.rows ?? [];
+
+	// The headers on screen come from the `query:started` event; these rows come
+	// from a separate cache read. They are meant to be the same execution, and
+	// the backend now refuses the request when they are not — but a row set
+	// rendered against someone else's headers puts every value under the wrong
+	// column, silently and convincingly, so it is worth refusing here too.
+	if (!sameColumns(resultColumns, newPageResult.columns)) {
+		console.error('Discarding a result page whose columns do not match the result on screen', {
+			expected: resultColumns,
+			received: newPageResult.columns
+		});
+		return null;
+	}
 
 	// 'pending' means the page lies past the watermark; nothing to merge yet.
 	// Clear it from loadingPages so the next watermark tick will refetch.

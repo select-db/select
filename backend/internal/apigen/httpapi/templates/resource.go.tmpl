@@ -1,0 +1,23 @@
+package {{.Pkg}}
+
+import "backend/internal/api/query"
+
+// resource is the queryable shape of the {{.Pkg}} table: the fields the API
+// exposes, the operators each accepts, the default sort, and the keyset
+// primary key. The list and get handlers run over it.
+var resource = query.Resource{
+	Table: {{printf "%q" .QualTable}}, PK: {{printf "%q" .PK}}, DefaultSort: {{printf "%q" .DefaultSort}},
+	Fields: []query.Field{
+{{- range .Fields}}
+		{Name: {{printf "%q" .Name}}, Column: {{printf "%q" .Column}}, Kind: {{.Kind}}, Ops: {{.Ops}}{{.Enum}}},
+{{- end}}
+	},
+}
+
+// singular names the resource in handler error messages ("{{.Name}} not found").
+const singular = {{printf "%q" .Name}}
+{{- if .HasWrite}}
+
+// table is the short table name carried on the write commit.
+const table = {{printf "%q" .Pkg}}
+{{- end}}

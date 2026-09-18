@@ -1,11 +1,12 @@
 package auth
 
 import (
-	"backend/db/db_types"
 	"net"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestExtractBearerToken(t *testing.T) {
@@ -121,7 +122,7 @@ func TestSameSubnet(t *testing.T) {
 }
 
 func TestSendSecurityAlert(t *testing.T) {
-	userID := db_types.JSONNullUUID{}
+	userID := uuid.New()
 	oldIP := net.ParseIP("1.2.3.4")
 	newIP := "5.6.7.8"
 

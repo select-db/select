@@ -11,27 +11,58 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-// hashWorkspaceDSN hashes (workspaceID, dsn) so DSNs never live in any
-// cache map. Shared by metadata and connection caches. FNV-1a 64-bit:
-// stdlib, alloc-free, ns-scale. Non-crypto;
-func hashWorkspaceDSN(workspaceID, dsn string) string {
+// workspaceCacheKey is the key every cache in this package uses: the workspace
+// in front, then a hash of (workspaceID, dsn) so no DSN lives in a cache key.
+// FNV-1a 64-bit: stdlib, alloc-free, ns-scale. Non-crypto.
+//
+// The workspace is readable rather than hashed in so that everything one
+// workspace has open can be found and dropped by prefix, which is what a
+// workspace being deleted needs. It is an id that appears in every log line
+// and URL already; the secret is the DSN, and that stays hashed.
+func workspaceCacheKey(workspaceID, dsn string) string {
 	h := fnv.New64a()
 	h.Write([]byte(workspaceID))
 	h.Write([]byte{0})
 	h.Write([]byte(dsn))
-	return strconv.FormatUint(h.Sum64(), 16)
+	return workspaceKeyPrefix(workspaceID) + strconv.FormatUint(h.Sum64(), 16)
 }
+
+// workspaceKeyPrefix is what every cache key of one workspace begins with.
+func workspaceKeyPrefix(workspaceID string) string {
+	return workspaceID + ":"
+}
+
+// defaultMetadataConcurrency bounds how many introspection queries FetchMetadata
+// runs at once when the caller doesn't specify. Metadata fetches fan out one
+// query per schema × object type; left unbounded they can open dozens of pooled
+// connections at once and trip the remote's max_connections ("too many clients").
+const defaultMetadataConcurrency = 8
 
 // FetchMetadata loads full schema info (schemas/tables/views/indexes/
 // triggers/stats/types/functions) into a *core.Metadata. Uncached;
 // most callers want GetOrFetchMetadata. ctx bounds every query.
-func FetchMetadata(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName string) (*core.Metadata, error) {
+//
+// maxConcurrency optionally caps how many introspection queries run at once
+// across all schemas. Unset or <=0 uses defaultMetadataConcurrency. The desktop
+// app passes 1 so the whole load serialises onto a single pooled connection,
+// staying well under the remote's connection limit; user queries then reuse the
+// same cached pool.
+func FetchMetadata(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName string, maxConcurrency ...int) (*core.Metadata, error) {
 	if db == nil {
 		return nil, fmt.Errorf("FetchMetadata: db is nil")
 	}
 	if dialect == nil {
 		return nil, fmt.Errorf("FetchMetadata: dialect is nil")
 	}
+
+	// A shared buffered channel bounds concurrent DB calls across every schema.
+	limit := defaultMetadataConcurrency
+	if len(maxConcurrency) > 0 && maxConcurrency[0] > 0 {
+		limit = maxConcurrency[0]
+	}
+	sem := make(chan struct{}, limit)
+	acquire := func() { sem <- struct{}{} }
+	release := func() { <-sem }
 
 	schemaNames, err := dialect.GetSchemas(ctx, db)
 	if err != nil {
@@ -68,14 +99,24 @@ func FetchMetadata(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbN
 				functions           []core.Function
 				errTables, errViews error
 			)
+			// run executes fn in its own goroutine, but only holds a DB
+			// connection while inside the semaphore. limit=1 => fully serial.
+			run := func(fn func()) {
+				go func() {
+					defer swg.Done()
+					acquire()
+					defer release()
+					fn()
+				}()
+			}
 			swg.Add(7)
-			go func() { defer swg.Done(); tables, errTables = dialect.GetTables(ctx, db, name) }()
-			go func() { defer swg.Done(); views, errViews = dialect.GetViews(ctx, db, name) }()
-			go func() { defer swg.Done(); indexes, _ = dialect.GetIndexes(ctx, db, name) }()
-			go func() { defer swg.Done(); triggers, _ = dialect.GetTriggers(ctx, db, name) }()
-			go func() { defer swg.Done(); stats, _ = dialect.GetStats(ctx, db, name) }()
-			go func() { defer swg.Done(); types, _ = dialect.GetTypes(ctx, db, name) }()
-			go func() { defer swg.Done(); functions, _ = dialect.GetFunctions(ctx, db, name) }()
+			run(func() { tables, errTables = dialect.GetTables(ctx, db, name) })
+			run(func() { views, errViews = dialect.GetViews(ctx, db, name) })
+			run(func() { indexes, _ = dialect.GetIndexes(ctx, db, name) })
+			run(func() { triggers, _ = dialect.GetTriggers(ctx, db, name) })
+			run(func() { stats, _ = dialect.GetStats(ctx, db, name) })
+			run(func() { types, _ = dialect.GetTypes(ctx, db, name) })
+			run(func() { functions, _ = dialect.GetFunctions(ctx, db, name) })
 			swg.Wait()
 
 			if errTables != nil {

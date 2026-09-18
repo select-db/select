@@ -1,12 +1,14 @@
 -- name: ListDatasourcesByWorkspace :many
 SELECT
-  id,
-  db_type,
-  name
+  d.id,
+  d.db_type,
+  d.name
 FROM
-  app.datasource
+  app.datasource d
+  JOIN app.workspace w ON w.id = d.workspace_id
 WHERE
-  workspace_id = $1
+  d.workspace_id = $1
+  AND w.deleted_at IS NULL
 ORDER BY
-  name,
-  id;
+  d.name,
+  d.id;

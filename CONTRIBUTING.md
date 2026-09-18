@@ -14,11 +14,11 @@ Monorepo of Go modules + a Svelte frontend + a Python analyzer:
 | `backend/` | Hosted proxy and sync server (Go) |
 | `dialect/` | Shared SQL engine: per-dialect parsing/introspection + the Python token analyzer (`dialect/core/tokenanalyzer/python`) |
 | `toolkit/` | Small shared Go utilities |
-| `docs/` | Documentation website source |
+| `web/` | select-db.com: `website/` (marketing), `docs/` (documentation), `api/` (API reference) and the generator that builds all three |
 
 ## Prerequisites
 
-Go 1.25+ · Node 20+ · [Wails v2](https://wails.io) (desktop) · [uv](https://docs.astral.sh/uv/) (analyzer)
+Go 1.25+ · Node 22+ · [Wails v3](https://v3.wails.io) (desktop) · [uv](https://docs.astral.sh/uv/) (analyzer)
 
 ## Branches
 
@@ -38,6 +38,10 @@ Go 1.25+ · Node 20+ · [Wails v2](https://wails.io) (desktop) · [uv](https://d
 ```bash
 npm ci && npm run check && npm run lint
 ```
+> The frontend calls the Go services through the generated bindings in
+> `app/frontend/src/lib/bindings`. They are committed; regenerate and commit them
+> whenever a bound service's signature changes:
+> `cd app && wails3 task generate:bindings`
 
 **Go modules** (`app` | `backend` | `dialect`): golangci-lint + tests; CI also fails on dead code:
 ```bash
@@ -45,8 +49,34 @@ cd <module>
 golangci-lint run ./...
 go test ./...
 ```
+> The `dialect` tests that drive the Python analyzer skip when its venv is
+> missing, so `uv sync` in `dialect/core/tokenanalyzer/python` first. CI sets
+> `SELECT_REQUIRE_ANALYZER=1`, which makes that skip a failure instead.
 > The `app` module embeds the frontend build output; stub it when testing Go only:
 > `mkdir -p app/frontend/build && touch app/frontend/build/.keep`
+>
+> On Linux the desktop app links against GTK4/WebKitGTK 6.0 through cgo, so
+> building, linting or testing the `app` module needs `libgtk-4-dev` and
+> `libwebkitgtk-6.0-dev` installed.
+
+**End-to-end** (`app`):
+```bash
+cd app && wails3 task test:e2e
+```
+> The suite drives the real app built with wails' `server` tag: the same Go
+> services, bindings and events, served over HTTP instead of embedded in a
+> webview, so Playwright can drive it with no display server. It cannot cover
+> anything that needs a native window — zoom, dialogs, menus — and it runs
+> against Chromium rather than WebKit/WebView2, so those stay manual.
+>
+> Specs live in `app/frontend/tests/e2e`. `npx playwright test --ui` gives the
+> watch mode; the binary it drives comes from `wails3 task build:server`.
+>
+> Each run gets a throwaway data directory, seeded by `internal/cmd/e2eseed`
+> with a migrated database, a user, a workspace and its files — without which
+> the app only ever shows a login screen. Sign-in itself is not part of it: the
+> tokens live in the OS keyring, so specs use the `signIn` fixture, which emits
+> the same `login` event the Go side emits once it finds them.
 
 **Python analyzer** (`dialect/core/tokenanalyzer/python`):
 ```bash

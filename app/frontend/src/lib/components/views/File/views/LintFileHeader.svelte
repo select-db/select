@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import { ResetLint } from '$lib/wailsjs/go/system/System';
+	import { ResetLint } from '$lib/bindings/selectDb/internal/system/system';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import { notifySuccess, notifyError } from '$lib/system/Notifications/notificationsStore';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
@@ -44,14 +44,14 @@
 			{#if hasUnsavedChanges}
 				<Button
 					leftIcon="check"
-					iconSize={18}
+					iconSize={16}
 					content="Apply"
 					onclick={handleSave}
 					emphasis="high"
 				/>
 			{/if}
 			{#if isModifiedFromDefault}
-				<Button leftIcon="refresh" iconSize={18} content="Reset" onclick={handleReset} />
+				<Button leftIcon="refresh" iconSize={16} content="Reset" onclick={handleReset} />
 			{/if}
 		</div>
 	</div>
@@ -60,7 +60,6 @@
 <style>
 	.wrapper {
 		min-height: 35px;
-		background-color: var(--gray-0);
 		display: flex;
 		gap: var(--space-sm);
 		justify-content: space-between;

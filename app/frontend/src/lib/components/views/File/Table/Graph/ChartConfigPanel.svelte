@@ -129,7 +129,6 @@
 		display: flex;
 		flex-direction: row;
 		border-left: var(--border);
-		background-color: var(--gray-0);
 		overflow: hidden;
 	}
 
@@ -188,7 +187,7 @@
 		padding: var(--space-xs) 0;
 		background: var(--gray-100);
 		border: var(--border);
-		border-radius: var(--radius-sm);
+		border-radius: var(--br-xs);
 		cursor: pointer;
 		color: var(--gray-800);
 		font-size: 10px;

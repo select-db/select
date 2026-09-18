@@ -3,29 +3,26 @@ package testutil
 
 import (
 	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	ta "github.com/selectDb/dialect/core/tokenanalyzer"
 )
 
-// NewTestAnalyzer creates a Python analyzer for tests. Skips if the venv is not found.
-func NewTestAnalyzer(t *testing.T) *ta.Analyzer {
-	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
+// requireAnalyzerEnv makes a missing analyzer fail rather than skip. CI sets
+// it, because a skip there stops the run testing what it exists to test.
+const requireAnalyzerEnv = "SELECT_REQUIRE_ANALYZER"
+
+// NewTestAnalyzer creates a Python analyzer for tests. A fresh checkout has no
+// venv until `uv sync` runs, so the default is to skip.
+func NewTestAnalyzer(tb testing.TB) *ta.Analyzer {
+	tb.Helper()
+	pythonPath, script, ok := ta.FindDevAnalyzer()
 	if !ok {
-		t.Fatal("cannot determine test file path")
+		const missing = "python venv not found; run `uv sync` in dialect/core/tokenanalyzer/python"
+		if os.Getenv(requireAnalyzerEnv) != "" {
+			tb.Fatalf("%s is set: %s", requireAnalyzerEnv, missing)
+		}
+		tb.Skip(missing)
 	}
-	pyDir := filepath.Join(filepath.Dir(thisFile), "..", "tokenanalyzer", "python")
-	script := filepath.Join(pyDir, "main.py")
-	venvBin := "bin"
-	if runtime.GOOS == "windows" {
-		venvBin = "Scripts"
-	}
-	pyPath := filepath.Join(pyDir, ".venv", venvBin, "python3")
-	if _, err := os.Stat(pyPath); err != nil {
-		t.Skipf("python venv not found at %s", pyPath)
-	}
-	return ta.NewAnalyzer(pyPath, script)
+	return ta.NewAnalyzer(pythonPath, script)
 }

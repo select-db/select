@@ -20,39 +20,53 @@ func (g *Graph) FindDbItemNodeById(dbInstanceID, nodeID string) *DBInstanceItemN
 	return nil
 }
 
+// GetWorkspaceGraph returns a copy of the workspace graph for the frontend.
+// See clone.go: what crosses the bridge is never the tree the watcher writes to.
 func (g *Graph) GetWorkspaceGraph() (*WorkspaceNode, error) {
+	if _, err := EnsureWorkspaceGraph(g); err != nil {
+		return nil, err
+	}
+	return SnapshotWorkspaceGraph(g), nil
+}
+
+// EnsureWorkspaceGraph returns the tree itself, building it on first use.
+//
+// A function rather than a method: every method on Graph is frontend API, and
+// this hands out the live tree, which is the app's to hold and no one else's.
+//
+// It also guarantees the graph is indexed: WorkspaceGraph is an exported field,
+// so a graph can be assigned rather than built, and every lookup goes through
+// the index.
+func EnsureWorkspaceGraph(g *Graph) (*WorkspaceNode, error) {
 	g.mu.RLock()
-	
-	if g.WorkspaceGraph != nil {
+	if g.WorkspaceGraph != nil && g.index != nil {
 		defer g.mu.RUnlock()
 		return g.WorkspaceGraph, nil
 	}
-	
 	g.mu.RUnlock()
 
 	g.mu.Lock()
 
-	if g.WorkspaceGraph == nil {
+	built := false
+	switch {
+	case g.WorkspaceGraph == nil:
 		if err := g.BuildWorkspaceGraph(); err != nil {
 			g.mu.Unlock()
 			return nil, err
 		}
-		
-		wg := g.WorkspaceGraph
-		
-		g.mu.Unlock()
-		
-		onGraphBuilt := g.AfterWorkspaceGraphBuild
-		if onGraphBuilt != nil {
-			onGraphBuilt(wg)
-		}
-
-		return wg, nil
+		built = true
+	case g.index == nil:
+		g.ensureIndex()
 	}
-	
+
 	wg := g.WorkspaceGraph
+	onGraphBuilt := g.AfterWorkspaceGraphBuild
 
 	g.mu.Unlock()
-	
+
+	if built && onGraphBuilt != nil {
+		onGraphBuilt(wg)
+	}
+
 	return wg, nil
 }

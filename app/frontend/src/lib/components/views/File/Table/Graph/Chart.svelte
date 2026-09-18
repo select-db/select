@@ -569,7 +569,7 @@
 	.tooltip {
 		position: fixed;
 		pointer-events: none;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 		color: var(--gray-900);
 		border: var(--border);
 		border-radius: var(--br-xs);
@@ -580,7 +580,7 @@
 		z-index: 9999;
 		min-width: 160px;
 		max-width: 260px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 4px 12px var(--shadow);
 	}
 	.tooltip :global(.tx) {
 		padding: var(--space-xs) var(--space-sm);

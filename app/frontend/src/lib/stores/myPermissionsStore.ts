@@ -1,13 +1,13 @@
 import { writable, derived } from 'svelte/store';
-import { GetMyPermissions } from '$lib/wailsjs/go/role/Role';
+import { GetMyPermissions } from '$lib/bindings/selectDb/internal/role/role';
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import {
 	isAppActionAllowed,
 	buildPermissionMap,
 	resolve
-} from '$lib/components/views/Settings/permissions';
-import type { Permission, PermissionMap } from '$lib/components/views/Settings/permissions';
+} from '$lib/components/views/Settings/shared/permissions';
+import type { Permission, PermissionMap } from '$lib/components/views/Settings/shared/permissions';
 
 export const myPermissionsStore = writable<Permission[]>([]);
 
@@ -30,7 +30,7 @@ export function clearMyPermissions(): void {
 	myPermissionsStore.set([]);
 }
 
-export const permissionActions = ['manage', 'select', 'see', 'insert', 'update', 'delete', 'ddl'];
+export const permissionActions = ['manage', 'select', 'see', 'insert', 'update', 'delete'];
 export type PermissionActions = (typeof permissionActions)[number];
 
 /** Reactive helper: check app-level and db-level permissions. */
@@ -41,9 +41,19 @@ export const myPermissions = derived(
 		const permMap: PermissionMap = buildPermissionMap($perms);
 		return {
 			isAllowed: (action: string) => isAppActionAllowed($perms, action, isOwner),
-			canAccessDb: (dbId: string) =>
+			canAccessDb: (dbId: string, isProxified?: boolean) =>
+				!isProxified ||
 				isOwner ||
-				permissionActions.some((a) => resolve(permMap, dbId, '*', '*', '*', a) === 'allow')
+				permissionActions.some((a) => resolve(permMap, dbId, '*', '*', '*', a) === 'allow'),
+
+			/**
+			 * Whether this person administrates the connection, which is the same
+			 * question the backend asks before it will change or revoke one
+			 * (`Actor.IsOwner() || Actor.CanManage(id)`). Asking it here only
+			 * decides what the UI offers: the server refuses either way.
+			 */
+			canManageDb: (dbId: string) =>
+				isOwner || resolve(permMap, dbId, '*', '*', '*', 'manage') === 'allow'
 		};
 	}
 );

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, type Snippet } from 'svelte';
 
 	import Modal from '$lib/system/Modal/Modal.svelte';
 	import Notifications from '$lib/system/Notifications/Notifications.svelte';
@@ -11,11 +11,15 @@
 		gitWorkspaceStatusStore,
 		gitFileStatusStore
 	} from '$lib/components/views/Git/gitStore';
-	import { StartFileWatcher, StartDatabaseWatcher } from '$lib/wailsjs/go/system/System';
+	import {
+		StartFileWatcher,
+		StopFileWatcher,
+		StartDatabaseWatcher
+	} from '$lib/bindings/selectDb/internal/system/system';
 
 	import Leftbar from '$lib/components/Leftbar/Leftbar.svelte';
-	import Titlebar from '$lib/components/Titlebar/Titlebar.svelte';
 	import PageLogin from '$lib/components/PageLogin/PageLogin.svelte';
+	import { folderStore } from '$lib/components/PageFolder/folderStore';
 	import Rightbar from '$lib/components/Rightbar/Rightbar.svelte';
 	import Bottombar from '$lib/components/Bottombar/Bottombar.svelte';
 	import EditorLayout from '$lib/components/Layout/Layout.svelte';
@@ -27,18 +31,23 @@
 	import { lintVersionStore } from '$lib/stores/lintStore';
 	import '$lib/utils/query/queryStream.svelte';
 	import { setContext } from '$lib/stores/keybindingsContextStore';
-	import { zoomStore } from '$lib/stores/zoomStore';
 	import KeybindingsManager from '$lib/components/KeybindingsManager.svelte';
+	import { initZoom } from '$lib/wails/zoom';
 
 	import { setupSessionWall, teardownSessionWall, sessionCheckingStore } from './sessionWall';
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import { initLayoutPersistence } from '$lib/components/Layout/layoutPersistence';
-	import { EventsOn } from '$lib/wailsjs/runtime/runtime';
-	import { CheckVersion } from '$lib/wailsjs/go/updater/Updater';
+	import { EventsOn } from '$lib/wails/events';
+	import { CheckVersion } from '$lib/bindings/selectDb/internal/updater/updater';
 	import { updateStore } from '$lib/stores/updateStore';
 	import { notifyError } from '$lib/system/Notifications/notificationsStore';
 	import UpdateOverlay from '$lib/components/UpdateOverlay/UpdateOverlay.svelte';
 	import UpdateToast from '$lib/components/UpdateOverlay/UpdateToast.svelte';
+
+	// SvelteKit hands every layout its page's content. Ours is deliberately
+	// empty — see +page.svelte — but it is rendered where a page would go, so
+	// nothing is silently dropped.
+	let { children }: { children?: Snippet } = $props();
 
 	let teardownLayoutPersistence: (() => void) | undefined;
 
@@ -60,6 +69,7 @@
 	);
 
 	onMount(() => {
+		void initZoom();
 		setupSessionWall();
 		initTheme();
 		teardownLayoutPersistence = initLayoutPersistence();
@@ -71,31 +81,47 @@
 		teardownLayoutPersistence?.();
 	});
 
-	let watchedWorkspaceId: string | undefined;
-	$: if ($workspaceGraphStore && $workspaceGraphStore.id !== watchedWorkspaceId) {
-		watchedWorkspaceId = $workspaceGraphStore.id;
+	// Runes, because this component takes props now and the two modes cannot be
+	// mixed. These ran on init before and run after mount now, which neither the
+	// watchers nor the keybinding context care about.
+	// Keyed on the folder, not the workspace: the same workspace can be opened
+	// at a different path, and the old watcher would keep its watches.
+	let watchedFolder: string | undefined;
+	$effect(() => {
+		const workspace = $workspaceGraphStore;
+		if (!workspace) {
+			if (watchedFolder !== undefined) {
+				watchedFolder = undefined;
+				StopFileWatcher();
+			}
+			return;
+		}
+
+		const key = `${workspace.id}:${$folderStore?.path ?? ''}`;
+		if (key === watchedFolder) return;
+
+		watchedFolder = key;
 		gitWorkspaceStatusStore.set(null);
 		gitFileStatusStore.set(null);
 		loadGitStatus();
-		StartFileWatcher($workspaceGraphStore.id);
+		StartFileWatcher(workspace.id);
 		StartDatabaseWatcher();
-	}
+	});
 
-	$: setContext('leftPanelVisible', $isLeftbarOpened);
-	$: setContext('rightPanelVisible', $isRightbarOpened);
-	$: document.documentElement.style.zoom = String($zoomStore);
+	$effect(() => setContext('leftPanelVisible', $isLeftbarOpened));
+	$effect(() => setContext('rightPanelVisible', $isRightbarOpened));
 </script>
 
 <div class="wrapper">
-	<Titlebar />
-
 	<div class="layout">
 		{#if $sessionCheckingStore}
 			<div class="session-loader"><Loader size={24} /></div>
-		{:else if $workspaceGraphStore}
+		{:else if $folderStore || $workspaceGraphStore}
 			{#key `${$themeVersionStore}-${$configVersionStore}-${$lintVersionStore}`}
 				<Leftbar />
-				<main class:no-left-border={!$isLeftbarOpened} class:no-right-border={!$isRightbarOpened}>
+				<main class:left-bar-closed={!$isLeftbarOpened} class:right-bar-closed={!$isRightbarOpened}>
+					{@render children?.()}
+					<div class="drag-spacer" style="--wails-draggable:drag"></div>
 					<EditorLayout node={$layoutStore.root} />
 				</main>
 				<Rightbar />
@@ -131,29 +157,40 @@
 	.layout {
 		display: flex;
 		flex: 1;
-		overflow: hidden;
+		/* A flex item will not shrink below its content, and this one is the whole
+		   app: without it the bottom bar is squeezed to nothing in a short window,
+		   and a file tree taller than the window grows past it instead of scrolling. */
+		min-height: 0;
+		/* clip, not hidden: `hidden` still makes this a scroll container, and a
+		   scrollIntoView from the file tree or the editor leaves it scrolled a
+		   few px sideways with no scrollbar to put it back — the whole app then
+		   sits off-centre until the window is resized. `clip` cannot scroll. */
+		overflow: clip;
 	}
 
 	main {
-		background-color: var(--gray-0);
-		border: var(--border);
-		border-radius: var(--br-sm);
-		flex-grow: 1;
+		display: flex;
+		flex-direction: column;
+		/* flex-basis:0 + min-width:0 → main's width is purely the leftover space
+		   between the side bars, never influenced by (over)wide tab content.
+		   Combined with overflow:hidden, content clips/scrolls inside main. */
+		flex: 1 1 0;
+		min-width: 0;
 		overflow: hidden;
-
 		z-index: 2;
+
+		box-shadow: var(--shadow-main);
 	}
 
-	main.no-left-border {
-		border-top-left-radius: 0;
-		border-bottom-left-radius: 0;
-		border-left: none;
+	.drag-spacer {
+		flex-shrink: 0;
+		height: var(--space-sm);
 	}
-
-	main.no-right-border {
-		border-top-right-radius: 0;
-		border-bottom-right-radius: 0;
-		border-right: none;
+	main.left-bar-closed {
+		padding-left: var(--space-sm);
+	}
+	main.right-bar-closed {
+		padding-right: var(--space-sm);
 	}
 
 	.session-loader {

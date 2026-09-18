@@ -22,6 +22,7 @@
 
 <Button
 	leftIcon="github-branch"
+	label="Source control"
 	iconSize={17}
 	size="sm"
 	emphasis={$isLeftbarOpened && $leftPanelTab === 'github-branch' ? 'high' : 'low'}

@@ -1,4 +1,4 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 export type ResourceType =
 	| 'file'

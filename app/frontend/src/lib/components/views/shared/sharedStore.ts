@@ -1,5 +1,7 @@
-import type { generated, graph } from '$lib/wailsjs/go/models';
-import { EventsOn } from '$lib/wailsjs/runtime/runtime';
+import type * as generated from '$lib/bindings/selectDb/internal/db/generated/models';
+import type * as graph from '$lib/wails/graph';
+import { EventsOn } from '$lib/wails/events';
+import { resolveFolderContents } from '$lib/utils/graph/resolveFolder';
 import { writable } from 'svelte/store';
 import {
 	createDatabase,
@@ -17,11 +19,16 @@ export type FileSystemItem = graph.FileNode | graph.FolderNode;
 export const expandedItemIdsStore = writable<Map<string, boolean>>(new Map([]));
 
 export const toggleIsItemExpanded = (id: string) => {
+	let expanded = false;
+
 	expandedItemIdsStore.update((store) => {
 		const newStore = new Map(store);
-		newStore.set(id, !newStore.get(id));
+		expanded = !newStore.get(id);
+		newStore.set(id, expanded);
 		return newStore;
 	});
+
+	if (expanded) resolveFolderContents(id);
 };
 
 export const expandItem = (id: string) => {
@@ -30,6 +37,8 @@ export const expandItem = (id: string) => {
 		newStore.set(id, true);
 		return newStore;
 	});
+
+	resolveFolderContents(id);
 };
 
 export const renamingItemIdStore = writable<string | null>(null);

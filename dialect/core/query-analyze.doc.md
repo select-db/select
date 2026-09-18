@@ -6,11 +6,12 @@ Query analyze **executes the query** and measures actual performance. Unlike the
 
 SELECT runs the query with `EXPLAIN ANALYZE` (and `BUFFERS` on PostgreSQL). The query executes fully, but results are discarded. You get the execution plan enriched with actual metrics.
 
+> [!CAUTION]
 > Because the query runs for real, **write statements will modify data**. Use with caution on INSERT, UPDATE, and DELETE.
 
 ## What you see
 
-On top of everything the [Query Planner](/sql/query-planner/) shows, analyze adds:
+On top of everything the [Query Planner](/docs/sql/query-planner/) shows, analyze adds:
 
 - **Actual rows**: how many rows each operation actually processed (vs estimated)
 - **Actual time**: real execution time per operation in milliseconds

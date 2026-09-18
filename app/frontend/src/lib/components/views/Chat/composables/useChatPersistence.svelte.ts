@@ -1,10 +1,10 @@
 import { untrack } from 'svelte';
 import type { Tab } from '$lib/components/Layout/layoutStore';
 import { updateTab } from '$lib/components/Layout/layoutStore';
-import type { CreateChatReturn } from '$lib/components/views/Chat/core/tanstack-svelte/types';
+import type { CreateChatReturn } from '$lib/components/views/Chat/core/chat/types';
 
 export function useChatPersistence(
-	chat: CreateChatReturn<any>,
+	chat: CreateChatReturn,
 	getTab: () => Tab,
 	sessionId: string,
 	getInputText: () => string,

@@ -1,20 +1,17 @@
 <script lang="ts">
-	import { updateIsLeftbarOpened } from '$lib/components/Leftbar/store';
+	import { updateIsLeftbarOpened, LEFTBAR_WIDTH_KEY } from '$lib/components/Leftbar/store';
 	import { throttle } from '$lib/utils/throttle';
 
 	const MIN_WIDTH = 0;
-	const DEFAULT_WIDTH = 200;
 
-	export let width: number = parseInt(
-		localStorage.getItem('sidebarWidth') || `${DEFAULT_WIDTH}`,
-		10
-	);
+	// Owned by Leftbar, which seeds it from storage and pins the bar to it.
+	export let width: number;
 	export let resizing: boolean = false;
 
 	const throttledResizeSidebar = throttle((e: MouseEvent) => {
 		width = Math.max(MIN_WIDTH, Math.min(e.clientX - 4, window.innerWidth / 2));
 		updateIsLeftbarOpened(width > MIN_WIDTH);
-		localStorage.setItem('sidebarWidth', width.toString());
+		localStorage.setItem(LEFTBAR_WIDTH_KEY, width.toString());
 	}, 15);
 
 	function startResizing(e: MouseEvent) {
@@ -42,7 +39,7 @@
 	#resizer {
 		position: absolute;
 		z-index: 3;
-		top: var(--space-sm-md);
+		top: 64px;
 		right: 1px;
 		bottom: var(--space-sm-md);
 

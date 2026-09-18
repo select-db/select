@@ -87,7 +87,7 @@
 
 		notify({
 			type: AlertType.Success,
-			message: `Replaced ${result.totalReplacements} occurrences in ${result.filesModified} files`
+			message: `Replaced ${result?.totalReplacements ?? 0} occurrences in ${result?.filesModified ?? 0} files`
 		});
 
 		// Re-run search to update results
@@ -139,7 +139,7 @@
 </script>
 
 <div class="search-panel">
-	<div class="section space x y">
+	<div class="section space x y" style="padding-top: var(--space-xs);">
 		<div class="options">
 			<Button
 				emphasis={caseSensitive ? 'high' : 'low'}

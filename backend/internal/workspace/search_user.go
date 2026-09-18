@@ -8,18 +8,13 @@ import (
 	"strings"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
 	"backend/internal/authz"
-	"backend/internal/middlewares"
 
 	core "github.com/selectDb/dialect/core"
-)
 
-type searchUserRequest struct {
-	WorkspaceID string `json:"workspace_id"`
-	Email       string `json:"email"`
-}
+	"github.com/google/uuid"
+)
 
 type searchUserResponse struct {
 	Found        bool    `json:"found"`
@@ -31,34 +26,22 @@ type searchUserResponse struct {
 
 func SearchUserHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
 
-		var req searchUserRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		email := strings.TrimSpace(strings.ToLower(req.Email))
+		email := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("email")))
 		if email == "" {
 			http.Error(w, "email is required", http.StatusBadRequest)
 			return
 		}
 
-		workspaceID := middlewares.MemberWorkspaceID(r)
+		a := authz.ActorOf(r)
+		workspaceID := a.WorkspaceID
 
-		if !authz.IsWorkspaceOwner(r, workspaceID) {
-			compiled := authz.CompiledFromRequest(r)
-			if !compiled.IsAllowed(core.ActionWorkspaceUsersManage) {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
+		if !a.IsOwner() && !a.Can(core.ActionWorkspaceUsersManage) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
 		}
 
-		workspaceUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		workspaceUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -84,7 +67,7 @@ func SearchUserHandler() http.HandlerFunc {
 		resp := searchUserResponse{
 			Found:        true,
 			UserID:       row.ID.String(),
-			Email:        row.Email.String,
+			Email:        row.Email,
 			AlreadyAdded: row.IsMember,
 		}
 		if row.Name.Valid {

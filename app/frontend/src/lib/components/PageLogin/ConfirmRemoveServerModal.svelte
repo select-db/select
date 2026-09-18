@@ -28,8 +28,14 @@
 	</p>
 </ModalBody>
 <footer class="footer">
-	<Button content="Cancel" size="sm" emphasis="high" onclick={onClose} disabled={removing} />
-	<Button content="Remove" size="sm" emphasis="low" onclick={handleConfirm} disabled={removing} />
+	<Button content="Cancel" size="sm" emphasis="low" onclick={onClose} disabled={removing} />
+	<Button
+		content="Remove"
+		size="sm"
+		emphasis="warning"
+		onclick={handleConfirm}
+		disabled={removing}
+	/>
 </footer>
 
 <style>
@@ -43,6 +49,6 @@
 		gap: var(--space-sm);
 		padding: var(--space-sm);
 		border-top: var(--border);
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 </style>

@@ -42,7 +42,7 @@ func TestStreamLocalEmitsStartedThenExecuted(t *testing.T) {
 	}
 
 	listener := &recordingListener{}
-	sink := NewStreamingSink(NewStreamingResult(), listener)
+	sink := NewStreamingSink(NewStreamingResult("test-exec"), listener)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -6,7 +6,7 @@ import (
 	"selectDb/internal/graph"
 
 	"github.com/selectDb/dialect/engine"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"selectDb/internal/desktop"
 )
 
 // queryStartedEvent is the payload of "query:started". The frontend uses it
@@ -73,6 +73,11 @@ type queryEventListener struct {
 }
 
 func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.ColumnEditMeta) {
+	// Columns came back, so the database answered. Reported here and not where
+	// the stream is kicked off: Stream returns before any I/O happens, and a
+	// query against an unreachable database would have claimed it was up.
+	emitAvailability(l.dbInstanceID, "")
+
 	// Compute column edit metadata if the engine didn't already populate it.
 	// Done lazily here so the streaming cache exposes it on the very first
 	// Page() call and the started event carries it to the frontend.
@@ -84,7 +89,7 @@ func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.C
 			}
 		}
 	}
-	runtime.EventsEmit(l.ctx, "query:started", queryStartedEvent{
+	desktop.Emit("query:started", queryStartedEvent{
 		ExecutionID:    l.executionID,
 		DbInstanceID:   l.dbInstanceID,
 		FileID:         l.fileID,
@@ -94,7 +99,7 @@ func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.C
 }
 
 func (l *queryEventListener) OnExecuted(durationMs int64) {
-	runtime.EventsEmit(l.ctx, "query:executed", queryExecutedEvent{
+	desktop.Emit("query:executed", queryExecutedEvent{
 		ExecutionID:  l.executionID,
 		DbInstanceID: l.dbInstanceID,
 		FileID:       l.fileID,
@@ -103,7 +108,7 @@ func (l *queryEventListener) OnExecuted(durationMs int64) {
 }
 
 func (l *queryEventListener) OnProgress(available int64) {
-	runtime.EventsEmit(l.ctx, "query:progress", queryProgressEvent{
+	desktop.Emit("query:progress", queryProgressEvent{
 		ExecutionID:  l.executionID,
 		DbInstanceID: l.dbInstanceID,
 		FileID:       l.fileID,
@@ -115,7 +120,7 @@ func (l *queryEventListener) OnDone(rowCount, affected, durationMs int64) {
 	if l.cancelTimer != nil {
 		l.cancelTimer()
 	}
-	runtime.EventsEmit(l.ctx, "query:done", queryDoneEvent{
+	desktop.Emit("query:done", queryDoneEvent{
 		ExecutionID:  l.executionID,
 		DbInstanceID: l.dbInstanceID,
 		FileID:       l.fileID,
@@ -129,7 +134,7 @@ func (l *queryEventListener) OnError(message string, errorPosition *int) {
 	if l.cancelTimer != nil {
 		l.cancelTimer()
 	}
-	runtime.EventsEmit(l.ctx, "query:error", queryErrorEvent{
+	desktop.Emit("query:error", queryErrorEvent{
 		ExecutionID:   l.executionID,
 		DbInstanceID:  l.dbInstanceID,
 		FileID:        l.fileID,

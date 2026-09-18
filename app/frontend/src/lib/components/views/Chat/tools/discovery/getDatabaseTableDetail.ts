@@ -1,4 +1,4 @@
-import { toolDefinition } from '@tanstack/ai';
+import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
 import { loadDatabase } from '../helpers';
 
@@ -38,7 +38,9 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 		};
 	}
 
-	const schemaNode = (node!.children ?? []).find((c) => c.type === 'schema' && c.id === schemaId);
+	const schemaNode = node!.children.find(
+		(c) => c.type === 'schema' && c.id === schemaId
+	);
 
 	if (!schemaNode) {
 		return {
@@ -50,8 +52,8 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 		};
 	}
 
-	const tablesGroup = (schemaNode.children ?? []).find((c) => c.type === 'tables');
-	const viewsGroup = (schemaNode.children ?? []).find((c) => c.type === 'views');
+	const tablesGroup = schemaNode.children.find((c) => c.type === 'tables');
+	const viewsGroup = schemaNode.children.find((c) => c.type === 'views');
 	const tableNodeFromTables = (tablesGroup?.children ?? []).find((c) => c.name === tableName);
 	const tableNodeFromViews = (viewsGroup?.children ?? []).find((c) => c.name === tableName);
 	const tableNode = tableNodeFromTables ?? tableNodeFromViews;

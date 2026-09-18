@@ -39,8 +39,8 @@ func TestResolveExpiry(t *testing.T) {
 }
 
 func TestGuardRejectsAPIKeyPrincipal(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/apikey/list", strings.NewReader(`{"workspace_id":"w"}`))
-	req = req.WithContext(middlewares.ContextWithAPIKeyPrincipal(context.Background(), "key-1", "ws-1", nil))
+	req := httptest.NewRequest(http.MethodGet, "/apikeys", nil)
+	req = req.WithContext(middlewares.ContextWithAPIKeyPrincipal(context.Background(), "key-1", "Key One", "ws-1", nil))
 	rr := httptest.NewRecorder()
 
 	ListHandler().ServeHTTP(rr, req)
@@ -50,14 +50,5 @@ func TestGuardRejectsAPIKeyPrincipal(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "api keys cannot manage api keys") {
 		t.Fatalf("body = %q", rr.Body.String())
-	}
-}
-
-func TestGuardRejectsGET(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/apikey/list", nil)
-	rr := httptest.NewRecorder()
-	ListHandler().ServeHTTP(rr, req)
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want 405", rr.Code)
 	}
 }

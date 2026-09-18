@@ -28,6 +28,7 @@ func ExecuteHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		req.ID = r.PathValue("id")
 		if req.ID == "" || req.SQL == "" {
 			http.Error(w, "id and sql are required", http.StatusBadRequest)
 			return
@@ -72,15 +73,18 @@ func ExecuteHandler() http.HandlerFunc {
 		w.Header().Set("Content-Encoding", "zstd")
 		w.WriteHeader(http.StatusOK)
 
-		sink := arrowstream.NewSink(w)
-		defer sink.Close()
+		inner := arrowstream.NewSink(w)
+		defer inner.Close()
 
 		// Push compressed bytes through HTTP buffering after every batch so
 		// the client sees rows arrive steadily instead of in one tail clump
 		// when the handler returns.
 		if flusher, ok := w.(http.Flusher); ok {
-			sink.SetDownstreamFlusher(flusher.Flush)
+			inner.SetDownstreamFlusher(flusher.Flush)
 		}
+
+		// Wrap the sink to capture the query's outcome for the audit log.
+		sink := newLoggingSink(inner, newQueryAuditRecord(r, req, ds.DBType))
 
 		inst := engine.DBInstance{ID: req.ID, DBType: ds.DBType}
 		engine.StreamLocal(ctx, conn, inst, req.SQL, engine.Options{

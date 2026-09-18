@@ -8,6 +8,7 @@
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import CellValueModal from './CellValueModal.svelte';
 	import ForeignKeyPickerModal from './ForeignKeyPickerModal.svelte';
+	import { formatCellValue } from './helpers/cellText';
 
 	export type ForeignKeyContext = {
 		databaseId: string;
@@ -53,6 +54,16 @@
 
 	const editable = $derived(hasAllPrimaryKeys && !isPrimaryKey);
 
+	/** Why this cell can't be written to, or null when it can. */
+	const notEditableReason = $derived.by(() => {
+		if (editable) return null;
+		if (isPrimaryKey) return 'Column is a primary key and cannot be edited.';
+		if (missingPrimaryKeys.length > 0) {
+			return `Missing primary key${missingPrimaryKeys.length > 1 ? 's' : ''} in SELECT: ${missingPrimaryKeys.join(', ')}`;
+		}
+		return 'Column cannot be edited: computed expression or no primary key.';
+	});
+
 	// NULL emits the literal "NULL" string, matching what typing NULL into the
 	// text input does today, so the edit pipeline stays byte-for-byte unchanged.
 	const NULL_VALUE = 'NULL';
@@ -63,12 +74,8 @@
 	]);
 
 	let menuOpen = $state(true);
-	let menuValue = $state('');
+	let menuValue = $derived(formatCellValue(value));
 	let menuWidth = $state(0);
-
-	$effect(() => {
-		menuValue = formatValue(value);
-	});
 
 	// Closing the menu (pick, Escape, or click-away) ends the edit. A pick has
 	// already pushed its value via onchange by the time open flips to false.
@@ -91,16 +98,11 @@
 		onEdit(picked);
 	}
 
-	let inputValue = $state('');
+	let inputValue = $derived(formatCellValue(value));
 	let inputElement: HTMLInputElement | null = $state(null);
 	let modalOpen = $state(false);
 
 	let actionsWidth = $state(0);
-
-	// Sync input value when prop changes (e.g. after rollback)
-	$effect(() => {
-		inputValue = formatValue(value);
-	});
 
 	// Focus and select on mount
 	$effect(() => {
@@ -109,12 +111,6 @@
 			inputElement?.select();
 		});
 	});
-
-	function formatValue(val: unknown): string {
-		if (val === null) return 'NULL';
-		if (val === undefined) return '';
-		return typeof val === 'string' ? val : String(val);
-	}
 
 	function handleInput() {
 		if (!checkEditable()) {
@@ -130,8 +126,9 @@
 		onEndEdit();
 	}
 
+	// Opening the value is always allowed — only writing it back is gated. A cell
+	// that can't be edited opens in the read-only viewer instead of refusing.
 	function openModal() {
-		if (!checkEditable()) return;
 		modalOpen = true;
 		const onCancel = () => {
 			modalStore.set(null);
@@ -141,7 +138,9 @@
 			});
 		};
 
-		if (foreignKey) {
+		// The foreign-key picker exists to choose a new value; with nothing to write
+		// back, the plain viewer is what's useful.
+		if (foreignKey && !notEditableReason) {
 			modalStore.set({
 				content: () => ForeignKeyPickerModal as unknown as Component,
 				width: 'min(80vw, 860px)',
@@ -170,7 +169,9 @@
 				value: inputValue,
 				dataType,
 				columnName,
-				onSave: (v: string) => onEdit(v),
+				readOnly: !!notEditableReason,
+				readOnlyReason: notEditableReason ?? undefined,
+				onSave: notEditableReason ? undefined : (v: string) => onEdit(v),
 				onCancel
 			}
 		});
@@ -212,17 +213,8 @@
 	}
 
 	function checkEditable(): boolean {
-		if (editable) return true;
-
-		if (isPrimaryKey) {
-			notifyError(`Column is a primary key and cannot be edited.`);
-		} else if (missingPrimaryKeys.length > 0) {
-			notifyError(
-				`Missing primary key${missingPrimaryKeys.length > 1 ? 's' : ''} in SELECT: ${missingPrimaryKeys.join(', ')}`
-			);
-		} else {
-			notifyError(`Column cannot be edited: computed expression or no primary key.`);
-		}
+		if (!notEditableReason) return true;
+		notifyError(notEditableReason);
 		return false;
 	}
 </script>
@@ -298,7 +290,7 @@
 	}
 
 	.editable-menu-container :global(.select-trigger) {
-		background-color: var(--gray-400);
+		background-color: var(--gray-300);
 		border-radius: var(--br-sm);
 		outline: 0.5px solid var(--gray-800);
 		outline-offset: -1px;
@@ -326,7 +318,7 @@
 		right: 0;
 		height: 100%;
 		width: 100%;
-		background-color: var(--gray-400);
+		background-color: var(--gray-300);
 		padding: var(--space-sm-md) var(--space-sm);
 		/* always reserve room for the buttons, sized to the real cluster
 		   (1 button when not edited, 2 when edited) */
@@ -334,7 +326,7 @@
 
 		border: none;
 		border-radius: var(--br-sm);
-		outline: 0.5px solid var(--gray-800);
+		outline: 0.5px solid var(--gray-600);
 		outline-offset: -1px;
 
 		box-shadow:

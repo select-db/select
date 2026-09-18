@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { core } from '$lib/wailsjs/go/models';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	import Tooltip from '$lib/system/Tooltip/Tooltip.svelte';
 
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
 		result: graph.ExplainResult;
@@ -15,13 +15,13 @@
 
 	type FlatRow = {
 		level: number;
-		node: core.ExplainNode;
+		node: graph.ExplainNode;
 		isLast: boolean;
 		branches: number[];
 	};
 
 	const flattenTree = (
-		node: core.ExplainNode,
+		node: graph.ExplainNode,
 		level: number,
 		isLast: boolean,
 		branches: number[]
@@ -31,9 +31,10 @@
 
 		if (!isLast) branches.push(level);
 
-		if (node.children && node.children.length > 0) {
-			node.children.forEach((child, index) => {
-				const childIsLast = index === node.children.length - 1;
+		const children = node.children;
+		if (children.length > 0) {
+			children.forEach((child, index) => {
+				const childIsLast = index === children.length - 1;
 				rows.push(...flattenTree(child, level + 1, childIsLast, branches));
 			});
 		}
@@ -73,15 +74,11 @@
 	const formatPercent = (v: number | null | undefined, t: number) =>
 		v && t > 0 ? (v / t) * 100 : 0;
 
-	let expandedRows = $state<Set<string>>(new Set());
+	let expandedRows = new SvelteSet<string>();
 	const toggleRow = (id: string) => {
-		const next = new Set(expandedRows);
-		if (next.has(id)) next.delete(id);
-		else next.add(id);
-
-		expandedRows = next;
+		if (expandedRows.has(id)) expandedRows.delete(id);
+		else expandedRows.add(id);
 	};
-
 </script>
 
 {#if explain}
@@ -373,7 +370,6 @@
 		font-size: var(--fs-sm);
 		position: sticky;
 		top: 0;
-		background: var(--gray-0);
 		z-index: 1;
 		padding: var(--space-xs) var(--space-sm);
 		text-align: left;
@@ -381,6 +377,7 @@
 		color: var(--gray-800);
 		border-left: none;
 		border-right: none;
+		background-color: var(--gray-200);
 	}
 
 	.grid-table thead tr:last-child th {
@@ -419,21 +416,19 @@
 
 	.grid-table td {
 		font-size: var(--fs-sm);
-		padding: var(--space-sm) var(--space-sm) calc(var(--space-xs-sm) + 2px) var(--space-sm);
+		padding: var(--space-sm-md) var(--space-sm) calc(var(--space-sm) + 2px) var(--space-sm);
 		text-align: left;
 		vertical-align: center;
 		white-space: nowrap;
+		background-color: var(--gray-200);
 
 		border-left: none;
 		border-right: none;
+		border-bottom: var(--border);
 	}
 
 	.grid-table tbody tr td:last-child {
 		padding-right: var(--space-md);
-	}
-
-	.grid-table tr:last-child td {
-		border-bottom: var(--border);
 	}
 
 	.row-wrapper {
@@ -468,16 +463,15 @@
 		left: 0;
 		top: 0;
 		z-index: 5 !important;
-		background: var(--gray-0);
-		box-shadow: 0.5px 0 0 0 var(--border-color);
+		box-shadow: 0.5px 0 0 0 var(--shadow);
 	}
 
 	td.sticky {
 		position: sticky;
 		left: 0;
 		z-index: 2;
-		background: var(--gray-100);
-		box-shadow: 0.5px 0 0 0 var(--border-color);
+		box-shadow: 0.5px 0 0 0 var(--shadow);
+		border-right: var(--border);
 	}
 
 	.row-wrapper:hover td.sticky {
@@ -626,14 +620,6 @@
 		font-size: var(--fs-sm);
 		border-bottom: none !important;
 	}
-
-	/* .metadata-table tbody tr:not(:last-child) {
-		border-bottom: 1px solid var(--gray-300);
-	}
-
-	.metadata-table tbody tr:last-child {
-		border-bottom: none;
-	} */
 
 	.metadata-key {
 		padding: var(--space-xs) var(--space-sm);

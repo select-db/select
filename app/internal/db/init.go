@@ -17,6 +17,10 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// migrationsDir is the path inside the embedded FS, and the goose argument for
+// every command that reads it.
+const migrationsDir = "migrations"
+
 var (
 	DB *sql.DB
 	mu sync.RWMutex
@@ -114,5 +118,5 @@ func runMigrations(dbPath string) error {
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return err
 	}
-	return goose.Up(plainDB, "migrations")
+	return goose.Up(plainDB, migrationsDir)
 }

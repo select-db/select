@@ -1,14 +1,10 @@
-import type { graph } from '$lib/wailsjs/go/models';
-
-import { must, tryCatch } from '$lib/utils/tryCatch';
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import type * as graph from '$lib/wails/graph';
 
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 
-import { addToItemSelection } from '$lib/components/views/shared/sharedStore';
-import { renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
-
+import { deleteEntries } from '$lib/components/views/shared/deleteEntries';
 import { rootOptions } from './rootOptions';
+import { renameOption } from './helpers';
 
 export const getFolderOptions = (ctx: 'fs' | 'git' | 'search' = 'fs'): ContextMenuOption[] => {
 	// For git context, return empty options (placeholder folders shouldn't have context menu)
@@ -16,27 +12,15 @@ export const getFolderOptions = (ctx: 'fs' | 'git' | 'search' = 'fs'): ContextMe
 
 	return [
 		...rootOptions,
-		{
-			label: 'Rename...',
-			action: (onClose, { id }: graph.FolderNode) => {
-				renamingItemIdStore.set(id);
-				addToItemSelection(id);
-				onClose?.();
-			}
-		},
+		renameOption,
 		{
 			label: '',
 			divider: true
 		},
 		{
 			label: 'Delete',
-			action: async (onClose, { uri }: graph.FolderNode) => {
-				await must(
-					tryCatch(fs.Delete, {
-						uri,
-						recursive: true
-					})
-				);
+			action: async (onClose, folder: graph.FolderNode) => {
+				await deleteEntries([folder]);
 				onClose();
 			}
 		}

@@ -23,6 +23,16 @@ if ! command -v sqlc &> /dev/null; then
     exit 1
 fi
 
+# Pin sqlc to a known-good version. Older versions (<= v1.29.0) mis-handle
+# quoted keyword tables like "group" as an UPDATE target on the SQLite engine.
+REQUIRED_SQLC_VERSION="v1.31.1"
+CURRENT_SQLC_VERSION="$(sqlc version)"
+if [[ "$CURRENT_SQLC_VERSION" != "$REQUIRED_SQLC_VERSION" ]]; then
+    echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} sqlc ${REQUIRED_SQLC_VERSION} required, found ${CURRENT_SQLC_VERSION}."
+    echo -e "${RED}${BOLD}[Error]${NORMAL}${NC} Upgrade: ${BOLD}brew upgrade sqlc${NORMAL} (or) go install github.com/sqlc-dev/sqlc/cmd/sqlc@${REQUIRED_SQLC_VERSION}"
+    exit 1
+fi
+
 # Find all .sql files and combine them into one file
 echo -e "${BOLD}[Generate]${NORMAL} Looking for queries.sql files..."
 if ! find ./ -type f \( -name "*_query.sql" -o -name "*_statement.sql" \) | sort | while read -r file; do

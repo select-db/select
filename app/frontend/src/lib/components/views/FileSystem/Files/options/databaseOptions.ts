@@ -1,21 +1,21 @@
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { loadSchema } from '$lib/utils/query/loadSchema';
-import { must, tryCatch } from '$lib/utils/tryCatch';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import DatabaseSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 
-import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+import { deleteEntries } from '$lib/components/views/shared/deleteEntries';
 import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
 import { navigateToSchema } from '$lib/components/views/Schema/navigateToSchema';
 import { fileSystemOptions } from './fileOptions';
+import { renameOption } from './helpers';
 import { createFileInFolder, createFolderInFolder } from './rootOptions';
 
 export const databaseOptions = [
 	{
 		label: 'Refresh',
 		action: (onClose, database: graph.DBInstanceNode) => {
-			void loadSchema({ database, noCache: true, silent: true });
+			void loadSchema({ database });
 			onClose();
 		}
 	},
@@ -26,6 +26,7 @@ export const databaseOptions = [
 			onClose();
 		}
 	},
+	renameOption,
 	{
 		label: 'Infos...',
 		action: async (onClose, database: graph.DBInstanceNode) => {
@@ -69,13 +70,8 @@ export const databaseOptions = [
 	},
 	{
 		label: 'Delete',
-		action: async (onClose, { uri }: graph.DBInstanceNode) => {
-			await must(
-				tryCatch(fs.Delete, {
-					uri,
-					recursive: true
-				})
-			);
+		action: async (onClose, database: graph.DBInstanceNode) => {
+			await deleteEntries([database]);
 			onClose();
 		}
 	}

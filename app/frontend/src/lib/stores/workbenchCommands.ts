@@ -8,13 +8,13 @@ import {
 import {
 	isRightbarOpened,
 	updateIsRightbarOpened,
-	toggleSearchPanel
+	togglePanelTab
 } from '$lib/components/Rightbar/rightbarStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
-import SearchModalContent from '$lib/components/Titlebar/Search/SearchModalContent.svelte';
+import SearchModalContent from '$lib/components/Leftbar/Search/SearchModalContent.svelte';
 
 import { registerCommand } from './commandRegistry';
-import { zoomIn, zoomOut, resetZoom } from './zoomStore';
+import { zoomIn, zoomOut, resetZoom } from '$lib/wails/zoom';
 import {
 	addTerminalTab,
 	addTempFileTab,
@@ -25,6 +25,7 @@ import {
 	navigateToNextTab
 } from '$lib/components/Layout/layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
+import { pickAndOpenFolder } from '$lib/components/PageFolder/folderStore';
 
 export function registerWorkbenchCommands(): void {
 	registerCommand('workbench.toggleLeftPanel', () => {
@@ -37,7 +38,8 @@ export function registerWorkbenchCommands(): void {
 
 	registerCommand('workbench.toggleFiles', () => toggleLeftPanelTab('files'));
 	registerCommand('workbench.toggleGit', () => toggleLeftPanelTab('github-branch'));
-	registerCommand('workbench.toggleSearch', toggleSearchPanel);
+	registerCommand('workbench.toggleSearch', () => togglePanelTab('search'));
+	registerCommand('workbench.toggleHistory', () => togglePanelTab('history'));
 
 	registerCommand('workbench.openSearch', async () => {
 		modalStore.set({
@@ -45,6 +47,8 @@ export function registerWorkbenchCommands(): void {
 			width: 650
 		});
 	});
+
+	registerCommand('workbench.openFolder', pickAndOpenFolder);
 
 	registerCommand('workbench.zoomIn', zoomIn);
 	registerCommand('workbench.zoomOut', zoomOut);
@@ -54,9 +58,7 @@ export function registerWorkbenchCommands(): void {
 		const folderId = get(workspaceGraphStore)?.folders?.[0]?.id ?? '';
 		const activeTab = getActiveTab();
 		const dbInstanceId =
-			activeTab?.database?.node.id ??
-			activeTab?.file?.node.databases?.[0]?.id ??
-			undefined;
+			activeTab?.database?.node.id ?? activeTab?.file?.node.databases?.[0]?.id ?? undefined;
 		addTempFileTab({ content: '', name: '[temp].sql', folderId, dbInstanceId }, false);
 	});
 

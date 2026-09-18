@@ -1,6 +1,8 @@
 # Permissions
 
-Permissions control what users can do in a workspace. They are assigned to [roles](/workspace/roles/) at varying levels of granularity.
+Permissions control what users can do in a workspace. They are assigned to [roles](/docs/workspace/roles/) at varying levels of granularity.
+
+![The permission grid for a role: workspace-level rows above, then the database, its schema and its tables, with allow and deny against each action.](/shots/permissions.light.webp)
 
 ## Permission levels
 
@@ -8,7 +10,7 @@ Permissions are hierarchical. You can grant or deny access at five levels, from 
 
 | Level       | Scope                                           |
 |-------------|--------------------------------------------------|
-| **App**     | Workspace settings, user management, role management |
+| **App**     | Workspace settings, user, role, and group management |
 | **Database**| All schemas, tables, and columns in a database   |
 | **Schema**  | All tables and columns in a schema               |
 | **Table**   | All columns in a table                           |
@@ -26,7 +28,7 @@ Permissions are defined per action:
 | **INSERT** | Add new rows                             |
 | **UPDATE** | Modify existing rows                     |
 | **DELETE** | Remove rows                              |
-| **DDL**    | Schema changes (CREATE, ALTER, DROP)     |
+| **MANAGE** | Change the database itself: its structure, its access, its configuration |
 
 App-level actions cover workspace administration:
 
@@ -35,6 +37,7 @@ App-level actions cover workspace administration:
 | **Workspace settings**    | Edit workspace name, git remote, and settings    |
 | **Workspace users**       | Invite, remove, and manage members               |
 | **Workspace roles**       | Create, edit, and delete roles and permissions   |
+| **Workspace groups**      | Create groups and manage members; attaching a role to a group also requires Workspace roles |
 | **Workspace API keys**    | Create, rotate, and revoke API keys              |
 
 API keys let automated clients authenticate with the roles bound to the key, so every query they run passes through this same permission model.
@@ -51,7 +54,35 @@ Evaluation order:
 4. If an allow matches, access is granted
 5. If neither matches, access is refused (default deny)
 
-This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `DDL` for production databases. A user with both roles cannot run DDL on production.
+This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `MANAGE` for production databases. A user with both roles cannot change the schema on production.
+
+The first four actions are about the rows in a table. MANAGE is about the
+database itself: creating, altering and dropping tables, granting access,
+loading and exporting in bulk, and running procedures. It is granted on a
+connection, not on a schema or a table, so a rule scoped below the connection
+never matches.
+
+Anything that is not plainly one of the four row actions needs MANAGE. That is
+deliberate: granting the four never quietly grants more than reading and
+writing rows, so an unusual statement is refused rather than let through.
+
+## Databases nobody has written a rule for
+
+Step 5 is about a database your roles *do* cover. A database that no role in the
+workspace mentions at all is a different case, and the answer depends on who is
+holding the credentials.
+
+| Connection | A database with no rules | Why |
+|------------|--------------------------|-----|
+| **Local** | Allowed | The DSN is yours, on your machine. Refusing here would only be refusing you access to your own database. |
+| **[Proxified](/docs/databases/proxified-connections/)** | Refused | The credentials are held server-side and the query runs on our server. Nothing is granted that a role did not grant. |
+| **[MCP](/docs/workspace/mcp-server/)** | Refused | Same server, same rule. An agent gets what its key's roles name, and nothing else. |
+
+> [!IMPORTANT]
+> Adding a database to a proxified workspace does not make it readable. Until a
+> role carries an allow rule for it, every query against it is refused,
+> including from an API key that can read every other database in the
+> workspace.
 
 ## Scope
 
@@ -65,5 +96,5 @@ A typical team might have:
 |-------------|-------------|----------------------|--------|
 | Developer   | dev-db      | SELECT, INSERT, UPDATE, DELETE | allow |
 | Developer   | prod-db     | SELECT               | allow  |
-| DBA         | *           | SELECT, INSERT, UPDATE, DELETE, DDL | allow |
+| DBA         | *           | SELECT, INSERT, UPDATE, DELETE, MANAGE | allow |
 | Analyst     | prod-db     | SELECT               | allow  |

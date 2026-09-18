@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { AlertType } from '../Alert/types';
 
 type Notification = {
@@ -26,6 +26,15 @@ export const notify = ({
 	duration?: number;
 	copyable?: boolean;
 }) => {
+	// An identical alert already on screen is replaced rather than stacked. Now
+	// that schema failures always report, a workspace whose databases all fail
+	// the same way would otherwise bury the screen in copies of one message.
+	const duplicate = get(notificationStore).find((n) => n.type === type && n.message === message);
+	if (duplicate) {
+		clearTimeout(duplicate.timeoutId);
+		notificationStore.update((list) => list.filter((n) => n.id !== duplicate.id));
+	}
+
 	const id = crypto.randomUUID();
 	const timeoutId = setTimeout(() => {
 		notificationStore.update((list) => list.filter((n) => n.id !== id));

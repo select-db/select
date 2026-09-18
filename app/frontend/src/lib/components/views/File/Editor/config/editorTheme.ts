@@ -10,7 +10,6 @@ export const EDITOR_THEME_NAME = 'selectdb-theme';
 export const getEditorTheme = () => {
 	const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
-	const gray0 = hslToHex(getCSSVariable('--gray-0'));
 	const gray200 = hslToHex(getCSSVariable('--gray-200'));
 	const gray300 = hslToHex(getCSSVariable('--gray-300'));
 	const gray400 = hslToHex(getCSSVariable('--gray-400'));
@@ -102,7 +101,7 @@ export const getEditorTheme = () => {
 			// ===== SQL =====
 			{ token: 'keyword.sql', foreground: red },
 			{ token: 'function.sql', foreground: blue },
-{ token: 'string.sql', foreground: purple },
+			{ token: 'string.sql', foreground: purple },
 			{ token: 'identifier.sql', foreground: gray1000 },
 			{ token: 'number.sql', foreground: orange },
 			{ token: 'comment.sql', foreground: gray700, fontStyle: 'italic' },
@@ -121,17 +120,17 @@ export const getEditorTheme = () => {
 		],
 		colors: {
 			// ===== Editor base =====
-			'editor.background': gray0,
+			'editor.background': gray200,
 			'editor.foreground': gray1000,
 
 			// ===== Cursor =====
 			'editorCursor.foreground': gray1000,
-			'editorCursor.background': gray0,
+			'editorCursor.background': gray200,
 			'editorMultiCursor.primary.foreground': gray1000,
 			'editorMultiCursor.secondary.foreground': orange,
 
 			// ===== Selection =====
-			'editor.selectionBackground': isDark ? gray600 : gray400,
+			'editor.selectionBackground': gray400,
 			'editor.selectionForeground': gray1000,
 			'editor.inactiveSelectionBackground': gray300,
 			'editor.selectionHighlightBackground': `${gray400}80`,
@@ -144,8 +143,8 @@ export const getEditorTheme = () => {
 			'editor.wordHighlightStrongBorder': `${gray700}60`,
 
 			// ===== Line =====
-			'editor.lineHighlightBackground': `${gray600}30`,
-			'editor.lineHighlightBorder': `${gray600}20`,
+			'editor.lineHighlightBackground': `${gray400}20`,
+			'editor.lineHighlightBorder': `${gray400}20`,
 
 			// ===== Find / search =====
 			'editor.findMatchBackground': `${orange}66`,
@@ -158,10 +157,10 @@ export const getEditorTheme = () => {
 
 			// ===== Hover =====
 			'editor.hoverHighlightBackground': `${gray400}40`,
-			'editorHoverWidget.background': gray0,
+			'editorHoverWidget.background': gray200,
 			'editorHoverWidget.foreground': gray1000,
 			'editorHoverWidget.border': gray300,
-			'editorHoverWidget.statusBarBackground': gray200,
+			'editorHoverWidget.statusBarBackground': gray300,
 
 			// ===== Line numbers =====
 			'editorLineNumber.foreground': gray700,
@@ -170,12 +169,12 @@ export const getEditorTheme = () => {
 
 			// ===== Whitespace & indent guides =====
 			'editorWhitespace.foreground': gray700,
-			'editorIndentGuide.background1': gray0,
-			'editorIndentGuide.background2': gray0,
-			'editorIndentGuide.background3': gray0,
-			'editorIndentGuide.background4': gray0,
-			'editorIndentGuide.background5': gray0,
-			'editorIndentGuide.background6': gray0,
+			'editorIndentGuide.background1': gray200,
+			'editorIndentGuide.background2': gray200,
+			'editorIndentGuide.background3': gray200,
+			'editorIndentGuide.background4': gray200,
+			'editorIndentGuide.background5': gray200,
+			'editorIndentGuide.background6': gray200,
 			'editorIndentGuide.activeBackground1': gray600,
 			'editorIndentGuide.activeBackground2': gray600,
 			'editorIndentGuide.activeBackground3': gray600,
@@ -185,11 +184,11 @@ export const getEditorTheme = () => {
 
 			// ===== Ruler / gutter =====
 			'editorRuler.foreground': gray300,
-			'editorGutter.background': gray0,
+			'editorGutter.background': gray200,
 			'editorCodeLens.foreground': gray700,
 
 			// ===== Overview ruler =====
-			'editorOverviewRuler.background': gray0,
+			'editorOverviewRuler.background': gray200,
 			'editorOverviewRuler.border': gray300,
 			'editorOverviewRuler.errorForeground': red,
 			'editorOverviewRuler.warningForeground': orange,
@@ -239,13 +238,13 @@ export const getEditorTheme = () => {
 			'editorHint.foreground': gray700,
 
 			// ===== Widget =====
-			'editorWidget.background': gray0,
+			'editorWidget.background': gray200,
 			'editorWidget.foreground': gray1000,
 			'editorWidget.border': gray300,
 			'editorWidget.resizeBorder': blue,
 
 			// ===== Suggest widget =====
-			'editorSuggestWidget.background': gray0,
+			'editorSuggestWidget.background': gray200,
 			'editorSuggestWidget.foreground': gray1000,
 			'editorSuggestWidget.border': gray300,
 			'editorSuggestWidget.selectedBackground': gray400,
@@ -270,8 +269,8 @@ export const getEditorTheme = () => {
 			'editorLink.activeForeground': blue,
 
 			// ===== Sticky scroll =====
-			'editorStickyScroll.background': gray0,
-			'editorStickyScrollHover.background': gray200,
+			'editorStickyScroll.background': gray200,
+			'editorStickyScrollHover.background': gray300,
 			'editorStickyScroll.border': gray300,
 
 			// ===== Diff editor =====
@@ -290,7 +289,7 @@ export const getEditorTheme = () => {
 			'list.activeSelectionIconForeground': gray1000,
 			'list.inactiveSelectionBackground': gray300,
 			'list.inactiveSelectionForeground': gray1000,
-			'list.hoverBackground': gray200,
+			'list.hoverBackground': gray300,
 			'list.hoverForeground': gray1000,
 			'list.focusBackground': gray400,
 			'list.focusForeground': gray1000,
@@ -302,16 +301,16 @@ export const getEditorTheme = () => {
 			'list.filterMatchBackground': `${orange}40`,
 
 			// ===== Quick input =====
-			'quickInput.background': gray0,
+			'quickInput.background': gray200,
 			'quickInput.foreground': gray1000,
-			'quickInputTitle.background': gray200,
+			'quickInputTitle.background': gray300,
 			'quickInputList.focusBackground': gray400,
 			'quickInputList.focusForeground': gray1000,
 			'pickerGroup.foreground': blue,
 			'pickerGroup.border': gray300,
 
 			// ===== Scrollbar =====
-			'scrollbar.shadow': `${gray0}00`,
+			'scrollbar.shadow': `${gray200}00`,
 			'scrollbarSlider.background': `${gray600}60`,
 			'scrollbarSlider.hoverBackground': `${gray700}80`,
 			'scrollbarSlider.activeBackground': gray700,

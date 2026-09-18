@@ -1,17 +1,17 @@
 name: CI
 
-# Single source of truth for CI. The `plan` job holds ALL gating logic
-# (change detection + module dependency fan-in + event/ref rules) and emits
-# plain outputs; every other job is a simple `if: needs.plan.outputs.X`.
+# Single source of truth for CI. The plan job holds every gating decision and
+# emits plain outputs, so each other job is one `if: needs.plan.outputs.X`.
 #
-# Module dependency graph (drives the fan-in in `plan`):
-#   toolkit  -> (depended on by dialect, backend, app)
-#   dialect  -> (depended on by backend, app)
-#   backend  -> (hosted server; nothing depends on it)
-#   app      -> desktop client
+# The fan-in those outputs encode:
 #
-# Branch protection should require the single "CI OK" check (not the individual
-# matrix legs), since path-gated jobs may legitimately be skipped.
+#   dialect and backend and app all depend on toolkit
+#   backend and app depend on dialect
+#   backend is the hosted server and nothing depends on it
+#   app is the desktop client
+#
+# Branch protection requires the single "CI OK" check rather than the
+# individual legs, because a path gated job may legitimately be skipped.
 
 on:
   push:
@@ -25,13 +25,21 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs for the same PR; never cancel dev/main/tag builds.
+# Supersede runs for the same PR, and never cancel a dev, main or tag build.
+#
+# The branch belongs in the group, not in cancel-in-progress, where an
+# expression evaluates to the non-empty string "false" for a push and cancels
+# anyway. That cancelled 11 of 27 dev pushes, including cfd6c3c, whose
+# cancelled run let a stale generated file reach dev unchecked (see #176).
+#
+# run_id is unique, so every non-PR run gets a group to itself while PR runs
+# still collapse onto one group per ref.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: true
 
 env:
-  WAILS_VERSION: v2.10.1
+  WAILS_VERSION: v3.0.0-beta.12
   # Minimum app version, bump when a release contains a breaking change.
   MIN_APP_VERSION: 0.0.0
 
@@ -45,12 +53,13 @@ jobs:
       go-dialect:      ${{ steps.plan.outputs.go-dialect }}
       frontend:        ${{ steps.plan.outputs.frontend }}
       python:          ${{ steps.plan.outputs.python }}
+      web:             ${{ steps.plan.outputs.web }}
       go-modules:      ${{ steps.plan.outputs.go-modules }}
       desktop:         ${{ steps.plan.outputs.desktop }}
       staging-release: ${{ steps.plan.outputs.staging-release }}
       draft-release:   ${{ steps.plan.outputs.draft-release }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
       - id: plan
@@ -58,33 +67,41 @@ jobs:
           EVENT="${{ github.event_name }}"
           REF="${{ github.ref }}"
 
-          # Raw per-area change flags. Full on push/dispatch/schedule; on PRs we
-          # diff the merge against its base (HEAD~1 of the merge commit).
-          frontend=false; app=false; backend=false; dialect=false; toolkit=false; python=false
+          # Raw per-area change flags. Everything runs on push, dispatch and
+          # schedule. A PR diffs the merge against its base.
+          frontend=false; app=false; backend=false; dialect=false; toolkit=false; python=false; web=false
           if [[ "$EVENT" == "push" || "$EVENT" == "workflow_dispatch" || "$EVENT" == "schedule" ]]; then
-            frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
+            frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
           else
             FILES="$(git diff --name-only HEAD~1 HEAD || true)"
             if grep -qE '^(\.github/|\.gitleaks\.toml)' <<<"$FILES"; then
-              # Shared infra changed -> run everything to be safe.
-              frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true
+              # Shared infrastructure changed, so run everything.
+              frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
             else
               grep -q '^app/frontend/' <<<"$FILES" && frontend=true || true
-              grep -qE '^app/(backend|main\.go|go\.(mod|sum)|\.golangci)' <<<"$FILES" && app=true || true
+              grep -qE '^app/(internal|build)/|^app/(main\.go|Taskfile\.yml|go\.(mod|sum)|\.golangci)' <<<"$FILES" && app=true || true
               grep -q '^backend/' <<<"$FILES" && backend=true || true
               { grep '^dialect/' <<<"$FILES" | grep -qv '^dialect/core/tokenanalyzer/python/'; } && dialect=true || true
               grep -q '^dialect/core/tokenanalyzer/python/' <<<"$FILES" && python=true || true
               grep -q '^toolkit/' <<<"$FILES" && toolkit=true || true
+              # The website source, any doc page (they sit beside the code
+              # they document), the app theme it takes its colours from, and
+              # the OpenAPI spec behind the API reference.
+              grep -q '^web/' <<<"$FILES" && web=true || true
+              grep -q '\.doc\.md$' <<<"$FILES" && web=true || true
+              grep -q '^app/internal/graph/defaults/user/\.theme$' <<<"$FILES" && web=true || true
+              grep -q '^backend/internal/apigen/gen/openapi\.json$' <<<"$FILES" && web=true || true
             fi
           fi
 
-          # Dependency fan-in: everyone depends on toolkit; backend & app depend on dialect.
+          # Dependency fan-in. Everyone depends on toolkit, and backend and app
+          # depend on dialect.
           go_dialect=false; [[ "$dialect" == true || "$toolkit" == true ]] && go_dialect=true || true
           go_backend=false; [[ "$backend" == true || "$dialect" == true || "$toolkit" == true ]] && go_backend=true || true
           go_app=false;     [[ "$app" == true || "$dialect" == true || "$toolkit" == true ]] && go_app=true || true
           go_toolkit="$toolkit"
 
-          # JSON array of Go modules that need security scanning (govulncheck + gosec).
+          # JSON array of the Go modules to scan.
           mods=()
           [[ "$go_app" == true ]] && mods+=('"app"') || true
           [[ "$go_backend" == true ]] && mods+=('"backend"') || true
@@ -92,7 +109,7 @@ jobs:
           [[ "$go_toolkit" == true ]] && mods+=('"toolkit"') || true
           joined="$(IFS=,; echo "${mods[*]}")"
 
-          # Build/release gates (kept out of every job's conditional).
+          # Build and release gates, kept out of every job's conditional.
           desktop=false
           if [[ "$EVENT" == "workflow_dispatch" ]] || { [[ "$EVENT" == "push" ]] && { [[ "$REF" == "refs/heads/dev" ]] || [[ "$REF" == refs/tags/* ]]; }; }; then
             desktop=true
@@ -106,63 +123,90 @@ jobs:
             echo "go-dialect=$go_dialect"
             echo "frontend=$frontend"
             echo "python=$python"
+            echo "web=$web"
             echo "go-modules=[${joined}]"
             echo "desktop=$desktop"
             echo "staging-release=$staging"
             echo "draft-release=$draft"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Plan: go-modules=[${joined}] frontend=$frontend python=$python desktop=$desktop staging=$staging draft=$draft"
+          echo "Plan: go-modules=[${joined}] frontend=$frontend python=$python web=$web desktop=$desktop staging=$staging draft=$draft"
 
-  # ---- Security / vulnerability scanning (path-gated matrix) ----
+  # Security scanning, gated on which modules changed.
   security:
     name: Security (${{ matrix.module }})
     needs: [plan]
     if: needs.plan.outputs.go-modules != '[]'
     runs-on: ubuntu-latest
+    # The budget sits on the scan steps, not the job. The apt install ahead of
+    # them measured anywhere from 6s to 13m40s for the same packages, and at
+    # 13m40s it ate a 15 minute job budget and cancelled semgrep.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         module: ${{ fromJSON(needs.plan.outputs.go-modules) }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           cache-dependency-path: ${{ matrix.module }}/go.sum
-      # The app module embeds the frontend build output; stub it so packages compile.
+      # The app embeds the frontend build output. Stub it so packages compile.
       - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
-      - run: sudo apt-get update && sudo apt-get install -y gcc
+      - if: matrix.module != 'app'
+        run: sudo apt-get update && sudo apt-get install -y gcc
       - name: govulncheck
         working-directory: ${{ matrix.module }}
+        timeout-minutes: 10
+        # The app is scanned in its server build, which carries the same Go
+        # code with the cgo webview swapped for an HTTP server. That keeps GTK
+        # out of this job entirely. The cost is real and bounded: a
+        # vulnerability reachable only through the GTK path is not reported
+        # here. Nothing in the webview layer is ours, and the desktop variant
+        # is still compiled by the lint job on every PR.
+        env:
+          BUILD_TAGS: ${{ matrix.module == 'app' && 'server' || '' }}
+          CGO_ENABLED: ${{ matrix.module == 'app' && '0' || '1' }}
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
-      - name: gosec
+          # Pinned because a blocking gate must not change between runs.
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          govulncheck ${BUILD_TAGS:+-tags=$BUILD_TAGS} ./...
+      - name: semgrep (SAST)
         if: ${{ !cancelled() }}
+        timeout-minutes: 10
         working-directory: ${{ matrix.module }}
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          # Excluded rules are categorical false positives for this codebase or
-          # are owned by another linter; the security-meaningful rules (taint
-          # path-traversal G703, taint SSRF G704, SSH host key G106,
-          # decompression-bomb G110, goroutine context G118, weak crypto, etc.)
-          # stay active. Reasons:
-          #   G101 identifier name-matches "password"/"token" (no real secrets; audited)
-          #   G104 unhandled errors -> owned by errcheck (golangci-lint)
-          #   G115 int->rune conversions in generated parser/lexer and bounded counters
-          #   G201,G202 parameterized SQL built in the dialect engine (values are bound)
-          #   G204 DB-dump/git/analyzer subprocess with no shell and validated args
-          #   G301,G302,G306 permissions on the desktop app's own user-owned files
-          #   G304 file access contained by the workspace root / validated paths
-          #   G706 low-risk log injection into operator-facing logs
-          gosec -exclude=G101,G104,G115,G201,G202,G204,G301,G302,G304,G306,G706 ./...
+          # Build free SAST, replacing gosec. Its whole-program SSA recompiled
+          # the module graph on every cold runner, taking 6 minutes and nearly
+          # running backend out of memory. Semgrep parses source directly.
+          #
+          # Interprocedural taint analysis runs nightly in codeql.yml instead,
+          # off the PR critical path. --error makes this a blocking gate.
+          #
+          # Findings are accepted in one of two places. Patterns excluded here
+          # are categorical, and each is excluded for a stated reason:
+          #
+          #   string-formatted-query: the engine binds values into SQL it builds
+          #   unsafe-deserialization-interface: sync payloads are type-switched
+          #   potential-dos-via-decompression-bomb: only signed release artifacts
+          #
+          # A single reviewed site is suppressed with `// nosemgrep`, which
+          # leaves the rule live for new code. There are two: the desktop TOFU
+          # SSH host key in dialect/engine/ssh.go, and a reflect by name over a
+          # struct's own field names in app/internal/graph/helpers.go.
+          pipx run --spec 'semgrep==1.170.0' semgrep scan \
+            --config p/gosec --config p/golang \
+            --exclude-rule go.lang.security.audit.database.string-formatted-query.string-formatted-query \
+            --exclude-rule go.lang.security.deserialization.unsafe-deserialization-interface.go-unsafe-deserialization-interface \
+            --exclude-rule go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb \
+            --exclude='*_test.go' --error --metrics=off --disable-version-check .
 
   gitleaks:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install gitleaks (pinned + checksum-verified)
         env:
           GITLEAKS_VERSION: 8.30.1
@@ -175,162 +219,65 @@ jobs:
       - name: Scan working tree for secrets
         run: gitleaks dir . --config .gitleaks.toml --redact --verbose
 
-  # ---- Quality (lint / typecheck) ----
-  quality-frontend:
-    name: Frontend typecheck & lint
+  # One called workflow per module, so a module's checks sit together in the
+  # run graph and in the tree. Gating stays here: plan decides, the caller
+  # applies, and the called workflow only knows how to check its module.
+  app:
+    name: App
     needs: [plan]
-    if: needs.plan.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: app/frontend/package-lock.json
-      - run: npm ci
-        working-directory: app/frontend
-      - run: npm run check
-        working-directory: app/frontend
-      - run: npm run lint
-        working-directory: app/frontend
+    if: needs.plan.outputs.go-app == 'true' || needs.plan.outputs.frontend == 'true'
+    uses: ./.github/workflows/ci-app.yml
+    # The Go half and the web half change independently, so the caller runs
+    # when either did and passes both answers in.
+    with:
+      go-app: ${{ needs.plan.outputs.go-app == 'true' }}
+      frontend: ${{ needs.plan.outputs.frontend == 'true' }}
 
-  quality-app-backend:
-    name: App backend quality
-    needs: [plan]
-    if: needs.plan.outputs.go-app == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-      - run: mkdir -p app/frontend/build && touch app/frontend/build/.keep
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
-        with:
-          version: v2.11.4
-          working-directory: app
-      - name: Dead code check
-        run: |
-          go install golang.org/x/tools/cmd/deadcode@latest
-          # deadcode exits 0 even when it finds dead code; treat any output as failure
-          out=$(deadcode ./...)
-          if [ -n "$out" ]; then
-            echo "$out"
-            echo "::error::Dead code detected"
-            exit 1
-          fi
-          echo "No dead code found"
-        working-directory: app
-
-  quality-backend:
-    name: Backend quality
+  backend:
+    name: Backend
     needs: [plan]
     if: needs.plan.outputs.go-backend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
-        with:
-          version: v2.11.4
-          working-directory: backend
-      - name: Dead code check
-        run: |
-          go install golang.org/x/tools/cmd/deadcode@latest
-          # deadcode exits 0 even when it finds dead code; treat any output as failure
-          out=$(deadcode ./...)
-          if [ -n "$out" ]; then
-            echo "$out"
-            echo "::error::Dead code detected"
-            exit 1
-          fi
-          echo "No dead code found"
-        working-directory: backend
+    uses: ./.github/workflows/ci-backend.yml
 
-  quality-dialect:
-    name: Dialect quality
+  dialect:
+    name: Dialect
     needs: [plan]
-    if: needs.plan.outputs.go-dialect == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: dialect/go.mod
-          cache-dependency-path: dialect/go.sum
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
-        with:
-          version: v2.11.4
-          working-directory: dialect
+    if: needs.plan.outputs.go-dialect == 'true' || needs.plan.outputs.python == 'true'
+    uses: ./.github/workflows/ci-dialect.yml
+    # The Go side and the Python analyzer under it change independently, so the
+    # caller runs when either did and passes both answers in.
+    with:
+      go-dialect: ${{ needs.plan.outputs.go-dialect == 'true' }}
+      python: ${{ needs.plan.outputs.python == 'true' }}
 
-  # ---- Tests ----
-  test-app-backend:
-    name: App backend tests
-    needs: [plan, quality-app-backend]
-    if: needs.plan.outputs.go-app == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-      - run: sudo apt-get update && sudo apt-get install -y gcc
-      - run: go test ./internal/...
-        working-directory: app
 
-  test-backend:
-    name: Backend tests
-    needs: [plan, quality-backend]
-    if: needs.plan.outputs.go-backend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.embedded-postgres-go
-          key: embedded-postgres-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
-          restore-keys: embedded-postgres-${{ runner.os }}-
-      - run: go test ./...
-        working-directory: backend
-
-  test-dialect:
-    name: Dialect tests
-    needs: [plan, quality-dialect]
-    if: needs.plan.outputs.go-dialect == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: dialect/go.mod
-          cache-dependency-path: dialect/go.sum
-      - run: go test ./...
-        working-directory: dialect
-
-  test-analyzer:
-    name: Analyzer tests
+  # The website: docs, API reference and marketing pages.
+  website:
+    name: Website
     needs: [plan]
-    if: needs.plan.outputs.python == 'true'
+    if: needs.plan.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
-      - run: uv sync
-        working-directory: dialect/core/tokenanalyzer/python
-      - run: uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
-        working-directory: dialect/core/tokenanalyzer/python
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: web/generate/go.mod
+          cache-dependency-path: web/generate/go.sum
+      # The Scalar bundle behind /api/ is fetched once and cached. Without
+      # this every run redownloads it and a bad day upstream fails the build.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/.cache
+          key: web-cache-${{ hashFiles('web/generate/main.go') }}
+          restore-keys: web-cache-
+      # The build is the check. It fails on a broken internal link, a sidebar
+      # entry pointing at nothing, a marketing page over the 14KB brotli
+      # budget, or a page fetching from a third party origin.
+      - run: go run .
+        working-directory: web/generate
 
-  # ---- Single required gate: aggregates every PR-relevant job ----
+  # The one required check. It aggregates every job a PR runs.
   ci-ok:
     name: CI OK
     if: always()
@@ -338,14 +285,10 @@ jobs:
       - plan
       - security
       - gitleaks
-      - quality-frontend
-      - quality-app-backend
-      - quality-backend
-      - quality-dialect
-      - test-app-backend
-      - test-backend
-      - test-dialect
-      - test-analyzer
+      - app
+      - backend
+      - dialect
+      - website
     runs-on: ubuntu-latest
     steps:
       - name: Verify no required job failed
@@ -360,18 +303,22 @@ jobs:
           done
           echo "All required jobs passed or were skipped."
 
-  # ---- Build & release (dev/tags only; gated by plan) ----
-  # Staging version: derived from commit count, not GITHUB_RUN_NUMBER, which
-  # resets when the workflow file is renamed and would break the update toast.
+  # Build and release, on dev and tags only.
+  #
+  # The staging version comes from the commit count rather than
+  # GITHUB_RUN_NUMBER, which resets when the workflow file is renamed and would
+  # break the update toast.
   version:
     name: Compute staging version
-    needs: [plan]
+    # After the gate rather than beside it. Every consumer waits for ci-ok
+    # anyway, so running earlier only spent a runner on runs about to fail.
+    needs: [plan, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     outputs:
       staging: ${{ steps.v.outputs.staging }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: v
@@ -379,12 +326,12 @@ jobs:
 
   build-backend:
     name: Build backend binary
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
@@ -414,34 +361,35 @@ jobs:
 
   build-desktop-macos-arm64:
     name: Desktop (darwin/arm64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Build analyzer binary
         run: uv run --with pyinstaller pyinstaller --onefile --collect-all sqlglot --name analyzer main.py
@@ -456,20 +404,20 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform darwin/arm64 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-arm64.zip *.app
@@ -481,34 +429,35 @@ jobs:
 
   build-desktop-macos-amd64:
     name: Desktop (darwin/amd64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Build analyzer binary
         run: uv run --with pyinstaller pyinstaller --onefile --collect-all sqlglot --name analyzer main.py
@@ -517,26 +466,28 @@ jobs:
       - name: Build
         working-directory: app
         env:
+          # macos-latest runners are arm64; cross-compile the Intel build.
+          GOARCH: amd64
           VERSION: ${{ github.ref_name }}
           IS_PROD: ${{ startsWith(github.ref, 'refs/tags/') }}
           STAGING_VERSION: ${{ needs.version.outputs.staging }}
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
           # Staging verifies updates via SHA256 checksum, not minisign.
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform darwin/amd64 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/select.app/Contents/MacOS/analyzer
           cd build/bin
           zip -r selectDb-darwin-amd64.zip *.app
@@ -548,34 +499,35 @@ jobs:
 
   build-desktop-windows:
     name: Desktop (windows/amd64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
 
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Build analyzer binary
         shell: bash
@@ -593,10 +545,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -604,10 +556,10 @@ jobs:
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
           cp build/appicon-default.png build/appicon.png
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform windows/amd64 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer.exe build/bin/analyzer.exe
 
       - name: Package
@@ -622,43 +574,39 @@ jobs:
 
   build-desktop-linux:
     name: Desktop (linux/amd64)
-    needs: [plan, version, test-dialect, test-backend, test-app-backend, test-analyzer]
+    needs: [plan, version, ci-ok]
     if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: setup-go
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: app/frontend/package-lock.json
 
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            nsis
+      - uses: ./.github/actions/gtk-deps
+      - name: Install the Windows installer builder
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis
 
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache-wails
         with:
           path: ~/go/bin/wails*
-          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}
+          key: wails-${{ env.WAILS_VERSION }}-${{ runner.os }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Install Wails
         if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
 
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Build analyzer binary
         run: uv run --with pyinstaller pyinstaller --onefile --collect-all sqlglot --name analyzer main.py
@@ -673,10 +621,10 @@ jobs:
         run: |
           if [[ "${IS_PROD}" == "true" ]]; then
             V="${VERSION#v}"
-            APP_ENV="production" DEVTOOLS=""
+            APP_ENV="production"
           else
             V="${STAGING_VERSION}"
-            APP_ENV="staging" DEVTOOLS="-devtools"
+            APP_ENV="staging"
           fi
           source ../.github/scripts/resolve-pubkeys.sh ../minisign.pub
 
@@ -684,11 +632,10 @@ jobs:
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
           cp build/appicon-default.png build/appicon.png
-          export PUBLIC_APP_ENV="${APP_ENV}"
-          wails build ${DEVTOOLS} \
-            -platform linux/amd64 \
-            -tags webkit2_41 \
-            -ldflags "-X main.appVersion=${V} -X main.appEnv=${APP_ENV} -X selectDb/internal/updater.minisignPublicKey=${PUBKEY}"
+          wails3 task package \
+            APP_VERSION="${V}" \
+            APP_ENV="${APP_ENV}" \
+            MINISIGN_PUBLIC_KEY="${PUBKEY}"
           cp ../dialect/core/tokenanalyzer/python/dist/analyzer build/bin/analyzer
           cd build/bin
           zip selectDb-linux-amd64.zip select analyzer
@@ -712,7 +659,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -725,7 +672,7 @@ jobs:
         run: find . -maxdepth 1 -type f ! -name checksums.sha256 -exec sha256sum {} + > checksums.sha256
 
       - name: Update staging pre-release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: staging-latest
           name: "Staging (latest)"
@@ -757,10 +704,11 @@ jobs:
         working-directory: dist
         run: find . -maxdepth 1 -type f ! -name checksums.sha256 -exec sha256sum {} + > checksums.sha256 && cat checksums.sha256
 
-      # Draft: signatures and the publish step happen on a maintainer's laptop
-      # via the select-ops repo's sign-and-deploy.sh. Users never see this release until then.
+      # Signing and publishing happen on a maintainer's laptop, through
+      # sign-and-deploy.sh in the select-ops repo. Users see nothing until
+      # then.
       - name: Upload to draft release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: dist/*
           draft: true

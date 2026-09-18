@@ -47,7 +47,12 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="resizer" class:active={resizing} onmousedown={startResizing}></div>
+<div
+	class="resizer"
+	class:active={resizing}
+	data-test="results.resizer"
+	onmousedown={startResizing}
+></div>
 
 <style>
 	.resizer {

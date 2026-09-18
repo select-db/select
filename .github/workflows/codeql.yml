@@ -1,0 +1,55 @@
+name: CodeQL
+
+# Interprocedural taint analysis for Go: SSRF, path traversal, SQL and command
+# injection, unsafe deserialization, open redirect. This is what gosec's
+# whole-program SSA attempted on every PR, taking 6 minutes and hanging the
+# security job by nearly exhausting memory on the backend module.
+#
+# It runs nightly, off the PR critical path, where a multi-minute scan is free
+# and blocks no merge. Per-PR security is the semgrep step in ci.yml, and
+# results from both surface in the Security tab.
+#
+# A schedule trigger fires only on the default branch, so that is the only
+# place this runs. Branches and PRs get semgrep instead.
+#
+# Uploading results needs Code scanning enabled for the repository, which on a
+# private repository means GitHub Advanced Security. Without it analyze fails
+# with a clear message and an admin can enable it in Settings.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # nightly 03:00 UTC (default branch only)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # upload SARIF to Code scanning
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # build-mode none extracts every Go source across the modules without
+      # compiling, so there is no per-module build to wrangle and the local
+      # `replace ../dialect` directives cause no trouble. Deeper cross-module
+      # dataflow would mean autobuild and one analyze per module in a matrix.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          languages: go
+          build-mode: none
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          category: "/language:go"

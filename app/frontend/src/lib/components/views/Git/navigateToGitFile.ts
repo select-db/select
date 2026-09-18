@@ -4,10 +4,10 @@ import { setItemSelection } from '$lib/components/views/shared/sharedStore';
 import { addDiffTab } from '$lib/components/Layout/layoutStore';
 import { uriToGitPath } from '$lib/components/views/Git/helpers';
 import { getFileLanguage } from '$lib/components/views/File/Editor/utils/getFileLanguage';
-import { GetFileDiffContent } from '$lib/wailsjs/go/git/Git';
+import { GetFileDiffContent } from '$lib/bindings/selectDb/internal/git/git';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 
 /**
  * Opens a git file in a diff tab (HEAD vs working tree). Use for files in the Git panel.
@@ -24,7 +24,7 @@ export async function navigateToGitFile(file: graph.FileNode) {
 	const path = uriToGitPath(file.uri, workspace.id);
 	const [result, err] = await tryCatch(GetFileDiffContent, { path });
 
-	if (err) {
+	if (err || !result) {
 		notifyError(`Could not load diff: ${err}`);
 		return;
 	}

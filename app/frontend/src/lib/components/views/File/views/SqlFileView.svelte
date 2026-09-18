@@ -1,10 +1,12 @@
 <script lang="ts">
-	import type { graph } from '$lib/wailsjs/go/models';
+	import type * as graph from '$lib/wails/graph';
 	import { untrack, type Component } from 'svelte';
 
-	import * as fs from '$lib/wailsjs/go/fs_provider/FSProvider';
+	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import {
+		getTabById,
 		getTabByNodeId,
+		getTabUri,
 		updateTab,
 		removeTab,
 		activeGroupStore,
@@ -17,7 +19,7 @@
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
 	import { getDbIds, runStatement, type RunStatementResult } from '$lib/utils/query/helpers';
 	import { registerCommand, unregisterCommand } from '$lib/stores/commandRegistry';
-	import * as graphApi from '$lib/wailsjs/go/graph/Graph';
+	import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import RuntimeVarsModal from '../RuntimeVarsModal.svelte';
 
@@ -42,7 +44,7 @@
 	const isTemp = $derived(tab.file?.isTemp ?? false);
 	let content = $state<string>('');
 	let contentLoaded = $state(false);
-	let tableHeight = $state(0);
+	let tableHeight = $derived(tab.file?.tableHeight ?? 0);
 
 	let databasePickerOpen = $state(false);
 	let wasDatabasePickerOpen = $state(false);
@@ -54,10 +56,6 @@
 		if (!justClosed) return;
 
 		queueMicrotask(() => editorRef?.focus());
-	});
-
-	$effect(() => {
-		tableHeight = tab.file?.tableHeight ?? 0;
 	});
 
 	$effect(() => {
@@ -112,9 +110,32 @@
 		contentLoaded = true;
 	}
 
-	const writeToFile = debounce(async (uri: string, content: string) => {
+	// The path is looked up when the write goes out, not when the key was
+	// pressed: a rename in between moves the file, and a write to where it used
+	// to be recreates it there -- an old folder coming back from the dead,
+	// holding the text that belongs to the new one. The tab id is what survives
+	// the rename, so that is what is remembered.
+	const writeFile = async (tabId: string, content: string) => {
+		const uri = getTabUri(tabId);
+		if (!uri) return;
 		await must(tryCatch(fs.Write, { uri, content }));
-	}, 200);
+	};
+
+	const writeToFile = debounce(writeFile, 200);
+
+	// What the editor was holding for a tab it is being taken off, which is the
+	// one moment a debounced write would be too late: it is addressed by tab id
+	// because the tab is no longer the one on screen.
+	const savePendingChange = (tabId: string, pending: string) => {
+		const target = getTabById(tabId);
+		if (!target?.file) return;
+
+		if (target.file.isTemp) {
+			updateTab({ ...target, file: { ...target.file, content: pending } });
+			return;
+		}
+		void writeFile(tabId, pending);
+	};
 
 	const handleContentChange = (newContent: string) => {
 		content = newContent;
@@ -131,7 +152,7 @@
 		}
 
 		if (file) {
-			writeToFile(file.uri, content);
+			writeToFile(tab.id, content);
 		}
 	};
 
@@ -197,6 +218,36 @@
 			});
 		});
 
+	/**
+	 * Drops the last result for the databases about to run.
+	 *
+	 * A run only writes its own result once `query:started` comes back, which on
+	 * a remote or tunnelled connection is seconds away. Until then the pane kept
+	 * showing the previous run's rows, row count and duration — and because a
+	 * finished duration stops the clock, the header read as a query that had
+	 * already returned while it was still going. The pane already has a running
+	 * state; it just could not reach it while the old result sat in the slot.
+	 */
+	const clearResultsForRun = (dbIdsToClear: string[], mode: 'run' | 'explain' | 'plan') => {
+		if (!file) return;
+
+		const currentTab = getTabByNodeId(file.id);
+		if (!currentTab?.file?.node) return;
+
+		const key =
+			mode === 'run' ? 'queryResults' : mode === 'plan' ? 'planResults' : 'explainResults';
+		const cleared = { ...(currentTab.file.node[key] ?? {}) };
+		for (const dbId of dbIdsToClear) delete cleared[dbId];
+
+		updateTab({
+			...currentTab,
+			file: {
+				...currentTab.file,
+				node: { ...currentTab.file.node, [key]: cleared } as graph.FileNode
+			}
+		});
+	};
+
 	const run = async (mode: 'run' | 'explain' | 'plan', dbIdsArg?: string[]) => {
 		if (!file || !tab.file || !tab.file.node) return;
 
@@ -244,6 +295,8 @@
 			}
 		}
 
+		clearResultsForRun(targetDbIds, mode);
+
 		const results: Record<string, RunStatementResult> = {};
 		for (const dbId of targetDbIds) {
 			const result = await runStatement({
@@ -271,13 +324,13 @@
 			}
 		}
 
-		const queryResults: Record<string, graph.QueryResult> = {
+		const queryResults: NonNullable<graph.FileNode['queryResults']> = {
 			...currentTab.file.node.queryResults
 		};
-		const planResults: Record<string, graph.ExplainResult> = {
+		const planResults: NonNullable<graph.FileNode['planResults']> = {
 			...(currentTab.file.node.planResults ?? {})
 		};
-		const explainResults: Record<string, graph.ExplainResult> = {
+		const explainResults: NonNullable<graph.FileNode['explainResults']> = {
 			...currentTab.file.node.explainResults
 		};
 
@@ -308,6 +361,23 @@
 			}
 		});
 	};
+
+	// Tabs opened with a prefilled statement (e.g. "View data" on a table) run it
+	// once, as soon as the content is in the editor. This view instance is shared
+	// by every tab of its group (see the content loader above), so the guard
+	// tracks the tab it ran for rather than being a one-shot flag. Clearing the
+	// tab's own flag then keeps the query from replaying when the tab is
+	// re-selected later.
+	let autoRunTabId: string | undefined;
+	$effect(() => {
+		if (!contentLoaded) return;
+		if (!tab.file?.runOnOpen) return;
+		if (autoRunTabId === tab.id) return;
+
+		autoRunTabId = tab.id;
+		updateTab({ ...tab, file: { ...tab.file, runOnOpen: false } });
+		void run('run');
+	});
 
 	const effectiveDbId = $derived(getEffectiveSelectedDbId(file, tab));
 	const currentQueryResult = $derived(getQueryResultForDb(file, effectiveDbId));
@@ -397,7 +467,8 @@
 				{tab}
 				{content}
 				language="sql-custom"
-				onchange={handleContentChange}
+				onContentChange={handleContentChange}
+				onPendingChange={savePendingChange}
 				errorPosition={currentQueryResult?.errors?.length
 					? (currentQueryResult?.errorPosition ?? undefined)
 					: undefined}
@@ -427,7 +498,7 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--gray-0);
+		background-color: var(--gray-200);
 	}
 
 	.page {

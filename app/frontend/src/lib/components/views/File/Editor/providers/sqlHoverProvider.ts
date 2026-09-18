@@ -1,6 +1,6 @@
 import * as monaco from 'monaco-editor';
-import { Hover } from '$lib/wailsjs/go/sqllang/SqlLang';
-import type { graph } from '$lib/wailsjs/go/models';
+import { Hover } from '$lib/bindings/selectDb/internal/sqllang/sqllang';
+import type * as graph from '$lib/wails/graph';
 
 const debounceMs = 220;
 const pending = new Map<string, ReturnType<typeof setTimeout>>();

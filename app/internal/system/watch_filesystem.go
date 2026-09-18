@@ -2,7 +2,7 @@ package system
 
 import (
 	"context"
-	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +32,17 @@ func classifyFSOp(op fsnotify.Op) (string, bool) {
 	}
 }
 
-// Stops any running watcher and starts a new one for workspaceID.
+// StopFileWatcher releases the inotify watches on a folder being closed.
+func (s *System) StopFileWatcher() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fileWatcherCancel != nil {
+		s.fileWatcherCancel()
+		s.fileWatcherCancel = nil
+	}
+}
+
+// StartFileWatcher stops any running watcher and starts a new one for workspaceID.
 func (s *System) StartFileWatcher(workspaceID string) {
 	s.mu.Lock()
 	if s.fileWatcherCancel != nil {
@@ -43,6 +53,49 @@ func (s *System) StartFileWatcher(workspaceID string) {
 	s.mu.Unlock()
 
 	go s.watchWorkspace(ctx, workspaceID)
+}
+
+// addWatches registers root and every directory under it.
+//
+// One watch per directory, so a workspace with more folders than the platform's
+// watch limit (inotify's max_user_watches, commonly 8192) gets refusals partway
+// through the walk. Those folders then go silent: no mutation, no graph update,
+// nothing in the UI to say why. The count is logged once rather than per
+// directory.
+func addWatches(watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS, root string) {
+	refused := 0
+	if err := watcher.Add(root); err != nil {
+		refused++
+	}
+	_ = fsCtx.WalkFrom(root, func(entry graph.Entry) error {
+		if entry.IsDir() {
+			if addErr := watcher.Add(entry.Path); addErr != nil {
+				refused++
+			}
+		}
+		return nil
+	})
+	if refused > 0 {
+		log.Printf("[watcher] %d directories under %s could not be watched (platform watch limit?); changes there will not reach the workspace graph", refused, root)
+	}
+}
+
+// dropStaleWatches unregisters the watches under root whose directory is no
+// longer there. Removal is by path, which is the point: a renamed directory is
+// still watched under its old name, and giving that name up is what frees the
+// directory to be watched again under the new one.
+//
+// Watches outside the workspace are left alone -- the per-user config
+// directory is one.
+func dropStaleWatches(watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS) {
+	for _, watched := range watcher.WatchList() {
+		if _, inside := fsCtx.Rel(watched); !inside {
+			continue
+		}
+		if _, err := os.Stat(watched); err != nil {
+			_ = watcher.Remove(watched)
+		}
+	}
 }
 
 func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
@@ -65,22 +118,16 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 	defer func() { _ = watcher.Close() }()
 
 	// Watch all existing dirs; new ones are added dynamically on Create events.
-	addWatches := func(root string) {
-		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return fs.SkipDir
-				}
-				_ = watcher.Add(p)
-			}
-			return nil
-		})
-	}
+	addWatches(watcher, fsCtx, fsCtx.WorkspaceRoot)
 
-	addWatches(fsCtx.WorkspaceRoot)
+	// Also watch the per-user config dir so edits to the personal .theme /
+	// .config hot-reload exactly like workspace files. These files live outside
+	// the workspace, so their events are routed straight to the theme/config
+	// reload handlers (never to the workspace graph).
+	userConfigDir, _ := graph.UserConfigDir()
+	if userConfigDir != "" {
+		_ = watcher.Add(userConfigDir)
+	}
 
 	for {
 		select {
@@ -88,57 +135,95 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 			if !ok {
 				return
 			}
-
-			if strings.HasSuffix(event.Name, ".metadata.json") {
-				s.handleMetadataEvent(event, user.ID, fsCtx)
-				continue
-			}
-
-			if strings.HasSuffix(event.Name, "db.config.json") {
-				s.handleDBConfigEvent(event, user.ID, fsCtx)
-				continue
-			}
-
-			if filepath.Base(event.Name) == ".env" {
-				s.handleEnvFileEvent(event, fsCtx)
-			}
-
-			if filepath.Base(event.Name) == graph.ThemeFileName {
-				s.handleThemeFileEvent(event, fsCtx)
-			}
-
-			if filepath.Base(event.Name) == graph.ConfigFileName {
-				s.handleConfigFileEvent(event, fsCtx)
-			}
-
-			if filepath.Base(event.Name) == graph.LintFileName {
-				s.handleLintFileEvent(event, fsCtx)
-			}
-
-			// Track new directories for deeper-level events.
-			if event.Op&fsnotify.Create != 0 {
-				info, err := os.Stat(event.Name)
-				if err == nil && info.IsDir() {
-					_ = watcher.Add(event.Name)
-				}
-			}
-
-			// Rename: full rebuild (fine-grained derivation is error-prone).
-			if event.Op&fsnotify.Rename != 0 {
-				s.rebuildGraphAndEmit()
-				continue
-			}
-
-			if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove) != 0 {
-				s.handleFSEvent(event, user.ID, fsCtx)
-				utils.DebouncedEventsEmit(s.ctx, "gitDetailedStatusChanged", 200*time.Millisecond, nil)
-			}
+			s.handleWatchEvent(event, user.ID, watcher, fsCtx)
 		case <-watcher.Errors:
 			// @todo handle error
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+// handleWatchEvent routes one filesystem event to whatever reads that kind of
+// file, and tells the git panel the working tree moved.
+func (s *System) handleWatchEvent(event fsnotify.Event, userID string, watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS) {
+	// First, because a db.config.json, a sidecar and a rename each leave this
+	// function early, and the git panel lists paths: a file it tracks changed
+	// whatever kind of node the app reads it as.
+	//
+	// For every event rather than a chosen set of ops, because git tracks the
+	// executable bit too and the signal is already debounced.
+	s.notifyGitStatusChanged()
+
+	if strings.HasSuffix(event.Name, ".metadata.json") {
+		s.handleMetadataEvent(event, userID, fsCtx)
+		return
+	}
+
+	if strings.HasSuffix(event.Name, graph.DBConfigFileName) {
+		s.handleDBConfigEvent(event, userID, fsCtx)
+		return
+	}
+
+	if filepath.Base(event.Name) == ".env" {
+		s.handleEnvFileEvent(event, fsCtx)
+	}
+
+	if filepath.Base(event.Name) == graph.ThemeFileName {
+		s.handleThemeFileEvent(event, fsCtx)
+	}
+
+	if filepath.Base(event.Name) == graph.ConfigFileName {
+		s.handleConfigFileEvent(event, fsCtx)
+	}
+
+	if filepath.Base(event.Name) == graph.LintFileName {
+		s.handleLintFileEvent(event, fsCtx)
+	}
+
+	// Track new directories for deeper-level events.
+	//
+	// The whole subtree, not just this level: a directory can arrive with
+	// children already in it -- mkdir -p, a checkout, an unzip, a clone -- and
+	// those children raise no Create of their own, so watching only the
+	// directory named here leaves them silent.
+	if event.Op&fsnotify.Create != 0 {
+		info, err := os.Stat(event.Name)
+		if err == nil && info.IsDir() {
+			addWatches(watcher, fsCtx, event.Name)
+		}
+	}
+
+	// Rename: full rebuild (fine-grained derivation is error-prone).
+	if event.Op&fsnotify.Rename != 0 {
+		// A watch is registered against a path. A renamed directory keeps its
+		// watch, so its children keep arriving under the old name -- and land
+		// in the graph under a folder that no longer exists, which is to say
+		// nowhere.
+		//
+		// Re-walking on its own does not undo that. The old name and the new
+		// one are the same directory, and adding a directory that is already
+		// watched is a no-op, so the registration keeps the name it was made
+		// under. The names that no longer exist have to go first; only then
+		// does the walk register the new ones.
+		dropStaleWatches(watcher, fsCtx)
+		addWatches(watcher, fsCtx, fsCtx.WorkspaceRoot)
+		s.rebuildGraphAndEmit()
+		return
+	}
+
+	if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove) != 0 {
+		s.handleFSEvent(event, userID, fsCtx)
+	}
+}
+
+// notifyGitStatusChanged asks the git panel to read the working tree again.
+func (s *System) notifyGitStatusChanged() {
+	if s.gitStatusHook != nil {
+		s.gitStatusHook()
+		return
+	}
+	utils.DebouncedEventsEmit("gitDetailedStatusChanged", 200*time.Millisecond, nil)
 }
 
 // Rebuilds the workspace graph and emits workspaceGraphUpdated.
@@ -148,11 +233,7 @@ func (s *System) rebuildGraphAndEmit() {
 		// @todo handle error
 		return
 	}
-	wsGraph, err := s.Graph.GetWorkspaceGraph()
-	if err != nil {
-		return
-	}
-	utils.DebouncedEventsEmit(s.ctx, "workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	graph.EmitWorkspaceGraphUpdated(s.Graph)
 }
 
 // LoadAllDatabaseSchemas runs QuerySchema for each workspace DB instance (same as after other graph rebuilds).
@@ -212,7 +293,7 @@ func (s *System) handleDBConfigEvent(event fsnotify.Event, userID string, ctx *g
 	payload := graph.DBInstanceDTO{
 		ID:          &cfg.ID,
 		URI:         &dbURI,
-		Name:        utils.Ptr(cfg.Name),
+		Name:        utils.Ptr(filepath.Base(dirPath)),
 		DBType:      utils.Ptr(cfg.DbType),
 		DSN:         utils.Ptr(cfg.DSN),
 		Proxified:   utils.Ptr(cfg.Proxified),
@@ -248,59 +329,49 @@ func (s *System) handleEnvFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS
 
 	folderURI := ctx.URI(folderRel)
 
-	wsGraph, err := s.Graph.GetWorkspaceGraph()
+	wsGraph, err := graph.EnsureWorkspaceGraph(s.Graph)
 	if err != nil || wsGraph == nil {
 		return
 	}
 
-	nodes := graph.FindNodesByIds(wsGraph, []string{folderURI})
-	if len(nodes) == 0 {
-		return
-	}
-
-	folderNode, ok := nodes[0].(*graph.FolderNode)
-	if !ok {
-		return
-	}
-
 	if event.Op&fsnotify.Remove != 0 {
-		folderNode.Variables = make(map[string]string)
+		if err := graph.SetFolderVariables(s.Graph, folderURI, map[string]string{}); err != nil {
+			return
+		}
 	} else {
 		wfs, err := graph.NewWorkspaceFS(wsGraph.ID)
-		if err == nil {
-			_ = s.Graph.LoadFolderEnvFile(folderNode, wfs)
+		if err != nil {
+			return
+		}
+		if err := s.Graph.LoadFolderEnvFile(folderURI, wfs); err != nil {
+			return
 		}
 	}
 
-	utils.DebouncedEventsEmit(s.ctx, "workspaceGraphUpdated", 200*time.Millisecond, wsGraph)
+	graph.EmitWorkspaceGraphUpdated(s.Graph)
 }
 
-// Emits themeUpdated when the workspace .theme file changes.
+// Emits themeUpdated when the per-user .theme file changes.
 // Always sends the merged state (defaults + user .theme); on remove or error, merged = defaults.
+// The .theme file lives in the per-user config dir, so events come from there
+// rather than the workspace root.
 func (s *System) handleThemeFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS) {
-	if _, ok := ctx.Rel(event.Name); !ok {
-		return
-	}
-
 	themeVars, err := s.Graph.LoadWorkspaceTheme()
 	if err != nil {
 		themeVars = graph.LoadDefaultTheme()
 	}
-	utils.DebouncedEventsEmit(s.ctx, "themeUpdated", 100*time.Millisecond, themeVars)
+	utils.DebouncedEventsEmit("themeUpdated", 100*time.Millisecond, themeVars)
 }
 
-// Emits configUpdated when the workspace .config file changes.
-// Always sends the merged state (defaults + user .config); on remove or error, merged = defaults.
+// Emits configUpdated when the per-user .config file changes. Always sends the
+// merged state (defaults + user keybindings/snippets); on remove or error,
+// merged = defaults.
 func (s *System) handleConfigFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS) {
-	if _, ok := ctx.Rel(event.Name); !ok {
-		return
-	}
-
-	configResponse, err := s.Graph.LoadWorkspaceConfig()
+	configResponse, err := s.Graph.LoadConfig()
 	if err != nil {
 		return
 	}
-	utils.DebouncedEventsEmit(s.ctx, "configUpdated", 100*time.Millisecond, configResponse)
+	utils.DebouncedEventsEmit("configUpdated", 100*time.Millisecond, configResponse)
 }
 
 func (s *System) handleLintFileEvent(event fsnotify.Event, ctx *graph.WorkspaceFS) {
@@ -311,7 +382,7 @@ func (s *System) handleLintFileEvent(event fsnotify.Event, ctx *graph.WorkspaceF
 	if err != nil {
 		return
 	}
-	utils.DebouncedEventsEmit(s.ctx, "lintUpdated", 100*time.Millisecond, lintConfig)
+	utils.DebouncedEventsEmit("lintUpdated", 100*time.Millisecond, lintConfig)
 }
 
 // Emits a file update mutation when a .metadata.json sidecar changes.
@@ -376,9 +447,15 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 	uri := ctx.URI(relSlash)
 
 	if op == "delete" {
+		// The path is gone, so the graph is all that says what it was: it holds
+		// every folder it has seen, but a file only once its folder has been
+		// opened. An unknown URI is taken for a file -- the graph can miss a
+		// folder too (made while the app was down, or never watched), and that
+		// way round costs a tab close for a URI with no tab, where the other
+		// leaves a tab open on a file that is gone.
 		table := s.inferTableFromGraph(uri)
 		if table == "" {
-			if isDir || statErr != nil {
+			if isDir {
 				table = "folder"
 			} else {
 				table = "file"
@@ -399,42 +476,43 @@ func (s *System) handleFSEvent(event fsnotify.Event, userID string, ctx *graph.W
 
 // Resolves a node URI to its table name via the current graph.
 func (s *System) inferTableFromGraph(id string) string {
-	ws, err := s.Graph.GetWorkspaceGraph()
-	if err != nil || ws == nil {
+	if s.Graph == nil {
 		return ""
 	}
-
-	nodes := graph.FindNodesByIds(ws, []string{id})
-	if len(nodes) == 0 {
-		return ""
-	}
-
-	switch nodes[0].(type) {
-	case *graph.FileNode:
-		return "file"
-	case *graph.FolderNode:
-		return "folder"
-	case *graph.DBInstanceNode:
-		return "db_instance"
-	default:
-		return ""
-	}
+	return s.Graph.NodeKind(id)
 }
 
-// Emits a file mutation, skipping internal workspace files.
+// Emits a file mutation, skipping internal workspace files and files whose
+// folder has not been opened yet -- an unresolved folder reads its files when it
+// is opened, so putting one file in it now would only make it look resolved.
 func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID string, ctx *graph.WorkspaceFS, op string) {
 	name := filepath.Base(filePath)
 	if graph.IsInternalWorkspaceFile(name) {
 		return
 	}
 
-	payload := graph.FileDTO{
-		ID:       &fileURI,
-		URI:      &fileURI,
-		Name:     utils.Ptr(name),
-		FolderID: utils.Ptr(parentURI),
+	if !s.parentAcceptsFiles(parentURI) {
+		return
 	}
+
+	payload := graph.FileDTOFromNode(graph.FileNodeFromDisk(filePath, fileURI, parentURI))
 	s.emitMutation("file", op, fileURI, payload, ctx.WorkspaceID, userID)
+}
+
+// Reports whether a file event's parent is a container the graph tracks files
+// for: a db instance directory, or a resolved folder. A parent the graph does
+// not know -- a folder whose own insert is still in flight -- is accepted, so its
+// files are not lost.
+func (s *System) parentAcceptsFiles(parentURI string) bool {
+	if s.Graph == nil {
+		return true
+	}
+
+	parent := s.Graph.GetFolderNodeByID(parentURI)
+	if parent == nil {
+		return true
+	}
+	return parent.Resolved
 }
 
 // Handles the directory if it contains db.config.json.
@@ -442,7 +520,7 @@ func (s *System) checkAndHandleDBInstance(dirPath string, userID string, ctx *gr
 	if !graph.CheckIsDBInstance(dirPath) {
 		return false
 	}
-	s.handleDBConfigEvent(fsnotify.Event{Name: filepath.Join(dirPath, "db.config.json"), Op: fsnotify.Create}, userID, ctx)
+	s.handleDBConfigEvent(fsnotify.Event{Name: filepath.Join(dirPath, graph.DBConfigFileName), Op: fsnotify.Create}, userID, ctx)
 	return true
 }
 
@@ -461,7 +539,11 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 	}
 	s.emitMutation("folder", "insert", dirURI, payload, ctx.WorkspaceID, userID)
 
-	// Scan contents to catch files restored e.g. via git.
+	// Scan contents to catch what arrived with the directory rather than after
+	// it: a checkout, a clone, a mkdir -p. Its children raise no event of their
+	// own, and the graph holds every folder, so the folders in there have to be
+	// taken now. The files in there are filtered by processFileEntry, which
+	// drops the ones whose folder nobody has opened.
 	if scanContents {
 		s.scanFolderContents(dirPath, dirURI, userID, ctx)
 	}
@@ -469,27 +551,16 @@ func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID
 
 // Recursively emits insert mutations for all children of a new folder.
 func (s *System) scanFolderContents(folderPath, folderURI string, userID string, ctx *graph.WorkspaceFS) {
-	entries, err := os.ReadDir(folderPath)
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		childPath := filepath.Join(folderPath, entry.Name())
-
-		relSlash, ok := ctx.Rel(childPath)
-		if !ok || graph.IsInternalWorkspacePath(relSlash) {
-			continue
-		}
-
-		childURI := ctx.URI(relSlash)
+	_ = ctx.ReadDir(folderPath, func(entry graph.Entry) error {
+		childURI := entry.URI()
 
 		if entry.IsDir() {
-			s.processDirectoryEntry(childPath, childURI, folderURI, userID, ctx, true)
+			s.processDirectoryEntry(entry.Path, childURI, folderURI, userID, ctx, true)
 		} else {
-			s.processFileEntry(childPath, childURI, folderURI, userID, ctx, "insert")
+			s.processFileEntry(entry.Path, childURI, folderURI, userID, ctx, "insert")
 		}
-	}
+		return nil
+	})
 }
 
 // Sends a MutationCommit to the graph for incremental updates.

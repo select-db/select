@@ -7,8 +7,6 @@ import (
 
 	"selectDb/internal/db_client"
 	"selectDb/internal/graph"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -17,6 +15,11 @@ const (
 )
 
 // Stops any running DB availability watcher and starts a new one.
+//
+// The watcher only decides when to ping. What each ping found reaches the
+// frontend from Ping itself, along with every other way a database is reached,
+// so the dot moves the moment anything learns something rather than at the top
+// of the next sweep.
 func (s *System) StartDatabaseWatcher() {
 	s.mu.Lock()
 	if s.dbWatcherCancel != nil {
@@ -29,17 +32,12 @@ func (s *System) StartDatabaseWatcher() {
 	go s.watchDatabases(ctx)
 }
 
-type pingResult struct {
-	ID    string
-	Error string
-}
-
 func (s *System) watchDatabases(ctx context.Context) {
 	backoff := make(map[string]time.Duration)
 	lastPing := make(map[string]time.Time)
 
 	for {
-		ws, err := s.Graph.GetWorkspaceGraph()
+		ws, err := graph.EnsureWorkspaceGraph(s.Graph)
 		if err == nil && ws != nil {
 			dbs := s.Graph.WorkspaceGraph.DBInstances
 			now := time.Now()
@@ -56,7 +54,7 @@ func (s *System) watchDatabases(ctx context.Context) {
 			}
 
 			if len(toCheck) > 0 {
-				results := make([]pingResult, len(toCheck))
+				failures := make([]string, len(toCheck))
 				var wg sync.WaitGroup
 
 				for i, db := range toCheck {
@@ -71,39 +69,28 @@ func (s *System) watchDatabases(ctx context.Context) {
 							Ssh:          db.SSH,
 							Proxified:    db.Proxified,
 						})
-						results[idx] = pingResult{ID: db.ID, Error: result}
+						failures[idx] = result
 					}(i, db)
 				}
 				wg.Wait()
 
-				for _, r := range results {
-					lastPing[r.ID] = now
-					if r.Error != "" {
-						b := backoff[r.ID]
-						if b == 0 {
-							b = pingBaseInterval
-						}
-						b *= 2
-						if b > pingMaxInterval {
-							b = pingMaxInterval
-						}
-						backoff[r.ID] = b
-					} else {
-						delete(backoff, r.ID)
+				for i, db := range toCheck {
+					lastPing[db.ID] = now
+					if failures[i] == "" {
+						delete(backoff, db.ID)
+						continue
 					}
-				}
 
-				databases := make([]map[string]interface{}, 0, len(results))
-				for _, r := range results {
-					entry := map[string]interface{}{"id": r.ID}
-					if r.Error != "" {
-						entry["error"] = r.Error
+					b := backoff[db.ID]
+					if b == 0 {
+						b = pingBaseInterval
 					}
-					databases = append(databases, entry)
+					b *= 2
+					if b > pingMaxInterval {
+						b = pingMaxInterval
+					}
+					backoff[db.ID] = b
 				}
-				runtime.EventsEmit(s.ctx, "databaseAvailability", map[string]interface{}{
-					"databases": databases,
-				})
 			}
 
 			// Clean up entries for removed databases

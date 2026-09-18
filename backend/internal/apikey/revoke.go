@@ -2,37 +2,38 @@ package apikey
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 
 	"backend/db"
-	"backend/db/db_types"
 	"backend/db/generated"
-)
+	"backend/internal/audit"
+	"backend/internal/authz"
 
-type revokeRequest struct {
-	ID string `json:"id"`
-}
+	"github.com/google/uuid"
+)
 
 func RevokeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		workspaceID, _, ok := guard(w, r)
-		if !ok {
+		a := authz.ActorOf(r)
+		if a.IsAPIKey {
+			audit.EmitDenied(r.Context(), audit.APIKeyRevoked, a.WorkspaceID, "")
+			http.Error(w, "api keys cannot manage api keys", http.StatusForbidden)
 			return
 		}
+		if !a.IsOwner() && !a.Can(manageAPIKeys) {
+			audit.EmitDenied(r.Context(), audit.APIKeyRevoked, a.WorkspaceID, "")
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		workspaceID := a.WorkspaceID
 
-		var req revokeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		idUUID, err := db_types.NewJSONNullUUIDFromString(req.ID)
+		idUUID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		wsUUID, err := db_types.NewJSONNullUUIDFromString(workspaceID)
+		wsUUID, err := uuid.Parse(workspaceID)
 		if err != nil {
 			http.Error(w, "invalid workspace id", http.StatusInternalServerError)
 			return
@@ -55,6 +56,12 @@ func RevokeHandler() http.HandlerFunc {
 			http.Error(w, "failed to revoke api key", http.StatusInternalServerError)
 			return
 		}
+
+		audit.EmitAction(r.Context(), audit.APIKeyRevoked, audit.Record{
+			WorkspaceID: workspaceID,
+			TargetID:    idUUID.String(),
+			Status:      audit.StatusSuccess,
+		})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

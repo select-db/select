@@ -64,6 +64,7 @@
 		user-select: none;
 		contain: layout style paint;
 		outline: none;
+		box-shadow: var(--shadow-subtle);
 	}
 
 	.checkbox-wrapper.disabled {
@@ -90,7 +91,7 @@
 		width: 16px;
 		height: 16px;
 		border: var(--border);
-		border-color: var(--gray-700);
+		border-color: var(--gray-600);
 		background-color: var(--gray-100);
 		border-radius: var(--br-xs);
 		transition:

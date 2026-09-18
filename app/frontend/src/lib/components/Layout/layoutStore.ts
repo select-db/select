@@ -1,9 +1,10 @@
-import type { graph } from '$lib/wailsjs/go/models';
+import type * as graph from '$lib/wails/graph';
 import { derived, get, writable } from 'svelte/store';
 import { closeTab } from '$lib/components/views/shared/assistant/all';
-import { setItemSelection } from '$lib/components/views/shared/sharedStore';
+import { clearItemSelection, setItemSelection } from '$lib/components/views/shared/sharedStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { recentItemsStore } from '$lib/stores/recentItemsStore';
+import { settingsSectionLabels } from '$lib/components/views/Settings/sections';
 
 /** Chat context DB item
  * same shape as get_chat_context databases. */
@@ -74,6 +75,7 @@ export type Tab = {
 		node: graph.FileNode;
 		isTemp?: boolean; // True for temporary files not persisted to disk
 		content?: string; // In-memory content for temp files
+		runOnOpen?: boolean; // Run the content once, as soon as the view mounts; cleared on run
 
 		editor?: { viewState?: unknown; lintMarkers?: unknown };
 
@@ -134,6 +136,14 @@ export type Tab = {
 			expandedKeys?: string[];
 			scrollTop?: number;
 			search?: string;
+		};
+		// Monaco view state (cursor/scroll/selection/folding) for the personal
+		// .theme / .config editors. Their tabs are synthetic and detached from any
+		// layout group, so they can't ride the regular tab.file.editor path and
+		// persist here instead. Restored on re-render (e.g. after Apply/Reset).
+		editors?: {
+			theme?: { viewState?: unknown };
+			config?: { viewState?: unknown };
 		};
 	};
 };
@@ -205,6 +215,21 @@ const collectGroups = (node: TabGroup | SplitContainer): TabGroup[] => {
 };
 
 export const getAllGroups = (): TabGroup[] => collectGroups(get(layoutStore).root);
+
+/**
+ * The path a tab is pointing at right now.
+ *
+ * A tab id outlives a rename while its uri does not, so anything that acts on a
+ * file later -- a debounced write, most of all -- asks for the path when it acts
+ * rather than remembering the one it started with.
+ */
+export const getTabUri = (tabId: string): string | undefined => getTabById(tabId)?.uri;
+
+/** The tab with this id, wherever it is. */
+export const getTabById = (tabId: string): Tab | undefined =>
+	getAllGroups()
+		.flatMap((group) => group.tabs)
+		.find((tab) => tab.id === tabId);
 
 export const activeGroupStore = derived(
 	layoutStore,
@@ -330,6 +355,20 @@ const updateTabNavigationHistory = (
 	return { ...navHistory, [groupId]: { history: nextHistory, index: nextHistory.length - 1 } };
 };
 
+/**
+ * Opens a tab beside the group's active one, and records the visit.
+ *
+ * Opening is a visit: the back and forward arrows walk where a group has been,
+ * and a file opened from the tree is somewhere it has been. Only clicking an
+ * already-open tab used to be recorded, which left the arrows dead through a
+ * whole session of opening files.
+ */
+const openTabInGroup = (layout: Layout, groupId: string, tab: Tab): Layout => ({
+	...layout,
+	root: updateGroupById(layout.root, groupId, (group) => insertTabNextToActive(group, tab)),
+	tabNavigationHistory: updateTabNavigationHistory(layout, groupId, tab.id)
+});
+
 export const setActiveTab = (groupId: string, tabId: string) => {
 	layoutStore.update((layout) => {
 		const newRoot = updateGroupById(layout.root, groupId, (group) => ({
@@ -350,7 +389,11 @@ export const setActiveTab = (groupId: string, tabId: string) => {
 function syncSelectionAndRecentForActiveTab() {
 	const tab = getActiveTab();
 	const nodeId = tab?.file?.node?.id ?? tab?.database?.node?.id;
+	// Tabs with no file-system item behind them (settings, terminal, chat, ...)
+	// clear the selection: leaving the previous file highlighted points at
+	// something the workbench is no longer showing.
 	if (nodeId) setItemSelection([nodeId]);
+	else clearItemSelection();
 	if (tab?.file?.node) {
 		const node = tab.file.node;
 		recentItemsStore.addItem({
@@ -450,14 +493,6 @@ export function navigateToNextTab(groupId: string): void {
 }
 
 // focusTab activates an existing tab by URI across all groups. Returns true if found.
-const settingsSectionLabels: Record<string, string> = {
-	workspace: 'Workspace',
-	git: 'Git',
-	users: 'Users',
-	roles: 'Roles',
-	api_keys: 'API keys'
-};
-
 export function getTabLabel(tab: Tab): string {
 	if (tab.file) return tab.file.node.name;
 	if (tab.database) return tab.database.node.name;
@@ -510,12 +545,7 @@ export const addTab = (node: graph.FileNode | graph.DBInstanceNode) => {
 				: {})
 	};
 
-	layoutStore.update((layout) => ({
-		...layout,
-		root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-			insertTabNextToActive(groupForUpdate, newTab)
-		)
-	}));
+	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 
 	if (node.type === 'file') {
 		recentItemsStore.addItem({
@@ -546,12 +576,7 @@ export const addSchemaTab = (databaseId?: string, databaseName?: string) => {
 		schema: { databaseId, databaseName }
 	};
 
-	layoutStore.update((layout) => ({
-		...layout,
-		root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-			insertTabNextToActive(groupForUpdate, newTab)
-		)
-	}));
+	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 	syncSelectionAndRecentForActiveTab();
 };
 
@@ -570,23 +595,27 @@ export const updateSettingsTab = (patch: Exclude<Tab['settings'], undefined>) =>
 	}));
 };
 
-export const addSettingsTab = () => {
+/**
+ * Opens the Settings tab at an optional section (theme/config/workspace/...).
+ * Reuses an already-open Settings tab instead of duplicating it, and jumps to
+ * the requested section (Settings reacts to the tab's `settings.section`).
+ */
+export const openSettingsSection = (section?: string) => {
+	if (focusTab('selectdb://settings')) {
+		if (section) updateSettingsTab({ section });
+		return;
+	}
+
 	const group = getActiveGroup();
 	if (!group) return;
 
-	const tabId = crypto.randomUUID();
 	const newTab: Tab = {
-		id: tabId,
+		id: crypto.randomUUID(),
 		uri: 'selectdb://settings',
-		settings: {}
+		settings: section ? { section } : {}
 	};
 
-	layoutStore.update((layout) => ({
-		...layout,
-		root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-			insertTabNextToActive(groupForUpdate, newTab)
-		)
-	}));
+	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 
 	syncSelectionAndRecentForActiveTab();
 };
@@ -597,6 +626,8 @@ export const addTempFileTab = (
 		name: string;
 		dbInstanceId?: string;
 		folderId: string;
+		/** Execute the content against the attached database as soon as the tab mounts. */
+		runOnOpen?: boolean;
 	},
 	split: boolean = true
 ) => {
@@ -622,7 +653,8 @@ export const addTempFileTab = (
 		file: {
 			node: virtualNode,
 			isTemp: true,
-			content: params.content
+			content: params.content,
+			...(params.runOnOpen && { runOnOpen: true })
 		}
 	};
 
@@ -638,12 +670,7 @@ export const addTempFileTab = (
 
 	// Add to current group without splitting
 	if (!split) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-				insertTabNextToActive(groupForUpdate, newTab)
-			)
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		trackRecentTempFile();
 		return;
 	}
@@ -667,7 +694,8 @@ export const addTempFileTab = (
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: true
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 
@@ -720,22 +748,12 @@ export const addDiffTab = (params: AddDiffTabParams) => {
 	};
 
 	if (params.targetGroupId) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, params.targetGroupId!, (groupForUpdate) =>
-				insertTabNextToActive(groupForUpdate, newTab)
-			)
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, params.targetGroupId!, newTab));
 		return;
 	}
 
 	if (!params.split) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (groupForUpdate) =>
-				insertTabNextToActive(groupForUpdate, newTab)
-			)
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		return;
 	}
 
@@ -756,7 +774,8 @@ export const addDiffTab = (params: AddDiffTabParams) => {
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: true
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 };
@@ -775,10 +794,7 @@ export const addTerminalTab = (shell: string = '') => {
 
 	const activeTab = getActiveTab();
 	if (activeTab?.terminal) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (g) => insertTabNextToActive(g, newTab))
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		syncSelectionAndRecentForActiveTab();
 		return;
 	}
@@ -800,7 +816,8 @@ export const addTerminalTab = (shell: string = '') => {
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: false
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 	syncSelectionAndRecentForActiveTab();
@@ -872,10 +889,7 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 	};
 
 	if (activeTab?.chat) {
-		layoutStore.update((layout) => ({
-			...layout,
-			root: updateGroupById(layout.root, group.id, (g) => insertTabNextToActive(g, newTab))
-		}));
+		layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
 		syncSelectionAndRecentForActiveTab();
 		return;
 	}
@@ -896,7 +910,8 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 				newGroupFirst: false,
 				duplicateExistingGroupTabs: true
 			}),
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: updateTabNavigationHistory(layout, newGroupId, newTab.id)
 		};
 	});
 	syncSelectionAndRecentForActiveTab();
@@ -1017,18 +1032,33 @@ export const removeTabByUri = (uri: string) => {
 };
 
 /** Updates open file tabs when a file is renamed so they point at the new URI (keeps tab open). */
+/**
+ * Points open tabs at a renamed path.
+ *
+ * Renaming a folder moves everything under it, so a tab is updated when it is
+ * the renamed file itself or when it sits inside the renamed folder — otherwise
+ * it keeps reading a path that no longer exists, and the file quietly opens a
+ * second time when it is opened again.
+ */
 export const updateFileTabsAfterRename = (oldUri: string, newUri: string, newName: string) => {
+	const insideOld = `${oldUri}/`;
 	const tabsToUpdate = getAllGroups()
 		.flatMap((g) => g.tabs)
-		.filter((t) => t.uri === oldUri && t.file && !t.file.isTemp);
+		.filter((t) => t.file && !t.file.isTemp && (t.uri === oldUri || t.uri.startsWith(insideOld)));
+
 	for (const tab of tabsToUpdate) {
 		const node = tab.file!.node;
+		const uri = tab.uri === oldUri ? newUri : newUri + tab.uri.slice(oldUri.length);
+		// Only the renamed thing takes the new name; a file carried along by a
+		// folder rename keeps its own.
+		const name = tab.uri === oldUri ? newName : node.name;
+
 		updateTab({
 			...tab,
-			uri: newUri,
+			uri,
 			file: {
 				...tab.file!,
-				node: { ...node, id: newUri, uri: newUri, name: newName } as graph.FileNode
+				node: { ...node, id: uri, uri, name } as graph.FileNode
 			}
 		});
 	}
@@ -1114,7 +1144,10 @@ export const splitGroup = (
 		return cleanupLayout({
 			...layout,
 			root: rootWithSplit,
-			activeGroupId: newGroupId
+			activeGroupId: newGroupId,
+			tabNavigationHistory: movedTab
+				? updateTabNavigationHistory(layout, newGroupId, movedTab.id)
+				: (layout.tabNavigationHistory ?? {})
 		});
 	});
 };

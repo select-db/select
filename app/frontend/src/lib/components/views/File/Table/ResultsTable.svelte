@@ -2,7 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import type { Component } from 'svelte';
 
-	import { graph } from '$lib/wailsjs/go/models';
+	import * as graph from '$lib/wails/graph';
 
 	import Button from '$lib/system/Button/Button.svelte';
 	import Group from '$lib/system/Group/Group.svelte';
@@ -27,8 +27,11 @@
 		getColumnWidth as getColumnWidthFn,
 		getVisibleColumnRange,
 		resetColumnState,
+		computeAutoColumnWidths,
+		MIN_COLUMN_WIDTH,
 		type ColumnState
 	} from './helpers/columnManagement';
+	import { createTextMeasurer, formatCellValue } from './helpers/cellText';
 	import {
 		createInitialLoadingStateFromResult,
 		mergeNewPageIntoState,
@@ -54,15 +57,15 @@
 		table: string
 	): graph.DBInstanceItemNode | null {
 		if (!ws) return null;
-		const db = ws.db_instances?.find((d) => d.id === databaseId);
+		const db = ws.db_instances.find((d) => d.id === databaseId);
 		if (!db) return null;
-		const schemaNode = db.children?.find((c) => c.type === 'schema' && c.name === schema);
+		const schemaNode = db.children.find((c) => c.type === 'schema' && c.name === schema);
 		if (!schemaNode) return null;
-		const tablesGroup = schemaNode.children?.find((c) => c.type === 'tables');
-		const viewsGroup = schemaNode.children?.find((c) => c.type === 'views');
+		const tablesGroup = schemaNode.children.find((c) => c.type === 'tables');
+		const viewsGroup = schemaNode.children.find((c) => c.type === 'views');
 		return (
-			tablesGroup?.children?.find((c) => c.name === table) ??
-			viewsGroup?.children?.find((c) => c.name === table) ??
+			(tablesGroup?.children ?? []).find((c) => c.name === table) ??
+			(viewsGroup?.children ?? []).find((c) => c.name === table) ??
 			null
 		);
 	}
@@ -76,8 +79,8 @@
 		}
 		const tableNode = findTableNode(ws, meta.databaseId, meta.schema, meta.table);
 		if (!tableNode) return null;
-		const columnsGroup = tableNode.children?.find((c) => c.type === 'columns');
-		return columnsGroup?.children?.find((c) => c.name === meta.originalColumnName) ?? null;
+		const columnsGroup = tableNode.children.find((c) => c.type === 'columns');
+		return (columnsGroup?.children ?? []).find((c) => c.name === meta.originalColumnName) ?? null;
 	}
 
 	type FkRef = { schemaName: string; tableName: string; columnName: string };
@@ -89,7 +92,7 @@
 	}
 
 	function tableColumnNames(node: graph.DBInstanceItemNode | null): string[] {
-		const columnsGroup = node?.children?.find((c) => c.type === 'columns');
+		const columnsGroup = (node?.children ?? []).find((c) => c.type === 'columns');
 		return (columnsGroup?.children ?? []).map((c) => c.name ?? '').filter(Boolean);
 	}
 
@@ -132,6 +135,7 @@
 	// Hierarchical edit storage - check row first, then column
 	// Most rows have no edits, so we skip column checks entirely
 	const editsByRow = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local map built and returned inside a derivation
 		const rows = new Map<number, Map<number, string>>();
 		for (const [key, edit] of Object.entries(edits)) {
 			const [rowStr, colStr] = key.split(':');
@@ -283,7 +287,31 @@
 	// Derived: width for column i from state, with fallback
 	const getColumnWidth = (i: number) => getColumnWidthFn(columnState, i);
 
-	const MIN_COLUMN_WIDTH = 40;
+	// Size every column to the widest value in the batch of rows that just
+	// arrived, so a table of short ids stops reserving a fixed 280px a column.
+	// Measured rather than guessed from character counts: the cell font comes
+	// from the theme. Runs once, on the first batch -- after that the widths are
+	// the user's, and a page arriving mid-scroll must not shift columns out from
+	// under the cursor.
+	//
+	// `rows` is the page as the backend sent it, not a slice of dataState: the
+	// row buffer is a `$state` proxy preallocated to the result's row count, and
+	// reading a hundred rows through it allocates a signal per cell touched.
+	function autoSizeColumns(rows: unknown[][] | undefined) {
+		const columns = queryResult?.columns;
+		if (!columnState.widthsPending || !columns?.length) return;
+
+		const sample = rows ?? [];
+		// Nothing has landed yet: wait, unless the result is settled and empty,
+		// in which case the headers are all there will ever be to measure.
+		if (sample.length === 0 && (isStreaming || totalRows > 0)) return;
+
+		columnState = {
+			...columnState,
+			columnWidths: computeAutoColumnWidths(columns, sample, createTextMeasurer()),
+			widthsPending: false
+		};
+	}
 
 	// Column resize state
 	let resizingColumn = $state<number | null>(null);
@@ -302,7 +330,7 @@
 			}
 		}
 		next[resizingColumn] = newW;
-		columnState = { ...columnState, columnWidths: next };
+		columnState = { ...columnState, columnWidths: next, widthsPending: false };
 	}, 16);
 
 	function startResize(columnIndex: number, e: MouseEvent) {
@@ -445,8 +473,9 @@
 		);
 
 		if (pageResult) {
-			const merged = mergeNewPageIntoState(pageResult, dataState);
+			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
+			autoSizeColumns(pageResult.rows);
 		}
 	};
 
@@ -538,10 +567,11 @@
 		// CASE 1: Pagination
 		// same query, new page loaded
 		if (!shouldInitialize) {
-			const mergedState = mergeNewPageIntoState(newResult, dataState);
+			const mergedState = mergeNewPageIntoState(newResult, dataState, queryResult?.columns);
 			if (!mergedState) return;
 
 			dataState = mergedState;
+			autoSizeColumns(newResult.rows);
 			return;
 		}
 
@@ -555,15 +585,18 @@
 		dataState = createInitialLoadingStateFromResult(newResult, totalRows);
 		const totalCols = 1 + (newResult.columns?.length ?? 0);
 		const baseColumnState = resetColumnState(totalCols);
-		const restoredWidths =
-			cachedState?.columnWidths?.length === totalCols
-				? cachedState.columnWidths
-				: baseColumnState.columnWidths;
+		const cachedWidths =
+			cachedState?.columnWidths?.length === totalCols ? cachedState.columnWidths : null;
 		columnState = {
 			...baseColumnState,
 			pinnedColumnIdx: cachedState?.pinnedColumns ?? baseColumnState.pinnedColumnIdx,
-			columnWidths: restoredWidths
+			columnWidths: cachedWidths ?? baseColumnState.columnWidths,
+			// Widths the user already has for this result win over anything measured.
+			widthsPending: cachedWidths === null
 		};
+		// Size before the first paint where the result came with its rows, so the
+		// table renders once at its final widths rather than snapping after.
+		autoSizeColumns(newResult.rows);
 
 		// Pre-load pages needed for cached scroll position
 		const { rowHeight, viewportHeight, scrollContainer } = virtualScrollState;
@@ -586,8 +619,9 @@
 		);
 
 		if (pageResult) {
-			const merged = mergeNewPageIntoState(pageResult, dataState);
+			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
+			autoSizeColumns(pageResult.rows);
 		}
 
 		// Restore scroll position after DOM updates
@@ -645,18 +679,17 @@
 				},
 				totalRows
 			);
-			if (!pageResult) return;
-			const merged = mergeNewPageIntoState(pageResult, dataState);
+			// A stream that ended with no rows never returns a page; its headers are
+			// still worth sizing, which autoSizeColumns decides from the row count.
+			if (!pageResult) {
+				autoSizeColumns([]);
+				return;
+			}
+			const merged = mergeNewPageIntoState(pageResult, dataState, queryResult?.columns);
 			if (merged) dataState = merged;
+			autoSizeColumns(pageResult.rows);
 		});
 	});
-
-	// Utility functions
-	const formatCellValue = (value: unknown) => {
-		if (value === null) return 'NULL';
-		if (value === undefined) return '';
-		return typeof value === 'string' ? value : String(value);
-	};
 
 	function handleCellClick(e: MouseEvent) {
 		const target = e.target as HTMLElement;
@@ -856,7 +889,7 @@
 	isEditingThisRow: boolean
 )}
 	{#if columnIndex === 0}
-		<span class="text-cell" style="display: block; text-align: end;">{rowIndex + 1}</span>
+		<span class="text-cell index" style="display: block; text-align: end;">{rowIndex + 1}</span>
 	{:else if row}
 		{@const colIndex = columnIndex - 1}
 		{@const cell = row[colIndex]}
@@ -929,13 +962,22 @@
 {/snippet}
 
 <div class="wrapper selectable" class:resizing={resizingColumn !== null}>
-	{#if queryResult?.columns && (totalRows > 0 || isStreaming)}
+	<!-- Columns are enough to render: an empty result set still shows its headers. -->
+	{#if queryResult?.columns?.length}
 		{@const colSpan =
 			pinnedIndices.length +
 			visibleNonPinnedIndices.length +
 			(leftSpacerWidth > 0 ? 1 : 0) +
 			(rightSpacerWidth > 0 ? 1 : 0)}
-		<div class="table scrollable" use:observeViewport data-total-rows={totalRows}>
+		<!-- "pending" until a batch of rows arrives to measure: until then every
+		     column is the placeholder width, so anything reading column geometry
+		     has to wait for "measured". -->
+		<div
+			class="table scrollable"
+			use:observeViewport
+			data-total-rows={totalRows}
+			data-test-widths={columnState.widthsPending ? 'pending' : 'measured'}
+		>
 			<table border="1" cellpadding="5" cellspacing="0" style="width: {tableWidth}px;">
 				<colgroup>
 					{#each pinnedIndices as columnIndex (columnIndex)}
@@ -1019,7 +1061,7 @@
 	.wrapper {
 		height: 100%;
 		overflow: hidden;
-		background-color: var(--gray-100);
+		background-color: var(--gray-200);
 	}
 	.wrapper.resizing {
 		cursor: col-resize;
@@ -1044,8 +1086,7 @@
 	}
 
 	th .cell.clickable:hover {
-		text-decoration: underline;
-		text-underline-offset: 3px;
+		color: var(--gray-1000);
 	}
 
 	table {
@@ -1060,7 +1101,6 @@
 	th {
 		position: sticky;
 		top: 0;
-		background: var(--gray-0);
 		z-index: 1;
 	}
 
@@ -1083,6 +1123,7 @@
 
 	th {
 		overflow: hidden;
+		background-color: var(--gray-200);
 	}
 
 	th span:not(.col-resizer) {
@@ -1094,8 +1135,13 @@
 		text-align: left;
 		border-top: none;
 		border-right: none;
-		border-bottom: none;
 		border-left: none;
+	}
+	th {
+		border-bottom: none;
+	}
+	td {
+		border-bottom: var(--border);
 	}
 
 	th span,
@@ -1141,7 +1187,7 @@
 		background: var(--gray-100);
 	}
 	th.spacer-cell {
-		background: var(--gray-0);
+		background: var(--gray-200);
 	}
 
 	/* Last pinned column: right border to separate from scrollable area (override base border-right: none) */
@@ -1153,10 +1199,11 @@
 	/* Pinned columns behaviors */
 	th.sticky {
 		z-index: 3 !important;
+		background: var(--gray-200);
 	}
 	td.sticky {
 		position: sticky;
-		background: var(--gray-100);
+		background: var(--gray-200);
 		z-index: 2;
 	}
 	th.sticky,
@@ -1225,6 +1272,11 @@
 		padding: var(--space-sm-md) var(--space-sm);
 	}
 
+	.text-cell.index {
+		font-size: var(--fs-sm);
+		font-family: monospace;
+	}
+
 	/* Edited cell wrapper and styles */
 	.edited-cell-wrapper {
 		position: relative;
@@ -1239,7 +1291,7 @@
 		width: 100%;
 		height: 100%;
 		box-sizing: border-box;
-		background-color: var(--gray-400);
+		background-color: var(--gray-300);
 		color: var(--gray-1000);
 
 		border-radius: var(--br-sm);

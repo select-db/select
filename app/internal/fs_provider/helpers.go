@@ -6,67 +6,105 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"selectDb/internal/fs_uri"
+	"selectDb/internal/utils"
 )
 
-// GetOSPathFromURI resolves a logical workspace URI to an absolute OS path.
-// It enforces that URIs use the "selectdb://" scheme and that the path portion
-// starts with "workspaces/". The path portion after the scheme is joined
-// directly under the provider root, ensuring that URI and filesystem paths
-// have the exact same shape.
+// GetOSPathFromURI resolves a logical URI to an absolute OS path.
+//
+// Two URI namespaces are supported, both under the "selectdb://" scheme:
+//
+//   - selectdb://workspaces/<id>/...  -> under that workspace's folder.
+//   - selectdb://user/...             -> under the per-user config dir, for
+//     personal files (.theme, .config) that live outside every workspace.
 func (fsp *FSProvider) GetOSPathFromURI(URI string) (string, error) {
-	const scheme = "selectdb://"
-
-	if !strings.HasPrefix(URI, scheme) {
-		return "", fmt.Errorf("invalid URI (expected scheme %q): %s", scheme, URI)
+	rel, ok := fs_uri.Rel(URI)
+	if !ok {
+		return "", fmt.Errorf("invalid URI (expected scheme %q and a path): %s", fs_uri.Scheme, URI)
 	}
 
-	rel := strings.TrimPrefix(URI, scheme)
-	if rel == "" {
-		return "", fmt.Errorf("missing path in uri: %s", URI)
+	if strings.HasPrefix(rel, fs_uri.UserPrefix) {
+		return userOSPathFromURI(URI, rel)
 	}
 
-	if !strings.HasPrefix(rel, "workspaces/") {
-		return "", fmt.Errorf("invalid URI path (expected to start with %q): %s", "workspaces/", URI)
+	if !strings.HasPrefix(rel, fs_uri.WorkspacePrefix) {
+		return "", fmt.Errorf("invalid URI path (expected to start with %q or %q): %s", fs_uri.WorkspacePrefix, fs_uri.UserPrefix, URI)
 	}
 
-	// Normalise and guard against path traversal or absolute paths.
-	rel = filepath.Clean(rel)
-	if filepath.IsAbs(rel) || strings.HasPrefix(rel, "..") {
-		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape root): %s", URI)
+	root, sub, err := fsp.workspaceRootFromURI(URI, rel)
+	if err != nil {
+		return "", err
 	}
-	if fsp.root == "" {
-		return "", fmt.Errorf("FSProvider root not set (no server selected)")
+
+	full, err := fs_uri.Resolve(root, sub)
+	if err != nil {
+		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape the workspace): %s", URI)
 	}
-	full := filepath.Join(fsp.root, rel)
-	if err := ensureWithinRoot(fsp.root, full); err != nil {
+
+	// This path is about to be read or written, so the lexical check is not
+	// enough: a symlink inside the workspace must not lead out of it.
+	if err := fs_uri.EnsureWithin(root, full); err != nil {
 		return "", fmt.Errorf("invalid URI path (escapes workspace root): %s", URI)
 	}
 	return full, nil
 }
 
-// ensureWithinRoot resolves symlinks on the deepest existing ancestor of full
-// and verifies it stays under root, so a symlink placed inside the workspace
-// (e.g. by a cloned repo) cannot be followed out to the host filesystem.
-func ensureWithinRoot(root, full string) error {
-	realRoot, err := filepath.EvalSymlinks(root)
+// workspaceRootFromURI splits selectdb://workspaces/<id>/rest into <id>'s folder
+// and the remainder, which is empty for the root itself.
+func (fsp *FSProvider) workspaceRootFromURI(URI, rel string) (root, sub string, err error) {
+	after := strings.TrimPrefix(rel, fs_uri.WorkspacePrefix)
+	workspaceID, sub, _ := strings.Cut(after, "/")
+	if workspaceID == "" {
+		return "", "", fmt.Errorf("invalid URI (names no workspace): %s", URI)
+	}
+
+	if fsp.workspaceRoot == nil {
+		return "", "", fmt.Errorf("FSProvider cannot resolve workspaces (no lookup wired)")
+	}
+	root, err = fsp.workspaceRoot(workspaceID)
 	if err != nil {
-		realRoot = root
+		return "", "", fmt.Errorf("resolve workspace %s: %w", workspaceID, err)
 	}
-	p := full
-	for {
-		if resolved, rerr := filepath.EvalSymlinks(p); rerr == nil {
-			rel, relErr := filepath.Rel(realRoot, resolved)
-			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("escapes root")
-			}
-			return nil
-		}
-		parent := filepath.Dir(p)
-		if parent == p {
-			return fmt.Errorf("escapes root")
-		}
-		p = parent
+	if root == "" {
+		return "", "", fmt.Errorf("workspace %s has no folder open", workspaceID)
 	}
+	return root, sub, nil
+}
+
+// WorkspaceURIPrefix returns the prefix every workspace URI starts with,
+// "selectdb://workspaces/".
+//
+// The frontend has to recognise a workspace URI — to tell a folder on disk from
+// a row in the search or git tree, say. This is how it asks, rather than
+// restating the scheme in TypeScript where it can drift from the Go side.
+func (fsp *FSProvider) WorkspaceURIPrefix() string {
+	return fs_uri.Scheme + fs_uri.WorkspacePrefix
+}
+
+// userOSPathFromURI resolves a selectdb://user/... URI to an absolute path under
+// the per-user config directory. rel is the path portion after the scheme
+// (e.g. "user/.theme"). It guards against path traversal so a crafted URI
+// cannot escape the user config dir.
+func userOSPathFromURI(URI, rel string) (string, error) {
+	sub := strings.TrimPrefix(rel, fs_uri.UserPrefix)
+	if sub == "" {
+		return "", fmt.Errorf("missing path in uri: %s", URI)
+	}
+
+	dir, err := utils.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	full, err := fs_uri.Resolve(dir, sub)
+	if err != nil {
+		return "", fmt.Errorf("invalid URI path (cannot be absolute or escape user config dir): %s", URI)
+	}
+	if err := fs_uri.EnsureWithin(dir, full); err != nil {
+		return "", fmt.Errorf("invalid URI path (escapes user config dir): %s", URI)
+	}
+	return full, nil
 }
 
 func fileInfoToStat(info fs.FileInfo) FileStat {

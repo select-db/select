@@ -1,0 +1,38 @@
+name: GTK build dependencies
+description: >
+  Installs the GTK4/WebKitGTK headers the app module's cgo webview bindings
+  compile against, from a cache of the .deb files.
+
+# The download is 56MB and about 20s of the 25s this used to take, paid by
+# every job that touches the app module. The packages change only when the
+# runner image does, which is what the key tracks.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      id: debs
+      with:
+        path: /tmp/gtk-debs
+        key: gtk4-debs-${{ runner.os }}-${{ env.ImageOS }}-1
+
+    - shell: bash
+      run: |
+        set -euo pipefail
+        packages="gcc libgtk-4-dev libwebkitgtk-6.0-dev"
+
+        if [ "${{ steps.debs.outputs.cache-hit }}" != "true" ]; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends --download-only $packages
+          mkdir -p /tmp/gtk-debs
+          sudo cp /var/cache/apt/archives/*.deb /tmp/gtk-debs/
+          sudo chown -R "$USER" /tmp/gtk-debs
+        fi
+
+        # A cached set can go stale against a newer runner image. A slow job
+        # is better than a broken one, so failure falls back to a plain install.
+        sudo apt-get install -y --no-install-recommends /tmp/gtk-debs/*.deb || {
+          echo "::warning::cached packages did not install; falling back to apt"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $packages
+        }

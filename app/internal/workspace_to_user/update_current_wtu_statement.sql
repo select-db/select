@@ -1,14 +1,8 @@
 -- name: UpdateCurrentWorkspaceToUser :exec
 ; -- @no-track
+-- One statement, because GetCurrentUser selects on this flag: clearing the old
+-- row before setting the new one leaves a window with no current user at all,
+-- and anything asking in it is told there is none.
 UPDATE workspace_to_user
-SET current = TRUE
-WHERE id = (
-    SELECT 
-        wtu.id
-    FROM 
-        workspace_to_user AS wtu
-        LEFT JOIN workspace w ON w.id = wtu.workspace_id
-    WHERE 
-        wtu.user_id = :user_id
-        AND wtu.workspace_id = :workspace_id
-);
+SET current = (workspace_id = :workspace_id)
+WHERE user_id = :user_id;
