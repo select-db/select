@@ -89,13 +89,14 @@ CREATE INDEX IF NOT EXISTS idx_event_errors
 -- partitions + a default, drops expired ones per part_config) and set retention.
 -- Without it (dev/test): attach one DEFAULT partition per domain so inserts route
 -- somewhere, production gets monthly partitions managed by partman instead.
+-- p_type 'native' is pg_partman 4.x, pinned to match OVH managed Postgres.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_partman') THEN
-        PERFORM partman.create_parent(p_parent_table := 'audit.event_query',      p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
-        PERFORM partman.create_parent(p_parent_table := 'audit.event_auth',       p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
-        PERFORM partman.create_parent(p_parent_table := 'audit.event_iam',        p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
-        PERFORM partman.create_parent(p_parent_table := 'audit.event_datasource', p_control := 'occurred_at', p_interval := '1 month', p_type := 'range');
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_query',      p_control := 'occurred_at', p_interval := '1 month', p_type := 'native');
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_auth',       p_control := 'occurred_at', p_interval := '1 month', p_type := 'native');
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_iam',        p_control := 'occurred_at', p_interval := '1 month', p_type := 'native');
+        PERFORM partman.create_parent(p_parent_table := 'audit.event_datasource', p_control := 'occurred_at', p_interval := '1 month', p_type := 'native');
 
         -- Retention: drop partitions (don't just detach) older than the window.
         -- One year for all; override per domain to keep security streams longer:

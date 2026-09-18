@@ -1,15 +1,19 @@
-# Local dev Postgres with pg_partman available. Matches staging/prod (PG 17).
+# Local dev Postgres with pg_partman available.
 #
-# The app manages audit-log partition retention with pg_partman when the
-# extension is present (falling back to an in-app sweeper otherwise). Baking it
-# into the dev image means the app's boot-time CREATE EXTENSION just works, with
-# no per-machine build. pg_partman ships in the PGDG apt repo that the official
-# postgres image already configures.
-#
-# pg_partman's background worker would need shared_preload_libraries, but the app
-# drives maintenance itself (pg_cron in prod), so plain availability is enough.
+# pg_partman is pinned to 4.7.4, the only version OVH managed Postgres (prod)
+# offers, and built from source since PGDG only ships 5.x. Staging pins the same.
+# NO_BGW: maintenance runs from pg_cron, so the background worker is not needed.
 FROM postgres:17
 
+ARG PG_PARTMAN_VERSION=4.7.4
+ARG PG_PARTMAN_SHA256=e81e9b4edbd36490be6389e2a593cac9a55b1694ba84f8fd4b08df5b17d6233e
+
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-17-partman \
+    && apt-get install -y --no-install-recommends curl ca-certificates make gcc postgresql-server-dev-17 \
+    && curl -fsSL -o /tmp/pg_partman.tar.gz "https://github.com/pgpartman/pg_partman/archive/refs/tags/v${PG_PARTMAN_VERSION}.tar.gz" \
+    && echo "${PG_PARTMAN_SHA256}  /tmp/pg_partman.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/pg_partman.tar.gz -C /tmp \
+    && make -C "/tmp/pg_partman-${PG_PARTMAN_VERSION}" NO_BGW=1 install \
+    && rm -rf /tmp/pg_partman* \
+    && apt-get purge -y --auto-remove curl make gcc postgresql-server-dev-17 \
     && rm -rf /var/lib/apt/lists/*
