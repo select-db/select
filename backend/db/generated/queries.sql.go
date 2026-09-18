@@ -247,27 +247,6 @@ func (q *Queries) DeleteRefreshToken(ctx context.Context, hashedToken string) er
 	return err
 }
 
-const existsWorkspaceToUserByUserAndWorkspace = `-- name: ExistsWorkspaceToUserByUserAndWorkspace :one
-SELECT EXISTS (
-    SELECT 1 
-    FROM app.workspace_to_user 
-    WHERE 
-        user_id = $1 AND workspace_id = $2
-)
-`
-
-type ExistsWorkspaceToUserByUserAndWorkspaceParams struct {
-	UserID      uuid.UUID
-	WorkspaceID uuid.UUID
-}
-
-func (q *Queries) ExistsWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg ExistsWorkspaceToUserByUserAndWorkspaceParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, existsWorkspaceToUserByUserAndWorkspace, arg.UserID, arg.WorkspaceID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const expireAPIKeyAt = `-- name: ExpireAPIKeyAt :exec
 UPDATE auth.api_key SET expires_at = $2
 WHERE id = $1 AND deleted_at IS NULL
@@ -848,34 +827,6 @@ func (q *Queries) GetRoleGrantsByUserID(ctx context.Context, userID uuid.UUID) (
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getRoleIDsByUserID = `-- name: GetRoleIDsByUserID :many
-SELECT role_id FROM app.user_to_role
-WHERE user_id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetRoleIDsByUserID(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getRoleIDsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var role_id uuid.UUID
-		if err := rows.Scan(&role_id); err != nil {
-			return nil, err
-		}
-		items = append(items, role_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1511,17 +1462,6 @@ func (q *Queries) InsertUserPlaceholder(ctx context.Context, arg InsertUserPlace
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const insertWorkspaceIfNotExists = `-- name: InsertWorkspaceIfNotExists :exec
-INSERT INTO app.workspace (id, name, updated_at) 
-VALUES ($1, 'Workspace', now())
-ON CONFLICT (id) DO NOTHING
-`
-
-func (q *Queries) InsertWorkspaceIfNotExists(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, insertWorkspaceIfNotExists, id)
-	return err
 }
 
 const insertWorkspaceToUser = `-- name: InsertWorkspaceToUser :exec
