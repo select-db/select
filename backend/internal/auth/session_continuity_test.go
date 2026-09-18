@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"backend/e2e"
+	"backend/internal/auth"
 )
 
 // What a session has to survive. Each test drives the real refresh the
@@ -189,6 +191,47 @@ func TestCreateWorkspace_DoesNotSignTheAuthorOut(t *testing.T) {
 
 	_, err := device.Refresh(t)
 	require.NoError(t, err, "creating a workspace signed its author out")
+}
+
+// Creating a workspace makes you its owner, and the claim the caller is holding
+// predates it, so the handler has to hand back a token that says so. Without it
+// the creator is a member of their new workspace with no roles and no ownership
+// until their access token expires, and every owner-gated route in it refuses
+// them for five minutes.
+func TestCreateWorkspace_MakesTheAuthorItsOwnerAtOnce(t *testing.T) {
+	f := e2e.Setup(t)
+
+	rec := e2e.Do(t, f.H, http.MethodPost, "/workspaces", f.Actor.Token, map[string]any{"name": "Second"})
+	require.Equalf(t, http.StatusOK, rec.Code, "create workspace: %s", rec.Body.String())
+
+	var created struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+
+	token := rec.Header().Get("X-New-Access-Token")
+	require.NotEmpty(t, token, "creating a workspace must hand back a token that knows about it")
+
+	_, claims, err := auth.ValidateJWT(token)
+	require.NoError(t, err)
+	var owned bool
+	for _, ws := range claims.Workspaces {
+		if ws.ID == created.ID {
+			owned = ws.IsOwner
+		}
+	}
+	require.True(t, owned, "the new token does not make the author owner of the workspace they just made")
+
+	// And it works on a route the new workspace grants no other way: with no
+	// roles in it yet, only ownership passes this gate.
+	rec = e2e.Do(t, f.H, http.MethodPut, "/datasources/"+uuid.NewString(), token, map[string]any{
+		"workspace_id": created.ID,
+		"db_type":      "postgresql",
+		"name":         "warehouse",
+		"dsn":          e2e.TargetDSN(t, f.Conn),
+	})
+	require.Equalf(t, http.StatusNoContent, rec.Code,
+		"the author cannot use their own new workspace: %s", rec.Body.String())
 }
 
 // Nor is deleting one. Access to the deleted workspace stops because membership
