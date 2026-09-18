@@ -164,3 +164,32 @@ func TestStanding_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
 	got := effectiveRoles(t, userID, wsID)
 	require.NotContains(t, got, groupRoleID, "soft-deleted group must grant no roles")
 }
+
+// A grant row names both a role and a workspace, and the two can disagree. The
+// syncer refuses to write such a row, so this seeds one directly: standing is
+// derived from this query alone, and it must not hand somebody a role from a
+// tenant they were never granted anything in.
+func TestStanding_IgnoresGrantPointingAtAnotherWorkspacesRole(t *testing.T) {
+	conn := newTestDB(t)
+
+	userID, ownerID := newID(), newID()
+	mine, theirs := newID(), newID()
+	theirRoleID := newID()
+
+	seedUser(t, conn, userID, "member")
+	seedUser(t, conn, ownerID, "owner")
+	seedWorkspace(t, conn, mine, "mine", userID)
+	seedWorkspace(t, conn, theirs, "theirs", ownerID)
+	seedRole(t, conn, theirRoleID, theirs, "their-admin")
+
+	// A member of both, so the other workspace's standing is built at all.
+	seedMembership(t, conn, mine, userID)
+	seedMembership(t, conn, theirs, userID)
+
+	seedUserToRole(t, conn, newID(), userID, theirRoleID, mine)
+
+	require.NotContains(t, effectiveRoles(t, userID, theirs), theirRoleID,
+		"a grant written in one workspace granted a role in another")
+	require.NotContains(t, effectiveRoles(t, userID, mine), theirRoleID,
+		"a grant naming another workspace's role granted it locally")
+}
