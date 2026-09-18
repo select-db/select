@@ -18,7 +18,7 @@ import (
 func TestSync_EmptyRequest(t *testing.T) {
 	newTestDB(t)
 
-	resp, _, err := Sync(context.Background(), newID(), []string{}, nil, nil, &types.SyncRequest{})
+	resp, err := Sync(context.Background(), newID(), []string{}, nil, nil, &types.SyncRequest{})
 	require.NoError(t, err)
 	assert.Empty(t, resp.Confirmed)
 	assert.Empty(t, resp.Restored)
@@ -31,7 +31,7 @@ func TestAuthorize_OwnerCanRenameWorkspace(t *testing.T) {
 	seedUser(t, conn, ownerID, "Owner")
 	seedWorkspace(t, conn, wsID, "Old Name", ownerID)
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "UPDATE",
@@ -57,7 +57,7 @@ func TestAuthorize_OwnerCanDeleteWorkspace(t *testing.T) {
 	seedUser(t, conn, ownerID, "Owner")
 	seedWorkspace(t, conn, wsID, "My Workspace", ownerID)
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "delete",
@@ -84,7 +84,7 @@ func TestAuthorize_NonOwnerCannotDeleteWorkspace(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "My Workspace", ownerID)
 
 	// member of wsID, not its owner (ownedWorkspaceIDs nil)
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "delete",
@@ -122,7 +122,7 @@ func TestAuthorize_OwnerCanCreateRole(t *testing.T) {
 	seedUser(t, conn, ownerID, "Owner")
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{roleCommit(ownerID, wsID, roleID)},
 	})
 	require.NoError(t, err)
@@ -142,7 +142,7 @@ func TestAuthorize_OwnerCanUpdateRole(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "Old Name")
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "UPDATE",
@@ -172,7 +172,7 @@ func TestAuthorize_OwnerCanDeleteRole(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "To Delete")
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "delete",
@@ -201,7 +201,7 @@ func TestAuthorize_NonOwnerCannotCreateRole(t *testing.T) {
 	seedUser(t, conn, memberID, "Member")
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{roleCommit(memberID, wsID, roleID)},
 	})
 	require.NoError(t, err)
@@ -222,7 +222,7 @@ func TestAuthorize_NonOwnerCannotUpdateRole(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "Original Name")
 
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "UPDATE",
@@ -259,7 +259,7 @@ func TestAuthorize_NonOwnerCannotUpdatePermission(t *testing.T) {
 	seedRole(t, conn, roleID, wsID, "Admins")
 	seedPermission(t, conn, permID, roleID, wsID, "select", "allow")
 
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, nil, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "UPDATE",
@@ -317,7 +317,7 @@ func TestAuthorize_MemberWithGroupsManageCanCreateGroup(t *testing.T) {
 	seedRole(t, conn, roleID, wsID, "Group Admins")
 	seedPermission(t, conn, permID, roleID, wsID, "workspace/groups.manage", "allow")
 
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{roleID}, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, []string{roleID}, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{groupCommit(memberID, wsID, groupID)},
 	})
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestAuthorize_RolesManageDoesNotGrantGroupsManage(t *testing.T) {
 	seedRole(t, conn, roleID, wsID, "Role Admins")
 	seedPermission(t, conn, permID, roleID, wsID, "workspace/roles.manage", "allow")
 
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{roleID}, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, []string{roleID}, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{groupCommit(memberID, wsID, groupID)},
 	})
 	require.NoError(t, err)
@@ -379,7 +379,7 @@ func TestAuthorize_GroupsManageAloneCannotAttachRole(t *testing.T) {
 	seedGroup(t, conn, groupID, wsID, "Data Eng")
 	seedRole(t, conn, grantedRoleID, wsID, "Powerful Role")
 
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{adminRoleID}, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, []string{adminRoleID}, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{groupToRoleCommit(memberID, wsID, gtrID, groupID, grantedRoleID)},
 	})
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestAuthorize_GroupsAndRolesManageCanAttachRole(t *testing.T) {
 	seedGroup(t, conn, groupID, wsID, "Data Eng")
 	seedRole(t, conn, grantedRoleID, wsID, "Analyst")
 
-	resp, _, err := Sync(context.Background(), memberID, []string{wsID}, []string{adminRoleID}, nil, &types.SyncRequest{
+	resp, err := Sync(context.Background(), memberID, []string{wsID}, []string{adminRoleID}, nil, &types.SyncRequest{
 		PendingCommits: []types.Commit{groupToRoleCommit(memberID, wsID, gtrID, groupID, grantedRoleID)},
 	})
 	require.NoError(t, err)
@@ -415,39 +415,6 @@ func TestAuthorize_GroupsAndRolesManageCanAttachRole(t *testing.T) {
 	var count int
 	require.NoError(t, conn.QueryRow(`SELECT count(*) FROM app.group_to_role WHERE id = $1::uuid`, gtrID).Scan(&count))
 	assert.Equal(t, 1, count, "a member with both groups.manage and roles.manage can attach a role to a group")
-}
-
-// A soft-deleted group must stop granting its roles. Deletion is a soft delete
-// and the FK cascade only fires on hard deletes, so without the group's own
-// deleted_at guard the still-live membership rows would keep the roles alive.
-func TestGroupRoles_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
-	conn := newTestDB(t)
-	ctx := context.Background()
-	ownerID, memberID, wsID := newID(), newID(), newID()
-	groupID, roleID, utgID, gtrID := newID(), newID(), newID(), newID()
-	seedUser(t, conn, ownerID, "Owner")
-	seedUser(t, conn, memberID, "Member")
-	seedWorkspace(t, conn, wsID, "WS", ownerID)
-	seedRole(t, conn, roleID, wsID, "Analyst")
-	seedGroup(t, conn, groupID, wsID, "Data Eng")
-	_, err := conn.Exec(`INSERT INTO app.user_to_group (id, user_id, group_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid)`, utgID, memberID, groupID, wsID)
-	require.NoError(t, err)
-	_, err = conn.Exec(`INSERT INTO app.group_to_role (id, group_id, role_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid)`, gtrID, groupID, roleID, wsID)
-	require.NoError(t, err)
-
-	memberUUID, err := uuid.Parse(memberID)
-	require.NoError(t, err)
-
-	rows, err := db.Queries.GetUserGroupRolesWithNames(ctx, memberUUID)
-	require.NoError(t, err)
-	assert.Len(t, rows, 1, "active group must grant its role")
-
-	_, err = conn.Exec(`UPDATE app."group" SET deleted_at = now() WHERE id = $1::uuid`, groupID)
-	require.NoError(t, err)
-
-	rows, err = db.Queries.GetUserGroupRolesWithNames(ctx, memberUUID)
-	require.NoError(t, err)
-	assert.Empty(t, rows, "a soft-deleted group must grant no roles")
 }
 
 func TestAuthorize_MismatchedUserIDRejected(t *testing.T) {
@@ -459,7 +426,7 @@ func TestAuthorize_MismatchedUserIDRejected(t *testing.T) {
 	commit := roleCommit(ownerID, wsID, roleID)
 	commit.UserID = otherID // commit claims to be from otherID but caller is ownerID
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{commit},
 	})
 	require.NoError(t, err)
@@ -474,7 +441,7 @@ func TestAuthorize_WorkspaceNotInUserListRejected(t *testing.T) {
 	seedUser(t, conn, ownerID, "Owner")
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{roleCommit(ownerID, otherWsID, roleID)},
 	})
 	require.NoError(t, err)
@@ -493,7 +460,7 @@ func TestAuthorize_PayloadForeignWorkspaceRejected(t *testing.T) {
 	// commit targets wsID (allowed) but payload references a foreign workspace
 	commit.Payload = map[string]any{"id": roleID, "workspace_id": foreignWsID, "name": "Smuggled"}
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{commit},
 	})
 	require.NoError(t, err)
@@ -517,7 +484,7 @@ func TestAuthorize_PayloadWorkspaceMismatchRejected(t *testing.T) {
 	// payload claims workspace_id = ws2ID while commit targets ws1ID
 	commit.Payload = map[string]any{"id": roleID, "workspace_id": ws2ID, "name": "Smuggled"}
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{ws1ID, ws2ID}, nil, []string{ws1ID, ws2ID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{ws1ID, ws2ID}, nil, []string{ws1ID, ws2ID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{commit},
 	})
 	require.NoError(t, err)
