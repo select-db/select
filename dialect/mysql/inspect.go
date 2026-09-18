@@ -47,28 +47,25 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	parser.RemoveErrorListeners()
 	lexer.RemoveErrorListeners()
 
-	root := parser.Script()
-	if root == nil {
-		return nil
+	var queries []mysql.IQueryContext
+	if root := parser.Script(); root != nil {
+		queries = root.AllQuery()
 	}
-
-	queries := root.AllQuery()
 	if len(queries) == 0 {
-		return nil
+		return []core.InspectStatement{core.UnknownStatement()}
 	}
 
-	var results []core.InspectStatement
+	results := make([]core.InspectStatement, 0, len(queries))
 	for _, q := range queries {
 		if q == nil {
 			continue
 		}
 		simple := q.SimpleStatement()
 		if simple == nil {
+			// The grammar emits a trailing empty query for the ';' we append.
 			continue
 		}
-		if r := i.inspectStatement(simple); r != nil {
-			results = append(results, *r)
-		}
+		results = append(results, core.OrUnknown(i.inspectStatement(simple)))
 	}
 	return results
 }

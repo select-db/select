@@ -32,7 +32,8 @@ func toolListDatasources() Tool {
 			"`deny.select.public.users.password` (deny that one column), " +
 			"`allow.insert.public.events.*` (insert any column of events). " +
 			"Deny rules win at the most specific level they match. " +
-			"Action values: select, insert, update, delete, ddl.",
+			"Action values: select, insert, update, delete. Anything else a statement does, " +
+			"schema changes included, needs manage on the connection.",
 		InputSchema: jsonObjectSchema(nil, nil),
 		Annotations: &ToolAnnotations{
 			ReadOnlyHint:   boolPtr(true),

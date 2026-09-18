@@ -30,7 +30,7 @@ export function clearMyPermissions(): void {
 	myPermissionsStore.set([]);
 }
 
-export const permissionActions = ['manage', 'select', 'see', 'insert', 'update', 'delete', 'ddl'];
+export const permissionActions = ['manage', 'select', 'see', 'insert', 'update', 'delete'];
 export type PermissionActions = (typeof permissionActions)[number];
 
 /** Reactive helper: check app-level and db-level permissions. */
