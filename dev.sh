@@ -42,7 +42,7 @@
 # libwebkitgtk-6.0-dev. macOS and Windows need nothing extra.
 #
 # The dev database runs in Docker (see backend/docker-compose.yml and
-# Dockerfile.postgres: Postgres 17 with pg_partman baked in), published on host
+# Dockerfile.postgres: Postgres 18 with pg_partman baked in), published on host
 # port 5431 to match the default POSTGRES_DSN in backend/.env. Requires Docker;
 # the Go binaries read .env themselves.
 
