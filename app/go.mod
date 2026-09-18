@@ -16,7 +16,7 @@ require (
 	github.com/selectDb/dialect v0.0.0-00010101000000-000000000000
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.12.1
-	github.com/wailsapp/wails/v3 v3.0.0-beta.17
+	github.com/wailsapp/wails/v3 v3.0.0-beta.22
 	github.com/zalando/go-keyring v0.2.6
 	modernc.org/sqlite v1.58.0
 )
@@ -36,7 +36,6 @@ require (
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
-	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
