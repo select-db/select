@@ -9,23 +9,13 @@ import (
 
 const permDBID = "inst-1"
 
-// permMeta is a catalog the inspectors resolve names against. One schema name
-// serves all three dialects: an inspector resolves against meta.DefaultSchema,
-// not against a default of its own.
+// permMeta is the catalog every inspector suite resolves names against, so a
+// table or schema added for one of them reaches this one too. Its default
+// schema serves all three dialects: an inspector resolves against
+// meta.DefaultSchema, not against a default of its own.
 func permMeta() *core.Metadata {
-	return &core.Metadata{
-		DefaultSchema: "main",
-		Schemas: []core.Schema{{
-			Name: "main",
-			Tables: []core.Table{{
-				Name:    "users",
-				Columns: []core.Column{{Name: "id", Type: "integer"}, {Name: "bio", Type: "text"}},
-			}, {
-				Name:    "orders",
-				Columns: []core.Column{{Name: "id", Type: "integer"}, {Name: "user_id", Type: "integer"}},
-			}},
-		}},
-	}
+	meta := core.GetInspectTestMetadata()
+	return &meta
 }
 
 // dataActionsOnly allows the four actions a statement can be resolved down to,
@@ -50,41 +40,41 @@ func TestPermissions_StatementsThatNeedManage(t *testing.T) {
 		{
 			dialect: "postgresql",
 			sql: []string{
-				"COPY users FROM '/tmp/x.csv'",
-				"COPY users TO '/tmp/x.csv'",
-				"CREATE TABLE t2 AS SELECT * FROM users",
-				"DO $$ BEGIN DELETE FROM users; END $$",
-				"MERGE INTO users u USING orders o ON u.id = o.user_id WHEN MATCHED THEN UPDATE SET bio = 'x'",
-				"GRANT SELECT ON users TO bob",
-				"REVOKE ALL ON users FROM bob",
+				"COPY t1 FROM '/tmp/x.csv'",
+				"COPY t1 TO '/tmp/x.csv'",
+				"CREATE TABLE t9 AS SELECT * FROM t1",
+				"DO $$ BEGIN DELETE FROM t1; END $$",
+				"MERGE INTO t1 a USING t2 b ON a.c1 = b.c1 WHEN MATCHED THEN UPDATE SET c2 = 'x'",
+				"GRANT SELECT ON t1 TO bob",
+				"REVOKE ALL ON t1 FROM bob",
 				"CREATE ROLE evil SUPERUSER",
-				"CREATE VIEW v AS SELECT * FROM users",
-				"EXPLAIN ANALYZE DELETE FROM users",
-				"ALTER TABLE users RENAME TO users2",
+				"CREATE VIEW v AS SELECT * FROM t1",
+				"EXPLAIN ANALYZE DELETE FROM t1",
+				"ALTER TABLE t1 RENAME TO t9",
 				"REFRESH MATERIALIZED VIEW mv",
-				"LOCK TABLE users",
+				"LOCK TABLE t1",
 				"CALL some_proc()",
-				"DROP TABLE users",
-				"TRUNCATE users",
+				"DROP TABLE t1",
+				"TRUNCATE t1",
 				"!!! not sql at all !!!",
 			},
 		},
 		{
 			dialect: "mysql",
 			sql: []string{
-				"LOAD DATA INFILE '/tmp/x' INTO TABLE users",
-				"GRANT SELECT ON users TO bob",
-				"RENAME TABLE users TO users2",
+				"LOAD DATA INFILE '/tmp/x' INTO TABLE t1",
+				"GRANT SELECT ON t1 TO bob",
+				"RENAME TABLE t1 TO t9",
 				"CALL p()",
-				"DROP TABLE users",
+				"DROP TABLE t1",
 			},
 		},
 		{
 			dialect: "sqlite",
 			sql: []string{
 				"ATTACH DATABASE '/tmp/evil.db' AS e",
-				"DROP TABLE users",
-				"ALTER TABLE users RENAME TO users2",
+				"DROP TABLE t1",
+				"ALTER TABLE t1 RENAME TO t9",
 			},
 		},
 	}
@@ -124,14 +114,23 @@ func TestPermissions_DataStatementsAreUnaffected(t *testing.T) {
 		t.Run(dialect, func(t *testing.T) {
 			perms := dataActionsOnly()
 			for _, sql := range []string{
-				"SELECT id FROM users",
-				"SELECT u.id FROM users u JOIN orders o ON u.id = o.user_id",
-				"INSERT INTO users (id) VALUES (1)",
-				"UPDATE users SET bio = 'x' WHERE id = 1",
-				"DELETE FROM users WHERE id = 1",
+				"SELECT c1 FROM t1",
+				"SELECT a.c1 FROM t1 a JOIN t2 b ON a.c1 = b.c1",
+				"SELECT c1 FROM other.t3",
+				"INSERT INTO t1 (c1) VALUES (1)",
+				"UPDATE t1 SET c2 = 'x' WHERE c1 = 1",
+				"DELETE FROM t1 WHERE c1 = 1",
 			} {
 				t.Run(sql, func(t *testing.T) {
 					inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+					// A statement whose table stopped resolving is checked
+					// against nothing and passes, which is the one way this
+					// test goes green without testing anything.
+					for _, stmt := range inspected {
+						if len(stmt.Tables) == 0 {
+							t.Fatalf("resolved no table, so the check had nothing to refuse: %+v", stmt)
+						}
+					}
 					if err := core.CheckQueryPermissions(inspected, permDBID, perms); err != nil {
 						t.Errorf("want allowed, got %v", err)
 					}
@@ -162,7 +161,7 @@ func TestInspect_ForeignDialectCannotReturnNothing(t *testing.T) {
 	RegisterDialect("silent-test-dialect", silentDialect{})
 	t.Cleanup(func() { RegisterDialect("silent-test-dialect", nil) })
 
-	got := Inspect(GetDialect("silent-test-dialect"), permMeta(), "DROP TABLE users")
+	got := Inspect(GetDialect("silent-test-dialect"), permMeta(), "DROP TABLE t1")
 	if len(got) != 1 || got[0].Operation != core.InspectOpUnknown {
 		t.Fatalf("got %+v, want one unknown statement", got)
 	}
