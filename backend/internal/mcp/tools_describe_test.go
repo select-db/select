@@ -60,10 +60,10 @@ func TestRuleString(t *testing.T) {
 				SchemaName:   nil,
 				TableName:    nil,
 				ColumnName:   nil,
-				Action:       "ddl",
+				Action:       "manage",
 				Effect:       "allow",
 			},
-			want: "allow.ddl.*.*.*",
+			want: "allow.manage.*.*.*",
 		},
 		{
 			name: "explicit star is treated as wildcard",
