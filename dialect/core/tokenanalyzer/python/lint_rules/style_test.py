@@ -275,10 +275,21 @@ class TestS011UnquotedMixedCase:
     def test_no_trigger_quoted_column(self):
         assert _diags(_r('SELECT "myCol" FROM t'), "unquoted-uppercase") == []
 
-    def test_no_trigger_mysql(self):
-        r = analyze("SELECT * FROM customerAccount", dialect="mysql",
-                    schema_dict={}, default_schema="public")
-        assert [d for d in r["diagnostics"] if d["rule_id"] == "unquoted-uppercase"] == []
+    def test_silent_where_nothing_is_folded(self):
+        """
+        The rule is about a name the database will not store as written. MySQL
+        keeps the case and SQLite compares without it, so on both there is no
+        surprise to report.
+        """
+        for dialect in ("mysql", "sqlite"):
+            r = analyze("SELECT * FROM customerAccount", dialect=dialect,
+                        schema_dict={}, default_schema="public")
+            got = [d for d in r["diagnostics"] if d["rule_id"] == "unquoted-uppercase"]
+            assert got == [], f"{dialect}: {got}"
+
+    def test_message_names_the_case_the_dialect_folds_to(self):
+        diags = _diags(_r("SELECT * FROM customerAccount"), "unquoted-uppercase")
+        assert "'customeraccount'" in diags[0]["message"]
 
     def test_alias_unquoted_mixed_triggers(self):
         assert len(_diags(_r("SELECT id AS myAlias FROM t"), "unquoted-uppercase")) == 1

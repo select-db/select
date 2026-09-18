@@ -197,7 +197,7 @@ def analyze(
         _add(analyze_null_rules(stmt))
         _add(analyze_style_rules(stmt, sg_dialect, sql))
         _add(analyze_aggregation_rules(stmt, user_agg_names))
-        _add(analyze_orderby_rules(stmt))
+        _add(analyze_orderby_rules(stmt, sg_dialect))
 
         _add(analyze_unknown_tables(stmt, schema_dict, default_schema, virtual_names))
         _add(analyze_unknown_columns(scopes, schema_dict, default_schema, sg_dialect))
