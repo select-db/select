@@ -4,74 +4,70 @@ import (
 	"testing"
 
 	core "github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/core/testutil"
 )
 
-// A statement nested inside another one is still a statement. Where the
-// inspector did not recognise it, it reported nothing, and a permission check
-// reads nothing as nothing to check. These pin that the query a CREATE is
-// filled from reaches the result.
-
-// touch is one operation on one table, looked for anywhere in a statement tree.
-type touch struct {
-	op           core.InspectOperation
-	schema, name string
-}
-
-func inspectNested(t *testing.T, sql string) []core.InspectStatement {
-	t.Helper()
-	meta := core.GetInspectTestMetadata()
-	return NewInspector(NewDialect(), meta).Inspect(sql)
-}
-
-func touches(stmts []core.InspectStatement, want touch) bool {
-	for _, stmt := range stmts {
-		if stmt.Operation == want.op {
-			for _, tbl := range stmt.Tables {
-				if tbl.Schema == want.schema && tbl.Name == want.name {
-					return true
-				}
-			}
-		}
-		if touches(stmt.Subqueries, want) {
-			return true
-		}
-	}
-	return false
-}
-
-func TestInspectNestedStatementsReachTheResult(t *testing.T) {
+// SQLite's UPDATE ... FROM reads the relations it joins against. The CREATE
+// cases this dialect also nests are pinned by permission outcome in
+// dialect/engine, which runs them for every dialect.
+func TestInspectUpdateFromReadsItsRelations(t *testing.T) {
 	const s = "main"
 
 	tests := []struct {
 		name string
 		sql  string
-		want []touch
+		want []testutil.Touch
 	}{
 		{
-			name: "CREATE TABLE AS creates one table and reads another",
-			sql:  "CREATE TABLE t9 AS SELECT c1 FROM t1",
-			want: []touch{{core.InspectOpCreate, s, "t9"}, {core.InspectOpSelect, s, "t1"}},
+			name: "a single relation",
+			sql:  "UPDATE t2 SET c1 = t1.c1 FROM t1",
+			want: []testutil.Touch{
+				{Op: core.InspectOpUpdate, Schema: s, Name: "t2"},
+				{Op: core.InspectOpSelect, Schema: s, Name: "t1"},
+			},
 		},
 		{
-			name: "CREATE VIEW reads the tables behind it",
-			sql:  "CREATE VIEW v AS SELECT c1 FROM t1",
-			want: []touch{{core.InspectOpCreate, s, "v"}, {core.InspectOpSelect, s, "t1"}},
+			name: "a comma list",
+			sql:  "UPDATE t2 SET c1 = t1.c1 FROM t1, other.t3",
+			want: []testutil.Touch{
+				{Op: core.InspectOpSelect, Schema: s, Name: "t1"},
+				{Op: core.InspectOpSelect, Schema: "other", Name: "t3"},
+			},
 		},
 		{
-			name: "INSERT ... SELECT still reads its source",
-			sql:  "INSERT INTO t2 (c1) SELECT c1 FROM t1",
-			want: []touch{{core.InspectOpInsert, s, "t2"}, {core.InspectOpSelect, s, "t1"}},
+			name: "a join, which hangs off a different grammar node than the comma list",
+			sql:  "UPDATE t2 SET c1 = t1.c1 FROM t1 JOIN other.t3 ON t1.c1 = t3.c1",
+			want: []testutil.Touch{
+				{Op: core.InspectOpSelect, Schema: s, Name: "t1"},
+				{Op: core.InspectOpSelect, Schema: "other", Name: "t3"},
+			},
+		},
+		{
+			name: "a subquery",
+			sql:  "UPDATE t2 SET c1 = s.c1 FROM (SELECT c1 FROM t1) s",
+			want: []testutil.Touch{{Op: core.InspectOpSelect, Schema: s, Name: "t1"}},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stmts := inspectNested(t, tt.sql)
+			stmts := NewInspector(NewDialect(), core.GetInspectTestMetadata()).Inspect(tt.sql)
 			for _, want := range tt.want {
-				if !touches(stmts, want) {
-					t.Errorf("no %s on %s.%s anywhere in %+v", want.op, want.schema, want.name, stmts)
+				if !testutil.Touches(stmts, want) {
+					t.Errorf("no %s on %s.%s anywhere in %+v", want.Op, want.Schema, want.Name, stmts)
 				}
 			}
 		})
+	}
+}
+
+// An UPDATE with no FROM names only the table it writes.
+func TestInspectUpdateWithoutFromReadsNothing(t *testing.T) {
+	stmts := NewInspector(NewDialect(), core.GetInspectTestMetadata()).Inspect("UPDATE t2 SET c1 = 1")
+	if len(stmts) != 1 {
+		t.Fatalf("got %d statements, want 1", len(stmts))
+	}
+	if len(stmts[0].Subqueries) != 0 {
+		t.Errorf("got %d subqueries, want none: %+v", len(stmts[0].Subqueries), stmts[0].Subqueries)
 	}
 }

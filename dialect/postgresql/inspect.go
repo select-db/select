@@ -118,11 +118,7 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 	}
 
 	if createAsStmt := stmt.Createasstmt(); createAsStmt != nil {
-		var name pg.IQualified_nameContext
-		if target := createAsStmt.Create_as_target(); target != nil {
-			name = target.Qualified_name()
-		}
-		return i.inspectCreateFrom(name, createAsStmt.Selectstmt())
+		return i.inspectCreateFrom(targetName(createAsStmt.Create_as_target()), createAsStmt.Selectstmt())
 	}
 
 	if viewStmt := stmt.Viewstmt(); viewStmt != nil {
@@ -130,11 +126,7 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 	}
 
 	if matViewStmt := stmt.Creatematviewstmt(); matViewStmt != nil {
-		var name pg.IQualified_nameContext
-		if target := matViewStmt.Create_mv_target(); target != nil {
-			name = target.Qualified_name()
-		}
-		return i.inspectCreateFrom(name, matViewStmt.Selectstmt())
+		return i.inspectCreateFrom(targetName(matViewStmt.Create_mv_target()), matViewStmt.Selectstmt())
 	}
 
 	if copyStmt := stmt.Copystmt(); copyStmt != nil {
@@ -217,16 +209,7 @@ func (i *Inspector) inspectSelectPrimary(
 
 	fromSubqueries := i.extractFromSubqueriesFromPrimary(primary)
 
-	// Virtual table names: CTEs and FROM subquery aliases must not appear in Tables.
-	virtualTables := make(map[string]bool)
-	for _, cte := range ctes {
-		virtualTables[i.dialect.NormalizeIdentifier(cte.Table)] = true
-	}
-	for name := range subqueryColumns {
-		virtualTables[i.dialect.NormalizeIdentifier(name)] = true
-	}
-
-	tables := i.convertRelationRefs(relationRefs, virtualTables)
+	tables := i.convertRelationRefs(relationRefs, i.virtualNames(ctes, subqueryColumns))
 	for _, subq := range cteSubqueries {
 		tables = core.MergeInspectTables(tables, subq.Tables)
 	}
@@ -378,10 +361,22 @@ func (i *Inspector) inspectCreate(stmt pg.ICreatestmtContext) *core.InspectState
 	return result
 }
 
-// inspectCreateFrom analyzes the statements that create something and fill it
-// from a query: CREATE TABLE ... AS, CREATE VIEW, CREATE MATERIALIZED VIEW.
-// Creating it needs manage; the query still reads its own tables, and manage
-// does not stand in for that read.
+// createTarget is the node naming what a CREATE creates. CREATE TABLE ... AS
+// and CREATE MATERIALIZED VIEW spell it as different grammar rules.
+type createTarget interface {
+	Qualified_name() pg.IQualified_nameContext
+}
+
+func targetName(target createTarget) pg.IQualified_nameContext {
+	if target == nil {
+		return nil
+	}
+	return target.Qualified_name()
+}
+
+// inspectCreateFrom analyzes CREATE TABLE ... AS, CREATE VIEW and CREATE
+// MATERIALIZED VIEW: creating it needs manage, reading the query still needs
+// select on what the query reads.
 func (i *Inspector) inspectCreateFrom(name pg.IQualified_nameContext, source pg.ISelectstmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpCreate}
 	if schema, table := i.resolveQualifiedName(name); table != "" {
@@ -394,8 +389,7 @@ func (i *Inspector) inspectCreateFrom(name pg.IQualified_nameContext, source pg.
 }
 
 // inspectCopy analyzes COPY, which moves rows between a table and the server's
-// own filesystem. That stays unclassified so it needs manage; the COPY (query)
-// form also reads the query's tables, and that read is checked on its own.
+// own filesystem. It stays unclassified, so it needs manage.
 func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement {
 	result := core.UnknownStatement()
 	if source := stmt.Preparablestmt(); source != nil {
@@ -405,8 +399,7 @@ func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement
 }
 
 // inspectPreparable inspects a statement nested inside another one: a CTE body
-// or a COPY source. The grammar allows any of five statements there, and a
-// nested write is still a write.
+// or a COPY source. A nested write is still a write.
 func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.InspectStatement {
 	if stmt == nil {
 		return core.UnknownStatement()
@@ -1338,6 +1331,19 @@ func (l *whereColumnExtractorListener) EnterColumnref(ctx *pg.ColumnrefContext) 
 	}
 }
 
+// virtualNames are the names in a FROM that are not tables: a CTE and a FROM
+// subquery alias both look like one and neither is a grant anybody holds.
+func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
+	names := make(map[string]bool, len(ctes)+len(subqueryColumns))
+	for _, cte := range ctes {
+		names[i.dialect.NormalizeIdentifier(cte.Table)] = true
+	}
+	for name := range subqueryColumns {
+		names[i.dialect.NormalizeIdentifier(name)] = true
+	}
+	return names
+}
+
 // convertRelationRefs converts RelationRef to InspectTable, filtering out virtual tables
 func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables map[string]bool) []core.InspectTable {
 	var tables []core.InspectTable
@@ -1384,9 +1390,7 @@ func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables m
 	return tables
 }
 
-// inspectWithClause reads the CTEs an INSERT, UPDATE or DELETE carries. Their
-// bodies are statements of their own, and their names are not tables, so a
-// clause referring to one must not read as a table nobody can resolve.
+// inspectWithClause reads the CTEs an INSERT, UPDATE or DELETE carries.
 func (i *Inspector) inspectWithClause(opt pg.IOpt_with_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
 	if opt == nil {
 		return nil, nil
@@ -1400,15 +1404,14 @@ func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext)
 		return nil, nil
 	}
 
-	var ctes []core.RelationRef
-	var subqueries []core.InspectStatement
-
 	cteList := withClause.Cte_list()
 	if cteList == nil {
-		return ctes, subqueries
+		return nil, nil
 	}
 
 	cteElements := cteList.AllCommon_table_expr()
+	ctes := make([]core.RelationRef, 0, len(cteElements))
+	subqueries := make([]core.InspectStatement, 0, len(cteElements))
 	for _, cteEl := range cteElements {
 		if cteEl == nil {
 			continue
@@ -1421,8 +1424,8 @@ func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext)
 		}
 
 		// A CTE body is any preparable statement, so WITH x AS (DELETE ...) is a
-		// delete the outer statement never mentions. One subquery per CTE also
-		// keeps the two slices index-aligned for cteToSubqueryMap.
+		// delete the outer statement never mentions. One subquery per CTE keeps
+		// the two slices index-aligned for cteToSubqueryMap.
 		body := i.inspectPreparable(cteEl.Preparablestmt())
 		subqueries = append(subqueries, body)
 
@@ -1467,16 +1470,8 @@ func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.Relat
 	fw := &fromWalker{dialect: i.dialect, meta: i.meta}
 	refs, subqueryColumns := fw.walk(fromList)
 
-	virtualTables := make(map[string]bool)
-	for name := range subqueryColumns {
-		virtualTables[i.dialect.NormalizeIdentifier(name)] = true
-	}
-	for _, cte := range ctes {
-		virtualTables[i.dialect.NormalizeIdentifier(cte.Table)] = true
-	}
-
 	reads := i.extractSubqueriesFromFromList(fromList)
-	if tables := i.convertRelationRefs(refs, virtualTables); len(tables) > 0 {
+	if tables := i.convertRelationRefs(refs, i.virtualNames(ctes, subqueryColumns)); len(tables) > 0 {
 		reads = append(reads, core.InspectStatement{
 			Operation: core.InspectOpSelect,
 			Tables:    tables,

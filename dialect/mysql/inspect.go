@@ -644,7 +644,7 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 	}
 	if cv := stmt.CreateView(); cv != nil {
 		if vn := cv.ViewName(); vn != nil {
-			schema, view := splitQualifiedName(i.dialect, vn.GetText(), core.GetDefaultSchema(i.meta))
+			schema, view := i.resolveViewName(vn)
 			if view != "" {
 				result.Tables = []core.InspectTable{{Name: view, Schema: schema}}
 			}
@@ -658,11 +658,8 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 	return result
 }
 
-// sourceQuery is the query a CREATE TABLE ... AS or a CREATE VIEW is filled
-// from, as its own statement. Creating the table needs manage; the query still
-// reads its own tables, which manage does not stand in for. A query we failed
-// to read becomes unknown rather than nothing, so the check refuses it instead
-// of finding no source to check.
+// sourceQuery is the query a CREATE TABLE ... AS or a CREATE VIEW is filled from, as its own
+// statement: creating it needs manage, reading it still needs select.
 func (i *Inspector) sourceQuery(source mysql.IQueryExpressionOrParensContext) []core.InspectStatement {
 	if source == nil {
 		return nil
@@ -681,6 +678,14 @@ func (i *Inspector) resolveTableRef(tr mysql.ITableRefContext) (schema, table st
 		return "", ""
 	}
 	return splitQualifiedName(i.dialect, tr.GetText(), core.GetDefaultSchema(i.meta))
+}
+
+// resolveViewName mirrors resolveTableRef for ViewName nodes.
+func (i *Inspector) resolveViewName(vn mysql.IViewNameContext) (schema, view string) {
+	if vn == nil {
+		return "", ""
+	}
+	return splitQualifiedName(i.dialect, vn.GetText(), core.GetDefaultSchema(i.meta))
 }
 
 // resolveTableName mirrors resolveTableRef for TableName nodes (used by CREATE TABLE).
