@@ -11,10 +11,11 @@ import (
 	"backend/e2e"
 )
 
-// Deleting a workspace has to take its members' access with it. The owner's
-// refresh tokens are dropped by the handler, but every access token already
-// minted -- the owner's and every other member's -- carries on being accepted
-// unless membership itself stops resolving for a deleted workspace.
+// Deleting a workspace has to take its members' access with it. Every access
+// token already minted -- the owner's and every other member's -- carries on
+// being accepted unless membership itself stops resolving for a deleted
+// workspace, which is what does the work here. Nobody is signed out for it:
+// see TestDeleteWorkspace_DoesNotSignTheOwnerOut.
 func TestDeleteWorkspace_RevokesMemberAccess(t *testing.T) {
 	f := e2e.Setup(t)
 
