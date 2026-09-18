@@ -14,6 +14,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/toolkit/telemetry"
 
 	"backend/db"
 	"backend/internal/api"
@@ -74,6 +75,22 @@ func main() {
 			log.Fatalf("Error running command: %v", err)
 		}
 		return
+	}
+
+	// After the CLI branch: a one-shot command should not stand up an exporter
+	// it would immediately tear down.
+	shutdownTelemetry, err := telemetry.Start(context.Background(), telemetry.Config{
+		ServiceName:    "select-backend",
+		ServiceVersion: version,
+		Region:         os.Getenv("REGION"),
+	})
+	if err != nil {
+		// Telemetry is not worth refusing to serve over.
+		log.Printf("WARNING: telemetry: %v", err)
+		shutdownTelemetry = func(context.Context) error { return nil }
+	}
+	if err := telemetry.ObserveSQLPool("app", db.GetDB()); err != nil {
+		log.Printf("WARNING: telemetry: db pool metrics: %v", err)
 	}
 
 	startPprofServer()
@@ -139,6 +156,13 @@ func main() {
 	}
 
 	stopAuditLogger(auditLogger)
+
+	// Last: flushes spans the audit drain and shutdown path just produced.
+	flushCtx, flushCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := shutdownTelemetry(flushCtx); err != nil {
+		log.Printf("telemetry: shutdown: %v", err)
+	}
+	flushCancel()
 
 	log.Println("Server stopped gracefully")
 }

@@ -7,6 +7,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/selectDb/toolkit/telemetry"
+
 	"backend/internal/middlewares"
 
 	"backend/internal/api/gen"
@@ -102,5 +104,8 @@ func withPrincipalResolver(next http.Handler) http.Handler {
 func Wrap(mux *http.ServeMux) http.Handler {
 	handler := middlewares.RequestLogger(mux)
 	handler = middlewares.SecureHeaders(handler)
+	// Outermost, so a span covers the middleware chain and not just the handler,
+	// and so an inbound traceparent is adopted before anything else runs.
+	handler = telemetry.HTTPMiddleware("select-backend", handler)
 	return handler
 }
