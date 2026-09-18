@@ -49,14 +49,5 @@ func RolesInWorkspace(t *testing.T, accessToken, workspaceID string) map[string]
 	t.Helper()
 	_, claims, err := auth.ValidateJWT(accessToken)
 	require.NoError(t, err)
-	out := map[string]string{}
-	for _, ws := range claims.Workspaces {
-		if ws.ID != workspaceID {
-			continue
-		}
-		for _, r := range ws.Roles {
-			out[r.ID] = r.Name
-		}
-	}
-	return out
+	return claims.RolesIn(workspaceID)
 }

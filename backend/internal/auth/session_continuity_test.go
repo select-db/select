@@ -14,6 +14,30 @@ import (
 // middleware runs, so "still signed in" means the refresh actually succeeds,
 // not that a row happens to be present.
 
+// newMemberDevice adds a member to the fixture's workspace and signs them in on
+// one device.
+func newMemberDevice(t *testing.T, f e2e.Fixture, deviceID string) (string, *e2e.Device) {
+	t.Helper()
+	memberID := uuid.NewString()
+	e2e.SeedUser(t, f.Conn, memberID)
+	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
+	return memberID, e2e.SignIn(t, memberID, deviceID)
+}
+
+// grantRole gives the member the fixture's role through the real sync endpoint,
+// and returns the commit's object id so a later test can take it back.
+func grantRole(t *testing.T, f e2e.Fixture, memberID string) string {
+	t.Helper()
+	utrID := uuid.NewString()
+	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "user_to_role", utrID, map[string]any{
+		"id":           utrID,
+		"user_id":      memberID,
+		"role_id":      f.Actor.RoleID,
+		"workspace_id": f.Actor.WorkspaceID,
+	})
+	return utrID
+}
+
 // A person signed in on a laptop and a desktop holds one refresh token per
 // device, and neither device's rotation may take the other's away.
 func TestTwoDevices_BothStaySignedIn(t *testing.T) {
@@ -55,23 +79,14 @@ func TestRefreshToken_IsBoundToItsDevice(t *testing.T) {
 func TestRoleGrant_ReachesMemberWithoutSigningThemOut(t *testing.T) {
 	f := e2e.Setup(t)
 
-	memberID := uuid.NewString()
-	e2e.SeedUser(t, f.Conn, memberID)
-	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
-	member := e2e.SignIn(t, memberID, "laptop")
+	memberID, member := newMemberDevice(t, f, "laptop")
 
 	before, err := member.Refresh(t)
 	require.NoError(t, err)
 	require.NotContains(t, e2e.RolesInWorkspace(t, before.AccessToken, f.Actor.WorkspaceID), f.Actor.RoleID,
 		"the member starts without the role")
 
-	utrID := uuid.NewString()
-	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "user_to_role", utrID, map[string]any{
-		"id":           utrID,
-		"user_id":      memberID,
-		"role_id":      f.Actor.RoleID,
-		"workspace_id": f.Actor.WorkspaceID,
-	})
+	grantRole(t, f, memberID)
 
 	after, err := member.Refresh(t)
 	require.NoError(t, err, "granting a role signed the member out")
@@ -83,17 +98,8 @@ func TestRoleGrant_ReachesMemberWithoutSigningThemOut(t *testing.T) {
 func TestRoleRemoval_ReachesMemberWithoutSigningThemOut(t *testing.T) {
 	f := e2e.Setup(t)
 
-	memberID := uuid.NewString()
-	e2e.SeedUser(t, f.Conn, memberID)
-	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
-	utrID := uuid.NewString()
-	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "user_to_role", utrID, map[string]any{
-		"id":           utrID,
-		"user_id":      memberID,
-		"role_id":      f.Actor.RoleID,
-		"workspace_id": f.Actor.WorkspaceID,
-	})
-	member := e2e.SignIn(t, memberID, "laptop")
+	memberID, member := newMemberDevice(t, f, "laptop")
+	utrID := grantRole(t, f, memberID)
 
 	before, err := member.Refresh(t)
 	require.NoError(t, err)
@@ -111,15 +117,51 @@ func TestRoleRemoval_ReachesMemberWithoutSigningThemOut(t *testing.T) {
 		"the removed role is still in the member's next token")
 }
 
+// A group's role set changes every current member's standing at once, so this is
+// the widest a single commit reaches. None of them may lose their session for it.
+func TestGroupRoleGrant_ReachesEveryMemberWithoutSigningThemOut(t *testing.T) {
+	f := e2e.Setup(t)
+
+	firstID, first := newMemberDevice(t, f, "laptop")
+	secondID, second := newMemberDevice(t, f, "desktop")
+
+	groupID := uuid.NewString()
+	_, err := f.Conn.Exec(
+		`INSERT INTO app."group" (id, workspace_id, name) VALUES ($1::uuid,$2::uuid,$3)`,
+		groupID, f.Actor.WorkspaceID, "Engineering")
+	require.NoError(t, err)
+	for _, memberID := range []string{firstID, secondID} {
+		utgID := uuid.NewString()
+		e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "user_to_group", utgID, map[string]any{
+			"id":           utgID,
+			"user_id":      memberID,
+			"group_id":     groupID,
+			"workspace_id": f.Actor.WorkspaceID,
+		})
+	}
+
+	gtrID := uuid.NewString()
+	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "group_to_role", gtrID, map[string]any{
+		"id":           gtrID,
+		"group_id":     groupID,
+		"role_id":      f.Actor.RoleID,
+		"workspace_id": f.Actor.WorkspaceID,
+	})
+
+	for name, device := range map[string]*e2e.Device{"first": first, "second": second} {
+		tokens, err := device.Refresh(t)
+		require.NoErrorf(t, err, "giving the group a role signed the %s member out", name)
+		require.Containsf(t, e2e.RolesInWorkspace(t, tokens.AccessToken, f.Actor.WorkspaceID), f.Actor.RoleID,
+			"the group's role did not reach the %s member's next token", name)
+	}
+}
+
 // A permission change alters what a role may do rather than who holds it, so it
 // touches no token at all. It must not touch anyone's session either.
 func TestPermissionChange_DoesNotSignMembersOut(t *testing.T) {
 	f := e2e.Setup(t)
 
-	memberID := uuid.NewString()
-	e2e.SeedUser(t, f.Conn, memberID)
-	e2e.SeedMembership(t, f.Conn, f.Actor.WorkspaceID, memberID)
-	member := e2e.SignIn(t, memberID, "laptop")
+	_, member := newMemberDevice(t, f, "laptop")
 
 	permID := uuid.NewString()
 	e2e.SyncCommit(t, f.H, f.Actor, "INSERT", "permission", permID, map[string]any{

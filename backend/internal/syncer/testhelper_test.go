@@ -96,7 +96,7 @@ func seedWorkspace(t *testing.T, conn *sql.DB, id, name, ownerID string) {
 	require.NoError(t, err)
 }
 
-func seedMembership(t *testing.T, conn *sql.DB, userID, workspaceID string) {
+func seedMembership(t *testing.T, conn *sql.DB, workspaceID, userID string) {
 	t.Helper()
 	_, err := conn.Exec(
 		`INSERT INTO app.workspace_to_user (id, user_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid)`,

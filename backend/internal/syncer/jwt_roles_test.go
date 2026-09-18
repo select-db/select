@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,18 +19,31 @@ import (
 	"github.com/google/uuid"
 )
 
-// localSigner points auth.CreateJWT at an in-process RSA key so the proxified
-// token can actually be issued and re-parsed inside the test.
+// localSigner points auth.CreateJWT at an in-process RSA key. Done once per
+// process: auth caches its signer behind a sync.Once, so a second key would be
+// generated and then ignored.
+var signerOnce sync.Once
+
 func localSigner(t *testing.T) {
+	t.Helper()
+	signerOnce.Do(func() { generateLocalSigner(t) })
+}
+
+func generateLocalSigner(t *testing.T) {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	der := x509.MarshalPKCS1PrivateKey(priv)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
-	path := filepath.Join(t.TempDir(), "jwt.pem")
+	// The key and the env outlive the test that generated them, so neither
+	// t.TempDir nor t.Setenv will do: the first would be swept while later tests
+	// still need the path, the second restored while they still need the value.
+	dir, err := os.MkdirTemp("", "jwt-signer-*")
+	require.NoError(t, err)
+	path := filepath.Join(dir, "jwt.pem")
 	require.NoError(t, os.WriteFile(path, pemBytes, 0o600))
-	t.Setenv("SELECTDB_KEK", "dev") // localMode -> in-process signer
-	t.Setenv("PRIVATE_KEY_PATH", path)
+	require.NoError(t, os.Setenv("SELECTDB_KEK", "dev")) // localMode -> in-process signer
+	require.NoError(t, os.Setenv("PRIVATE_KEY_PATH", path))
 }
 
 func seedUserToRole(t *testing.T, conn *sql.DB, id, userID, roleID, workspaceID string) {
@@ -59,20 +73,6 @@ func seedGroupToRole(t *testing.T, conn *sql.DB, id, groupID, roleID, workspaceI
 	require.NoError(t, err)
 }
 
-// workspaceRoleIDs pulls the role ID set the token grants for one workspace.
-func workspaceRoleIDs(claims *auth.CustomClaims, workspaceID string) map[string]string {
-	out := map[string]string{}
-	for _, ws := range claims.Workspaces {
-		if ws.ID != workspaceID {
-			continue
-		}
-		for _, r := range ws.Roles {
-			out[r.ID] = r.Name
-		}
-	}
-	return out
-}
-
 // TestCreateJWT_UnionsDirectAndGroupRoles is the proxified-path analogue of the
 // client-side TestGroupRoleFlow_AppliesToLocalPermissions: a proxified backend
 // derives a user's authority from the JWT, so the token must embed BOTH
@@ -97,11 +97,7 @@ func TestCreateJWT_UnionsDirectAndGroupRoles(t *testing.T) {
 	seedGroup(t, conn, groupID, wsID, "engineering")
 
 	// membership so the workspace appears in the token
-	_, err := conn.Exec(
-		`INSERT INTO app.workspace_to_user (id, user_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid)`,
-		newID(), userID, wsID,
-	)
-	require.NoError(t, err)
+	seedMembership(t, conn, wsID, userID)
 
 	seedUserToRole(t, conn, newID(), userID, directRoleID, wsID)
 	seedUserToGroup(t, conn, newID(), userID, groupID, wsID)
@@ -113,7 +109,7 @@ func TestCreateJWT_UnionsDirectAndGroupRoles(t *testing.T) {
 	_, claims, err := auth.ValidateJWT(tok)
 	require.NoError(t, err)
 
-	got := workspaceRoleIDs(claims, wsID)
+	got := claims.RolesIn(wsID)
 	require.Contains(t, got, directRoleID, "direct role must be in the token")
 	require.Contains(t, got, groupRoleID, "group-granted role must be in the token")
 	require.Equal(t, "direct-role", got[directRoleID])
@@ -138,11 +134,7 @@ func TestCreateJWT_DedupesRoleGrantedBothWays(t *testing.T) {
 	seedRole(t, conn, roleID, wsID, "shared-role")
 	seedGroup(t, conn, groupID, wsID, "engineering")
 
-	_, err := conn.Exec(
-		`INSERT INTO app.workspace_to_user (id, user_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid)`,
-		newID(), userID, wsID,
-	)
-	require.NoError(t, err)
+	seedMembership(t, conn, wsID, userID)
 
 	// same role, both paths
 	seedUserToRole(t, conn, newID(), userID, roleID, wsID)
@@ -188,17 +180,13 @@ func TestCreateJWT_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
 	seedRole(t, conn, groupRoleID, wsID, "group-role")
 	seedGroup(t, conn, groupID, wsID, "engineering")
 
-	_, err := conn.Exec(
-		`INSERT INTO app.workspace_to_user (id, user_id, workspace_id) VALUES ($1::uuid,$2::uuid,$3::uuid)`,
-		newID(), userID, wsID,
-	)
-	require.NoError(t, err)
+	seedMembership(t, conn, wsID, userID)
 
 	seedUserToGroup(t, conn, newID(), userID, groupID, wsID)
 	seedGroupToRole(t, conn, newID(), groupID, groupRoleID, wsID)
 
 	// soft-delete the group
-	_, err = conn.Exec(`UPDATE app."group" SET deleted_at = now() WHERE id = $1::uuid`, groupID)
+	_, err := conn.Exec(`UPDATE app."group" SET deleted_at = now() WHERE id = $1::uuid`, groupID)
 	require.NoError(t, err)
 
 	tok, err := auth.CreateJWT(context.Background(), uuid.MustParse(userID))
@@ -207,6 +195,6 @@ func TestCreateJWT_SoftDeletedGroupGrantsNoRoles(t *testing.T) {
 	_, claims, err := auth.ValidateJWT(tok)
 	require.NoError(t, err)
 
-	got := workspaceRoleIDs(claims, wsID)
+	got := claims.RolesIn(wsID)
 	require.NotContains(t, got, groupRoleID, "soft-deleted group must not grant roles in the token")
 }

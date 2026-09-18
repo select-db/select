@@ -23,16 +23,16 @@ import (
 //
 // This is auth logic the schema can't express, so it stays hand-written and
 // composes with the generated pure-upsert Apply, like needsTokenRefresh.
-// Best-effort: a lookup or a single side effect failing must not fail the sync.
+// Best-effort: a lookup failing must not fail the sync.
 func applyCommitSideEffects(ctx context.Context, c types.Commit) {
+	if c.TableName != "permission" {
+		return
+	}
+	// The row changed the role's effective grants, so drop its cached compiled
+	// permissions and let the next request reload them from the DB.
 	payload, _ := c.Payload.(map[string]any)
-	switch c.TableName {
-	case "permission":
-		// A permission row changed the role's effective grants: drop its cached
-		// compiled permissions so the next request reloads them from the DB.
-		if rid, ok := affectedRoleID(ctx, c, payload); ok {
-			authz.Invalidate(rid)
-		}
+	if roleID, ok := affectedRoleID(ctx, c, payload); ok {
+		authz.Invalidate(roleID)
 	}
 }
 
@@ -41,28 +41,26 @@ func applyCommitSideEffects(ctx context.Context, c types.Commit) {
 // string, which is the authz permission-cache key.
 func affectedRoleID(ctx context.Context, c types.Commit, payload map[string]any) (string, bool) {
 	if c.Operation != "delete" {
-		rid := utils.MapGetString(payload, "role_id")
-		return rid, rid != ""
+		roleID := utils.MapGetString(payload, "role_id")
+		return roleID, roleID != ""
 	}
-	id, ws, ok := commitRowKey(c, payload)
-	if !ok {
-		return "", false
-	}
-	row, err := db.Queries.GetPermissionByID(ctx, generated.GetPermissionByIDParams{ID: id, WorkspaceID: ws})
-	if err != nil {
-		return "", false
-	}
-	return row.RoleID.String(), true
-}
-
-// commitRowKey parses the (id, workspace_id) that identify the commit's row,
-// taking id from the payload with a fallback to ObjectID (matching ApplyDelete).
-func commitRowKey(c types.Commit, payload map[string]any) (id, ws uuid.UUID, ok bool) {
+	// The payload of a delete carries only id + workspace_id, and id falls back
+	// to ObjectID the way ApplyDelete reads it.
 	rawID := utils.MapGetString(payload, "id")
 	if rawID == "" {
 		rawID = c.ObjectID
 	}
-	id, err1 := uuid.Parse(rawID)
-	ws, err2 := uuid.Parse(c.WorkspaceID)
-	return id, ws, err1 == nil && err2 == nil
+	id, err := uuid.Parse(rawID)
+	if err != nil {
+		return "", false
+	}
+	workspaceID, err := uuid.Parse(c.WorkspaceID)
+	if err != nil {
+		return "", false
+	}
+	row, err := db.Queries.GetPermissionByID(ctx, generated.GetPermissionByIDParams{ID: id, WorkspaceID: workspaceID})
+	if err != nil {
+		return "", false
+	}
+	return row.RoleID.String(), true
 }

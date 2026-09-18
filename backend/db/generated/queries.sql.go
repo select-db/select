@@ -1038,35 +1038,6 @@ func (q *Queries) GetUserGroupRolesWithNames(ctx context.Context, userID uuid.UU
 	return items, nil
 }
 
-const getUserIDsByGroupID = `-- name: GetUserIDsByGroupID :many
-SELECT user_id
-FROM app.user_to_group
-WHERE group_id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetUserIDsByGroupID(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getUserIDsByGroupID, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_id uuid.UUID
-		if err := rows.Scan(&user_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getUserNameByID = `-- name: GetUserNameByID :one
 SELECT name, email FROM app."user" WHERE id = $1
 `

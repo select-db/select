@@ -99,14 +99,28 @@ type WorkspaceClaim struct {
 	Roles   []RoleRef `json:"roles,omitempty"`
 }
 
-// Roles/ownership are cached at issuance (a role change revokes the refresh
-// token, forcing a fresh one). Membership itself is re-derived from the DB per
-// request, not trusted from the token.
+// Roles/ownership are read from the database at issuance, so they are at most
+// accessTokenTTL stale. Membership itself is re-derived per request, not
+// trusted from the token.
 type CustomClaims struct {
 	UserID     string           `json:"sub"`
 	Name       string           `json:"name,omitempty"`
 	Workspaces []WorkspaceClaim `json:"workspaces,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// RolesIn returns the roles the token grants in one workspace, keyed by role id.
+func (c *CustomClaims) RolesIn(workspaceID string) map[string]string {
+	roles := map[string]string{}
+	for _, ws := range c.Workspaces {
+		if ws.ID != workspaceID {
+			continue
+		}
+		for _, r := range ws.Roles {
+			roles[r.ID] = r.Name
+		}
+	}
+	return roles
 }
 
 // CreateJWT issues a signed access token embedding per-workspace roles/ownership.
@@ -197,9 +211,9 @@ func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 // leave the user with no refresh tokens. ctx is used for DB calls so creation
 // can be cancelled if the client disconnects.
 //
-// The reap is scoped to expired rows. A token is hashed with the device id that
-// asked for it, so the user's other devices hold rows of their own, and
-// clearing those here signed every other device out on each rotation.
+// The reap is scoped to expired rows: a token is hashed with the device id that
+// asked for it, so each of the user's devices holds a row of its own and a
+// wider delete takes the other devices' sessions with it.
 func CreateRefreshToken(ctx context.Context, userID uuid.UUID, deviceID string, issuedIP string) (*string, error) {
 	plainToken := GenerateRandomString(64)
 	expiry := time.Now().Add(refreshTokenTTL)
