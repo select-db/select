@@ -10,6 +10,7 @@ from sqlglot.errors import ErrorLevel, ParseError, SqlglotError
 from sqlglot.optimizer.scope import traverse_scope
 
 from lint_rules.aggregation import analyze_aggregation_rules
+from lint_rules.file_level import analyze_file_rules
 from analysis.collect import collect_column_refs, collect_relations
 from lint_rules.enum_values import analyze_enum_values
 from lint_rules.functions import analyze_unknown_functions
@@ -173,6 +174,7 @@ def analyze(
                 result["diagnostics"].append(_drawable(item, sql))
 
     _add(arity_diags)
+    _add(analyze_file_rules(sql, sg_dialect))
 
     if not statements:
         return result
@@ -195,7 +197,7 @@ def analyze(
         result["column_refs"].extend(collect_column_refs(stmt))
 
         _add(analyze_null_rules(stmt))
-        _add(analyze_style_rules(stmt, sg_dialect, sql))
+        _add(analyze_style_rules(stmt, sg_dialect))
         _add(analyze_aggregation_rules(stmt, user_agg_names))
         _add(analyze_orderby_rules(stmt, sg_dialect))
 
