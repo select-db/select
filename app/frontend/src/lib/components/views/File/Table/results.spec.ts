@@ -63,6 +63,7 @@ test('columns are sized to the rows that arrived', async ({ page, signIn }) => {
 	await run(page, WIDTHS_QUERY);
 
 	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/5/, AFTER_QUERY);
+	await expect(queryResultTable.sized(page)).toBeVisible(AFTER_QUERY);
 
 	// Non-optional: a null box means the header never laid out, which is a
 	// different failure from one that laid out at the wrong width.
@@ -111,6 +112,7 @@ test('a pinned column holds its place through a scroll', async ({ page, signIn }
 	await open(page, signIn);
 	await run(page, WIDE_QUERY);
 	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/400/, AFTER_QUERY);
+	await expect(queryResultTable.sized(page)).toBeVisible(AFTER_QUERY);
 
 	await pin(page, 'aaa');
 
@@ -146,6 +148,7 @@ test('the rows follow the column being resized', async ({ page, signIn }) => {
 	await open(page, signIn);
 	await run(page, WIDE_QUERY);
 	await expect(testId(page, 'segmented.option', 'results')).toHaveText(/400/, AFTER_QUERY);
+	await expect(queryResultTable.sized(page)).toBeVisible(AFTER_QUERY);
 
 	// Pinned, so the resize moves a sticky offset as well as a column width.
 	await pin(page, 'aaa');

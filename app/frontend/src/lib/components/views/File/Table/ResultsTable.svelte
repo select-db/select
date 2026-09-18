@@ -969,7 +969,15 @@
 			visibleNonPinnedIndices.length +
 			(leftSpacerWidth > 0 ? 1 : 0) +
 			(rightSpacerWidth > 0 ? 1 : 0)}
-		<div class="table scrollable" use:observeViewport data-total-rows={totalRows}>
+		<!-- "pending" until a batch of rows arrives to measure: until then every
+		     column is the placeholder width, so anything reading column geometry
+		     has to wait for "measured". -->
+		<div
+			class="table scrollable"
+			use:observeViewport
+			data-total-rows={totalRows}
+			data-test-widths={columnState.widthsPending ? 'pending' : 'measured'}
+		>
 			<table border="1" cellpadding="5" cellspacing="0" style="width: {tableWidth}px;">
 				<colgroup>
 					{#each pinnedIndices as columnIndex (columnIndex)}
