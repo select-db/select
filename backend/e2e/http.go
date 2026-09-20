@@ -68,3 +68,15 @@ func SyncCommit(t *testing.T, h http.Handler, actor Actor, operation, table, obj
 	require.Equalf(t, http.StatusOK, rec.Code, "sync %s %s failed: %s", operation, table, rec.Body.String())
 	return rec
 }
+
+// CreateAPIKey posts the create-key request as the given token. The route is
+// gated on workspace/api-keys.manage, so the status is what tests read to ask
+// whether that token still holds it.
+func CreateAPIKey(t *testing.T, h http.Handler, token, workspaceID, roleID, name string) *httptest.ResponseRecorder {
+	t.Helper()
+	return Do(t, h, http.MethodPost, "/apikeys", token, map[string]any{
+		"workspace_id": workspaceID,
+		"name":         name,
+		"role_ids":     []string{roleID},
+	})
+}

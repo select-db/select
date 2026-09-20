@@ -31,13 +31,32 @@ tasks:
       # bind a service that is not, and its methods would go missing here.
       - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}} -f "-tags server"
 
-  generate:icons:
-    summary: Generates the macOS `.icns` and Windows `.ico` from build/appicon.png
-    status:
-      - test -f build/darwin/icons.icns
-      - test -f build/windows/icon.ico
+  icons:
+    summary: Re-derives the icon variants from build/icon-default.png
+    # Only the browser, not the app: these are reframings of a drawing, not
+    # pictures of anything running.
+    deps:
+      - install:frontend
+    dir: frontend
     cmds:
-      - wails3 generate icons -input build/appicon.png -macfilename build/darwin/icons.icns -windowsfilename build/windows/icon.ico
+      - node ../../brand/icons.mjs
+
+  generate:icons:
+    summary: Generates the macOS `.icns` and the Windows `.ico`, from one source each
+    # Newer than its own source, not merely present: an icon regenerated from a
+    # file that has since changed is the state this task exists to avoid.
+    status:
+      - test build/darwin/icons.icns -nt build/appicon.mac.png
+      - test build/windows/icon.ico -nt build/appicon.png
+    # macOS wants an 824px body centred on a 1024 canvas; Windows wants the
+    # artwork to fill it. One source for both is one of them wrong.
+    #
+    # The other filename is passed empty because omitting it does not: both
+    # flags carry a default, so a single run writes both outputs from whichever
+    # source it was given.
+    cmds:
+      - wails3 generate icons -input build/appicon.mac.png -macfilename build/darwin/icons.icns -windowsfilename=""
+      - wails3 generate icons -input build/appicon.png -windowsfilename build/windows/icon.ico -macfilename=""
 
   install:frontend:
     summary: Installs the frontend dependencies
