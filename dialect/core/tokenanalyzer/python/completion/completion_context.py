@@ -4,7 +4,9 @@ Scans tokens backward from caret to determine what to complete.
 """
 from __future__ import annotations
 
-from sqlglot.tokens import Tokenizer, TokenType
+from sqlglot.tokens import TokenType
+
+from analysis.schema import tokenize
 
 # Must match Go constants
 TARGET_SCHEMA   = 1 << 0
@@ -27,9 +29,10 @@ def detect_completion_context(
     caret_line: int,
     caret_col: int,
     schema_names: list[str],
+    sg_dialect: str,
 ) -> dict:
     caret_offset = _line_col_to_offset(sql, caret_line, caret_col)
-    tokens = _tokenize_up_to(sql, caret_offset)
+    tokens = _tokenize_up_to(sql, caret_offset, sg_dialect)
 
     if _detect_setting_context(tokens, sql, caret_offset):
         return {
@@ -105,9 +108,8 @@ def _line_col_to_offset(sql: str, line: int, col: int) -> int:
     return len(sql)
 
 
-def _tokenize_up_to(sql: str, caret_offset: int) -> list:
-    all_tokens = list(Tokenizer().tokenize(sql))
-    return [t for t in all_tokens if t.start < caret_offset]
+def _tokenize_up_to(sql: str, caret_offset: int, sg_dialect: str) -> list:
+    return [t for t in tokenize(sql, sg_dialect) if t.start < caret_offset]
 
 
 # --- Qualified identifier parsing ---

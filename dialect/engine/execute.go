@@ -267,7 +267,7 @@ func effectiveMaxBytes(opts Options) int64 {
 }
 
 // checkPermissions parses sql and runs the action-level permission check
-// (select/insert/update/delete/ddl). The see check needs the driver's
+// (select/insert/update/delete, manage for the rest). The see check needs the driver's
 // rows.Columns() output to map result positions, so it runs later from
 // evaluateSeeForResult.
 func checkPermissions(conn Conn, inst DBInstance, sql string) ([]core.InspectStatement, error) {

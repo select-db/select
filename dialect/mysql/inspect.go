@@ -47,28 +47,25 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	parser.RemoveErrorListeners()
 	lexer.RemoveErrorListeners()
 
-	root := parser.Script()
-	if root == nil {
-		return nil
+	var queries []mysql.IQueryContext
+	if root := parser.Script(); root != nil {
+		queries = root.AllQuery()
 	}
-
-	queries := root.AllQuery()
 	if len(queries) == 0 {
-		return nil
+		return []core.InspectStatement{core.UnknownStatement()}
 	}
 
-	var results []core.InspectStatement
+	results := make([]core.InspectStatement, 0, len(queries))
 	for _, q := range queries {
 		if q == nil {
 			continue
 		}
 		simple := q.SimpleStatement()
 		if simple == nil {
+			// The grammar emits a trailing empty query for the ';' we append.
 			continue
 		}
-		if r := i.inspectStatement(simple); r != nil {
-			results = append(results, *r)
-		}
+		results = append(results, core.OrUnknown(i.inspectStatement(simple)))
 	}
 	return results
 }
@@ -240,6 +237,10 @@ func (i *Inspector) inspectQueryPrimary(
 	if prim == nil {
 		return nil
 	}
+	// TABLE t1 is SELECT * FROM t1, and it reaches none of the target-list path.
+	if explicit := prim.ExplicitTable(); explicit != nil {
+		return i.inspectTableShorthand(explicit.TableRef())
+	}
 	spec := prim.QuerySpecification()
 	if spec == nil {
 		return nil
@@ -282,6 +283,22 @@ func (i *Inspector) inspectQueryPrimary(
 		Fields:     fields,
 		Where:      where,
 		Subqueries: subqueries,
+	}
+}
+
+// inspectTableShorthand analyzes TABLE t1, which is SELECT * FROM t1.
+func (i *Inspector) inspectTableShorthand(ref mysql.ITableRefContext) *core.InspectStatement {
+	unknown := core.UnknownStatement()
+	schema, table := i.resolveTableRef(ref)
+	if table == "" {
+		return &unknown
+	}
+	if !core.TableExistsInMetadata(i.meta, schema, table, i.dialect) {
+		schema = ""
+	}
+	return &core.InspectStatement{
+		Operation: core.InspectOpSelect,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
 	}
 }
 
@@ -641,8 +658,33 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 				result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 			}
 		}
+		if as := ct.DuplicateAsQueryExpression(); as != nil {
+			result.Subqueries = i.sourceQuery(as.QueryExpressionOrParens())
+		}
+	}
+	if cv := stmt.CreateView(); cv != nil {
+		if vn := cv.ViewName(); vn != nil {
+			schema, view := i.resolveViewName(vn)
+			if view != "" {
+				result.Tables = []core.InspectTable{{Name: view, Schema: schema}}
+			}
+		}
+		if tail := cv.ViewTail(); tail != nil {
+			if vs := tail.ViewSelect(); vs != nil {
+				result.Subqueries = i.sourceQuery(vs.QueryExpressionOrParens())
+			}
+		}
 	}
 	return result
+}
+
+// sourceQuery is the query a CREATE TABLE ... AS or a CREATE VIEW is filled from, as its own
+// statement: creating it needs manage, reading it still needs select.
+func (i *Inspector) sourceQuery(source mysql.IQueryExpressionOrParensContext) []core.InspectStatement {
+	if source == nil {
+		return nil
+	}
+	return []core.InspectStatement{core.OrUnknown(i.inspectQueryExpressionOrParens(source))}
 }
 
 // ============================================
@@ -656,6 +698,14 @@ func (i *Inspector) resolveTableRef(tr mysql.ITableRefContext) (schema, table st
 		return "", ""
 	}
 	return splitQualifiedName(i.dialect, tr.GetText(), core.GetDefaultSchema(i.meta))
+}
+
+// resolveViewName mirrors resolveTableRef for ViewName nodes.
+func (i *Inspector) resolveViewName(vn mysql.IViewNameContext) (schema, view string) {
+	if vn == nil {
+		return "", ""
+	}
+	return splitQualifiedName(i.dialect, vn.GetText(), core.GetDefaultSchema(i.meta))
 }
 
 // resolveTableName mirrors resolveTableRef for TableName nodes (used by CREATE TABLE).

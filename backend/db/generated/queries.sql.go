@@ -227,6 +227,16 @@ func (q *Queries) DeleteDatasource(ctx context.Context, arg DeleteDatasourcePara
 	return err
 }
 
+const deleteExpiredUserRefreshTokens = `-- name: DeleteExpiredUserRefreshTokens :exec
+DELETE FROM auth.refresh_token
+WHERE user_id = $1 AND expires_at < now()
+`
+
+func (q *Queries) DeleteExpiredUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredUserRefreshTokens, userID)
+	return err
+}
+
 const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
 DELETE FROM auth.refresh_token
 WHERE hashed_token = $1
@@ -235,52 +245,6 @@ WHERE hashed_token = $1
 func (q *Queries) DeleteRefreshToken(ctx context.Context, hashedToken string) error {
 	_, err := q.db.ExecContext(ctx, deleteRefreshToken, hashedToken)
 	return err
-}
-
-const deleteUserRefreshTokens = `-- name: DeleteUserRefreshTokens :exec
-DELETE FROM auth.refresh_token
-WHERE user_id = $1
-`
-
-func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteUserRefreshTokens, userID)
-	return err
-}
-
-const deleteUserRefreshTokensExcept = `-- name: DeleteUserRefreshTokensExcept :exec
-DELETE FROM auth.refresh_token
-WHERE user_id = $1 AND hashed_token != $2
-`
-
-type DeleteUserRefreshTokensExceptParams struct {
-	UserID      uuid.UUID
-	HashedToken string
-}
-
-func (q *Queries) DeleteUserRefreshTokensExcept(ctx context.Context, arg DeleteUserRefreshTokensExceptParams) error {
-	_, err := q.db.ExecContext(ctx, deleteUserRefreshTokensExcept, arg.UserID, arg.HashedToken)
-	return err
-}
-
-const existsWorkspaceToUserByUserAndWorkspace = `-- name: ExistsWorkspaceToUserByUserAndWorkspace :one
-SELECT EXISTS (
-    SELECT 1 
-    FROM app.workspace_to_user 
-    WHERE 
-        user_id = $1 AND workspace_id = $2
-)
-`
-
-type ExistsWorkspaceToUserByUserAndWorkspaceParams struct {
-	UserID      uuid.UUID
-	WorkspaceID uuid.UUID
-}
-
-func (q *Queries) ExistsWorkspaceToUserByUserAndWorkspace(ctx context.Context, arg ExistsWorkspaceToUserByUserAndWorkspaceParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, existsWorkspaceToUserByUserAndWorkspace, arg.UserID, arg.WorkspaceID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const expireAPIKeyAt = `-- name: ExpireAPIKeyAt :exec
@@ -648,34 +612,6 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 	return items, nil
 }
 
-const getOwnedWorkspaceIDsByUserID = `-- name: GetOwnedWorkspaceIDsByUserID :many
-SELECT id FROM app.workspace
-WHERE owner_id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetOwnedWorkspaceIDsByUserID(ctx context.Context, ownerID db_types.JSONNullUUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getOwnedWorkspaceIDsByUserID, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getPermissionByID = `-- name: GetPermissionByID :one
 SELECT id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at, deleted_at
 FROM app.permission
@@ -841,34 +777,6 @@ func (q *Queries) GetRoleByID(ctx context.Context, arg GetRoleByIDParams) (AppRo
 	return i, err
 }
 
-const getRoleIDsByUserID = `-- name: GetRoleIDsByUserID :many
-SELECT role_id FROM app.user_to_role
-WHERE user_id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetRoleIDsByUserID(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getRoleIDsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var role_id uuid.UUID
-		if err := rows.Scan(&role_id); err != nil {
-			return nil, err
-		}
-		items = append(items, role_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getRolesForUserSince = `-- name: GetRolesForUserSince :many
 SELECT r.id, r.workspace_id, r.name, r.updated_at, r.deleted_at
 FROM app.role r
@@ -897,6 +805,84 @@ func (q *Queries) GetRolesForUserSince(ctx context.Context, arg GetRolesForUserS
 			&i.UpdatedAt,
 			&i.DeletedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStandingByUserID = `-- name: GetStandingByUserID :many
+SELECT
+  wtu.workspace_id,
+  COALESCE(w.owner_id = $1::uuid, false)::boolean AS is_owner,
+  COALESCE(g.roles, '[]'::json)::json AS roles
+FROM app.workspace_to_user wtu
+  JOIN app.workspace w ON w.id = wtu.workspace_id AND w.deleted_at IS NULL
+  LEFT JOIN (
+    SELECT
+      grant_rows.workspace_id,
+      json_agg(json_build_object('id', grant_rows.role_id, 'name', grant_rows.role_name)) AS roles
+    FROM (
+      SELECT r.id AS role_id, r.name AS role_name, r.workspace_id
+      FROM app.user_to_role utr
+        JOIN app.role r
+          ON r.id = utr.role_id AND r.workspace_id = utr.workspace_id AND r.deleted_at IS NULL
+      WHERE utr.user_id = $1 AND utr.deleted_at IS NULL
+      UNION
+      -- The group's own soft-delete must be honored: deletion is a soft delete
+      -- and the FK ON DELETE CASCADE only fires on hard deletes, so a deleted
+      -- group would otherwise keep granting its roles through live membership.
+      SELECT r.id, r.name, r.workspace_id
+      FROM app.user_to_group ug
+        JOIN app."group" gp ON gp.id = ug.group_id AND gp.deleted_at IS NULL
+        JOIN app.group_to_role gr ON gr.group_id = ug.group_id AND gr.deleted_at IS NULL
+        JOIN app.role r
+          ON r.id = gr.role_id AND r.workspace_id = gr.workspace_id AND r.deleted_at IS NULL
+      WHERE ug.user_id = $1 AND ug.deleted_at IS NULL
+    ) grant_rows
+    GROUP BY grant_rows.workspace_id
+  ) g ON g.workspace_id = wtu.workspace_id
+WHERE wtu.user_id = $1 AND wtu.deleted_at IS NULL
+`
+
+type GetStandingByUserIDRow struct {
+	WorkspaceID uuid.UUID
+	IsOwner     bool
+	Roles       json.RawMessage
+}
+
+// The caller's standing: one row per workspace they belong to, whether they own
+// it, and the roles they hold in it.
+//
+// Membership is the spine, so the grants come in on a LEFT JOIN: a workspace
+// the caller holds no role in still has to appear. The roles arrive aggregated
+// rather than one row per grant, which keeps it one row per workspace and lets
+// COALESCE type the column honestly (sqlc reads a LEFT JOIN's plain columns as
+// NOT NULL and the role-less row then fails to scan).
+//
+// Driven from the caller's own grants, which are indexed on (user_id,
+// workspace_id), rather than from app.role, which is indexed on neither and
+// would make every authenticated request scan every tenant's roles. The UNION
+// dedups a role held both directly and through a group, and each branch matches
+// the grant row's workspace against the role's own so a grant cannot reach
+// across tenants.
+func (q *Queries) GetStandingByUserID(ctx context.Context, userID uuid.UUID) ([]GetStandingByUserIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getStandingByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetStandingByUserIDRow
+	for rows.Next() {
+		var i GetStandingByUserIDRow
+		if err := rows.Scan(&i.WorkspaceID, &i.IsOwner, &i.Roles); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1009,79 +995,6 @@ func (q *Queries) GetUserByProviderIdentity(ctx context.Context, arg GetUserByPr
 	return i, err
 }
 
-const getUserGroupRolesWithNames = `-- name: GetUserGroupRolesWithNames :many
-SELECT DISTINCT r.id, r.name, r.workspace_id
-FROM app.role r
-JOIN app.group_to_role gr ON gr.role_id = r.id AND gr.deleted_at IS NULL
-JOIN app.user_to_group ug ON ug.group_id = gr.group_id AND ug.deleted_at IS NULL
-JOIN app."group" g ON g.id = gr.group_id AND g.deleted_at IS NULL
-WHERE ug.user_id = $1 AND r.deleted_at IS NULL
-`
-
-type GetUserGroupRolesWithNamesRow struct {
-	ID          uuid.UUID
-	Name        string
-	WorkspaceID uuid.UUID
-}
-
-// Roles a user holds indirectly, via group membership: user_to_group -> group_to_role -> role.
-// Unioned with GetUserRolesWithNames (direct roles) to form the effective role set baked
-// into the access token.
-// The group's own soft-delete must be honored: deletion is a soft delete and the
-// FK ON DELETE CASCADE only fires on hard deletes, so a deleted group would
-// otherwise keep granting its roles through still-live membership rows.
-func (q *Queries) GetUserGroupRolesWithNames(ctx context.Context, userID uuid.UUID) ([]GetUserGroupRolesWithNamesRow, error) {
-	rows, err := q.db.QueryContext(ctx, getUserGroupRolesWithNames, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetUserGroupRolesWithNamesRow
-	for rows.Next() {
-		var i GetUserGroupRolesWithNamesRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.WorkspaceID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getUserIDsByGroupID = `-- name: GetUserIDsByGroupID :many
-SELECT user_id
-FROM app.user_to_group
-WHERE group_id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetUserIDsByGroupID(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getUserIDsByGroupID, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_id uuid.UUID
-		if err := rows.Scan(&user_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getUserNameByID = `-- name: GetUserNameByID :one
 SELECT name, email FROM app."user" WHERE id = $1
 `
@@ -1096,42 +1009,6 @@ func (q *Queries) GetUserNameByID(ctx context.Context, id uuid.UUID) (GetUserNam
 	var i GetUserNameByIDRow
 	err := row.Scan(&i.Name, &i.Email)
 	return i, err
-}
-
-const getUserRolesWithNames = `-- name: GetUserRolesWithNames :many
-SELECT r.id, r.name, r.workspace_id
-FROM app.role r
-JOIN app.user_to_role utr ON utr.role_id = r.id
-WHERE utr.user_id = $1 AND utr.deleted_at IS NULL AND r.deleted_at IS NULL
-`
-
-type GetUserRolesWithNamesRow struct {
-	ID          uuid.UUID
-	Name        string
-	WorkspaceID uuid.UUID
-}
-
-func (q *Queries) GetUserRolesWithNames(ctx context.Context, userID uuid.UUID) ([]GetUserRolesWithNamesRow, error) {
-	rows, err := q.db.QueryContext(ctx, getUserRolesWithNames, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetUserRolesWithNamesRow
-	for rows.Next() {
-		var i GetUserRolesWithNamesRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.WorkspaceID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getUserToGroupByID = `-- name: GetUserToGroupByID :one
@@ -1338,41 +1215,6 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id uuid.UUID) (GetWorksp
 		&i.DeletedAt,
 	)
 	return i, err
-}
-
-const getWorkspaceIDsByUserID = `-- name: GetWorkspaceIDsByUserID :many
-SELECT
-  wtu.workspace_id
-FROM
-  app.workspace_to_user wtu
-  JOIN app.workspace w ON w.id = wtu.workspace_id
-WHERE
-  wtu.user_id = $1
-  AND wtu.deleted_at IS NULL
-  AND w.deleted_at IS NULL
-`
-
-func (q *Queries) GetWorkspaceIDsByUserID(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, getWorkspaceIDsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var workspace_id uuid.UUID
-		if err := rows.Scan(&workspace_id); err != nil {
-			return nil, err
-		}
-		items = append(items, workspace_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getWorkspaceOwnerID = `-- name: GetWorkspaceOwnerID :one
@@ -1599,17 +1441,6 @@ func (q *Queries) InsertUserPlaceholder(ctx context.Context, arg InsertUserPlace
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const insertWorkspaceIfNotExists = `-- name: InsertWorkspaceIfNotExists :exec
-INSERT INTO app.workspace (id, name, updated_at) 
-VALUES ($1, 'Workspace', now())
-ON CONFLICT (id) DO NOTHING
-`
-
-func (q *Queries) InsertWorkspaceIfNotExists(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, insertWorkspaceIfNotExists, id)
-	return err
 }
 
 const insertWorkspaceToUser = `-- name: InsertWorkspaceToUser :exec

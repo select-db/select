@@ -6,12 +6,11 @@ import (
 	"time"
 )
 
-const retentionSweepInterval = 24 * time.Hour
+const dailyTaskInterval = 24 * time.Hour
 
-// partmanManaged reports whether pg_partman is installed — i.e. partitions and
-// retention are managed in-DB. When false (on-prem without partman/cron), the
-// in-app retention sweeper takes over. On error we assume managed, so an
-// unrelated hiccup never triggers deletes.
+// partmanManaged reports whether pg_partman is installed, i.e. partitions and
+// retention are managed in-DB. When false, the in-app retention sweeper takes
+// over. On error we assume managed, so an unrelated hiccup never triggers deletes.
 func (l *Logger) partmanManaged() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
@@ -24,26 +23,27 @@ func (l *Logger) partmanManaged() bool {
 	return ok
 }
 
-// retentionLoop deletes events past the window — once at startup, then daily.
-// Started only when pg_partman is absent (see Start); assumes on-prem scale, so
-// it relies on a plain bounded DELETE rather than partition drops.
-func (l *Logger) retentionLoop() {
+// runDaily runs task once at startup, then daily until Stop.
+func (l *Logger) runDaily(task func()) {
 	defer l.wg.Done()
 
-	ticker := time.NewTicker(retentionSweepInterval)
+	ticker := time.NewTicker(dailyTaskInterval)
 	defer ticker.Stop()
 
-	l.retentionSweep()
+	task()
 	for {
 		select {
 		case <-l.stop:
 			return
 		case <-ticker.C:
-			l.retentionSweep()
+			task()
 		}
 	}
 }
 
+// retentionSweep deletes events past the window. Runs only when pg_partman is
+// absent; assumes on-prem scale, so a plain bounded DELETE rather than
+// partition drops.
 func (l *Logger) retentionSweep() {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()

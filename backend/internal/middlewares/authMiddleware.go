@@ -4,6 +4,7 @@ import (
 	"backend/db"
 	"backend/db/generated"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -44,12 +45,12 @@ func MustGetUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // GetWorkspaces returns the caller's per-workspace standing, the source every
 // other workspace getter derives from.
-func GetWorkspaces(r *http.Request) ([]auth.WorkspaceClaim, bool) {
-	ws, ok := r.Context().Value(workspacesKey).([]auth.WorkspaceClaim)
+func GetWorkspaces(r *http.Request) ([]auth.WorkspaceStanding, bool) {
+	ws, ok := r.Context().Value(workspacesKey).([]auth.WorkspaceStanding)
 	return ws, ok
 }
 
-func workspaceIDsOf(ws []auth.WorkspaceClaim) []string {
+func workspaceIDsOf(ws []auth.WorkspaceStanding) []string {
 	ids := make([]string, 0, len(ws))
 	for _, w := range ws {
 		ids = append(ids, w.ID)
@@ -93,16 +94,16 @@ type Principal struct {
 	ID         string
 	Name       string
 	IsAPIKey   bool
-	Workspaces []auth.WorkspaceClaim
+	Workspaces []auth.WorkspaceStanding
 }
 
-func (p Principal) Workspace(workspaceID string) (auth.WorkspaceClaim, bool) {
+func (p Principal) Workspace(workspaceID string) (auth.WorkspaceStanding, bool) {
 	for _, w := range p.Workspaces {
 		if w.ID == workspaceID {
 			return w, true
 		}
 	}
-	return auth.WorkspaceClaim{}, false
+	return auth.WorkspaceStanding{}, false
 }
 
 // GetPrincipal returns the caller's identity in one read.
@@ -110,7 +111,7 @@ func GetPrincipal(r *http.Request) Principal {
 	ctx := r.Context()
 	id, _ := ctx.Value(userIDKey).(string)
 	name, _ := ctx.Value(principalNameKey).(string)
-	ws, _ := ctx.Value(workspacesKey).([]auth.WorkspaceClaim)
+	ws, _ := ctx.Value(workspacesKey).([]auth.WorkspaceStanding)
 	return Principal{
 		ID:         id,
 		Name:       name,
@@ -128,10 +129,10 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// buildAuthContext attaches identity and per-workspace standing. Membership is
-// re-derived from the DB for tenant isolation (not trusted from the token);
-// roles/ownership for each member workspace come from the token claim.
-func buildAuthContext(ctx context.Context, userID, name string, claimWorkspaces []auth.WorkspaceClaim) (context.Context, error) {
+// buildAuthContext attaches identity and per-workspace standing, the latter
+// re-derived from the DB on every request, in one query. See
+// auth.WorkspaceStanding.
+func buildAuthContext(ctx context.Context, userID, name string) (context.Context, error) {
 	ctx = context.WithValue(ctx, userIDKey, userID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
 
@@ -142,20 +143,22 @@ func buildAuthContext(ctx context.Context, userID, name string, claimWorkspaces 
 	if err != nil {
 		return ctx, fmt.Errorf("invalid user id: %w", err)
 	}
-	ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, uid)
+	rows, err := db.Queries.GetStandingByUserID(ctx, uid)
 	if err != nil {
-		return ctx, fmt.Errorf("workspace lookup failed: %w", err)
+		return ctx, fmt.Errorf("standing lookup failed: %w", err)
 	}
 
-	claimByWS := make(map[string]auth.WorkspaceClaim, len(claimWorkspaces))
-	for _, w := range claimWorkspaces {
-		claimByWS[w.ID] = w
-	}
-	workspaces := make([]auth.WorkspaceClaim, 0, len(ids))
-	for _, u := range ids {
-		id := u.String()
-		c := claimByWS[id] // zero value if the token predates this membership
-		workspaces = append(workspaces, auth.WorkspaceClaim{ID: id, IsOwner: c.IsOwner, Roles: c.Roles})
+	workspaces := make([]auth.WorkspaceStanding, 0, len(rows))
+	for _, row := range rows {
+		var roles []auth.RoleRef
+		if err := json.Unmarshal(row.Roles, &roles); err != nil {
+			return ctx, fmt.Errorf("standing roles for workspace %s: %w", row.WorkspaceID, err)
+		}
+		workspaces = append(workspaces, auth.WorkspaceStanding{
+			ID:      row.WorkspaceID.String(),
+			IsOwner: row.IsOwner,
+			Roles:   roles,
+		})
 	}
 	return context.WithValue(ctx, workspacesKey, workspaces), nil
 }
@@ -204,7 +207,7 @@ func buildAPIKeyContext(ctx context.Context, token string) (context.Context, err
 func ContextWithAPIKeyPrincipal(ctx context.Context, principalID, name, workspaceID string, roles []auth.RoleRef) context.Context {
 	ctx = context.WithValue(ctx, userIDKey, principalID)
 	ctx = context.WithValue(ctx, principalNameKey, name)
-	ctx = context.WithValue(ctx, workspacesKey, []auth.WorkspaceClaim{{ID: workspaceID, Roles: roles}})
+	ctx = context.WithValue(ctx, workspacesKey, []auth.WorkspaceStanding{{ID: workspaceID, Roles: roles}})
 	ctx = context.WithValue(ctx, ctxWorkspaceID, workspaceID)
 	ctx = context.WithValue(ctx, apiKeyPrincipalKey, true)
 	return ctx
@@ -234,7 +237,7 @@ func Authenticated() func(http.Handler) http.Handler {
 			token, claims, err := auth.ValidateJWT(tokenStr)
 			switch {
 			case err == nil && token.Valid:
-				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, claims.Name, claims.Workspaces)
+				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, claims.Name)
 				if ctxErr != nil {
 					http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 					return
@@ -247,7 +250,7 @@ func Authenticated() func(http.Handler) http.Handler {
 					http.Error(w, "Invalid access token", http.StatusUnauthorized)
 					return
 				}
-				newTokens, userID, refreshErr := handleTokenRefresh(r, claims.UserID)
+				newTokens, refreshErr := handleTokenRefresh(r, claims.UserID)
 				if refreshErr != nil {
 					http.Error(w, "Failed to refresh token", http.StatusUnauthorized)
 					return
@@ -256,16 +259,13 @@ func Authenticated() func(http.Handler) http.Handler {
 				w.Header().Set("X-New-Access-Token", newTokens.AccessToken)
 				w.Header().Set("X-New-Refresh-Token", newTokens.RefreshToken)
 
-				_, newClaims, parseErr := auth.ValidateJWT(newTokens.AccessToken)
-				var (
-					ctx    context.Context
-					ctxErr error
-				)
-				if parseErr == nil && newClaims != nil {
-					ctx, ctxErr = buildAuthContext(r.Context(), newClaims.UserID, newClaims.Name, newClaims.Workspaces)
-				} else {
-					ctx, ctxErr = buildAuthContext(r.Context(), userID, "", nil)
+				// Prefer the name off the token just minted, which picks up a
+				// rename; the expired token names the same user either way.
+				name := claims.Name
+				if _, newClaims, parseErr := auth.ValidateJWT(newTokens.AccessToken); parseErr == nil && newClaims != nil {
+					name = newClaims.Name
 				}
+				ctx, ctxErr := buildAuthContext(r.Context(), claims.UserID, name)
 				if ctxErr != nil {
 					http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 					return
@@ -281,19 +281,14 @@ func Authenticated() func(http.Handler) http.Handler {
 	}
 }
 
-func handleTokenRefresh(r *http.Request, userID string) (*TokenResponse, string, error) {
+func handleTokenRefresh(r *http.Request, userID string) (*TokenResponse, error) {
 	refreshToken := r.Header.Get("X-Refresh-Token")
 	deviceID := r.Header.Get("X-Device-ID")
 
 	if refreshToken == "" || deviceID == "" {
-		return nil, "", errors.New("missing refresh token or device ID")
+		return nil, errors.New("missing refresh token or device ID")
 	}
-
-	newTokens, err := TryRefreshToken(r, refreshToken, deviceID, userID)
-	if err != nil {
-		return nil, "", err
-	}
-	return newTokens, userID, nil
+	return TryRefreshToken(r, refreshToken, deviceID, userID)
 }
 
 func TryRefreshToken(r *http.Request, refreshToken string, deviceID string, userID string) (*TokenResponse, error) {

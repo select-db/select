@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Python SQL analysis process for selectDb, powered by sqlglot"
 requires-python = ">=3.11"
 dependencies = [
-    "sqlglot>=25.0.0",
+    # The floor is the version the analyzer is actually developed against, not
+    # the oldest that installs: on 25.34.1 and 27.20.0 the Go suite fails 152
+    # subtests, because scope traversal and tokenizer behaviour both moved.
+    # The ceiling is there because those are the releases that move them.
+    "sqlglot>=30.18,<31",
 ]
 
 [project.optional-dependencies]

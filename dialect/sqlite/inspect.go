@@ -40,20 +40,22 @@ func (i *Inspector) normalizeEquals(a, b string) bool {
 
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
+	if strings.TrimSpace(sql) == "" {
+		return nil
+	}
+
 	lexer := i.dialect.CreateLexer(sql)
 	tokenStream := antlr.NewCommonTokenStream(lexer, 0)
 	tokenStream.Fill() // pre-fill for compound-operator detection
 	parser := sqlite.NewSQLiteParser(tokenStream)
 	parser.RemoveErrorListeners()
 
-	root := parser.Parse()
-	if root == nil {
-		return nil
+	var stmtLists []sqlite.ISql_stmt_listContext
+	if root := parser.Parse(); root != nil {
+		stmtLists = root.AllSql_stmt_list()
 	}
-
-	stmtLists := root.AllSql_stmt_list()
 	if len(stmtLists) == 0 {
-		return nil
+		return []core.InspectStatement{core.UnknownStatement()}
 	}
 
 	var results []core.InspectStatement
@@ -68,16 +70,10 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		}
 
 		if len(group) > 1 {
-			result := i.mergeCompoundSelectGroup(group)
-			if result != nil {
-				results = append(results, *result)
-			}
+			results = append(results, core.OrUnknown(i.mergeCompoundSelectGroup(group)))
 		} else {
 			for _, stmt := range group[0].AllSql_stmt() {
-				result := i.inspectStatement(stmt)
-				if result != nil {
-					results = append(results, *result)
-				}
+				results = append(results, core.OrUnknown(i.inspectStatement(stmt)))
 			}
 		}
 		idx++
@@ -149,6 +145,9 @@ func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.Inspect
 	if createStmt := stmt.Create_table_stmt(); createStmt != nil {
 		return i.inspectCreate(createStmt)
 	}
+	if viewStmt := stmt.Create_view_stmt(); viewStmt != nil {
+		return i.inspectCreateView(viewStmt)
+	}
 	if alterStmt := stmt.Alter_table_stmt(); alterStmt != nil {
 		return i.inspectAlterTable(alterStmt)
 	}
@@ -211,15 +210,7 @@ func (i *Inspector) inspectSelectCore(
 
 	fromSubqueries := i.extractFromSubqueries(selectCore, cteToSubqueryMap)
 
-	virtualTables := make(map[string]bool)
-	for _, cte := range ctes {
-		virtualTables[i.dialect.NormalizeIdentifier(cte.Table)] = true
-	}
-	for name := range subqueryColumns {
-		virtualTables[i.dialect.NormalizeIdentifier(name)] = true
-	}
-
-	tables := i.convertRelationRefs(relationRefs, virtualTables)
+	tables := i.convertRelationRefs(relationRefs, i.virtualNames(ctes, subqueryColumns))
 	for _, subq := range fromSubqueries {
 		tables = core.MergeInspectTables(tables, subq.Tables)
 	}
@@ -241,16 +232,21 @@ func (i *Inspector) inspectSelectCore(
 	}
 }
 
+// effectiveSchema is the schema an unqualified name resolves in. SQLite is the
+// dialect that honours CurrentSchema, so the fallback lives in one place.
+func (i *Inspector) effectiveSchema() string {
+	if i.meta.CurrentSchema != "" {
+		return i.meta.CurrentSchema
+	}
+	return i.meta.DefaultSchema
+}
+
 // resolveQualifiedTableName extracts schema and table name from a qualified_table_name context.
 func (i *Inspector) resolveQualifiedTableName(qtname sqlite.IQualified_table_nameContext) (schema, table string) {
 	if qtname == nil {
 		return "", ""
 	}
-	effectiveSchema := i.meta.CurrentSchema
-	if effectiveSchema == "" {
-		effectiveSchema = i.meta.DefaultSchema
-	}
-	schema = effectiveSchema
+	schema = i.effectiveSchema()
 	if qtname.Schema_name() != nil {
 		schema = i.dialect.NormalizeIdentifier(qtname.Schema_name().GetText())
 	}
@@ -262,11 +258,7 @@ func (i *Inspector) resolveQualifiedTableName(qtname sqlite.IQualified_table_nam
 
 // resolveInsertTarget extracts schema and table name from an INSERT statement.
 func (i *Inspector) resolveInsertTarget(stmt sqlite.IInsert_stmtContext) (schema, table string) {
-	effectiveSchema := i.meta.CurrentSchema
-	if effectiveSchema == "" {
-		effectiveSchema = i.meta.DefaultSchema
-	}
-	schema = effectiveSchema
+	schema = i.effectiveSchema()
 	if stmt.Schema_name() != nil {
 		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
 	}
@@ -331,6 +323,10 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
+	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+	result.Subqueries = append(result.Subqueries, i.readSources(stmt, ctes)...)
+
 	// SET column names, AllColumn_name() returns the LHS of each assignment.
 	for _, cn := range stmt.AllColumn_name() {
 		name := i.dialect.NormalizeIdentifier(cn.Any_name().GetText())
@@ -366,6 +362,65 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	return result
 }
 
+// readSources is the read an UPDATE ... FROM performs on the relations it joins
+// against. Those rows are read, not written, so the update does not cover them.
+func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
+	if with == nil {
+		return nil, nil
+	}
+	names := with.AllCte_table_name()
+	bodies := with.AllSelect_stmt()
+
+	ctes := make([]core.RelationRef, 0, len(names))
+	subqueries := make([]core.InspectStatement, 0, len(names))
+	for idx, name := range names {
+		if name.Table_name() == nil {
+			continue
+		}
+		ctes = append(ctes, core.RelationRef{
+			Table:     i.dialect.NormalizeIdentifier(name.Table_name().GetText()),
+			IsVirtual: true,
+		})
+		if idx < len(bodies) {
+			subqueries = append(subqueries, core.OrUnknown(i.inspectSelect(bodies[idx])))
+		}
+	}
+	return ctes, subqueries
+}
+
+func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.RelationRef) []core.InspectStatement {
+	// A FROM list is either a comma list of relations or a join clause, and
+	// only the relations under it are read; the target table is not.
+	relations := make([]antlr.ParseTree, 0, len(stmt.AllTable_or_subquery())+1)
+	for _, relation := range stmt.AllTable_or_subquery() {
+		relations = append(relations, relation)
+	}
+	if join := stmt.Join_clause(); join != nil {
+		relations = append(relations, join)
+	}
+
+	var refs []core.RelationRef
+	var reads []core.InspectStatement
+	subqueryColumns := make(map[string][]core.Column)
+
+	for _, relation := range relations {
+		relationRefs, columns := i.extractRelationRefs(relation)
+		refs = append(refs, relationRefs...)
+		for name, cols := range columns {
+			subqueryColumns[name] = cols
+		}
+		reads = append(reads, i.extractFromSubqueries(relation, nil)...)
+	}
+
+	if tables := i.convertRelationRefs(refs, i.virtualNames(ctes, subqueryColumns)); len(tables) > 0 {
+		reads = append(reads, core.InspectStatement{
+			Operation: core.InspectOpSelect,
+			Tables:    tables,
+		})
+	}
+	return reads
+}
+
 // inspectDelete analyzes a DELETE statement.
 func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpDelete}
@@ -393,11 +448,7 @@ func (i *Inspector) inspectDrop(stmt sqlite.IDrop_stmtContext) *core.InspectStat
 		return nil
 	}
 	result := &core.InspectStatement{Operation: core.InspectOpDrop}
-	effectiveSchema := i.meta.CurrentSchema
-	if effectiveSchema == "" {
-		effectiveSchema = i.meta.DefaultSchema
-	}
-	schema := effectiveSchema
+	schema := i.effectiveSchema()
 	if stmt.Schema_name() != nil {
 		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
 	}
@@ -411,11 +462,7 @@ func (i *Inspector) inspectDrop(stmt sqlite.IDrop_stmtContext) *core.InspectStat
 // inspectCreate analyzes a CREATE TABLE statement.
 func (i *Inspector) inspectCreate(stmt sqlite.ICreate_table_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpCreate}
-	effectiveSchema := i.meta.CurrentSchema
-	if effectiveSchema == "" {
-		effectiveSchema = i.meta.DefaultSchema
-	}
-	schema := effectiveSchema
+	schema := i.effectiveSchema()
 	if stmt.Schema_name() != nil {
 		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
 	}
@@ -423,17 +470,40 @@ func (i *Inspector) inspectCreate(stmt sqlite.ICreate_table_stmtContext) *core.I
 		table := i.dialect.NormalizeIdentifier(stmt.Table_name().Any_name().GetText())
 		result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 	}
+	result.Subqueries = i.sourceQuery(stmt.Select_stmt())
 	return result
+}
+
+// inspectCreateView analyzes CREATE VIEW ... AS SELECT. Creating the view needs
+// manage; the query behind it reads its own tables, which manage does not stand
+// in for.
+func (i *Inspector) inspectCreateView(stmt sqlite.ICreate_view_stmtContext) *core.InspectStatement {
+	result := &core.InspectStatement{Operation: core.InspectOpCreate}
+	schema := i.effectiveSchema()
+	if stmt.Schema_name() != nil {
+		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
+	}
+	if stmt.View_name() != nil {
+		view := i.dialect.NormalizeIdentifier(stmt.View_name().GetText())
+		result.Tables = []core.InspectTable{{Name: view, Schema: schema}}
+	}
+	result.Subqueries = i.sourceQuery(stmt.Select_stmt())
+	return result
+}
+
+// sourceQuery is the query a CREATE TABLE ... AS or a CREATE VIEW is filled from, as its own
+// statement: creating it needs manage, reading it still needs select.
+func (i *Inspector) sourceQuery(selectStmt sqlite.ISelect_stmtContext) []core.InspectStatement {
+	if selectStmt == nil {
+		return nil
+	}
+	return []core.InspectStatement{core.OrUnknown(i.inspectSelect(selectStmt))}
 }
 
 // inspectAlterTable analyzes an ALTER TABLE statement.
 func (i *Inspector) inspectAlterTable(stmt sqlite.IAlter_table_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpAlter}
-	effectiveSchema := i.meta.CurrentSchema
-	if effectiveSchema == "" {
-		effectiveSchema = i.meta.DefaultSchema
-	}
-	schema := effectiveSchema
+	schema := i.effectiveSchema()
 	if stmt.Schema_name() != nil {
 		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
 	}
@@ -445,21 +515,15 @@ func (i *Inspector) inspectAlterTable(stmt sqlite.IAlter_table_stmtContext) *cor
 	return result
 }
 
-// extractRelationRefs extracts table references from a SELECT statement
-// Uses a listener to walk the select_core's FROM clause
-func (i *Inspector) extractRelationRefs(selectCore sqlite.ISelect_coreContext) ([]core.RelationRef, map[string][]core.Column) {
-	// Determine effective schema: use CurrentSchema if set, otherwise DefaultSchema
-	effectiveSchema := i.meta.CurrentSchema
-	if effectiveSchema == "" {
-		effectiveSchema = i.meta.DefaultSchema
-	}
-
+// extractRelationRefs extracts table references from any node that can hold
+// them: a select_core, or the relation list of an UPDATE ... FROM.
+func (i *Inspector) extractRelationRefs(tree antlr.ParseTree) ([]core.RelationRef, map[string][]core.Column) {
 	// Use a listener similar to the dialect's relationRefListener
 	listener := &relationRefExtractorListener{
 		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},
 		refs:                     []core.RelationRef{},
 		vtabs:                    []core.RelationRef{},
-		defaultSchema:            effectiveSchema,
+		defaultSchema:            i.effectiveSchema(),
 		meta:                     i.meta,
 		dialect:                  i.dialect,
 		level:                    0,
@@ -467,8 +531,7 @@ func (i *Inspector) extractRelationRefs(selectCore sqlite.ISelect_coreContext) (
 		depthStack:               []bool{},
 	}
 
-	// Walk the select_core to extract table references
-	antlr.ParseTreeWalkerDefault.Walk(listener, selectCore)
+	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
 
 	// Extract subquery columns from virtual tables
 	// Subqueries in FROM clause are identified by having columns but being in vtabs
@@ -1445,6 +1508,19 @@ func (l *whereColumnExtractorListener) EnterExpr(ctx *sqlite.ExprContext) {
 	}
 }
 
+// virtualNames are the names in a FROM that are not tables: a CTE and a FROM
+// subquery alias both look like one and neither is a grant anybody holds.
+func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
+	names := make(map[string]bool, len(ctes)+len(subqueryColumns))
+	for _, cte := range ctes {
+		names[i.dialect.NormalizeIdentifier(cte.Table)] = true
+	}
+	for name := range subqueryColumns {
+		names[i.dialect.NormalizeIdentifier(name)] = true
+	}
+	return names
+}
+
 // convertRelationRefs converts RelationRef to InspectTable, filtering out virtual tables
 func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables map[string]bool) []core.InspectTable {
 	var tables []core.InspectTable
@@ -1541,16 +1617,13 @@ func (i *Inspector) extractCTEsWithSubqueries(commonTableStmt sqlite.ICommon_tab
 }
 
 // extractFromSubqueries extracts InspectStatements from subqueries in the FROM clause
-func (i *Inspector) extractFromSubqueries(selectCore sqlite.ISelect_coreContext, cteToSubqueryMap map[string]*core.InspectStatement) []core.InspectStatement {
-	// Walk the FROM clause to find subqueries
-	// In SQLite, FROM can contain table_or_subquery or join_clause
-	// We need to check both
+func (i *Inspector) extractFromSubqueries(tree antlr.ParseTree, cteToSubqueryMap map[string]*core.InspectStatement) []core.InspectStatement {
 	listener := &subqueryExtractorListener{
 		inspector:  i,
 		subqueries: []core.InspectStatement{},
 	}
 
-	antlr.ParseTreeWalkerDefault.Walk(listener, selectCore)
+	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
 
 	return listener.subqueries
 }

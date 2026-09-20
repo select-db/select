@@ -15,12 +15,15 @@ type dialectInfo struct {
 	name          string
 	dialect       core.SQLDialect
 	defaultSchema string
+	// identifierQuote is how this dialect spells a quoted identifier. SQLite
+	// accepts the double quote as well as brackets, so one character covers it.
+	identifierQuote string
 }
 
 var dialects = []dialectInfo{
-	{"postgresql", postgresql.NewDialect(), "public"},
-	{"sqlite", sqlite.NewDialect(), "main"},
-	{"mysql", mysql.NewDialect(), "public"},
+	{"postgresql", postgresql.NewDialect(), "public", `"`},
+	{"sqlite", sqlite.NewDialect(), "main", `"`},
+	{"mysql", mysql.NewDialect(), "public", "`"},
 }
 
 func shouldSkip(skipDialects []string, dialectName string) bool {

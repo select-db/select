@@ -20,6 +20,10 @@ export function CheckForLogin(): $CancellablePromise<void> {
     return $Call.ByID(1425142152);
 }
 
+/**
+ * CheckForLogout ends the session only on credentials the keyring reports as
+ * gone. A keyring that cannot answer is not a sign-out.
+ */
 export function CheckForLogout(): $CancellablePromise<void> {
     return $Call.ByID(2480583021);
 }

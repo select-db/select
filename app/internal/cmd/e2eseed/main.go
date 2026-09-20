@@ -423,7 +423,6 @@ func seedTeam(ctx context.Context, queries *generated.Queries) error {
 		{"e2e-perm-eng-insert", RoleEngineerID, DatasourceID, "insert", "allow"},
 		{"e2e-perm-eng-update", RoleEngineerID, DatasourceID, "update", "allow"},
 		{"e2e-perm-eng-delete", RoleEngineerID, DatasourceID, "delete", "allow"},
-		{"e2e-perm-eng-ddl", RoleEngineerID, DatasourceID, "ddl", "deny"},
 
 		{"e2e-perm-admin-manage", RoleAdminID, "", "manage", "allow"},
 		{"e2e-perm-admin-select", RoleAdminID, DatasourceID, "select", "allow"},

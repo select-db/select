@@ -15,10 +15,7 @@
 	import Avatar from '$lib/system/Avatar/Avatar.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { fileToLogoBase64, logoSrc, LOGO_ACCEPT } from '$lib/utils/workspaceLogo';
-	import {
-		Logout,
-		UpdateWorkspaceExecutionLimits
-	} from '$lib/bindings/selectDb/internal/system/system';
+	import { UpdateWorkspaceExecutionLimits } from '$lib/bindings/selectDb/internal/system/system';
 	import { get } from 'svelte/store';
 	import * as graph from '$lib/wails/graph';
 	import ConfirmDeleteWorkspaceModal from './ConfirmDeleteWorkspaceModal.svelte';
@@ -142,8 +139,10 @@
 						return;
 					}
 
+					// DeleteWorkspace closes the folder, which leaves the person on the
+					// no-folder screen. Signing them out as well took the session with
+					// the workspace.
 					modalStore.set(null);
-					await Logout();
 				}
 			},
 			width: 400

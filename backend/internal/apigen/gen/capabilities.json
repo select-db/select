@@ -325,7 +325,6 @@
             "insert",
             "update",
             "delete",
-            "ddl",
             "see",
             "manage"
           ]

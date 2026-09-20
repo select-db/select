@@ -64,7 +64,7 @@ type AppPermission struct {
 	TableName db_types.JSONNullString
 	// Column the rule applies to; null = any.
 	ColumnName db_types.JSONNullString
-	// SQL action the rule applies to. @app.values [select, insert, update, delete, ddl, see, manage]
+	// SQL action the rule applies to. @app.values [select, insert, update, delete, see, manage]
 	Action string
 	// Whether the rule allows or denies the action. @app.values [allow, deny]
 	Effect    string

@@ -44,13 +44,13 @@ def analyze_unknown_tables(
 
         known_tables = {t.lower() for t in schema_dict.get(schema_name, {})}
         if name not in known_tables:
-            line, col, end_col = span(table)
+            line, col, end_line, end_col = span(table)
             results.append({
                 "rule_id":    "unknown-table",
                 "severity":   "warning",
                 "message":    f"unknown table or view {table.name!r}",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     return results
@@ -179,7 +179,7 @@ def analyze_unknown_columns(
                 if col.name.lower() in select_aliases:
                     continue
 
-            line, col_pos, end_col = span(col)
+            line, col_pos, end_line, end_col = span(col)
             key = (col.name, qualifier, line, col_pos)
             if key not in seen:
                 seen.add(key)
@@ -189,7 +189,7 @@ def analyze_unknown_columns(
                     "severity":   "warning",
                     "message":    f"unknown column {display!r}",
                     "start_line": line, "start_col": col_pos,
-                    "end_line":   line, "end_col":   end_col,
+                    "end_line":   end_line, "end_col":   end_col,
                 })
 
     return results
@@ -252,7 +252,7 @@ def analyze_update_columns(
         name = col_node.name
         if not name or name == "*":
             return
-        line, col_pos, end_col = span(col_node)
+        line, col_pos, end_line, end_col = span(col_node)
         key = (name, line, col_pos)
         if key not in seen:
             seen.add(key)
@@ -261,7 +261,7 @@ def analyze_update_columns(
                 "severity":   "warning",
                 "message":    f"unknown column {name!r}",
                 "start_line": line, "start_col": col_pos,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     def _col_matches(cols_pair: tuple[set[str], set[str]], name: str, quoted: bool) -> bool:
@@ -366,7 +366,7 @@ def analyze_insert_columns(
     seen: set[tuple] = set()
 
     def _emit(name: str, node):
-        line, col_pos, end_col = span(node)
+        line, col_pos, end_line, end_col = span(node)
         key = (name, line, col_pos)
         if key not in seen:
             seen.add(key)
@@ -375,7 +375,7 @@ def analyze_insert_columns(
                 "severity":   "warning",
                 "message":    f"unknown column {name!r}",
                 "start_line": line, "start_col": col_pos,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     def _check_col_name(name: str, quoted: bool, node):
@@ -483,7 +483,7 @@ def analyze_delete_columns(
         name = col_node.name
         if not name or name == "*":
             return
-        line, col_pos, end_col = span(col_node)
+        line, col_pos, end_line, end_col = span(col_node)
         key = (name, line, col_pos)
         if key not in seen:
             seen.add(key)
@@ -492,7 +492,7 @@ def analyze_delete_columns(
                 "severity":   "warning",
                 "message":    f"unknown column {name!r}",
                 "start_line": line, "start_col": col_pos,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     def _col_matches(cols_pair: tuple[set[str], set[str]], name: str, quoted: bool) -> bool:
@@ -599,7 +599,7 @@ def analyze_merge_columns(
         name = col_node.name
         if not name or name == "*":
             return
-        line, col_pos, end_col = span(col_node)
+        line, col_pos, end_line, end_col = span(col_node)
         key = (name, line, col_pos)
         if key not in seen:
             seen.add(key)
@@ -608,7 +608,7 @@ def analyze_merge_columns(
                 "severity":   "warning",
                 "message":    f"unknown column {name!r}",
                 "start_line": line, "start_col": col_pos,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     def _col_matches(cols_pair: tuple[set[str], set[str]], name: str, quoted: bool) -> bool:
@@ -730,7 +730,7 @@ def analyze_ambiguous_columns(
                 if (col.name in orig_cols if quoted else col.name.lower() in orig_cols)
             }
             if len(matching_sources) > 1:
-                line, col_pos, end_col = span(col)
+                line, col_pos, end_line, end_col = span(col)
                 key = (col.name, line, col_pos)
                 if key not in seen:
                     seen.add(key)
@@ -739,7 +739,7 @@ def analyze_ambiguous_columns(
                         "severity":   "warning",
                         "message":    f"column {col.name!r} is ambiguous; qualify with a table alias",
                         "start_line": line, "start_col": col_pos,
-                        "end_line":   line, "end_col":   end_col,
+                        "end_line":   end_line, "end_col":   end_col,
                     })
 
     return results
@@ -766,13 +766,13 @@ def analyze_dead_ctes(stmt: exp.Expression) -> list[dict]:
         if name not in used:
             alias_ident = cte_node.args.get("alias")
             pos_node = alias_ident.this if isinstance(alias_ident, exp.Expression) else cte_node
-            line, col, end_col = span(pos_node)
+            line, col, end_line, end_col = span(pos_node)
             results.append({
                 "rule_id":    "unused-cte",
                 "severity":   "hint",
                 "message":    f"CTE {cte_node.alias!r} is defined but never used",
                 "start_line": line, "start_col": col,
-                "end_line":   line, "end_col":   end_col,
+                "end_line":   end_line, "end_col":   end_col,
             })
 
     return results

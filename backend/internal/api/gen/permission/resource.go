@@ -16,7 +16,7 @@ var resource = query.Resource{
 		{Name: "schema_name", Column: "schema_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
 		{Name: "table_name", Column: "table_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
 		{Name: "column_name", Column: "column_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
-		{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}, Enum: []string{"select", "insert", "update", "delete", "ddl", "see", "manage"}},
+		{Name: "action", Column: "action", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}, Enum: []string{"select", "insert", "update", "delete", "see", "manage"}},
 		{Name: "effect", Column: "effect", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}, Enum: []string{"allow", "deny"}},
 		{Name: "updated_at", Column: "updated_at", Kind: query.KindTime, Ops: []query.Op{"eq", "ne", "lt", "le", "gt", "ge", "in", "not in"}},
 	},

@@ -20,6 +20,7 @@
 #   ./dev.sh web build             build the site into web/dist once
 #   ./dev.sh web shots             recapture the product screenshots
 #   ./dev.sh web og                re-render the link preview card
+#   ./dev.sh app icons             re-derive the icon variants
 #
 #   ./dev.sh backend start         db up, migrate, generate, run the server
 #   ./dev.sh backend test          go test ./... (wants the dev DB up)
@@ -33,6 +34,8 @@
 #   ./dev.sh backend generate      codegen: apigen (schema -> sql+glue) then sqlc
 #
 #   ./dev.sh dialect test          go test ./... for the dialect module
+#   ./dev.sh dialect probe <args>  run one SQL string through lint, completion
+#                                  and inspect (-h for the flags)
 #   ./dev.sh test                  every module's tests, the way CI runs them
 #
 # `app test` and `app e2e` compile the app's Go code, which links the webview.
@@ -40,7 +43,7 @@
 # libwebkitgtk-6.0-dev. macOS and Windows need nothing extra.
 #
 # The dev database runs in Docker (see backend/docker-compose.yml and
-# Dockerfile.postgres: Postgres 17 with pg_partman baked in), published on host
+# Dockerfile.postgres: Postgres 18 with pg_partman baked in), published on host
 # port 5431 to match the default POSTGRES_DSN in backend/.env. Requires Docker;
 # the Go binaries read .env themselves.
 
@@ -236,7 +239,8 @@ app() {
     test)     app_test ;;
     e2e)      app_e2e "$@" ;;
     migrate)  app_migrate "$@" ;;
-    *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e|migrate)" >&2; exit 1 ;;
+    icons)    app_task icons "$@" ;;
+    *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e|migrate|icons)" >&2; exit 1 ;;
   esac
 }
 
@@ -363,11 +367,29 @@ dialect_test() {
   done_ "dialect test"
 }
 
+# No step/done_ wrapper: the probe's output is the point, not its exit status.
+dialect_probe() {
+  # go run needs the module directory, but the caller's -meta and @file paths
+  # are relative to where they are standing, so resolve them before moving.
+  local resolved=() arg prefix path
+  for arg in "$@"; do
+    prefix=""; path="$arg"
+    case "$arg" in @*) prefix="@"; path="${arg#@}" ;; esac
+    if [ -e "$path" ]; then
+      path="$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
+      arg="${prefix}${path}"
+    fi
+    resolved+=("$arg")
+  done
+  (cd "$ROOT/dialect" && go run ./cmd/sqlprobe "${resolved[@]}")
+}
+
 dialect() {
   local sub="${1:-}"; shift || true
   case "$sub" in
     test) dialect_test ;;
-    *) echo "unknown dialect subcommand: '${sub:-}' (want: test)" >&2; exit 1 ;;
+    probe) dialect_probe "$@" ;;
+    *) echo "unknown dialect subcommand: '${sub:-}' (want: test, probe)" >&2; exit 1 ;;
   esac
 }
 

@@ -28,7 +28,7 @@ Permissions are defined per action:
 | **INSERT** | Add new rows                             |
 | **UPDATE** | Modify existing rows                     |
 | **DELETE** | Remove rows                              |
-| **DDL**    | Schema changes (CREATE, ALTER, DROP)     |
+| **MANAGE** | Change the database itself: its structure, its access, its configuration |
 
 App-level actions cover workspace administration:
 
@@ -54,7 +54,23 @@ Evaluation order:
 4. If an allow matches, access is granted
 5. If neither matches, access is refused (default deny)
 
-This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `DDL` for production databases. A user with both roles cannot run DDL on production.
+This lets you create broad access with targeted restrictions. For example, a "Developer" role can allow all operations, while an "Intern" role adds a deny on `MANAGE` for production databases. A user with both roles cannot change the schema on production.
+
+The first four actions are about the rows in a table. MANAGE is about the
+database itself: creating, altering and dropping tables, granting access,
+loading and exporting in bulk, and running procedures. It is granted on a
+connection, not on a schema or a table, so a rule scoped below the connection
+never matches.
+
+Anything that is not plainly one of the four row actions needs MANAGE. That is
+deliberate: granting the four never quietly grants more than reading and
+writing rows, so an unusual statement is refused rather than let through.
+
+A statement that does two things needs the permission for both. `CREATE TABLE
+new AS SELECT * FROM old` builds a table and reads another one, so it needs
+MANAGE and SELECT on `old`. The same holds for a view over a table, an UPDATE
+that reads a second table to fill the first, and a statement whose result is
+built by a query inside it.
 
 ## Databases nobody has written a rule for
 
@@ -86,5 +102,5 @@ A typical team might have:
 |-------------|-------------|----------------------|--------|
 | Developer   | dev-db      | SELECT, INSERT, UPDATE, DELETE | allow |
 | Developer   | prod-db     | SELECT               | allow  |
-| DBA         | *           | SELECT, INSERT, UPDATE, DELETE, DDL | allow |
+| DBA         | *           | SELECT, INSERT, UPDATE, DELETE, MANAGE | allow |
 | Analyst     | prod-db     | SELECT               | allow  |

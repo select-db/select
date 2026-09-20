@@ -2,6 +2,12 @@
 	import { onMount, onDestroy } from 'svelte';
 
 	export let error = false;
+	/**
+	 * When the attempt being timed started, as `Date.now()`. It comes from the
+	 * flow rather than from this component's mount, so reopening the modal shows
+	 * the time actually left instead of restarting the countdown.
+	 */
+	export let startedAt: number = Date.now();
 
 	const START_PROGRESS = 5;
 	const END_PROGRESS = 100;
@@ -9,7 +15,6 @@
 
 	let progress = START_PROGRESS;
 	let color = '';
-	let startTime = 0;
 	let rafId: number;
 
 	type RGB = [number, number, number];
@@ -45,11 +50,10 @@
 		return interpolateColor(from, to, ratio);
 	}
 
-	function animate(timestamp: number) {
-		if (!startTime) startTime = timestamp;
+	const elapsed = () => Date.now() - startedAt;
 
-		const elapsed = timestamp - startTime;
-		const ratio = Math.min(elapsed / DURATION_MS, 1);
+	function animate() {
+		const ratio = Math.min(elapsed() / DURATION_MS, 1);
 
 		progress = START_PROGRESS + (END_PROGRESS - START_PROGRESS) * ratio;
 		color = interpolateMultiStepColor(COLOR_STEPS, ratio);
@@ -65,7 +69,9 @@
 		color = 'rgb(255, 60, 60)';
 	}
 
-	let timeLeft = Math.floor(DURATION_MS / 1000);
+	const remaining = () => Math.max(0, Math.ceil((DURATION_MS - elapsed()) / 1000));
+
+	let timeLeft = remaining();
 	let interval: ReturnType<typeof setInterval>;
 
 	function formatTime(seconds: number) {
@@ -82,15 +88,11 @@
 		if (error) {
 			forceErrorState();
 		} else {
-			startTime = 0;
 			rafId = requestAnimationFrame(animate);
 
 			interval = setInterval(() => {
-				if (timeLeft > 0) {
-					timeLeft -= 1;
-				} else {
-					clearInterval(interval);
-				}
+				timeLeft = remaining();
+				if (timeLeft === 0) clearInterval(interval);
 			}, 1000);
 		}
 	});

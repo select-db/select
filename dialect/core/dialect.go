@@ -105,8 +105,10 @@ type SQLDialect interface {
 	// Complete provides SQL code completion suggestions for a given SQL string and caret position
 	Complete(ctx context.Context, sql string, caretLine, caretOffset int, meta Metadata) ([]Candidate, error)
 
-	// Inspect parses sql against meta and returns one InspectStatement per top-level statement.
-	// Returns nil for dialects that do not yet support inspection (e.g. MySQL).
+	// Inspect parses sql against meta and returns one InspectStatement per
+	// top-level statement, and UnknownStatement for one it cannot classify.
+	// Permission checks read a missing statement as nothing to check, so an
+	// implementation returns nil only for blank sql.
 	Inspect(meta Metadata, sql string) []InspectStatement
 
 	// Returns operators valid for a given column type

@@ -23,7 +23,7 @@ func TestGetPrincipalNoMemberWorkspaceDoesNotPanic(t *testing.T) {
 
 // The flat workspace getters all derive from the one nested structure.
 func TestGetPrincipalDerivedGetters(t *testing.T) {
-	ws := []auth.WorkspaceClaim{
+	ws := []auth.WorkspaceStanding{
 		{ID: "w1", IsOwner: true, Roles: []auth.RoleRef{{ID: "r1", Name: "Admin"}}},
 		{ID: "w2", Roles: []auth.RoleRef{{ID: "r2", Name: "Viewer"}}},
 	}
