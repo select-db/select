@@ -192,7 +192,33 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
 	result.Subqueries = append(result.Subqueries, tail...)
 
+	// SELECT ... INTO builds a table, the same as CREATE TABLE ... AS SELECT.
+	// It takes manage for the table it makes and select for the rows it reads,
+	// so the read becomes the nested statement of an unclassified one.
+	if selectsInto(selectNoParens) {
+		return &core.InspectStatement{
+			Operation:  core.InspectOpUnknown,
+			Subqueries: []core.InspectStatement{*result},
+		}
+	}
+
 	return result
+}
+
+// selectsInto reports whether any branch carries an INTO clause.
+func selectsInto(selectNoParens pg.ISelect_no_parensContext) bool {
+	selectClause := selectNoParens.Select_clause()
+	if selectClause == nil {
+		return false
+	}
+	for _, intersect := range selectClause.AllSimple_select_intersect() {
+		for _, primary := range intersect.AllSimple_select_pramary() {
+			if primary != nil && len(primary.AllInto_clause()) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // extractTailSubqueries collects the subqueries in the clauses that sit after
@@ -318,10 +344,15 @@ func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *co
 func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpInsert}
 
-	// Resolve target table (schema, name).
-	schema, tableName := i.resolveQualifiedName(stmt.Insert_target().Qualified_name())
+	// Resolve target table (schema, name). Error recovery leaves no target on
+	// syntax this grammar rejects, such as SQLite's INSERT OR REPLACE.
+	target := stmt.Insert_target()
+	if target == nil {
+		return nil
+	}
+	schema, tableName := i.resolveQualifiedName(target.Qualified_name())
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
@@ -564,7 +595,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	}
 	schema, tableName := i.resolveQualifiedName(relOptAlias.Relation_expr().Qualified_name())
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
@@ -629,7 +660,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	}
 	schema, tableName := i.resolveQualifiedName(relOptAlias.Relation_expr().Qualified_name())
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
