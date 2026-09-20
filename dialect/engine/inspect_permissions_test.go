@@ -426,7 +426,10 @@ func holdingPerTable(grants ...tableGrant) core.CompiledPermissions {
 			RoleName:   "test-role",
 		})
 	}
-	return compileFor(permDBID, entries...)
+	// Dropping the only grant leaves no rule naming the database, which reads as
+	// unmanaged and passes everything, so the necessary-direction loop would
+	// prove nothing without this.
+	return compileFor(permDBID, entries...).WithDenyUnmanaged()
 }
 
 // TestPermissions_EveryTableIsChecked pins the statements that name a column of
@@ -640,4 +643,82 @@ func unresolvedTable(stmts []core.InspectStatement) string {
 		}
 	}
 	return ""
+}
+
+// TestPermissions_CTEVisibleInsideAnotherBody pins the CTE bodies. A body is
+// inspected without the WITH clause around it, so a sibling or a recursive
+// self-reference came back as a table resolving to no schema. checkTables
+// refuses that whatever the role holds, so a recursive CTE and a CTE built from
+// another one were refused for everybody, manage included.
+func TestPermissions_CTEVisibleInsideAnotherBody(t *testing.T) {
+	const s = "main"
+
+	for _, tt := range []struct {
+		sql   string
+		needs []tableGrant
+	}{
+		{"WITH RECURSIVE x AS (SELECT c1 FROM t1 UNION ALL SELECT c1 FROM x) SELECT * FROM x",
+			[]tableGrant{{s, "t1", core.ActionSelect}}},
+		{"WITH RECURSIVE x(c1) AS (SELECT c1 FROM t1 UNION ALL SELECT c1 FROM x WHERE c1 < 5) SELECT * FROM x",
+			[]tableGrant{{s, "t1", core.ActionSelect}}},
+		{"WITH a AS (SELECT c1 FROM t1), b AS (SELECT c1 FROM a) SELECT * FROM b",
+			[]tableGrant{{s, "t1", core.ActionSelect}}},
+		{"WITH a AS (SELECT c1 FROM t1), b AS (SELECT c1 FROM a WHERE c1 IN (SELECT c1 FROM a)) SELECT * FROM b",
+			[]tableGrant{{s, "t1", core.ActionSelect}}},
+		{"WITH a AS (SELECT c1 FROM t1), b AS (SELECT c1 FROM t2), c AS (SELECT c1 FROM a UNION SELECT c1 FROM b) SELECT * FROM c",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}},
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+tt.sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), tt.sql)
+				if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: s, Name: "t1"}) {
+					t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+				}
+				if name := unresolvedTable(inspected); name != "" {
+					t.Errorf("%q is a CTE the statement declares, reported as a table: %+v", name, inspected)
+				}
+
+				// The tables behind the CTEs are still read, so each grant is
+				// necessary: dropping the denial must not drop the check.
+				for idx, missing := range tt.needs {
+					rest := slices.Delete(slices.Clone(tt.needs), idx, idx+1)
+					if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(rest...)); err == nil {
+						t.Errorf("ran without %s on %s.%s", missing.action, missing.schema, missing.table)
+					}
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(tt.needs...)); err != nil {
+					t.Errorf("holding %v still refused it: %v", tt.needs, err)
+				}
+			})
+		}
+	}
+}
+
+// TestPermissions_LaterCTENameIsTheRealTable is the other edge. A plain WITH
+// exposes only the CTEs declared before a body, so a name declared later is the
+// table: PostgreSQL 16 runs "WITH a AS (SELECT c1 FROM t2), t2 AS (...)"
+// against main.t2. Treating the whole clause as in scope would delete that read.
+func TestPermissions_LaterCTENameIsTheRealTable(t *testing.T) {
+	const s = "main"
+	const sql = "WITH a AS (SELECT c1 FROM t2), t2 AS (SELECT c1 FROM t1) SELECT * FROM a"
+
+	for _, dialect := range BuiltinDialects() {
+		t.Run(dialect, func(t *testing.T) {
+			inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: s, Name: "t2"}) {
+				t.Fatalf("main.t2 is read and nothing reported it: %+v", inspected)
+			}
+
+			needs := []tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}
+			for idx, missing := range needs {
+				rest := slices.Delete(slices.Clone(needs), idx, idx+1)
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(rest...)); err == nil {
+					t.Errorf("ran without %s on %s.%s", missing.action, missing.schema, missing.table)
+				}
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(needs...)); err != nil {
+				t.Errorf("holding select on both tables still refused it: %v", err)
+			}
+		})
+	}
 }

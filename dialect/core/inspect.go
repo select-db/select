@@ -51,3 +51,21 @@ func dropDeclaredTables(stmts []InspectStatement, declared map[string]bool, norm
 		dropDeclaredTables(stmt.Subqueries, declared, normalize)
 	}
 }
+
+// CTEScope returns the CTE names the body at idx can refer to. A plain WITH
+// exposes only the CTEs declared before this one, so a name declared later is
+// still the real table: PostgreSQL runs "WITH a AS (SELECT c1 FROM b), b AS
+// (...)" against the table b. WITH RECURSIVE exposes every name in the clause,
+// which is what lets a CTE refer to itself. idx is clamped rather than allowed
+// to panic, since the caller is a permission check.
+func CTEScope(names []string, idx int, recursive bool) map[string]bool {
+	visible := names
+	if !recursive {
+		visible = names[:min(idx, len(names))]
+	}
+	scope := make(map[string]bool, len(visible))
+	for _, name := range visible {
+		scope[name] = true
+	}
+	return scope
+}

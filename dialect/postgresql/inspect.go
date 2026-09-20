@@ -1498,25 +1498,37 @@ func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext)
 	cteElements := cteList.AllCommon_table_expr()
 	ctes := make([]core.RelationRef, 0, len(cteElements))
 	subqueries := make([]core.InspectStatement, 0, len(cteElements))
+
+	// Names before bodies: a body cannot be walked until the clause it may refer
+	// to is known.
+	names := make([]string, 0, len(cteElements))
 	for _, cteEl := range cteElements {
+		name := ""
+		if cteEl != nil {
+			if nameCtx := cteEl.Name(); nameCtx != nil {
+				name = i.dialect.NormalizeIdentifier(nameCtx.GetText())
+			}
+		}
+		names = append(names, name)
+	}
+	recursive := withClause.RECURSIVE() != nil
+
+	for idx, cteEl := range cteElements {
 		if cteEl == nil {
 			continue
 		}
 
-		// Get CTE name
-		cteName := ""
-		if nameCtx := cteEl.Name(); nameCtx != nil {
-			cteName = i.dialect.NormalizeIdentifier(nameCtx.GetText())
-		}
+		cteName := names[idx]
 
 		// A CTE body is any preparable statement, so WITH x AS (DELETE ...) is a
 		// delete the outer statement never mentions. One subquery per CTE keeps
 		// the two slices index-aligned for cteToSubqueryMap.
-		body := i.inspectPreparable(cteEl.Preparablestmt())
-		subqueries = append(subqueries, body)
+		subqueries = append(subqueries, i.inspectPreparable(cteEl.Preparablestmt()))
+		body := subqueries[len(subqueries)-1:]
+		core.DropVirtualTables(body, core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
 
 		var cteColumns []core.Column
-		for _, field := range body.Fields {
+		for _, field := range body[0].Fields {
 			cteColumns = append(cteColumns, core.Column{
 				Name: field.Name,
 				Type: "unknown",

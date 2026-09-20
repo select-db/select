@@ -93,3 +93,39 @@ func TestInspectClauseSubqueriesReachTheResult(t *testing.T) {
 		})
 	}
 }
+
+// An UPDATE carries its CTE clause through a different extractor than a SELECT
+// does, so the scope has to reach both. A recursive CTE on an UPDATE was
+// refused for every role, the same way it was on a SELECT.
+func TestInspectCTEScopeOnUpdate(t *testing.T) {
+	stmts := NewInspector(NewDialect(), core.GetInspectTestMetadata()).
+		Inspect("WITH RECURSIVE r AS (SELECT c1 FROM t1 UNION ALL SELECT c1 FROM r) UPDATE t2 SET c3 = 'x'")
+
+	for _, want := range []testutil.Touch{
+		{Op: core.InspectOpUpdate, Schema: "main", Name: "t2"},
+		{Op: core.InspectOpSelect, Schema: "main", Name: "t1"},
+	} {
+		if !testutil.Touches(stmts, want) {
+			t.Errorf("no %s on %s.%s anywhere in %+v", want.Op, want.Schema, want.Name, stmts)
+		}
+	}
+	if name := unresolvedCTE(stmts); name != "" {
+		t.Errorf("%q is the CTE the statement declares, reported as a table: %+v", name, stmts)
+	}
+}
+
+// unresolvedCTE returns the first table in the tree that resolved to no schema.
+// The permission check refuses one of those whatever the role holds.
+func unresolvedCTE(stmts []core.InspectStatement) string {
+	for _, stmt := range stmts {
+		for _, table := range stmt.Tables {
+			if table.Schema == "" {
+				return table.Name
+			}
+		}
+		if name := unresolvedCTE(stmt.Subqueries); name != "" {
+			return name
+		}
+	}
+	return ""
+}
