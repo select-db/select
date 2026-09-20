@@ -32,12 +32,20 @@ tasks:
       - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}} -f "-tags server"
 
   generate:icons:
-    summary: Generates the macOS `.icns` and Windows `.ico` from build/appicon.png
+    summary: Generates the macOS `.icns` and the Windows `.ico`, from one source each
     status:
       - test -f build/darwin/icons.icns
       - test -f build/windows/icon.ico
+    # Two sources, because the platforms want opposite things and wails3 resizes
+    # the bitmap without reframing it. macOS draws a legacy .icns exactly as
+    # authored, and its convention is an 824px body centred on a 1024 canvas
+    # with a soft shadow -- measured off shipping icons, since Apple no longer
+    # publishes the template. Windows masks nothing and expects the artwork to
+    # fill the canvas. One file for both is one of them wrong: ours filled the
+    # canvas, so the Dock drew it 19% wider than everything beside it.
     cmds:
-      - wails3 generate icons -input build/appicon.png -macfilename build/darwin/icons.icns -windowsfilename build/windows/icon.ico
+      - wails3 generate icons -input build/appicon.mac.png -macfilename build/darwin/icons.icns
+      - wails3 generate icons -input build/appicon.png -windowsfilename build/windows/icon.ico
 
   install:frontend:
     summary: Installs the frontend dependencies

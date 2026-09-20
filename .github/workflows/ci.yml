@@ -556,6 +556,7 @@ jobs:
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
           cp build/appicon-default.png build/appicon.png
+          cp build/appicon.mac-default.png build/appicon.mac.png
           wails3 task package \
             APP_VERSION="${V}" \
             APP_ENV="${APP_ENV}" \
@@ -632,6 +633,7 @@ jobs:
           if [[ "${IS_PROD}" != "true" ]]; then PUBKEY=""; fi
 
           cp build/appicon-default.png build/appicon.png
+          cp build/appicon.mac-default.png build/appicon.mac.png
           wails3 task package \
             APP_VERSION="${V}" \
             APP_ENV="${APP_ENV}" \
