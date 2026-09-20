@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/selectDb/dialect/core"
@@ -13,6 +15,20 @@ var (
 	dialectRegistry   = make(map[string]core.SQLDialect)
 	dialectRegistryMu sync.RWMutex
 )
+
+// builtinDialects is the one list of the dialects we ship. The tests that must
+// hold for all of them range over it, so a fourth is enrolled by being added
+// here rather than by someone remembering to widen each test.
+var builtinDialects = map[string]func() core.SQLDialect{
+	"postgresql": func() core.SQLDialect { return postgresql.NewDialect() },
+	"mysql":      func() core.SQLDialect { return mysql.NewDialect() },
+	"sqlite":     func() core.SQLDialect { return sqlite.NewDialect() },
+}
+
+// BuiltinDialects names them in a stable order.
+func BuiltinDialects() []string {
+	return slices.Sorted(maps.Keys(builtinDialects))
+}
 
 // RegisterDialect stores a custom dialect under dbType. Optional: the three
 // built-in types (postgresql, mysql, sqlite) are created lazily by GetDialect.
@@ -32,17 +48,11 @@ func GetDialect(dbType string) core.SQLDialect {
 		return dialect
 	}
 
-	var created core.SQLDialect
-	switch dbType {
-	case "postgresql":
-		created = postgresql.NewDialect()
-	case "mysql":
-		created = mysql.NewDialect()
-	case "sqlite":
-		created = sqlite.NewDialect()
-	default:
+	newDialect, builtin := builtinDialects[dbType]
+	if !builtin {
 		return nil
 	}
+	created := newDialect()
 
 	dialectRegistryMu.Lock()
 	// Re-check under write lock; another goroutine may have raced us.

@@ -5,21 +5,20 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/lib/pq"
 )
 
-// Partitions are managed in-DB by pg_partman, triggered by pg_cron. These
-// boot-time helpers verify that setup (Preflight) and self-provision the cron
-// job (EnsureMaintenanceSchedule). Raw SQL throughout: they hit catalog/extension
-// objects (pg_extension, partman.part_config, pg_cron) the migrations do not
-// describe, so
-// sqlc can't type them.
+// Partitions are managed in-DB by pg_partman; the Logger runs its maintenance
+// daily (see Start). Raw SQL throughout: these hit catalog/extension objects
+// (pg_extension, partman.part_config) the migrations do not describe, so sqlc
+// can't type them.
 
 const (
-	maintenanceJobName  = "audit-partman-maintenance"
-	maintenanceCommand  = "CALL partman.run_maintenance_proc()"
-	defaultCronSchedule = "17 3 * * *" // daily 03:17, off-peak
+	// maintenanceLockKey serializes maintenance across backend instances.
+	maintenanceLockKey = 0x61756469745f706d // "audit_pm"
+	maintenanceTimeout = 5 * time.Minute
 )
 
 // auditParents are the partitioned parents pg_partman must be managing.
@@ -56,47 +55,38 @@ func Preflight(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// EnsureMaintenanceSchedule registers the pg_cron maintenance job; no-op when
-// cronDSN is empty. pg_cron's functions live only in the cluster's cron DB, so
-// it can't be a migration: this connects to cronDSN and schedules the job to run
-// in the app DB. Upserts by job name (safe on every boot). Needs the cronDSN role
-// to have pg_cron privileges; otherwise leave cronDSN empty and provision by hand.
-func EnsureMaintenanceSchedule(ctx context.Context, appDB *sql.DB, cronDSN, schedule string) error {
-	if cronDSN == "" {
+func (l *Logger) partitionMaintenance() {
+	ctx, cancel := context.WithTimeout(context.Background(), maintenanceTimeout)
+	defer cancel()
+	if err := runPartitionMaintenance(ctx, l.db); err != nil {
+		log.Printf("WARNING: audit: partition maintenance: %v", err)
+	}
+}
+
+// runPartitionMaintenance premakes upcoming partitions and drops expired ones.
+// The advisory lock is session-scoped, so lock, CALL and unlock share one
+// connection; an instance that loses the race skips this round.
+func runPartitionMaintenance(ctx context.Context, db *sql.DB) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	var locked bool
+	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, maintenanceLockKey).Scan(&locked); err != nil {
+		return fmt.Errorf("taking lock: %w", err)
+	}
+	if !locked {
 		return nil
 	}
-	if schedule == "" {
-		schedule = defaultCronSchedule
-	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, maintenanceLockKey)
+	}()
 
-	var targetDB string
-	if err := appDB.QueryRowContext(ctx, `SELECT current_database()`).Scan(&targetDB); err != nil {
-		return fmt.Errorf("audit cron: resolving target database: %w", err)
-	}
-
-	cronDB, err := sql.Open("postgres", cronDSN)
-	if err != nil {
-		return fmt.Errorf("audit cron: opening cron database: %w", err)
-	}
-	defer func() { _ = cronDB.Close() }()
-	if err := cronDB.PingContext(ctx); err != nil {
-		return fmt.Errorf("audit cron: connecting to cron database: %w", err)
-	}
-
-	var hasCron bool
-	if err := cronDB.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')`).Scan(&hasCron); err != nil {
-		return fmt.Errorf("audit cron: checking pg_cron: %w", err)
-	}
-	if !hasCron {
-		return fmt.Errorf("audit cron: pg_cron is not installed in the cron database. Enable it (shared_preload_libraries + restart) or schedule maintenance manually")
-	}
-
-	// schedule_in_database upserts by job name, so re-running on boot is safe.
-	if _, err := cronDB.ExecContext(ctx,
-		`SELECT cron.schedule_in_database($1, $2, $3, $4)`,
-		maintenanceJobName, schedule, maintenanceCommand, targetDB); err != nil {
-		return fmt.Errorf("audit cron: scheduling maintenance job: %w", err)
+	// A procedure that commits per partition set, so it runs outside any tx.
+	if _, err := conn.ExecContext(ctx, `CALL partman.run_maintenance_proc()`); err != nil {
+		return fmt.Errorf("run_maintenance_proc: %w", err)
 	}
 	return nil
 }

@@ -1,8 +1,8 @@
 # audit — TODO
 
 Foundation merged: unified `audit.event` (partitioned by domain × month),
-async + outbox lanes, principal snapshots, catalog/`Emit`, pg_partman/pg_cron
-lifecycle. Live emit sites: `query.executed`, `iam.permission.lifecycle.*`.
+async + outbox lanes, principal snapshots, catalog/`Emit`, pg_partman
+lifecycle (maintenance run daily by the Logger). Live emit sites: `query.executed`, `iam.permission.lifecycle.*`.
 
 ## Wire remaining emit sites (vocabulary already declared in catalog.go)
 - [ ] query: `denied`, `exported` (dump path)
@@ -19,7 +19,6 @@ lifecycle. Live emit sites: `query.executed`, `iam.permission.lifecycle.*`.
       not in its tx — thread a tx through `patch.Apply` (see TODO in logger.go)
 - [ ] MCP execute path logging + `channel` (http|mcp) in payload (agent-access signal)
 - [ ] System/platform events (key rotation, boot): blocked by `workspace_id NOT NULL` — needs a decision
-- [ ] select-ops: enable pg_partman + pg_cron on the cluster, set `POSTGRES_AUDIT_CRON_DSN` (KMS secret → cluster's `defaultdb`)
 
 ## Notes
 - `domain.action` is a frozen external contract — add, never rename/repurpose.

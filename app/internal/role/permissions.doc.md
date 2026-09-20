@@ -66,6 +66,12 @@ Anything that is not plainly one of the four row actions needs MANAGE. That is
 deliberate: granting the four never quietly grants more than reading and
 writing rows, so an unusual statement is refused rather than let through.
 
+A statement that does two things needs the permission for both. `CREATE TABLE
+new AS SELECT * FROM old` builds a table and reads another one, so it needs
+MANAGE and SELECT on `old`. The same holds for a view over a table, an UPDATE
+that reads a second table to fill the first, and a statement whose result is
+built by a query inside it.
+
 ## Databases nobody has written a rule for
 
 Step 5 is about a database your roles *do* cover. A database that no role in the
