@@ -110,20 +110,14 @@ web_start() {
 # browser and nothing else. Through the task for the same reason as the shots:
 # playwright lives under app/frontend, and that is where it resolves.
 web_og() {
-  command -v wails3 >/dev/null 2>&1 || {
-    echo "wails3 not found. Install it: go install github.com/wailsapp/wails/v3/cmd/wails3@latest" >&2
-    exit 1
-  }
+  require_wails3
   step "Web -- re-rendering the link preview card"
   (cd "$ROOT/app" && wails3 task og)
   done_ "web og -- look at web/og.png before committing it"
 }
 
 web_shots() {
-  command -v wails3 >/dev/null 2>&1 || {
-    echo "wails3 not found. Install it: go install github.com/wailsapp/wails/v3/cmd/wails3@latest" >&2
-    exit 1
-  }
+  require_wails3
   # The captures are written as lossless WebP, the format the site serves.
   command -v cwebp >/dev/null 2>&1 || {
     echo "cwebp not found. Install libwebp: brew install webp, or apt install webp" >&2
@@ -149,9 +143,14 @@ web() {
 # Everything here goes through wails3, which owns the build: it generates the
 # bindings, builds the frontend into the binary and knows the platform tags.
 
+# The CLI generates the bindings, so a version other than the library's writes
+# a tree CI then rejects as stale. `@latest` was the old advice and is how the
+# pin drifted five releases; read the answer off the library instead.
 require_wails3() {
   command -v wails3 >/dev/null 2>&1 || {
-    echo "wails3 not found. Install it: go install github.com/wailsapp/wails/v3/cmd/wails3@latest" >&2
+    local want
+    want="$(cd "$ROOT/app" && go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3 2>/dev/null)"
+    echo "wails3 not found. Install it: go install github.com/wailsapp/wails/v3/cmd/wails3@${want:-latest}" >&2
     exit 1
   }
 }
