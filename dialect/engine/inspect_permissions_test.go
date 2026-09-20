@@ -722,3 +722,94 @@ func TestPermissions_LaterCTENameIsTheRealTable(t *testing.T) {
 		})
 	}
 }
+
+// TestPermissions_AQualifiedNameIsNeverVirtual pins the tables a FROM list
+// dropped because a CTE or a subquery alias beside them happened to share their
+// bare name. convertRelationRefs matched on that name alone, so naming an alias
+// after a table hid the table: the role below read other.t3 and main.t2 holding
+// select on main.t1 and nothing else. A subquery alias collides the same way,
+// and is pinned per dialect, since what each reports for the subquery differs.
+func TestPermissions_AQualifiedNameIsNeverVirtual(t *testing.T) {
+	const s = "main"
+
+	for _, tt := range []struct {
+		sql   string
+		read  testutil.Touch
+		needs []tableGrant
+	}{
+		{"WITH t3 AS (SELECT c1 FROM t1) SELECT * FROM t3 JOIN other.t3 ON 1=1",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "other", Name: "t3"},
+			[]tableGrant{{s, "t1", core.ActionSelect}, {"other", "t3", core.ActionSelect}}},
+		{"WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2 JOIN main.t2 ON 1=1",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: s, Name: "t2"},
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}},
+		{"WITH t3 AS (SELECT c1 FROM t1) SELECT other.t3.c4 FROM t3, other.t3",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "other", Name: "t3"},
+			[]tableGrant{{s, "t1", core.ActionSelect}, {"other", "t3", core.ActionSelect}}},
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+tt.sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), tt.sql)
+				if !testutil.Touches(inspected, tt.read) {
+					t.Fatalf("%s.%s is read and nothing reported it: %+v", tt.read.Schema, tt.read.Name, inspected)
+				}
+
+				for idx, missing := range tt.needs {
+					rest := slices.Delete(slices.Clone(tt.needs), idx, idx+1)
+					if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(rest...)); err == nil {
+						t.Errorf("ran without %s on %s.%s", missing.action, missing.schema, missing.table)
+					}
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(tt.needs...)); err != nil {
+					t.Errorf("holding %v still refused it: %v", tt.needs, err)
+				}
+			})
+		}
+	}
+}
+
+// An unqualified name that matches a CTE or a subquery alias is still that
+// relation, so the guard above must not turn every alias back into a table.
+func TestPermissions_AnUnqualifiedNameStillResolvesToTheAlias(t *testing.T) {
+	for _, sql := range []string{
+		"WITH t2 AS (SELECT c1 FROM t1) SELECT c1 FROM t2",
+		"SELECT * FROM (SELECT c1 FROM t1) s",
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+					t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable()); err == nil {
+					t.Error("ran holding nothing, so passing below proves nothing")
+				}
+				onlyT1 := holdingPerTable(tableGrant{"main", "t1", core.ActionSelect})
+				if err := core.CheckQueryPermissions(inspected, permDBID, onlyT1); err != nil {
+					t.Errorf("the alias was read as a table: %v", err)
+				}
+			})
+		}
+	}
+}
+
+// The same collision written with a subquery alias rather than a CTE. What each
+// dialect reports for the subquery itself differs, so only the qualified read
+// is pinned; the grants it needs are pinned by the CTE cases above.
+func TestInspect_AQualifiedNameSurvivesAnAliasOfTheSameName(t *testing.T) {
+	want := testutil.Touch{Op: core.InspectOpSelect, Schema: "other", Name: "t3"}
+
+	for _, sql := range []string{
+		"SELECT * FROM (SELECT c1 FROM t1) t3 JOIN other.t3 ON 1=1",
+		"SELECT other.t3.c4 FROM (SELECT c1 FROM t1) t3, other.t3",
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				if !testutil.Touches(inspected, want) {
+					t.Errorf("no read of other.t3 anywhere in %+v", inspected)
+				}
+			})
+		}
+	}
+}

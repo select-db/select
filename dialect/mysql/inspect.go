@@ -773,14 +773,21 @@ func (i *Inspector) resolveTableName(tn mysql.ITableNameContext) (schema, table 
 // splitQualifiedName parses "db.table" or "table" and applies the default schema.
 // Backtick-quoted segments are normalized.
 func splitQualifiedName(d *Dialect, raw, defaultSchema string) (schema, table string) {
+	schema, table, _ = splitQualifiedNameParts(d, raw, defaultSchema)
+	return schema, table
+}
+
+// splitQualifiedNameParts also reports whether raw carried the schema. The
+// caller cannot tell from schema alone, which holds the default for a bare name.
+func splitQualifiedNameParts(d *Dialect, raw, defaultSchema string) (schema, table string, qualified bool) {
 	parts := splitDotted(raw)
 	switch len(parts) {
 	case 0:
-		return "", ""
+		return "", "", false
 	case 1:
-		return defaultSchema, d.NormalizeIdentifier(parts[0])
+		return defaultSchema, d.NormalizeIdentifier(parts[0]), false
 	default:
-		return d.NormalizeIdentifier(parts[0]), d.NormalizeIdentifier(parts[len(parts)-1])
+		return d.NormalizeIdentifier(parts[0]), d.NormalizeIdentifier(parts[len(parts)-1]), true
 	}
 }
 
@@ -949,13 +956,14 @@ func (l *relationRefListener) EnterSingleTable(ctx *mysql.SingleTableContext) {
 	if tr == nil {
 		return
 	}
-	schema, table := splitQualifiedName(l.dialect, tr.GetText(), l.defaultSchema)
+	schema, table, qualified := splitQualifiedNameParts(l.dialect, tr.GetText(), l.defaultSchema)
 	if table == "" {
 		return
 	}
 	ref := core.RelationRef{
 		Schema:        schema,
 		Table:         table,
+		Qualified:     qualified,
 		ScopeStartPos: -1,
 		ScopeEndPos:   -1,
 	}
@@ -1732,7 +1740,9 @@ func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables m
 		if ref.Schema == "" && ref.Table == "" {
 			continue
 		}
-		if virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
+		// Skip virtual tables (CTEs, subqueries). Only an unqualified name can
+		// be one; dropping a qualified one is a read nobody checks.
+		if !ref.Qualified && virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
 			continue
 		}
 		schema := ref.Schema

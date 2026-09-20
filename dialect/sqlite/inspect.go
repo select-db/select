@@ -681,6 +681,7 @@ func (l *relationRefExtractorListener) EnterTable_or_subquery(ctx *sqlite.Table_
 		// Handle qualified table names (schema.table)
 		if ctx.Schema_name() != nil {
 			ref.Schema = l.dialect.NormalizeIdentifier(ctx.Schema_name().GetText())
+			ref.Qualified = true
 		}
 		ref.Table = l.dialect.NormalizeIdentifier(tableName.Any_name().GetText())
 
@@ -815,6 +816,7 @@ func (l *relationRefExtractorListener) EnterJoin_clause(ctx *sqlite.Join_clauseC
 			// Handle qualified table names (schema.table)
 			if tos.Schema_name() != nil {
 				ref.Schema = l.dialect.NormalizeIdentifier(tos.Schema_name().GetText())
+				ref.Qualified = true
 			}
 			ref.Table = l.dialect.NormalizeIdentifier(tableName.Any_name().GetText())
 
@@ -823,8 +825,9 @@ func (l *relationRefExtractorListener) EnterJoin_clause(ctx *sqlite.Join_clauseC
 				continue
 			}
 
-			// Check if this is a CTE (virtual table) - CTEs have no schema
-			if l.isCTE(ref.Table) {
+			// Check if this is a CTE (virtual table) - CTEs have no schema. Only
+			// an unqualified name can be one.
+			if !ref.Qualified && l.isCTE(ref.Table) {
 				ref.Schema = ""
 			}
 
@@ -1604,8 +1607,9 @@ func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables m
 			continue
 		}
 
-		// Skip virtual tables (CTEs, subqueries)
-		if virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
+		// Skip virtual tables (CTEs, subqueries). Only an unqualified name can
+		// be one; dropping a qualified one is a read nobody checks.
+		if !ref.Qualified && virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
 			continue
 		}
 

@@ -1441,8 +1441,9 @@ func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables m
 			continue
 		}
 
-		// Skip virtual tables (CTEs, subqueries)
-		if virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
+		// Skip virtual tables (CTEs, subqueries). Only an unqualified name can
+		// be one; dropping a qualified one is a read nobody checks.
+		if !ref.Qualified && virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
 			continue
 		}
 
@@ -2003,9 +2004,11 @@ func (fw *fromWalker) processRelationRef(relationRef pg.ITable_refContext, defau
 	}
 
 	var schema, table string
+	var qualified bool
 	var nameLine, nameCol, nameEndCol int
 	if indirection := qualifiedName.Indirection(); indirection != nil {
 		// This is schema.table format
+		qualified = true
 		schema = fw.dialect.NormalizeIdentifier(colId.GetText())
 		indirectionEls := indirection.AllIndirection_el()
 		if len(indirectionEls) > 0 {
@@ -2061,6 +2064,7 @@ func (fw *fromWalker) processRelationRef(relationRef pg.ITable_refContext, defau
 		Schema:        schema,
 		Table:         table,
 		Alias:         alias,
+		Qualified:     qualified,
 		ScopeStartPos: availableFromPos,
 		ScopeEndPos:   -1, // Available until end of query (will be refined for subqueries)
 		Line:          nameLine,

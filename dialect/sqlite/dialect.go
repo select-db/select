@@ -665,6 +665,7 @@ func (l *relationRefListener) EnterTable_or_subquery(ctx *sqlite.Table_or_subque
 		// Handle qualified table names (schema.table)
 		if ctx.Schema_name() != nil {
 			ref.Schema = l.dialect.NormalizeIdentifier(ctx.Schema_name().GetText())
+			ref.Qualified = true
 		}
 		ref.Table = l.dialect.NormalizeIdentifier(tableName.Any_name().GetText())
 
@@ -673,8 +674,9 @@ func (l *relationRefListener) EnterTable_or_subquery(ctx *sqlite.Table_or_subque
 			return
 		}
 
-		// Check if this is a CTE (virtual table) - CTEs have no schema
-		if l.isCTE(ref.Table) {
+		// Check if this is a CTE (virtual table) - CTEs have no schema. Only an
+		// unqualified name can be one.
+		if !ref.Qualified && l.isCTE(ref.Table) {
 			ref.Schema = ""
 		}
 
@@ -785,6 +787,7 @@ func (l *relationRefListener) EnterJoin_clause(ctx *sqlite.Join_clauseContext) {
 			// Handle qualified table names (schema.table)
 			if tos.Schema_name() != nil {
 				ref.Schema = l.dialect.NormalizeIdentifier(tos.Schema_name().GetText())
+				ref.Qualified = true
 			}
 			ref.Table = l.dialect.NormalizeIdentifier(tableName.Any_name().GetText())
 
@@ -793,8 +796,9 @@ func (l *relationRefListener) EnterJoin_clause(ctx *sqlite.Join_clauseContext) {
 				continue
 			}
 
-			// Check if this is a CTE (virtual table) - CTEs have no schema
-			if l.isCTE(ref.Table) {
+			// Check if this is a CTE (virtual table) - CTEs have no schema. Only
+			// an unqualified name can be one.
+			if !ref.Qualified && l.isCTE(ref.Table) {
 				ref.Schema = ""
 			}
 
