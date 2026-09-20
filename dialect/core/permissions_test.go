@@ -538,3 +538,37 @@ func equalIntSlices(a, b []int) bool {
 	}
 	return true
 }
+
+// A table no field came from used to be skipped whenever some other table in
+// the same statement had fields: the "no fields" branch was a test of the
+// statement, not of the table, so the per-column walk simply matched nothing
+// and the loop moved on. Joining a forbidden table and selecting only the
+// permitted one's columns then read it unchecked.
+func TestCheckQueryPermissions_TableWithNoFieldsIsStillChecked(t *testing.T) {
+	// SELECT t1.c2 FROM t1, t2: c2 resolves to t1, nothing resolves to t2.
+	stmt := []InspectStatement{{
+		Operation: InspectOpSelect,
+		Tables: []InspectTable{
+			{Name: "t1", Schema: "public"},
+			{Name: "t2", Schema: "public"},
+		},
+		Fields: []InspectField{{Name: "c2", Table: "t1", Schema: "public"}},
+	}}
+
+	onlyT1 := []PermissionEntry{pe(testDBID, "public", "t1", "*", ActionSelect, "allow")}
+	if err := CheckQueryPermissions(stmt, testDBID, Compile(onlyT1)); err == nil {
+		t.Error("read t2 on a grant covering only t1")
+	}
+
+	bothTables := append(onlyT1, pe(testDBID, "public", "t2", "*", ActionSelect, "allow"))
+	if err := CheckQueryPermissions(stmt, testDBID, Compile(bothTables)); err != nil {
+		t.Errorf("holding select on both tables still refused it: %v", err)
+	}
+
+	// A deny on the joined table is what the grant above must not be able to
+	// override, so it is the same check from the other side.
+	denied := append(bothTables, pe(testDBID, "public", "t2", "*", ActionSelect, "deny"))
+	if err := CheckQueryPermissions(stmt, testDBID, Compile(denied)); err == nil {
+		t.Error("read a select-denied table it named no column of")
+	}
+}
