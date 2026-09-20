@@ -71,3 +71,25 @@ func TestInspectUpdateWithoutFromReadsNothing(t *testing.T) {
 		t.Errorf("got %d subqueries, want none: %+v", len(stmts[0].Subqueries), stmts[0].Subqueries)
 	}
 }
+
+// SQLite takes a subquery in LIMIT and in the OFFSET that follows it, which
+// MySQL does not, so the clauses every dialect shares are pinned by permission
+// outcome in dialect/engine and only these two live here.
+func TestInspectClauseSubqueriesReachTheResult(t *testing.T) {
+	read := testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t2"}
+
+	for _, tt := range []struct {
+		clause string
+		sql    string
+	}{
+		{"LIMIT", "SELECT c1 FROM t1 LIMIT (SELECT count(*) FROM t2)"},
+		{"OFFSET", "SELECT c1 FROM t1 LIMIT 5 OFFSET (SELECT count(*) FROM t2)"},
+	} {
+		t.Run(tt.clause, func(t *testing.T) {
+			stmts := NewInspector(NewDialect(), core.GetInspectTestMetadata()).Inspect(tt.sql)
+			if !testutil.Touches(stmts, read) {
+				t.Errorf("no read of main.t2 anywhere in %+v", stmts)
+			}
+		})
+	}
+}

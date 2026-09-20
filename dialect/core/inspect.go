@@ -16,3 +16,38 @@ func OrUnknown(stmt *InspectStatement) InspectStatement {
 	}
 	return *stmt
 }
+
+// DropVirtualTables strips, in place and throughout the tree, the tables naming
+// a CTE the enclosing query declared. A CTE is a relation at any depth, so a
+// subquery inspected without that scope reports one as a table resolving to no
+// schema, which is refused for every role.
+//
+// Only a name that resolved to no schema is dropped: a qualified one is the
+// real table even where a CTE shadows the bare name, and dropping it would be
+// a read nobody checks. normalize applies to both sides, so virtual may hold
+// any casing.
+func DropVirtualTables(stmts []InspectStatement, virtual map[string]bool, normalize func(string) string) {
+	if len(virtual) == 0 {
+		return
+	}
+	declared := make(map[string]bool, len(virtual))
+	for name := range virtual {
+		declared[normalize(name)] = true
+	}
+	dropDeclaredTables(stmts, declared, normalize)
+}
+
+func dropDeclaredTables(stmts []InspectStatement, declared map[string]bool, normalize func(string) string) {
+	for idx := range stmts {
+		stmt := &stmts[idx]
+		kept := stmt.Tables[:0]
+		for _, table := range stmt.Tables {
+			if table.Schema == "" && declared[normalize(table.Name)] {
+				continue
+			}
+			kept = append(kept, table)
+		}
+		stmt.Tables = kept
+		dropDeclaredTables(stmt.Subqueries, declared, normalize)
+	}
+}
