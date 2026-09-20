@@ -44,8 +44,9 @@ func NewAccount(t *testing.T, conn *sql.DB) Actor {
 	}
 }
 
-// MintJWT issues an access token for userID, embedding whatever workspaces/roles
-// are seeded at call time (CreateJWT reads them from the DB). Seed first.
+// MintJWT issues an access token naming userID. It carries identity only:
+// workspaces, ownership and roles are derived per request, so when a token was
+// minted relative to a seed makes no difference to what it reaches.
 func MintJWT(t *testing.T, userID string) string {
 	t.Helper()
 	uid, err := uuid.Parse(userID)
@@ -85,6 +86,25 @@ func SeedRole(t *testing.T, conn *sql.DB, id, workspaceID, name string) {
 	_, err := conn.Exec(`INSERT INTO app.role (id, workspace_id, name) VALUES ($1::uuid, $2::uuid, $3)`,
 		id, workspaceID, name)
 	require.NoError(t, err)
+}
+
+// SeedPermission grants a role one workspace-level action.
+func SeedPermission(t *testing.T, conn *sql.DB, roleID, workspaceID, action string) {
+	t.Helper()
+	_, err := conn.Exec(
+		`INSERT INTO app.permission (id, role_id, workspace_id, action, effect) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'allow')`,
+		uuid.NewString(), roleID, workspaceID, action)
+	require.NoError(t, err)
+}
+
+// SeedRoleWithPermission returns a new role in the workspace carrying one
+// action, for tests that ask whether somebody may act rather than what they hold.
+func SeedRoleWithPermission(t *testing.T, conn *sql.DB, workspaceID, name, action string) string {
+	t.Helper()
+	roleID := uuid.NewString()
+	SeedRole(t, conn, roleID, workspaceID, name)
+	SeedPermission(t, conn, roleID, workspaceID, action)
+	return roleID
 }
 
 func SeedUserRole(t *testing.T, conn *sql.DB, userID, roleID, workspaceID string) {

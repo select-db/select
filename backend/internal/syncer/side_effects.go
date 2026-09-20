@@ -16,14 +16,12 @@ import (
 // write triggers beyond the row upsert itself. It runs after a successful
 // apply.
 //
-// Role and group writes need nothing here. CreateJWT reads roles from the
-// database when it mints, so the next token a user is issued carries the change
-// already, and the one they hold now is accepted on its signature until it
-// expires whatever this does.
+// Role and group writes need nothing here: standing is derived per request, so
+// the write is the whole of the change.
 //
 // This is auth logic the schema can't express, so it stays hand-written and
-// composes with the generated pure-upsert Apply, like needsTokenRefresh.
-// Best-effort: a lookup failing must not fail the sync.
+// composes with the generated pure-upsert Apply. Best-effort: a lookup failing
+// must not fail the sync.
 func applyCommitSideEffects(ctx context.Context, c types.Commit) {
 	if c.TableName != "permission" {
 		return

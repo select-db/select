@@ -36,7 +36,7 @@ func TestApply_ClientWins_NewerCommit(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "Old Name")
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{
 			updateRoleCommit(ownerID, wsID, roleID, "New Name", time.Now().Add(time.Second)),
 		},
@@ -58,7 +58,7 @@ func TestApply_ServerWins_OlderCommit(t *testing.T) {
 	seedRole(t, conn, roleID, wsID, "Server Name")
 
 	// zero CreatedAt is before any real updated_at → server wins
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{
 			updateRoleCommit(ownerID, wsID, roleID, "Client Name", time.Time{}),
 		},
@@ -92,7 +92,7 @@ func TestApply_ServerWins_RowAlreadyDeleted(t *testing.T) {
 	require.NoError(t, err)
 
 	// client tries to update a role the server has already deleted
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{
 			updateRoleCommit(ownerID, wsID, roleID, "Revived Name", time.Now().Add(time.Second)),
 		},
@@ -124,7 +124,7 @@ func TestApply_UserToRole_InsertsRow(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "Admins")
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "INSERT",
@@ -156,7 +156,7 @@ func TestApply_Permission_NullableFieldsOmitted(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "Admins")
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "INSERT",
@@ -199,7 +199,7 @@ func TestApply_Permission_NullableFieldsStored(t *testing.T) {
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "Admins")
 
-	resp, _, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
+	resp, err := Sync(context.Background(), ownerID, []string{wsID}, nil, []string{wsID}, &types.SyncRequest{
 		PendingCommits: []types.Commit{{
 			ID:          newID(),
 			Operation:   "INSERT",
