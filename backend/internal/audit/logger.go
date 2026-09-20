@@ -71,8 +71,9 @@ func New(db *sql.DB, opts Options) *Logger {
 	}
 }
 
-// Start launches the async writer and the outbox drainer, plus the fallback
-// retention sweeper when pg_partman isn't managing partitions in-DB.
+// Start launches the async writer and the outbox drainer, plus a daily task:
+// pg_partman maintenance when partman manages the partitions, otherwise the
+// fallback retention sweep.
 func (l *Logger) Start() {
 	if l == nil {
 		return
@@ -81,9 +82,13 @@ func (l *Logger) Start() {
 	go l.writeLoop()
 	go l.outboxLoop()
 
-	if l.retention > 0 && !l.partmanManaged() {
+	switch {
+	case l.partmanManaged():
 		l.wg.Add(1)
-		go l.retentionLoop()
+		go l.runDaily(l.partitionMaintenance)
+	case l.retention > 0:
+		l.wg.Add(1)
+		go l.runDaily(l.retentionSweep)
 	}
 }
 

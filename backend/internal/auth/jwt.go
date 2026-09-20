@@ -22,8 +22,10 @@ import (
 )
 
 const (
-	issuer          = "selectdb"
-	audience        = "selectdb-client"
+	// Issuer and Audience are required on every token ValidateJWT accepts, so
+	// anything that signs one for this service has to set both.
+	Issuer          = "selectdb"
+	Audience        = "selectdb-client"
 	accessTokenTTL  = 5 * time.Minute
 	refreshTokenTTL = 10 * 24 * time.Hour
 )
@@ -86,44 +88,17 @@ func (rsaSignerMethod) Verify(signingString string, sig []byte, key any) error {
 
 var jwtSigningMethod = rsaSignerMethod{}
 
-// Name is cached at issuance so audit/UI need no per-request role lookup.
-type RoleRef struct {
-	ID   string `json:"id"`
-	Name string `json:"name,omitempty"`
-}
-
-// Roles are workspace-scoped, so the token groups them per workspace.
-type WorkspaceClaim struct {
-	ID      string    `json:"id"`
-	IsOwner bool      `json:"is_owner,omitempty"`
-	Roles   []RoleRef `json:"roles,omitempty"`
-}
-
-// Roles/ownership are read from the database at issuance, so they are at most
-// accessTokenTTL stale. Membership itself is re-derived per request, not
-// trusted from the token.
+// CustomClaims is identity only: nothing here is authorised against. Membership,
+// ownership and roles are re-derived per request from the database, so a change
+// to any of them takes effect on the next request rather than when the token
+// naming it expires. Name is a display label and may lag a rename by one token.
 type CustomClaims struct {
-	UserID     string           `json:"sub"`
-	Name       string           `json:"name,omitempty"`
-	Workspaces []WorkspaceClaim `json:"workspaces,omitempty"`
+	UserID string `json:"sub"`
+	Name   string `json:"name,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// RolesIn returns the roles the token grants in one workspace, keyed by role id.
-func (c *CustomClaims) RolesIn(workspaceID string) map[string]string {
-	roles := map[string]string{}
-	for _, ws := range c.Workspaces {
-		if ws.ID != workspaceID {
-			continue
-		}
-		for _, r := range ws.Roles {
-			roles[r.ID] = r.Name
-		}
-	}
-	return roles
-}
-
-// CreateJWT issues a signed access token embedding per-workspace roles/ownership.
+// CreateJWT issues a signed access token naming the user.
 func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 	signer, err := getSigner()
 	if err != nil {
@@ -131,58 +106,7 @@ func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 	}
 
 	displayName := ""
-	var workspaces []WorkspaceClaim
 	if db.Queries != nil {
-		// Membership, ownership, roles. Grouped per workspace below.
-		var workspaceIDs []string
-		if ids, err := db.Queries.GetWorkspaceIDsByUserID(ctx, userID); err == nil {
-			for _, u := range ids {
-				workspaceIDs = append(workspaceIDs, u.String())
-			}
-		}
-
-		owned := map[string]bool{}
-		if ids, err := db.Queries.GetOwnedWorkspaceIDsByUserID(ctx, db_types.NewJSONNullUUID(userID)); err == nil {
-			for _, u := range ids {
-				owned[u.String()] = true
-			}
-		}
-
-		// A user's effective roles are the union of directly-assigned roles
-		// (user_to_role) and roles granted through group membership
-		// (user_to_group -> group_to_role), deduped per workspace.
-		rolesByWS := map[string][]RoleRef{}
-		seenRole := map[string]map[string]bool{}
-		addRole := func(ws, id, name string) {
-			if seenRole[ws] == nil {
-				seenRole[ws] = map[string]bool{}
-			}
-			if seenRole[ws][id] {
-				return
-			}
-			seenRole[ws][id] = true
-			rolesByWS[ws] = append(rolesByWS[ws], RoleRef{ID: id, Name: name})
-		}
-		if rows, err := db.Queries.GetUserRolesWithNames(ctx, userID); err == nil {
-			for _, r := range rows {
-				addRole(r.WorkspaceID.String(), r.ID.String(), r.Name)
-			}
-		}
-		if rows, err := db.Queries.GetUserGroupRolesWithNames(ctx, userID); err == nil {
-			for _, r := range rows {
-				addRole(r.WorkspaceID.String(), r.ID.String(), r.Name)
-			}
-		}
-
-		workspaces = make([]WorkspaceClaim, 0, len(workspaceIDs))
-		for _, ws := range workspaceIDs {
-			workspaces = append(workspaces, WorkspaceClaim{
-				ID:      ws,
-				IsOwner: owned[ws],
-				Roles:   rolesByWS[ws],
-			})
-		}
-
 		if u, err := db.Queries.GetUserNameByID(ctx, userID); err == nil {
 			displayName = u.Name.ValueOrEmpty()
 			if displayName == "" {
@@ -192,12 +116,11 @@ func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 	}
 
 	claims := CustomClaims{
-		UserID:     userID.String(),
-		Name:       displayName,
-		Workspaces: workspaces,
+		UserID: userID.String(),
+		Name:   displayName,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    issuer,
-			Audience:  jwt.ClaimStrings{audience},
+			Issuer:    Issuer,
+			Audience:  jwt.ClaimStrings{Audience},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -263,7 +186,7 @@ func ValidateJWT(tokenStr string) (*jwt.Token, *CustomClaims, error) {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return pubKey, nil
-	}, jwt.WithAudience(audience), jwt.WithIssuer(issuer))
+	}, jwt.WithAudience(Audience), jwt.WithIssuer(Issuer))
 
 	if err != nil {
 		// When the token is expired, the library still parses and fills claims;

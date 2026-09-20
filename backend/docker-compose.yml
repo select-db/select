@@ -9,7 +9,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.postgres
-    image: select-dev-postgres:17
+    image: select-dev-postgres:18
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
@@ -18,7 +18,8 @@ services:
     ports:
       - "5431:5432"
     volumes:
-      - select_pgdata:/var/lib/postgresql/data
+      # postgres:18+ keeps PGDATA under /var/lib/postgresql/<major>/docker.
+      - select_pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 2s
