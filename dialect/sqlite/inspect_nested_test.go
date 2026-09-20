@@ -146,3 +146,29 @@ func TestInspectCTEScopeOnInsert(t *testing.T) {
 		}
 	}
 }
+
+// Another dialect's SQL is one paste away in an editor that does not switch
+// connections, and the statement splitter read tokens off nodes error recovery
+// had left incomplete. That panicked, which fails the request rather than
+// refusing the statement.
+func TestInspectMySQLWritesDoNotPanic(t *testing.T) {
+	for _, sql := range []string{
+		"DELETE t1 FROM t1 JOIN t2 ON t1.c1 = t2.c1",
+		"UPDATE t1, t2 SET c1 = 1",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("inspecting panicked: %v", r)
+				}
+			}()
+			stmts := NewInspector(NewDialect(), core.GetInspectTestMetadata()).Inspect(sql)
+			if len(stmts) == 0 {
+				t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+			}
+			if name := unresolvedCTE(stmts); name != "" {
+				t.Errorf("%q resolved to no schema: %+v", name, stmts)
+			}
+		})
+	}
+}

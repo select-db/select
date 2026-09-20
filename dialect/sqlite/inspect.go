@@ -69,22 +69,59 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 			group = append(group, stmtLists[idx])
 		}
 
+		var produced []core.InspectStatement
 		if len(group) > 1 {
-			results = append(results, core.OrUnknown(i.mergeCompoundSelectGroup(group)))
+			produced = append(produced, core.OrUnknown(i.mergeCompoundSelectGroup(group)))
 		} else {
 			for _, stmt := range group[0].AllSql_stmt() {
-				results = append(results, core.OrUnknown(i.inspectStatement(stmt)))
+				produced = append(produced, core.OrUnknown(i.inspectStatement(stmt)))
 			}
 		}
+
+		// A call that reaches the filesystem is not covered by the four row
+		// actions, so the read becomes the nested statement of an unclassified
+		// one: manage for the call, and whatever the rows still need.
+		from, to := groupTokenRange(tokenStream, group, stmtLists, idx)
+		if callsHostFunction(tokenStream, from, to) {
+			for pi := range produced {
+				produced[pi] = core.InspectStatement{
+					Operation:  core.InspectOpUnknown,
+					Subqueries: []core.InspectStatement{produced[pi]},
+				}
+			}
+		}
+		results = append(results, produced...)
 		idx++
 	}
 
 	return results
 }
 
+// groupTokenRange is the half-open token span of one compound group, bounded by
+// the statement list after it so a script does not leak one statement's calls
+// into another.
+func groupTokenRange(tokens *antlr.CommonTokenStream, group, all []sqlite.ISql_stmt_listContext, idx int) (int, int) {
+	from := 0
+	if start := group[0].GetStart(); start != nil {
+		from = start.GetTokenIndex()
+	}
+	to := len(tokens.GetAllTokens())
+	if idx+1 < len(all) && all[idx+1] != nil {
+		if start := all[idx+1].GetStart(); start != nil {
+			to = start.GetTokenIndex()
+		}
+	}
+	return from, to
+}
+
 // hasCompoundOperatorBetween reports whether UNION/INTERSECT/EXCEPT tokens appear between two parse-tree nodes.
 // The compound operator is the last token of the first stmt_list, so we scan from stopIdx (inclusive).
 func hasCompoundOperatorBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRuleContext) bool {
+	// Error recovery leaves a node without its bounding tokens, and reading one
+	// off it panics, which fails the request rather than refusing the statement.
+	if a == nil || b == nil || a.GetStop() == nil || b.GetStart() == nil {
+		return false
+	}
 	stopIdx := a.GetStop().GetTokenIndex()
 	startIdx := b.GetStart().GetTokenIndex()
 	allTokens := tokens.GetAllTokens()

@@ -56,7 +56,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	results := make([]core.InspectStatement, 0, len(queries))
-	for _, q := range queries {
+	for idx, q := range queries {
 		if q == nil {
 			continue
 		}
@@ -65,9 +65,65 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 			// The grammar emits a trailing empty query for the ';' we append.
 			continue
 		}
-		results = append(results, core.OrUnknown(i.inspectStatement(simple)))
+		read := core.OrUnknown(i.inspectStatement(simple))
+
+		// INTO OUTFILE writes the server's filesystem, which the four row
+		// actions do not cover, so the read becomes the nested statement of an
+		// unclassified one: manage for the file, select for the rows. The
+		// clause is read off the tokens rather than the tree because the
+		// spellings that follow a locking clause raise a syntax error here and
+		// error recovery drops the tail, leaving no node to find.
+		from, to := queryTokenRange(tokenStream, q, queryAfter(queries, idx))
+		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) {
+			read = core.InspectStatement{
+				Operation:  core.InspectOpUnknown,
+				Subqueries: []core.InspectStatement{read},
+			}
+		}
+		results = append(results, read)
 	}
 	return results
+}
+
+// queryAfter returns the query following idx, or nil at the end.
+func queryAfter(queries []mysql.IQueryContext, idx int) mysql.IQueryContext {
+	for _, q := range queries[idx+1:] {
+		if q != nil {
+			return q
+		}
+	}
+	return nil
+}
+
+// queryTokenRange is the half-open token span of one query, bounded by the one
+// after it so a script does not leak one statement's clauses into another.
+func queryTokenRange(tokens *antlr.CommonTokenStream, q, next mysql.IQueryContext) (int, int) {
+	from := 0
+	if q != nil && q.GetStart() != nil {
+		from = q.GetStart().GetTokenIndex()
+	}
+	to := len(tokens.GetAllTokens())
+	if next != nil && next.GetStart() != nil {
+		to = next.GetStart().GetTokenIndex()
+	}
+	return from, to
+}
+
+// writesAFile reports whether the tokens between from and to name a file to
+// write. OUTFILE and DUMPFILE are reserved, so a column or alias cannot lex as
+// either.
+func writesAFile(tokens *antlr.CommonTokenStream, from, to int) bool {
+	all := tokens.GetAllTokens()
+	if to > len(all) {
+		to = len(all)
+	}
+	for ti := from; ti < to; ti++ {
+		switch all[ti].GetTokenType() {
+		case mysql.MySQLLexerOUTFILE_SYMBOL, mysql.MySQLLexerDUMPFILE_SYMBOL:
+			return true
+		}
+	}
+	return false
 }
 
 // inspectStatement dispatches based on the SimpleStatement variant.
@@ -112,16 +168,20 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 // inspectSelectStatement handles MySQL's SelectStatement -> QueryExpression /
 // QueryExpressionParens / SelectStatementWithInto.
 func (i *Inspector) inspectSelectStatement(stmt mysql.ISelectStatementContext) *core.InspectStatement {
-	if qe := stmt.QueryExpression(); qe != nil {
-		return i.inspectQueryExpression(qe)
+	var read *core.InspectStatement
+	switch {
+	case stmt.QueryExpression() != nil:
+		read = i.inspectQueryExpression(stmt.QueryExpression())
+	case stmt.QueryExpressionParens() != nil:
+		read = i.inspectQueryExpressionParens(stmt.QueryExpressionParens())
+	case stmt.SelectStatementWithInto() != nil:
+		read = i.inspectSelectStatementWithInto(stmt.SelectStatementWithInto())
 	}
-	if qep := stmt.QueryExpressionParens(); qep != nil {
-		return i.inspectQueryExpressionParens(qep)
+	if read == nil {
+		return nil
 	}
-	if into := stmt.SelectStatementWithInto(); into != nil {
-		return i.inspectSelectStatementWithInto(into)
-	}
-	return nil
+
+	return read
 }
 
 func (i *Inspector) inspectSelectStatementWithInto(ctx mysql.ISelectStatementWithIntoContext) *core.InspectStatement {
@@ -139,17 +199,6 @@ func (i *Inspector) inspectSelectStatementWithInto(ctx mysql.ISelectStatementWit
 		}
 		if inner != nil {
 			break
-		}
-	}
-	if inner == nil {
-		return nil
-	}
-	// The INTO can trail the query as well as sit inside it, and the trailing
-	// spelling is the documented one.
-	if intoWritesAFile(ctx.IntoClause()) {
-		return &core.InspectStatement{
-			Operation:  core.InspectOpUnknown,
-			Subqueries: []core.InspectStatement{*inner},
 		}
 	}
 	return inner
@@ -212,43 +261,7 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
 	result.Subqueries = append(result.Subqueries, tail...)
 
-	// SELECT ... INTO OUTFILE writes the server's filesystem, which the four
-	// row actions do not cover. The read becomes the nested statement of an
-	// unclassified one, so it takes manage as well as select.
-	if writesAFile(qe) {
-		return &core.InspectStatement{
-			Operation:  core.InspectOpUnknown,
-			Subqueries: []core.InspectStatement{*result},
-		}
-	}
 	return result
-}
-
-// intoWritesAFile reports whether an INTO clause names a file. INTO a variable
-// is not one: it reads rows and writes nothing.
-func intoWritesAFile(into mysql.IIntoClauseContext) bool {
-	return into != nil && (into.OUTFILE_SYMBOL() != nil || into.DUMPFILE_SYMBOL() != nil)
-}
-
-// writesAFile reports whether a branch carries INTO OUTFILE or INTO DUMPFILE.
-func writesAFile(qe mysql.IQueryExpressionContext) bool {
-	body := qe.QueryExpressionBody()
-	if body == nil {
-		return false
-	}
-	for _, prim := range body.AllQueryPrimary() {
-		if prim == nil {
-			continue
-		}
-		spec := prim.QuerySpecification()
-		if spec == nil {
-			continue
-		}
-		if intoWritesAFile(spec.IntoClause()) {
-			return true
-		}
-	}
-	return false
 }
 
 // cteNames is the set of relation names a nested statement can refer to beyond
@@ -588,6 +601,9 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 
 	virtualTables := make(map[string]bool)
 	result.Tables = i.convertRelationRefs(relationRefs, virtualTables)
+	if len(result.Tables) == 0 {
+		return nil
+	}
 
 	// First real table is the primary target. SET columns without table prefix attach to it.
 	var targetSchema, targetTable string
@@ -695,6 +711,9 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	}
 
 	result.Tables = i.convertRelationRefs(targetRefs, nil)
+	if len(result.Tables) == 0 {
+		return nil
+	}
 
 	if wc := stmt.WhereClause(); wc != nil {
 		if expr := wc.Expr(); expr != nil {
@@ -963,6 +982,11 @@ func (i *Inspector) extractRelationRefs(spec mysql.IQuerySpecificationContext) (
 }
 
 func (i *Inspector) extractRelationRefsFromTableRefList(list mysql.ITableReferenceListContext) ([]core.RelationRef, map[string][]core.Column) {
+	// Error recovery leaves no list at all, and walking a nil tree panics,
+	// which fails the request rather than refusing the statement.
+	if list == nil {
+		return nil, nil
+	}
 	effectiveSchema := i.meta.CurrentSchema
 	if effectiveSchema == "" {
 		effectiveSchema = i.meta.DefaultSchema
