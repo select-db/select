@@ -1681,19 +1681,33 @@ func (i *Inspector) extractCTEsFromWithClause(w mysql.IWithClauseContext) ([]cor
 	}
 	var ctes []core.RelationRef
 	var subs []core.InspectStatement
-	for _, cte := range w.AllCommonTableExpression() {
+
+	// Names before bodies: a body cannot be walked until the clause it may refer
+	// to is known.
+	elements := w.AllCommonTableExpression()
+	names := make([]string, 0, len(elements))
+	for _, cte := range elements {
+		name := ""
+		if cte != nil {
+			if id := cte.Identifier(); id != nil {
+				name = i.dialect.NormalizeIdentifier(id.GetText())
+			}
+		}
+		names = append(names, name)
+	}
+	recursive := w.RECURSIVE_SYMBOL() != nil
+
+	for idx, cte := range elements {
 		if cte == nil {
 			continue
 		}
-		name := ""
-		if id := cte.Identifier(); id != nil {
-			name = i.dialect.NormalizeIdentifier(id.GetText())
-		}
+		name := names[idx]
 		var cols []core.Column
 		if sq := cte.Subquery(); sq != nil {
 			if sub := i.inspectSubquery(sq); sub != nil {
 				subs = append(subs, *sub)
-				for _, f := range sub.Fields {
+				core.DropVirtualTables(subs[len(subs)-1:], core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
+				for _, f := range subs[len(subs)-1].Fields {
 					cols = append(cols, core.Column{Name: f.Name, Type: "unknown"})
 				}
 			}

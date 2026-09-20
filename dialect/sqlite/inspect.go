@@ -418,21 +418,36 @@ func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.R
 	if with == nil {
 		return nil, nil
 	}
-	names := with.AllCte_table_name()
+	elements := with.AllCte_table_name()
 	bodies := with.AllSelect_stmt()
 
-	ctes := make([]core.RelationRef, 0, len(names))
-	subqueries := make([]core.InspectStatement, 0, len(names))
-	for idx, name := range names {
-		if name.Table_name() == nil {
+	// Names before bodies: a body cannot be walked until the clause it may refer
+	// to is known. This is the CTE clause an UPDATE carries; the one a SELECT
+	// carries is extractCTEsWithSubqueries, and both need the same scope.
+	names := make([]string, 0, len(elements))
+	for _, element := range elements {
+		name := ""
+		if element.Table_name() != nil {
+			name = i.dialect.NormalizeIdentifier(element.Table_name().GetText())
+		}
+		names = append(names, name)
+	}
+	recursive := with.RECURSIVE_() != nil
+
+	ctes := make([]core.RelationRef, 0, len(elements))
+	subqueries := make([]core.InspectStatement, 0, len(elements))
+	for idx, element := range elements {
+		if element.Table_name() == nil {
 			continue
 		}
 		ctes = append(ctes, core.RelationRef{
-			Table:     i.dialect.NormalizeIdentifier(name.Table_name().GetText()),
+			Table:     names[idx],
 			IsVirtual: true,
 		})
 		if idx < len(bodies) {
 			subqueries = append(subqueries, core.OrUnknown(i.inspectSelect(bodies[idx])))
+			body := subqueries[len(subqueries)-1:]
+			core.DropVirtualTables(body, core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
 		}
 	}
 	return ctes, subqueries
@@ -1636,24 +1651,35 @@ func (i *Inspector) extractCTEsWithSubqueries(commonTableStmt sqlite.ICommon_tab
 		return ctes, subqueries
 	}
 
+	// Names before bodies: a body cannot be walked until the clause it may refer
+	// to is known.
+	names := make([]string, 0, len(cteElements))
 	for _, cteEl := range cteElements {
+		name := ""
+		if cteEl != nil {
+			if tableName := cteEl.Table_name(); tableName != nil {
+				name = i.dialect.NormalizeIdentifier(tableName.Any_name().GetText())
+			}
+		}
+		names = append(names, name)
+	}
+	recursive := commonTableStmt.RECURSIVE_() != nil
+
+	for idx, cteEl := range cteElements {
 		if cteEl == nil {
 			continue
 		}
 
-		// Get CTE name
-		cteName := ""
-		if tableName := cteEl.Table_name(); tableName != nil {
-			cteName = i.dialect.NormalizeIdentifier(tableName.Any_name().GetText())
-		}
+		cteName := names[idx]
 
 		// Inspect the CTE body to get its InspectStatement and columns
 		var cteColumns []core.Column
 		if selectStmt := cteEl.Select_stmt(); selectStmt != nil {
 			if subResult := i.inspectSelect(selectStmt); subResult != nil {
 				subqueries = append(subqueries, *subResult)
+				core.DropVirtualTables(subqueries[len(subqueries)-1:], core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
 				// Extract column names from the subquery's fields
-				for _, field := range subResult.Fields {
+				for _, field := range subqueries[len(subqueries)-1].Fields {
 					cteColumns = append(cteColumns, core.Column{
 						Name: field.Name,
 						Type: "unknown",
