@@ -20,6 +20,7 @@
 #   ./dev.sh web build             build the site into web/dist once
 #   ./dev.sh web shots             recapture the product screenshots
 #   ./dev.sh web og                re-render the link preview card
+#   ./dev.sh app icons             re-derive the icon variants
 #
 #   ./dev.sh backend start         db up, migrate, generate, run the server
 #   ./dev.sh backend test          go test ./... (wants the dev DB up)
@@ -42,7 +43,7 @@
 # libwebkitgtk-6.0-dev. macOS and Windows need nothing extra.
 #
 # The dev database runs in Docker (see backend/docker-compose.yml and
-# Dockerfile.postgres: Postgres 17 with pg_partman baked in), published on host
+# Dockerfile.postgres: Postgres 18 with pg_partman baked in), published on host
 # port 5431 to match the default POSTGRES_DSN in backend/.env. Requires Docker;
 # the Go binaries read .env themselves.
 
@@ -238,7 +239,8 @@ app() {
     test)     app_test ;;
     e2e)      app_e2e "$@" ;;
     migrate)  app_migrate "$@" ;;
-    *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e|migrate)" >&2; exit 1 ;;
+    icons)    app_task icons "$@" ;;
+    *) echo "unknown app subcommand: '${sub:-}' (want: start|build|package|bindings|test|e2e|migrate|icons)" >&2; exit 1 ;;
   esac
 }
 

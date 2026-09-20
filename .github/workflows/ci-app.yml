@@ -95,6 +95,12 @@ jobs:
             exit 1
           }
 
+      # After the regeneration above, so this reads the current file. The dead
+      # code check cannot see these: it skips generated code, and sqlc emits
+      # whatever is in the sql directory whether or not anything calls it.
+      - name: Every generated query has a caller
+        run: .github/scripts/unused-queries.sh app/internal
+
   backend-tests:
     name: Backend tests
     if: inputs.go-app
