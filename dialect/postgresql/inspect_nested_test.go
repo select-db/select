@@ -123,3 +123,27 @@ func TestInspectCopyIsUnclassified(t *testing.T) {
 		})
 	}
 }
+
+// The clauses only PostgreSQL spells this way. A local PostgreSQL 16 runs a
+// subquery in each; the clauses every dialect shares are pinned by permission
+// outcome in dialect/engine.
+func TestInspectClauseSubqueriesReachTheResult(t *testing.T) {
+	read := testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t2"}
+
+	for _, tt := range []struct {
+		clause string
+		sql    string
+	}{
+		{"DISTINCT ON", "SELECT DISTINCT ON ((SELECT c1 FROM t2)) c1 FROM t1"},
+		{"LIMIT", "SELECT c1 FROM t1 LIMIT (SELECT count(*) FROM t2)"},
+		{"OFFSET", "SELECT c1 FROM t1 OFFSET (SELECT count(*) FROM t2)"},
+		{"FETCH FIRST", "SELECT c1 FROM t1 FETCH FIRST (SELECT count(*) FROM t2) ROWS ONLY"},
+	} {
+		t.Run(tt.clause, func(t *testing.T) {
+			stmts := inspectNested(t, tt.sql)
+			if !testutil.Touches(stmts, read) {
+				t.Errorf("no read of main.t2 anywhere in %+v", stmts)
+			}
+		})
+	}
+}

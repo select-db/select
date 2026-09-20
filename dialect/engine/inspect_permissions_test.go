@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/core/testutil"
 )
 
 const permDBID = "inst-1"
@@ -504,4 +505,139 @@ func TestPermissions_EveryTableIsChecked(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestPermissions_ClauseSubqueriesAreChecked pins the clauses that hold a
+// subquery outside the FROM list, the select list and the WHERE. Each one was
+// walked by nothing, so the subquery never reached the result and a role
+// holding select on main.t1 read main.t2 through it.
+func TestPermissions_ClauseSubqueriesAreChecked(t *testing.T) {
+	const s = "main"
+
+	for _, tt := range []struct {
+		clause string
+		sql    string
+	}{
+		{"HAVING", "SELECT c1 FROM t1 GROUP BY c1 HAVING count(*) > (SELECT count(*) FROM t2)"},
+		{"GROUP BY", "SELECT count(*) FROM t1 GROUP BY (SELECT c1 FROM t2)"},
+		{"ORDER BY", "SELECT c1 FROM t1 ORDER BY (SELECT c1 FROM t2)"},
+		{"WINDOW", "SELECT c1 FROM t1 WINDOW w AS (PARTITION BY (SELECT c1 FROM t2))"},
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+tt.clause, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), tt.sql)
+				// The read has to be in the result at all. Without this the
+				// permission check below has nothing to refuse and goes green
+				// on exactly the bug it is here to catch.
+				read := testutil.Touch{Op: core.InspectOpSelect, Schema: s, Name: "t2"}
+				if !testutil.Touches(inspected, read) {
+					t.Fatalf("the %s subquery reads main.t2 and nothing reported it: %+v", tt.clause, inspected)
+				}
+
+				needs := []tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}
+				for idx, missing := range needs {
+					rest := slices.Delete(slices.Clone(needs), idx, idx+1)
+					if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(rest...)); err == nil {
+						t.Errorf("ran without %s on %s.%s", missing.action, missing.schema, missing.table)
+					}
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(needs...)); err != nil {
+					t.Errorf("holding select on both tables still refused it: %v", err)
+				}
+			})
+		}
+	}
+}
+
+// TestPermissions_DeclaredNamesAreNotTables pins the other side of carrying the
+// clause subqueries. A subquery in an expression is inspected without the scope
+// of the query around it, so a CTE name or a FROM-subquery alias it reads looks
+// like a table that resolved to no schema, and the check refuses that for every
+// role. Reporting more subqueries must not mean refusing more ordinary work.
+func TestPermissions_DeclaredNamesAreNotTables(t *testing.T) {
+	for _, tt := range []struct {
+		sql  string
+		real testutil.Touch
+	}{
+		{"WITH x AS (SELECT c1 FROM t1) SELECT c1 FROM x ORDER BY (SELECT c1 FROM x)",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}},
+		{"WITH x AS (SELECT c1 FROM t1) SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM x)",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t2"}},
+		{"WITH x AS (SELECT c1 FROM t1) SELECT (SELECT count(*) FROM x) FROM t2",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t2"}},
+		{"WITH x AS (SELECT c1 FROM t1) SELECT c1 FROM t2 GROUP BY c1 HAVING count(*) > (SELECT count(*) FROM x)",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t2"}},
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+tt.sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), tt.sql)
+				// A statement that resolved nothing names no unresolved table
+				// and needs no permission, so it passes both checks below
+				// without exercising either.
+				if !testutil.Touches(inspected, tt.real) {
+					t.Fatalf("no read of %s.%s, so nothing here was checked: %+v", tt.real.Schema, tt.real.Name, inspected)
+				}
+				if name := unresolvedTable(inspected); name != "" {
+					t.Errorf("%q is a name the statement declares, reported as a table: %+v", name, inspected)
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, dataActionsOnly()); err != nil {
+					t.Errorf("ordinary work refused: %v", err)
+				}
+			})
+		}
+	}
+}
+
+// TestPermissions_AQualifiedNameIsTheRealTable pins the other edge of dropping
+// a CTE name. A CTE shadows the bare name, never the qualified one, so a
+// subquery naming main.t2 reads the table whatever the CTE around it is called.
+// Matching on the bare name alone deleted that read, and the statement then ran
+// on a grant covering only main.t1.
+func TestPermissions_AQualifiedNameIsTheRealTable(t *testing.T) {
+	const s = "main"
+	read := testutil.Touch{Op: core.InspectOpSelect, Schema: s, Name: "t2"}
+
+	for _, sql := range []string{
+		"SELECT c1 FROM (SELECT c1 FROM t1) t2 ORDER BY (SELECT c1 FROM main.t2)",
+		"SELECT c1 FROM (SELECT c1 FROM t1) t2 WHERE c1 IN (SELECT c1 FROM main.t2)",
+		"SELECT (SELECT c1 FROM main.t2) FROM (SELECT c1 FROM t1) t2",
+		"WITH t2 AS (SELECT c1 FROM t1) SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM main.t2)",
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				if !testutil.Touches(inspected, read) {
+					t.Fatalf("main.t2 is read and nothing reported it: %+v", inspected)
+				}
+
+				needs := []tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}
+				for idx, missing := range needs {
+					rest := slices.Delete(slices.Clone(needs), idx, idx+1)
+					if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(rest...)); err == nil {
+						t.Errorf("ran without %s on %s.%s", missing.action, missing.schema, missing.table)
+					}
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(needs...)); err != nil {
+					t.Errorf("holding select on both tables still refused it: %v", err)
+				}
+			})
+		}
+	}
+}
+
+// unresolvedTable returns the name of the first table in the tree that resolved
+// to no schema, or "". Such a table is refused whatever the role holds, so it
+// is what a false denial looks like before the check runs.
+func unresolvedTable(stmts []core.InspectStatement) string {
+	for _, stmt := range stmts {
+		for _, table := range stmt.Tables {
+			if table.Schema == "" {
+				return table.Name
+			}
+		}
+		if name := unresolvedTable(stmt.Subqueries); name != "" {
+			return name
+		}
+	}
+	return ""
 }

@@ -196,7 +196,29 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 		result.Subqueries = append(result.Subqueries, branch.Subqueries...)
 	}
 
+	tail := i.extractTailSubqueries(selectStmt)
+	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	result.Subqueries = append(result.Subqueries, tail...)
+
 	return result
+}
+
+// extractTailSubqueries collects the subqueries in the clauses that sit after
+// every compound branch rather than inside one. ORDER BY, LIMIT and OFFSET each
+// take an expression, and the server runs a subquery in all three. Limit_stmt
+// carries LIMIT and OFFSET together.
+func (i *Inspector) extractTailSubqueries(selectStmt sqlite.ISelect_stmtContext) []core.InspectStatement {
+	if selectStmt == nil {
+		return nil
+	}
+	var subqueries []core.InspectStatement
+	if order := selectStmt.Order_by_stmt(); order != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(order)...)
+	}
+	if limit := selectStmt.Limit_stmt(); limit != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(limit)...)
+	}
+	return subqueries
 }
 
 // inspectSelectCore processes a single select_core (one branch of a compound query).
@@ -223,6 +245,8 @@ func (i *Inspector) inspectSelectCore(
 
 	subqueries := append(fromSubqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
+	subqueries = append(subqueries, i.extractBranchClauseSubqueries(selectCore)...)
+	core.DropVirtualTables(subqueries, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
 
 	return core.InspectStatement{
 		Tables:     tables,
@@ -230,6 +254,32 @@ func (i *Inspector) inspectSelectCore(
 		Where:      where,
 		Subqueries: subqueries,
 	}
+}
+
+// extractBranchClauseSubqueries collects the subqueries in the clauses of a
+// branch that are neither the FROM list, the result columns nor the WHERE. All
+// three take an expression, and the server runs a subquery in each.
+func (i *Inspector) extractBranchClauseSubqueries(selectCore sqlite.ISelect_coreContext) []core.InspectStatement {
+	if selectCore == nil {
+		return nil
+	}
+	var subqueries []core.InspectStatement
+	for _, group := range selectCore.GetGroupByExpr() {
+		if group != nil {
+			subqueries = append(subqueries, i.extractEmbeddedSubqueries(group)...)
+		}
+	}
+	if having := selectCore.GetHavingExpr(); having != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(having)...)
+	}
+	// A window named here rather than written inline: the result-column walk
+	// reaches OVER (...), not WINDOW w AS (...).
+	for _, window := range selectCore.AllWindow_defn() {
+		if window != nil {
+			subqueries = append(subqueries, i.extractEmbeddedSubqueries(window)...)
+		}
+	}
+	return subqueries
 }
 
 // effectiveSchema is the schema an unqualified name resolves in. SQLite is the
@@ -1510,6 +1560,13 @@ func (l *whereColumnExtractorListener) EnterExpr(ctx *sqlite.ExprContext) {
 
 // virtualNames are the names in a FROM that are not tables: a CTE and a FROM
 // subquery alias both look like one and neither is a grant anybody holds.
+// cteNames is the subset of virtualNames a nested statement can refer to. A
+// FROM subquery's alias is not a relation outside its own query level, so only
+// the CTEs travel into a subquery inspected without the enclosing scope.
+func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
+	return i.virtualNames(ctes, nil)
+}
+
 func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
 	names := make(map[string]bool, len(ctes)+len(subqueryColumns))
 	for _, cte := range ctes {

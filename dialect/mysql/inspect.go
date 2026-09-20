@@ -194,7 +194,37 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 			result.Subqueries = append(result.Subqueries, inner.Subqueries...)
 		}
 	}
+
+	tail := i.extractTailSubqueries(qe)
+	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	result.Subqueries = append(result.Subqueries, tail...)
 	return result
+}
+
+// cteNames is the set of relation names a nested statement can refer to beyond
+// the catalog. A FROM subquery's alias is not a relation outside its own query
+// level, so only the CTEs travel into a subquery inspected without the
+// enclosing scope.
+func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
+	names := make(map[string]bool, len(ctes))
+	for _, cte := range ctes {
+		names[i.dialect.NormalizeIdentifier(cte.Table)] = true
+	}
+	return names
+}
+
+// extractTailSubqueries collects the subqueries in ORDER BY, which sits after
+// every UNION branch rather than inside one. MySQL's LIMIT takes an integer or
+// a placeholder, never a subquery, so there is no tail clause beyond it.
+func (i *Inspector) extractTailSubqueries(qe mysql.IQueryExpressionContext) []core.InspectStatement {
+	if qe == nil {
+		return nil
+	}
+	order := qe.OrderClause()
+	if order == nil {
+		return nil
+	}
+	return i.extractEmbeddedSubqueries(order)
 }
 
 // mergeBranchesIntoResult walks every QueryPrimary inside a QueryExpressionBody
@@ -276,6 +306,8 @@ func (i *Inspector) inspectQueryPrimary(
 	subqueries := append([]core.InspectStatement{}, fromSubqueries...)
 	subqueries = append(subqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
+	subqueries = append(subqueries, i.extractBranchClauseSubqueries(spec)...)
+	core.DropVirtualTables(subqueries, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -284,6 +316,28 @@ func (i *Inspector) inspectQueryPrimary(
 		Where:      where,
 		Subqueries: subqueries,
 	}
+}
+
+// extractBranchClauseSubqueries collects the subqueries in the clauses of a
+// branch that are neither the FROM list, the select list nor the WHERE. All
+// three take an expression, and the server runs a subquery in each.
+func (i *Inspector) extractBranchClauseSubqueries(spec mysql.IQuerySpecificationContext) []core.InspectStatement {
+	if spec == nil {
+		return nil
+	}
+	var subqueries []core.InspectStatement
+	if group := spec.GroupByClause(); group != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(group)...)
+	}
+	if having := spec.HavingClause(); having != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(having)...)
+	}
+	// A window named here rather than written inline: the select-list walk
+	// reaches OVER (...), not WINDOW w AS (...).
+	if window := spec.WindowClause(); window != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(window)...)
+	}
+	return subqueries
 }
 
 // inspectTableShorthand analyzes TABLE t1, which is SELECT * FROM t1.

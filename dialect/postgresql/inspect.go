@@ -171,27 +171,51 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 		Subqueries: cteSubqueries,
 	}
 
-	selectClause := selectNoParens.Select_clause()
-	if selectClause == nil {
-		return result
-	}
-
 	// Process every branch of UNION / INTERSECT / EXCEPT independently so that
 	// column-to-table resolution uses only that branch's FROM clause.
-	for _, intersect := range selectClause.AllSimple_select_intersect() {
-		for _, primary := range intersect.AllSimple_select_pramary() {
-			branch := i.inspectSelectPrimary(primary, ctes, cteSubqueries, cteToSubqueryMap)
-			if branch == nil {
-				continue
+	if selectClause := selectNoParens.Select_clause(); selectClause != nil {
+		for _, intersect := range selectClause.AllSimple_select_intersect() {
+			for _, primary := range intersect.AllSimple_select_pramary() {
+				branch := i.inspectSelectPrimary(primary, ctes, cteSubqueries, cteToSubqueryMap)
+				if branch == nil {
+					continue
+				}
+				result.Tables = core.MergeInspectTables(result.Tables, branch.Tables)
+				result.Fields = core.MergeInspectFields(result.Fields, branch.Fields)
+				result.Where = core.MergeInspectFields(result.Where, branch.Where)
+				result.Subqueries = append(result.Subqueries, branch.Subqueries...)
 			}
-			result.Tables = core.MergeInspectTables(result.Tables, branch.Tables)
-			result.Fields = core.MergeInspectFields(result.Fields, branch.Fields)
-			result.Where = core.MergeInspectFields(result.Where, branch.Where)
-			result.Subqueries = append(result.Subqueries, branch.Subqueries...)
 		}
 	}
 
+	tail := i.extractTailSubqueries(selectNoParens)
+	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	result.Subqueries = append(result.Subqueries, tail...)
+
 	return result
+}
+
+// extractTailSubqueries collects the subqueries in the clauses that sit after
+// every UNION branch rather than inside one. ORDER BY, LIMIT, OFFSET and FETCH
+// FIRST each take an expression, and the server runs a subquery in all four.
+func (i *Inspector) extractTailSubqueries(selectNoParens pg.ISelect_no_parensContext) []core.InspectStatement {
+	if selectNoParens == nil {
+		return nil
+	}
+	var subqueries []core.InspectStatement
+	if sort := selectNoParens.Opt_sort_clause(); sort != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(sort)...)
+	}
+	// select_limit carries LIMIT, OFFSET and FETCH FIRST together; the opt_
+	// variant is the same rule where the grammar makes the whole clause
+	// optional.
+	if limit := selectNoParens.Select_limit(); limit != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(limit)...)
+	}
+	if limit := selectNoParens.Opt_select_limit(); limit != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(limit)...)
+	}
+	return subqueries
 }
 
 // inspectSelectPrimary analyzes a single simple_select_pramary, one branch of a UNION.
@@ -234,6 +258,8 @@ func (i *Inspector) inspectSelectPrimary(
 
 	subqueries := append(fromSubqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
+	subqueries = append(subqueries, i.extractBranchClauseSubqueries(primary)...)
+	core.DropVirtualTables(subqueries, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -242,6 +268,31 @@ func (i *Inspector) inspectSelectPrimary(
 		Where:      where,
 		Subqueries: subqueries,
 	}
+}
+
+// extractBranchClauseSubqueries collects the subqueries in the clauses of a
+// branch that are neither the FROM list, the target list nor the WHERE. All
+// four take an expression, and the server runs a subquery in each.
+func (i *Inspector) extractBranchClauseSubqueries(primary pg.ISimple_select_pramaryContext) []core.InspectStatement {
+	if primary == nil {
+		return nil
+	}
+	var subqueries []core.InspectStatement
+	if distinct := primary.Distinct_clause(); distinct != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(distinct)...)
+	}
+	if group := primary.Group_clause(); group != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(group)...)
+	}
+	if having := primary.Having_clause(); having != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(having)...)
+	}
+	// A window named here rather than written inline: the target-list walk
+	// reaches OVER (...), not WINDOW w AS (...).
+	if window := primary.Window_clause(); window != nil {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(window)...)
+	}
+	return subqueries
 }
 
 // inspectTableShorthand analyzes TABLE t1, which is SELECT * FROM t1.
@@ -1361,6 +1412,13 @@ func (l *whereColumnExtractorListener) EnterColumnref(ctx *pg.ColumnrefContext) 
 
 // virtualNames are the names in a FROM that are not tables: a CTE and a FROM
 // subquery alias both look like one and neither is a grant anybody holds.
+// cteNames is the subset of virtualNames a nested statement can refer to. A
+// FROM subquery's alias is not a relation outside its own query level, so only
+// the CTEs travel into a subquery inspected without the enclosing scope.
+func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
+	return i.virtualNames(ctes, nil)
+}
+
 func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
 	names := make(map[string]bool, len(ctes)+len(subqueryColumns))
 	for _, cte := range ctes {
