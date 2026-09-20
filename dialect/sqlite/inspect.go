@@ -327,7 +327,7 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 
 	schema, tableName := i.resolveInsertTarget(stmt)
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
@@ -372,7 +372,7 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 
 	schema, tableName := i.resolveQualifiedTableName(stmt.Qualified_table_name())
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
@@ -498,7 +498,7 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 
 	schema, tableName := i.resolveQualifiedTableName(stmt.Qualified_table_name())
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 

@@ -119,8 +119,6 @@ func (i *Inspector) inspectSelectStatement(stmt mysql.ISelectStatementContext) *
 		return i.inspectQueryExpressionParens(qep)
 	}
 	if into := stmt.SelectStatementWithInto(); into != nil {
-		// SELECT … INTO; inspect the inner query expression for permission purposes.
-		// SelectStatementWithInto wraps a QueryExpression with INTO clauses we don't track.
 		return i.inspectSelectStatementWithInto(into)
 	}
 	return nil
@@ -131,15 +129,30 @@ func (i *Inspector) inspectSelectStatementWithInto(ctx mysql.ISelectStatementWit
 		return nil
 	}
 	// Descend into any nested QueryExpression we can find on this node.
+	var inner *core.InspectStatement
 	for _, child := range ctx.GetChildren() {
 		switch c := child.(type) {
 		case mysql.IQueryExpressionContext:
-			return i.inspectQueryExpression(c)
+			inner = i.inspectQueryExpression(c)
 		case mysql.ISelectStatementWithIntoContext:
-			return i.inspectSelectStatementWithInto(c)
+			inner = i.inspectSelectStatementWithInto(c)
+		}
+		if inner != nil {
+			break
 		}
 	}
-	return nil
+	if inner == nil {
+		return nil
+	}
+	// The INTO can trail the query as well as sit inside it, and the trailing
+	// spelling is the documented one.
+	if intoWritesAFile(ctx.IntoClause()) {
+		return &core.InspectStatement{
+			Operation:  core.InspectOpUnknown,
+			Subqueries: []core.InspectStatement{*inner},
+		}
+	}
+	return inner
 }
 
 func (i *Inspector) inspectQueryExpressionParens(ctx mysql.IQueryExpressionParensContext) *core.InspectStatement {
@@ -198,7 +211,44 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	tail := i.extractTailSubqueries(qe)
 	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
 	result.Subqueries = append(result.Subqueries, tail...)
+
+	// SELECT ... INTO OUTFILE writes the server's filesystem, which the four
+	// row actions do not cover. The read becomes the nested statement of an
+	// unclassified one, so it takes manage as well as select.
+	if writesAFile(qe) {
+		return &core.InspectStatement{
+			Operation:  core.InspectOpUnknown,
+			Subqueries: []core.InspectStatement{*result},
+		}
+	}
 	return result
+}
+
+// intoWritesAFile reports whether an INTO clause names a file. INTO a variable
+// is not one: it reads rows and writes nothing.
+func intoWritesAFile(into mysql.IIntoClauseContext) bool {
+	return into != nil && (into.OUTFILE_SYMBOL() != nil || into.DUMPFILE_SYMBOL() != nil)
+}
+
+// writesAFile reports whether a branch carries INTO OUTFILE or INTO DUMPFILE.
+func writesAFile(qe mysql.IQueryExpressionContext) bool {
+	body := qe.QueryExpressionBody()
+	if body == nil {
+		return false
+	}
+	for _, prim := range body.AllQueryPrimary() {
+		if prim == nil {
+			continue
+		}
+		spec := prim.QuerySpecification()
+		if spec == nil {
+			continue
+		}
+		if intoWritesAFile(spec.IntoClause()) {
+			return true
+		}
+	}
+	return false
 }
 
 // cteNames is the set of relation names a nested statement can refer to beyond
@@ -365,7 +415,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 
 	schema, tableName := i.resolveTableRef(stmt.TableRef())
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
@@ -441,7 +491,7 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 
 	schema, tableName := i.resolveTableRef(stmt.TableRef())
 	if tableName == "" {
-		return result
+		return nil
 	}
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 

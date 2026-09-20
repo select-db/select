@@ -176,13 +176,15 @@ type silentDialect struct {
 
 func (silentDialect) Inspect(core.Metadata, string) []core.InspectStatement { return nil }
 
-// holding is a role with exactly the actions named, on every table.
+// holding is a role with exactly the actions named, on every table. It denies a
+// database no rule names, so dropping the only action still refuses: otherwise
+// a necessary-direction loop over one action proves nothing.
 func holding(actions ...string) core.CompiledPermissions {
 	var entries []core.PermissionEntry
 	for _, a := range actions {
 		entries = append(entries, core.PermissionEntry{Action: a, Effect: "allow", RoleName: "test-role"})
 	}
-	return compileFor(permDBID, entries...)
+	return compileFor(permDBID, entries...).WithDenyUnmanaged()
 }
 
 // nestedCase is a statement carrying another statement, and the permissions a
@@ -889,5 +891,102 @@ func TestPermissions_EveryNestedReadIsReported(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestPermissions_AWriteNamingNoTableIsRefused pins the write whose target did
+// not resolve. It named no table, so the per-table walk had nothing to iterate
+// and the statement ran on a policy granting nothing at all. PostgreSQL reached
+// it by dereferencing a target its grammar never produces, which panicked.
+//
+// SQLite owns this spelling and resolves it, so it is pinned separately below:
+// asserting a refusal there would only be asserting that deny-all refuses.
+func TestPermissions_AWriteNamingNoTableIsRefused(t *testing.T) {
+	nothing := core.Compile(nil).WithDenyUnmanaged()
+
+	for _, sql := range []string{
+		"INSERT OR REPLACE INTO t1 VALUES (1, 'a')",
+		"INSERT OR IGNORE INTO t1 VALUES (1, 'a')",
+	} {
+		for _, dialect := range []string{"postgresql", "mysql"} {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				var inspected []core.InspectStatement
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							t.Fatalf("inspecting panicked, which fails the request rather than refusing it: %v", r)
+						}
+					}()
+					inspected = Inspect(GetDialect(dialect), permMeta(), sql)
+				}()
+				if len(inspected) == 0 {
+					t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, nothing); err == nil {
+					t.Error("ran on a policy granting nothing")
+				}
+			})
+		}
+	}
+}
+
+// The same spelling on the dialect that owns it still resolves to its table and
+// needs exactly insert, so refusing it everywhere was never the fix.
+func TestPermissions_SQLiteStillReadsItsOwnUpsert(t *testing.T) {
+	for _, sql := range []string{
+		"INSERT OR REPLACE INTO t1 VALUES (1, 'a')",
+		"INSERT OR IGNORE INTO t1 VALUES (1, 'a')",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect("sqlite"), permMeta(), sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "t1"}) {
+				t.Fatalf("no insert on main.t1 reported: %+v", inspected)
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, holding(core.ActionSelect)); err == nil {
+				t.Error("ran holding select alone")
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, holding(core.ActionInsert)); err != nil {
+				t.Errorf("holding insert still refused it: %v", err)
+			}
+		})
+	}
+}
+
+// TestPermissions_SelectIntoIsNotJustASelect pins the two spellings that build
+// something while looking like a read. Both used to run holding select alone.
+func TestPermissions_SelectIntoIsNotJustASelect(t *testing.T) {
+	for _, tt := range []struct {
+		dialect string
+		sql     string
+		needs   []string
+	}{
+		{"postgresql", "SELECT c1 INTO t9 FROM t1", []string{core.ActionManage, core.ActionSelect}},
+		{"postgresql", "SELECT c1 INTO TEMP t9 FROM t1", []string{core.ActionManage, core.ActionSelect}},
+		{"mysql", "SELECT c1 INTO OUTFILE '/tmp/x' FROM t1", []string{core.ActionManage, core.ActionSelect}},
+		{"mysql", "SELECT c1 INTO DUMPFILE '/tmp/x' FROM t1", []string{core.ActionManage, core.ActionSelect}},
+		// The INTO trails the query here, which is the documented spelling and
+		// reaches a different grammar node than the one above.
+		{"mysql", "SELECT c1 FROM t1 INTO OUTFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
+		{"mysql", "SELECT c1 FROM t1 INTO DUMPFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
+		{"mysql", "(SELECT c1 FROM t1) INTO OUTFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
+		// Writes nothing, so it stays a plain read.
+		{"mysql", "SELECT c1 INTO @v FROM t1", []string{core.ActionSelect}},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+			}
+
+			for idx, missing := range tt.needs {
+				rest := slices.Delete(slices.Clone(tt.needs), idx, idx+1)
+				if err := core.CheckQueryPermissions(inspected, permDBID, holding(rest...)); err == nil {
+					t.Errorf("ran without %q", missing)
+				}
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, holding(tt.needs...)); err != nil {
+				t.Errorf("holding %v still refused it: %v", tt.needs, err)
+			}
+		})
 	}
 }
