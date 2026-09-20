@@ -100,10 +100,10 @@
       --red-text: rgb(190, 38, 38);
       /* The wash behind the top of the page. Faint here: the ground is nearly
      white, and anything stronger reads as a print fault rather than as light. */
-      --glow: rgba(172, 45, 49, .12);
+      --glow: rgba(172, 45, 49, .18);
       /* The washes away from the hero are quieter: the page should have one
      source of light, not three competing ones. */
-      --glow-2: rgba(172, 45, 49, .10)
+      --glow-2: rgba(172, 45, 49, .15)
     }
 
     :root[data-theme=dark] {
@@ -808,7 +808,7 @@
    Percentages rather than pixels, because the section's height moves with
    the text. */
     .price {
-      background: radial-gradient(72% 54% at 86% 50%, var(--glow-2), transparent 62%) no-repeat
+      background: radial-gradient(84% 66% at 84% 50%, var(--glow-2), transparent 62%) no-repeat
     }
 
     .price .f {
@@ -819,39 +819,30 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       margin-top: var(--s3);
-      border: var(--border);
-      border-radius: var(--br-md);
-      overflow: hidden
+      gap: var(--s2)
     }
 
+    /* Each card is a raised surface, so the wash behind the section reads in
+   the gaps and the gutters rather than through the text. */
     .tiers>* {
       padding: var(--s3);
-      border-right: var(--border);
       display: flex;
       flex-direction: column;
-      gap: 10px
+      gap: 10px;
+      background: var(--gray-200);
+      border: var(--border);
+      border-radius: var(--br-md)
     }
 
-    .tiers>*:last-child {
-      border-right: 0
-    }
-
+    /* One step off the other two, which gray-100 no longer is now that the
+   cards sit on gray-200: in dark mode the two are a percent apart. */
     .tiers>.mid {
-      background: var(--gray-100)
+      background: var(--gray-300)
     }
 
     @media (max-width:820px) {
       .tiers {
         grid-template-columns: 1fr
-      }
-
-      .tiers>* {
-        border-right: 0;
-        border-bottom: var(--border)
-      }
-
-      .tiers>*:last-child {
-        border-bottom: 0
       }
     }
 
