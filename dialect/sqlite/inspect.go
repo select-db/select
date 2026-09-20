@@ -322,6 +322,9 @@ func (i *Inspector) resolveInsertTarget(stmt sqlite.IInsert_stmtContext) (schema
 func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpInsert}
 
+	_, cteBodies := i.inspectWithClause(stmt.With_clause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+
 	schema, tableName := i.resolveInsertTarget(stmt)
 	if tableName == "" {
 		return result
@@ -490,6 +493,9 @@ func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.Rel
 func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpDelete}
 
+	_, cteBodies := i.inspectWithClause(stmt.With_clause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+
 	schema, tableName := i.resolveQualifiedTableName(stmt.Qualified_table_name())
 	if tableName == "" {
 		return result
@@ -500,7 +506,7 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		targetRef := []core.RelationRef{{Table: tableName, Schema: schema}}
 		where, whereSubqueries := i.extractWhereFieldsFromExpr(stmt.Expr(), targetRef)
 		result.Where = where
-		result.Subqueries = whereSubqueries
+		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
 
 	return result
@@ -594,6 +600,7 @@ func (i *Inspector) extractRelationRefs(tree antlr.ParseTree) ([]core.RelationRe
 		level:                    0,
 		subqueryDepth:            0,
 		depthStack:               []bool{},
+		root:                     tree,
 	}
 
 	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
@@ -625,6 +632,10 @@ type relationRefExtractorListener struct {
 	subqueryDepth     int // depth from FROM-clause subqueries
 	exprSubqueryDepth int // depth from expression subqueries (WHERE, HAVING, SELECT list)
 	depthStack        []bool
+	// root is the tree this listener was started on. A nested statement is
+	// inspected on its own, but its context keeps the parent pointers of the
+	// whole parse, so an ancestor walk has to stop here.
+	root antlr.Tree
 }
 
 // EnterSelect_stmt tracks expression-level subqueries (those inside WHERE, HAVING, SELECT list).
@@ -946,9 +957,11 @@ func (l *relationRefExtractorListener) isCTE(tableName string) bool {
 
 // isInJoinClause checks if a Table_or_subquery is inside a JOIN clause
 func (l *relationRefExtractorListener) isInJoinClause(ctx *sqlite.Table_or_subqueryContext) bool {
-	// Walk up the parse tree to see if we're inside a Join_clause
+	// Walk up the parse tree to see if we're inside a Join_clause, stopping at
+	// the tree being inspected: a join further out belongs to a statement this
+	// listener is not walking, and EnterJoin_clause will not run for it.
 	parent := ctx.GetParent()
-	for parent != nil {
+	for parent != nil && parent != l.root {
 		if _, ok := parent.(*sqlite.Join_clauseContext); ok {
 			return true
 		}

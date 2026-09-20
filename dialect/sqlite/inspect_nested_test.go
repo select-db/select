@@ -129,3 +129,20 @@ func unresolvedCTE(stmts []core.InspectStatement) string {
 	}
 	return ""
 }
+
+// SQLite puts a WITH clause on an INSERT as well as on an UPDATE and a DELETE.
+// MySQL has no such form and PostgreSQL reports it already, so the case is only
+// interesting here.
+func TestInspectCTEScopeOnInsert(t *testing.T) {
+	stmts := NewInspector(NewDialect(), core.GetInspectTestMetadata()).
+		Inspect("WITH x AS (SELECT c2 FROM t1) INSERT INTO t2 (c1,c3) SELECT 1, (SELECT c2 FROM x)")
+
+	for _, want := range []testutil.Touch{
+		{Op: core.InspectOpInsert, Schema: "main", Name: "t2"},
+		{Op: core.InspectOpSelect, Schema: "main", Name: "t1"},
+	} {
+		if !testutil.Touches(stmts, want) {
+			t.Errorf("no %s on %s.%s anywhere in %+v", want.Op, want.Schema, want.Name, stmts)
+		}
+	}
+}
