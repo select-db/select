@@ -72,6 +72,11 @@ MANAGE and SELECT on `old`. The same holds for a view over a table, an UPDATE
 that reads a second table to fill the first, and a statement whose result is
 built by a query inside it.
 
+Every table a statement names counts, including one no column is selected from.
+`SELECT t1.c2 FROM t1, t2` reads `t2` for its rows whether or not a column of it
+appears in the result, and a `WHERE` over it reports what those rows hold, so it
+needs SELECT on `t2` as well as on `t1`.
+
 ## Databases nobody has written a rule for
 
 Step 5 is about a database your roles *do* cover. A database that no role in the

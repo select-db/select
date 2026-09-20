@@ -247,26 +247,12 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 			}
 		}
 
-		if len(stmt.Fields) == 0 {
-			allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, "", action)
-			if !allowed {
-				return &PermissionDeniedError{
-					Action:    action,
-					Schema:    table.Schema,
-					Table:     table.Name,
-					RoleName:  role,
-					StartLine: table.StartLine,
-					StartCol:  table.StartCol,
-					EndCol:    table.EndCol,
-				}
-			}
-			continue
-		}
-
+		named := false
 		for _, field := range stmt.Fields {
 			if field.Table != table.Name || field.Schema != table.Schema {
 				continue
 			}
+			named = true
 
 			allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, field.Name, action)
 			if !allowed {
@@ -286,6 +272,25 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 					StartCol:  startCol,
 					EndCol:    endCol,
 				}
+			}
+		}
+		if named {
+			continue
+		}
+
+		// A table none of the fields came from is still read: joined for its
+		// rows, filtered on in a WHERE. The per-column walk matches nothing for
+		// it, so the table as a whole is what there is to ask about.
+		allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, "", action)
+		if !allowed {
+			return &PermissionDeniedError{
+				Action:    action,
+				Schema:    table.Schema,
+				Table:     table.Name,
+				RoleName:  role,
+				StartLine: table.StartLine,
+				StartCol:  table.StartCol,
+				EndCol:    table.EndCol,
 			}
 		}
 	}

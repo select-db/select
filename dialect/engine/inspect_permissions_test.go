@@ -405,3 +405,103 @@ func TestPermissions_AReadNamesWhatItReads(t *testing.T) {
 		}
 	}
 }
+
+// tableGrant is one action on one table, the granularity a role is actually
+// configured at. holding() grants on every table, which cannot express "may
+// read t1 but not t2" -- the shape these cases turn on.
+type tableGrant struct {
+	schema, table, action string
+}
+
+func holdingPerTable(grants ...tableGrant) core.CompiledPermissions {
+	var entries []core.PermissionEntry
+	for _, g := range grants {
+		schema, table := g.schema, g.table
+		entries = append(entries, core.PermissionEntry{
+			SchemaName: &schema,
+			TableName:  &table,
+			Action:     g.action,
+			Effect:     "allow",
+			RoleName:   "test-role",
+		})
+	}
+	return compileFor(permDBID, entries...)
+}
+
+// TestPermissions_EveryTableIsChecked pins the statements that name a column of
+// one table and none of another. The per-column walk matched nothing for the
+// second table and the loop moved on, so a role holding select on main.t1 read
+// main.t2 and other.t3 through a join. A WHERE over the unchecked table turns
+// that into an oracle over every row in it.
+func TestPermissions_EveryTableIsChecked(t *testing.T) {
+	tests := []struct {
+		dialects []string
+		sql      string
+		needs    []tableGrant
+		why      string
+	}{
+		{
+			dialects: BuiltinDialects(),
+			sql:      "SELECT t1.c2 FROM t1, t2",
+			needs: []tableGrant{
+				{"main", "t1", core.ActionSelect},
+				{"main", "t2", core.ActionSelect},
+			},
+			why: "t2 is joined for its rows even though no column of it is named",
+		},
+		{
+			dialects: BuiltinDialects(),
+			sql:      "SELECT t1.c2 FROM t1 JOIN t2 ON t1.c1 = t2.c1",
+			needs: []tableGrant{
+				{"main", "t1", core.ActionSelect},
+				{"main", "t2", core.ActionSelect},
+			},
+			why: "an explicit join reads t2 the same way a comma join does",
+		},
+		{
+			dialects: BuiltinDialects(),
+			sql:      "SELECT t1.c2 FROM t1, t2 WHERE t2.c3 = 'secret'",
+			needs: []tableGrant{
+				{"main", "t1", core.ActionSelect},
+				{"main", "t2", core.ActionSelect},
+			},
+			why: "the predicate reports whether t2 holds that value, a row at a time",
+		},
+		{
+			dialects: BuiltinDialects(),
+			sql:      "SELECT t1.c2 FROM t1 JOIN other.t3 ON t1.c1 = other.t3.c1",
+			needs: []tableGrant{
+				{"main", "t1", core.ActionSelect},
+				{"other", "t3", core.ActionSelect},
+			},
+			why: "a grant on one schema does not reach a table in another",
+		},
+	}
+
+	for _, tt := range tests {
+		for _, dialect := range tt.dialects {
+			t.Run(dialect+": "+tt.sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), tt.sql)
+				if len(inspected) == 0 {
+					t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+				}
+				// Both tables have to resolve, or the second one is refused for
+				// naming no schema and the test passes without testing this.
+				if got := len(inspected[0].Tables); got != len(tt.needs) {
+					t.Fatalf("resolved %d tables, want %d: %+v", got, len(tt.needs), inspected[0].Tables)
+				}
+
+				for idx, missing := range tt.needs {
+					rest := slices.Delete(slices.Clone(tt.needs), idx, idx+1)
+					if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(rest...)); err == nil {
+						t.Errorf("ran without %s on %s.%s. %s", missing.action, missing.schema, missing.table, tt.why)
+					}
+				}
+
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(tt.needs...)); err != nil {
+					t.Errorf("holding %v still refused it: %v", tt.needs, err)
+				}
+			})
+		}
+	}
+}
