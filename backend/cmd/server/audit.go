@@ -9,30 +9,18 @@ import (
 
 	"backend/db"
 	"backend/internal/audit"
-	"backend/internal/kms"
 )
 
 // startAuditLogger builds the unified audit logger, starts its background lanes,
-// installs it as the package default, and provisions/validates partition
-// maintenance. Returns the logger so the caller can Stop it on shutdown.
+// installs it as the package default, and validates partition maintenance.
+// Returns the logger so the caller can Stop it on shutdown.
 func startAuditLogger() *audit.Logger {
-	// Async writer + outbox drainer run until Stop on shutdown. Partitions are
-	// managed in-DB by pg_partman + pg_cron; without them, the logger sweeps rows
+	// Async writer + outbox drainer run until Stop on shutdown. With pg_partman
+	// the logger runs partition maintenance daily; without it, it sweeps rows
 	// older than AUDIT_RETENTION_DAYS (default 365; 0 = keep forever) instead.
 	logger := audit.New(db.GetDB(), audit.Options{RetentionDays: auditRetentionDays()})
 	logger.Start()
 	audit.SetDefault(logger)
-
-	// pg_cron's scheduler lives in the cluster's cron DB, not the app DB, so the
-	// maintenance job can't be a migration. No-op if POSTGRES_AUDIT_CRON_DSN is
-	// unset, then it's provisioned out of band (see the on-prem runbook).
-	if cronDSN, _ := kms.Secret("POSTGRES_AUDIT_CRON_DSN"); cronDSN != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		if err := audit.EnsureMaintenanceSchedule(ctx, db.GetDB(), cronDSN, os.Getenv("AUDIT_CRON_SCHEDULE")); err != nil {
-			log.Printf("WARNING: audit: %v", err)
-		}
-		cancel()
-	}
 
 	// Report on partition maintenance: warns only when pg_partman is present but
 	// misconfigured. No partman is a supported mode (in-app retention).

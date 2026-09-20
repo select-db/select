@@ -1,10 +1,18 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
+	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -43,11 +51,46 @@ func (d *Device) Refresh(t *testing.T) (*middlewares.TokenResponse, error) {
 	return tokens, err
 }
 
-// RolesInWorkspace is the set of role ids an access token grants in one
-// workspace, keyed by id.
-func RolesInWorkspace(t *testing.T, accessToken, workspaceID string) map[string]string {
+// MintExpiredJWT signs an access token that expired an hour ago, with the key
+// the harness wrote. CreateJWT cannot produce one, and the middleware's refresh
+// branch runs only for a token in this state.
+func MintExpiredJWT(t *testing.T, userID string) string {
 	t.Helper()
-	_, claims, err := auth.ValidateJWT(accessToken)
+	pemBytes, err := os.ReadFile(os.Getenv("PRIVATE_KEY_PATH"))
 	require.NoError(t, err)
-	return claims.RolesIn(workspaceID)
+	block, _ := pem.Decode(pemBytes)
+	require.NotNil(t, block, "no PEM block in the harness signing key")
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	require.NoError(t, err)
+
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodRS256, auth.CustomClaims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    auth.Issuer,
+			Audience:  jwt.ClaimStrings{auth.Audience},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+		},
+	}).SignedString(key)
+	require.NoError(t, err)
+	return signed
+}
+
+// DoExpired sends a request the way a client does when its access token has
+// just expired: the stale bearer plus the refresh headers the middleware reads.
+func DoExpired(t *testing.T, h http.Handler, method, path, expiredToken string, d *Device, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		require.NoError(t, json.NewEncoder(&buf).Encode(body))
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	req.Header.Set("Authorization", "Bearer "+expiredToken)
+	req.Header.Set("X-Refresh-Token", d.Token)
+	req.Header.Set("X-Device-ID", d.DeviceID)
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "10.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
 }

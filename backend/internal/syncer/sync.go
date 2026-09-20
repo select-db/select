@@ -28,12 +28,11 @@ var handlers = func() map[string]gen.Handler {
 
 // 1. Apply commits with last-write-wins
 // 2. then return changes since last_pulled_at
-func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []string, ownedWorkspaceIDs []string, req *types.SyncRequest) (*types.SyncResponse, bool, error) {
+func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []string, ownedWorkspaceIDs []string, req *types.SyncRequest) (*types.SyncResponse, error) {
 	if db.GetDB() == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 
-	needsTokenRefresh := false
 	var confirmed []string
 	var restored []types.RestoredItem
 	// Object IDs applied in this request: don't echo them back in changes.
@@ -48,7 +47,7 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 		if !authorizeCommit(userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, c) {
 			rest, err := fetchCurrentForUnauthorized(ctx, c)
 			if err != nil {
-				return nil, false, fmt.Errorf("fetch current for unauthorized commit %s: %w", c.ID, err)
+				return nil, fmt.Errorf("fetch current for unauthorized commit %s: %w", c.ID, err)
 			}
 			if rest != nil {
 				restored = append(restored, *rest)
@@ -74,18 +73,11 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 		}
 
 		if applyErr != nil {
-			return nil, false, fmt.Errorf("apply %s commit %s: %w", c.TableName, c.ID, applyErr)
+			return nil, fmt.Errorf("apply %s commit %s: %w", c.TableName, c.ID, applyErr)
 		}
 
 		if applied {
-			// Drop any authz cache this write dirties (see side_effects.go), and
-			// signal the caller to refresh their own token so their UI has the new
-			// claims without waiting for the access token to expire.
 			applyCommitSideEffects(ctx, c)
-			if c.TableName == "user_to_role" || c.TableName == "permission" ||
-				c.TableName == "user_to_group" || c.TableName == "group_to_role" {
-				needsTokenRefresh = true
-			}
 		}
 
 		confirmed, restored, appliedIDs = recordResult(c, applied, rest, confirmed, restored, appliedIDs)
@@ -93,7 +85,7 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 
 	changes, err := getChangesSince(ctx, userID, lastPulledAt)
 	if err != nil {
-		return nil, false, fmt.Errorf("get changes since: %w", err)
+		return nil, fmt.Errorf("get changes since: %w", err)
 	}
 
 	if len(appliedIDs) > 0 {
@@ -106,7 +98,7 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 	// Resolve related users so client can upsert users before workspace_to_user (FK).
 	// TODO: create a generic approach for related fields
 	if err := resolveRelatedUsers(ctx, db.GetDB(), changes); err != nil {
-		return nil, false, fmt.Errorf("resolve related users: %w", err)
+		return nil, fmt.Errorf("resolve related users: %w", err)
 	}
 
 	serverTime := time.Now().UTC()
@@ -115,7 +107,7 @@ func Sync(ctx context.Context, userID string, workspaceIDs []string, roleIDs []s
 		Restored:   restored,
 		Changes:    *changes,
 		ServerTime: serverTime,
-	}, needsTokenRefresh, nil
+	}, nil
 }
 
 // Fills changes.Users only when needed: user_ids referenced by workspace_to_user

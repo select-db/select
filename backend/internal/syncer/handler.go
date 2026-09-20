@@ -1,13 +1,10 @@
 package syncer
 
 import (
-	"backend/internal/auth"
 	"backend/internal/middlewares"
 	"backend/internal/syncer/types"
 	"encoding/json"
 	"net/http"
-
-	"github.com/google/uuid"
 )
 
 func Handler() http.HandlerFunc {
@@ -38,19 +35,10 @@ func Handler() http.HandlerFunc {
 		// The audit principal resolver is installed once by the authenticated
 		// middleware (see internal/api), so Sync's emit sites resolve the actor
 		// from the request context — no per-handler wiring needed here.
-		resp, needsTokenRefresh, err := Sync(r.Context(), userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
+		resp, err := Sync(r.Context(), userID, workspaceIDs, roleIDs, ownedWorkspaceIDs, &req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		}
-
-		if needsTokenRefresh {
-			uid, err := uuid.Parse(userID)
-			if err == nil {
-				if token, err := auth.CreateJWT(r.Context(), uid); err == nil {
-					w.Header().Set("X-New-Access-Token", token)
-				}
-			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
