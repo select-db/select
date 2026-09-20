@@ -39,7 +39,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  WAILS_VERSION: v3.0.0-beta.12
+  WAILS_VERSION: v3.0.0-beta.23
   # Minimum app version, bump when a release contains a breaking change.
   MIN_APP_VERSION: 0.0.0
 
