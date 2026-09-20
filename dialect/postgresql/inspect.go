@@ -1726,6 +1726,21 @@ func (fw *fromWalker) walk(fromList pg.IFrom_listContext) ([]core.RelationRef, m
 	return refs, subqueryColumns
 }
 
+// physicalRefs drops the derived-table aliases among refs. A subquery's tables
+// are reported by the query around it, but the names it declares are in scope
+// only inside it: carried outward they resolve to no schema, and the permission
+// check refuses one of those whatever the role holds.
+func physicalRefs(refs []core.RelationRef) []core.RelationRef {
+	kept := make([]core.RelationRef, 0, len(refs))
+	for _, ref := range refs {
+		if ref.IsVirtual {
+			continue
+		}
+		kept = append(kept, ref)
+	}
+	return kept
+}
+
 func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContext) ([]core.RelationRef, []core.Column) {
 	var refs []core.RelationRef
 	var columns []core.Column
@@ -1746,7 +1761,7 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 					if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
 						// Recursively parse the FROM clause
 						subqueryRefs, nestedSubqueryCols := fw.walk(fromClause.From_list())
-						refs = append(refs, subqueryRefs...)
+						refs = append(refs, physicalRefs(subqueryRefs)...)
 						nestedSubqueryColumns = nestedSubqueryCols
 					}
 
@@ -1977,6 +1992,7 @@ func (fw *fromWalker) processSubqueryRelationRef(relationRef pg.ITable_refContex
 		Schema:        "",        // Subqueries don't have schemas
 		Table:         tableName, // Use alias as table name for subqueries
 		Alias:         "",
+		IsVirtual:     true,
 		ScopeStartPos: availableFromPos,
 		ScopeEndPos:   -1, // Available until end of query
 	}

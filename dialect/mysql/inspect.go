@@ -529,6 +529,11 @@ func (i *Inspector) inspectQueryExpressionOrParens(ctx mysql.IQueryExpressionOrP
 func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpUpdate}
 
+	// A WITH clause on a DML statement is the read it is on a SELECT, and the
+	// write does not cover the rows it reads.
+	_, cteBodies := i.extractCTEsFromWithClause(stmt.WithClause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
+
 	relationRefs, _ := i.extractRelationRefsFromTableRefList(stmt.TableReferenceList())
 
 	virtualTables := make(map[string]bool)
@@ -582,6 +587,11 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 
 func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpDelete}
+
+	// A WITH clause on a DML statement is the read it is on a SELECT, and the
+	// write does not cover the rows it reads.
+	_, cteBodies := i.extractCTEsFromWithClause(stmt.WithClause())
+	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	// sourceRefs covers every relation in scope for column resolution and the
 	// WHERE clause; targetRefs are the tables actually being deleted from.

@@ -610,7 +610,9 @@ func (d *Dialect) WalkFromClause(parser antlr.Parser, listener core.RelationRefL
 
 	// SQLite parser expects a complete statement, so we need to walk the entire select statement
 	// and then filter for FROM clause references
-	antlr.ParseTreeWalkerDefault.Walk(sqliteListener, sqliteParser.Select_stmt())
+	tree := sqliteParser.Select_stmt()
+	sqliteListener.root = tree
+	antlr.ParseTreeWalkerDefault.Walk(sqliteListener, tree)
 
 	// Copy results to the provided listener via interface
 	listener.SetReferences(sqliteListener.refs)
@@ -632,6 +634,9 @@ type relationRefListener struct {
 	level         int // grammar nesting of Table_or_subquery nodes at current FROM
 	subqueryDepth int // semantic depth of subquery contexts for nesting level
 	depthStack    []bool
+	// root is the tree this listener was started on, the bound for any walk up
+	// the parse: a context keeps the parent pointers of the whole parse.
+	root antlr.Tree
 }
 
 func (l *relationRefListener) EnterTable_or_subquery(ctx *sqlite.Table_or_subqueryContext) {
@@ -888,8 +893,10 @@ func (l *relationRefListener) isJoinKeyword(tableName string) bool {
 // isInJoinClause checks if a Table_or_subquery is inside a JOIN clause
 func (l *relationRefListener) isInJoinClause(ctx *sqlite.Table_or_subqueryContext) bool {
 	// Walk up the parse tree to see if we're inside a Join_clause
+	// Stop at the tree being walked: a join further out belongs to a statement
+	// this listener is not walking, and EnterJoin_clause will not run for it.
 	parent := ctx.GetParent()
-	for parent != nil {
+	for parent != nil && parent != l.root {
 		if _, ok := parent.(*sqlite.Join_clauseContext); ok {
 			return true
 		}

@@ -813,3 +813,81 @@ func TestInspect_AQualifiedNameSurvivesAnAliasOfTheSameName(t *testing.T) {
 		}
 	}
 }
+
+// TestPermissions_ANestedAliasStaysInsideItsQuery is the other half of walking
+// a nested statement. A name a subquery declares is in scope only inside it, so
+// carrying it outward left a table resolving to no schema, and PostgreSQL
+// refused a derived table nested in another for every role.
+func TestPermissions_ANestedAliasStaysInsideItsQuery(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT * FROM (SELECT c1 FROM (SELECT c1 FROM t1) y) x",
+		"SELECT * FROM (SELECT c1 FROM (SELECT c1 FROM t1) y, t2) x",
+		"SELECT * FROM (SELECT c1 FROM (SELECT c1 FROM t1) y JOIN t2 ON 1=1) x",
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+					t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+				}
+				if name := unresolvedTable(inspected); name != "" {
+					t.Errorf("%q is a name a subquery declares, reported as a table: %+v", name, inspected)
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, dataActionsOnly()); err != nil {
+					t.Errorf("ordinary work refused: %v", err)
+				}
+			})
+		}
+	}
+}
+
+// TestPermissions_EveryNestedReadIsReported pins the statements whose inner
+// read never reached the result at all, so the check had nothing to refuse.
+// A derived table joined rather than comma-listed lost its whole body on
+// SQLite, and a WITH clause on an UPDATE or a DELETE was read by neither MySQL
+// inspector nor, for DELETE, the SQLite one.
+func TestPermissions_EveryNestedReadIsReported(t *testing.T) {
+	const s = "main"
+	read := testutil.Touch{Op: core.InspectOpSelect, Schema: s, Name: "t1"}
+
+	for _, tt := range []struct {
+		sql   string
+		needs []tableGrant
+	}{
+		{"SELECT * FROM (SELECT c1 FROM t1) x JOIN t2 ON x.c1 = t2.c1",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}},
+		{"SELECT * FROM t2 JOIN (SELECT c1 FROM t1) x ON x.c1 = t2.c1",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}},
+		{"SELECT * FROM (SELECT c1 FROM t1) x LEFT JOIN t2 ON x.c1 = t2.c1",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionSelect}}},
+		{"WITH x AS (SELECT c1 FROM t1) UPDATE t2 SET c3 = 'x'",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionUpdate}}},
+		{"WITH x AS (SELECT c1 FROM t1) DELETE FROM t2",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionDelete}}},
+		// A WHERE clause is collected after the CTE bodies, so assigning its
+		// subqueries rather than appending them threw the bodies away.
+		{"WITH x AS (SELECT c1 FROM t1) DELETE FROM t2 WHERE c1 > 0",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionDelete}}},
+		{"WITH x AS (SELECT c1 FROM t1) UPDATE t2 SET c3 = 'x' WHERE c1 > 0",
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionUpdate}}},
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+tt.sql, func(t *testing.T) {
+				inspected := Inspect(GetDialect(dialect), permMeta(), tt.sql)
+				if !testutil.Touches(inspected, read) {
+					t.Fatalf("no read of main.t1, so the check had nothing to refuse: %+v", inspected)
+				}
+
+				for idx, missing := range tt.needs {
+					rest := slices.Delete(slices.Clone(tt.needs), idx, idx+1)
+					if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(rest...)); err == nil {
+						t.Errorf("ran without %s on %s.%s", missing.action, missing.schema, missing.table)
+					}
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, holdingPerTable(tt.needs...)); err != nil {
+					t.Errorf("holding %v still refused it: %v", tt.needs, err)
+				}
+			})
+		}
+	}
+}
