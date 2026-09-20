@@ -8,7 +8,17 @@ icons are in `app/build/`, the site's mark and link preview card in `web/`.
 | ---- | ------------- |
 | `github-avatar.png` | The GitHub organisation and repository avatar |
 
-`github-avatar.png` is `app/build/icon-default.png` flattened onto its own
-tile colour, which squares off the rounded corners. GitHub crops an avatar to
-a square and rounds it itself, so a corner radius baked into the file is drawn
-once by us and once by them.
+Both this and the macOS icon source in `app/build/` are reframings of
+`app/build/icon-default.png`, derived by `icons.mjs` rather than drawn again:
+
+```
+./dev.sh app icons
+```
+
+macOS draws a legacy `.icns` exactly as authored, and its convention is an
+824px body centred on a 1024 canvas with a soft shadow. Windows and Linux want
+the artwork to fill the canvas, which `icon-default.png` already does. GitHub
+crops an avatar square and rounds it itself, so that one is the same mark
+flattened onto its tile colour, with the corners squared off.
+
+Run it after changing the mark, and commit what changed.

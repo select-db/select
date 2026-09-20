@@ -31,6 +31,16 @@ tasks:
       # bind a service that is not, and its methods would go missing here.
       - wails3 generate bindings -ts -clean=true -d {{.BINDINGS_DIR}} -f "-tags server"
 
+  icons:
+    summary: Re-derives the icon variants from build/icon-default.png
+    # Only the browser, not the app: these are reframings of a drawing, not
+    # pictures of anything running.
+    deps:
+      - install:frontend
+    dir: frontend
+    cmds:
+      - node ../../brand/icons.mjs
+
   generate:icons:
     summary: Generates the macOS `.icns` and the Windows `.ico`, from one source each
     # Newer than its own source, not merely present: an icon regenerated from a
