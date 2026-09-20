@@ -10,9 +10,9 @@ import (
 )
 
 func reqWithWorkspaces(ids ...string) *http.Request {
-	ws := make([]auth.WorkspaceClaim, len(ids))
+	ws := make([]auth.WorkspaceStanding, len(ids))
 	for i, id := range ids {
-		ws[i] = auth.WorkspaceClaim{ID: id}
+		ws[i] = auth.WorkspaceStanding{ID: id}
 	}
 	ctx := context.WithValue(context.Background(), workspacesKey, ws)
 	return httptest.NewRequest("GET", "/roles", nil).WithContext(ctx)
