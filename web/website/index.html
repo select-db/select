@@ -100,7 +100,10 @@
       --red-text: rgb(190, 38, 38);
       /* The wash behind the top of the page. Faint here: the ground is nearly
      white, and anything stronger reads as a print fault rather than as light. */
-      --glow: rgba(172, 45, 49, .12)
+      --glow: rgba(172, 45, 49, .18);
+      /* The washes away from the hero are quieter: the page should have one
+     source of light, not three competing ones. */
+      --glow-2: rgba(172, 45, 49, .15)
     }
 
     :root[data-theme=dark] {
@@ -108,7 +111,8 @@
       --red-hover: var(--red-glow);
       --orange-text: var(--orange);
       --red-text: var(--red);
-      --glow: rgba(172, 45, 49, .34)
+      --glow: rgba(172, 45, 49, .34);
+      --glow-2: rgba(172, 45, 49, .20)
     }
 
     *,
@@ -117,9 +121,16 @@
       box-sizing: border-box
     }
 
+    /* The bottom of the page, lit from below and anchored to the bottom edge so
+   its reach does not depend on how long the page is. Wide and shallow where
+   the hero's is tall and off-centre: the same light, a different hour.
+   640px keeps it clear of the opaque .arg band above the pricing table,
+   which would otherwise cut it off mid-fade. */
     body {
       margin: 0;
-      background: var(--gray-0);
+      background:
+        radial-gradient(1400px 640px at 50% 100%, var(--glow-2), transparent 66%) no-repeat bottom,
+        var(--gray-0);
       color: var(--gray-1000);
       font: var(--t3)/1.6 var(--f);
       -webkit-font-smoothing: antialiased
@@ -778,6 +789,15 @@
     }
 
     /* pricing */
+    /* Kept inside its own box: centred vertically with a radius short enough
+   that the top and bottom edges are both past the transparent stop, so
+   neither the opaque band above nor the closing block below shows a step.
+   Percentages rather than pixels, because the section's height moves with
+   the text. */
+    .price {
+      background: radial-gradient(84% 66% at 84% 50%, var(--glow-2), transparent 62%) no-repeat
+    }
+
     .price .f {
       padding: var(--s4) var(--s3)
     }
@@ -786,39 +806,24 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       margin-top: var(--s3);
-      border: var(--border);
-      border-radius: var(--br-md);
-      overflow: hidden
+      gap: var(--s2)
     }
 
+    /* Each card is a raised surface, so the wash behind the section reads in
+   the gaps and the gutters rather than through the text. */
     .tiers>* {
       padding: var(--s3);
-      border-right: var(--border);
       display: flex;
       flex-direction: column;
-      gap: 10px
-    }
-
-    .tiers>*:last-child {
-      border-right: 0
-    }
-
-    .tiers>.mid {
-      background: var(--gray-100)
+      gap: 10px;
+      background: var(--gray-200);
+      border: var(--border);
+      border-radius: var(--br-md)
     }
 
     @media (max-width:820px) {
       .tiers {
         grid-template-columns: 1fr
-      }
-
-      .tiers>* {
-        border-right: 0;
-        border-bottom: var(--border)
-      }
-
-      .tiers>*:last-child {
-        border-bottom: 0
       }
     }
 
@@ -1134,7 +1139,7 @@
             </ul>
             <a class="btn g" href="/download/">Download</a>
           </div>
-          <div class="mid">
+          <div>
             <h3>Teams</h3>
             <p class="amt"><b>$12</b><span>/ SEAT / MONTH</span><s>$17</s></p>
             <p class="note" style="color:var(--orange-text)">BETA PRICE</p>

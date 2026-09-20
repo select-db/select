@@ -42,10 +42,10 @@ document.documentElement.dataset.theme =
 }
 /* Lightening a solid red button drops white text under 4.5:1, so the hover
    step deepens it in light mode and lifts it in dark. */
-:root[data-theme=light]{--shadow-subtle:0px 4px 4px -1px lch(80% 0 0 / .02),0px 1px 1px 0px lch(80% 0 0 / .02);--red-hover:rgb(190, 38, 38);--orange-text:hsl(24, 88%, 34%);--red-text:rgb(190, 38, 38)}
-:root[data-theme=dark]{--shadow-subtle:0px 4px 4px -1px lch(0% 0 0 / .06),0px 1px 1px 0px lch(0% 0 0 / .06);--red-hover:var(--red-glow);--orange-text:var(--orange);--red-text:var(--red)}
+:root[data-theme=light]{--shadow-subtle:0px 4px 4px -1px lch(80% 0 0 / .02),0px 1px 1px 0px lch(80% 0 0 / .02);--red-hover:rgb(190, 38, 38);--orange-text:hsl(24, 88%, 34%);--red-text:rgb(190, 38, 38);--glow:rgba(172, 45, 49, .18);--glow-2:rgba(172, 45, 49, .15)}
+:root[data-theme=dark]{--shadow-subtle:0px 4px 4px -1px lch(0% 0 0 / .06),0px 1px 1px 0px lch(0% 0 0 / .06);--red-hover:var(--red-glow);--orange-text:var(--orange);--red-text:var(--red);--glow:rgba(172, 45, 49, .34);--glow-2:rgba(172, 45, 49, .20)}
 *,::before,::after{box-sizing:border-box}
-body{margin:0;background:var(--gray-0);color:var(--gray-1000);font:1rem/1.6 var(--f);-webkit-font-smoothing:antialiased}
+body{margin:0;background:radial-gradient(1400px 640px at 50% 100%,var(--glow-2),transparent 66%) no-repeat bottom,var(--gray-0);color:var(--gray-1000);font:1rem/1.6 var(--f);-webkit-font-smoothing:antialiased}
 h1,h2{margin:0;line-height:1.15;letter-spacing:-.025em}
 p{margin:0}
 a{color:var(--red-text)}
@@ -82,10 +82,15 @@ nav a:hover{color:var(--red)}
 .btn{display:inline-block;font:500 var(--t2)/1 var(--m);text-decoration:none;padding:10px 15px;border-radius:var(--br-sm);border:1px solid var(--red);background:var(--red);color:#fff;box-shadow:var(--shadow-subtle)}
 :root[data-theme=dark] .btn{box-shadow:0 3px 12px -4px lch(100% 0 0 / .25)}
 .btn:hover{background:var(--red-hover);border-color:var(--red-hover)}
+/* Centred further in than the landing page's: this frame is 820px, not
+   1140, so the same percentage put the light in the gutter rather than
+   behind the words. Low enough that it has faded before main's top edge,
+   where the opaque header would otherwise show a step. */
+main{background:radial-gradient(760px 520px at 34% 380px,var(--glow),transparent 68%) no-repeat}
 main .f{padding:var(--s4) var(--s3)}
 h1{font-size:clamp(1.8rem,4vw,2.6rem);margin-bottom:var(--s2)}
 .lede{color:var(--gray-900);max-width:56ch}
-table{border-collapse:collapse;width:100%;margin-top:var(--s3);border:var(--border);border-radius:var(--br-md)}
+table{border-collapse:collapse;width:100%;margin-top:var(--s3);border:var(--border);border-radius:var(--br-md);background:var(--gray-200)}
 th,td{text-align:left;padding:10px 14px;border-bottom:var(--border);font-size:.93rem}
 th{font:500 var(--t1)/1 var(--m);letter-spacing:.11em;text-transform:uppercase;color: var(--gray-800);background:var(--gray-100)}
 tr:last-child td{border-bottom:0}

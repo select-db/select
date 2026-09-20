@@ -388,54 +388,6 @@ func (q *Queries) GetLastPulledAtForWorkspace(ctx context.Context, workspaceID s
 	return last_pulled_at, err
 }
 
-const getPendingCommitsByUser = `-- name: GetPendingCommitsByUser :many
-SELECT
-    id, created_at, operation, table_name, object_id, payload, user_id, workspace_id
-FROM
-    mutation_commit
-WHERE
-    user_id = ?1
-ORDER BY created_at ASC
-LIMIT ?2
-`
-
-type GetPendingCommitsByUserParams struct {
-	UserID string `json:"user_id"`
-	Limit  int64  `json:"limit"`
-}
-
-func (q *Queries) GetPendingCommitsByUser(ctx context.Context, arg GetPendingCommitsByUserParams) ([]MutationCommit, error) {
-	rows, err := q.db.QueryContext(ctx, getPendingCommitsByUser, arg.UserID, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []MutationCommit
-	for rows.Next() {
-		var i MutationCommit
-		if err := rows.Scan(
-			&i.ID,
-			&i.CreatedAt,
-			&i.Operation,
-			&i.TableName,
-			&i.ObjectID,
-			&i.Payload,
-			&i.UserID,
-			&i.WorkspaceID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getPendingCommitsByUserAndWorkspace = `-- name: GetPendingCommitsByUserAndWorkspace :many
 SELECT
     id, created_at, operation, table_name, object_id, payload, user_id, workspace_id
