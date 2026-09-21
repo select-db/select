@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"testing"
 	"time"
 
@@ -516,5 +517,62 @@ func TestExecuteLocalNameReusedInAnotherScope(t *testing.T) {
 				t.Error("users.id masked by a name another scope reuses")
 			}
 		})
+	}
+}
+
+// A CTE named after a table reads the CTE, not the table. Reading the table's
+// columns as well hides a value the role may see, since a hidden column of the
+// shadowed table claims the result column the CTE returns.
+func TestExecuteLocalCTEShadowingATableDoesNotMask(t *testing.T) {
+	db, meta := setupContactsDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("contacts"),
+			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+	)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn, "WITH contacts AS (SELECT email FROM users) SELECT * FROM contacts ORDER BY email")
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected errors: %v", result.Errors)
+	}
+	if result.RowCount == 0 {
+		t.Fatal("no rows, so nothing here was checked")
+	}
+	if result.Rows[0][0] == core.MaskedValue {
+		t.Errorf("users.email masked by a rule on the table the CTE shadows")
+	}
+}
+
+// A qualified name is the real table even where a CTE shadows the bare one, so
+// the star over it selects the table's columns and a rule on them still hides
+// their values.
+func TestExecuteLocalQualifiedNameIsNotTheCTE(t *testing.T) {
+	db, meta := setupContactsDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("contacts"),
+			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+	)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn, "WITH contacts AS (SELECT email FROM users) SELECT * FROM main.contacts")
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected errors: %v", result.Errors)
+	}
+	if result.RowCount == 0 {
+		t.Fatal("no rows, so nothing here was checked")
+	}
+	email := slices.Index(result.Columns, "email")
+	if email < 0 {
+		t.Fatalf("no email column in %v, so nothing here was checked", result.Columns)
+	}
+	if result.Rows[0][email] != core.MaskedValue {
+		t.Errorf("contacts.email = %v, want %q: the CTE shadows the bare name only",
+			result.Rows[0][email], core.MaskedValue)
 	}
 }
