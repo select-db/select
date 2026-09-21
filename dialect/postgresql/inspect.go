@@ -215,7 +215,7 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	// against the tables the statement ended up reading, which is what
 	// resolves one the derived table passed straight through.
 	result.Where = core.MergeInspectFields(result.Where,
-		i.tailClauseFields(selectNoParens, core.RelationRefsOf(result)))
+		i.tailClauseFields(selectNoParens, core.RelationRefsOf(result), core.Scope{}))
 
 	result.Where = core.DistinctTestsProjection(
 		core.DedupsRows(selectNoParens, compoundOperators, pg.PostgreSQLParserALL),
@@ -316,7 +316,7 @@ func (i *Inspector) inspectSelectPrimary(
 	allSubqueries := append(cteSubqueries, fromSubqueries...)
 	fields := i.extractSelectFieldsWithResolution(primary, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
-	where, whereSubqueries := i.extractWhereFieldsFromPrimary(primary, relationRefs)
+	where, whereSubqueries := i.extractWhereFieldsFromPrimary(primary, relationRefs, scope)
 	selectSubqueries := i.extractSelectListSubqueries(primary)
 
 	subqueries := append(fromSubqueries, whereSubqueries...)
@@ -324,10 +324,10 @@ func (i *Inspector) inspectSelectPrimary(
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(primary)...)
 	i.resolver.DropCTETables(subqueries, ctes)
 
-	tested := core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields))
+	tested := core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, scope, fields))
 	tested = core.MergeInspectFields(tested,
 		i.joinFields(core.TreeOrNil(primary.From_clause()), relationRefs, scope))
-	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs))
+	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs, scope))
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -341,7 +341,7 @@ func (i *Inspector) inspectSelectPrimary(
 // testedFields are the columns a clause names to choose, group or order rows
 // rather than to return them, collected exactly as a WHERE's are. The listener
 // does not descend into subqueries, which are collected in their own right.
-func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if tree == nil {
 		return nil
 	}
@@ -349,6 +349,7 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 		BasePostgreSQLParserListener: &pg.BasePostgreSQLParserListener{},
 		inspector:                    i,
 		relationRefs:                 refs,
+		scope:                        scope,
 		fields:                       []core.InspectField{},
 		seenFields:                   make(map[string]bool),
 	}
@@ -374,7 +375,7 @@ func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope c
 			fields = core.MergeInspectFields(fields, i.resolver.NamedColumns(names, refs, scope))
 			continue
 		}
-		fields = core.MergeInspectFields(fields, i.testedFields(qual, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(qual, refs, scope))
 	}
 	for _, joined := range core.CollectNodes[pg.IJoined_tableContext](tree) {
 		if joined.NATURAL() != nil {
@@ -387,7 +388,7 @@ func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope c
 
 // branchClauseFields are the columns the clauses of one branch name without
 // returning: DISTINCT ON, GROUP BY, HAVING and a named window.
-func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
+func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext, refs []core.RelationRef, scope core.Scope, projection []core.InspectField) []core.InspectField {
 	if primary == nil {
 		return nil
 	}
@@ -398,9 +399,9 @@ func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext,
 		core.TreeOrNil(primary.Having_clause()),
 		core.TreeOrNil(primary.Window_clause()),
 	} {
-		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs, scope))
 	}
-	fields = core.MergeInspectFields(fields, i.overAndFilterFields(primary, refs))
+	fields = core.MergeInspectFields(fields, i.overAndFilterFields(primary, refs, scope))
 	return core.DistinctTestsProjection(plainDistinct(primary.Distinct_clause()), fields, projection)
 }
 
@@ -408,13 +409,13 @@ func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext,
 // clause is written inline on a result column rather than as a WINDOW clause
 // of its own. Both order or choose the rows an aggregate counts, so what they
 // name is tested even where the column itself is never returned.
-func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	var fields []core.InspectField
 	for _, over := range core.CollectNodes[pg.IOver_clauseContext](tree) {
-		fields = core.MergeInspectFields(fields, i.testedFields(over, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(over, refs, scope))
 	}
 	for _, filter := range core.CollectNodes[pg.IFilter_clauseContext](tree) {
-		fields = core.MergeInspectFields(fields, i.testedFields(filter, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(filter, refs, scope))
 	}
 	return fields
 }
@@ -436,7 +437,7 @@ func plainDistinct(clause pg.IDistinct_clauseContext) bool {
 
 // tailClauseFields are the columns ORDER BY, LIMIT and OFFSET name. They sit
 // after every branch of a compound select rather than inside one.
-func (i *Inspector) tailClauseFields(selectNoParens pg.ISelect_no_parensContext, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) tailClauseFields(selectNoParens pg.ISelect_no_parensContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if selectNoParens == nil {
 		return nil
 	}
@@ -446,7 +447,7 @@ func (i *Inspector) tailClauseFields(selectNoParens pg.ISelect_no_parensContext,
 		core.TreeOrNil(selectNoParens.Select_limit()),
 		core.TreeOrNil(selectNoParens.Opt_select_limit()),
 	} {
-		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs, scope))
 	}
 	return fields
 }
@@ -557,7 +558,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	// them, both against the target table, so what it names is tested.
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.Opt_on_conflict()),
-			[]core.RelationRef{{Table: tableName, Schema: schema}}))
+			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -1185,7 +1186,7 @@ func (i *Inspector) extractSelectListSubqueries(primary pg.ISimple_select_pramar
 
 // extractWhereFieldsFromPrimary extracts column references and embedded subqueries
 // from the WHERE clause of a simple_select_pramary.
-func (i *Inspector) extractWhereFieldsFromPrimary(primary pg.ISimple_select_pramaryContext, relationRefs []core.RelationRef) ([]core.InspectField, []core.InspectStatement) {
+func (i *Inspector) extractWhereFieldsFromPrimary(primary pg.ISimple_select_pramaryContext, relationRefs []core.RelationRef, scope core.Scope) ([]core.InspectField, []core.InspectStatement) {
 	if primary == nil {
 		return nil, nil
 	}
@@ -1204,6 +1205,7 @@ func (i *Inspector) extractWhereFieldsFromPrimary(primary pg.ISimple_select_pram
 		BasePostgreSQLParserListener: &pg.BasePostgreSQLParserListener{},
 		inspector:                    i,
 		relationRefs:                 relationRefs,
+		scope:                        scope,
 		fields:                       []core.InspectField{},
 		seenFields:                   make(map[string]bool),
 	}
@@ -1218,8 +1220,11 @@ func (i *Inspector) extractWhereFieldsFromPrimary(primary pg.ISimple_select_pram
 // It does not descend into subqueries, those are handled separately as InspectStatements.
 type whereColumnExtractorListener struct {
 	*pg.BasePostgreSQLParserListener
-	inspector     *Inspector
-	relationRefs  []core.RelationRef
+	inspector    *Inspector
+	relationRefs []core.RelationRef
+	// scope is what the statement declared, so a name a CTE or a derived
+	// table returns resolves to the column behind it.
+	scope         core.Scope
 	fields        []core.InspectField
 	seenFields    map[string]bool
 	subqueryDepth int
@@ -1252,7 +1257,7 @@ func (l *whereColumnExtractorListener) EnterColumnref(ctx *pg.ColumnrefContext) 
 	if tablePrefix != "" {
 		resolvedField = l.inspector.resolver.Column(tablePrefix, normalizedCol, l.relationRefs)
 	} else {
-		resolvedField = l.inspector.resolver.UnqualifiedColumn(normalizedCol, l.relationRefs)
+		resolvedField = l.inspector.resolver.UnqualifiedColumn(normalizedCol, l.relationRefs, l.scope)
 	}
 
 	// Add field if resolved and not already seen

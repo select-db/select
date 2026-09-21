@@ -250,7 +250,7 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	// against the tables the statement ended up reading, which is what
 	// resolves one the derived table passed straight through.
 	result.Where = core.MergeInspectFields(result.Where,
-		i.tailClauseFields(qe, core.RelationRefsOf(result)))
+		i.tailClauseFields(qe, core.RelationRefsOf(result), core.Scope{}))
 
 	result.Where = core.DistinctTestsProjection(
 		core.DedupsRows(qe, compoundOperators, mysql.MySQLParserALL_SYMBOL),
@@ -325,7 +325,7 @@ func (i *Inspector) inspectQueryPrimary(
 	}
 
 	relationRefs, subqueryColumns := i.extractRelationRefs(spec)
-	fromSubqueries := i.extractFromSubqueries(spec)
+	fromSubqueries := i.extractFromSubqueries(core.TreeOrNil(spec.FromClause()))
 
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
 	tables := i.resolver.Tables(relationRefs, scope)
@@ -341,10 +341,10 @@ func (i *Inspector) inspectQueryPrimary(
 
 	fields := i.extractSelectFieldsWithResolution(spec, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
-	where, whereSubqueries := i.extractWhereFields(spec, relationRefs)
-	where = core.MergeInspectFields(where, i.branchClauseFields(spec, relationRefs, fields))
+	where, whereSubqueries := i.extractWhereFields(spec, relationRefs, scope)
+	where = core.MergeInspectFields(where, i.branchClauseFields(spec, relationRefs, scope, fields))
 	where = core.MergeInspectFields(where, i.joinFields(core.TreeOrNil(spec.FromClause()), relationRefs, scope))
-	where = core.MergeInspectFields(where, i.tailClauseFields(tail, relationRefs))
+	where = core.MergeInspectFields(where, i.tailClauseFields(tail, relationRefs, scope))
 	where = i.resolver.ThroughVirtual(where, relationRefs, scope, allSubqueries)
 	selectSubqueries := i.extractSelectListSubqueries(spec)
 
@@ -366,7 +366,7 @@ func (i *Inspector) inspectQueryPrimary(
 // testedFields are the columns a clause names to choose, group or order rows
 // rather than to return them, collected exactly as a WHERE's are. The listener
 // does not descend into subqueries, which are collected in their own right.
-func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if tree == nil {
 		return nil
 	}
@@ -374,6 +374,7 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
 		inspector:               i,
 		relationRefs:            refs,
+		scope:                   scope,
 		seen:                    make(map[string]bool),
 	}
 	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
@@ -390,7 +391,7 @@ func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope c
 	}
 	var fields []core.InspectField
 	for _, join := range core.CollectNodes[mysql.IJoinedTableContext](tree) {
-		fields = core.MergeInspectFields(fields, i.testedFields(core.TreeOrNil(join.Expr()), refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(core.TreeOrNil(join.Expr()), refs, scope))
 		if list := join.IdentifierListWithParentheses(); list != nil && list.IdentifierList() != nil {
 			names := make([]string, 0, len(list.IdentifierList().AllIdentifier()))
 			for _, identifier := range list.IdentifierList().AllIdentifier() {
@@ -407,7 +408,7 @@ func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope c
 
 // branchClauseFields are the columns the clauses of one branch name without
 // returning: GROUP BY, HAVING and a named window.
-func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
+func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, refs []core.RelationRef, scope core.Scope, projection []core.InspectField) []core.InspectField {
 	if spec == nil {
 		return nil
 	}
@@ -417,9 +418,9 @@ func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, re
 		core.TreeOrNil(spec.HavingClause()),
 		core.TreeOrNil(spec.WindowClause()),
 	} {
-		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs, scope))
 	}
-	fields = core.MergeInspectFields(fields, i.overAndFilterFields(spec, refs))
+	fields = core.MergeInspectFields(fields, i.overAndFilterFields(spec, refs, scope))
 	return core.DistinctTestsProjection(isDistinct(spec), fields, projection)
 }
 
@@ -428,10 +429,10 @@ func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, re
 // of its own. Both order or choose the rows an aggregate counts, so what they
 // name is tested even where the column itself is never returned. MySQL has no
 // FILTER clause.
-func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	var fields []core.InspectField
 	for _, over := range core.CollectNodes[mysql.IWindowingClauseContext](tree) {
-		fields = core.MergeInspectFields(fields, i.testedFields(over, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(over, refs, scope))
 	}
 	return fields
 }
@@ -460,11 +461,11 @@ var compoundOperators = []int{
 
 // tailClauseFields are the columns ORDER BY names. It sits after every branch
 // of a compound select rather than inside one.
-func (i *Inspector) tailClauseFields(qe mysql.IQueryExpressionContext, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) tailClauseFields(qe mysql.IQueryExpressionContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if qe == nil {
 		return nil
 	}
-	return i.testedFields(core.TreeOrNil(qe.OrderClause()), refs)
+	return i.testedFields(core.TreeOrNil(qe.OrderClause()), refs, scope)
 }
 
 // extractBranchClauseSubqueries collects the subqueries in the clauses of a
@@ -675,12 +676,15 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 
 	// A WITH clause on a DML statement is the read it is on a SELECT, and the
 	// write does not cover the rows it reads.
-	_, cteBodies := i.extractCTEsFromWithClause(stmt.WithClause())
+	ctes, cteBodies := i.extractCTEsFromWithClause(stmt.WithClause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
-	relationRefs, _ := i.extractRelationRefsFromTableRefList(stmt.TableReferenceList())
+	relationRefs, subqueryColumns := i.extractRelationRefsFromTableRefList(stmt.TableReferenceList())
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns}
+	fromSubqueries := i.extractFromSubqueries(core.TreeOrNil(stmt.TableReferenceList()))
+	result.Subqueries = append(result.Subqueries, fromSubqueries...)
 
-	result.Tables = i.resolver.Tables(relationRefs, core.Scope{})
+	result.Tables = i.resolver.Tables(relationRefs, scope)
 	if len(result.Tables) == 0 {
 		return nil
 	}
@@ -719,13 +723,13 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 
 	if wc := stmt.WhereClause(); wc != nil {
 		if expr := wc.Expr(); expr != nil {
-			where, subs := i.extractWhereFieldsFromExpr(expr, relationRefs)
+			where, subs := i.extractWhereFieldsFromExpr(expr, relationRefs, scope)
 			result.Where = where
 			result.Subqueries = append(result.Subqueries, subs...)
 		}
 	}
 	result.Where = core.MergeInspectFields(result.Where,
-		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), relationRefs, core.Scope{}))
+		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), relationRefs, scope))
 	return result
 }
 
@@ -738,7 +742,7 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 
 	// A WITH clause on a DML statement is the read it is on a SELECT, and the
 	// write does not cover the rows it reads.
-	_, cteBodies := i.extractCTEsFromWithClause(stmt.WithClause())
+	ctes, cteBodies := i.extractCTEsFromWithClause(stmt.WithClause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	// sourceRefs covers every relation in scope for column resolution and the
@@ -747,9 +751,13 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	var targetRefs []core.RelationRef
 
 	// Multi-table form (DELETE FROM list ... or DELETE alias_list FROM list).
+	var subqueryColumns map[string][]core.Column
 	if list := stmt.TableReferenceList(); list != nil {
-		refs, _ := i.extractRelationRefsFromTableRefList(list)
-		sourceRefs = refs
+		refs, columns := i.extractRelationRefsFromTableRefList(list)
+		sourceRefs, subqueryColumns = refs, columns
+		// A derived table in the list is a read of its own, and nothing else
+		// in a DELETE reaches the tables behind it.
+		result.Subqueries = append(result.Subqueries, i.extractFromSubqueries(list)...)
 	}
 
 	// Single-table form: DELETE FROM tbl [alias].
@@ -792,20 +800,21 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 		targetRefs = sourceRefs
 	}
 
-	result.Tables = i.resolver.Tables(targetRefs, core.Scope{})
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns}
+	result.Tables = i.resolver.Tables(targetRefs, scope)
 	if len(result.Tables) == 0 {
 		return nil
 	}
 
 	if wc := stmt.WhereClause(); wc != nil {
 		if expr := wc.Expr(); expr != nil {
-			where, subs := i.extractWhereFieldsFromExpr(expr, sourceRefs)
+			where, subs := i.extractWhereFieldsFromExpr(expr, sourceRefs, scope)
 			result.Where = where
 			result.Subqueries = append(result.Subqueries, subs...)
 		}
 	}
 	result.Where = core.MergeInspectFields(result.Where,
-		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), sourceRefs, core.Scope{}))
+		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), sourceRefs, scope))
 	return result
 }
 
@@ -1424,15 +1433,15 @@ func (i *Inspector) resolveColumn(
 // WHERE
 // ============================================
 
-func (i *Inspector) extractWhereFields(spec mysql.IQuerySpecificationContext, refs []core.RelationRef) ([]core.InspectField, []core.InspectStatement) {
+func (i *Inspector) extractWhereFields(spec mysql.IQuerySpecificationContext, refs []core.RelationRef, scope core.Scope) ([]core.InspectField, []core.InspectStatement) {
 	wc := spec.WhereClause()
 	if wc == nil {
 		return nil, nil
 	}
-	return i.extractWhereFieldsFromExpr(wc.Expr(), refs)
+	return i.extractWhereFieldsFromExpr(wc.Expr(), refs, scope)
 }
 
-func (i *Inspector) extractWhereFieldsFromExpr(expr mysql.IExprContext, refs []core.RelationRef) ([]core.InspectField, []core.InspectStatement) {
+func (i *Inspector) extractWhereFieldsFromExpr(expr mysql.IExprContext, refs []core.RelationRef, scope core.Scope) ([]core.InspectField, []core.InspectStatement) {
 	if expr == nil {
 		return nil, nil
 	}
@@ -1440,6 +1449,7 @@ func (i *Inspector) extractWhereFieldsFromExpr(expr mysql.IExprContext, refs []c
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
 		inspector:               i,
 		relationRefs:            refs,
+		scope:                   scope,
 		seen:                    make(map[string]bool),
 	}
 	antlr.ParseTreeWalkerDefault.Walk(listener, expr)
@@ -1450,8 +1460,11 @@ func (i *Inspector) extractWhereFieldsFromExpr(expr mysql.IExprContext, refs []c
 
 type whereColumnListener struct {
 	*mysql.BaseMySQLParserListener
-	inspector     *Inspector
-	relationRefs  []core.RelationRef
+	inspector    *Inspector
+	relationRefs []core.RelationRef
+	// scope is what the statement declared, so a name a CTE or a derived
+	// table returns resolves to the column behind it.
+	scope         core.Scope
 	fields        []core.InspectField
 	seen          map[string]bool
 	subqueryDepth int
@@ -1476,7 +1489,7 @@ func (l *whereColumnListener) EnterColumnRef(ctx *mysql.ColumnRefContext) {
 	if cr.tablePrefix != "" {
 		resolved = l.inspector.resolver.Column(cr.tablePrefix, cr.name, l.relationRefs)
 	} else {
-		resolved = l.inspector.resolver.UnqualifiedColumn(cr.name, l.relationRefs)
+		resolved = l.inspector.resolver.UnqualifiedColumn(cr.name, l.relationRefs, l.scope)
 		if resolved == nil && len(l.relationRefs) == 1 {
 			ref := l.relationRefs[0]
 			resolved = &core.InspectField{Name: cr.name, Table: ref.Table, Schema: ref.Schema}
@@ -1544,17 +1557,17 @@ func (i *Inspector) extractSelectListSubqueries(spec mysql.IQuerySpecificationCo
 	return out
 }
 
-// extractFromSubqueries collects InspectStatements for derived tables in FROM.
-func (i *Inspector) extractFromSubqueries(spec mysql.IQuerySpecificationContext) []core.InspectStatement {
-	fc := spec.FromClause()
-	if fc == nil {
+// extractFromSubqueries collects InspectStatements for the derived tables in a
+// FROM clause or in the table reference list an UPDATE or a DELETE reads.
+func (i *Inspector) extractFromSubqueries(tree antlr.Tree) []core.InspectStatement {
+	if tree == nil {
 		return nil
 	}
 	listener := &fromSubqueryListener{
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
 		inspector:               i,
 	}
-	antlr.ParseTreeWalkerDefault.Walk(listener, fc)
+	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
 	return listener.results
 }
 

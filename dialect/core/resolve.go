@@ -383,16 +383,24 @@ func (r Resolver) virtualFields(refs []RelationRef, s Scope, subqueries []Inspec
 // UnqualifiedColumn resolves a column written without a relation prefix
 // against the relations in scope, taking the first that holds it.
 //
-// A name no relation holds under that spelling is tried again ignoring case.
-// SQLite and MySQL match column names case-insensitively whichever way the
-// name is written, so "Email" in quotes is the email column, and reading it as
-// a name of its own would leave the rule hiding that column with nothing to
-// match.
-func (r Resolver) UnqualifiedColumn(name string, refs []RelationRef) *InspectField {
+// A name no relation holds under that spelling is tried again ignoring case,
+// which SQLite and MySQL do whichever way the name is written, and then
+// against what the CTEs and derived tables in scope return.
+func (r Resolver) UnqualifiedColumn(name string, refs []RelationRef, s Scope) *InspectField {
 	if field := r.firstHolding(name, refs, false); field != nil {
 		return field
 	}
-	return r.firstHolding(name, refs, true)
+	if field := r.firstHolding(name, refs, true); field != nil {
+		return field
+	}
+	// A relation the statement declared holds it under a name of its own, and
+	// only the scope says what a CTE or a derived table returns.
+	for _, ref := range refs {
+		if field := r.columnOf(ref, name, nil, s); field != nil {
+			return field
+		}
+	}
+	return nil
 }
 
 func (r Resolver) firstHolding(name string, refs []RelationRef, foldCase bool) *InspectField {

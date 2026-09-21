@@ -252,6 +252,18 @@ func GetSeeTestCases() []SeeCase {
 		{Name: "WHERE through a derived table", SQL: "SELECT s.id FROM (SELECT id, email FROM users) s WHERE s.email LIKE 'a%'", Refused: true},
 		{Name: "WHERE through a rename", SQL: "SELECT s.id FROM (SELECT id, email AS e FROM users) s WHERE s.e LIKE 'a%'", Refused: true},
 		{Name: "WHERE through a CTE", SQL: "WITH q AS (SELECT id, email FROM users) SELECT q.id FROM q WHERE q.email LIKE 'a%'", Refused: true},
+		// Unqualified, only the scope says which relation holds the name, so a
+		// resolver that stops at the tables in FROM drops the test silently.
+		{Name: "WHERE on it unqualified over a derived table", SQL: "SELECT id FROM (SELECT id, email FROM users) q WHERE email LIKE 'a%'", Refused: true},
+		{Name: "WHERE on it unqualified over a star derived table", SQL: "SELECT id FROM (SELECT * FROM users) q WHERE email LIKE 'a%'", Refused: true},
+		{Name: "WHERE on it unqualified over a CTE", SQL: "WITH q AS (SELECT id, email FROM users) SELECT id FROM q WHERE email LIKE 'a%'", Refused: true},
+		{Name: "GROUP BY it unqualified over a derived table", SQL: "SELECT count(*) FROM (SELECT id, email FROM users) q GROUP BY email", Refused: true},
+		{Name: "GROUP BY it unqualified over a CTE", SQL: "WITH q AS (SELECT id, email FROM users) SELECT count(*) FROM q GROUP BY email", Refused: true},
+		{Name: "ORDER BY it unqualified over a derived table", SQL: "SELECT id FROM (SELECT id, email FROM users) q ORDER BY email", Refused: true},
+		{Name: "ORDER BY it unqualified over a CTE", SQL: "WITH q AS (SELECT id, email FROM users) SELECT id FROM q ORDER BY email", Refused: true},
+		{Name: "HAVING on it unqualified over a derived table", SQL: "SELECT id FROM (SELECT id, email FROM users) q GROUP BY id HAVING max(email) > 'm'", Refused: true},
+		{Name: "HAVING on it unqualified over a CTE", SQL: "WITH q AS (SELECT id, email FROM users) SELECT id FROM q GROUP BY id HAVING max(email) > 'm'", Refused: true},
+		{Name: "a rename tested unqualified over a derived table", SQL: "SELECT id FROM (SELECT id, email AS e FROM users) q WHERE e LIKE 'a%'", Refused: true},
 		{Name: "ORDER BY the hidden column", SQL: "SELECT id FROM users ORDER BY email", Refused: true},
 		{Name: "GROUP BY the hidden column", SQL: "SELECT count(*) FROM users GROUP BY email", Refused: true},
 		{Name: "HAVING on the hidden column", SQL: "SELECT id, count(*) FROM users GROUP BY id HAVING max(email) > 'm'", Refused: true},
