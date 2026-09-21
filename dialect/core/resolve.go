@@ -436,3 +436,145 @@ func (r Resolver) Column(prefix, name string, refs []RelationRef) *InspectField 
 	// scope here. The field is kept under that name for ResolveCorrelated.
 	return &InspectField{Name: name, Table: prefix}
 }
+
+// SelectColumn resolves a column an expression names, "c" or "t.c", to the
+// table it is read from.
+//
+// A prefix decides on its own: a name in scope is that relation's column
+// whether or not the metadata lists it. Without one the relations are tried in
+// the order the statement named them, and a name none of them holds is
+// attributed to the one real table in scope, where there is exactly one. It
+// resolves to nothing otherwise, which refuses rather than guesses.
+//
+// alias is the name the statement gives the result column, and belongs to the
+// field only where the expression resolves to this column alone.
+func (r Resolver) SelectColumn(name, prefix string, alias *string, refs []RelationRef, s Scope) *InspectField {
+	if prefix != "" {
+		return r.prefixedColumn(name, prefix, alias, refs, s)
+	}
+	for _, ref := range refs {
+		if field := r.columnOf(ref, name, alias, s); field != nil {
+			return field
+		}
+	}
+	return r.soleRelationColumn(name, alias, refs)
+}
+
+// prefixedColumn resolves "t.c", where t names a relation the statement has in
+// scope. The relation answers even where the metadata has no such column: the
+// name says which table to ask about, and a column the metadata is missing is
+// what a check has to refuse rather than skip.
+func (r Resolver) prefixedColumn(name, prefix string, alias *string, refs []RelationRef, s Scope) *InspectField {
+	for _, ref := range refs {
+		if !r.named(ref, prefix) {
+			continue
+		}
+		if cte, ok := r.matchCTE(s.CTEs, ref); ok {
+			resolved := r.CTEColumn(r.Dialect.NormalizeIdentifier(name), s.CTEResults[r.Dialect.NormalizeIdentifier(cte.Table)])
+			if resolved != nil {
+				resolved.Alias = alias
+			}
+			return resolved
+		}
+		return &InspectField{
+			Name:   r.canonicalName(name, ref),
+			Alias:  alias,
+			Table:  ref.Table,
+			Schema: ref.Schema,
+		}
+	}
+	return nil
+}
+
+// columnOf reports the field where ref holds a column of that name, whether
+// ref is a CTE, a derived table or a table of the metadata.
+func (r Resolver) columnOf(ref RelationRef, name string, alias *string, s Scope) *InspectField {
+	// A name can be a CTE and a derived table at once, and the FROM decides
+	// which one the statement reads. Where the CTE does not hold the column,
+	// the relation is tried as what else it could be rather than given up on.
+	if cte, ok := r.matchCTE(s.CTEs, ref); ok && holds(cte.Columns, name, r.Dialect) {
+		if resolved := r.CTEColumn(r.Dialect.NormalizeIdentifier(name), s.CTEResults[r.Dialect.NormalizeIdentifier(cte.Table)]); resolved != nil {
+			resolved.Alias = alias
+			return resolved
+		}
+	}
+
+	if ref.Schema == "" {
+		if columns, ok := s.Subqueries[ref.Table]; ok {
+			if column := hold(columns, name, r.Dialect); column != nil {
+				return &InspectField{Name: column.Name, Alias: alias, Table: ref.Table, Schema: r.Meta.DefaultSchema}
+			}
+		}
+		return nil
+	}
+
+	for _, column := range TableFields(r.Meta, ref.Schema, ref.Table, r.Dialect) {
+		if sameIdentifier(column.Name, name, r.Dialect) {
+			return &InspectField{Name: column.Name, Alias: alias, Table: ref.Table, Schema: ref.Schema}
+		}
+	}
+	return nil
+}
+
+// soleRelationColumn attributes a name no relation holds to the only real
+// table in scope. A column the metadata has not caught up with is that table's,
+// and there is nowhere else it could be from. Where more than one table could
+// hold it, it resolves to nothing, which refuses rather than picks one.
+func (r Resolver) soleRelationColumn(name string, alias *string, refs []RelationRef) *InspectField {
+	var real []RelationRef
+	for _, ref := range refs {
+		if ref.Schema != "" {
+			real = append(real, ref)
+		}
+	}
+	if len(real) != 1 {
+		return nil
+	}
+	field := InspectField{Name: name, Alias: alias, Table: real[0].Table, Schema: real[0].Schema}
+	// A table the metadata does not describe keeps an empty schema, which is
+	// what refuses the statement rather than checking it against nothing.
+	if !TableExistsInMetadata(r.Meta, real[0].Schema, real[0].Table, r.Dialect) {
+		field.Schema = ""
+	}
+	return &field
+}
+
+// canonicalName is the column's name as the metadata spells it, which keeps
+// the case a quoted name in the statement may not have.
+func (r Resolver) canonicalName(name string, ref RelationRef) string {
+	for _, column := range TableFields(r.Meta, ref.Schema, ref.Table, r.Dialect) {
+		if sameIdentifier(column.Name, name, r.Dialect) {
+			return column.Name
+		}
+	}
+	return r.Dialect.NormalizeIdentifier(name)
+}
+
+func (r Resolver) named(ref RelationRef, name string) bool {
+	called := ref.Alias
+	if called == "" {
+		called = ref.Table
+	}
+	return r.Dialect.NormalizeIdentifier(called) == r.Dialect.NormalizeIdentifier(name)
+}
+
+func holds(columns []Column, name string, dialect SQLDialect) bool {
+	return hold(columns, name, dialect) != nil
+}
+
+func hold(columns []Column, name string, dialect SQLDialect) *Column {
+	for idx, column := range columns {
+		if sameIdentifier(column.Name, name, dialect) {
+			return &columns[idx]
+		}
+	}
+	return nil
+}
+
+// sameIdentifier compares two names as the dialect spells them, then ignoring
+// case: SQLite and MySQL match a column name case-insensitively whichever way
+// it is written, so a quoted "Email" is the email column.
+func sameIdentifier(a, b string, dialect SQLDialect) bool {
+	left, right := dialect.NormalizeIdentifier(a), dialect.NormalizeIdentifier(b)
+	return left == right || strings.EqualFold(left, right)
+}

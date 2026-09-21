@@ -423,13 +423,21 @@ func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, re
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
 	}
-	// An OVER written inline on a result column orders or partitions the rows
-	// an aggregate counts, so what it names is tested even where the column
-	// itself is never returned.
-	for _, over := range core.CollectNodes[mysql.IWindowingClauseContext](spec) {
+	fields = core.MergeInspectFields(fields, i.overAndFilterFields(spec, refs))
+	return core.DistinctTestsProjection(isDistinct(spec), fields, projection)
+}
+
+// overAndFilterFields are the columns an OVER or a FILTER names where the
+// clause is written inline on a result column rather than as a WINDOW clause
+// of its own. Both order or choose the rows an aggregate counts, so what they
+// name is tested even where the column itself is never returned. MySQL has no
+// FILTER clause.
+func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef) []core.InspectField {
+	var fields []core.InspectField
+	for _, over := range core.CollectNodes[mysql.IWindowingClauseContext](tree) {
 		fields = core.MergeInspectFields(fields, i.testedFields(over, refs))
 	}
-	return core.DistinctTestsProjection(isDistinct(spec), fields, projection)
+	return fields
 }
 
 // isDistinct reports whether a query specification carries SELECT DISTINCT.
@@ -1412,86 +1420,8 @@ func (i *Inspector) resolveColumn(
 	subqueryColumns map[string][]core.Column,
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) *core.InspectField {
-	if col.tablePrefix != "" {
-		for _, ref := range relationRefs {
-			key := ref.Alias
-			if key == "" {
-				key = ref.Table
-			}
-			if i.dialect.NormalizeIdentifier(key) != col.tablePrefix {
-				continue
-			}
-			// CTE?
-			for _, cte := range ctes {
-				if i.normalizeEquals(cte.Table, ref.Table) {
-					return i.resolver.CTEColumn(col.name, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
-				}
-			}
-			return &core.InspectField{
-				Name:   col.name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			}
-		}
-	}
-
-	// Unqualified: walk all relation refs.
-	for _, ref := range relationRefs {
-		// CTE?
-		for _, cte := range ctes {
-			if i.normalizeEquals(cte.Table, ref.Table) {
-				for _, c := range cte.Columns {
-					if i.normalizeEquals(c.Name, col.name) {
-						return i.resolver.CTEColumn(col.name, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
-					}
-				}
-			}
-		}
-		// Subquery alias?
-		if ref.Schema == "" && subqueryColumns != nil {
-			if cols, ok := subqueryColumns[ref.Table]; ok {
-				for _, c := range cols {
-					if i.normalizeEquals(c.Name, col.name) {
-						return &core.InspectField{
-							Name:   col.name,
-							Table:  ref.Table,
-							Schema: i.meta.DefaultSchema,
-						}
-					}
-				}
-			}
-		}
-		// Physical table.
-		for _, c := range core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect) {
-			if i.normalizeEquals(c.Name, col.name) {
-				return &core.InspectField{
-					Name:   col.name,
-					Table:  ref.Table,
-					Schema: ref.Schema,
-				}
-			}
-		}
-	}
-
-	// Fallback: only one real table in scope.
-	var known, unknown []core.RelationRef
-	for _, ref := range relationRefs {
-		if ref.Schema == "" {
-			continue
-		}
-		if core.TableExistsInMetadata(i.meta, ref.Schema, ref.Table, i.dialect) {
-			known = append(known, ref)
-		} else {
-			unknown = append(unknown, ref)
-		}
-	}
-	if len(known) == 1 {
-		return &core.InspectField{Name: col.name, Table: known[0].Table, Schema: known[0].Schema}
-	}
-	if len(known) == 0 && len(unknown) == 1 {
-		return &core.InspectField{Name: col.name, Table: unknown[0].Table}
-	}
-	return nil
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	return i.resolver.SelectColumn(col.name, col.tablePrefix, nil, relationRefs, scope)
 }
 
 // ============================================
