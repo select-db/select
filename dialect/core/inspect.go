@@ -50,6 +50,50 @@ func AlsoPerforms(stmt *InspectStatement, op InspectOperation, fields []InspectF
 	})
 }
 
+// AlsoReads records the relations a statement reads without writing them: the
+// tables a multi-table UPDATE or DELETE joins against but does not target.
+// Without it the write's own action is asked for on them, which is both a
+// right the statement does not need and a read nobody checked.
+func AlsoReads(stmt *InspectStatement, tables []InspectTable) {
+	if stmt == nil || len(tables) == 0 {
+		return
+	}
+	stmt.Also = append(stmt.Also, InspectStatement{Operation: InspectOpSelect, Tables: tables})
+}
+
+// SplitWrittenTables divides tables into the ones fields name, which a write
+// changes, and the ones it only reads. A write whose fields name nothing
+// leaves the split undecided, which the caller reads as every table written.
+func SplitWrittenTables(tables []InspectTable, fields []InspectField) (written, read []InspectTable) {
+	named := make(map[[2]string]bool, len(fields))
+	for _, field := range fields {
+		named[[2]string{field.Schema, field.Table}] = true
+	}
+	for _, table := range tables {
+		if named[[2]string{table.Schema, table.Name}] {
+			written = append(written, table)
+			continue
+		}
+		read = append(read, table)
+	}
+	return written, read
+}
+
+// TablesExcept are the tables of all that none of keep names.
+func TablesExcept(all, keep []InspectTable) []InspectTable {
+	held := make(map[[2]string]bool, len(keep))
+	for _, table := range keep {
+		held[[2]string{table.Schema, table.Name}] = true
+	}
+	var rest []InspectTable
+	for _, table := range all {
+		if !held[[2]string{table.Schema, table.Name}] {
+			rest = append(rest, table)
+		}
+	}
+	return rest
+}
+
 // AsFilter marks stmts as filters and returns them. See InspectStatement.Filter.
 func AsFilter(stmts []InspectStatement) []InspectStatement {
 	for i := range stmts {

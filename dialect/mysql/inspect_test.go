@@ -209,6 +209,8 @@ func TestInspectMySQLSpecific(t *testing.T) {
 		},
 		{
 			// Multi-table UPDATE writes to t1 via the JOIN.
+			// Only t1 is written. t2 is joined against, so it is a read and
+			// asking for update on it would refuse a role that may read it.
 			Name: "Multi-table UPDATE with JOIN",
 			SQL:  "UPDATE t1 JOIN t2 ON t1.c1 = t2.c1 SET t1.c2 = t2.c3 WHERE t2.c1 = 5",
 			Expected: []core.InspectStatement{
@@ -216,7 +218,6 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					Operation: core.InspectOpUpdate,
 					Tables: []core.InspectTable{
 						{Name: "t1", Schema: defaultSchema},
-						{Name: "t2", Schema: defaultSchema},
 					},
 					Fields: []core.InspectField{
 						{Name: "c2", Table: "t1", Schema: defaultSchema},
@@ -224,6 +225,9 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					Where: []core.InspectField{
 						{Name: "c1", Table: "t2", Schema: defaultSchema},
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
+					},
+					Also: []core.InspectStatement{
+						{Operation: core.InspectOpSelect, Tables: []core.InspectTable{{Name: "t2", Schema: defaultSchema}}},
 					},
 				},
 			},
