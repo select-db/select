@@ -99,6 +99,12 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 		return nil
 	}
 
+	// EXPLAIN reports what the server knows about the rows a statement would
+	// touch, so it takes the rights that statement takes.
+	if explainStmt := stmt.Explainstmt(); explainStmt != nil {
+		return i.inspectExplainable(explainStmt.Explainablestmt())
+	}
+
 	// Handle SELECT statements
 	if selectStmt := stmt.Selectstmt(); selectStmt != nil {
 		return i.inspectTopLevelSelect(selectStmt)
@@ -602,6 +608,25 @@ func (i *Inspector) conflictSetFields(
 		})
 	}
 	return fields
+}
+
+// inspectExplainable reads the statement an EXPLAIN wraps. A form this does
+// not list resolves to nothing, which the floor reports as unknown.
+func (i *Inspector) inspectExplainable(stmt pg.IExplainablestmtContext) *core.InspectStatement {
+	if stmt == nil {
+		return nil
+	}
+	switch {
+	case stmt.Selectstmt() != nil:
+		return i.inspectTopLevelSelect(stmt.Selectstmt())
+	case stmt.Insertstmt() != nil:
+		return i.inspectInsert(stmt.Insertstmt())
+	case stmt.Updatestmt() != nil:
+		return i.inspectUpdate(stmt.Updatestmt())
+	case stmt.Deletestmt() != nil:
+		return i.inspectDelete(stmt.Deletestmt())
+	}
+	return nil
 }
 
 // addReturningFields records the columns a RETURNING clause hands back. They

@@ -46,8 +46,17 @@ func PermCasesFor(dialect string) []PermCase {
 	if dialect != "postgresql" {
 		cases = append(cases, GetPermCasesMySQLAndSQLite()...)
 	}
+	if dialect != "sqlite" {
+		cases = append(cases, GetPermCasesPostgreSQLAndMySQL()...)
+	}
 	if dialect == "mysql" {
 		cases = append(cases, GetPermCasesMySQL()...)
+	}
+	if dialect == "sqlite" {
+		cases = append(cases, GetPermCasesSQLite()...)
+	}
+	if dialect == "postgresql" {
+		cases = append(cases, GetPermCasesPostgreSQL()...)
 	}
 	return cases
 }
@@ -191,6 +200,59 @@ func GetPermCasesEveryDialect() []PermCase {
 			Why:   "whether a row survives is an answer about t2",
 		},
 
+		// --- how a relation is named. The rule is one relation, however it is
+		// spelled, and a name that resolves to nothing is refused rather than
+		// guessed at.
+		{
+			Name:  "a schema-qualified name",
+			SQL:   "SELECT c1 FROM main.t1",
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "main.t1 and t1 are the same table",
+		},
+		{
+			Name:  "a name in another schema",
+			SQL:   "SELECT c1 FROM other.t3",
+			Needs: []Right{t3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a right on main is not a right on other",
+		},
+		{
+			Name:  "an alias",
+			SQL:   "SELECT x.c1 FROM t1 AS x",
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the alias is a name for t1, not a relation of its own",
+		},
+		{
+			Name:  "an alias named after another table",
+			SQL:   "SELECT x.c1 FROM t1 AS x, t2 AS t1",
+			Needs: []Right{t1(core.ActionSelect), t2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "calling t2 by the name t1 must not hide either of them",
+		},
+		{
+			Name:  "a CTE named after a table",
+			SQL:   "WITH t1 AS (SELECT c1 FROM t2) SELECT c1 FROM t1",
+			Needs: []Right{t2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the statement reads the CTE, so the table it shadows is never touched",
+		},
+		{
+			Name:  "a qualified name a CTE shadows",
+			SQL:   "WITH t1 AS (SELECT c1 FROM t2) SELECT c1 FROM main.t1",
+			Needs: []Right{t1(core.ActionSelect), t2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "qualifying reaches past the CTE to the real table, and the body still reads t2",
+		},
+		{
+			Name:  "a name in another case",
+			SQL:   "SELECT C1 FROM T1",
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "every dialect here folds an unquoted name, so T1 is t1",
+		},
+
 		// --- statements that name no table and change nothing
 		{
 			// A connection check is the commonest statement there is, and it
@@ -238,6 +300,28 @@ func GetPermCasesEveryDialect() []PermCase {
 			Needs: []Right{Manage},
 			Op:    core.InspectOpDrop,
 			Why:   "delete removes rows, drop removes the table",
+		},
+
+		// --- asking the planner about a statement. It reports what the server
+		// knows about the rows, so it takes what the statement itself takes.
+		{
+			Name:  "EXPLAIN of a select",
+			SQL:   "EXPLAIN SELECT c1 FROM t1",
+			Needs: []Right{t1(core.ActionSelect)},
+			Why:   "the plan reports what the server knows about the rows of t1",
+		},
+		{
+			Name:  "EXPLAIN of an update",
+			SQL:   "EXPLAIN UPDATE t1 SET c1 = 1",
+			Needs: []Right{t1(core.ActionUpdate)},
+			Why:   "asking how a write would run is asking about the write",
+		},
+
+		{
+			Name:  "truncating a table is administration",
+			SQL:   "TRUNCATE TABLE t1",
+			Needs: []Right{Manage},
+			Why:   "it empties the table outside the transaction a delete runs in",
 		},
 
 		// --- rights and session statements
@@ -319,6 +403,113 @@ func GetPermCasesPostgreSQLAndSQLite() []PermCase {
 	}
 }
 
+// GetPermCasesPostgreSQL are statements PostgreSQL alone parses: COPY, which
+// moves rows between a table and a file the server can see.
+func GetPermCasesPostgreSQL() []PermCase {
+	return []PermCase{
+		{
+			Name:  "a name in double quotes",
+			SQL:   `SELECT c1 FROM "t1"`,
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "quoting is how a name is written, not which table it is",
+		},
+		{
+			Name:  "a quoted schema and table",
+			SQL:   `SELECT c1 FROM "main"."t1"`,
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "both halves quoted is still main.t1",
+		},
+		{
+			Name:  "copying a file into a table",
+			SQL:   "COPY t1 FROM '/tmp/x.csv'",
+			Needs: []Right{Manage},
+			Why:   "it reads a file the server can see and the caller may not",
+		},
+		{
+			Name:  "copying a table out to a file",
+			SQL:   "COPY t1 TO '/tmp/x.csv'",
+			Needs: []Right{Manage},
+			Why:   "it writes rows somewhere the rules do not reach",
+		},
+	}
+}
+
+// GetPermCasesPostgreSQLAndMySQL are statements those two parse and SQLite
+// does not, which spells the same question EXPLAIN QUERY PLAN.
+func GetPermCasesPostgreSQLAndMySQL() []PermCase {
+	return []PermCase{
+		{
+			// EXPLAIN ANALYZE runs the statement rather than describing it,
+			// so nothing less than what the statement takes will do.
+			Name:  "EXPLAIN ANALYZE of a delete",
+			SQL:   "EXPLAIN ANALYZE DELETE FROM t1",
+			Needs: []Right{t1(core.ActionDelete)},
+			Why:   "the rows really go, so it is the delete it explains",
+		},
+	}
+}
+
+// GetPermCasesSQLite are statements SQLite alone parses: the ones that reach
+// the file behind the database.
+func GetPermCasesSQLite() []PermCase {
+	return []PermCase{
+		{
+			Name:  "a name in double quotes",
+			SQL:   `SELECT c1 FROM "t1"`,
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "SQLite takes all three quotings, and each names the same table",
+		},
+		{
+			Name:  "a name in backticks",
+			SQL:   "SELECT c1 FROM `t1`",
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "SQLite takes MySQL quoting too",
+		},
+		{
+			Name:  "a name in square brackets",
+			SQL:   "SELECT c1 FROM [t1]",
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "SQLite takes SQL Server quoting too",
+		},
+		{
+			Name:  "a quoted name in another case",
+			SQL:   `SELECT c1 FROM "T1"`,
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "SQLite matches a table name without regard to case, quoted or not",
+		},
+		{
+			Name:  "attaching another database file",
+			SQL:   "ATTACH DATABASE '/tmp/other.db' AS x",
+			Needs: []Right{Manage},
+			Why:   "it brings a whole database the rules say nothing about into reach",
+		},
+		{
+			Name:  "detaching one",
+			SQL:   "DETACH DATABASE x",
+			Needs: []Right{Manage},
+			Why:   "what the connection can reach is not data",
+		},
+		{
+			Name:  "reading the schema through a pragma",
+			SQL:   "PRAGMA table_info(t1)",
+			Needs: []Right{Manage},
+			Why:   "a pragma reads and writes settings rather than rows",
+		},
+		{
+			Name:  "vacuuming",
+			SQL:   "VACUUM",
+			Needs: []Right{Manage},
+			Why:   "it rewrites the file the database lives in",
+		},
+	}
+}
+
 // GetPermCasesMySQLAndSQLite are statements those two parse and PostgreSQL
 // does not: REPLACE, which is an insert that first deletes whatever conflicts.
 func GetPermCasesMySQLAndSQLite() []PermCase {
@@ -341,9 +532,41 @@ func GetPermCasesMySQLAndSQLite() []PermCase {
 }
 
 // GetPermCasesMySQL are statements MySQL alone parses: its own spelling of the
-// upsert.
+// upsert, its multi-table writes, and the ones that reach the server.
 func GetPermCasesMySQL() []PermCase {
 	return []PermCase{
+		{
+			Name:  "a name in backticks",
+			SQL:   "SELECT c1 FROM `t1`",
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "backticks are how MySQL quotes a name",
+		},
+		{
+			Name:  "a backticked schema and table",
+			SQL:   "SELECT c1 FROM `main`.`t1`",
+			Needs: []Right{t1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "both halves quoted is still main.t1",
+		},
+		{
+			Name:  "calling a procedure",
+			SQL:   "CALL some_proc()",
+			Needs: []Right{Manage},
+			Why:   "what the procedure does is not in the statement",
+		},
+		{
+			Name:  "loading a file into a table",
+			SQL:   "LOAD DATA INFILE '/tmp/x.csv' INTO TABLE t1",
+			Needs: []Right{Manage},
+			Why:   "it reads a file the server can see and the caller may not",
+		},
+		{
+			Name:  "locking a table",
+			SQL:   "LOCK TABLES t1 WRITE",
+			Needs: []Right{Manage},
+			Why:   "holding a lock is a thing done to the server, not to rows",
+		},
 		{
 			Name:  "ON DUPLICATE KEY UPDATE also updates",
 			SQL:   "INSERT INTO t1 (c1) VALUES (1) ON DUPLICATE KEY UPDATE c2 = 'x'",

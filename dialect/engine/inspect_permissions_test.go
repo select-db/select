@@ -47,7 +47,6 @@ func TestPermissions_StatementsThatNeedManage(t *testing.T) {
 				"REVOKE ALL ON t1 FROM bob",
 				"CREATE ROLE evil SUPERUSER",
 				"CREATE VIEW v AS SELECT * FROM t1",
-				"EXPLAIN ANALYZE DELETE FROM t1",
 				"ALTER TABLE t1 RENAME TO t9",
 				"REFRESH MATERIALIZED VIEW mv",
 				"LOCK TABLE t1",
