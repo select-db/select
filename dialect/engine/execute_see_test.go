@@ -843,3 +843,68 @@ func TestExecuteLocalOrderByVisibleColumnRuns(t *testing.T) {
 		})
 	}
 }
+
+// A write stores what it reads, and stored rows are out of reach of masking: a
+// hidden column copied into a table the caller may select from is the value
+// itself, not an answer about it.
+func TestExecuteLocalWriteReadingHiddenColumnIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"INSERT INTO contacts (email) SELECT email FROM users",
+		"INSERT INTO contacts (id, email) VALUES (9, (SELECT email FROM users LIMIT 1))",
+		"UPDATE contacts SET email = (SELECT email FROM users LIMIT 1)",
+		"INSERT INTO contacts (email) SELECT x FROM (SELECT email AS x FROM users) s",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "insert", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatal("ran, so the hidden values are in contacts now")
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+			var stored string
+			_ = db.QueryRow(`SELECT coalesce(group_concat(email), '') FROM contacts`).Scan(&stored)
+			if strings.Contains(stored, "@example.com") && strings.Contains(stored, "alice") {
+				t.Errorf("hidden value reached contacts: %q", stored)
+			}
+		})
+	}
+}
+
+// A write that reads only visible columns is ordinary work.
+func TestExecuteLocalWriteReadingVisibleColumnRuns(t *testing.T) {
+	for _, sql := range []string{
+		"INSERT INTO contacts (id, email) SELECT id + 10, 'x' FROM users",
+		"UPDATE contacts SET id = id + 100",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "insert", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			if result := runQuery(ctx, conn, sql); len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+		})
+	}
+}

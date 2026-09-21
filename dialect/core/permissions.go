@@ -463,15 +463,30 @@ func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms Com
 // on them does: "WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'" is the
 // same oracle spelled through a subquery. So everything a filter reads counts
 // as tested, its own result columns included.
+//
+// A subquery a write reads from counts too. Its rows are not masked on the way
+// past, they are stored: "INSERT INTO other (c) SELECT email FROM users" hands
+// the caller a table it may select from, holding the values it may not see.
 func predicateFields(stmt InspectStatement, tested bool, into []InspectField) []InspectField {
 	into = append(into, stmt.Where...)
 	if tested {
 		into = append(into, stmt.Fields...)
 	}
+	stores := isWrite(stmt.Operation)
 	for _, sub := range stmt.Subqueries {
-		into = predicateFields(sub, tested || sub.Filter, into)
+		into = predicateFields(sub, tested || sub.Filter || stores, into)
 	}
 	return into
+}
+
+// isWrite reports whether an operation puts rows into a table, where what it
+// read is out of reach of masking.
+func isWrite(op InspectOperation) bool {
+	switch op {
+	case InspectOpInsert, InspectOpUpdate, InspectOpDelete:
+		return true
+	}
+	return false
 }
 
 // readFields returns every field whose value the statement can return, its own
