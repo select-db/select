@@ -197,7 +197,7 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	}
 
 	tail := i.extractTailSubqueries(selectNoParens)
-	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	core.DropVirtualTables(tail, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
 	result.Subqueries = append(result.Subqueries, tail...)
 
 	return result
@@ -279,7 +279,8 @@ func (i *Inspector) inspectSelectPrimary(
 
 	fromSubqueries := i.extractFromSubqueriesFromPrimary(primary)
 
-	tables := i.convertRelationRefs(relationRefs, i.virtualNames(ctes, subqueryColumns))
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	tables := i.resolve().Tables(relationRefs, scope)
 	for _, subq := range cteSubqueries {
 		tables = core.MergeInspectTables(tables, subq.Tables)
 	}
@@ -296,7 +297,7 @@ func (i *Inspector) inspectSelectPrimary(
 	subqueries := append(fromSubqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(primary)...)
-	core.DropVirtualTables(subqueries, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	core.DropVirtualTables(subqueries, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -797,13 +798,14 @@ func (i *Inspector) extractSelectFields(
 		}
 	}
 
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
 	var fields []core.InspectField
 	targetElements := targetList.AllTarget_el()
 
 	for _, targetEl := range targetElements {
 		// Handle SELECT *
 		if starCtx, ok := targetEl.(*pg.Target_starContext); ok && starCtx.STAR() != nil {
-			fields = append(fields, i.expandStar(relationRefs, ctes, subqueryColumns, cteToSubqueryMap)...)
+			fields = append(fields, i.resolve().Star(relationRefs, scope)...)
 			continue
 		}
 
@@ -811,7 +813,7 @@ func (i *Inspector) extractSelectFields(
 		for _, field := range i.extractFieldsFromTarget(targetEl, relationRefs, ctes, subqueryColumns, cteToSubqueryMap) {
 			// Check if this is a qualified star (table.*)
 			if field.Name == "*" && field.Table != "" {
-				fields = append(fields, i.expandQualifiedStar(field.Table, relationRefs, ctes, cteToSubqueryMap)...)
+				fields = append(fields, i.resolve().QualifiedStar(field.Table, relationRefs, scope)...)
 				continue
 			}
 			fields = append(fields, field)
@@ -1041,7 +1043,7 @@ func (i *Inspector) resolveColumn(
 				// Check if this is a CTE
 				for _, cte := range ctes {
 					if i.dialect.NormalizeIdentifier(cte.Table) == i.dialect.NormalizeIdentifier(ref.Table) {
-						return i.resolveCTEColumnFromFields(normalizedCol, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
+						return i.resolve().CTEColumn(normalizedCol, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
 					}
 				}
 
@@ -1073,7 +1075,7 @@ func (i *Inspector) resolveColumn(
 				for _, col := range cte.Columns {
 					if i.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
 						cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-						resolved := i.resolveCTEColumnFromFields(normalizedCol, cteToSubqueryMap[cteKey])
+						resolved := i.resolve().CTEColumn(normalizedCol, cteToSubqueryMap[cteKey])
 						if resolved != nil {
 							resolved.Alias = alias
 							return resolved
@@ -1393,7 +1395,8 @@ func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.Relat
 	refs, subqueryColumns := fw.walk(fromList)
 
 	reads := i.extractSubqueriesFromFromList(fromList)
-	if tables := i.convertRelationRefs(refs, i.virtualNames(ctes, subqueryColumns)); len(tables) > 0 {
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns}
+	if tables := i.resolve().Tables(refs, scope); len(tables) > 0 {
 		reads = append(reads, core.InspectStatement{
 			Operation: core.InspectOpSelect,
 			Tables:    tables,
@@ -2025,39 +2028,7 @@ func (d *Dialect) processColumnRef(
 	return core.ResolveColumnFromRelationRefs(qualifiers, fieldName, relationRefs, meta, d)
 }
 
-// The rules below are the same for every dialect and live in core; these bind
-// them to this inspector's metadata.
-
-func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
-	return core.VirtualNames(ctes, subqueryColumns, i.dialect)
-}
-
-func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
-	return core.VirtualNames(ctes, nil, i.dialect)
-}
-
-func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtual map[string]bool) []core.InspectTable {
-	return core.ConvertRelationRefs(refs, virtual, i.meta, i.dialect)
-}
-
-func (i *Inspector) resolveCTEColumnFromFields(columnName string, cte *core.InspectStatement) *core.InspectField {
-	return core.ResolveCTEColumn(columnName, cte, i.meta, i.dialect)
-}
-
-func (i *Inspector) expandStar(
-	refs []core.RelationRef,
-	ctes []core.RelationRef,
-	subqueryColumns map[string][]core.Column,
-	cteResults map[string]*core.InspectStatement,
-) []core.InspectField {
-	return core.ExpandStar(refs, ctes, subqueryColumns, cteResults, i.meta, i.dialect)
-}
-
-func (i *Inspector) expandQualifiedStar(
-	prefix string,
-	refs []core.RelationRef,
-	ctes []core.RelationRef,
-	cteResults map[string]*core.InspectStatement,
-) []core.InspectField {
-	return core.ExpandQualifiedStar(prefix, refs, ctes, cteResults, i.meta, i.dialect)
+// resolve binds the shared resolution rules to this inspector's metadata.
+func (i *Inspector) resolve() core.Resolver {
+	return core.Resolver{Meta: i.meta, Dialect: i.dialect}
 }

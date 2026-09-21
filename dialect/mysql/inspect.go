@@ -226,7 +226,7 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	}
 
 	tail := i.extractTailSubqueries(qe)
-	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	core.DropVirtualTables(tail, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
 	result.Subqueries = append(result.Subqueries, tail...)
 
 	return result
@@ -298,7 +298,8 @@ func (i *Inspector) inspectQueryPrimary(
 	relationRefs, subqueryColumns := i.extractRelationRefs(spec)
 	fromSubqueries := i.extractFromSubqueries(spec)
 
-	tables := i.convertRelationRefs(relationRefs, i.virtualNames(ctes, subqueryColumns))
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	tables := i.resolve().Tables(relationRefs, scope)
 	for _, sub := range cteSubqueries {
 		tables = core.MergeInspectTables(tables, sub.Tables)
 	}
@@ -318,7 +319,7 @@ func (i *Inspector) inspectQueryPrimary(
 	subqueries = append(subqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(spec)...)
-	core.DropVirtualTables(subqueries, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	core.DropVirtualTables(subqueries, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -542,7 +543,7 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 
 	relationRefs, _ := i.extractRelationRefsFromTableRefList(stmt.TableReferenceList())
 
-	result.Tables = i.convertRelationRefs(relationRefs, nil)
+	result.Tables = i.resolve().Tables(relationRefs, core.Scope{})
 	if len(result.Tables) == 0 {
 		return nil
 	}
@@ -652,7 +653,7 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 		targetRefs = sourceRefs
 	}
 
-	result.Tables = i.convertRelationRefs(targetRefs, nil)
+	result.Tables = i.resolve().Tables(targetRefs, core.Scope{})
 	if len(result.Tables) == 0 {
 		return nil
 	}
@@ -1121,6 +1122,8 @@ func (i *Inspector) extractSelectFields(
 	subqueryColumns map[string][]core.Column,
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) []core.InspectField {
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+
 	// MySQL's QuerySpecification has either "SELECT *" (with MULT_OPERATOR on
 	// the SelectItemList) or a list of SelectItems.
 	il := spec.SelectItemList()
@@ -1128,13 +1131,13 @@ func (i *Inspector) extractSelectFields(
 		return nil
 	}
 	if il.MULT_OPERATOR() != nil && len(il.AllSelectItem()) == 0 {
-		return i.expandStar(relationRefs, ctes, subqueryColumns, cteToSubqueryMap)
+		return i.resolve().Star(relationRefs, scope)
 	}
 
 	var fields []core.InspectField
 	// Account for the leading "*, col1, col2" case: SELECT *, c1, c2.
 	if il.MULT_OPERATOR() != nil {
-		fields = append(fields, i.expandStar(relationRefs, ctes, subqueryColumns, cteToSubqueryMap)...)
+		fields = append(fields, i.resolve().Star(relationRefs, scope)...)
 	}
 	for _, item := range il.AllSelectItem() {
 		fields = append(fields, i.processSelectItem(item, relationRefs, ctes, subqueryColumns, cteToSubqueryMap)...)
@@ -1152,6 +1155,7 @@ func (i *Inspector) processSelectItem(
 	if item == nil {
 		return nil
 	}
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
 	// table.*
 	if tw := item.TableWild(); tw != nil {
 		ids := tw.AllIdentifier()
@@ -1159,7 +1163,7 @@ func (i *Inspector) processSelectItem(
 			return nil
 		}
 		prefix := i.dialect.NormalizeIdentifier(ids[len(ids)-1].GetText())
-		return i.expandQualifiedStar(prefix, relationRefs, ctes, cteToSubqueryMap)
+		return i.resolve().QualifiedStar(prefix, relationRefs, scope)
 	}
 	// Expression (column ref or computed).
 	expr := item.Expr()
@@ -1317,7 +1321,7 @@ func (i *Inspector) resolveColumn(
 			// CTE?
 			for _, cte := range ctes {
 				if i.normalizeEquals(cte.Table, ref.Table) {
-					return i.resolveCTEColumnFromFields(col.name, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
+					return i.resolve().CTEColumn(col.name, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
 				}
 			}
 			return &core.InspectField{
@@ -1335,7 +1339,7 @@ func (i *Inspector) resolveColumn(
 			if i.normalizeEquals(cte.Table, ref.Table) {
 				for _, c := range cte.Columns {
 					if i.normalizeEquals(c.Name, col.name) {
-						return i.resolveCTEColumnFromFields(col.name, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
+						return i.resolve().CTEColumn(col.name, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
 					}
 				}
 			}
@@ -1647,39 +1651,7 @@ func (i *Inspector) extractCTEsFromWithClause(w mysql.IWithClauseContext) ([]cor
 // CONVERT REFS -> InspectTable
 // ============================================
 
-// The rules below are the same for every dialect and live in core; these bind
-// them to this inspector's metadata.
-
-func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
-	return core.VirtualNames(ctes, subqueryColumns, i.dialect)
-}
-
-func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
-	return core.VirtualNames(ctes, nil, i.dialect)
-}
-
-func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtual map[string]bool) []core.InspectTable {
-	return core.ConvertRelationRefs(refs, virtual, i.meta, i.dialect)
-}
-
-func (i *Inspector) resolveCTEColumnFromFields(columnName string, cte *core.InspectStatement) *core.InspectField {
-	return core.ResolveCTEColumn(columnName, cte, i.meta, i.dialect)
-}
-
-func (i *Inspector) expandStar(
-	refs []core.RelationRef,
-	ctes []core.RelationRef,
-	subqueryColumns map[string][]core.Column,
-	cteResults map[string]*core.InspectStatement,
-) []core.InspectField {
-	return core.ExpandStar(refs, ctes, subqueryColumns, cteResults, i.meta, i.dialect)
-}
-
-func (i *Inspector) expandQualifiedStar(
-	prefix string,
-	refs []core.RelationRef,
-	ctes []core.RelationRef,
-	cteResults map[string]*core.InspectStatement,
-) []core.InspectField {
-	return core.ExpandQualifiedStar(prefix, refs, ctes, cteResults, i.meta, i.dialect)
+// resolve binds the shared resolution rules to this inspector's metadata.
+func (i *Inspector) resolve() core.Resolver {
+	return core.Resolver{Meta: i.meta, Dialect: i.dialect}
 }
