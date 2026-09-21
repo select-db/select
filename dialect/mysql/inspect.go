@@ -30,10 +30,6 @@ func (d *Dialect) Inspect(meta core.Metadata, sql string) []core.InspectStatemen
 	return NewInspector(d, meta).Inspect(sql)
 }
 
-func (i *Inspector) normalizeEquals(a, b string) bool {
-	return i.dialect.NormalizeIdentifier(a) == i.dialect.NormalizeIdentifier(b)
-}
-
 // Inspect parses the SQL and returns one InspectStatement per top-level statement.
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	trimmed := strings.TrimSpace(sql)

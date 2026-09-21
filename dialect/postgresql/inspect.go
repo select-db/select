@@ -30,11 +30,6 @@ func (d *Dialect) Inspect(meta core.Metadata, sql string) []core.InspectStatemen
 	return NewInspector(d, meta).Inspect(sql)
 }
 
-// normalizeEquals compares two identifiers after normalization
-func (i *Inspector) normalizeEquals(a, b string) bool {
-	return i.dialect.NormalizeIdentifier(a) == i.dialect.NormalizeIdentifier(b)
-}
-
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	if strings.TrimSpace(sql) == "" {

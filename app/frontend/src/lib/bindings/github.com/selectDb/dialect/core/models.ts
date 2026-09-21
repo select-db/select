@@ -548,7 +548,9 @@ export class InspectStatement {
     "Tables": InspectTable[];
 
     /**
-     * Fields used in WHERE clause (for permission/filtering context)
+     * Where holds the fields a statement tests rather than returns: WHERE,
+     * GROUP BY, HAVING, ORDER BY, a join condition, a window or FILTER clause,
+     * and the projection of a DISTINCT select.
      */
     "Where": InspectField[];
 
