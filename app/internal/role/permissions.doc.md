@@ -58,10 +58,12 @@ SEE hides it from the query. A subquery that selects the column to compare it
 against something is the same test written longer, and is refused too: write
 `EXISTS (SELECT 1 FROM ...)` where the column was only there to fill the list.
 
-GROUP BY, ORDER BY, HAVING and a JOIN condition are the same oracle, and are not
-covered yet: the inspectors do not report the columns those clauses name. Until
-they do, SEE is a boundary against a statement that filters on the column, not
-against one that groups or orders by it.
+WHERE is not the only clause that asks. GROUP BY, ORDER BY, HAVING, a join
+condition and a window clause each read a column without returning it, and each
+answers a question a row at a time: which group a row falls in, which of two
+rows sorts first, whether a join matched. They are refused on the same terms as
+a WHERE. SELECT DISTINCT is refused too, since collapsing duplicate rows makes
+the row count the number of distinct values in the columns it names.
 
 The whole statement is read, so a column hidden at the bottom stays hidden when
 a derived table or a CTE hands it up, and the rows a write returns through

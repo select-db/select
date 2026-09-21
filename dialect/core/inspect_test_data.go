@@ -40,10 +40,14 @@ type InspectTable struct {
 
 // InspectStatement represents the structured analysis of a SQL statement
 type InspectStatement struct {
-	Operation  InspectOperation   // The operation type
-	Fields     []InspectField     // Fields/columns involved (for SELECT, UPDATE SET, INSERT columns)
-	Tables     []InspectTable     // Tables involved
-	Where      []InspectField     // Fields used in WHERE clause (for permission/filtering context)
+	Operation InspectOperation // The operation type
+	Fields    []InspectField   // Fields/columns involved (for SELECT, UPDATE SET, INSERT columns)
+	Tables    []InspectTable   // Tables involved
+	// Where holds the fields a statement tests rather than returns: WHERE,
+	// GROUP BY, HAVING, ORDER BY, a join condition, a window clause, and the
+	// projection of a DISTINCT select. Each one answers a question about a
+	// value without handing it back.
+	Where      []InspectField
 	Subqueries []InspectStatement // Nested CTEs and subqueries - allows recursive permission checking
 
 	// Filter marks a subquery the server runs to choose or order rows rather
@@ -55,7 +59,7 @@ type InspectStatement struct {
 
 // InspectTestCase represents a single inspect test case.
 // Cases here MUST work identically across every dialect. Dialect-specific
-// statements (RETURNING, ON CONFLICT, TRUNCATE, ON DUPLICATE KEY UPDATE…)
+// statements (RETURNING, ON CONFLICT, TRUNCATE, ON DUPLICATE KEY UPDATE...)
 // live alongside the inspector that handles them.
 type InspectTestCase struct {
 	Name     string
@@ -224,6 +228,8 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 		},
 		// JOIN
 		{
+			// A join is made on the columns its condition names, which is a
+			// test on their values, so they are reported like a WHERE's.
 			Name: "SELECT with JOIN",
 			SQL:  "SELECT t1.c1, t2.c3 FROM t1 JOIN t2 ON t1.c1 = t2.c1",
 			Expected: []InspectStatement{
@@ -236,6 +242,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -347,6 +357,68 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t2", Schema: defaultSchema},
 					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			Name: "SELECT with HAVING",
+			SQL:  "SELECT c1, COUNT(c3) FROM t2 GROUP BY c1 HAVING COUNT(c3) > 1",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			Name: "SELECT with ORDER BY",
+			SQL:  "SELECT c1 FROM t2 ORDER BY c3",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			// DISTINCT collapses duplicate rows, so the row count reports how
+			// many distinct values the projection holds: it is tested as well
+			// as returned.
+			Name: "SELECT DISTINCT",
+			SQL:  "SELECT DISTINCT c1 FROM t2",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
 				},
 			},
 		},
@@ -410,6 +482,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -996,6 +1072,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: "main"},
 						{Name: "t3", Schema: "other"},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: "main"},
+						{Name: "c1", Table: "t3", Schema: "other"},
 					},
 				},
 			},

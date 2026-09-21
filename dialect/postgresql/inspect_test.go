@@ -94,6 +94,27 @@ func TestInspectPostgreSQLSpecific(t *testing.T) {
 				},
 			},
 		},
+		{
+			// DISTINCT ON collapses rows on the expressions it names, so those
+			// are the tested columns. The projection is returned as it stands.
+			Name: "SELECT DISTINCT ON",
+			SQL:  "SELECT DISTINCT ON (c1) c1, c3 FROM t2",
+			Expected: []core.InspectStatement{
+				{
+					Operation: core.InspectOpSelect,
+					Fields: []core.InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+					Tables: []core.InspectTable{
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []core.InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range cases {

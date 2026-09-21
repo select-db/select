@@ -237,6 +237,7 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	tail := i.extractTailSubqueries(qe)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
+	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(qe, relationRefsOf(result)))
 
 	return result
 }
@@ -322,6 +323,7 @@ func (i *Inspector) inspectQueryPrimary(
 	fields := i.extractSelectFieldsWithResolution(spec, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
 	where, whereSubqueries := i.extractWhereFields(spec, relationRefs)
+	where = core.MergeInspectFields(where, i.branchClauseFields(spec, relationRefs, fields))
 	selectSubqueries := i.extractSelectListSubqueries(spec)
 
 	subqueries := append([]core.InspectStatement{}, fromSubqueries...)
@@ -337,6 +339,112 @@ func (i *Inspector) inspectQueryPrimary(
 		Where:      where,
 		Subqueries: subqueries,
 	}
+}
+
+// testedFields are the columns a clause names to choose, group or order rows
+// rather than to return them. A role that may not see a column may not test it
+// either, so they are collected exactly as a WHERE's are. The listener does not
+// descend into subqueries, which are collected in their own right.
+func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+	if tree == nil {
+		return nil
+	}
+	listener := &whereColumnListener{
+		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
+		inspector:               i,
+		relationRefs:            refs,
+		seen:                    make(map[string]bool),
+	}
+	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
+	return listener.fields
+}
+
+// branchClauseFields are the columns the clauses of one branch name without
+// returning: GROUP BY, HAVING, a named window, and a join condition.
+func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
+	if spec == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, clause := range []antlr.ParseTree{
+		treeOrNil(spec.GroupByClause()),
+		treeOrNil(spec.HavingClause()),
+		treeOrNil(spec.WindowClause()),
+	} {
+		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
+	}
+	if from := spec.FromClause(); from != nil {
+		for _, join := range collectJoinedTables(from) {
+			fields = core.MergeInspectFields(fields, i.testedFields(treeOrNil(join.Expr()), refs))
+			fields = core.MergeInspectFields(fields,
+				i.testedFields(treeOrNil(join.IdentifierListWithParentheses()), refs))
+		}
+	}
+	return core.DistinctTestsProjection(isDistinct(spec), fields, projection)
+}
+
+// isDistinct reports whether a query specification carries SELECT DISTINCT.
+// MySQL puts it among the select options rather than in a clause of its own.
+func isDistinct(spec mysql.IQuerySpecificationContext) bool {
+	for _, option := range spec.AllSelectOption() {
+		if option == nil {
+			continue
+		}
+		if specOption := option.QuerySpecOption(); specOption != nil && specOption.DISTINCT_SYMBOL() != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// tailClauseFields are the columns ORDER BY names. It sits after every branch
+// of a compound select rather than inside one.
+func (i *Inspector) tailClauseFields(qe mysql.IQueryExpressionContext, refs []core.RelationRef) []core.InspectField {
+	if qe == nil {
+		return nil
+	}
+	return i.testedFields(treeOrNil(qe.OrderClause()), refs)
+}
+
+// treeOrNil turns a typed nil context into an untyped nil, which a walk can
+// refuse rather than dereference.
+func treeOrNil[T antlr.ParseTree](ctx T) antlr.ParseTree {
+	if any(ctx) == nil {
+		return nil
+	}
+	return ctx
+}
+
+// relationRefsOf rebuilds the relations a statement read, which is what an
+// ORDER BY column resolves against.
+func relationRefsOf(stmt *core.InspectStatement) []core.RelationRef {
+	refs := make([]core.RelationRef, 0, len(stmt.Tables))
+	for _, table := range stmt.Tables {
+		ref := core.RelationRef{Table: table.Name, Schema: table.Schema}
+		if table.Alias != nil {
+			ref.Alias = *table.Alias
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// collectJoinedTables returns the joins under a node. MySQL writes the ON
+// expression and the USING list inside the join rather than in a clause of
+// their own, and a join is made on the columns they name.
+func collectJoinedTables(tree antlr.Tree) []mysql.IJoinedTableContext {
+	var found []mysql.IJoinedTableContext
+	var walk func(antlr.Tree)
+	walk = func(node antlr.Tree) {
+		if join, ok := node.(mysql.IJoinedTableContext); ok {
+			found = append(found, join)
+		}
+		for idx := 0; idx < node.GetChildCount(); idx++ {
+			walk(node.GetChild(idx))
+		}
+	}
+	walk(tree)
+	return found
 }
 
 // extractBranchClauseSubqueries collects the subqueries in the clauses of a

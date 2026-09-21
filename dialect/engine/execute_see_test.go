@@ -282,8 +282,10 @@ func TestExecuteLocalNoSeeRulesNoMasking(t *testing.T) {
 	defer cancel()
 
 	// No see rules at all: every Field is see-denied, every bare projection
-	// gets masked. This verifies the default-deny behavior.
-	result := runQuery(ctx, conn, "SELECT email FROM users ORDER BY id")
+	// gets masked. This verifies the default-deny behavior. Nothing is ordered
+	// or grouped on: with no see rules an ORDER BY column is a refusal, which
+	// TestExecuteLocalOrderByHiddenColumnRefused covers.
+	result := runQuery(ctx, conn, "SELECT email FROM users")
 	if len(result.Errors) != 0 {
 		t.Fatalf("unexpected errors: %v", result.Errors)
 	}
@@ -476,7 +478,7 @@ func TestExecuteLocalClauseSubqueryDoesNotMask(t *testing.T) {
 func TestExecuteLocalComputedColumnBesideMaskedOne(t *testing.T) {
 	for _, sql := range []string{
 		"SELECT id, email, 'lit' AS tag FROM users ORDER BY id",
-		"SELECT email, count(*) FROM users GROUP BY email ORDER BY email",
+		"SELECT email, count(*) FROM users GROUP BY id ORDER BY id",
 		"SELECT id, email, row_number() OVER (ORDER BY id) AS rn FROM users ORDER BY id",
 	} {
 		t.Run(sql, func(t *testing.T) {
@@ -766,6 +768,77 @@ func TestExecuteLocalFilterSelectingAHiddenColumnIsRefused(t *testing.T) {
 			}
 			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
 				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// GROUP BY, ORDER BY, HAVING and a JOIN condition read a column without
+// projecting it, so each one answers questions about a hidden column a row at a
+// time: the ordering of two rows, whether a group exists, whether a join
+// matched. They are the same oracle as WHERE and are refused the same way.
+func TestExecuteLocalOrderByHiddenColumnRefused(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT id FROM users ORDER BY email",
+		"SELECT id FROM users ORDER BY email DESC LIMIT 1",
+		"SELECT count(*) FROM users GROUP BY email",
+		"SELECT id, count(*) FROM users GROUP BY id HAVING max(email) > 'm'",
+		"SELECT DISTINCT email FROM users",
+		"SELECT u.id FROM users u JOIN contacts c ON c.email = u.email",
+		"SELECT u.id FROM users u LEFT JOIN contacts c ON c.id = u.id AND u.email > 'm'",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %v", result.Rows)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// The same clauses on a visible column are ordinary work. A single hidden
+// column in the projection is masked, not refused.
+func TestExecuteLocalOrderByVisibleColumnRuns(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT id, email FROM users ORDER BY id",
+		"SELECT age, count(*) FROM users GROUP BY age HAVING count(*) > 0 ORDER BY age",
+		"SELECT u.id, u.email FROM users u JOIN contacts c ON c.id = u.id ORDER BY u.id",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount == 0 {
+				t.Fatal("no rows, so nothing here was checked")
+			}
+			if i := slices.Index(result.Columns, "email"); i >= 0 {
+				if result.Rows[0][i] != core.MaskedValue {
+					t.Errorf("email = %v, want masked", result.Rows[0][i])
+				}
 			}
 		})
 	}

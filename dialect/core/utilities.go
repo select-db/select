@@ -557,6 +557,17 @@ func MergeInspectTables(tables []InspectTable, newTables []InspectTable) []Inspe
 	return tables
 }
 
+// DistinctTestsProjection folds the result columns into the tested ones when a
+// select is DISTINCT. Collapsing duplicate rows makes the row count the number
+// of distinct values, so a hidden column in the projection is answered about
+// and not merely shown.
+func DistinctTestsProjection(distinct bool, tested, projection []InspectField) []InspectField {
+	if !distinct {
+		return tested
+	}
+	return MergeInspectFields(tested, projection)
+}
+
 // MergeInspectFields merges fields into a slice, avoiding duplicates by (name, table, schema)
 func MergeInspectFields(fields []InspectField, newFields []InspectField) []InspectField {
 	for _, newField := range newFields {

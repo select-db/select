@@ -237,8 +237,113 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	tail := i.extractTailSubqueries(selectStmt)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
+	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectStmt, relationRefsOf(result)))
 
 	return result
+}
+
+// tailClauseFields are the columns ORDER BY and LIMIT name. They sit after
+// every branch of a compound select rather than inside one.
+func (i *Inspector) tailClauseFields(selectStmt sqlite.ISelect_stmtContext, refs []core.RelationRef) []core.InspectField {
+	if selectStmt == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	if order := selectStmt.Order_by_stmt(); order != nil {
+		fields = core.MergeInspectFields(fields, i.testedFields(order, refs))
+	}
+	if limit := selectStmt.Limit_stmt(); limit != nil {
+		fields = core.MergeInspectFields(fields, i.testedFields(limit, refs))
+	}
+	return fields
+}
+
+// relationRefsOf rebuilds the relations a statement read, which is what an
+// ORDER BY column resolves against.
+func relationRefsOf(stmt *core.InspectStatement) []core.RelationRef {
+	refs := make([]core.RelationRef, 0, len(stmt.Tables))
+	for _, table := range stmt.Tables {
+		ref := core.RelationRef{Table: table.Name, Schema: table.Schema}
+		if table.Alias != nil {
+			ref.Alias = *table.Alias
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// testedFields are the columns a clause names to choose, group or order rows
+// rather than to return them. A role that may not see a column may not test it
+// either, so they are collected exactly as a WHERE's are. The listener does not
+// descend into subqueries, which are collected in their own right.
+func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+	if tree == nil {
+		return nil
+	}
+	listener := &whereColumnExtractorListener{
+		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},
+		inspector:                i,
+		relationRefs:             refs,
+		fields:                   []core.InspectField{},
+		seenFields:               make(map[string]bool),
+	}
+	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
+	return listener.fields
+}
+
+// branchClauseFields are the columns the clauses of one branch name without
+// returning: GROUP BY, HAVING, a named window, and a join condition.
+func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
+	if selectCore == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, group := range selectCore.GetGroupByExpr() {
+		fields = core.MergeInspectFields(fields, i.testedFields(group, refs))
+	}
+	if having := selectCore.GetHavingExpr(); having != nil {
+		fields = core.MergeInspectFields(fields, i.testedFields(having, refs))
+	}
+	for _, window := range selectCore.AllWindow_defn() {
+		if window != nil {
+			fields = core.MergeInspectFields(fields, i.testedFields(window, refs))
+		}
+	}
+	for _, relation := range selectCore.AllTable_or_subquery() {
+		if relation != nil {
+			fields = core.MergeInspectFields(fields, i.joinConstraintFields(relation, refs))
+		}
+	}
+	if join := selectCore.Join_clause(); join != nil {
+		fields = core.MergeInspectFields(fields, i.joinConstraintFields(join, refs))
+	}
+	return core.DistinctTestsProjection(selectCore.DISTINCT_() != nil, fields, projection)
+}
+
+// joinConstraintFields are the columns a join is made on. They choose which
+// rows pair up, which is a test on their values.
+func (i *Inspector) joinConstraintFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+	var fields []core.InspectField
+	for _, constraint := range collectJoinConstraints(tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(constraint, refs))
+	}
+	return fields
+}
+
+// collectJoinConstraints returns the ON and USING clauses under a node.
+func collectJoinConstraints(tree antlr.ParseTree) []sqlite.IJoin_constraintContext {
+	var found []sqlite.IJoin_constraintContext
+	var walk func(antlr.Tree)
+	walk = func(node antlr.Tree) {
+		if constraint, ok := node.(sqlite.IJoin_constraintContext); ok {
+			found = append(found, constraint)
+		}
+		for idx := 0; idx < node.GetChildCount(); idx++ {
+			walk(node.GetChild(idx))
+		}
+	}
+	walk(tree)
+	return found
 }
 
 // extractTailSubqueries collects the subqueries in the clauses that sit after
@@ -296,7 +401,7 @@ func (i *Inspector) inspectSelectCore(
 	return core.InspectStatement{
 		Tables:     tables,
 		Fields:     fields,
-		Where:      where,
+		Where:      core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields)),
 		Subqueries: subqueries,
 	}
 }

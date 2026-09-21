@@ -208,6 +208,7 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	tail := i.extractTailSubqueries(selectNoParens)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
+	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectNoParens, relationRefsOf(result)))
 
 	return result
 }
@@ -312,9 +313,116 @@ func (i *Inspector) inspectSelectPrimary(
 		Operation:  core.InspectOpSelect,
 		Tables:     tables,
 		Fields:     fields,
-		Where:      where,
+		Where:      core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields)),
 		Subqueries: subqueries,
 	}
+}
+
+// relationRefsOf rebuilds the relations a statement read, which is what an
+// ORDER BY column resolves against.
+func relationRefsOf(stmt *core.InspectStatement) []core.RelationRef {
+	refs := make([]core.RelationRef, 0, len(stmt.Tables))
+	for _, table := range stmt.Tables {
+		ref := core.RelationRef{Table: table.Name, Schema: table.Schema}
+		if table.Alias != nil {
+			ref.Alias = *table.Alias
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// testedFields are the columns a clause names to choose, group or order rows
+// rather than to return them. A role that may not see a column may not test it
+// either, so they are collected exactly as a WHERE's are. The listener does not
+// descend into subqueries, which are collected in their own right.
+func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+	if tree == nil {
+		return nil
+	}
+	listener := &whereColumnExtractorListener{
+		BasePostgreSQLParserListener: &pg.BasePostgreSQLParserListener{},
+		inspector:                    i,
+		relationRefs:                 refs,
+		fields:                       []core.InspectField{},
+		seenFields:                   make(map[string]bool),
+	}
+	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
+	return listener.fields
+}
+
+// branchClauseFields are the columns the clauses of one branch name without
+// returning: DISTINCT ON, GROUP BY, HAVING, a named window, and a join
+// condition.
+func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
+	if primary == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, clause := range []antlr.ParseTree{
+		treeOrNil(primary.Distinct_clause()),
+		treeOrNil(primary.Group_clause()),
+		treeOrNil(primary.Having_clause()),
+		treeOrNil(primary.Window_clause()),
+	} {
+		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
+	}
+	if from := primary.From_clause(); from != nil {
+		for _, qual := range collectJoinQuals(from) {
+			fields = core.MergeInspectFields(fields, i.testedFields(qual, refs))
+		}
+	}
+	return core.DistinctTestsProjection(plainDistinct(primary.Distinct_clause()), fields, projection)
+}
+
+// plainDistinct reports whether a DISTINCT clause collapses rows on the whole
+// projection. DISTINCT ON collapses on the expressions it names instead, and
+// those are read as tested columns in their own right.
+func plainDistinct(clause pg.IDistinct_clauseContext) bool {
+	return clause != nil && clause.ON() == nil
+}
+
+// tailClauseFields are the columns ORDER BY, LIMIT and OFFSET name. They sit
+// after every branch of a compound select rather than inside one.
+func (i *Inspector) tailClauseFields(selectNoParens pg.ISelect_no_parensContext, refs []core.RelationRef) []core.InspectField {
+	if selectNoParens == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, clause := range []antlr.ParseTree{
+		treeOrNil(selectNoParens.Opt_sort_clause()),
+		treeOrNil(selectNoParens.Select_limit()),
+		treeOrNil(selectNoParens.Opt_select_limit()),
+	} {
+		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
+	}
+	return fields
+}
+
+// treeOrNil turns a typed nil context into an untyped nil, which a walk can
+// refuse rather than dereference.
+func treeOrNil[T antlr.ParseTree](ctx T) antlr.ParseTree {
+	if any(ctx) == nil {
+		return nil
+	}
+	return ctx
+}
+
+// collectJoinQuals returns the ON and USING clauses under a node. A join is
+// made on the columns they name, which chooses which rows pair up.
+func collectJoinQuals(tree antlr.Tree) []pg.IJoin_qualContext {
+	var found []pg.IJoin_qualContext
+	var walk func(antlr.Tree)
+	walk = func(node antlr.Tree) {
+		if qual, ok := node.(pg.IJoin_qualContext); ok {
+			found = append(found, qual)
+		}
+		for idx := 0; idx < node.GetChildCount(); idx++ {
+			walk(node.GetChild(idx))
+		}
+	}
+	walk(tree)
+	return found
 }
 
 // extractBranchClauseSubqueries collects the subqueries in the clauses of a
