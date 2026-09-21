@@ -8,12 +8,10 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// RunSeeCases checks a dialect against the shared see cases.
-//
-// It drives the same path a query takes, minus the database: the statement is
-// inspected, checked against the policy, and its result columns are matched to
-// the fields the inspection found. Nothing here needs a server, so a dialect
-// gets the whole boundary covered by reading its own grammar.
+// RunSeeCases checks a dialect against the shared see cases. It drives the
+// path a query takes, minus the database: the statement is inspected, checked
+// against the policy, and its result columns are matched to the fields the
+// inspection found.
 func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []core.SeeCase) {
 	t.Helper()
 	meta := core.GetSeeTestMetadata()
@@ -21,12 +19,14 @@ func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []core.SeeCase) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			var masked []int
+			if len(testCase.Masked) > 0 && len(testCase.Columns) == 0 {
+				t.Fatal("the case expects masking but names no result columns, so nothing would be checked")
+			}
+
 			statements := dialect.Inspect(meta, testCase.SQL)
 			if len(statements) == 0 {
-				// The floor engine.Inspect puts under a dialect that reads
-				// nothing: a statement nobody could read is not a statement
-				// with no rules.
+				// The floor engine.Inspect puts under a dialect that read
+				// nothing.
 				statements = []core.InspectStatement{core.UnknownStatement()}
 			}
 
@@ -35,10 +35,11 @@ func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []core.SeeCase) {
 				err = core.CheckSeePredicates(statements, core.SeeTestDBInstanceID, perms)
 			}
 
+			var masked []int
 			if err == nil {
 				// A hidden column an expression swallowed has no result column
 				// of its own to mask, which only the driver's columns show.
-				err = seeOnResult(statements, testCase.Columns, perms, &masked)
+				masked, err = seeOnResult(statements, testCase.Columns, perms)
 			}
 
 			if testCase.Refused {
@@ -62,21 +63,16 @@ func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []core.SeeCase) {
 }
 
 // seeOnResult is the check the engine runs once the driver reports the result
-// columns. It reports which positions are masked through into.
-func seeOnResult(statements []core.InspectStatement, columns []string, perms core.CompiledPermissions, into *[]int) error {
+// columns, and the positions it masks.
+func seeOnResult(statements []core.InspectStatement, columns []string, perms core.CompiledPermissions) ([]int, error) {
 	if len(columns) == 0 {
-		return nil
+		return nil, nil
 	}
 	for _, statement := range statements {
 		if !core.ReturnsRows(statement.Operation) {
 			continue
 		}
-		masked, err := core.EvaluateSee(statement, columns, core.SeeTestDBInstanceID, perms)
-		if err != nil {
-			return err
-		}
-		*into = masked
-		return nil
+		return core.EvaluateSee(statement, columns, core.SeeTestDBInstanceID, perms)
 	}
-	return nil
+	return nil, nil
 }

@@ -1,15 +1,11 @@
 package core
 
-// The see boundary is decided without a database. Inspecting a statement,
-// checking it against a policy and working out which result columns to mask
-// are all functions of the metadata, the statement and the rules, so the cases
-// below are data: a statement, and what the boundary must do with it.
+// SeeCase is one statement and what the see rules must do with it. Deciding
+// that needs no database, so a case is data.
 //
-// Cases here MUST behave identically in every dialect. SQL only some dialects
+// Cases MUST behave identically in every dialect. SQL only some dialects
 // accept (RETURNING, ON CONFLICT, ON DUPLICATE KEY UPDATE) belongs beside the
 // inspector that reads it.
-
-// SeeCase is one statement and what the see rules must do with it.
 //
 // Columns are the result columns the statement hands back, in order, and are
 // what the driver would report. Refused says the caller gets no rows at all,
@@ -31,7 +27,6 @@ const SeeTestDBInstanceID = "db1"
 // GetSeeTestMetadata describes two tables that share a column name, which is
 // what tells a rule hiding one table's column from a rule hiding the other's.
 func GetSeeTestMetadata() Metadata {
-	column := func(name, kind string) Column { return Column{Name: name, Type: kind} }
 	return Metadata{
 		DefaultSchema: "main",
 		Schemas: []Schema{{
@@ -42,8 +37,8 @@ func GetSeeTestMetadata() Metadata {
 					PrimaryKey: []string{"id"},
 					Columns: []Column{
 						{Name: "id", Type: "INTEGER", IsPrimaryKey: true},
-						column("email", "TEXT"),
-						column("age", "INTEGER"),
+						{Name: "email", Type: "TEXT"},
+						{Name: "age", Type: "INTEGER"},
 					},
 				},
 				{
@@ -51,7 +46,7 @@ func GetSeeTestMetadata() Metadata {
 					PrimaryKey: []string{"id"},
 					Columns: []Column{
 						{Name: "id", Type: "INTEGER", IsPrimaryKey: true},
-						column("email", "TEXT"),
+						{Name: "email", Type: "TEXT"},
 					},
 				},
 			},
