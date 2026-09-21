@@ -345,9 +345,20 @@ func TestEvaluateSee(t *testing.T) {
 			wantMask:   nil,
 		},
 		{
-			name: "non-SELECT statement returns nil",
+			// A write hands rows back through RETURNING, and they are rows.
+			name: "a write returning a hidden column masks it",
 			stmt: InspectStatement{
 				Operation: InspectOpInsert,
+				Fields:    []InspectField{{Name: "email", Table: "users", Schema: "public"}},
+			},
+			driverCols: []string{"email"},
+			entries:    []PermissionEntry{pe(testDBID, "public", "users", "email", "see", "deny")},
+			wantMask:   []int{0},
+		},
+		{
+			name: "a statement that is not a row action returns nil",
+			stmt: InspectStatement{
+				Operation: InspectOpUnknown,
 				Fields:    []InspectField{{Name: "email", Table: "users", Schema: "public"}},
 			},
 			driverCols: []string{"email"},

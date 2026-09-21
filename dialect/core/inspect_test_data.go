@@ -40,16 +40,25 @@ type InspectTable struct {
 
 // InspectStatement represents the structured analysis of a SQL statement
 type InspectStatement struct {
-	Operation  InspectOperation   // The operation type
-	Fields     []InspectField     // Fields/columns involved (for SELECT, UPDATE SET, INSERT columns)
-	Tables     []InspectTable     // Tables involved
-	Where      []InspectField     // Fields used in WHERE clause (for permission/filtering context)
+	Operation InspectOperation // The operation type
+	Fields    []InspectField   // Fields/columns involved (for SELECT, UPDATE SET, INSERT columns)
+	Tables    []InspectTable   // Tables involved
+	// Where holds the fields a statement tests rather than returns: WHERE,
+	// GROUP BY, HAVING, ORDER BY, a join condition, a window or FILTER clause,
+	// and the projection of a DISTINCT select.
+	Where      []InspectField
 	Subqueries []InspectStatement // Nested CTEs and subqueries - allows recursive permission checking
+
+	// Filter marks a subquery the server runs to choose or order rows rather
+	// than to return them: a WHERE, HAVING, GROUP BY, ORDER BY or window
+	// clause. Unmarked means its value reaches the row, which is the answer
+	// that refuses rather than leaks.
+	Filter bool
 }
 
 // InspectTestCase represents a single inspect test case.
 // Cases here MUST work identically across every dialect. Dialect-specific
-// statements (RETURNING, ON CONFLICT, TRUNCATE, ON DUPLICATE KEY UPDATE…)
+// statements (RETURNING, ON CONFLICT, TRUNCATE, ON DUPLICATE KEY UPDATE...)
 // live alongside the inspector that handles them.
 type InspectTestCase struct {
 	Name     string
@@ -216,8 +225,54 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 				},
 			},
 		},
+		{
+			// USING names a column without qualifying it, and the join reads
+			// it on both sides.
+			Name: "SELECT with JOIN USING",
+			SQL:  "SELECT t1.c2 FROM t1 JOIN t2 USING (c1)",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c2", Table: "t1", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t1", Schema: defaultSchema},
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			// A natural join names no column at all: it pairs on every name
+			// both sides carry.
+			Name: "SELECT with NATURAL JOIN",
+			SQL:  "SELECT t1.c2 FROM t1 NATURAL JOIN t2",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c2", Table: "t1", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t1", Schema: defaultSchema},
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
 		// JOIN
 		{
+			// A join is made on the columns its condition names, which is a
+			// test on their values, so they are reported like a WHERE's.
 			Name: "SELECT with JOIN",
 			SQL:  "SELECT t1.c1, t2.c3 FROM t1 JOIN t2 ON t1.c1 = t2.c1",
 			Expected: []InspectStatement{
@@ -230,6 +285,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -341,6 +400,68 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t2", Schema: defaultSchema},
 					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			Name: "SELECT with HAVING",
+			SQL:  "SELECT c1, COUNT(c3) FROM t2 GROUP BY c1 HAVING COUNT(c3) > 1",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			Name: "SELECT with ORDER BY",
+			SQL:  "SELECT c1 FROM t2 ORDER BY c3",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			// DISTINCT collapses duplicate rows, so the row count reports how
+			// many distinct values the projection holds: it is tested as well
+			// as returned.
+			Name: "SELECT DISTINCT",
+			SQL:  "SELECT DISTINCT c1 FROM t2",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
 				},
 			},
 		},
@@ -404,6 +525,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -770,6 +895,9 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 
 		// Both sides of UNION must be inspected, both tables need permission
 		{
+			// The plain form of a set operator collapses duplicate rows, so
+			// the row count says how many values the branches share, and the
+			// projection is tested as a DISTINCT's is.
 			Name: "UNION both sides inspected",
 			SQL:  "SELECT c1 FROM t1 UNION SELECT c1 FROM t2",
 			Expected: []InspectStatement{
@@ -782,6 +910,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -911,10 +1043,12 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 							Tables: []InspectTable{
 								{Name: "t2", Schema: defaultSchema},
 							},
-							// Correlated ref t1.c1 resolves against t2's refs only, not captured here.
-							// Permission for t1 is already enforced by the outer query.
+							// The correlated t1.c1 is a column the subquery tests,
+							// so it is reported even though t1 is the outer
+							// statement's relation.
 							Where: []InspectField{
 								{Name: "c1", Table: "t2", Schema: defaultSchema},
+								{Name: "c1", Table: "t1", Schema: defaultSchema},
 							},
 						},
 					},
@@ -990,6 +1124,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: "main"},
 						{Name: "t3", Schema: "other"},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: "main"},
+						{Name: "c1", Table: "t3", Schema: "other"},
 					},
 				},
 			},
@@ -1075,10 +1213,11 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 							Tables: []InspectTable{
 								{Name: "t2", Schema: defaultSchema},
 							},
-							// t2.c1 is inside subquery scope; t1.c1 is a correlated ref
-							// from outer scope, not resolved here, already checked by outer query.
+							// t1.c1 is a correlated ref: the subquery tests a
+							// column of the relation the outer statement named.
 							Where: []InspectField{
 								{Name: "c1", Table: "t2", Schema: defaultSchema},
+								{Name: "c1", Table: "t1", Schema: defaultSchema},
 							},
 						},
 					},
@@ -1088,6 +1227,9 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 
 		// INTERSECT, right side is accessed and must be permission-checked.
 		{
+			// The plain form of a set operator collapses duplicate rows, so
+			// the row count says how many values the branches share, and the
+			// projection is tested as a DISTINCT's is.
 			Name: "INTERSECT both sides inspected",
 			SQL:  "SELECT c1 FROM t1 INTERSECT SELECT c1 FROM t2",
 			Expected: []InspectStatement{
@@ -1101,12 +1243,19 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
 					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
 				},
 			},
 		},
 
 		// EXCEPT, right side is scanned even though its rows are excluded from output.
 		{
+			// The plain form of a set operator collapses duplicate rows, so
+			// the row count says how many values the branches share, and the
+			// projection is tested as a DISTINCT's is.
 			Name: "EXCEPT both sides inspected",
 			SQL:  "SELECT c1 FROM t1 EXCEPT SELECT c1 FROM t2",
 			Expected: []InspectStatement{
@@ -1119,6 +1268,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -1159,6 +1312,12 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "unknown_table", Schema: ""},
+					},
+					// The unknown relation's column carries no schema, so there
+					// is nothing to check it against and it is dropped. The
+					// table itself is still reported, and refused.
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
 					},
 				},
 			},

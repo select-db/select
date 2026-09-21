@@ -288,6 +288,12 @@ func checkPermissions(conn Conn, inst DBInstance, sql string) ([]core.InspectSta
 	if err := core.CheckQueryPermissions(inspected, inst.ID, conn.Perms); err != nil {
 		return inspected, err
 	}
+	// The see check on the result columns needs the driver's columns and runs
+	// later; what a statement tests rather than returns is known now, and a
+	// write filtered on a hidden column reports its rows without returning any.
+	if err := core.CheckSeePredicates(inspected, inst.ID, conn.Perms); err != nil {
+		return inspected, err
+	}
 	return inspected, nil
 }
 
@@ -298,7 +304,7 @@ func evaluateSeeForResult(conn Conn, inst DBInstance, inspected []core.InspectSt
 	if !conn.Perms.IsManaged(inst.ID) {
 		return nil, nil
 	}
-	stmt, ok := FirstSelectStatement(inspected)
+	stmt, ok := FirstReturningStatement(inspected)
 	if !ok {
 		return nil, nil
 	}

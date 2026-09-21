@@ -1125,6 +1125,123 @@ func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
 	}
 }
 
+// A statement the parser stumbled over is reported as whatever error recovery
+// salvaged. Where that named no table, a per-table check has nothing to ask
+// about, so the fragment used to run on a policy granting nothing.
+func TestPermissions_AStatementWeCouldNotParseNeedsManage(t *testing.T) {
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []dialectSQL{
+		{"postgresql", "SELECT c1 FROM"},
+		{"postgresql", "SELECT FROM"},
+		{"mysql", "SELECT"},
+		{"mysql", "SELECT c1 FROM"},
+		{"sqlite", "SELECT"},
+		{"sqlite", "SELECT c1 FROM"},
+		// SQLite has no GRANT, so its parser reads one as a bare select.
+		{"sqlite", "GRANT SELECT ON t1 TO bob"},
+		{"sqlite", "REVOKE ALL ON t1 FROM bob"},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if len(inspected) == 0 {
+				t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+			}
+			err := core.CheckQueryPermissions(inspected, permDBID, dataActions)
+			if err == nil {
+				t.Fatal("ran holding the four row actions")
+			}
+			if !strings.Contains(err.Error(), "manage") {
+				t.Errorf("refused for the wrong reason: %v", err)
+			}
+		})
+	}
+}
+
+// Text the parser stumbled over that no reported statement covers is SQL the
+// caller will run and we never checked.
+func TestPermissions_TextNoStatementCoversIsReported(t *testing.T) {
+	for _, tt := range []dialectSQL{
+		{"postgresql", "SELECT c1 FROM t1; ]]] not sql"},
+		{"mysql", "SELECT c1 FROM t1; ]]] not sql"},
+		{"sqlite", "SELECT c1 FROM t1; ]]] not sql"},
+	} {
+		t.Run(tt.dialect, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+			}
+			unknown := false
+			for _, stmt := range inspected {
+				if stmt.Operation == core.InspectOpUnknown {
+					unknown = true
+				}
+			}
+			if !unknown {
+				t.Errorf("the text after the select went unreported: %+v", inspected)
+			}
+		})
+	}
+}
+
+// These grammars do not model every spelling their server accepts, and a
+// statement they stumble over while still naming its tables is checked against
+// those tables. Refusing it instead would hold ordinary work.
+func TestPermissions_SpellingsTheGrammarMissesStayRowActions(t *testing.T) {
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []dialectSQL{
+		{"sqlite", "SELECT c1 FROM t1 WINDOW w AS (PARTITION BY c1)"},
+		{"sqlite", "SELECT count(*) FILTER (WHERE c1 > 0) FROM t1"},
+		{"sqlite", "SELECT c1 FROM t1 ORDER BY c1 NULLS LAST"},
+		{"sqlite", "SELECT c1 FROM t1 WHERE c2 REGEXP 'a'"},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err != nil {
+				t.Errorf("ordinary work refused: %v", err)
+			}
+		})
+	}
+}
+
+// A CTE shadows a table spelled the same way, so a star over it reads the CTE
+// and nothing else. Reporting the table's columns too refuses the statement to
+// a role that may read everything the statement actually touches.
+func TestPermissions_ACTEShadowsTheTableItIsNamedAfter(t *testing.T) {
+	schema, table, db := "main", "t1", permDBID
+	onlyT1 := core.Compile([]core.PermissionEntry{{
+		DbInstanceID: &db, SchemaName: &schema, TableName: &table,
+		Action: core.ActionSelect, Effect: "allow", RoleName: "r",
+	}}).WithDenyUnmanaged()
+
+	for _, tt := range []dialectSQL{
+		{"postgresql", "WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2"},
+		{"mysql", "WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2"},
+		{"sqlite", "WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2"},
+	} {
+		t.Run(tt.dialect, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+			}
+			for _, stmt := range inspected {
+				for _, f := range stmt.Fields {
+					if f.Table == "t2" {
+						t.Errorf("read a column of the table the CTE shadows: %+v", stmt.Fields)
+					}
+				}
+			}
+			if err := core.CheckQueryPermissions(inspected, db, onlyT1); err != nil {
+				t.Errorf("refused holding select on every table it reads: %v", err)
+			}
+		})
+	}
+}
+
 // A table may be named after one of those routines, and the parenthesis that
 // follows the name is then a column list. Reading it as a call costs the role
 // manage for an ordinary write.

@@ -37,6 +37,18 @@ func FirstSelectStatement(stmts []core.InspectStatement) (core.InspectStatement,
 	return core.InspectStatement{}, false
 }
 
+// FirstReturningStatement returns the first statement that hands rows back. A
+// select does, and so does a write with a RETURNING clause, which is why the
+// see check cannot look for a select alone.
+func FirstReturningStatement(stmts []core.InspectStatement) (core.InspectStatement, bool) {
+	for _, r := range stmts {
+		if core.ReturnsRows(r.Operation) {
+			return r, true
+		}
+	}
+	return core.InspectStatement{}, false
+}
+
 // AnalyzeEditableColumns determines which result columns are editable.
 // A column is editable when it comes from a real table, the table has a
 // primary key, and every primary-key column appears in the SELECT.

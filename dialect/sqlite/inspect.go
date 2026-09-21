@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"sort"
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
@@ -12,15 +11,17 @@ import (
 
 // Inspector analyzes SQL statements and extracts structured information
 type Inspector struct {
-	dialect *Dialect
-	meta    core.Metadata
+	dialect  *Dialect
+	meta     core.Metadata
+	resolver core.Resolver
 }
 
 // NewInspector creates a new SQLite statement inspector
 func NewInspector(dialect *Dialect, meta core.Metadata) *Inspector {
 	return &Inspector{
-		dialect: dialect,
-		meta:    meta,
+		dialect:  dialect,
+		meta:     meta,
+		resolver: core.Resolver{Meta: meta, Dialect: dialect},
 	}
 }
 
@@ -49,6 +50,8 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	tokenStream.Fill() // pre-fill for compound-operator detection
 	parser := sqlite.NewSQLiteParser(tokenStream)
 	parser.RemoveErrorListeners()
+	syntax := core.NewSyntaxErrors()
+	parser.AddErrorListener(syntax)
 
 	var stmtLists []sqlite.ISql_stmt_listContext
 	if root := parser.Parse(); root != nil {
@@ -65,20 +68,27 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// The SQLite grammar emits each UNION branch as a separate sql_stmt_list at the top level.
 		first := idx
 		group := []sqlite.ISql_stmt_listContext{stmtLists[idx]}
+		dedups := false
 		for idx+1 < len(stmtLists) && hasCompoundOperatorBetween(tokenStream, stmtLists[idx], stmtLists[idx+1]) {
+			dedups = dedups || compoundDedupsBetween(tokenStream, stmtLists[idx], stmtLists[idx+1])
 			idx++
 			group = append(group, stmtLists[idx])
 		}
 
 		// A call that reaches the filesystem is not covered by the four row
-		// actions. A compound group is one statement, so its branches are read
-		// together; a list of statements is read one at a time, so the call in
-		// one does not cost the rest of the script its row actions.
+		// actions, and neither is a statement the parser stumbled over that
+		// named no table: a per-table check has nothing to ask about, so what
+		// error recovery salvaged would run on a policy granting nothing. A
+		// compound group is one statement, so its branches are read together; a
+		// list of statements is read one at a time, so neither costs the rest
+		// of the script its row actions.
 		groupFrom, _ := core.TokenSpan(tokenStream, stmtLists, first)
 		_, groupTo := core.TokenSpan(tokenStream, stmtLists, idx)
+		syntax.Cover(stmtLists[idx], groupFrom, groupTo)
 
 		if len(group) > 1 {
-			read := core.OrUnknown(i.mergeCompoundSelectGroup(group))
+			read := core.OrUnknown(i.mergeCompoundSelectGroup(group, dedups))
+			read = core.NestUnderUnknownIfUnreadable(read, syntax, groupFrom, groupTo)
 			if callsHostFunction(tokenStream, groupFrom, groupTo) {
 				read = core.NestUnderUnknown(read)
 			}
@@ -91,13 +101,24 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		for si := range stmts {
 			read := core.OrUnknown(i.inspectStatement(stmts[si]))
 			from, to := core.TokenSpan(tokenStream, stmts, si)
-			if callsHostFunction(tokenStream, from, core.Clamp(to, from, groupTo)) {
+			to = core.Clamp(to, from, groupTo)
+			read = core.NestUnderUnknownIfUnreadable(read, syntax, from, to)
+			if callsHostFunction(tokenStream, from, to) {
 				read = core.NestUnderUnknown(read)
 			}
 			results = append(results, read)
 		}
 		idx++
 	}
+
+	if syntax.Uncovered() {
+		results = append(results, core.UnknownStatement())
+	}
+
+	// A subquery was inspected against its own FROM alone, so a name it takes
+	// from the statement around it resolved to nothing there. The enclosing
+	// relations are in scope here.
+	i.resolver.ResolveCorrelated(results, nil)
 
 	return results
 }
@@ -126,9 +147,38 @@ func hasCompoundOperatorBetween(tokens *antlr.CommonTokenStream, a, b antlr.Pars
 	return false
 }
 
-// mergeCompoundSelectGroup merges consecutive stmt_lists that are compound SELECT branches.
-func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContext) *core.InspectStatement {
+// compoundDedupsBetween reports whether the compound operator between two
+// branches collapses duplicate rows, which every one of UNION, INTERSECT and
+// EXCEPT does unless it is written with ALL.
+func compoundDedupsBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRuleContext) bool {
+	if a == nil || b == nil || a.GetStop() == nil || b.GetStart() == nil {
+		return false
+	}
+	allTokens := tokens.GetAllTokens()
+	operator := false
+	for ti := a.GetStop().GetTokenIndex(); ti < b.GetStart().GetTokenIndex() && ti < len(allTokens); ti++ {
+		token := allTokens[ti]
+		if token.GetChannel() != antlr.TokenDefaultChannel {
+			continue
+		}
+		switch strings.ToUpper(token.GetText()) {
+		case "UNION", "INTERSECT", "EXCEPT":
+			operator = true
+		case "ALL":
+			if operator {
+				return false
+			}
+		}
+	}
+	return operator
+}
+
+// mergeCompoundSelectGroup merges consecutive stmt_lists that are compound
+// SELECT branches. dedups says the operator joining them collapses duplicate
+// rows, which makes the row count a test on the values.
+func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContext, dedups bool) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpSelect}
+	var last sqlite.ISelect_stmtContext
 	for _, stmtList := range group {
 		for _, stmt := range stmtList.AllSql_stmt() {
 			if selectStmt := stmt.Select_stmt(); selectStmt != nil {
@@ -136,6 +186,7 @@ func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContex
 				if branch == nil {
 					continue
 				}
+				last = selectStmt
 				result.Tables = core.MergeInspectTables(result.Tables, branch.Tables)
 				result.Fields = core.MergeInspectFields(result.Fields, branch.Fields)
 				result.Where = core.MergeInspectFields(result.Where, branch.Where)
@@ -143,6 +194,12 @@ func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContex
 			}
 		}
 	}
+	// The ORDER BY of a compound select parses onto its last branch, but it
+	// orders the rows of every branch, so it is read again against all of the
+	// relations the branches named.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.tailClauseFields(last, core.RelationRefsOf(result)))
+	result.Where = core.DistinctTestsProjection(dedups, result.Where, result.Fields)
 	return result
 }
 
@@ -214,7 +271,7 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	}
 
 	for _, selectCore := range selectCores {
-		branch := i.inspectSelectCore(selectCore, ctes, cteSubqueries, cteToSubqueryMap)
+		branch := i.inspectSelectCore(selectCore, selectStmt, ctes, cteSubqueries, cteToSubqueryMap)
 		result.Tables = core.MergeInspectTables(result.Tables, branch.Tables)
 		result.Fields = core.MergeInspectFields(result.Fields, branch.Fields)
 		result.Where = core.MergeInspectFields(result.Where, branch.Where)
@@ -222,10 +279,133 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	}
 
 	tail := i.extractTailSubqueries(selectStmt)
-	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	i.resolver.DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
 
+	// The branches read the tail against their own relations, which is what
+	// resolves a name a derived table gave. A bare name is read again here,
+	// against the tables the statement ended up reading, which is what
+	// resolves one the derived table passed straight through.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.tailClauseFields(selectStmt, core.RelationRefsOf(result)))
+
+	result.Where = core.DistinctTestsProjection(
+		core.DedupsRows(selectStmt, compoundOperators, sqlite.SQLiteParserALL_),
+		result.Where, result.Fields)
+
 	return result
+}
+
+// compoundOperators are the set operators whose plain form collapses duplicate
+// rows.
+var compoundOperators = []int{
+	sqlite.SQLiteParserUNION_,
+	sqlite.SQLiteParserINTERSECT_,
+	sqlite.SQLiteParserEXCEPT_,
+}
+
+// tailClauseFields are the columns ORDER BY and LIMIT name. They sit after
+// every branch of a compound select rather than inside one.
+func (i *Inspector) tailClauseFields(selectStmt sqlite.ISelect_stmtContext, refs []core.RelationRef) []core.InspectField {
+	if selectStmt == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	if order := selectStmt.Order_by_stmt(); order != nil {
+		fields = core.MergeInspectFields(fields, i.testedFields(order, refs))
+	}
+	if limit := selectStmt.Limit_stmt(); limit != nil {
+		fields = core.MergeInspectFields(fields, i.testedFields(limit, refs))
+	}
+	return fields
+}
+
+// testedFields are the columns a clause names to choose, group or order rows
+// rather than to return them, collected exactly as a WHERE's are. The listener
+// does not descend into subqueries, which are collected in their own right.
+func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+	if tree == nil {
+		return nil
+	}
+	listener := &whereColumnExtractorListener{
+		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},
+		inspector:                i,
+		relationRefs:             refs,
+		fields:                   []core.InspectField{},
+		seenFields:               make(map[string]bool),
+	}
+	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
+	return listener.fields
+}
+
+// joinFields are the columns a join pairs rows on, wherever the join is: the
+// FROM list of a select, or the relations an UPDATE reads. ON names an
+// expression, USING gives bare column names that belong to every relation
+// carrying them, and NATURAL names nothing at all.
+func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+	if tree == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](tree) {
+		columns := constraint.AllColumn_name()
+		if len(columns) == 0 {
+			fields = core.MergeInspectFields(fields, i.testedFields(constraint, refs))
+			continue
+		}
+		names := make([]string, 0, len(columns))
+		for _, column := range columns {
+			names = append(names, i.dialect.NormalizeIdentifier(column.GetText()))
+		}
+		fields = core.MergeInspectFields(fields, i.resolver.NamedColumns(names, refs, scope))
+	}
+	// The keyword is read off the tokens because the grammar prefers to read
+	// the NATURAL in "t1 NATURAL JOIN t2" as an alias of t1, leaving the join
+	// operator holding JOIN alone.
+	for _, node := range core.CollectNodes[antlr.TerminalNode](tree) {
+		if node.GetSymbol().GetTokenType() == sqlite.SQLiteParserNATURAL_ {
+			fields = core.MergeInspectFields(fields, i.resolver.SharedColumns(refs, scope))
+			break
+		}
+	}
+	return fields
+}
+
+// branchClauseFields are the columns the clauses of one branch name without
+// returning: GROUP BY, HAVING and a named window.
+func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
+	if selectCore == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, group := range selectCore.GetGroupByExpr() {
+		fields = core.MergeInspectFields(fields, i.testedFields(group, refs))
+	}
+	if having := selectCore.GetHavingExpr(); having != nil {
+		fields = core.MergeInspectFields(fields, i.testedFields(having, refs))
+	}
+	for _, window := range selectCore.AllWindow_defn() {
+		if window != nil {
+			fields = core.MergeInspectFields(fields, i.testedFields(window, refs))
+		}
+	}
+	fields = core.MergeInspectFields(fields, i.overAndFilterFields(selectCore, refs))
+	return core.DistinctTestsProjection(selectCore.DISTINCT_() != nil, fields, projection)
+}
+
+// overAndFilterFields are the columns an OVER or a FILTER names where the
+// clause is written inline on a result column rather than as a WINDOW clause
+// of its own. Both order or choose the rows an aggregate counts, so what they
+// name is tested even where the column itself is never returned.
+func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef) []core.InspectField {
+	var fields []core.InspectField
+	for _, over := range core.CollectNodes[sqlite.IOver_clauseContext](tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(over, refs))
+	}
+	for _, filter := range core.CollectNodes[sqlite.IFilter_clauseContext](tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(filter, refs))
+	}
+	return fields
 }
 
 // extractTailSubqueries collects the subqueries in the clauses that sit after
@@ -243,12 +423,13 @@ func (i *Inspector) extractTailSubqueries(selectStmt sqlite.ISelect_stmtContext)
 	if limit := selectStmt.Limit_stmt(); limit != nil {
 		subqueries = append(subqueries, i.extractEmbeddedSubqueries(limit)...)
 	}
-	return subqueries
+	return core.AsFilter(subqueries)
 }
 
 // inspectSelectCore processes a single select_core (one branch of a compound query).
 func (i *Inspector) inspectSelectCore(
 	selectCore sqlite.ISelect_coreContext,
+	tail sqlite.ISelect_stmtContext,
 	ctes []core.RelationRef,
 	cteSubqueries []core.InspectStatement,
 	cteToSubqueryMap map[string]*core.InspectStatement,
@@ -257,12 +438,19 @@ func (i *Inspector) inspectSelectCore(
 
 	fromSubqueries := i.extractFromSubqueries(selectCore, cteToSubqueryMap)
 
-	tables := i.convertRelationRefs(relationRefs, i.virtualNames(ctes, subqueryColumns))
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	tables := i.resolver.Tables(relationRefs, scope)
 	for _, subq := range fromSubqueries {
 		tables = core.MergeInspectTables(tables, subq.Tables)
 	}
 
-	allSubqueries := fromSubqueries
+	// The CTE bodies come first: extractSelectFieldsWithResolution walks this
+	// slice by index, the CTEs against its head and the subquery aliases
+	// against what follows. Handing it the subqueries alone maps a CTE name to
+	// a subquery's columns and leaves the alias resolving to nothing.
+	allSubqueries := make([]core.InspectStatement, 0, len(cteSubqueries)+len(fromSubqueries))
+	allSubqueries = append(allSubqueries, cteSubqueries...)
+	allSubqueries = append(allSubqueries, fromSubqueries...)
 	fields := i.extractSelectFieldsWithResolution(selectCore, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
 	where, whereSubqueries := i.extractWhereFields(selectCore, relationRefs)
@@ -271,12 +459,16 @@ func (i *Inspector) inspectSelectCore(
 	subqueries := append(fromSubqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(selectCore)...)
-	core.DropVirtualTables(subqueries, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
+	i.resolver.DropCTETables(subqueries, ctes)
+
+	tested := core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields))
+	tested = core.MergeInspectFields(tested, i.joinFields(selectCore, relationRefs, scope))
+	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs))
 
 	return core.InspectStatement{
 		Tables:     tables,
 		Fields:     fields,
-		Where:      where,
+		Where:      i.resolver.ThroughVirtual(tested, relationRefs, scope, allSubqueries),
 		Subqueries: subqueries,
 	}
 }
@@ -304,7 +496,7 @@ func (i *Inspector) extractBranchClauseSubqueries(selectCore sqlite.ISelect_core
 			subqueries = append(subqueries, i.extractEmbeddedSubqueries(window)...)
 		}
 	}
-	return subqueries
+	return core.AsFilter(subqueries)
 }
 
 // effectiveSchema is the schema an unqualified name resolves in. SQLite is the
@@ -369,16 +561,10 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		}
 	} else {
 		// No explicit column list, expand to all columns from metadata.
-		for _, col := range core.GetColumnsForTableAsColumns(i.meta, schema, tableName, i.dialect) {
-			result.Fields = append(result.Fields, core.InspectField{
-				Name:   col.Name,
-				Table:  tableName,
-				Schema: schema,
-			})
-		}
+		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
-	// INSERT … SELECT: attach source as subquery when it has real tables.
+	// INSERT ... SELECT: attach source as subquery when it has real tables.
 	if selectStmt := stmt.Select_stmt(); selectStmt != nil {
 		if sub := i.inspectSelect(selectStmt); sub != nil && len(sub.Tables) > 0 {
 			result.Subqueries = append(result.Subqueries, *sub)
@@ -387,6 +573,14 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		// VALUES form: walk expressions for embedded subqueries.
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(stmt)...)
 	}
+
+	// An ON CONFLICT clause chooses which rows it updates and reads values into
+	// them, both against the target table, so what it names is tested.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.testedFields(core.TreeOrNil(stmt.Upsert_clause()),
+			[]core.RelationRef{{Table: tableName, Schema: schema}}))
+
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
 }
@@ -403,7 +597,8 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 
 	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
-	result.Subqueries = append(result.Subqueries, i.readSources(stmt, ctes)...)
+	reads, sourceRefs := i.readSources(stmt, ctes)
+	result.Subqueries = append(result.Subqueries, reads...)
 
 	// SET column names, AllColumn_name() returns the LHS of each assignment.
 	for _, cn := range stmt.AllColumn_name() {
@@ -415,7 +610,7 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 		})
 	}
 
-	targetRef := []core.RelationRef{{Table: tableName, Schema: schema}}
+	whereRefs := append([]core.RelationRef{{Table: tableName, Schema: schema}}, sourceRefs...)
 
 	// RHS expressions: scan for embedded subqueries, excluding the WHERE expr.
 	allExprs := stmt.AllExpr()
@@ -431,17 +626,20 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	if stmt.WHERE_() != nil {
 		if len(allExprs) > 0 {
 			whereExpr := allExprs[len(allExprs)-1]
-			where, whereSubqueries := i.extractWhereFieldsFromExpr(whereExpr, targetRef)
+			where, whereSubqueries := i.extractWhereFieldsFromExpr(whereExpr, whereRefs)
 			result.Where = where
 			result.Subqueries = append(result.Subqueries, whereSubqueries...)
 		}
 	}
 
+	result.Where = core.MergeInspectFields(result.Where,
+		i.joinFields(stmt, whereRefs, core.Scope{CTEs: ctes}))
+
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
 	return result
 }
 
-// readSources is the read an UPDATE ... FROM performs on the relations it joins
-// against. Those rows are read, not written, so the update does not cover them.
 func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
 	if with == nil {
 		return nil, nil
@@ -475,13 +673,16 @@ func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.R
 		if idx < len(bodies) {
 			subqueries = append(subqueries, core.OrUnknown(i.inspectSelect(bodies[idx])))
 			body := subqueries[len(subqueries)-1:]
-			core.DropVirtualTables(body, core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
+			i.resolver.DropVirtual(body, core.CTEScope(names, idx, recursive))
 		}
 	}
 	return ctes, subqueries
 }
 
-func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.RelationRef) []core.InspectStatement {
+// readSources is the read an UPDATE ... FROM performs on the relations it joins
+// against. Those rows are read, not written, so the update does not cover them.
+// It also reports the relations, which the WHERE resolves names against.
+func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.RelationRef) ([]core.InspectStatement, []core.RelationRef) {
 	// A FROM list is either a comma list of relations or a join clause, and
 	// only the relations under it are read; the target table is not.
 	relations := make([]antlr.ParseTree, 0, len(stmt.AllTable_or_subquery())+1)
@@ -505,13 +706,14 @@ func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.Rel
 		reads = append(reads, i.extractFromSubqueries(relation, nil)...)
 	}
 
-	if tables := i.convertRelationRefs(refs, i.virtualNames(ctes, subqueryColumns)); len(tables) > 0 {
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns}
+	if tables := i.resolver.Tables(refs, scope); len(tables) > 0 {
 		reads = append(reads, core.InspectStatement{
 			Operation: core.InspectOpSelect,
 			Tables:    tables,
 		})
 	}
-	return reads
+	return reads, refs
 }
 
 // inspectDelete analyzes a DELETE statement.
@@ -533,6 +735,8 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Where = where
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
+
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
 }
@@ -1005,61 +1209,8 @@ func (i *Inspector) extractSelectFieldsWithResolution(
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) []core.InspectField {
 	fields := i.extractSelectFields(selectCore, relationRefs, ctes, subqueryColumns, cteToSubqueryMap)
-
-	// Build a map of virtual table -> underlying fields from subqueries
-	// Use deterministic ordering: CTEs first, then subqueries in order
-	virtualTableFields := make(map[string][]core.InspectField)
-
-	// Map CTEs to their subquery results
-	for idx, cte := range ctes {
-		if idx < len(subqueries) {
-			cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-			virtualTableFields[cteKey] = subqueries[idx].Fields
-		}
-	}
-
-	// Map subquery aliases - need deterministic ordering
-	// Collect subquery names in order first
-	subqueryNames := make([]string, 0, len(subqueryColumns))
-	for name := range subqueryColumns {
-		subqueryNames = append(subqueryNames, name)
-	}
-	// Sort for deterministic ordering
-	sort.Strings(subqueryNames)
-
-	subqIdx := len(ctes)
-	for _, name := range subqueryNames {
-		if subqIdx < len(subqueries) {
-			normalizedName := i.dialect.NormalizeIdentifier(name)
-			virtualTableFields[normalizedName] = subqueries[subqIdx].Fields
-			subqIdx++
-		}
-	}
-
-	// Resolve fields that reference virtual tables
-	var resolvedFields []core.InspectField
-	for _, field := range fields {
-		normalizedTable := i.dialect.NormalizeIdentifier(field.Table)
-		if underlyingFields, ok := virtualTableFields[normalizedTable]; ok {
-			// Find the matching field in the underlying query
-			for _, uf := range underlyingFields {
-				if i.normalizeEquals(uf.Name, field.Name) {
-					resolvedField := core.InspectField{
-						Name:   field.Name,
-						Alias:  field.Alias,
-						Table:  uf.Table,
-						Schema: uf.Schema,
-					}
-					resolvedFields = append(resolvedFields, resolvedField)
-					break
-				}
-			}
-		} else {
-			resolvedFields = append(resolvedFields, field)
-		}
-	}
-
-	return resolvedFields
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	return i.resolver.ThroughVirtual(fields, relationRefs, scope, subqueries)
 }
 
 // extractSelectFields extracts fields from the SELECT clause
@@ -1070,6 +1221,8 @@ func (i *Inspector) extractSelectFields(
 	subqueryColumns map[string][]core.Column,
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) []core.InspectField {
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+
 	// Get result columns directly from select_core
 	resultColumns := selectCore.AllResult_column()
 	if len(resultColumns) == 0 {
@@ -1081,7 +1234,7 @@ func (i *Inspector) extractSelectFields(
 	for _, resultCol := range resultColumns {
 		// Handle SELECT * (case 1: just STAR)
 		if resultCol.STAR() != nil && resultCol.Table_name() == nil {
-			fields = append(fields, i.expandStar(relationRefs, ctes, subqueryColumns, cteToSubqueryMap)...)
+			fields = append(fields, i.resolver.Star(relationRefs, scope)...)
 			continue
 		}
 
@@ -1089,7 +1242,7 @@ func (i *Inspector) extractSelectFields(
 		if resultCol.Table_name() != nil && resultCol.DOT() != nil && resultCol.STAR() != nil {
 			tableName := resultCol.Table_name().Any_name().GetText()
 			normalizedTable := i.dialect.NormalizeIdentifier(tableName)
-			fields = append(fields, i.expandQualifiedStar(normalizedTable, relationRefs, ctes, cteToSubqueryMap)...)
+			fields = append(fields, i.resolver.QualifiedStar(normalizedTable, relationRefs, scope)...)
 			continue
 		}
 
@@ -1110,120 +1263,6 @@ func (i *Inspector) extractSelectFields(
 	}
 
 	return fields
-}
-
-// expandStar expands SELECT * to all columns from all tables
-func (i *Inspector) expandStar(
-	relationRefs []core.RelationRef,
-	ctes []core.RelationRef,
-	subqueryColumns map[string][]core.Column,
-	cteToSubqueryMap map[string]*core.InspectStatement,
-) []core.InspectField {
-	var fields []core.InspectField
-
-	for _, ref := range relationRefs {
-		// Check if this is a CTE reference
-		for _, cte := range ctes {
-			if i.dialect.NormalizeIdentifier(cte.Table) == i.dialect.NormalizeIdentifier(ref.Table) {
-				// Use the CTE's subquery result to resolve columns properly
-				cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-				if cteResult, ok := cteToSubqueryMap[cteKey]; ok {
-					// Use fields from the CTE's InspectStatement
-					fields = append(fields, cteResult.Fields...)
-				} else {
-					// Fallback: resolve each column individually
-					for _, col := range cte.Columns {
-						resolvedField := i.resolveCTEColumnFromFields(col.Name, nil)
-						if resolvedField != nil {
-							fields = append(fields, *resolvedField)
-						}
-					}
-				}
-				continue
-			}
-		}
-
-		// Check if this is a subquery reference
-		if ref.Schema == "" && subqueryColumns != nil {
-			if vtabCols, ok := subqueryColumns[ref.Table]; ok {
-				for _, col := range vtabCols {
-					fields = append(fields, core.InspectField{
-						Name:   col.Name,
-						Table:  ref.Table,
-						Schema: i.meta.DefaultSchema,
-					})
-				}
-				continue
-			}
-		}
-
-		// Regular table - lookup in metadata
-		tableCols := core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect)
-		for _, col := range tableCols {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
-	}
-
-	return fields
-}
-
-// expandQualifiedStar expands table.* to all columns from the specified table
-func (i *Inspector) expandQualifiedStar(
-	tablePrefix string,
-	relationRefs []core.RelationRef,
-	ctes []core.RelationRef,
-	cteToSubqueryMap map[string]*core.InspectStatement,
-) []core.InspectField {
-	normalizedPrefix := i.dialect.NormalizeIdentifier(tablePrefix)
-
-	// Find the matching table reference
-	for _, ref := range relationRefs {
-		tableName := ref.Alias
-		if tableName == "" {
-			tableName = ref.Table
-		}
-		if i.dialect.NormalizeIdentifier(tableName) != normalizedPrefix {
-			continue
-		}
-
-		// Check if this is a CTE reference
-		for _, cte := range ctes {
-			if i.dialect.NormalizeIdentifier(cte.Table) == i.dialect.NormalizeIdentifier(ref.Table) {
-				cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-				if cteResult, ok := cteToSubqueryMap[cteKey]; ok {
-					// Use fields from the CTE's InspectStatement
-					return cteResult.Fields
-				}
-				// Fallback: resolve each column individually
-				var fields []core.InspectField
-				for _, col := range cte.Columns {
-					resolvedField := i.resolveCTEColumnFromFields(col.Name, nil)
-					if resolvedField != nil {
-						fields = append(fields, *resolvedField)
-					}
-				}
-				return fields
-			}
-		}
-
-		// Regular table
-		tableCols := core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect)
-		var fields []core.InspectField
-		for _, col := range tableCols {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
-		return fields
-	}
-
-	return nil
 }
 
 // exprColumnRef holds a raw column reference found in an expression.
@@ -1317,138 +1356,8 @@ func (i *Inspector) resolveColumn(
 	subqueryColumns map[string][]core.Column,
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) *core.InspectField {
-	normalizedCol := i.dialect.NormalizeIdentifier(columnName)
-
-	// If table prefix is specified, resolve using that
-	if tablePrefix != "" {
-		for _, ref := range relationRefs {
-			refKey := ref.Alias
-			if refKey == "" {
-				refKey = ref.Table
-			}
-			if i.dialect.NormalizeIdentifier(refKey) == i.dialect.NormalizeIdentifier(tablePrefix) {
-				// Check if this is a CTE
-				for _, cte := range ctes {
-					if i.dialect.NormalizeIdentifier(cte.Table) == i.dialect.NormalizeIdentifier(ref.Table) {
-						return i.resolveCTEColumnFromFields(normalizedCol, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
-					}
-				}
-				return &core.InspectField{
-					Name:   normalizedCol,
-					Alias:  alias,
-					Table:  ref.Table,
-					Schema: ref.Schema,
-				}
-			}
-		}
-	}
-
-	// Search all table refs for the column
-	for _, ref := range relationRefs {
-		// Check CTEs first
-		for _, cte := range ctes {
-			if i.dialect.NormalizeIdentifier(cte.Table) == i.dialect.NormalizeIdentifier(ref.Table) {
-				for _, col := range cte.Columns {
-					if i.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-						cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-						resolved := i.resolveCTEColumnFromFields(normalizedCol, cteToSubqueryMap[cteKey])
-						if resolved != nil {
-							resolved.Alias = alias
-							return resolved
-						}
-					}
-				}
-			}
-		}
-
-		// Check subquery columns
-		if ref.Schema == "" && subqueryColumns != nil {
-			if vtabCols, ok := subqueryColumns[ref.Table]; ok {
-				for _, col := range vtabCols {
-					if i.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-						return &core.InspectField{
-							Name:   normalizedCol,
-							Alias:  alias,
-							Table:  ref.Table,
-							Schema: i.meta.DefaultSchema,
-						}
-					}
-				}
-			}
-		}
-
-		// Check regular table
-		tableCols := core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect)
-		for _, col := range tableCols {
-			if i.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-				return &core.InspectField{
-					Name:   normalizedCol,
-					Alias:  alias,
-					Table:  ref.Table,
-					Schema: ref.Schema,
-				}
-			}
-		}
-	}
-
-	// Fallback: column not found in any table metadata.
-	// Attribute to the sole real table in scope if unambiguous.
-	var knownRefs []core.RelationRef
-	var unknownRefs []core.RelationRef
-	for _, ref := range relationRefs {
-		if ref.Schema == "" {
-			continue // virtual (CTE / subquery alias)
-		}
-		if core.TableExistsInMetadata(i.meta, ref.Schema, ref.Table, i.dialect) {
-			knownRefs = append(knownRefs, ref)
-		} else {
-			unknownRefs = append(unknownRefs, ref)
-		}
-	}
-	if len(knownRefs) == 1 {
-		return &core.InspectField{Name: normalizedCol, Alias: alias, Table: knownRefs[0].Table, Schema: knownRefs[0].Schema}
-	}
-	if len(knownRefs) == 0 && len(unknownRefs) == 1 {
-		// Unknown table, schema left blank so permission checker can deny.
-		return &core.InspectField{Name: normalizedCol, Alias: alias, Table: unknownRefs[0].Table, Schema: ""}
-	}
-
-	return nil
-}
-
-// resolveCTEColumnFromFields resolves a CTE column to its underlying table using the CTE's InspectStatement
-func (i *Inspector) resolveCTEColumnFromFields(columnName string, cteResult *core.InspectStatement) *core.InspectField {
-	// If we have the CTE's InspectStatement, use its fields to resolve the column
-	if cteResult != nil {
-		normalizedCol := i.dialect.NormalizeIdentifier(columnName)
-		for _, field := range cteResult.Fields {
-			if i.dialect.NormalizeIdentifier(field.Name) == normalizedCol {
-				return &core.InspectField{
-					Name:   field.Name,
-					Table:  field.Table,
-					Schema: field.Schema,
-				}
-			}
-		}
-	}
-
-	// Fallback: look for the column in metadata (for backwards compatibility)
-	// This is less accurate but better than nothing
-	for _, schema := range i.meta.Schemas {
-		for _, table := range schema.Tables {
-			for _, col := range table.Columns {
-				if i.dialect.NormalizeIdentifier(col.Name) == i.dialect.NormalizeIdentifier(columnName) {
-					return &core.InspectField{
-						Name:   columnName,
-						Table:  table.Name,
-						Schema: schema.Name,
-					}
-				}
-			}
-		}
-	}
-
-	return nil
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	return i.resolver.SelectColumn(columnName, tablePrefix, alias, relationRefs, scope)
 }
 
 // extractWhereFields extracts column references and embedded subqueries from a select_core's WHERE.
@@ -1475,7 +1384,7 @@ func (i *Inspector) extractWhereFieldsFromExpr(whereExpr sqlite.IExprContext, re
 	}
 	antlr.ParseTreeWalkerDefault.Walk(listener, whereExpr)
 
-	subqueries := i.extractEmbeddedSubqueries(whereExpr)
+	subqueries := core.AsFilter(i.extractEmbeddedSubqueries(whereExpr))
 	return listener.fields, subqueries
 }
 
@@ -1562,45 +1471,9 @@ func (l *whereColumnExtractorListener) EnterExpr(ctx *sqlite.ExprContext) {
 
 			var resolvedField *core.InspectField
 			if tablePrefix != "" {
-				for _, ref := range l.relationRefs {
-					refKey := ref.Alias
-					if refKey == "" {
-						refKey = ref.Table
-					}
-					if l.inspector.dialect.NormalizeIdentifier(refKey) == tablePrefix {
-						tableCols := core.GetColumnsForTableAsColumns(l.inspector.meta, ref.Schema, ref.Table, l.inspector.dialect)
-						for _, col := range tableCols {
-							if l.inspector.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-								resolvedField = &core.InspectField{
-									Name:   normalizedCol,
-									Table:  ref.Table,
-									Schema: ref.Schema,
-								}
-								break
-							}
-						}
-						if resolvedField != nil {
-							break
-						}
-					}
-				}
+				resolvedField = l.inspector.resolver.Column(tablePrefix, normalizedCol, l.relationRefs)
 			} else {
-				for _, ref := range l.relationRefs {
-					tableCols := core.GetColumnsForTableAsColumns(l.inspector.meta, ref.Schema, ref.Table, l.inspector.dialect)
-					for _, col := range tableCols {
-						if l.inspector.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-							resolvedField = &core.InspectField{
-								Name:   normalizedCol,
-								Table:  ref.Table,
-								Schema: ref.Schema,
-							}
-							break
-						}
-					}
-					if resolvedField != nil {
-						break
-					}
-				}
+				resolvedField = l.inspector.resolver.UnqualifiedColumn(normalizedCol, l.relationRefs)
 			}
 
 			if resolvedField != nil {
@@ -1612,71 +1485,6 @@ func (l *whereColumnExtractorListener) EnterExpr(ctx *sqlite.ExprContext) {
 			}
 		}
 	}
-}
-
-// virtualNames are the names in a FROM that are not tables: a CTE and a FROM
-// subquery alias both look like one and neither is a grant anybody holds.
-// cteNames is the subset of virtualNames a nested statement can refer to. A
-// FROM subquery's alias is not a relation outside its own query level, so only
-// the CTEs travel into a subquery inspected without the enclosing scope.
-func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
-	return i.virtualNames(ctes, nil)
-}
-
-func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
-	names := make(map[string]bool, len(ctes)+len(subqueryColumns))
-	for _, cte := range ctes {
-		names[i.dialect.NormalizeIdentifier(cte.Table)] = true
-	}
-	for name := range subqueryColumns {
-		names[i.dialect.NormalizeIdentifier(name)] = true
-	}
-	return names
-}
-
-// convertRelationRefs converts RelationRef to InspectTable, filtering out virtual tables
-func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables map[string]bool) []core.InspectTable {
-	var tables []core.InspectTable
-	seen := make(map[string]bool)
-
-	for _, ref := range refs {
-		// Skip empty refs
-		if ref.Schema == "" && ref.Table == "" {
-			continue
-		}
-
-		// Skip virtual tables (CTEs, subqueries). Only an unqualified name can
-		// be one; dropping a qualified one is a read nobody checks.
-		if !ref.Qualified && virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
-			continue
-		}
-
-		// Mark unknown tables with Schema="" so the permission checker can deny them.
-		schema := ref.Schema
-		if !core.TableExistsInMetadata(i.meta, ref.Schema, ref.Table, i.dialect) {
-			schema = ""
-		}
-
-		key := schema + "." + ref.Table
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-
-		table := core.InspectTable{
-			Name:      ref.Table,
-			Schema:    schema,
-			StartLine: ref.Line,
-			StartCol:  ref.Col,
-			EndCol:    ref.EndCol,
-		}
-		if ref.Alias != "" {
-			table.Alias = &ref.Alias
-		}
-		tables = append(tables, table)
-	}
-
-	return tables
 }
 
 // extractCTEsWithSubqueries extracts CTE definitions and inspects their bodies
@@ -1719,7 +1527,7 @@ func (i *Inspector) extractCTEsWithSubqueries(commonTableStmt sqlite.ICommon_tab
 		if selectStmt := cteEl.Select_stmt(); selectStmt != nil {
 			if subResult := i.inspectSelect(selectStmt); subResult != nil {
 				subqueries = append(subqueries, *subResult)
-				core.DropVirtualTables(subqueries[len(subqueries)-1:], core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
+				i.resolver.DropVirtual(subqueries[len(subqueries)-1:], core.CTEScope(names, idx, recursive))
 				// Extract column names from the subquery's fields
 				for _, field := range subqueries[len(subqueries)-1].Fields {
 					cteColumns = append(cteColumns, core.Column{
@@ -1769,6 +1577,32 @@ func (l *subqueryExtractorListener) EnterTable_or_subquery(ctx *sqlite.Table_or_
 	if selectStmt := ctx.Select_stmt(); selectStmt != nil {
 		if subResult := l.inspector.inspectSelect(selectStmt); subResult != nil {
 			l.subqueries = append(l.subqueries, *subResult)
+		}
+	}
+}
+
+// resolve binds the shared resolution rules to this inspector's metadata.
+// addReturningFields records the columns a RETURNING clause hands back. They
+// are read from the target table and reach the caller's rows, so a rule hiding
+// one has to find it here as it would in a select.
+func (i *Inspector) addReturningFields(
+	result *core.InspectStatement,
+	ret sqlite.IReturning_clauseContext,
+	schema, table string,
+) {
+	if ret == nil {
+		return
+	}
+	refs := []core.RelationRef{{Table: table, Schema: schema}}
+	for _, column := range ret.AllResult_column() {
+		if column.STAR() != nil {
+			result.Fields = core.MergeInspectFields(result.Fields,
+				core.TableFields(i.meta, schema, table, i.dialect))
+			continue
+		}
+		if expr := column.Expr(); expr != nil {
+			result.Fields = core.MergeInspectFields(result.Fields,
+				i.extractFieldsFromExpr(expr, refs, nil, nil, nil))
 		}
 	}
 }

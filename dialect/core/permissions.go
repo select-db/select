@@ -298,17 +298,21 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 	return nil
 }
 
-// EvaluateSee returns which driver-column positions to mask, or errors
-// when a see-denied column can't be masked (used only inside a function).
+// EvaluateSee returns which driver-column positions to mask, or errors when a
+// see-denied column cannot be masked.
 //
-// Matches Fields to driverCols by alias or name (case-insensitive).
-// If multiple Fields share a name (JOINs), any see-denied one masks the position.
+// Matches fields to driverCols by alias or name (case-insensitive). If several
+// fields share a name (JOINs), any see-denied one masks the position. The whole
+// statement is read, subqueries included: a derived table returns its columns to
+// the outer select, so hiding one means finding it wherever it was read.
 func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string, perms CompiledPermissions) ([]int, error) {
 	if !perms.IsManaged(dbInstanceID) {
 		return nil, nil
 	}
 
-	if stmt.Operation != InspectOpSelect {
+	// A write hands rows back through RETURNING, so this cannot be a select's
+	// check alone.
+	if !ReturnsRows(stmt.Operation) {
 		return nil, nil
 	}
 
@@ -316,36 +320,86 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		return nil, nil
 	}
 
-	matched := make([]bool, len(stmt.Fields))
+	nested := nestedReadFields(stmt, nil)
+	fields := append(append(make([]InspectField, 0, len(stmt.Fields)+len(nested)), stmt.Fields...), nested...)
+	matched := make([]bool, len(fields))
+	allAccounted := true
 	var maskPositions []int
 
 	for i, dc := range driverCols {
-		deny := false
-		for fi := range stmt.Fields {
-			f := &stmt.Fields[fi]
-			if !fieldOutputName(*f, dc) {
-				continue
-			}
-
-			matched[fi] = true
-			if f.Schema == "" || f.Table == "" {
-				continue
-			}
-
-			allowed, _ := perms.isAllowed(dbInstanceID, f.Schema, f.Table, f.Name, ActionSee)
-			if !allowed {
-				deny = true
-			}
+		// The statement's own projection decides where it resolves the column
+		// to a table, so a name another scope reuses cannot hide one it shows.
+		resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
+		if !resolved {
+			resolved, deny = seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
 		}
-
+		// A field that resolved to no table carries no permission, so it
+		// accounts for nothing.
+		if !resolved {
+			allAccounted = false
+		}
 		if deny {
 			maskPositions = append(maskPositions, i)
 		}
 	}
 
-	// Unmatched see-denied Field = used inside a function, can't mask safely
-	for fi, f := range stmt.Fields {
-		if matched[fi] {
+	// A see-denied column the statement selects under no name of its own sits
+	// inside an expression, which has no position to mask. Only its own fields
+	// are read here: a subquery may select one the outer statement then drops.
+	if denied := firstSeeDenied(stmt.Fields, matched, dbInstanceID, perms); denied != nil {
+		return nil, denied
+	}
+
+	// A result column nothing accounts for may be carrying a hidden one, and
+	// the fields left unmatched are what it could be carrying.
+	if !allAccounted {
+		if denied := firstSeeDenied(fields, matched, dbInstanceID, perms); denied != nil {
+			return nil, denied
+		}
+	}
+
+	return maskPositions, nil
+}
+
+// ReturnsRows reports whether an operation can hand rows back to the caller. A
+// select does, and so does a write with a RETURNING clause.
+func ReturnsRows(op InspectOperation) bool {
+	return op == InspectOpSelect || isWrite(op)
+}
+
+// seeColumn scans the fields a result column named dc could come out under and
+// marks each in matched at its offset. resolved reports whether any of them
+// named a table, and deny whether any of those is a column no role may see.
+func seeColumn(
+	fields []InspectField,
+	offset int,
+	dc string,
+	matched []bool,
+	dbInstanceID string,
+	perms CompiledPermissions,
+) (resolved, deny bool) {
+	for fi := range fields {
+		f := &fields[fi]
+		if !fieldOutputName(*f, dc) {
+			continue
+		}
+		matched[offset+fi] = true
+		if f.Schema == "" || f.Table == "" {
+			continue
+		}
+		resolved = true
+		if allowed, _ := perms.isAllowed(dbInstanceID, f.Schema, f.Table, f.Name, ActionSee); !allowed {
+			deny = true
+		}
+	}
+	return resolved, deny
+}
+
+// firstSeeDenied returns the error for the first field no role may see, or nil.
+// A field marked in matched is skipped, as is one that resolved to no table.
+func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, perms CompiledPermissions) *PermissionDeniedError {
+	for fi, f := range fields {
+		if fi < len(matched) && matched[fi] {
 			continue
 		}
 		if f.Schema == "" || f.Table == "" {
@@ -355,7 +409,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		if allowed {
 			continue
 		}
-		return nil, &PermissionDeniedError{
+		return &PermissionDeniedError{
 			Action:    ActionSee,
 			Schema:    f.Schema,
 			Table:     f.Table,
@@ -366,16 +420,79 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 			EndCol:    f.EndCol,
 		}
 	}
+	return nil
+}
 
-	return maskPositions, nil
+// CheckSeePredicates refuses a statement that tests a column no role may see,
+// since enough answers about a value are the value.
+//
+// It runs whether or not the statement returns rows, which is why it is not
+// part of EvaluateSee: that one needs the driver's columns, and only a
+// statement handing rows back has any.
+func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms CompiledPermissions) error {
+	if !perms.IsManaged(dbInstanceID) {
+		return nil
+	}
+	for _, stmt := range stmts {
+		if denied := firstSeeDenied(predicateFields(stmt, false, nil), nil, dbInstanceID, perms); denied != nil {
+			return denied
+		}
+	}
+	return nil
+}
+
+// predicateFields returns every field the statement tests rather than returns,
+// its subqueries included. A filter's own result columns count as tested, since
+// what it selects is compared against something, and so do a write's, since
+// what a write reads it stores out of reach of masking.
+func predicateFields(stmt InspectStatement, tested bool, into []InspectField) []InspectField {
+	into = append(into, stmt.Where...)
+	if tested {
+		into = append(into, stmt.Fields...)
+	}
+	stores := isWrite(stmt.Operation)
+	for _, sub := range stmt.Subqueries {
+		into = predicateFields(sub, tested || sub.Filter || stores, into)
+	}
+	return into
+}
+
+// isWrite reports whether an operation puts rows into a table, where what it
+// read is out of reach of masking.
+func isWrite(op InspectOperation) bool {
+	switch op {
+	case InspectOpInsert, InspectOpUpdate, InspectOpDelete:
+		return true
+	}
+	return false
+}
+
+// nestedReadFields returns every field the statement's subqueries can return.
+// A derived table or a scalar subquery reads a column just as the outer select
+// does, and the value it returns is the one that reaches the row. A filter's
+// rows are a condition, so it is skipped.
+func nestedReadFields(stmt InspectStatement, into []InspectField) []InspectField {
+	for _, sub := range stmt.Subqueries {
+		if sub.Filter {
+			continue
+		}
+		into = append(into, sub.Fields...)
+		into = nestedReadFields(sub, into)
+	}
+	return into
+}
+
+// outputName is the name a field comes out under: its alias where it has one,
+// its own name otherwise.
+func outputName(f InspectField) string {
+	if f.Alias != nil && *f.Alias != "" {
+		return *f.Alias
+	}
+	return f.Name
 }
 
 func fieldOutputName(f InspectField, driverCol string) bool {
-	name := f.Name
-	if f.Alias != nil && *f.Alias != "" {
-		name = *f.Alias
-	}
-	return strings.EqualFold(name, driverCol)
+	return strings.EqualFold(outputName(f), driverCol)
 }
 
 // operationToAction maps an inspected operation to the permission it needs.

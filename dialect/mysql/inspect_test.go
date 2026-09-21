@@ -146,6 +146,8 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					},
 					Where: []core.InspectField{
 						{Name: "c2", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -161,11 +163,15 @@ func TestInspectMySQLSpecific(t *testing.T) {
 						{Name: "t1", Alias: ptr("a"), Schema: defaultSchema},
 						{Name: "t2", Alias: ptr("b"), Schema: defaultSchema},
 					},
+					Where: []core.InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
 				},
 			},
 		},
 		{
-			// DELETE … USING multi-table form. Only t1 is the target.
+			// DELETE ... USING multi-table form. Only t1 is the target.
 			Name: "DELETE USING form",
 			SQL:  "DELETE FROM t1 USING t1 JOIN t2 ON t1.c1 = t2.c1 WHERE t2.c3 = 'x'",
 			Expected: []core.InspectStatement{
@@ -176,6 +182,8 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					},
 					Where: []core.InspectField{
 						{Name: "c3", Table: "t2", Schema: defaultSchema},
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -211,6 +219,7 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					},
 					Where: []core.InspectField{
 						{Name: "c1", Table: "t2", Schema: defaultSchema},
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
 					},
 				},
 			},
@@ -228,6 +237,10 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					Fields: []core.InspectField{
 						{Name: "c2", Table: "t1", Schema: defaultSchema},
 						{Name: "c3", Table: "t2", Schema: defaultSchema},
+					},
+					Where: []core.InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},

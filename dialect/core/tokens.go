@@ -1,6 +1,7 @@
 package core
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -109,4 +110,70 @@ func previousDefaultToken(all []antlr.Token, from, idx int) string {
 		}
 	}
 	return ""
+}
+
+// nodeSpan is the half-open token span a node covers by itself, as opposed to
+// TokenSpan, which runs to the next node so a scan reaches a clause the node
+// does not own. ok is false for a node error recovery left without bounds.
+func nodeSpan(node interface {
+	GetStart() antlr.Token
+	GetStop() antlr.Token
+}) (from, to int, ok bool) {
+	if node == nil {
+		return 0, 0, false
+	}
+	start, stop := node.GetStart(), node.GetStop()
+	if start == nil || stop == nil {
+		return 0, 0, false
+	}
+	return start.GetTokenIndex(), stop.GetTokenIndex() + 1, true
+}
+
+// CollectNodes returns every node of type T under tree, in the order a
+// depth-first walk reaches them. The grammars give an ON clause, a joined table
+// or a name list no accessor that reaches through the nesting between it and
+// the clause that holds it.
+func CollectNodes[T any](tree antlr.Tree) []T {
+	var found []T
+	var walk func(antlr.Tree)
+	walk = func(node antlr.Tree) {
+		if node == nil {
+			return
+		}
+		if hit, ok := node.(T); ok {
+			found = append(found, hit)
+		}
+		for idx := 0; idx < node.GetChildCount(); idx++ {
+			walk(node.GetChild(idx))
+		}
+	}
+	walk(tree)
+	return found
+}
+
+// TreeOrNil returns ctx as a ParseTree, and nil where the accessor that
+// produced it returned a nil of its own interface type. A typed nil in an
+// antlr.ParseTree is not nil, and walking one panics.
+func TreeOrNil[T antlr.ParseTree](ctx T) antlr.ParseTree {
+	if any(ctx) == nil {
+		return nil
+	}
+	return ctx
+}
+
+// DedupsRows reports whether a compound operator under tree collapses duplicate
+// rows, which every one of UNION, INTERSECT and EXCEPT does unless it is
+// written with ALL. The row count then reports how many values the branches
+// have in common, which is a test on them.
+func DedupsRows(tree antlr.Tree, operators []int, all int) bool {
+	terminals := CollectNodes[antlr.TerminalNode](tree)
+	for idx, terminal := range terminals {
+		if !slices.Contains(operators, terminal.GetSymbol().GetTokenType()) {
+			continue
+		}
+		if idx+1 >= len(terminals) || terminals[idx+1].GetSymbol().GetTokenType() != all {
+			return true
+		}
+	}
+	return false
 }
