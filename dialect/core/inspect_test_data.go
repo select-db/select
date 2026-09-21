@@ -49,6 +49,13 @@ type InspectStatement struct {
 	Where      []InspectField
 	Subqueries []InspectStatement // Nested CTEs and subqueries - allows recursive permission checking
 
+	// Also holds what this statement does beyond its own operation, on its own
+	// tables: the update an upsert performs, the delete a REPLACE performs.
+	// The permission check reads it and nothing else does, so a column named
+	// here scopes a right without being read as a column the statement
+	// returned or stored.
+	Also []InspectStatement
+
 	// Filter marks a subquery the server runs to choose or order rows rather
 	// than to return them: a WHERE, HAVING, GROUP BY, ORDER BY or window
 	// clause. Unmarked means its value reaches the row, which is the answer

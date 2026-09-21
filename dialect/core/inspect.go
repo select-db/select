@@ -29,16 +29,25 @@ func NestUnderUnknown(read InspectStatement) InspectStatement {
 
 // AlsoPerforms records that a statement does something to its own tables that
 // its operation does not name: an upsert rewrites the row it conflicts with,
-// a REPLACE deletes it. The permission check already walks nested statements,
-// so the second right is asked for by reporting one that needs it rather than
-// by teaching the check that an insert is sometimes two things.
-func AlsoPerforms(stmt *InspectStatement, op InspectOperation) {
+// a REPLACE deletes it.
+//
+// It goes in Also rather than Subqueries: a subquery under a write is a value
+// the write stored, which the see check reads as a column out of reach of
+// masking, and these columns are written rather than read. Naming no column
+// asks for the right on the whole table, which is what a row leaving it takes;
+// an upsert names the columns it sets, so a role holding update on those
+// columns still runs.
+func AlsoPerforms(stmt *InspectStatement, op InspectOperation, fields []InspectField) {
 	if stmt == nil || len(stmt.Tables) == 0 {
 		return
 	}
 	tables := make([]InspectTable, len(stmt.Tables))
 	copy(tables, stmt.Tables)
-	stmt.Subqueries = append(stmt.Subqueries, InspectStatement{Operation: op, Tables: tables})
+	stmt.Also = append(stmt.Also, InspectStatement{
+		Operation: op,
+		Tables:    tables,
+		Fields:    fields,
+	})
 }
 
 // AsFilter marks stmts as filters and returns them. See InspectStatement.Filter.
@@ -49,33 +58,26 @@ func AsFilter(stmts []InspectStatement) []InspectStatement {
 	return stmts
 }
 
-// NestUnderUnknownIfUnreadable reports read under an unclassified statement
-// when what error recovery salvaged is not the statement the caller wrote.
+// SalvageOrUnknown decides how much of what error recovery salvaged to trust.
 //
-// Two shapes qualify. A salvage that named no table leaves a per-table check
-// nothing to ask about, so it would run on a policy granting nothing. A
-// salvage from a statement that never began, which the parser stumbling over
-// its first token is what says, names tables belonging to whatever fragment
-// recovery found: SQLite has no REVOKE, so "REVOKE SELECT ON t1 FROM bob"
-// leaves a select on a table named bob.
-//
-// An error later in the span is a clause the grammar does not carry, such as
-// SQLite's standalone WINDOW. The statement's own head parsed, what it named
-// still stands, and nesting it would refuse ordinary work.
-func NestUnderUnknownIfUnreadable(read InspectStatement, syntax *SyntaxErrors, from, to int) InspectStatement {
-	if !syntax.In(from, to) {
+// An error on the span's first token means the statement never began, so the
+// salvage belongs to some other fragment: SQLite has no REVOKE, and
+// "REVOKE SELECT ON t1 FROM bob" leaves a select on a table named bob. A
+// salvage naming no table leaves a per-table check nothing to ask about, so it
+// takes manage instead. An error anywhere else is a clause the grammar does
+// not carry, such as SQLite's standalone WINDOW, and what the statement named
+// still stands.
+func SalvageOrUnknown(read InspectStatement, syntax *SyntaxErrors, from, to int) InspectStatement {
+	switch {
+	case !syntax.In(from, to):
 		return read
-	}
-	if syntax.AtStart(from) {
-		// The statement never began, so what follows is a fragment of
-		// something else. Keeping its read would check a table the caller
-		// never named, and report that name back as the reason.
+	case syntax.At(from):
 		return UnknownStatement()
-	}
-	if len(read.Tables) > 0 {
+	case len(read.Tables) > 0:
 		return read
+	default:
+		return NestUnderUnknown(read)
 	}
-	return NestUnderUnknown(read)
 }
 
 // DropVirtualTables strips, in place and throughout the tree, the tables naming

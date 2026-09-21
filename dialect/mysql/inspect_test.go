@@ -55,8 +55,8 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					Tables: []core.InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 					},
-					Subqueries: []core.InspectStatement{
-						{Operation: core.InspectOpUpdate, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}},
+					Also: []core.InspectStatement{
+						{Operation: core.InspectOpUpdate, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}, Fields: []core.InspectField{{Name: "c2", Table: "t1", Schema: defaultSchema}}},
 					},
 				},
 			},
@@ -281,7 +281,7 @@ func TestInspectMySQLSpecific(t *testing.T) {
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
 						{Name: "c2", Table: "t1", Schema: defaultSchema},
 					},
-					Subqueries: []core.InspectStatement{
+					Also: []core.InspectStatement{
 						{Operation: core.InspectOpDelete, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}},
 					},
 				},
@@ -311,6 +311,8 @@ func TestInspectMySQLSpecific(t *testing.T) {
 								{Name: "c3", Table: "t2", Schema: defaultSchema},
 							},
 						},
+					},
+					Also: []core.InspectStatement{
 						{Operation: core.InspectOpDelete, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}},
 					},
 				},
@@ -360,7 +362,9 @@ func TestInspectMySQLSpecific(t *testing.T) {
 								{Name: "c1", Table: "t2", Schema: defaultSchema},
 							},
 						},
-						{Operation: core.InspectOpUpdate, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}},
+					},
+					Also: []core.InspectStatement{
+						{Operation: core.InspectOpUpdate, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}, Fields: []core.InspectField{{Name: "c2", Table: "t1", Schema: defaultSchema}}},
 					},
 				},
 			},

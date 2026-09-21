@@ -560,6 +560,15 @@ export class InspectStatement {
     "Subqueries": InspectStatement[];
 
     /**
+     * Also holds what this statement does beyond its own operation, on its own
+     * tables: the update an upsert performs, the delete a REPLACE performs.
+     * The permission check reads it and nothing else does, so a column named
+     * here scopes a right without being read as a column the statement
+     * returned or stored.
+     */
+    "Also": InspectStatement[];
+
+    /**
      * Filter marks a subquery the server runs to choose or order rows rather
      * than to return them: a WHERE, HAVING, GROUP BY, ORDER BY or window
      * clause. Unmarked means its value reaches the row, which is the answer
@@ -584,6 +593,9 @@ export class InspectStatement {
         if (!("Subqueries" in $$source)) {
             this["Subqueries"] = [];
         }
+        if (!("Also" in $$source)) {
+            this["Also"] = [];
+        }
         if (!("Filter" in $$source)) {
             this["Filter"] = false;
         }
@@ -599,6 +611,7 @@ export class InspectStatement {
         const $$createField2_0 = $$createType14;
         const $$createField3_0 = $$createType12;
         const $$createField4_0 = $$createType16;
+        const $$createField5_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("Fields" in $$parsedSource) {
             $$parsedSource["Fields"] = $$createField1_0($$parsedSource["Fields"]);
@@ -611,6 +624,9 @@ export class InspectStatement {
         }
         if ("Subqueries" in $$parsedSource) {
             $$parsedSource["Subqueries"] = $$createField4_0($$parsedSource["Subqueries"]);
+        }
+        if ("Also" in $$parsedSource) {
+            $$parsedSource["Also"] = $$createField5_0($$parsedSource["Also"]);
         }
         return new InspectStatement($$parsedSource as Partial<InspectStatement>);
     }

@@ -57,7 +57,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 		// A call that reaches the server itself is not covered by the four row
 		// actions, and neither is a statement we could not read.
-		read = core.NestUnderUnknownIfUnreadable(read, syntax, from, to)
+		read = core.SalvageOrUnknown(read, syntax, from, to)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
@@ -565,12 +565,38 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	// does not survive and insert alone is not the right the statement needs.
 	// DO NOTHING leaves it exactly as it was.
 	if conflict != nil && conflict.UPDATE() != nil {
-		core.AlsoPerforms(result, core.InspectOpUpdate)
+		core.AlsoPerforms(result, core.InspectOpUpdate,
+			i.conflictSetFields(conflict, schema, tableName))
 	}
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
+}
+
+// conflictSetFields are the columns DO UPDATE writes, which is what a role
+// holding update on some of the table's columns is checked against.
+func (i *Inspector) conflictSetFields(
+	conflict pg.IOpt_on_conflictContext,
+	schema, table string,
+) []core.InspectField {
+	list := conflict.Set_clause_list()
+	if list == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, clause := range list.AllSet_clause() {
+		target := clause.Set_target()
+		if target == nil {
+			continue
+		}
+		fields = append(fields, core.InspectField{
+			Name:   i.dialect.NormalizeIdentifier(target.GetText()),
+			Table:  table,
+			Schema: schema,
+		})
+	}
+	return fields
 }
 
 // addReturningFields records the columns a RETURNING clause hands back. They
@@ -590,9 +616,10 @@ func (i *Inspector) addReturningFields(
 	}
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	columns := core.TableFields(i.meta, schema, table, i.dialect)
+	var returned []core.InspectField
 	for _, el := range targetList.AllTarget_el() {
 		if star, ok := el.(*pg.Target_starContext); ok && star.STAR() != nil {
-			result.Fields = core.MergeInspectFields(result.Fields, columns)
+			returned = core.MergeInspectFields(returned, columns)
 			continue
 		}
 		field := i.extractFieldFromTarget(el, refs, nil, nil, nil)
@@ -603,11 +630,15 @@ func (i *Inspector) addReturningFields(
 		// column, the same shape the select path resolves through
 		// QualifiedStar. RETURNING names the target table or nothing.
 		if field.Name == "*" {
-			result.Fields = core.MergeInspectFields(result.Fields, columns)
+			returned = core.MergeInspectFields(returned, columns)
 			continue
 		}
-		result.Fields = core.MergeInspectFields(result.Fields, []core.InspectField{*field})
+		returned = core.MergeInspectFields(returned, []core.InspectField{*field})
 	}
+	result.Fields = core.MergeInspectFields(result.Fields, returned)
+	// RETURNING hands rows back, and rows handed back are a read whatever
+	// wrote them.
+	core.AlsoPerforms(result, core.InspectOpSelect, returned)
 }
 
 // inspectTruncate analyzes a TRUNCATE statement.

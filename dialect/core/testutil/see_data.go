@@ -25,8 +25,8 @@ type SeeCase struct {
 	Masked  []int
 }
 
-// SeeTestDBInstanceID is the database the see cases are checked against.
-const SeeTestDBInstanceID = "db1"
+// TestDBInstanceID is the database the see cases are checked against.
+const TestDBInstanceID = "db1"
 
 // GetSeeTestMetadata describes two tables that share a column name, which is
 // what tells a rule hiding one table's column from a rule hiding the other's.
@@ -62,7 +62,7 @@ func GetSeeTestMetadata() core.Metadata {
 // action and see on the schema, with see denied on main.users.email alone.
 // main.contacts.email stays visible, so a case that confuses the two shows up.
 func GetSeeTestPermissions() core.CompiledPermissions {
-	instance := SeeTestDBInstanceID
+	instance := TestDBInstanceID
 	schema := "main"
 	users := "users"
 	email := "email"

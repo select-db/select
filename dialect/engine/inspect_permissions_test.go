@@ -180,11 +180,7 @@ func (silentDialect) Inspect(core.Metadata, string) []core.InspectStatement { re
 // database no rule names, so dropping the only action still refuses: otherwise
 // a necessary-direction loop over one action proves nothing.
 func holding(actions ...string) core.CompiledPermissions {
-	var entries []core.PermissionEntry
-	for _, a := range actions {
-		entries = append(entries, core.PermissionEntry{Action: a, Effect: "allow", RoleName: "test-role"})
-	}
-	return compileFor(permDBID, entries...).WithDenyUnmanaged()
+	return testutil.PermHolding(permDBID, actions...)
 }
 
 // nestedCase is a statement carrying another statement, and the permissions a
@@ -1324,6 +1320,33 @@ func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
 			}
 			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err == nil {
 				t.Error("the calling statement ran on the four row actions")
+			}
+		})
+	}
+}
+
+// TestPermissions_AColumnScopedRoleStillUpserts pins the direction the second
+// right a statement asks for can break. An upsert needs update as well as
+// insert, and asking for it on the whole table would refuse a role granted
+// update on exactly the columns the upsert sets.
+func TestPermissions_AColumnScopedRoleStillUpserts(t *testing.T) {
+	column := "c2"
+	perms := compileFor(permDBID,
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("t1"),
+			Action: core.ActionInsert, Effect: "allow", RoleName: "test-role"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("t1"), ColumnName: &column,
+			Action: core.ActionUpdate, Effect: "allow", RoleName: "test-role"},
+	).WithDenyUnmanaged()
+
+	for _, name := range []string{"postgresql", "sqlite"} {
+		t.Run(name, func(t *testing.T) {
+			sql := "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c2 = 'x'"
+			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), sql), permDBID, perms); err != nil {
+				t.Errorf("refused a role holding update on the column it sets: %v", err)
+			}
+			other := "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c1 = 2"
+			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), other), permDBID, perms); err == nil {
+				t.Error("ran, and it sets a column the role may not update")
 			}
 		})
 	}

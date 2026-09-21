@@ -18,19 +18,9 @@ func TestPermissionCases(t *testing.T) {
 			t.Fatalf("no dialect named %q", name)
 		}
 		t.Run(name, func(t *testing.T) {
-			inspect := func(sql string) []core.InspectStatement {
+			testutil.RunPermCases(t, func(sql string) []core.InspectStatement {
 				return Inspect(dialect, &meta, sql)
-			}
-			testutil.RunPermCases(t, inspect, testutil.GetPermCasesEveryDialect())
-			if name != "mysql" {
-				testutil.RunPermCases(t, inspect, testutil.GetPermCasesPostgreSQLAndSQLite())
-			}
-			if name != "postgresql" {
-				testutil.RunPermCases(t, inspect, testutil.GetPermCasesMySQLAndSQLite())
-			}
-			if name == "mysql" {
-				testutil.RunPermCases(t, inspect, testutil.GetPermCasesMySQL())
-			}
+			}, testutil.PermCasesFor(name))
 		})
 	}
 }

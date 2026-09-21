@@ -77,7 +77,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// actions do not cover. The clause is read off the tokens rather than
 		// the tree because the spellings that follow a locking clause raise a
 		// syntax error here, and error recovery drops the tail with the node.
-		read = core.NestUnderUnknownIfUnreadable(read, syntax, from, to)
+		read = core.SalvageOrUnknown(read, syntax, from, to)
 		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
@@ -579,7 +579,8 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 	// there does not survive and insert alone is not the right it needs.
 	if iul := stmt.InsertUpdateList(); iul != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(iul)...)
-		core.AlsoPerforms(result, core.InspectOpUpdate)
+		core.AlsoPerforms(result, core.InspectOpUpdate,
+			i.updateListFields(iul.UpdateList(), schema, tableName))
 	}
 
 	return result
@@ -640,8 +641,25 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 	if fc := stmt.InsertFromConstructor(); fc != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(fc)...)
 	}
-	core.AlsoPerforms(result, core.InspectOpDelete)
+	core.AlsoPerforms(result, core.InspectOpDelete, nil)
 	return result
+}
+
+// updateListFields are the columns a SET list writes.
+func (i *Inspector) updateListFields(
+	list mysql.IUpdateListContext,
+	schema, table string,
+) []core.InspectField {
+	if list == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, el := range list.AllUpdateElement() {
+		if name := i.columnRefName(el.ColumnRef()); name != "" {
+			fields = append(fields, core.InspectField{Name: name, Table: table, Schema: schema})
+		}
+	}
+	return fields
 }
 
 // collectInsertFields collects the column names listed in (col1, col2, …).

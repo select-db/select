@@ -216,6 +216,11 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 			return err
 		}
 	}
+	for _, also := range stmt.Also {
+		if err := checkStatement(also, dbInstanceID, compiledPermissions); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
