@@ -36,11 +36,9 @@ func AsFilter(stmts []InspectStatement) []InspectStatement {
 }
 
 // NestUnderUnknownIfUnreadable reports read under an unclassified statement
-// when the parser stumbled over its span and it named no table. A per-table
+// when the parser stumbled over its span and it named no table: a per-table
 // check has nothing to ask about there, so what error recovery salvaged would
-// run on a policy granting nothing. A statement that still names its tables is
-// checked against them, which these grammars get right far more often than they
-// parse every spelling.
+// run on a policy granting nothing.
 func NestUnderUnknownIfUnreadable(read InspectStatement, syntax *SyntaxErrors, from, to int) InspectStatement {
 	if len(read.Tables) > 0 || !syntax.In(from, to) {
 		return read

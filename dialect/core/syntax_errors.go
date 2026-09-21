@@ -50,7 +50,7 @@ func (s *SyntaxErrors) Cover(node interface {
 	GetStart() antlr.Token
 	GetStop() antlr.Token
 }, from, to int) {
-	if start, stop, ok := NodeSpan(node); ok {
+	if start, stop, ok := nodeSpan(node); ok {
 		s.covered = append(s.covered, [2]int{start, stop})
 		return
 	}

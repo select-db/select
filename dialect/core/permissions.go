@@ -434,15 +434,12 @@ func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, 
 	return nil
 }
 
-// CheckSeePredicates refuses a statement that tests a column no role may see.
-// Such a statement reports the column's values one answer at a time, and enough
-// answers are the value: "WHERE email LIKE 'a%'" returning a count is a prefix
-// oracle, and so is the row count of an update filtered the same way. Masking
-// hides a column from the eye; this is what hides it from the query.
+// CheckSeePredicates refuses a statement that tests a column no role may see,
+// since enough answers about a value are the value.
 //
 // It runs whether or not the statement returns rows, which is why it is not
-// part of EvaluateSee: that one needs the driver's columns and only a statement
-// handing rows back has any.
+// part of EvaluateSee: that one needs the driver's columns, and only a
+// statement handing rows back has any.
 func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms CompiledPermissions) error {
 	if !perms.IsManaged(dbInstanceID) {
 		return nil
@@ -456,17 +453,9 @@ func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms Com
 }
 
 // predicateFields returns every field the statement tests rather than returns,
-// its subqueries included.
-//
-// A filter's rows do not reach the caller, but what it selects is compared
-// against something, which answers a question about the values just as a WHERE
-// on them does: "WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'" is the
-// same oracle spelled through a subquery. So everything a filter reads counts
-// as tested, its own result columns included.
-//
-// A subquery a write reads from counts too. Its rows are not masked on the way
-// past, they are stored: "INSERT INTO other (c) SELECT email FROM users" hands
-// the caller a table it may select from, holding the values it may not see.
+// its subqueries included. A filter's own result columns count as tested, since
+// what it selects is compared against something, and so do a write's, since
+// what a write reads it stores out of reach of masking.
 func predicateFields(stmt InspectStatement, tested bool, into []InspectField) []InspectField {
 	into = append(into, stmt.Where...)
 	if tested {

@@ -44,9 +44,8 @@ type InspectStatement struct {
 	Fields    []InspectField   // Fields/columns involved (for SELECT, UPDATE SET, INSERT columns)
 	Tables    []InspectTable   // Tables involved
 	// Where holds the fields a statement tests rather than returns: WHERE,
-	// GROUP BY, HAVING, ORDER BY, a join condition, a window clause, and the
-	// projection of a DISTINCT select. Each one answers a question about a
-	// value without handing it back.
+	// GROUP BY, HAVING, ORDER BY, a join condition, a window or FILTER clause,
+	// and the projection of a DISTINCT select.
 	Where      []InspectField
 	Subqueries []InspectStatement // Nested CTEs and subqueries - allows recursive permission checking
 

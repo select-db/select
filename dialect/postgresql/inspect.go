@@ -333,9 +333,8 @@ func (i *Inspector) inspectSelectPrimary(
 }
 
 // testedFields are the columns a clause names to choose, group or order rows
-// rather than to return them. A role that may not see a column may not test it
-// either, so they are collected exactly as a WHERE's are. The listener does not
-// descend into subqueries, which are collected in their own right.
+// rather than to return them, collected exactly as a WHERE's are. The listener
+// does not descend into subqueries, which are collected in their own right.
 func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
 	if tree == nil {
 		return nil

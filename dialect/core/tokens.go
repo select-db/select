@@ -111,10 +111,10 @@ func previousDefaultToken(all []antlr.Token, from, idx int) string {
 	return ""
 }
 
-// NodeSpan is the half-open token span a node covers by itself, as opposed to
+// nodeSpan is the half-open token span a node covers by itself, as opposed to
 // TokenSpan, which runs to the next node so a scan reaches a clause the node
 // does not own. ok is false for a node error recovery left without bounds.
-func NodeSpan(node interface {
+func nodeSpan(node interface {
 	GetStart() antlr.Token
 	GetStop() antlr.Token
 }) (from, to int, ok bool) {
