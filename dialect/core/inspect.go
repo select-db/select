@@ -17,6 +17,16 @@ func OrUnknown(stmt *InspectStatement) InspectStatement {
 	return *stmt
 }
 
+// NestUnderUnknown reports read as the nested statement of an unclassified
+// one. A statement doing something the four row actions do not cover takes
+// manage for that, and still whatever the rows themselves need.
+func NestUnderUnknown(read InspectStatement) InspectStatement {
+	return InspectStatement{
+		Operation:  InspectOpUnknown,
+		Subqueries: []InspectStatement{read},
+	}
+}
+
 // DropVirtualTables strips, in place and throughout the tree, the tables naming
 // a CTE the enclosing query declared. A CTE is a relation at any depth, so a
 // subquery inspected without that scope reports one as a table resolving to no

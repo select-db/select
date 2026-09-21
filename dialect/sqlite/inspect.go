@@ -63,18 +63,38 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	for idx < len(stmtLists) {
 		// Collect consecutive stmt_lists connected by compound operators (UNION/INTERSECT/EXCEPT).
 		// The SQLite grammar emits each UNION branch as a separate sql_stmt_list at the top level.
+		first := idx
 		group := []sqlite.ISql_stmt_listContext{stmtLists[idx]}
 		for idx+1 < len(stmtLists) && hasCompoundOperatorBetween(tokenStream, stmtLists[idx], stmtLists[idx+1]) {
 			idx++
 			group = append(group, stmtLists[idx])
 		}
 
+		// A call that reaches the filesystem is not covered by the four row
+		// actions. A compound group is one statement, so its branches are read
+		// together; a list of statements is read one at a time, so the call in
+		// one does not cost the rest of the script its row actions.
+		groupFrom, _ := core.TokenSpan(tokenStream, stmtLists, first)
+		_, groupTo := core.TokenSpan(tokenStream, stmtLists, idx)
+
 		if len(group) > 1 {
-			results = append(results, core.OrUnknown(i.mergeCompoundSelectGroup(group)))
-		} else {
-			for _, stmt := range group[0].AllSql_stmt() {
-				results = append(results, core.OrUnknown(i.inspectStatement(stmt)))
+			read := core.OrUnknown(i.mergeCompoundSelectGroup(group))
+			if callsHostFunction(tokenStream, groupFrom, groupTo) {
+				read = core.NestUnderUnknown(read)
 			}
+			results = append(results, read)
+			idx++
+			continue
+		}
+
+		stmts := group[0].AllSql_stmt()
+		for si := range stmts {
+			read := core.OrUnknown(i.inspectStatement(stmts[si]))
+			from, to := core.TokenSpan(tokenStream, stmts, si)
+			if callsHostFunction(tokenStream, from, core.Clamp(to, from, groupTo)) {
+				read = core.NestUnderUnknown(read)
+			}
+			results = append(results, read)
 		}
 		idx++
 	}
@@ -85,6 +105,11 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 // hasCompoundOperatorBetween reports whether UNION/INTERSECT/EXCEPT tokens appear between two parse-tree nodes.
 // The compound operator is the last token of the first stmt_list, so we scan from stopIdx (inclusive).
 func hasCompoundOperatorBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRuleContext) bool {
+	// Error recovery leaves a node without its bounding tokens, and reading one
+	// off it panics, which fails the request rather than refusing the statement.
+	if a == nil || b == nil || a.GetStop() == nil || b.GetStart() == nil {
+		return false
+	}
 	stopIdx := a.GetStop().GetTokenIndex()
 	startIdx := b.GetStart().GetTokenIndex()
 	allTokens := tokens.GetAllTokens()

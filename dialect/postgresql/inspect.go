@@ -51,8 +51,16 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	results := make([]core.InspectStatement, 0, len(statements))
-	for _, stmt := range statements {
-		results = append(results, core.OrUnknown(i.inspectStatement(stmt)))
+	for idx, stmt := range statements {
+		read := core.OrUnknown(i.inspectStatement(stmt))
+
+		// A call that reaches the server itself is not covered by the four row
+		// actions.
+		from, to := core.TokenSpan(tokenStream, statements, idx)
+		if callsHostFunction(tokenStream, from, to) {
+			read = core.NestUnderUnknown(read)
+		}
+		results = append(results, read)
 	}
 
 	return results
@@ -83,7 +91,7 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 
 	// Handle SELECT statements
 	if selectStmt := stmt.Selectstmt(); selectStmt != nil {
-		return i.inspectSelect(selectStmt)
+		return i.inspectTopLevelSelect(selectStmt)
 	}
 
 	// Handle INSERT statements
@@ -192,30 +200,33 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	core.DropVirtualTables(tail, i.cteNames(ctes), i.dialect.NormalizeIdentifier)
 	result.Subqueries = append(result.Subqueries, tail...)
 
-	// SELECT ... INTO builds a table, the same as CREATE TABLE ... AS SELECT.
-	// It takes manage for the table it makes and select for the rows it reads,
-	// so the read becomes the nested statement of an unclassified one.
-	if selectsInto(selectNoParens) {
-		return &core.InspectStatement{
-			Operation:  core.InspectOpUnknown,
-			Subqueries: []core.InspectStatement{*result},
-		}
-	}
-
 	return result
 }
 
-// selectsInto reports whether any branch carries an INTO clause.
-func selectsInto(selectNoParens pg.ISelect_no_parensContext) bool {
-	selectClause := selectNoParens.Select_clause()
-	if selectClause == nil {
-		return false
+// inspectTopLevelSelect inspects a SELECT written as a statement of its own.
+// SELECT ... INTO builds a table, the same as CREATE TABLE ... AS SELECT, so it
+// takes manage for the table it makes and select for the rows it reads. The
+// wrapping happens once, here, so that a nested select keeps the shape its
+// consumers resolve columns through.
+func (i *Inspector) inspectTopLevelSelect(stmt pg.ISelectstmtContext) *core.InspectStatement {
+	read := i.inspectSelect(stmt)
+	if !selectsInto(stmt) {
+		return read
 	}
-	for _, intersect := range selectClause.AllSimple_select_intersect() {
-		for _, primary := range intersect.AllSimple_select_pramary() {
-			if primary != nil && len(primary.AllInto_clause()) > 0 {
-				return true
-			}
+	wrapped := core.NestUnderUnknown(core.OrUnknown(read))
+	return &wrapped
+}
+
+// selectsInto reports whether any INTO clause appears under tree. The clause
+// hangs off different nodes for INTO, INTO TEMP and INTO STRICT, so the whole
+// statement is searched rather than one spelling.
+func selectsInto(tree antlr.Tree) bool {
+	if _, ok := tree.(pg.IInto_clauseContext); ok {
+		return true
+	}
+	for _, child := range tree.GetChildren() {
+		if child != nil && selectsInto(child) {
+			return true
 		}
 	}
 	return false
@@ -591,7 +602,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// Resolve target table from relation_expr_opt_alias.
 	relOptAlias := stmt.Relation_expr_opt_alias()
 	if relOptAlias == nil {
-		return result
+		return nil
 	}
 	schema, tableName := i.resolveQualifiedName(relOptAlias.Relation_expr().Qualified_name())
 	if tableName == "" {
@@ -656,7 +667,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 
 	relOptAlias := stmt.Relation_expr_opt_alias()
 	if relOptAlias == nil {
-		return result
+		return nil
 	}
 	schema, tableName := i.resolveQualifiedName(relOptAlias.Relation_expr().Qualified_name())
 	if tableName == "" {
