@@ -149,6 +149,89 @@ func GetSeeTestCases() []SeeCase {
 			Masked:  []int{1},
 		},
 
+		{
+			// The CTE takes the bare name, so the statement reads its columns
+			// and not the table's, whose rule does not reach them.
+			Name:    "a CTE shadowing the table the rule is on",
+			SQL:     "WITH users AS (SELECT email FROM contacts) SELECT * FROM users",
+			Columns: []string{"email"},
+		},
+		{
+			// Qualifying the name reaches past the CTE to the table itself.
+			Name:    "the same name qualified, which is the table",
+			SQL:     "WITH users AS (SELECT email FROM contacts) SELECT * FROM main.users",
+			Columns: []string{"id", "email", "age"},
+			Masked:  []int{1},
+		},
+		{
+			Name:    "a star over a derived table",
+			SQL:     "SELECT * FROM (SELECT email FROM users) q",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
+			Name:    "a star over a derived table beside a CTE",
+			SQL:     "WITH q AS (SELECT id FROM contacts) SELECT * FROM (SELECT email FROM users) s",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
+			// The metadata has not caught up with the table, so a column comes
+			// back that no field accounts for. The hidden one still has its own
+			// position, so the row is masked rather than refused.
+			Name:    "a result column the metadata does not know",
+			SQL:     "SELECT * FROM users",
+			Columns: []string{"id", "email", "age", "added_since"},
+			Masked:  []int{1},
+		},
+
+		{
+			Name:    "a qualified star over a derived table",
+			SQL:     "SELECT q.* FROM (SELECT email FROM users) q",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+
+		{
+			Name:    "a CTE that renames it in its body",
+			SQL:     "WITH q AS (SELECT email AS e FROM users) SELECT e FROM q",
+			Columns: []string{"e"},
+			Masked:  []int{0},
+		},
+
+		{
+			// The subquery chooses rows rather than returning them, so the
+			// column it reads is tested, and a visible one of the same name
+			// comes back as itself.
+			Name:    "a filter subquery beside a column of the same name",
+			SQL:     "SELECT c.email FROM contacts c WHERE EXISTS (SELECT u.id FROM users u)",
+			Columns: []string{"email"},
+		},
+		{
+			Name:    "a filter subquery in ORDER BY",
+			SQL:     "SELECT c.email FROM contacts c ORDER BY (SELECT u.id FROM users u LIMIT 1)",
+			Columns: []string{"email"},
+		},
+		{
+			Name:    "a filter subquery in HAVING",
+			SQL:     "SELECT c.email FROM contacts c GROUP BY c.email HAVING EXISTS (SELECT u.id FROM users u)",
+			Columns: []string{"email"},
+		},
+		{
+			// The derived table calls a hidden column by the name a visible
+			// one has elsewhere. What the statement returns is the outer
+			// column, and the name it reuses does not hide it.
+			Name:    "a name reused in another scope",
+			SQL:     "SELECT u.id FROM users u JOIN (SELECT email AS id FROM users) q ON 1=1",
+			Columns: []string{"id"},
+		},
+		{
+			Name:    "two derived tables whose aliases do not sort in FROM order",
+			SQL:     "SELECT z.email, y.id FROM (SELECT email FROM users) z, (SELECT id FROM contacts) y",
+			Columns: []string{"email", "id"},
+			Masked:  []int{0},
+		},
+
 		// --- Testing the column: refused, since masking cannot reach it ---
 		{Name: "WHERE on the hidden column", SQL: "SELECT id FROM users WHERE email LIKE 'a%'", Refused: true},
 		{Name: "WHERE through a derived table", SQL: "SELECT s.id FROM (SELECT id, email FROM users) s WHERE s.email LIKE 'a%'", Refused: true},
@@ -164,6 +247,26 @@ func GetSeeTestCases() []SeeCase {
 		{Name: "an inline window ordering by it", SQL: "SELECT id, row_number() OVER (ORDER BY email) AS rn FROM users", Refused: true},
 		{Name: "a correlated reference to it", SQL: "SELECT u.id FROM users u WHERE EXISTS (SELECT 1 FROM contacts c WHERE c.email = u.email)", Refused: true},
 		{Name: "a subquery selecting it for a comparison", SQL: "SELECT count(*) FROM users WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'", Refused: true},
+		{
+			// The subquery returns it under a name of the outer statement's
+			// choosing, which no field accounts for, so there is no position
+			// to mask and the statement is refused instead.
+			Name: "a subquery returning it under a name of its own",
+			SQL:  "SELECT (SELECT email FROM users LIMIT 1) AS x", Refused: true,
+			Columns: []string{"x"},
+		},
+		{
+			Name: "the same beside the table's own columns",
+			SQL:  "SELECT id, (SELECT email FROM users LIMIT 1) AS x FROM users", Refused: true,
+			Columns: []string{"id", "x"},
+		},
+		{
+			// A CTE column list renames it before the outer statement sees it,
+			// and the name it gives is not a column of any table.
+			Name: "a CTE column list renaming it",
+			SQL:  "WITH r(x) AS (SELECT email FROM users) SELECT x FROM r", Refused: true,
+			Columns: []string{"x"},
+		},
 		{Name: "a set operator collapsing duplicates of it", SQL: "SELECT email FROM users UNION SELECT 'a@b.c'", Refused: true},
 		{Name: "INTERSECT, which collapses them too", SQL: "SELECT email FROM users INTERSECT SELECT 'a@b.c'", Refused: true},
 		{Name: "EXCEPT, which collapses them too", SQL: "SELECT email FROM users EXCEPT SELECT 'a@b.c'", Refused: true},
@@ -185,6 +288,27 @@ func GetSeeTestCases() []SeeCase {
 		{Name: "a write filtered on it", SQL: "UPDATE users SET age = 1 WHERE email LIKE 'a%'", Refused: true},
 		{Name: "a delete filtered on it", SQL: "DELETE FROM users WHERE email LIKE 'a%'", Refused: true},
 		{Name: "a write reading it into another table", SQL: "INSERT INTO contacts (email) SELECT email FROM users", Refused: true},
+
+		{Name: "a comparison on it", SQL: "SELECT count(*) FROM users WHERE email > ''", Refused: true},
+		{Name: "an IN subquery filtered on it", SQL: "SELECT id FROM users WHERE id IN (SELECT id FROM users WHERE email > '')", Refused: true},
+		{Name: "an EXISTS subquery selecting it", SQL: "SELECT id FROM users WHERE EXISTS (SELECT email FROM users)", Refused: true},
+		{Name: "a HAVING subquery selecting it", SQL: "SELECT id FROM users GROUP BY id HAVING EXISTS (SELECT email FROM users)", Refused: true},
+		{Name: "an ORDER BY subquery selecting it", SQL: "SELECT id FROM users ORDER BY (SELECT email FROM users LIMIT 1)", Refused: true},
+		{Name: "a correlated subquery in ORDER BY", SQL: "SELECT u.id FROM users u ORDER BY (SELECT count(*) FROM contacts c WHERE c.email = u.email)", Refused: true},
+		{Name: "a correlated subquery in HAVING", SQL: "SELECT u.id FROM users u GROUP BY u.id HAVING EXISTS (SELECT 1 FROM contacts c WHERE c.email = u.email)", Refused: true},
+		{Name: "a join condition naming it beside a visible one", SQL: "SELECT u.id FROM users u LEFT JOIN contacts c ON c.id = u.id AND u.email > 'm'", Refused: true},
+		{Name: "an ORDER BY on it with a limit", SQL: "SELECT id FROM users ORDER BY email DESC LIMIT 1", Refused: true},
+		{Name: "a window partitioned by it", SQL: "SELECT id, count(*) OVER (PARTITION BY email) AS n FROM users", Refused: true},
+		{Name: "a derived table grouping on a rename of it", SQL: "SELECT s.id FROM (SELECT id, email AS e FROM users) s GROUP BY s.e, s.id", Refused: true},
+		{Name: "a derived table ordering on a rename of it", SQL: "SELECT s.id FROM (SELECT id, email AS e FROM users) s ORDER BY s.e", Refused: true},
+		{Name: "a CTE grouping on it", SQL: "WITH q AS (SELECT id, email FROM users) SELECT q.id FROM q GROUP BY q.email", Refused: true},
+		{Name: "a CTE ordering on it", SQL: "WITH q AS (SELECT id, email FROM users) SELECT q.id FROM q ORDER BY q.email", Refused: true},
+		{Name: "a write reading it through a rename", SQL: "INSERT INTO contacts (email) SELECT x FROM (SELECT email AS x FROM users) s", Refused: true},
+		{Name: "a write reading it through a scalar subquery", SQL: "INSERT INTO contacts (id, email) VALUES (9, (SELECT email FROM users LIMIT 1))", Refused: true},
+		{Name: "a write setting a column from it", SQL: "UPDATE contacts SET email = (SELECT email FROM users LIMIT 1)", Refused: true},
+		{Name: "a write filtered on it through a subquery", SQL: "UPDATE users SET age = 1 WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'", Refused: true},
+		{Name: "a delete filtered on it through a subquery", SQL: "DELETE FROM contacts WHERE id IN (SELECT id FROM users WHERE email LIKE 'a%')", Refused: true},
+		{Name: "a write correlated on it", SQL: "UPDATE contacts SET id = id WHERE EXISTS (SELECT 1 FROM users u WHERE u.email = contacts.email)", Refused: true},
 
 		// --- Neither: ordinary work that must keep running ---
 		{
@@ -220,6 +344,28 @@ func GetSeeTestCases() []SeeCase {
 			Name:    "a write reading only visible columns",
 			SQL:     "INSERT INTO contacts (id, email) SELECT id, 'x' FROM users",
 			Columns: nil,
+		},
+		{Name: "a write filtered on a visible column", SQL: "UPDATE contacts SET id = id + 100", Columns: nil},
+		{
+			Name:    "a filter subquery over visible columns",
+			SQL:     "SELECT id, age FROM users WHERE id IN (SELECT id FROM users WHERE age > 0)",
+			Columns: []string{"id", "age"},
+		},
+		{
+			Name:    "a correlated reference to a visible column",
+			SQL:     "SELECT u.id FROM users u WHERE EXISTS (SELECT 1 FROM contacts c WHERE c.id = u.id)",
+			Columns: []string{"id"},
+		},
+		{
+			Name:    "a derived table over visible columns",
+			SQL:     "SELECT s.a FROM (SELECT age AS a FROM users) s WHERE s.a > 0",
+			Columns: []string{"a"},
+		},
+		{
+			Name:    "a CTE returning it, ordered on a visible column",
+			SQL:     "WITH q AS (SELECT id, email FROM users) SELECT q.id, q.email FROM q ORDER BY q.id",
+			Columns: []string{"id", "email"},
+			Masked:  []int{1},
 		},
 	}
 }
