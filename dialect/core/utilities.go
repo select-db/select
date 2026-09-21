@@ -596,6 +596,18 @@ func GetColumnsForTableAsColumns(meta Metadata, schemaName, tableName string, di
 	return nil
 }
 
+// TableFields returns one field per column the table has, which is what a
+// statement naming no column of its own reads: SELECT *, TABLE t1, an INSERT
+// with no column list. A table the metadata does not know returns none.
+func TableFields(meta Metadata, schemaName, tableName string, dialect SQLDialect) []InspectField {
+	columns := GetColumnsForTableAsColumns(meta, schemaName, tableName, dialect)
+	fields := make([]InspectField, 0, len(columns))
+	for _, col := range columns {
+		fields = append(fields, InspectField{Name: col.Name, Table: tableName, Schema: schemaName})
+	}
+	return fields
+}
+
 // TableExistsInMetadata reports whether a table is known in the metadata.
 func TableExistsInMetadata(meta Metadata, schemaName, tableName string, dialect SQLDialect) bool {
 	return GetColumnsForTableAsColumns(meta, schemaName, tableName, dialect) != nil

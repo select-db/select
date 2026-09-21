@@ -298,11 +298,13 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 	return nil
 }
 
-// EvaluateSee returns which driver-column positions to mask, or errors
-// when a see-denied column can't be masked (used only inside a function).
+// EvaluateSee returns which driver-column positions to mask, or errors when a
+// see-denied column cannot be masked.
 //
-// Matches Fields to driverCols by alias or name (case-insensitive).
-// If multiple Fields share a name (JOINs), any see-denied one masks the position.
+// Matches fields to driverCols by alias or name (case-insensitive). If several
+// fields share a name (JOINs), any see-denied one masks the position. The whole
+// statement is read, subqueries included: a derived table returns its columns to
+// the outer select, so hiding one means finding it wherever it was read.
 func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string, perms CompiledPermissions) ([]int, error) {
 	if !perms.IsManaged(dbInstanceID) {
 		return nil, nil
@@ -316,18 +318,21 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		return nil, nil
 	}
 
-	matched := make([]bool, len(stmt.Fields))
+	fields := readFields(stmt, nil)
+	matched := make([]bool, len(fields))
+	accounted := make([]bool, len(driverCols))
 	var maskPositions []int
 
 	for i, dc := range driverCols {
 		deny := false
-		for fi := range stmt.Fields {
-			f := &stmt.Fields[fi]
+		for fi := range fields {
+			f := &fields[fi]
 			if !fieldOutputName(*f, dc) {
 				continue
 			}
 
 			matched[fi] = true
+			accounted[i] = true
 			if f.Schema == "" || f.Table == "" {
 				continue
 			}
@@ -343,9 +348,38 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		}
 	}
 
-	// Unmatched see-denied Field = used inside a function, can't mask safely
-	for fi, f := range stmt.Fields {
-		if matched[fi] {
+	// A see-denied column the statement selects under no name of its own is
+	// used inside an expression, which has no position to mask. Only the
+	// statement's own fields are read here: a subquery naming one may be
+	// filtering on it, which is what WHERE does and is not a read of the value.
+	// readFields appends them first, so they are the head of the slice.
+	own := fields[:len(stmt.Fields)]
+	if denied := firstSeeDenied(own, matched, dbInstanceID, perms); denied != nil {
+		return nil, denied
+	}
+
+	// A result column no field accounts for may be carrying one: an expression
+	// over it, a subquery whose alias the inspector does not follow, or a column
+	// added to the table since the metadata was read. With a see-denied column
+	// anywhere in the statement, it cannot be shown.
+	for i := range driverCols {
+		if accounted[i] {
+			continue
+		}
+		if denied := firstSeeDenied(fields, nil, dbInstanceID, perms); denied != nil {
+			return nil, denied
+		}
+		break
+	}
+
+	return maskPositions, nil
+}
+
+// firstSeeDenied returns the error for the first field no role may see, or nil.
+// A field marked in matched is skipped, as is one that resolved to no table.
+func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, perms CompiledPermissions) *PermissionDeniedError {
+	for fi, f := range fields {
+		if matched != nil && matched[fi] {
 			continue
 		}
 		if f.Schema == "" || f.Table == "" {
@@ -355,7 +389,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		if allowed {
 			continue
 		}
-		return nil, &PermissionDeniedError{
+		return &PermissionDeniedError{
 			Action:    ActionSee,
 			Schema:    f.Schema,
 			Table:     f.Table,
@@ -366,8 +400,18 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 			EndCol:    f.EndCol,
 		}
 	}
+	return nil
+}
 
-	return maskPositions, nil
+// readFields returns every field the statement reads, its subqueries included.
+// A derived table or a scalar subquery reads a column just as the outer select
+// does, and the value it returns is the one that reaches the row.
+func readFields(stmt InspectStatement, into []InspectField) []InspectField {
+	into = append(into, stmt.Fields...)
+	for _, sub := range stmt.Subqueries {
+		into = readFields(sub, into)
+	}
+	return into
 }
 
 func fieldOutputName(f InspectField, driverCol string) bool {

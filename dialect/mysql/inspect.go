@@ -381,9 +381,12 @@ func (i *Inspector) inspectTableShorthand(ref mysql.ITableRefContext) *core.Insp
 	if !core.TableExistsInMetadata(i.meta, schema, table, i.dialect) {
 		schema = ""
 	}
+	// The columns are the statement, as they are for the SELECT * it stands
+	// for. Without them the see check has no field to find and hides nothing.
 	return &core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+		Fields:    core.TableFields(i.meta, schema, table, i.dialect),
 	}
 }
 
@@ -435,13 +438,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 		}
 	} else {
 		// No column list: expand to all columns from metadata.
-		for _, col := range core.GetColumnsForTableAsColumns(i.meta, schema, tableName, i.dialect) {
-			result.Fields = append(result.Fields, core.InspectField{
-				Name:   col.Name,
-				Table:  tableName,
-				Schema: schema,
-			})
-		}
+		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
 	}
 
 	// INSERT … SELECT: source SELECT becomes a subquery.
@@ -505,11 +502,7 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 			}
 		}
 	} else {
-		for _, col := range core.GetColumnsForTableAsColumns(i.meta, schema, tableName, i.dialect) {
-			result.Fields = append(result.Fields, core.InspectField{
-				Name: col.Name, Table: tableName, Schema: schema,
-			})
-		}
+		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
 	}
 
 	if iqe := stmt.InsertQueryExpression(); iqe != nil {

@@ -29,6 +29,7 @@ Permissions are defined per action:
 | **UPDATE** | Modify existing rows                     |
 | **DELETE** | Remove rows                              |
 | **MANAGE** | Change the database itself: its structure, its access, its configuration |
+| **SEE**    | Read the values in a column. Without it the column's cells come back masked |
 
 App-level actions cover workspace administration:
 
@@ -41,6 +42,19 @@ App-level actions cover workspace administration:
 | **Workspace API keys**    | Create, rotate, and revoke API keys              |
 
 API keys let automated clients authenticate with the roles bound to the key, so every query they run passes through this same permission model.
+
+### Hiding a column
+
+SELECT says which columns a role may query; SEE says which values it may read.
+A role holding SELECT but not SEE on a column can still join, filter and sort on
+it, and gets `*****` where its cells would be.
+
+The whole statement is read, subqueries included, so a column hidden at the
+bottom stays hidden when a derived table or a CTE hands it up. Where a result
+column cannot be traced back to a column of a table, the statement is refused
+rather than run: an expression over a hidden column, a subquery returning it
+under a name of its own, and a column added since the metadata was last read all
+land here.
 
 ## Allow and deny
 

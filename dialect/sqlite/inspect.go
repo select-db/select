@@ -369,13 +369,7 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		}
 	} else {
 		// No explicit column list, expand to all columns from metadata.
-		for _, col := range core.GetColumnsForTableAsColumns(i.meta, schema, tableName, i.dialect) {
-			result.Fields = append(result.Fields, core.InspectField{
-				Name:   col.Name,
-				Table:  tableName,
-				Schema: schema,
-			})
-		}
+		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
 	}
 
 	// INSERT … SELECT: attach source as subquery when it has real tables.

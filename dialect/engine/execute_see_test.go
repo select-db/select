@@ -280,3 +280,97 @@ func TestExecuteLocalNoSeeRulesNoMasking(t *testing.T) {
 		}
 	}
 }
+
+// seeEmailDenied is the policy the tests below share: select on the table, see
+// on every column but email.
+func seeEmailDenied() core.CompiledPermissions {
+	return compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"), ColumnName: sptr("id"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"), ColumnName: sptr("age"), Action: "see", Effect: "allow"},
+	)
+}
+
+// A derived table returns the column to the outer select, under its own name or
+// a new one. The see check reads the whole statement, so it finds the column
+// where it was read rather than where it comes out.
+func TestExecuteLocalMasksThroughDerivedTable(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT e FROM (SELECT email AS e FROM users) q",
+		"SELECT q.email FROM (SELECT email FROM users) q",
+		"SELECT q.* FROM (SELECT email FROM users) q",
+		"SELECT * FROM (SELECT email FROM users) q",
+		"WITH q AS (SELECT email AS e FROM users) SELECT e FROM q",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("unexpected errors: %v", result.Errors)
+			}
+			if result.RowCount == 0 {
+				t.Fatal("no rows, so nothing here was checked")
+			}
+			for i, row := range result.Rows {
+				if row[0] != core.MaskedValue {
+					t.Errorf("row %d: email = %v, want %q", i, row[0], core.MaskedValue)
+				}
+			}
+		})
+	}
+}
+
+// A subquery in the select list returns the column under a name of the outer
+// statement's choosing, which no field accounts for. There is no position to
+// mask, so the statement is refused rather than run.
+func TestExecuteLocalRejectsSubqueryOverSeeDenied(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT (SELECT email FROM users LIMIT 1) AS x",
+		"SELECT id, (SELECT email FROM users LIMIT 1) AS x FROM users",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %v", result.Rows)
+			}
+		})
+	}
+}
+
+// Naming the column in a filter is not reading its value, which is what a WHERE
+// on it already is. A subquery filtering on it stays ordinary work.
+func TestExecuteLocalFilterSubqueryPassesWithSeeDenied(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT id FROM users WHERE EXISTS (SELECT email FROM users)",
+		"SELECT id FROM users WHERE id IN (SELECT id FROM users WHERE email > '')",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount != 2 {
+				t.Fatalf("expected 2 rows, got %d", result.RowCount)
+			}
+			for i, row := range result.Rows {
+				if row[0] == core.MaskedValue {
+					t.Errorf("row %d: id wrongly masked", i)
+				}
+			}
+		})
+	}
+}

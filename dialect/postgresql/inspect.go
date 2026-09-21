@@ -345,10 +345,14 @@ func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *co
 	if !core.TableExistsInMetadata(i.meta, schema, table, i.dialect) {
 		schema = ""
 	}
-	return &core.InspectStatement{
+	result := &core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
 	}
+	// The columns are the statement, as they are for the SELECT * it stands
+	// for. Without them the see check has no field to find and hides nothing.
+	result.Fields = core.TableFields(i.meta, schema, table, i.dialect)
+	return result
 }
 
 // inspectInsert analyzes an INSERT statement.
@@ -386,13 +390,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 		}
 	} else {
 		// No explicit column list, expand to all columns from metadata.
-		for _, col := range core.GetColumnsForTableAsColumns(i.meta, schema, tableName, i.dialect) {
-			result.Fields = append(result.Fields, core.InspectField{
-				Name:   col.Name,
-				Table:  tableName,
-				Schema: schema,
-			})
-		}
+		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
 	}
 
 	_, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
