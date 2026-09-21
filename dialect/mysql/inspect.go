@@ -46,6 +46,8 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	parser := mysql.NewMySQLParser(tokenStream)
 	parser.RemoveErrorListeners()
 	lexer.RemoveErrorListeners()
+	syntax := core.NewSyntaxErrors()
+	parser.AddErrorListener(syntax)
 
 	var queries []mysql.IQueryContext
 	if root := parser.Script(); root != nil {
@@ -56,10 +58,14 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	results := make([]core.InspectStatement, 0, len(queries))
+	spans := make([][2]int, 0, len(queries))
 	for idx, q := range queries {
 		if q == nil {
 			continue
 		}
+		from, to := core.TokenSpan(tokenStream, queries, idx)
+		spans = append(spans, coveredSpan(q, from, to))
+
 		simple := q.SimpleStatement()
 		if simple == nil {
 			// The grammar emits a trailing empty query for the ';' we append.
@@ -71,11 +77,21 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// actions do not cover. The clause is read off the tokens rather than
 		// the tree because the spellings that follow a locking clause raise a
 		// syntax error here, and error recovery drops the tail with the node.
-		from, to := core.TokenSpan(tokenStream, queries, idx)
-		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) {
+		// A statement the parser stumbled over that named no table takes manage
+		// too: a per-table check has nothing to ask about, so what recovery
+		// salvaged would run on a policy granting nothing.
+		unreadable := syntax.In(from, to) && len(read.Tables) == 0
+		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) ||
+			unreadable {
 			read = core.NestUnderUnknown(read)
 		}
 		results = append(results, read)
+	}
+
+	// Text the parser stumbled over that no statement covers is SQL the caller
+	// will run and we never reported.
+	if syntax.Outside(spans) {
+		results = append(results, core.UnknownStatement())
 	}
 	return results
 }
@@ -1654,4 +1670,17 @@ func (i *Inspector) extractCTEsFromWithClause(w mysql.IWithClauseContext) ([]cor
 // resolve binds the shared resolution rules to this inspector's metadata.
 func (i *Inspector) resolve() core.Resolver {
 	return core.Resolver{Meta: i.meta, Dialect: i.dialect}
+}
+
+// coveredSpan is the token span a statement accounts for. A node error recovery
+// left without bounds falls back to the span up to the next statement, which
+// covers more and so reports less.
+func coveredSpan(node interface {
+	GetStart() antlr.Token
+	GetStop() antlr.Token
+}, from, to int) [2]int {
+	if start, stop, ok := core.NodeSpan(node); ok {
+		return [2]int{start, stop}
+	}
+	return [2]int{from, to}
 }

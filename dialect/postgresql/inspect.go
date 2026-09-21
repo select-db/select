@@ -44,6 +44,8 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	tokenStream := antlr.NewCommonTokenStream(lexer, 0)
 	parser := pg.NewPostgreSQLParser(tokenStream)
 	parser.RemoveErrorListeners()
+	syntax := core.NewSyntaxErrors()
+	parser.AddErrorListener(syntax)
 
 	statements := topLevelStatements(parser)
 	if len(statements) == 0 {
@@ -51,16 +53,30 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	results := make([]core.InspectStatement, 0, len(statements))
+	spans := make([][2]int, 0, len(statements))
 	for idx, stmt := range statements {
 		read := core.OrUnknown(i.inspectStatement(stmt))
 
-		// A call that reaches the server itself is not covered by the four row
-		// actions.
 		from, to := core.TokenSpan(tokenStream, statements, idx)
-		if callsHostFunction(tokenStream, from, to) {
+		spans = append(spans, coveredSpan(stmt, from, to))
+
+		// A call that reaches the server itself is not covered by the four row
+		// actions. Neither is a statement the parser stumbled over that named
+		// no table: a per-table check has nothing to ask about, so what error
+		// recovery salvaged would run on a policy granting nothing. A statement
+		// that still names its tables is checked against them, which these
+		// grammars get right far more often than they parse every spelling.
+		unreadable := syntax.In(from, to) && len(read.Tables) == 0
+		if callsHostFunction(tokenStream, from, to) || unreadable {
 			read = core.NestUnderUnknown(read)
 		}
 		results = append(results, read)
+	}
+
+	// Text the parser stumbled over that no statement covers is SQL the caller
+	// will run and we never reported.
+	if syntax.Outside(spans) {
+		results = append(results, core.UnknownStatement())
 	}
 
 	return results
@@ -2031,4 +2047,17 @@ func (d *Dialect) processColumnRef(
 // resolve binds the shared resolution rules to this inspector's metadata.
 func (i *Inspector) resolve() core.Resolver {
 	return core.Resolver{Meta: i.meta, Dialect: i.dialect}
+}
+
+// coveredSpan is the token span a statement accounts for. A node error recovery
+// left without bounds falls back to the span up to the next statement, which
+// covers more and so reports less.
+func coveredSpan(node interface {
+	GetStart() antlr.Token
+	GetStop() antlr.Token
+}, from, to int) [2]int {
+	if start, stop, ok := core.NodeSpan(node); ok {
+		return [2]int{start, stop}
+	}
+	return [2]int{from, to}
 }
