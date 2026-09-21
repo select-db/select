@@ -90,7 +90,7 @@ func (r Resolver) Star(refs []RelationRef, s Scope) []InspectField {
 	var fields []InspectField
 
 	for _, ref := range refs {
-		if cte, ok := r.matchCTE(s.CTEs, ref.Table); ok {
+		if cte, ok := r.matchCTE(s.CTEs, ref); ok {
 			fields = append(fields, r.cteFields(cte, s)...)
 			continue
 		}
@@ -127,7 +127,7 @@ func (r Resolver) QualifiedStar(prefix string, refs []RelationRef, s Scope) []In
 		if r.Dialect.NormalizeIdentifier(name) != normalized {
 			continue
 		}
-		if cte, ok := r.matchCTE(s.CTEs, ref.Table); ok {
+		if cte, ok := r.matchCTE(s.CTEs, ref); ok {
 			return r.cteFields(cte, s)
 		}
 		return TableFields(r.Meta, ref.Schema, ref.Table, r.Dialect)
@@ -175,9 +175,14 @@ func (r Resolver) DropCTETables(stmts []InspectStatement, ctes []RelationRef) {
 	r.DropVirtual(stmts, r.VirtualNames(Scope{CTEs: ctes}))
 }
 
-// matchCTE returns the CTE a name refers to, if any.
-func (r Resolver) matchCTE(ctes []RelationRef, name string) (RelationRef, bool) {
-	normalized := r.Dialect.NormalizeIdentifier(name)
+// matchCTE returns the CTE a relation refers to, if any. A qualified name is
+// the real table even where a CTE shadows the bare one, which is the rule
+// Tables applies to the same relations.
+func (r Resolver) matchCTE(ctes []RelationRef, ref RelationRef) (RelationRef, bool) {
+	if ref.Qualified {
+		return RelationRef{}, false
+	}
+	normalized := r.Dialect.NormalizeIdentifier(ref.Table)
 	for _, cte := range ctes {
 		if r.Dialect.NormalizeIdentifier(cte.Table) == normalized {
 			return cte, true
@@ -186,17 +191,12 @@ func (r Resolver) matchCTE(ctes []RelationRef, name string) (RelationRef, bool) 
 	return RelationRef{}, false
 }
 
-// cteFields returns what a CTE selects: its own inspection where we have it,
-// and otherwise each declared column resolved against the metadata.
+// cteFields returns what a CTE selects. The inspectors walk a WITH clause one
+// body per name, so a CTE in scope has its own inspection; a name with none
+// selects nothing rather than guessing a table from the metadata.
 func (r Resolver) cteFields(cte RelationRef, s Scope) []InspectField {
 	if result, ok := s.CTEResults[r.Dialect.NormalizeIdentifier(cte.Table)]; ok {
 		return result.Fields
 	}
-	var fields []InspectField
-	for _, col := range cte.Columns {
-		if resolved := r.CTEColumn(col.Name, nil); resolved != nil {
-			fields = append(fields, *resolved)
-		}
-	}
-	return fields
+	return nil
 }
