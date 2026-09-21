@@ -324,7 +324,7 @@ func (i *Inspector) inspectQueryPrimary(
 
 	where, whereSubqueries := i.extractWhereFields(spec, relationRefs)
 	where = core.MergeInspectFields(where, i.branchClauseFields(spec, relationRefs, fields))
-	where = core.MergeInspectFields(where, i.joinNameFields(spec.FromClause(), relationRefs, scope))
+	where = core.MergeInspectFields(where, i.joinFields(core.TreeOrNil(spec.FromClause()), relationRefs, scope))
 	selectSubqueries := i.extractSelectListSubqueries(spec)
 
 	subqueries := append([]core.InspectStatement{}, fromSubqueries...)
@@ -360,15 +360,17 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 	return listener.fields
 }
 
-// joinNameFields are the columns a join pairs rows on where it names no
-// expression. USING gives bare column names, which belong to every relation
-// that carries them, and NATURAL names nothing at all.
-func (i *Inspector) joinNameFields(from mysql.IFromClauseContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
-	if from == nil {
+// joinFields are the columns a join pairs rows on, wherever the join is: the
+// FROM list of a select, or the relations a multi-table UPDATE or DELETE
+// names. ON takes an expression, USING gives bare column names that belong to
+// every relation carrying them, and NATURAL names nothing at all.
+func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+	if tree == nil {
 		return nil
 	}
 	var fields []core.InspectField
-	for _, join := range core.CollectNodes[mysql.IJoinedTableContext](from) {
+	for _, join := range core.CollectNodes[mysql.IJoinedTableContext](tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(core.TreeOrNil(join.Expr()), refs))
 		if list := join.IdentifierListWithParentheses(); list != nil && list.IdentifierList() != nil {
 			names := make([]string, 0, len(list.IdentifierList().AllIdentifier()))
 			for _, identifier := range list.IdentifierList().AllIdentifier() {
@@ -384,7 +386,7 @@ func (i *Inspector) joinNameFields(from mysql.IFromClauseContext, refs []core.Re
 }
 
 // branchClauseFields are the columns the clauses of one branch name without
-// returning: GROUP BY, HAVING, a named window, and a join condition.
+// returning: GROUP BY, HAVING and a named window.
 func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
 	if spec == nil {
 		return nil
@@ -396,13 +398,6 @@ func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, re
 		core.TreeOrNil(spec.WindowClause()),
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
-	}
-	if from := spec.FromClause(); from != nil {
-		for _, join := range core.CollectNodes[mysql.IJoinedTableContext](from) {
-			fields = core.MergeInspectFields(fields, i.testedFields(core.TreeOrNil(join.Expr()), refs))
-			fields = core.MergeInspectFields(fields,
-				i.testedFields(core.TreeOrNil(join.IdentifierListWithParentheses()), refs))
-		}
 	}
 	return core.DistinctTestsProjection(isDistinct(spec), fields, projection)
 }
@@ -687,6 +682,8 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 			result.Subqueries = append(result.Subqueries, subs...)
 		}
 	}
+	result.Where = core.MergeInspectFields(result.Where,
+		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), relationRefs, core.Scope{}))
 	return result
 }
 
@@ -707,7 +704,7 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	var sourceRefs []core.RelationRef
 	var targetRefs []core.RelationRef
 
-	// Multi-table form (DELETE FROM list … or DELETE alias_list FROM list).
+	// Multi-table form (DELETE FROM list ... or DELETE alias_list FROM list).
 	if list := stmt.TableReferenceList(); list != nil {
 		refs, _ := i.extractRelationRefsFromTableRefList(list)
 		sourceRefs = refs
@@ -765,6 +762,8 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 			result.Subqueries = append(result.Subqueries, subs...)
 		}
 	}
+	result.Where = core.MergeInspectFields(result.Where,
+		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), sourceRefs, core.Scope{}))
 	return result
 }
 

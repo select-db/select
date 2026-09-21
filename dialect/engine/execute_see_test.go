@@ -910,3 +910,35 @@ func TestExecuteLocalWriteReadingVisibleColumnRuns(t *testing.T) {
 		})
 	}
 }
+
+// An UPDATE ... FROM filters on the relations it joins against, and its row
+// count answers for them exactly as a WHERE on the target does.
+func TestExecuteLocalWriteFilteringOnHiddenColumnIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"UPDATE contacts SET id = id + 1 FROM users WHERE users.email LIKE 'a%'",
+		"UPDATE contacts SET id = id + 1 FROM users WHERE users.id = contacts.id AND users.email > 'm'",
+		"DELETE FROM contacts WHERE id IN (SELECT id FROM users WHERE email LIKE 'a%')",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "delete", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatal("ran, so the row count answered for the hidden column")
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}

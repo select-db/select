@@ -277,17 +277,19 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 	return listener.fields
 }
 
-// joinNameFields are the columns a join pairs rows on where it names no
-// expression. USING gives bare column names, which belong to every relation
-// that carries them, and NATURAL names nothing at all.
-func (i *Inspector) joinNameFields(selectCore sqlite.ISelect_coreContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
-	if selectCore == nil {
+// joinFields are the columns a join pairs rows on, wherever the join is: the
+// FROM list of a select, or the relations an UPDATE reads. ON names an
+// expression, USING gives bare column names that belong to every relation
+// carrying them, and NATURAL names nothing at all.
+func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+	if tree == nil {
 		return nil
 	}
 	var fields []core.InspectField
-	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](selectCore) {
+	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](tree) {
 		columns := constraint.AllColumn_name()
 		if len(columns) == 0 {
+			fields = core.MergeInspectFields(fields, i.testedFields(constraint, refs))
 			continue
 		}
 		names := make([]string, 0, len(columns))
@@ -299,7 +301,7 @@ func (i *Inspector) joinNameFields(selectCore sqlite.ISelect_coreContext, refs [
 	// The keyword is read off the tokens because the grammar prefers to read
 	// the NATURAL in "t1 NATURAL JOIN t2" as an alias of t1, leaving the join
 	// operator holding JOIN alone.
-	for _, node := range core.CollectNodes[antlr.TerminalNode](selectCore) {
+	for _, node := range core.CollectNodes[antlr.TerminalNode](tree) {
 		if node.GetSymbol().GetTokenType() == sqlite.SQLiteParserNATURAL_ {
 			fields = core.MergeInspectFields(fields, i.resolve().SharedColumns(refs, scope))
 			break
@@ -309,7 +311,7 @@ func (i *Inspector) joinNameFields(selectCore sqlite.ISelect_coreContext, refs [
 }
 
 // branchClauseFields are the columns the clauses of one branch name without
-// returning: GROUP BY, HAVING, a named window, and a join condition.
+// returning: GROUP BY, HAVING and a named window.
 func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
 	if selectCore == nil {
 		return nil
@@ -326,25 +328,7 @@ func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, re
 			fields = core.MergeInspectFields(fields, i.testedFields(window, refs))
 		}
 	}
-	for _, relation := range selectCore.AllTable_or_subquery() {
-		if relation != nil {
-			fields = core.MergeInspectFields(fields, i.joinConstraintFields(relation, refs))
-		}
-	}
-	if join := selectCore.Join_clause(); join != nil {
-		fields = core.MergeInspectFields(fields, i.joinConstraintFields(join, refs))
-	}
 	return core.DistinctTestsProjection(selectCore.DISTINCT_() != nil, fields, projection)
-}
-
-// joinConstraintFields are the columns a join is made on. They choose which
-// rows pair up, which is a test on their values.
-func (i *Inspector) joinConstraintFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
-	var fields []core.InspectField
-	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](tree) {
-		fields = core.MergeInspectFields(fields, i.testedFields(constraint, refs))
-	}
-	return fields
 }
 
 // extractTailSubqueries collects the subqueries in the clauses that sit after
@@ -404,7 +388,7 @@ func (i *Inspector) inspectSelectCore(
 		Fields: fields,
 		Where: core.MergeInspectFields(
 			core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields)),
-			i.joinNameFields(selectCore, relationRefs, scope)),
+			i.joinFields(selectCore, relationRefs, scope)),
 		Subqueries: subqueries,
 	}
 }
@@ -527,7 +511,8 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 
 	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
-	result.Subqueries = append(result.Subqueries, i.readSources(stmt, ctes)...)
+	reads, sourceRefs := i.readSources(stmt, ctes)
+	result.Subqueries = append(result.Subqueries, reads...)
 
 	// SET column names, AllColumn_name() returns the LHS of each assignment.
 	for _, cn := range stmt.AllColumn_name() {
@@ -539,7 +524,7 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 		})
 	}
 
-	targetRef := []core.RelationRef{{Table: tableName, Schema: schema}}
+	whereRefs := append([]core.RelationRef{{Table: tableName, Schema: schema}}, sourceRefs...)
 
 	// RHS expressions: scan for embedded subqueries, excluding the WHERE expr.
 	allExprs := stmt.AllExpr()
@@ -555,19 +540,20 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	if stmt.WHERE_() != nil {
 		if len(allExprs) > 0 {
 			whereExpr := allExprs[len(allExprs)-1]
-			where, whereSubqueries := i.extractWhereFieldsFromExpr(whereExpr, targetRef)
+			where, whereSubqueries := i.extractWhereFieldsFromExpr(whereExpr, whereRefs)
 			result.Where = where
 			result.Subqueries = append(result.Subqueries, whereSubqueries...)
 		}
 	}
+
+	result.Where = core.MergeInspectFields(result.Where,
+		i.joinFields(stmt, whereRefs, core.Scope{CTEs: ctes}))
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
 }
 
-// readSources is the read an UPDATE ... FROM performs on the relations it joins
-// against. Those rows are read, not written, so the update does not cover them.
 func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
 	if with == nil {
 		return nil, nil
@@ -607,7 +593,10 @@ func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.R
 	return ctes, subqueries
 }
 
-func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.RelationRef) []core.InspectStatement {
+// readSources is the read an UPDATE ... FROM performs on the relations it joins
+// against. Those rows are read, not written, so the update does not cover them.
+// It also reports the relations, which the WHERE resolves names against.
+func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.RelationRef) ([]core.InspectStatement, []core.RelationRef) {
 	// A FROM list is either a comma list of relations or a join clause, and
 	// only the relations under it are read; the target table is not.
 	relations := make([]antlr.ParseTree, 0, len(stmt.AllTable_or_subquery())+1)
@@ -638,7 +627,7 @@ func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.Rel
 			Tables:    tables,
 		})
 	}
-	return reads
+	return reads, refs
 }
 
 // inspectDelete analyzes a DELETE statement.

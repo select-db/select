@@ -315,7 +315,7 @@ func (i *Inspector) inspectSelectPrimary(
 		Fields:    fields,
 		Where: core.MergeInspectFields(
 			core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields)),
-			i.joinNameFields(primary.From_clause(), relationRefs, scope)),
+			i.joinFields(core.TreeOrNil(primary.From_clause()), relationRefs, scope)),
 		Subqueries: subqueries,
 	}
 }
@@ -339,26 +339,27 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 	return listener.fields
 }
 
-// joinNameFields are the columns a join pairs rows on where it names no
-// expression. USING gives bare column names, which belong to every relation
-// that carries them, and NATURAL names nothing at all.
-func (i *Inspector) joinNameFields(from pg.IFrom_clauseContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
-	if from == nil {
+// joinFields are the columns a join pairs rows on, wherever the join is: the
+// FROM list of a select, or the relations an UPDATE or a DELETE reads. ON
+// names an expression, USING gives bare column names that belong to every
+// relation carrying them, and NATURAL names nothing at all.
+func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+	if tree == nil {
 		return nil
 	}
 	var fields []core.InspectField
-	for _, qual := range core.CollectNodes[pg.IJoin_qualContext](from) {
-		list := qual.Name_list()
-		if list == nil {
+	for _, qual := range core.CollectNodes[pg.IJoin_qualContext](tree) {
+		if list := qual.Name_list(); list != nil {
+			names := make([]string, 0, len(list.AllName()))
+			for _, name := range list.AllName() {
+				names = append(names, i.dialect.NormalizeIdentifier(name.GetText()))
+			}
+			fields = core.MergeInspectFields(fields, i.resolve().NamedColumns(names, refs, scope))
 			continue
 		}
-		names := make([]string, 0, len(list.AllName()))
-		for _, name := range list.AllName() {
-			names = append(names, i.dialect.NormalizeIdentifier(name.GetText()))
-		}
-		fields = core.MergeInspectFields(fields, i.resolve().NamedColumns(names, refs, scope))
+		fields = core.MergeInspectFields(fields, i.testedFields(qual, refs))
 	}
-	for _, joined := range core.CollectNodes[pg.IJoined_tableContext](from) {
+	for _, joined := range core.CollectNodes[pg.IJoined_tableContext](tree) {
 		if joined.NATURAL() != nil {
 			fields = core.MergeInspectFields(fields, i.resolve().SharedColumns(refs, scope))
 			break
@@ -368,8 +369,7 @@ func (i *Inspector) joinNameFields(from pg.IFrom_clauseContext, refs []core.Rela
 }
 
 // branchClauseFields are the columns the clauses of one branch name without
-// returning: DISTINCT ON, GROUP BY, HAVING, a named window, and a join
-// condition.
+// returning: DISTINCT ON, GROUP BY, HAVING and a named window.
 func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
 	if primary == nil {
 		return nil
@@ -382,11 +382,6 @@ func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext,
 		core.TreeOrNil(primary.Window_clause()),
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
-	}
-	if from := primary.From_clause(); from != nil {
-		for _, qual := range core.CollectNodes[pg.IJoin_qualContext](from) {
-			fields = core.MergeInspectFields(fields, i.testedFields(qual, refs))
-		}
 	}
 	return core.DistinctTestsProjection(plainDistinct(primary.Distinct_clause()), fields, projection)
 }
@@ -734,12 +729,16 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	ctes, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
-	if fromClause := stmt.From_clause(); fromClause != nil {
-		result.Subqueries = append(result.Subqueries, i.readSources(fromClause.From_list(), ctes)...)
-	}
-
 	// The target table ref used for column resolution.
 	targetRef := core.RelationRef{Table: tableName, Schema: schema}
+	whereRefs := []core.RelationRef{targetRef}
+
+	fromClause := stmt.From_clause()
+	if fromClause != nil {
+		reads, sourceRefs := i.readSources(fromClause.From_list(), ctes)
+		result.Subqueries = append(result.Subqueries, reads...)
+		whereRefs = append(whereRefs, sourceRefs...)
+	}
 
 	// Collect SET columns from set_clause_list.
 	if setList := stmt.Set_clause_list(); setList != nil {
@@ -767,7 +766,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 			listener := &whereColumnExtractorListener{
 				BasePostgreSQLParserListener: &pg.BasePostgreSQLParserListener{},
 				inspector:                    i,
-				relationRefs:                 []core.RelationRef{targetRef},
+				relationRefs:                 whereRefs,
 				fields:                       []core.InspectField{},
 				seenFields:                   make(map[string]bool),
 			}
@@ -778,6 +777,9 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 			result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(expr)...)
 		}
 	}
+
+	result.Where = core.MergeInspectFields(result.Where,
+		i.joinFields(core.TreeOrNil(fromClause), whereRefs, core.Scope{CTEs: ctes}))
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -801,8 +803,12 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	ctes, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
-	if usingClause := stmt.Using_clause(); usingClause != nil {
-		result.Subqueries = append(result.Subqueries, i.readSources(usingClause.From_list(), ctes)...)
+	whereRefs := []core.RelationRef{{Table: tableName, Schema: schema}}
+	usingClause := stmt.Using_clause()
+	if usingClause != nil {
+		reads, sourceRefs := i.readSources(usingClause.From_list(), ctes)
+		result.Subqueries = append(result.Subqueries, reads...)
+		whereRefs = append(whereRefs, sourceRefs...)
 	}
 
 	if whereClause := stmt.Where_or_current_clause(); whereClause != nil {
@@ -810,7 +816,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 			listener := &whereColumnExtractorListener{
 				BasePostgreSQLParserListener: &pg.BasePostgreSQLParserListener{},
 				inspector:                    i,
-				relationRefs:                 []core.RelationRef{{Table: tableName, Schema: schema}},
+				relationRefs:                 whereRefs,
 				fields:                       []core.InspectField{},
 				seenFields:                   make(map[string]bool),
 			}
@@ -819,6 +825,9 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 			result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(expr)...)
 		}
 	}
+
+	result.Where = core.MergeInspectFields(result.Where,
+		i.joinFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -1512,9 +1521,9 @@ func (i *Inspector) extractFromSubqueriesFromPrimary(primary pg.ISimple_select_p
 // readSources is the read an UPDATE ... FROM or a DELETE ... USING performs on
 // the relations it joins against. Those rows are read, not written, so the
 // statement's own update or delete does not cover them.
-func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.RelationRef) []core.InspectStatement {
+func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.RelationRef) ([]core.InspectStatement, []core.RelationRef) {
 	if fromList == nil {
-		return nil
+		return nil, nil
 	}
 	fw := &fromWalker{dialect: i.dialect, meta: i.meta}
 	refs, subqueryColumns := fw.walk(fromList)
@@ -1527,7 +1536,7 @@ func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.Relat
 			Tables:    tables,
 		})
 	}
-	return reads
+	return reads, refs
 }
 
 // extractSubqueriesFromFromList recursively finds subqueries in a FROM list
