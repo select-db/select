@@ -119,6 +119,13 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 	if stmt == nil {
 		return nil
 	}
+	// EXPLAIN reports what the server knows about the rows a statement would
+	// touch, so it takes the rights that statement takes.
+	if util := stmt.UtilityStatement(); util != nil {
+		if exp := util.ExplainStatement(); exp != nil {
+			return i.inspectExplainable(exp.ExplainableStatement())
+		}
+	}
 	if sel := stmt.SelectStatement(); sel != nil {
 		return i.inspectSelectStatement(sel)
 	}
@@ -660,6 +667,27 @@ func (i *Inspector) updateListFields(
 		}
 	}
 	return fields
+}
+
+// inspectExplainable reads the statement an EXPLAIN wraps. A form this does
+// not list resolves to nothing, which the floor reports as unknown.
+func (i *Inspector) inspectExplainable(stmt mysql.IExplainableStatementContext) *core.InspectStatement {
+	if stmt == nil {
+		return nil
+	}
+	switch {
+	case stmt.SelectStatement() != nil:
+		return i.inspectSelectStatement(stmt.SelectStatement())
+	case stmt.InsertStatement() != nil:
+		return i.inspectInsert(stmt.InsertStatement())
+	case stmt.UpdateStatement() != nil:
+		return i.inspectUpdate(stmt.UpdateStatement())
+	case stmt.DeleteStatement() != nil:
+		return i.inspectDelete(stmt.DeleteStatement())
+	case stmt.ReplaceStatement() != nil:
+		return i.inspectReplace(stmt.ReplaceStatement())
+	}
+	return nil
 }
 
 // collectInsertFields collects the column names listed in (col1, col2, …).

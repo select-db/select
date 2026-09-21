@@ -214,16 +214,17 @@ func (d *Dialect) NormalizeIdentifier(raw string) string {
 	if len(raw) >= 2 {
 		switch {
 		case raw[0] == '"' && raw[len(raw)-1] == '"':
-			return strings.ReplaceAll(raw[1:len(raw)-1], `""`, `"`)
+			return strings.ToLower(strings.ReplaceAll(raw[1:len(raw)-1], `""`, `"`))
 		case raw[0] == '`' && raw[len(raw)-1] == '`':
-			return strings.ReplaceAll(raw[1:len(raw)-1], "``", "`")
+			return strings.ToLower(strings.ReplaceAll(raw[1:len(raw)-1], "``", "`"))
 		// A bracketed name ends at the first "]": SQLite has no escape inside
 		// brackets, unlike SQL Server's doubled one.
 		case raw[0] == '[' && raw[len(raw)-1] == ']':
-			return raw[1 : len(raw)-1]
+			return strings.ToLower(raw[1 : len(raw)-1])
 		}
 	}
-	// SQLite is case-insensitive for unquoted identifiers
+	// SQLite folds case for an identifier however it is written, so quoting
+	// changes how a name is spelled and never which object it names.
 	return strings.ToLower(raw)
 }
 
