@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"sort"
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
@@ -142,6 +141,7 @@ func hasCompoundOperatorBetween(tokens *antlr.CommonTokenStream, a, b antlr.Pars
 // mergeCompoundSelectGroup merges consecutive stmt_lists that are compound SELECT branches.
 func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpSelect}
+	var last sqlite.ISelect_stmtContext
 	for _, stmtList := range group {
 		for _, stmt := range stmtList.AllSql_stmt() {
 			if selectStmt := stmt.Select_stmt(); selectStmt != nil {
@@ -149,6 +149,7 @@ func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContex
 				if branch == nil {
 					continue
 				}
+				last = selectStmt
 				result.Tables = core.MergeInspectTables(result.Tables, branch.Tables)
 				result.Fields = core.MergeInspectFields(result.Fields, branch.Fields)
 				result.Where = core.MergeInspectFields(result.Where, branch.Where)
@@ -156,6 +157,11 @@ func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContex
 			}
 		}
 	}
+	// The ORDER BY of a compound select parses onto its last branch, but it
+	// orders the rows of every branch, so it is read again against all of the
+	// relations the branches named.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.tailClauseFields(last, core.RelationRefsOf(result)))
 	return result
 }
 
@@ -227,7 +233,7 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	}
 
 	for _, selectCore := range selectCores {
-		branch := i.inspectSelectCore(selectCore, ctes, cteSubqueries, cteToSubqueryMap)
+		branch := i.inspectSelectCore(selectCore, selectStmt, ctes, cteSubqueries, cteToSubqueryMap)
 		result.Tables = core.MergeInspectTables(result.Tables, branch.Tables)
 		result.Fields = core.MergeInspectFields(result.Fields, branch.Fields)
 		result.Where = core.MergeInspectFields(result.Where, branch.Where)
@@ -237,7 +243,13 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	tail := i.extractTailSubqueries(selectStmt)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
-	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectStmt, core.RelationRefsOf(result)))
+
+	// The branches read the tail against their own relations, which is what
+	// resolves a name a derived table gave. A bare name is read again here,
+	// against the tables the statement ended up reading, which is what
+	// resolves one the derived table passed straight through.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.tailClauseFields(selectStmt, core.RelationRefsOf(result)))
 
 	return result
 }
@@ -352,6 +364,7 @@ func (i *Inspector) extractTailSubqueries(selectStmt sqlite.ISelect_stmtContext)
 // inspectSelectCore processes a single select_core (one branch of a compound query).
 func (i *Inspector) inspectSelectCore(
 	selectCore sqlite.ISelect_coreContext,
+	tail sqlite.ISelect_stmtContext,
 	ctes []core.RelationRef,
 	cteSubqueries []core.InspectStatement,
 	cteToSubqueryMap map[string]*core.InspectStatement,
@@ -383,12 +396,14 @@ func (i *Inspector) inspectSelectCore(
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(selectCore)...)
 	i.resolve().DropCTETables(subqueries, ctes)
 
+	tested := core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields))
+	tested = core.MergeInspectFields(tested, i.joinFields(selectCore, relationRefs, scope))
+	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs))
+
 	return core.InspectStatement{
-		Tables: tables,
-		Fields: fields,
-		Where: core.MergeInspectFields(
-			core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields)),
-			i.joinFields(selectCore, relationRefs, scope)),
+		Tables:     tables,
+		Fields:     fields,
+		Where:      i.resolve().ThroughVirtual(tested, relationRefs, scope, allSubqueries),
 		Subqueries: subqueries,
 	}
 }
@@ -1123,73 +1138,8 @@ func (i *Inspector) extractSelectFieldsWithResolution(
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) []core.InspectField {
 	fields := i.extractSelectFields(selectCore, relationRefs, ctes, subqueryColumns, cteToSubqueryMap)
-
-	// Build a map of virtual table -> underlying fields from subqueries
-	// Use deterministic ordering: CTEs first, then subqueries in order
-	virtualTableFields := make(map[string][]core.InspectField)
-
-	// A name the statement qualified is the real table even where a CTE
-	// shadows the bare one, so its columns are not the CTE's.
-	qualified := make(map[string]bool)
-	for _, ref := range relationRefs {
-		if ref.Qualified {
-			qualified[i.dialect.NormalizeIdentifier(ref.Table)] = true
-		}
-	}
-
-	// Map CTEs to their subquery results
-	for idx, cte := range ctes {
-		if idx < len(subqueries) {
-			cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-			if qualified[cteKey] {
-				continue
-			}
-			virtualTableFields[cteKey] = subqueries[idx].Fields
-		}
-	}
-
-	// Map subquery aliases - need deterministic ordering
-	// Collect subquery names in order first
-	subqueryNames := make([]string, 0, len(subqueryColumns))
-	for name := range subqueryColumns {
-		subqueryNames = append(subqueryNames, name)
-	}
-	// Sort for deterministic ordering
-	sort.Strings(subqueryNames)
-
-	subqIdx := len(ctes)
-	for _, name := range subqueryNames {
-		if subqIdx < len(subqueries) {
-			normalizedName := i.dialect.NormalizeIdentifier(name)
-			virtualTableFields[normalizedName] = subqueries[subqIdx].Fields
-			subqIdx++
-		}
-	}
-
-	// Resolve fields that reference virtual tables
-	var resolvedFields []core.InspectField
-	for _, field := range fields {
-		normalizedTable := i.dialect.NormalizeIdentifier(field.Table)
-		if underlyingFields, ok := virtualTableFields[normalizedTable]; ok {
-			// Find the matching field in the underlying query
-			for _, uf := range underlyingFields {
-				if i.normalizeEquals(uf.Name, field.Name) {
-					resolvedField := core.InspectField{
-						Name:   field.Name,
-						Alias:  field.Alias,
-						Table:  uf.Table,
-						Schema: uf.Schema,
-					}
-					resolvedFields = append(resolvedFields, resolvedField)
-					break
-				}
-			}
-		} else {
-			resolvedFields = append(resolvedFields, field)
-		}
-	}
-
-	return resolvedFields
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	return i.resolve().ThroughVirtual(fields, relationRefs, scope, subqueries)
 }
 
 // extractSelectFields extracts fields from the SELECT clause
@@ -1545,28 +1495,7 @@ func (l *whereColumnExtractorListener) EnterExpr(ctx *sqlite.ExprContext) {
 
 			var resolvedField *core.InspectField
 			if tablePrefix != "" {
-				for _, ref := range l.relationRefs {
-					refKey := ref.Alias
-					if refKey == "" {
-						refKey = ref.Table
-					}
-					if l.inspector.dialect.NormalizeIdentifier(refKey) == tablePrefix {
-						tableCols := core.GetColumnsForTableAsColumns(l.inspector.meta, ref.Schema, ref.Table, l.inspector.dialect)
-						for _, col := range tableCols {
-							if l.inspector.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-								resolvedField = &core.InspectField{
-									Name:   normalizedCol,
-									Table:  ref.Table,
-									Schema: ref.Schema,
-								}
-								break
-							}
-						}
-						if resolvedField != nil {
-							break
-						}
-					}
-				}
+				resolvedField = l.inspector.resolve().Column(tablePrefix, normalizedCol, l.relationRefs)
 			} else {
 				for _, ref := range l.relationRefs {
 					tableCols := core.GetColumnsForTableAsColumns(l.inspector.meta, ref.Schema, ref.Table, l.inspector.dialect)

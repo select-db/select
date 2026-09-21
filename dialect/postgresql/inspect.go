@@ -1,7 +1,6 @@
 package postgresql
 
 import (
-	"sort"
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
@@ -193,7 +192,7 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	if selectClause := selectNoParens.Select_clause(); selectClause != nil {
 		for _, intersect := range selectClause.AllSimple_select_intersect() {
 			for _, primary := range intersect.AllSimple_select_pramary() {
-				branch := i.inspectSelectPrimary(primary, ctes, cteSubqueries, cteToSubqueryMap)
+				branch := i.inspectSelectPrimary(primary, selectNoParens, ctes, cteSubqueries, cteToSubqueryMap)
 				if branch == nil {
 					continue
 				}
@@ -208,7 +207,13 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	tail := i.extractTailSubqueries(selectNoParens)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
-	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectNoParens, core.RelationRefsOf(result)))
+
+	// The branches read the tail against their own relations, which is what
+	// resolves a name a derived table gave. A bare name is read again here,
+	// against the tables the statement ended up reading, which is what
+	// resolves one the derived table passed straight through.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.tailClauseFields(selectNoParens, core.RelationRefsOf(result)))
 
 	return result
 }
@@ -265,9 +270,13 @@ func (i *Inspector) extractTailSubqueries(selectNoParens pg.ISelect_no_parensCon
 	return core.AsFilter(subqueries)
 }
 
-// inspectSelectPrimary analyzes a single simple_select_pramary, one branch of a UNION.
+// inspectSelectPrimary analyzes a single simple_select_pramary, one branch of a
+// UNION. tail is the ORDER BY and LIMIT that sit after every branch: they are
+// read here, once per branch, because the names in them resolve against a
+// branch's own relations and against what its derived tables return.
 func (i *Inspector) inspectSelectPrimary(
 	primary pg.ISimple_select_pramaryContext,
+	tail pg.ISelect_no_parensContext,
 	ctes []core.RelationRef,
 	cteSubqueries []core.InspectStatement,
 	cteToSubqueryMap map[string]*core.InspectStatement,
@@ -309,13 +318,16 @@ func (i *Inspector) inspectSelectPrimary(
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(primary)...)
 	i.resolve().DropCTETables(subqueries, ctes)
 
+	tested := core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields))
+	tested = core.MergeInspectFields(tested,
+		i.joinFields(core.TreeOrNil(primary.From_clause()), relationRefs, scope))
+	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs))
+
 	return &core.InspectStatement{
-		Operation: core.InspectOpSelect,
-		Tables:    tables,
-		Fields:    fields,
-		Where: core.MergeInspectFields(
-			core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields)),
-			i.joinFields(core.TreeOrNil(primary.From_clause()), relationRefs, scope)),
+		Operation:  core.InspectOpSelect,
+		Tables:     tables,
+		Fields:     fields,
+		Where:      i.resolve().ThroughVirtual(tested, relationRefs, scope, allSubqueries),
 		Subqueries: subqueries,
 	}
 }
@@ -857,64 +869,10 @@ func (i *Inspector) extractSelectFieldsWithResolution(
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) []core.InspectField {
 	fields := i.extractSelectFields(primary, relationRefs, ctes, subqueryColumns, cteToSubqueryMap)
-
-	// Build a map of virtual table -> underlying fields from subqueries
-	// Use deterministic ordering: CTEs first, then subqueries in order
-	virtualTableFields := make(map[string][]core.InspectField)
-
-	// Map CTEs to their subquery results
-	for idx, cte := range ctes {
-		if idx < len(subqueries) {
-			cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-			virtualTableFields[cteKey] = subqueries[idx].Fields
-		}
-	}
-
-	// Map subquery aliases - need deterministic ordering
-	// Collect subquery names in order first
-	subqueryNames := make([]string, 0, len(subqueryColumns))
-	for name := range subqueryColumns {
-		subqueryNames = append(subqueryNames, name)
-	}
-	// Sort for deterministic ordering
-	sort.Strings(subqueryNames)
-
-	subqIdx := len(ctes)
-	for _, name := range subqueryNames {
-		if subqIdx < len(subqueries) {
-			normalizedName := i.dialect.NormalizeIdentifier(name)
-			virtualTableFields[normalizedName] = subqueries[subqIdx].Fields
-			subqIdx++
-		}
-	}
-
-	// Resolve fields that reference virtual tables
-	var resolvedFields []core.InspectField
-	for _, field := range fields {
-		normalizedTable := i.dialect.NormalizeIdentifier(field.Table)
-		if underlyingFields, ok := virtualTableFields[normalizedTable]; ok {
-			// Find the matching field in the underlying query
-			for _, uf := range underlyingFields {
-				if i.normalizeEquals(uf.Name, field.Name) {
-					resolvedField := core.InspectField{
-						Name:   field.Name,
-						Alias:  field.Alias,
-						Table:  uf.Table,
-						Schema: uf.Schema,
-					}
-					resolvedFields = append(resolvedFields, resolvedField)
-					break
-				}
-			}
-		} else {
-			resolvedFields = append(resolvedFields, field)
-		}
-	}
-
-	return resolvedFields
+	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+	return i.resolve().ThroughVirtual(fields, relationRefs, scope, subqueries)
 }
 
-// extractSelectFields extracts fields from a simple_select_pramary.
 func (i *Inspector) extractSelectFields(
 	primary pg.ISimple_select_pramaryContext,
 	relationRefs []core.RelationRef,
@@ -1382,30 +1340,7 @@ func (l *whereColumnExtractorListener) EnterColumnref(ctx *pg.ColumnrefContext) 
 	// Resolve the column to its table
 	var resolvedField *core.InspectField
 	if tablePrefix != "" {
-		// Qualified column reference - resolve using table prefix
-		for _, ref := range l.relationRefs {
-			refKey := ref.Alias
-			if refKey == "" {
-				refKey = ref.Table
-			}
-			if l.inspector.dialect.NormalizeIdentifier(refKey) == l.inspector.dialect.NormalizeIdentifier(tablePrefix) {
-				// Check if column exists in this table
-				tableCols := core.GetColumnsForTableAsColumns(l.inspector.meta, ref.Schema, ref.Table, l.inspector.dialect)
-				for _, col := range tableCols {
-					if l.inspector.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-						resolvedField = &core.InspectField{
-							Name:   col.Name,
-							Table:  ref.Table,
-							Schema: ref.Schema,
-						}
-						break
-					}
-				}
-				if resolvedField != nil {
-					break
-				}
-			}
-		}
+		resolvedField = l.inspector.resolve().Column(tablePrefix, normalizedCol, l.relationRefs)
 	} else {
 		// Unqualified column reference - search all tables
 		for _, ref := range l.relationRefs {

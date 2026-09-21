@@ -1,5 +1,7 @@
 package core
 
+import "sort"
+
 // Resolution is the half of inspecting a statement that has nothing to do with
 // the grammar: given the relations a clause named, say which tables and columns
 // the statement reads.
@@ -254,4 +256,108 @@ func RelationRefsOf(stmt *InspectStatement) []RelationRef {
 		refs = append(refs, ref)
 	}
 	return refs
+}
+
+// ThroughVirtual rewrites a field read from a name the statement declared
+// itself, a CTE or a derived table, into the column of the table that name
+// returns: "SELECT s.c FROM (SELECT c FROM t) s" reads t.c. A field naming
+// something else is returned as it stands, and one naming a virtual relation
+// that returns no such column is dropped, since it resolves to nothing.
+//
+// subqueries are the statements behind those names in the order the statement
+// declared them: the CTEs first, then the derived tables by alias.
+func (r Resolver) ThroughVirtual(fields []InspectField, refs []RelationRef, s Scope, subqueries []InspectStatement) []InspectField {
+	virtual := r.virtualFields(refs, s, subqueries)
+	if len(virtual) == 0 {
+		return fields
+	}
+
+	resolved := make([]InspectField, 0, len(fields))
+	for _, field := range fields {
+		underlying, ok := virtual[r.Dialect.NormalizeIdentifier(field.Table)]
+		if !ok {
+			resolved = append(resolved, field)
+			continue
+		}
+		for _, source := range underlying {
+			if r.Dialect.NormalizeIdentifier(source.Name) == r.Dialect.NormalizeIdentifier(field.Name) {
+				resolved = append(resolved, InspectField{
+					Name:   field.Name,
+					Alias:  field.Alias,
+					Table:  source.Table,
+					Schema: source.Schema,
+				})
+				break
+			}
+		}
+	}
+	return resolved
+}
+
+// virtualFields maps each name the statement declared to the fields the
+// statement behind it returns.
+func (r Resolver) virtualFields(refs []RelationRef, s Scope, subqueries []InspectStatement) map[string][]InspectField {
+	virtual := make(map[string][]InspectField, len(s.CTEs)+len(s.Subqueries))
+
+	// A name the statement qualified is the real table even where a CTE
+	// shadows the bare one, so its columns are not the CTE's.
+	qualified := make(map[string]bool)
+	for _, ref := range refs {
+		if ref.Qualified {
+			qualified[r.Dialect.NormalizeIdentifier(ref.Table)] = true
+		}
+	}
+
+	for idx, cte := range s.CTEs {
+		if idx >= len(subqueries) {
+			break
+		}
+		name := r.Dialect.NormalizeIdentifier(cte.Table)
+		if qualified[name] {
+			continue
+		}
+		virtual[name] = subqueries[idx].Fields
+	}
+
+	aliases := make([]string, 0, len(s.Subqueries))
+	for alias := range s.Subqueries {
+		aliases = append(aliases, alias)
+	}
+	sort.Strings(aliases)
+
+	next := len(s.CTEs)
+	for _, alias := range aliases {
+		if next >= len(subqueries) {
+			break
+		}
+		virtual[r.Dialect.NormalizeIdentifier(alias)] = subqueries[next].Fields
+		next++
+	}
+
+	return virtual
+}
+
+// Column resolves a column written with a relation prefix, "s.c", against the
+// relations in scope. A prefix naming a relation the metadata holds no columns
+// for is a CTE or a derived table: the field keeps that name, for
+// ThroughVirtual to rewrite into whatever the name returns. A prefix matching
+// no relation at all resolves to nothing.
+func (r Resolver) Column(prefix, name string, refs []RelationRef) *InspectField {
+	wanted := r.Dialect.NormalizeIdentifier(prefix)
+	for _, ref := range refs {
+		named := ref.Alias
+		if named == "" {
+			named = ref.Table
+		}
+		if r.Dialect.NormalizeIdentifier(named) != wanted {
+			continue
+		}
+		for _, column := range TableFields(r.Meta, ref.Schema, ref.Table, r.Dialect) {
+			if r.Dialect.NormalizeIdentifier(column.Name) == r.Dialect.NormalizeIdentifier(name) {
+				return &InspectField{Name: column.Name, Table: ref.Table, Schema: ref.Schema}
+			}
+		}
+		return &InspectField{Name: name, Table: ref.Table, Schema: ref.Schema}
+	}
+	return nil
 }

@@ -942,3 +942,58 @@ func TestExecuteLocalWriteFilteringOnHiddenColumnIsRefused(t *testing.T) {
 		})
 	}
 }
+
+// A derived table or a CTE renames a hidden column without unhiding it. The
+// outer statement testing it under the new name is the same oracle as testing
+// it under the old one.
+func TestExecuteLocalPredicateThroughDerivedTableIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT s.id FROM (SELECT id, email FROM users) s WHERE s.email LIKE 'a%'",
+		"SELECT x FROM (SELECT id AS x, email FROM users) s WHERE s.email LIKE 'a%'",
+		"SELECT x FROM (SELECT id AS x, email FROM users) s ORDER BY s.email",
+		"WITH q AS (SELECT id, email FROM users) SELECT q.id FROM q WHERE q.email LIKE 'a%'",
+		"WITH q AS (SELECT id, email FROM users) SELECT q.id FROM q GROUP BY q.email",
+		"WITH q AS (SELECT id, email FROM users) SELECT q.id FROM q ORDER BY q.email",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %d rows, which answers for the hidden column", result.RowCount)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// The same shapes over a visible column stay ordinary work.
+func TestExecuteLocalPredicateThroughDerivedTableRuns(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT s.id, s.email FROM (SELECT id, email FROM users) s WHERE s.id > 0",
+		"WITH q AS (SELECT id, email FROM users) SELECT q.id, q.email FROM q ORDER BY q.id",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount == 0 {
+				t.Fatal("no rows, so nothing here was checked")
+			}
+			if i := slices.Index(result.Columns, "email"); i >= 0 && result.Rows[0][i] != core.MaskedValue {
+				t.Errorf("email = %v, want masked", result.Rows[0][i])
+			}
+		})
+	}
+}
