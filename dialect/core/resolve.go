@@ -1,7 +1,5 @@
 package core
 
-import "sort"
-
 // Resolution is the half of inspecting a statement that has nothing to do with
 // the grammar: given the relations a clause named, say which tables and columns
 // the statement reads.
@@ -319,14 +317,20 @@ func (r Resolver) virtualFields(refs []RelationRef, s Scope, subqueries []Inspec
 		virtual[name] = subqueries[idx].Fields
 	}
 
-	aliases := make([]string, 0, len(s.Subqueries))
-	for alias := range s.Subqueries {
-		aliases = append(aliases, alias)
-	}
-	sort.Strings(aliases)
-
+	// The derived tables were inspected in the order the FROM list names them,
+	// which is the order refs is in. Pairing them by any other order, such as
+	// the aliases sorted, maps an alias to another subquery's columns.
 	next := len(s.CTEs)
-	for _, alias := range aliases {
+	seen := make(map[string]bool, len(s.Subqueries))
+	for _, ref := range refs {
+		alias := ref.Alias
+		if alias == "" {
+			alias = ref.Table
+		}
+		if _, ok := s.Subqueries[alias]; !ok || seen[alias] {
+			continue
+		}
+		seen[alias] = true
 		if next >= len(subqueries) {
 			break
 		}

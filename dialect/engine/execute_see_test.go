@@ -1058,3 +1058,64 @@ func TestExecuteLocalUpsertOnVisibleColumnsRuns(t *testing.T) {
 		})
 	}
 }
+
+// Derived tables are paired with the statements behind them by the order the
+// FROM list names them. Aliases that do not read in that order used to pair an
+// alias with another subquery's columns, which resolved a hidden column to
+// nothing and let the predicate through.
+func TestExecuteLocalDerivedTableAliasesOutOfOrder(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT z.id FROM (SELECT id, email FROM users) z, (SELECT id FROM contacts) y WHERE z.email LIKE 'a%'",
+		"SELECT z.id FROM (SELECT id, email FROM users) z JOIN (SELECT id FROM contacts) b ON b.id = z.id ORDER BY z.email",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %d rows, which answers for the hidden column", result.RowCount)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// The column each alias returns is the one its own subquery read, whichever
+// order the aliases sort in.
+func TestExecuteLocalDerivedTableAliasesKeepTheirColumns(t *testing.T) {
+	db, meta := setupContactsDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+	)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// z reads the hidden column, y a visible one of another table.
+	result := runQuery(ctx, conn,
+		"SELECT z.email, y.id FROM (SELECT email FROM users) z, (SELECT id FROM contacts) y")
+	if len(result.Errors) != 0 {
+		t.Fatalf("ordinary work refused: %v", result.Errors)
+	}
+	if result.RowCount == 0 {
+		t.Fatal("no rows, so nothing here was checked")
+	}
+	if result.Rows[0][0] != core.MaskedValue {
+		t.Errorf("z.email = %v, want masked", result.Rows[0][0])
+	}
+	if result.Rows[0][1] == core.MaskedValue {
+		t.Error("y.id wrongly masked")
+	}
+}
