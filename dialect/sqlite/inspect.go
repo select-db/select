@@ -71,24 +71,30 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		}
 
 		// A call that reaches the filesystem is not covered by the four row
-		// actions. The span is the whole compound group, so every statement it
-		// produces is classified together.
-		from, _ := core.TokenSpan(tokenStream, stmtLists, first)
-		_, to := core.TokenSpan(tokenStream, stmtLists, idx)
-		reachesHost := callsHostFunction(tokenStream, from, to)
-		keep := func(stmt core.InspectStatement) {
-			if reachesHost {
-				stmt = core.NestUnderUnknown(stmt)
-			}
-			results = append(results, stmt)
-		}
+		// actions. A compound group is one statement, so its branches are read
+		// together; a list of statements is read one at a time, so the call in
+		// one does not cost the rest of the script its row actions.
+		groupFrom, _ := core.TokenSpan(tokenStream, stmtLists, first)
+		_, groupTo := core.TokenSpan(tokenStream, stmtLists, idx)
 
 		if len(group) > 1 {
-			keep(core.OrUnknown(i.mergeCompoundSelectGroup(group)))
-		} else {
-			for _, stmt := range group[0].AllSql_stmt() {
-				keep(core.OrUnknown(i.inspectStatement(stmt)))
+			read := core.OrUnknown(i.mergeCompoundSelectGroup(group))
+			if callsHostFunction(tokenStream, groupFrom, groupTo) {
+				read = core.NestUnderUnknown(read)
 			}
+			results = append(results, read)
+			idx++
+			continue
+		}
+
+		stmts := group[0].AllSql_stmt()
+		for si := range stmts {
+			read := core.OrUnknown(i.inspectStatement(stmts[si]))
+			from, to := core.TokenSpan(tokenStream, stmts, si)
+			if callsHostFunction(tokenStream, from, core.Clamp(to, from, groupTo)) {
+				read = core.NestUnderUnknown(read)
+			}
+			results = append(results, read)
 		}
 		idx++
 	}

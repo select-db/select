@@ -1108,6 +1108,8 @@ func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
 		{"postgresql", "SELECT c1 FROM t1 ORDER BY pg_read_file"},
 		{"mysql", "SELECT c1 AS load_file FROM t1"},
 		{"mysql", "SELECT c1 FROM t1 WHERE c2 = 'load_file('"},
+		{"mysql", "SELECT dumpfile FROM t1"},
+		{"mysql", "SELECT c1 FROM t1 ORDER BY dumpfile"},
 		{"sqlite", "SELECT c1 AS readfile FROM t1"},
 		{"sqlite", "SELECT c1 FROM t1 WHERE c2 = 'writefile'"},
 	} {
@@ -1123,6 +1125,59 @@ func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
 	}
 }
 
+// A table may be named after one of those routines, and the parenthesis that
+// follows the name is then a column list. Reading it as a call costs the role
+// manage for an ordinary write.
+func TestPermissions_AHostFunctionNameIsAlsoATableName(t *testing.T) {
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []struct {
+		dialect string
+		sql     string
+		touch   testutil.Touch
+	}{
+		{"postgresql", "INSERT INTO pg_read_file (c1) VALUES (1)",
+			testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "pg_read_file"}},
+		{"postgresql", "UPDATE pg_read_file SET c1 = 1",
+			testutil.Touch{Op: core.InspectOpUpdate, Schema: "main", Name: "pg_read_file"}},
+		{"postgresql", "SELECT * FROM (SELECT c1 FROM t1) AS pg_read_file (x)",
+			testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}},
+		{"mysql", "INSERT INTO load_file (c1) VALUES (1)",
+			testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "load_file"}},
+		{"sqlite", "INSERT INTO readfile (c1) VALUES (1)",
+			testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "readfile"}},
+	} {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, tt.touch) {
+				t.Fatalf("no %s on %s.%s, so nothing here was checked: %+v",
+					tt.touch.Op, tt.touch.Schema, tt.touch.Name, inspected)
+			}
+			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err != nil {
+				t.Errorf("ordinary work refused: %v", err)
+			}
+		})
+	}
+}
+
+// Calling such a routine in one branch of a compound select classifies the
+// whole of it, since the branches are one statement.
+func TestPermissions_ACompoundSelectIsOneStatement(t *testing.T) {
+	sql := "SELECT c1 FROM t1 UNION SELECT readfile('/etc/passwd')"
+	inspected := Inspect(GetDialect("sqlite"), permMeta(), sql)
+	if len(inspected) == 0 {
+		t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
+	}
+	for _, stmt := range inspected {
+		if stmt.Operation != core.InspectOpUnknown {
+			t.Errorf("a branch of it reads as %s: %+v", stmt.Operation, inspected)
+		}
+	}
+	if err := core.CheckQueryPermissions(inspected, permDBID, dataActionsOnly()); err == nil {
+		t.Error("ran on the four row actions")
+	}
+}
+
 // One statement calling such a routine must not drag the rest of a script with
 // it, nor be excused by them.
 func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
@@ -1131,8 +1186,10 @@ func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
 	for _, tt := range []dialectSQL{
 		{"postgresql", "SELECT pg_read_file('/etc/passwd'); SELECT c1 FROM t1"},
 		{"mysql", "SELECT LOAD_FILE('/etc/passwd'); SELECT c1 FROM t1"},
+		{"sqlite", "SELECT readfile('/etc/passwd'); SELECT c1 FROM t1"},
+		{"sqlite", "SELECT c1 FROM t1; SELECT readfile('/etc/passwd')"},
 	} {
-		t.Run(tt.dialect, func(t *testing.T) {
+		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
 			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
 			unknown := 0
 			for _, stmt := range inspected {

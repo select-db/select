@@ -81,15 +81,18 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 }
 
 // writesAFile reports whether the tokens between from and to name a file to
-// write. OUTFILE and DUMPFILE are reserved, so a column or alias cannot lex as
-// either.
+// write. Both spellings follow INTO, and DUMPFILE is non-reserved, so a column
+// named dumpfile lexes as the keyword and only the INTO tells them apart.
 func writesAFile(tokens *antlr.CommonTokenStream, from, to int) bool {
 	all := tokens.GetAllTokens()
 	to = core.Clamp(to, 0, len(all))
-	for ti := core.Clamp(from, 0, to); ti < to; ti++ {
+	from = core.Clamp(from, 0, to)
+	for ti := from; ti < to; ti++ {
 		switch all[ti].GetTokenType() {
 		case mysql.MySQLLexerOUTFILE_SYMBOL, mysql.MySQLLexerDUMPFILE_SYMBOL:
-			return true
+			if core.PrecededBy(all, from, ti, "into") {
+				return true
+			}
 		}
 	}
 	return false
@@ -137,13 +140,14 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 // inspectSelectStatement handles MySQL's SelectStatement -> QueryExpression /
 // QueryExpressionParens / SelectStatementWithInto.
 func (i *Inspector) inspectSelectStatement(stmt mysql.ISelectStatementContext) *core.InspectStatement {
-	switch {
-	case stmt.QueryExpression() != nil:
-		return i.inspectQueryExpression(stmt.QueryExpression())
-	case stmt.QueryExpressionParens() != nil:
-		return i.inspectQueryExpressionParens(stmt.QueryExpressionParens())
-	case stmt.SelectStatementWithInto() != nil:
-		return i.inspectSelectStatementWithInto(stmt.SelectStatementWithInto())
+	if qe := stmt.QueryExpression(); qe != nil {
+		return i.inspectQueryExpression(qe)
+	}
+	if qep := stmt.QueryExpressionParens(); qep != nil {
+		return i.inspectQueryExpressionParens(qep)
+	}
+	if into := stmt.SelectStatementWithInto(); into != nil {
+		return i.inspectSelectStatementWithInto(into)
 	}
 	return nil
 }
