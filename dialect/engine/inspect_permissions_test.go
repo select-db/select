@@ -9,7 +9,7 @@ import (
 	"github.com/selectDb/dialect/core/testutil"
 )
 
-const permDBID = "inst-1"
+const permDBID = testutil.TestDBInstanceID
 
 // permMeta is the catalog every inspector suite resolves names against, so a
 // table or schema added for one of them reaches this one too. Its default
@@ -179,7 +179,11 @@ func (silentDialect) Inspect(core.Metadata, string) []core.InspectStatement { re
 // database no rule names, so dropping the only action still refuses: otherwise
 // a necessary-direction loop over one action proves nothing.
 func holding(actions ...string) core.CompiledPermissions {
-	return testutil.PermHolding(permDBID, actions...)
+	rights := make([]testutil.Right, 0, len(actions))
+	for _, action := range actions {
+		rights = append(rights, testutil.Right{Action: action})
+	}
+	return testutil.PermGranting(rights...)
 }
 
 // nestedCase is a statement carrying another statement, and the permissions a

@@ -714,3 +714,18 @@ func ScopeContainsCaret(startPos, endPos, caretPos int) bool {
 	}
 	return true
 }
+
+// TablesExcept are the tables of all that none of keep names.
+func TablesExcept(all, keep []InspectTable) []InspectTable {
+	held := make(map[[2]string]bool, len(keep))
+	for _, table := range keep {
+		held[[2]string{table.Schema, table.Name}] = true
+	}
+	var rest []InspectTable
+	for _, table := range all {
+		if !held[[2]string{table.Schema, table.Name}] {
+			rest = append(rest, table)
+		}
+	}
+	return rest
+}

@@ -60,52 +60,24 @@ func RunPermCases(t *testing.T, inspect func(sql string) []core.InspectStatement
 	}
 }
 
-// assertResolved is the guard against a case that passes without the inspector
-// having understood anything. A case needing a right on a table proves nothing
-// unless that table was resolved, and one needing manage alone can be met by a
-// statement floored to unknown, which is why a case that expects an operation
-// says so.
+// assertResolved fails a case that would pass without the inspector having
+// understood anything: a right on a table nobody resolved, or an operation the
+// floor supplied rather than the statement.
 func assertResolved(t *testing.T, statements []core.InspectStatement, testCase PermCase) {
 	t.Helper()
 	for _, right := range testCase.Needs {
 		if right.Table == "" {
 			continue
 		}
-		if !touchesTable(statements, right.Schema, right.Table) {
+		if !Touches(statements, Touch{Schema: right.Schema, Name: right.Table}) {
 			t.Fatalf("resolved no %s.%s, so the check had nothing to ask about:\n  %s",
 				right.Schema, right.Table, testCase.SQL)
 		}
 	}
-	if testCase.Op != "" && !hasOperation(statements, testCase.Op) {
+	if testCase.Op != "" && !Touches(statements, Touch{Op: testCase.Op}) {
 		t.Fatalf("read no %s statement, so what passed was the floor rather than the statement:\n  %s",
 			testCase.Op, testCase.SQL)
 	}
-}
-
-func touchesTable(statements []core.InspectStatement, schema, table string) bool {
-	for _, stmt := range statements {
-		for _, named := range stmt.Tables {
-			if named.Schema == schema && named.Name == table {
-				return true
-			}
-		}
-		if touchesTable(stmt.Subqueries, schema, table) || touchesTable(stmt.Also, schema, table) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasOperation(statements []core.InspectStatement, op core.InspectOperation) bool {
-	for _, stmt := range statements {
-		if stmt.Operation == op {
-			return true
-		}
-		if hasOperation(stmt.Subqueries, op) || hasOperation(stmt.Also, op) {
-			return true
-		}
-	}
-	return false
 }
 
 // PermGranting is a policy granting exactly these rights and nothing else.
@@ -124,23 +96,6 @@ func PermGranting(rights ...Right) core.CompiledPermissions {
 			entry.SchemaName, entry.TableName = &schema, &table
 		}
 		entries = append(entries, entry)
-	}
-	return core.Compile(entries).WithDenyUnmanaged()
-}
-
-// PermHolding grants these actions on every table. It is what a case cannot
-// use, since a right granted everywhere cannot say which relation the
-// statement asked about.
-func PermHolding(dbID string, actions ...string) core.CompiledPermissions {
-	id := dbID
-	entries := make([]core.PermissionEntry, 0, len(actions))
-	for _, action := range actions {
-		entries = append(entries, core.PermissionEntry{
-			DbInstanceID: &id,
-			Action:       action,
-			Effect:       "allow",
-			RoleName:     "test-role",
-		})
 	}
 	return core.Compile(entries).WithDenyUnmanaged()
 }
