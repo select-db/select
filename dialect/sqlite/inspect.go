@@ -71,8 +71,8 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		}
 
 		// A call that reaches the filesystem is not covered by the four row
-		// actions, so the read becomes the nested statement of an unclassified
-		// one: manage for the call, and whatever the rows still need.
+		// actions. The span is the whole compound group, so every statement it
+		// produces is classified together.
 		from, _ := core.TokenSpan(tokenStream, stmtLists, first)
 		_, to := core.TokenSpan(tokenStream, stmtLists, idx)
 		reachesHost := callsHostFunction(tokenStream, from, to)

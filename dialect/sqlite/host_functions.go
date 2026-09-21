@@ -5,10 +5,10 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-// hostFunctions reach past the rows into the filesystem. They come from the
-// fileio extension rather than the core build, so a connection only has them
-// where someone loaded it: that is a second gate, not this one. A statement
-// calling one is not the plain read its shape suggests.
+// hostFunctions reach past the rows into the filesystem. A statement calling
+// one is not the plain read its shape suggests, so it takes manage as well as
+// whatever it reads. They come from the fileio extension rather than the core
+// build, which is a second gate and not this one.
 var hostFunctions = map[string]bool{
 	"readfile":  true,
 	"writefile": true,

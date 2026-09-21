@@ -954,10 +954,10 @@ func TestPermissions_SQLiteStillReadsItsOwnUpsert(t *testing.T) {
 
 // TestPermissions_ATruncatedWriteNeverRunsUnchecked pins the writes that name
 // no table because the statement stops before naming one. checkTables iterates
-// the tables a statement names, so it iterated nothing and the statement ran on
-// a policy granting nothing. Every dialect produced the same outcome for these,
-// and PostgreSQL and MySQL reached some of them by dereferencing a node error
-// recovery left incomplete, which fails the request rather than refusing it.
+// the tables a statement names, so a write naming none is checked against
+// nothing unless the inspector refuses it outright. Some of these also reach a
+// node error recovery leaves incomplete, where a dereference fails the request
+// rather than refusing the statement.
 func TestPermissions_ATruncatedWriteNeverRunsUnchecked(t *testing.T) {
 	nothing := core.Compile(nil).WithDenyUnmanaged()
 
@@ -1050,10 +1050,9 @@ type dialectSQL struct {
 
 // TestPermissions_ReachingTheServerNeedsManage pins the statements that touch
 // the host: its filesystem, its shell, another server. The four row actions
-// cover rows, so none of these may run on them. The database gates most of
-// these separately, on a superuser or the FILE privilege or a loaded extension,
-// but that is the database's gate and not this one: the credentials a
-// proxified connection holds are often privileged enough.
+// cover rows, so none of these may run on them. The database gates most of them
+// separately, on a superuser or the FILE privilege, which is a second gate and
+// not this one.
 func TestPermissions_ReachingTheServerNeedsManage(t *testing.T) {
 	dataActions := dataActionsOnly()
 

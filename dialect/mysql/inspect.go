@@ -68,11 +68,9 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		read := core.OrUnknown(i.inspectStatement(simple))
 
 		// INTO OUTFILE writes the server's filesystem, which the four row
-		// actions do not cover, so the read becomes the nested statement of an
-		// unclassified one: manage for the file, select for the rows. The
-		// clause is read off the tokens rather than the tree because the
-		// spellings that follow a locking clause raise a syntax error here and
-		// error recovery drops the tail, leaving no node to find.
+		// actions do not cover. The clause is read off the tokens rather than
+		// the tree because the spellings that follow a locking clause raise a
+		// syntax error here, and error recovery drops the tail with the node.
 		from, to := core.TokenSpan(tokenStream, queries, idx)
 		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
@@ -87,10 +85,8 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 // either.
 func writesAFile(tokens *antlr.CommonTokenStream, from, to int) bool {
 	all := tokens.GetAllTokens()
-	if to > len(all) {
-		to = len(all)
-	}
-	for ti := from; ti < to; ti++ {
+	to = core.Clamp(to, 0, len(all))
+	for ti := core.Clamp(from, 0, to); ti < to; ti++ {
 		switch all[ti].GetTokenType() {
 		case mysql.MySQLLexerOUTFILE_SYMBOL, mysql.MySQLLexerDUMPFILE_SYMBOL:
 			return true

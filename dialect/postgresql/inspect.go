@@ -55,8 +55,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		read := core.OrUnknown(i.inspectStatement(stmt))
 
 		// A call that reaches the server itself is not covered by the four row
-		// actions, so the read becomes the nested statement of an unclassified
-		// one: manage for the call, and whatever the rows still need.
+		// actions.
 		from, to := core.TokenSpan(tokenStream, statements, idx)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)

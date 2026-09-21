@@ -147,10 +147,10 @@ func TestInspectCTEScopeOnInsert(t *testing.T) {
 	}
 }
 
-// Another dialect's SQL is one paste away in an editor that does not switch
-// connections, and the statement splitter read tokens off nodes error recovery
-// had left incomplete. That panicked, which fails the request rather than
-// refusing the statement.
+// MySQL spellings reach the SQLite inspector whenever an editor does not switch
+// connections. The statement splitter reads tokens off nodes error recovery
+// leaves incomplete, and a panic there fails the request rather than refusing
+// the statement.
 func TestInspectMySQLWritesDoNotPanic(t *testing.T) {
 	for _, sql := range []string{
 		"DELETE t1 FROM t1 JOIN t2 ON t1.c1 = t2.c1",

@@ -9,8 +9,8 @@ import (
 // calling one is not the plain read its shape suggests, so it takes manage as
 // well as whatever it reads.
 //
-// MySQL gates these on the FILE privilege, which is a second gate, not this
-// one: a connection whose credentials we hold is often privileged enough.
+// MySQL gates them on the FILE privilege, which is a second gate and not this
+// one.
 var hostFunctions = map[string]bool{
 	"load_file": true,
 }

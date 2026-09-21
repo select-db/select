@@ -9,9 +9,8 @@ import (
 // large objects, another server. A statement calling one is not the plain read
 // its shape suggests, so it takes manage as well as whatever it reads.
 //
-// The database grants these separately, to a superuser or a role in
-// pg_read_server_files and friends. That is a second gate, not this one: a
-// connection whose credentials we hold is often privileged enough.
+// PostgreSQL grants them separately, to a superuser or a role in
+// pg_read_server_files, which is a second gate and not this one.
 var hostFunctions = map[string]bool{
 	"pg_read_file":         true,
 	"pg_read_binary_file":  true,

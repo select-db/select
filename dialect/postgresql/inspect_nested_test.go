@@ -150,8 +150,8 @@ func TestInspectClauseSubqueriesReachTheResult(t *testing.T) {
 
 // Classifying the INTO a statement carries must not cost the reads nested
 // inside it. The listener that collects an embedded subquery keeps one only if
-// it names a table, so wrapping a nested query in a statement that names none
-// dropped the branch and everything under it.
+// it names a table, so a wrap around a nested query loses the branch and
+// everything under it.
 func TestInspectClassifyingIntoKeepsNestedReads(t *testing.T) {
 	read := testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t2"}
 
