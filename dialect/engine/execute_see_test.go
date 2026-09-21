@@ -652,3 +652,74 @@ func TestExecuteLocalCTEColumnListDoesNotLeak(t *testing.T) {
 		})
 	}
 }
+
+// RETURNING hands rows back from a write, and they are rows like any other. A
+// role that may change a row but not see a column must not read the column by
+// asking a no-op write to return it.
+func TestExecuteLocalReturningMasksHiddenColumn(t *testing.T) {
+	for _, sql := range []string{
+		"UPDATE users SET age = age WHERE id = 1 RETURNING email",
+		"UPDATE users SET age = age WHERE id = 1 RETURNING id, email",
+		"UPDATE users SET age = age WHERE id = 1 RETURNING *",
+		"DELETE FROM users WHERE id = 2 RETURNING email",
+		"INSERT INTO users (id, email) VALUES (9, 'ninth@example.com') RETURNING email",
+		"INSERT INTO users (id, email) VALUES (9, 'ninth@example.com') RETURNING *",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "insert", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "delete", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				return // refused, which hides it too
+			}
+			if result.RowCount == 0 {
+				t.Fatal("no rows, so nothing here was checked")
+			}
+			for i, row := range result.Rows {
+				for _, v := range row {
+					if s, ok := v.(string); ok && strings.Contains(s, "@example.com") {
+						t.Errorf("row %d returned users.email in full: %v", i, row)
+					}
+				}
+			}
+		})
+	}
+}
+
+// The row a write returns that the role may see comes back in full.
+func TestExecuteLocalReturningShowsVisibleColumns(t *testing.T) {
+	db, meta := setupUsersDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+	)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn, "UPDATE users SET age = 31 WHERE id = 1 RETURNING id, age")
+	if len(result.Errors) != 0 {
+		t.Fatalf("ordinary work refused: %v", result.Errors)
+	}
+	if result.RowCount != 1 {
+		t.Fatalf("expected one row, got %d", result.RowCount)
+	}
+	for _, v := range result.Rows[0] {
+		if v == core.MaskedValue {
+			t.Errorf("a column the role may see was masked: %v", result.Rows[0])
+		}
+	}
+}

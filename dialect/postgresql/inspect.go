@@ -426,22 +426,41 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 		}
 	}
 
-	// RETURNING clause columns require SELECT permission.
-	if ret := stmt.Returning_clause(); ret != nil {
-		if targetList := ret.Target_list(); targetList != nil {
-			for _, el := range targetList.AllTarget_el() {
-				field := i.extractFieldFromTarget(el, []core.RelationRef{{
-					Table:  tableName,
-					Schema: schema,
-				}}, nil, nil, nil)
-				if field != nil && !containsField(result.Fields, *field) {
-					result.Fields = append(result.Fields, *field)
-				}
-			}
-		}
-	}
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
+}
+
+// addReturningFields records the columns a RETURNING clause hands back. They
+// are read from the target table and reach the caller's rows, so a rule hiding
+// one has to find it here as it would in a select.
+func (i *Inspector) addReturningFields(
+	result *core.InspectStatement,
+	ret pg.IReturning_clauseContext,
+	schema, table string,
+) {
+	if ret == nil {
+		return
+	}
+	targetList := ret.Target_list()
+	if targetList == nil {
+		return
+	}
+	refs := []core.RelationRef{{Table: table, Schema: schema}}
+	for _, el := range targetList.AllTarget_el() {
+		if star, ok := el.(*pg.Target_starContext); ok && star.STAR() != nil {
+			for _, field := range core.TableFields(i.meta, schema, table, i.dialect) {
+				if !containsField(result.Fields, field) {
+					result.Fields = append(result.Fields, field)
+				}
+			}
+			continue
+		}
+		if field := i.extractFieldFromTarget(el, refs, nil, nil, nil); field != nil &&
+			!containsField(result.Fields, *field) {
+			result.Fields = append(result.Fields, *field)
+		}
+	}
 }
 
 // inspectTruncate analyzes a TRUNCATE statement.
@@ -674,6 +693,8 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 		}
 	}
 
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
 	return result
 }
 
@@ -712,6 +733,8 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 			result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(expr)...)
 		}
 	}
+
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
 }

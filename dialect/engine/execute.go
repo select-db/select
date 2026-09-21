@@ -298,7 +298,7 @@ func evaluateSeeForResult(conn Conn, inst DBInstance, inspected []core.InspectSt
 	if !conn.Perms.IsManaged(inst.ID) {
 		return nil, nil
 	}
-	stmt, ok := FirstSelectStatement(inspected)
+	stmt, ok := FirstReturningStatement(inspected)
 	if !ok {
 		return nil, nil
 	}

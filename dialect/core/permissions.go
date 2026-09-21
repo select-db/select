@@ -311,7 +311,12 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		return nil, nil
 	}
 
-	if stmt.Operation != InspectOpSelect {
+	// A write hands rows back through RETURNING, so the check cannot be a
+	// select's alone. A statement we could not read has no fields to match, and
+	// the rule below refuses a column nothing accounts for.
+	switch stmt.Operation {
+	case InspectOpSelect, InspectOpInsert, InspectOpUpdate, InspectOpDelete:
+	default:
 		return nil, nil
 	}
 

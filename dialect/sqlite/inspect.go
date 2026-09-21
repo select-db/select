@@ -405,6 +405,8 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(stmt)...)
 	}
 
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
 	return result
 }
 
@@ -453,6 +455,8 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 			result.Subqueries = append(result.Subqueries, whereSubqueries...)
 		}
 	}
+
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
 }
@@ -551,6 +555,8 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Where = where
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
+
+	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
 }
@@ -1607,4 +1613,29 @@ func coveredSpan(node interface {
 		return [2]int{start, stop}
 	}
 	return [2]int{from, to}
+}
+
+// addReturningFields records the columns a RETURNING clause hands back. They
+// are read from the target table and reach the caller's rows, so a rule hiding
+// one has to find it here as it would in a select.
+func (i *Inspector) addReturningFields(
+	result *core.InspectStatement,
+	ret sqlite.IReturning_clauseContext,
+	schema, table string,
+) {
+	if ret == nil {
+		return
+	}
+	refs := []core.RelationRef{{Table: table, Schema: schema}}
+	for _, column := range ret.AllResult_column() {
+		if column.STAR() != nil {
+			result.Fields = core.MergeInspectFields(result.Fields,
+				core.TableFields(i.meta, schema, table, i.dialect))
+			continue
+		}
+		if expr := column.Expr(); expr != nil {
+			result.Fields = core.MergeInspectFields(result.Fields,
+				i.extractFieldsFromExpr(expr, refs, nil, nil, nil))
+		}
+	}
 }
