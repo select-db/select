@@ -279,7 +279,13 @@ func (i *Inspector) inspectSelectCore(
 		tables = core.MergeInspectTables(tables, subq.Tables)
 	}
 
-	allSubqueries := fromSubqueries
+	// The CTE bodies come first: extractSelectFieldsWithResolution walks this
+	// slice by index, the CTEs against its head and the subquery aliases
+	// against what follows. Handing it the subqueries alone maps a CTE name to
+	// a subquery's columns and leaves the alias resolving to nothing.
+	allSubqueries := make([]core.InspectStatement, 0, len(cteSubqueries)+len(fromSubqueries))
+	allSubqueries = append(allSubqueries, cteSubqueries...)
+	allSubqueries = append(allSubqueries, fromSubqueries...)
 	fields := i.extractSelectFieldsWithResolution(selectCore, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
 	where, whereSubqueries := i.extractWhereFields(selectCore, relationRefs)
@@ -1022,10 +1028,22 @@ func (i *Inspector) extractSelectFieldsWithResolution(
 	// Use deterministic ordering: CTEs first, then subqueries in order
 	virtualTableFields := make(map[string][]core.InspectField)
 
+	// A name the statement qualified is the real table even where a CTE
+	// shadows the bare one, so its columns are not the CTE's.
+	qualified := make(map[string]bool)
+	for _, ref := range relationRefs {
+		if ref.Qualified {
+			qualified[i.dialect.NormalizeIdentifier(ref.Table)] = true
+		}
+	}
+
 	// Map CTEs to their subquery results
 	for idx, cte := range ctes {
 		if idx < len(subqueries) {
 			cteKey := i.dialect.NormalizeIdentifier(cte.Table)
+			if qualified[cteKey] {
+				continue
+			}
 			virtualTableFields[cteKey] = subqueries[idx].Fields
 		}
 	}

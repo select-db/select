@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -574,5 +575,80 @@ func TestExecuteLocalQualifiedNameIsNotTheCTE(t *testing.T) {
 	if result.Rows[0][email] != core.MaskedValue {
 		t.Errorf("contacts.email = %v, want %q: the CTE shadows the bare name only",
 			result.Rows[0][email], core.MaskedValue)
+	}
+}
+
+// A derived table resolves to the columns it reads. A CTE anywhere in the
+// statement must not change that: the inspector walks its subqueries by
+// position, and handing it the wrong list left the alias resolving to a table
+// that does not exist, which no rule names and every wildcard allows.
+func TestExecuteLocalDerivedTableUnderACTEStillMasks(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT * FROM (SELECT email FROM users) q",
+		"WITH z AS (SELECT 1) SELECT * FROM (SELECT email FROM users) q",
+		"WITH z AS (SELECT id FROM contacts) SELECT * FROM (SELECT email FROM users) q",
+		"WITH contacts AS (SELECT email FROM users) SELECT * FROM (SELECT * FROM users) q",
+		"WITH a AS (SELECT id FROM users), b AS (SELECT id FROM contacts) SELECT * FROM (SELECT email FROM users) q",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount == 0 {
+				t.Fatal("no rows, so nothing here was checked")
+			}
+			email := slices.Index(result.Columns, "email")
+			if email < 0 {
+				t.Fatalf("no email column in %v, so nothing here was checked", result.Columns)
+			}
+			if result.Rows[0][email] != core.MaskedValue {
+				t.Errorf("users.email = %v, want %q", result.Rows[0][email], core.MaskedValue)
+			}
+		})
+	}
+}
+
+// A CTE may rename what it returns through a column list, which the inspectors
+// do not follow. The column then names no table, so it cannot be masked; it
+// must not be shown either.
+func TestExecuteLocalCTEColumnListDoesNotLeak(t *testing.T) {
+	for _, sql := range []string{
+		"WITH r(x) AS (SELECT email FROM users) SELECT x FROM r",
+		"WITH RECURSIVE r(x) AS (SELECT email FROM users LIMIT 1) SELECT x FROM r",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				return // refused, which hides it too
+			}
+			for i, row := range result.Rows {
+				for _, v := range row {
+					if s, ok := v.(string); ok && strings.Contains(s, "@example.com") {
+						t.Errorf("row %d returned users.email in full: %v", i, v)
+					}
+				}
+			}
+		})
 	}
 }

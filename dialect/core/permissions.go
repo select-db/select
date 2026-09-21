@@ -330,13 +330,16 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		// it decides, so a name another scope reuses cannot hide a column this
 		// one shows. A name it carries up from a subquery resolves to none, and
 		// the subquery is what knows where the value came from.
-		found, resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
+		_, resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
 		if !resolved {
-			nestedFound, _, nestedDeny := seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
-			found = found || nestedFound
+			_, nestedResolved, nestedDeny := seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
+			resolved = resolved || nestedResolved
 			deny = deny || nestedDeny
 		}
-		accounted[i] = found
+		// Only a field that named a table accounts for the column. One that
+		// resolved to nothing carries no permission, so treating it as an
+		// answer would leave the column neither masked nor asked about.
+		accounted[i] = resolved
 		if deny {
 			maskPositions = append(maskPositions, i)
 		}
