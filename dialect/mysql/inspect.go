@@ -409,6 +409,12 @@ func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, re
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
 	}
+	// An OVER written inline on a result column orders or partitions the rows
+	// an aggregate counts, so what it names is tested even where the column
+	// itself is never returned.
+	for _, over := range core.CollectNodes[mysql.IWindowingClauseContext](spec) {
+		fields = core.MergeInspectFields(fields, i.testedFields(over, refs))
+	}
 	return core.DistinctTestsProjection(isDistinct(spec), fields, projection)
 }
 

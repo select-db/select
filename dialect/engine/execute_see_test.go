@@ -784,6 +784,9 @@ func TestExecuteLocalOrderByHiddenColumnRefused(t *testing.T) {
 		"SELECT count(*) FROM users GROUP BY email",
 		"SELECT id, count(*) FROM users GROUP BY id HAVING max(email) > 'm'",
 		"SELECT DISTINCT email FROM users",
+		"SELECT id, row_number() OVER (ORDER BY email) AS rn FROM users",
+		"SELECT id, count(*) OVER (PARTITION BY email) AS n FROM users",
+		"SELECT id FROM (SELECT id, count(*) FILTER (WHERE email LIKE 'a%') AS n FROM users GROUP BY id) s WHERE s.n > 0",
 		"SELECT u.id FROM users u JOIN contacts c ON c.email = u.email",
 		"SELECT u.id FROM users u JOIN contacts c USING (email)",
 		"SELECT u.id FROM users u NATURAL JOIN contacts c",
@@ -993,6 +996,64 @@ func TestExecuteLocalPredicateThroughDerivedTableRuns(t *testing.T) {
 			}
 			if i := slices.Index(result.Columns, "email"); i >= 0 && result.Rows[0][i] != core.MaskedValue {
 				t.Errorf("email = %v, want masked", result.Rows[0][i])
+			}
+		})
+	}
+}
+
+// An upsert chooses which rows it updates, and the predicate it chooses them
+// with reads the stored row, not the one being inserted.
+func TestExecuteLocalUpsertPredicateOnHiddenColumnIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"INSERT INTO users (id, age) VALUES (1, 9) ON CONFLICT (id) DO UPDATE SET age = 9 WHERE users.email LIKE 'a%'",
+		"INSERT INTO users (id, age) VALUES (1, 9) ON CONFLICT (id) DO UPDATE SET age = length(users.email)",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "insert", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatal("ran, so the rows it touched answer for the hidden column")
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// An upsert that names no hidden column is ordinary work, including one that
+// writes to a hidden column: storing a value is not reading it.
+func TestExecuteLocalUpsertOnVisibleColumnsRuns(t *testing.T) {
+	for _, sql := range []string{
+		"INSERT INTO users (id, email, age) VALUES (1, 'z', 9) ON CONFLICT (id) DO UPDATE SET age = 9 WHERE users.id = 1",
+		"INSERT INTO users (id, email) VALUES (1, 'x') ON CONFLICT (id) DO UPDATE SET email = 'y'",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "insert", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			if result := runQuery(ctx, conn, sql); len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
 			}
 		})
 	}

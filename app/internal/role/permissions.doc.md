@@ -62,12 +62,25 @@ WHERE is not the only clause that asks. GROUP BY, ORDER BY, HAVING, a join
 condition and a window clause each read a column without returning it, and each
 answers a question a row at a time: which group a row falls in, which of two
 rows sorts first, whether a join matched. They are refused on the same terms as
-a WHERE. SELECT DISTINCT is refused too, since collapsing duplicate rows makes
-the row count the number of distinct values in the columns it names.
+a WHERE, whether the join names its columns in an ON, in a USING list or in
+neither, as NATURAL does, and whether the statement reading them is a select or
+the FROM of an UPDATE. `FILTER (WHERE ...)` and the ORDER BY or PARTITION BY of
+an `OVER (...)` ask the same way. SELECT DISTINCT is refused too, since
+collapsing duplicate rows makes the row count the number of distinct values in
+the columns it names, and so is the predicate of an ON CONFLICT, which chooses
+which stored rows an upsert changes.
 
 The whole statement is read, so a column hidden at the bottom stays hidden when
 a derived table or a CTE hands it up, and the rows a write returns through
-RETURNING are masked like any others.
+RETURNING are masked like any others. Renaming it on the way up does not unhide
+it: a statement testing `s.email` where `s` is a derived table is refused like
+one testing `users.email`.
+
+A write is refused where it reads a hidden column, rather than masked. Masking
+works on the rows a statement hands back, and what a write reads it stores:
+`INSERT INTO other (c) SELECT email FROM users` would leave the caller a table
+it may select from, holding the values SEE refused it. Writing to a hidden
+column is not reading it, and stays allowed.
 
 Where a result column cannot be traced back to a column of a table, and a hidden
 column in the statement has no result column of its own, the statement is

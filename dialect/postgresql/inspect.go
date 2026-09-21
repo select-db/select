@@ -395,7 +395,23 @@ func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext,
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
 	}
+	fields = core.MergeInspectFields(fields, i.overAndFilterFields(primary, refs))
 	return core.DistinctTestsProjection(plainDistinct(primary.Distinct_clause()), fields, projection)
+}
+
+// overAndFilterFields are the columns an OVER or a FILTER names where the
+// clause is written inline on a result column rather than as a WINDOW clause
+// of its own. Both order or choose the rows an aggregate counts, so what they
+// name is tested even where the column itself is never returned.
+func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef) []core.InspectField {
+	var fields []core.InspectField
+	for _, over := range core.CollectNodes[pg.IOver_clauseContext](tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(over, refs))
+	}
+	for _, filter := range core.CollectNodes[pg.IFilter_clauseContext](tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(filter, refs))
+	}
+	return fields
 }
 
 // plainDistinct reports whether a DISTINCT clause collapses rows on the whole
@@ -512,7 +528,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	_, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
-	// INSERT … SELECT: the grammar always wraps the source as a Selectstmt.
+	// INSERT ... SELECT: the grammar always wraps the source as a Selectstmt.
 	// When it's a real SELECT (has tables), attach as subquery.
 	// When it's VALUES, the Selectstmt has no FROM, so Tables is empty, skip.
 	if selectStmt := rest.Selectstmt(); selectStmt != nil {
@@ -523,6 +539,12 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 			result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(rest)...)
 		}
 	}
+
+	// An ON CONFLICT clause chooses which rows it updates and reads values into
+	// them, both against the target table, so what it names is tested.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.testedFields(core.TreeOrNil(stmt.Opt_on_conflict()),
+			[]core.RelationRef{{Table: tableName, Schema: schema}}))
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
