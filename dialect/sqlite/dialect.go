@@ -204,14 +204,24 @@ func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 	}
 }
 
-// NormalizeIdentifier normalizes an identifier according to SQLite rules
+// NormalizeIdentifier normalizes an identifier according to SQLite rules.
+//
+// SQLite takes an identifier in double quotes, in backticks or in square
+// brackets, the last two for compatibility with MySQL and SQL Server. A name
+// left wearing its quotes matches no column of the metadata, so a rule naming
+// that column would not find it.
 func (d *Dialect) NormalizeIdentifier(raw string) string {
-	// Strip quotes if present
-	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
-		// Quoted identifier - preserve case and strip quotes
-		unquoted := raw[1 : len(raw)-1]
-		// Handle escaped quotes (doubled quotes)
-		return strings.ReplaceAll(unquoted, `""`, `"`)
+	if len(raw) >= 2 {
+		switch {
+		case raw[0] == '"' && raw[len(raw)-1] == '"':
+			return strings.ReplaceAll(raw[1:len(raw)-1], `""`, `"`)
+		case raw[0] == '`' && raw[len(raw)-1] == '`':
+			return strings.ReplaceAll(raw[1:len(raw)-1], "``", "`")
+		// A bracketed name ends at the first "]": SQLite has no escape inside
+		// brackets, unlike SQL Server's doubled one.
+		case raw[0] == '[' && raw[len(raw)-1] == ']':
+			return raw[1 : len(raw)-1]
+		}
 	}
 	// SQLite is case-insensitive for unquoted identifiers
 	return strings.ToLower(raw)
