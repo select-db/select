@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"strings"
+
 )
 
 // CandidateType represents the type of a completion suggestion
@@ -58,8 +59,8 @@ func (t CandidateType) String() string {
 // Candidate is a completion suggestion item
 type Candidate struct {
 	Type       CandidateType
-	Text       string // Display text shown in completion list
-	InsertText string // Text to insert (may contain snippet placeholders like $1, $0)
+	Text       string     // Display text shown in completion list
+	InsertText string     // Text to insert (may contain snippet placeholders like $1, $0)
 	Definition string
 	Comment    string
 }
@@ -77,11 +78,11 @@ const (
 	CompletionTargetEnumValue   // Enum value completion (col = '|', col IN ('|'))
 	CompletionTargetSetting     // Runtime parameter completion (@@var, SHOW, PRAGMA)
 
-	CompletionTargetSchemaAndTable           = CompletionTargetSchema | CompletionTargetTable
+	CompletionTargetSchemaAndTable        = CompletionTargetSchema | CompletionTargetTable
 	CompletionTargetSchemaAndRelationRefOnly = CompletionTargetSchema | CompletionTargetTable | completionTargetRefOnlyFlag
-	CompletionTargetSchemaAndTableAll        = CompletionTargetSchema | CompletionTargetTable | completionTargetAllFlag
-	CompletionTargetTableAndColumn           = CompletionTargetTable | CompletionTargetColumn
-	CompletionTargetAll                      = CompletionTargetSchema | CompletionTargetTable | CompletionTargetColumn
+	CompletionTargetSchemaAndTableAll     = CompletionTargetSchema | CompletionTargetTable | completionTargetAllFlag
+	CompletionTargetTableAndColumn        = CompletionTargetTable | CompletionTargetColumn
+	CompletionTargetAll                   = CompletionTargetSchema | CompletionTargetTable | CompletionTargetColumn
 )
 
 // PrecedingColumnInfo holds info about the column preceding the caret (for operator completion)

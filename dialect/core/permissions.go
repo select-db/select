@@ -310,9 +310,8 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		return nil, nil
 	}
 
-	// A write hands rows back through RETURNING, so the check cannot be a
-	// select's alone. A statement we could not read has no fields to match, and
-	// the rule below refuses a column nothing accounts for.
+	// A write hands rows back through RETURNING, so this cannot be a select's
+	// check alone.
 	if !ReturnsRows(stmt.Operation) {
 		return nil, nil
 	}
@@ -321,24 +320,21 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		return nil, nil
 	}
 
-	fields := readFields(stmt, nil)
-	nested := fields[len(stmt.Fields):]
+	nested := nestedReadFields(stmt, nil)
+	fields := append(append(make([]InspectField, 0, len(stmt.Fields)+len(nested)), stmt.Fields...), nested...)
 	matched := make([]bool, len(fields))
 	allAccounted := true
 	var maskPositions []int
 
 	for i, dc := range driverCols {
-		// Where the statement's own projection resolves the column to a table,
-		// it decides, so a name another scope reuses cannot hide a column this
-		// one shows. A name it carries up from a subquery resolves to none, and
-		// the subquery is what knows where the value came from.
+		// The statement's own projection decides where it resolves the column
+		// to a table, so a name another scope reuses cannot hide one it shows.
 		resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
 		if !resolved {
 			resolved, deny = seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
 		}
-		// Only a field that named a table accounts for the column. One that
-		// resolved to nothing carries no permission, so treating it as an
-		// answer would leave the column neither masked nor asked about.
+		// A field that resolved to no table carries no permission, so it
+		// accounts for nothing.
 		if !resolved {
 			allAccounted = false
 		}
@@ -347,18 +343,15 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		}
 	}
 
-	// A see-denied column the statement selects under no name of its own is
-	// used inside an expression, which has no position to mask. A subquery may
-	// select one the outer statement then drops, so only the statement's own
-	// fields are read here. readFields appends them first.
+	// A see-denied column the statement selects under no name of its own sits
+	// inside an expression, which has no position to mask. Only its own fields
+	// are read here: a subquery may select one the outer statement then drops.
 	if denied := firstSeeDenied(stmt.Fields, matched, dbInstanceID, perms); denied != nil {
 		return nil, denied
 	}
 
-	// A result column no field accounts for may be carrying one: an expression
-	// over it, a subquery whose alias the inspector does not follow, or a column
-	// added to the table since the metadata was read. A field already matched
-	// is already masked, so only the ones left over can be what it carries.
+	// A result column nothing accounts for may be carrying a hidden one, and
+	// the fields left unmatched are what it could be carrying.
 	if !allAccounted {
 		if denied := firstSeeDenied(fields, matched, dbInstanceID, perms); denied != nil {
 			return nil, denied
@@ -371,11 +364,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 // ReturnsRows reports whether an operation can hand rows back to the caller. A
 // select does, and so does a write with a RETURNING clause.
 func ReturnsRows(op InspectOperation) bool {
-	switch op {
-	case InspectOpSelect, InspectOpInsert, InspectOpUpdate, InspectOpDelete:
-		return true
-	}
-	return false
+	return op == InspectOpSelect || isWrite(op)
 }
 
 // seeColumn scans the fields a result column named dc could come out under and
@@ -478,17 +467,17 @@ func isWrite(op InspectOperation) bool {
 	return false
 }
 
-// readFields returns every field whose value the statement can return, its own
-// first. A derived table or a scalar subquery reads a column just as the outer
-// select does, and the value it returns is the one that reaches the row. A
-// filter's rows are a condition, so it is skipped.
-func readFields(stmt InspectStatement, into []InspectField) []InspectField {
-	into = append(into, stmt.Fields...)
+// nestedReadFields returns every field the statement's subqueries can return.
+// A derived table or a scalar subquery reads a column just as the outer select
+// does, and the value it returns is the one that reaches the row. A filter's
+// rows are a condition, so it is skipped.
+func nestedReadFields(stmt InspectStatement, into []InspectField) []InspectField {
 	for _, sub := range stmt.Subqueries {
 		if sub.Filter {
 			continue
 		}
-		into = readFields(sub, into)
+		into = append(into, sub.Fields...)
+		into = nestedReadFields(sub, into)
 	}
 	return into
 }

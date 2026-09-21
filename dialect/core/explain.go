@@ -49,21 +49,21 @@ type ExplainNode struct {
 
 // CacheStats represents cache/buffer statistics from explain plans.
 type CacheStats struct {
-	SharedHitBlocks     *float64 `json:"sharedHitBlocks,omitempty"`
-	SharedReadBlocks    *float64 `json:"sharedReadBlocks,omitempty"`
+	SharedHitBlocks    *float64 `json:"sharedHitBlocks,omitempty"`
+	SharedReadBlocks   *float64 `json:"sharedReadBlocks,omitempty"`
 	SharedDirtiedBlocks *float64 `json:"sharedDirtiedBlocks,omitempty"`
 	SharedWrittenBlocks *float64 `json:"sharedWrittenBlocks,omitempty"`
-	TempReadBlocks      *float64 `json:"tempReadBlocks,omitempty"`
-	TempWriteBlocks     *float64 `json:"tempWriteBlocks,omitempty"`
-	LocalHitBlocks      *float64 `json:"localHitBlocks,omitempty"`
-	LocalReadBlocks     *float64 `json:"localReadBlocks,omitempty"`
-	LocalDirtiedBlocks  *float64 `json:"localDirtiedBlocks,omitempty"`
-	LocalWrittenBlocks  *float64 `json:"localWrittenBlocks,omitempty"`
+	TempReadBlocks     *float64 `json:"tempReadBlocks,omitempty"`
+	TempWriteBlocks    *float64 `json:"tempWriteBlocks,omitempty"`
+	LocalHitBlocks     *float64 `json:"localHitBlocks,omitempty"`
+	LocalReadBlocks    *float64 `json:"localReadBlocks,omitempty"`
+	LocalDirtiedBlocks *float64 `json:"localDirtiedBlocks,omitempty"`
+	LocalWrittenBlocks *float64 `json:"localWrittenBlocks,omitempty"`
 	// Formatted display strings (computed in backend)
-	SharedHitBlocksFormatted  *string `json:"sharedHitBlocksFormatted,omitempty"`
-	SharedReadBlocksFormatted *string `json:"sharedReadBlocksFormatted,omitempty"`
-	TempReadBlocksFormatted   *string `json:"tempReadBlocksFormatted,omitempty"`
-	TempWriteBlocksFormatted  *string `json:"tempWriteBlocksFormatted,omitempty"`
+	SharedHitBlocksFormatted    *string `json:"sharedHitBlocksFormatted,omitempty"`
+	SharedReadBlocksFormatted   *string `json:"sharedReadBlocksFormatted,omitempty"`
+	TempReadBlocksFormatted     *string `json:"tempReadBlocksFormatted,omitempty"`
+	TempWriteBlocksFormatted    *string `json:"tempWriteBlocksFormatted,omitempty"`
 }
 
 // ExplainRequest contains the input necessary to run an explain.

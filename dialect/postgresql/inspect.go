@@ -11,15 +11,17 @@ import (
 
 // Inspector analyzes SQL statements and extracts structured information
 type Inspector struct {
-	dialect *Dialect
-	meta    core.Metadata
+	dialect  *Dialect
+	meta     core.Metadata
+	resolver core.Resolver
 }
 
 // NewInspector creates a new PostgreSQL statement inspector
 func NewInspector(dialect *Dialect, meta core.Metadata) *Inspector {
 	return &Inspector{
-		dialect: dialect,
-		meta:    meta,
+		dialect:  dialect,
+		meta:     meta,
+		resolver: core.Resolver{Meta: meta, Dialect: dialect},
 	}
 }
 
@@ -205,7 +207,7 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	}
 
 	tail := i.extractTailSubqueries(selectNoParens)
-	i.resolve().DropCTETables(tail, ctes)
+	i.resolver.DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
 
 	// The branches read the tail against their own relations, which is what
@@ -299,7 +301,7 @@ func (i *Inspector) inspectSelectPrimary(
 	fromSubqueries := i.extractFromSubqueriesFromPrimary(primary)
 
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
-	tables := i.resolve().Tables(relationRefs, scope)
+	tables := i.resolver.Tables(relationRefs, scope)
 	for _, subq := range cteSubqueries {
 		tables = core.MergeInspectTables(tables, subq.Tables)
 	}
@@ -316,7 +318,7 @@ func (i *Inspector) inspectSelectPrimary(
 	subqueries := append(fromSubqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(primary)...)
-	i.resolve().DropCTETables(subqueries, ctes)
+	i.resolver.DropCTETables(subqueries, ctes)
 
 	tested := core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields))
 	tested = core.MergeInspectFields(tested,
@@ -327,7 +329,7 @@ func (i *Inspector) inspectSelectPrimary(
 		Operation:  core.InspectOpSelect,
 		Tables:     tables,
 		Fields:     fields,
-		Where:      i.resolve().ThroughVirtual(tested, relationRefs, scope, allSubqueries),
+		Where:      i.resolver.ThroughVirtual(tested, relationRefs, scope, allSubqueries),
 		Subqueries: subqueries,
 	}
 }
@@ -365,14 +367,14 @@ func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope c
 			for _, name := range list.AllName() {
 				names = append(names, i.dialect.NormalizeIdentifier(name.GetText()))
 			}
-			fields = core.MergeInspectFields(fields, i.resolve().NamedColumns(names, refs, scope))
+			fields = core.MergeInspectFields(fields, i.resolver.NamedColumns(names, refs, scope))
 			continue
 		}
 		fields = core.MergeInspectFields(fields, i.testedFields(qual, refs))
 	}
 	for _, joined := range core.CollectNodes[pg.IJoined_tableContext](tree) {
 		if joined.NATURAL() != nil {
-			fields = core.MergeInspectFields(fields, i.resolve().SharedColumns(refs, scope))
+			fields = core.MergeInspectFields(fields, i.resolver.SharedColumns(refs, scope))
 			break
 		}
 	}
@@ -891,7 +893,7 @@ func (i *Inspector) extractSelectFieldsWithResolution(
 ) []core.InspectField {
 	fields := i.extractSelectFields(primary, relationRefs, ctes, subqueryColumns, cteToSubqueryMap)
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
-	return i.resolve().ThroughVirtual(fields, relationRefs, scope, subqueries)
+	return i.resolver.ThroughVirtual(fields, relationRefs, scope, subqueries)
 }
 
 func (i *Inspector) extractSelectFields(
@@ -918,7 +920,7 @@ func (i *Inspector) extractSelectFields(
 	for _, targetEl := range targetElements {
 		// Handle SELECT *
 		if starCtx, ok := targetEl.(*pg.Target_starContext); ok && starCtx.STAR() != nil {
-			fields = append(fields, i.resolve().Star(relationRefs, scope)...)
+			fields = append(fields, i.resolver.Star(relationRefs, scope)...)
 			continue
 		}
 
@@ -926,7 +928,7 @@ func (i *Inspector) extractSelectFields(
 		for _, field := range i.extractFieldsFromTarget(targetEl, relationRefs, ctes, subqueryColumns, cteToSubqueryMap) {
 			// Check if this is a qualified star (table.*)
 			if field.Name == "*" && field.Table != "" {
-				fields = append(fields, i.resolve().QualifiedStar(field.Table, relationRefs, scope)...)
+				fields = append(fields, i.resolver.QualifiedStar(field.Table, relationRefs, scope)...)
 				continue
 			}
 			fields = append(fields, field)
@@ -1156,7 +1158,7 @@ func (i *Inspector) resolveColumn(
 				// Check if this is a CTE
 				for _, cte := range ctes {
 					if i.dialect.NormalizeIdentifier(cte.Table) == i.dialect.NormalizeIdentifier(ref.Table) {
-						return i.resolve().CTEColumn(normalizedCol, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
+						return i.resolver.CTEColumn(normalizedCol, cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)])
 					}
 				}
 
@@ -1188,7 +1190,7 @@ func (i *Inspector) resolveColumn(
 				for _, col := range cte.Columns {
 					if i.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
 						cteKey := i.dialect.NormalizeIdentifier(cte.Table)
-						resolved := i.resolve().CTEColumn(normalizedCol, cteToSubqueryMap[cteKey])
+						resolved := i.resolver.CTEColumn(normalizedCol, cteToSubqueryMap[cteKey])
 						if resolved != nil {
 							resolved.Alias = alias
 							return resolved
@@ -1361,7 +1363,7 @@ func (l *whereColumnExtractorListener) EnterColumnref(ctx *pg.ColumnrefContext) 
 	// Resolve the column to its table
 	var resolvedField *core.InspectField
 	if tablePrefix != "" {
-		resolvedField = l.inspector.resolve().Column(tablePrefix, normalizedCol, l.relationRefs)
+		resolvedField = l.inspector.resolver.Column(tablePrefix, normalizedCol, l.relationRefs)
 	} else {
 		// Unqualified column reference - search all tables
 		for _, ref := range l.relationRefs {
@@ -1441,7 +1443,7 @@ func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext)
 		// the two slices index-aligned for cteToSubqueryMap.
 		subqueries = append(subqueries, i.inspectPreparable(cteEl.Preparablestmt()))
 		body := subqueries[len(subqueries)-1:]
-		i.resolve().DropVirtual(body, core.CTEScope(names, idx, recursive))
+		i.resolver.DropVirtual(body, core.CTEScope(names, idx, recursive))
 
 		var cteColumns []core.Column
 		for _, field := range body[0].Fields {
@@ -1486,7 +1488,7 @@ func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.Relat
 
 	reads := i.extractSubqueriesFromFromList(fromList)
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns}
-	if tables := i.resolve().Tables(refs, scope); len(tables) > 0 {
+	if tables := i.resolver.Tables(refs, scope); len(tables) > 0 {
 		reads = append(reads, core.InspectStatement{
 			Operation: core.InspectOpSelect,
 			Tables:    tables,
@@ -2119,6 +2121,3 @@ func (d *Dialect) processColumnRef(
 }
 
 // resolve binds the shared resolution rules to this inspector's metadata.
-func (i *Inspector) resolve() core.Resolver {
-	return core.Resolver{Meta: i.meta, Dialect: i.dialect}
-}

@@ -32,7 +32,7 @@ func FormatTableDDL(ddl string) string {
 	// Pattern: spaces + (quoted identifier OR unquoted identifier) + space + type + constraints + comma
 	var colLines []string
 	var constraints []string
-
+	
 	// Match quoted identifiers: "identifier" or unquoted: identifier
 	// Then space, then rest of the line (type, constraints, comma)
 	colRegex := regexp.MustCompile(`^(\s+)(("[^"]+")|[^\s"]+)\s+(.+)$`)
@@ -73,10 +73,10 @@ func FormatTableDDL(ddl string) string {
 			continue
 		}
 		indent, name, typeAndRest := match[1], match[2], match[4]
-
+		
 		// Remove trailing comma
 		typeAndRest = strings.TrimSuffix(strings.TrimSpace(typeAndRest), ",")
-
+		
 		// Extract type (before NOT NULL, DEFAULT)
 		typeEnd := len(typeAndRest)
 		for _, sep := range []string{" NOT NULL", " DEFAULT"} {
@@ -100,7 +100,7 @@ func FormatTableDDL(ddl string) string {
 	var result strings.Builder
 	result.WriteString(lines[createIdx])
 	result.WriteString("\n")
-
+	
 	// Format columns
 	for _, c := range cols {
 		typeEnd := len(c.typeAndRest)
@@ -111,7 +111,7 @@ func FormatTableDDL(ddl string) string {
 		}
 		colType := strings.TrimSpace(c.typeAndRest[:typeEnd])
 		rest := strings.TrimSpace(c.typeAndRest[typeEnd:])
-
+		
 		result.WriteString(c.indent)
 		result.WriteString(padRight(c.name, maxNameLen))
 		result.WriteString(" ")
