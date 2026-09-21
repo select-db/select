@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -314,9 +313,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	// A write hands rows back through RETURNING, so the check cannot be a
 	// select's alone. A statement we could not read has no fields to match, and
 	// the rule below refuses a column nothing accounts for.
-	switch stmt.Operation {
-	case InspectOpSelect, InspectOpInsert, InspectOpUpdate, InspectOpDelete:
-	default:
+	if !ReturnsRows(stmt.Operation) {
 		return nil, nil
 	}
 
@@ -327,7 +324,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	fields := readFields(stmt, nil)
 	nested := fields[len(stmt.Fields):]
 	matched := make([]bool, len(fields))
-	accounted := make([]bool, len(driverCols))
+	allAccounted := true
 	var maskPositions []int
 
 	for i, dc := range driverCols {
@@ -335,16 +332,16 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		// it decides, so a name another scope reuses cannot hide a column this
 		// one shows. A name it carries up from a subquery resolves to none, and
 		// the subquery is what knows where the value came from.
-		_, resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
+		resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
 		if !resolved {
-			_, nestedResolved, nestedDeny := seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
-			resolved = resolved || nestedResolved
-			deny = deny || nestedDeny
+			resolved, deny = seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
 		}
 		// Only a field that named a table accounts for the column. One that
 		// resolved to nothing carries no permission, so treating it as an
 		// answer would leave the column neither masked nor asked about.
-		accounted[i] = resolved
+		if !resolved {
+			allAccounted = false
+		}
 		if deny {
 			maskPositions = append(maskPositions, i)
 		}
@@ -362,7 +359,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	// over it, a subquery whose alias the inspector does not follow, or a column
 	// added to the table since the metadata was read. A field already matched
 	// is already masked, so only the ones left over can be what it carries.
-	if slices.Contains(accounted, false) {
+	if !allAccounted {
 		if denied := firstSeeDenied(fields, matched, dbInstanceID, perms); denied != nil {
 			return nil, denied
 		}
@@ -371,10 +368,19 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	return maskPositions, nil
 }
 
+// ReturnsRows reports whether an operation can hand rows back to the caller. A
+// select does, and so does a write with a RETURNING clause.
+func ReturnsRows(op InspectOperation) bool {
+	switch op {
+	case InspectOpSelect, InspectOpInsert, InspectOpUpdate, InspectOpDelete:
+		return true
+	}
+	return false
+}
+
 // seeColumn scans the fields a result column named dc could come out under and
-// marks each in matched at its offset. found reports whether any matched,
-// resolved whether any of those named a table, and deny whether any of those is
-// a column no role may see.
+// marks each in matched at its offset. resolved reports whether any of them
+// named a table, and deny whether any of those is a column no role may see.
 func seeColumn(
 	fields []InspectField,
 	offset int,
@@ -382,13 +388,12 @@ func seeColumn(
 	matched []bool,
 	dbInstanceID string,
 	perms CompiledPermissions,
-) (found, resolved, deny bool) {
+) (resolved, deny bool) {
 	for fi := range fields {
 		f := &fields[fi]
 		if !fieldOutputName(*f, dc) {
 			continue
 		}
-		found = true
 		matched[offset+fi] = true
 		if f.Schema == "" || f.Table == "" {
 			continue
@@ -398,7 +403,7 @@ func seeColumn(
 			deny = true
 		}
 	}
-	return found, resolved, deny
+	return resolved, deny
 }
 
 // firstSeeDenied returns the error for the first field no role may see, or nil.
@@ -443,7 +448,7 @@ func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms Com
 		return nil
 	}
 	for _, stmt := range stmts {
-		if denied := firstSeeDenied(predicateFields(stmt, nil), nil, dbInstanceID, perms); denied != nil {
+		if denied := firstSeeDenied(predicateFields(stmt, false, nil), nil, dbInstanceID, perms); denied != nil {
 			return denied
 		}
 	}
@@ -451,12 +456,20 @@ func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms Com
 }
 
 // predicateFields returns every field the statement tests rather than returns,
-// its subqueries included. A filter's rows do not reach the caller, but what it
-// compares still decides which rows do.
-func predicateFields(stmt InspectStatement, into []InspectField) []InspectField {
+// its subqueries included.
+//
+// A filter's rows do not reach the caller, but what it selects is compared
+// against something, which answers a question about the values just as a WHERE
+// on them does: "WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'" is the
+// same oracle spelled through a subquery. So everything a filter reads counts
+// as tested, its own result columns included.
+func predicateFields(stmt InspectStatement, tested bool, into []InspectField) []InspectField {
 	into = append(into, stmt.Where...)
+	if tested {
+		into = append(into, stmt.Fields...)
+	}
 	for _, sub := range stmt.Subqueries {
-		into = predicateFields(sub, into)
+		into = predicateFields(sub, tested || sub.Filter, into)
 	}
 	return into
 }

@@ -42,8 +42,7 @@ func FirstSelectStatement(stmts []core.InspectStatement) (core.InspectStatement,
 // see check cannot look for a select alone.
 func FirstReturningStatement(stmts []core.InspectStatement) (core.InspectStatement, bool) {
 	for _, r := range stmts {
-		switch r.Operation {
-		case core.InspectOpSelect, core.InspectOpInsert, core.InspectOpUpdate, core.InspectOpDelete:
+		if core.ReturnsRows(r.Operation) {
 			return r, true
 		}
 	}

@@ -54,7 +54,14 @@ A statement that tests a hidden column is refused rather than run. Answering
 values, and enough answers are the value; the row count of an update filtered
 the same way answers it just as well, which is why the refusal does not wait for
 a statement to return rows. Hiding a column from the eye is not hiding it, so
-SEE hides it from the query.
+SEE hides it from the query. A subquery that selects the column to compare it
+against something is the same test written longer, and is refused too: write
+`EXISTS (SELECT 1 FROM ...)` where the column was only there to fill the list.
+
+GROUP BY, ORDER BY, HAVING and a JOIN condition are the same oracle, and are not
+covered yet: the inspectors do not report the columns those clauses name. Until
+they do, SEE is a boundary against a statement that filters on the column, not
+against one that groups or orders by it.
 
 The whole statement is read, so a column hidden at the bottom stays hidden when
 a derived table or a CTE hands it up, and the rows a write returns through

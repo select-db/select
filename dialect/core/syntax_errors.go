@@ -8,7 +8,8 @@ import "github.com/antlr4-go/antlr/v4"
 // fragment error recovery salvaged.
 type SyntaxErrors struct {
 	*antlr.DefaultErrorListener
-	at []int
+	at      []int
+	covered [][2]int
 }
 
 // NewSyntaxErrors returns a listener ready to attach to a parser.
@@ -32,9 +33,6 @@ func (s *SyntaxErrors) SyntaxError(
 	s.at = append(s.at, 0)
 }
 
-// Any reports whether the parser raised anything at all.
-func (s *SyntaxErrors) Any() bool { return len(s.at) > 0 }
-
 // In reports whether an error falls in the half-open token span [from, to).
 func (s *SyntaxErrors) In(from, to int) bool {
 	for _, at := range s.at {
@@ -45,12 +43,26 @@ func (s *SyntaxErrors) In(from, to int) bool {
 	return false
 }
 
-// Outside reports whether an error falls in none of the given spans, which
-// means the parser stumbled over text no statement we report covers.
-func (s *SyntaxErrors) Outside(spans [][2]int) bool {
+// Cover records that a reported statement accounts for the span a node covers,
+// falling back to [from, to) for a node error recovery left without bounds,
+// which covers more and so reports less.
+func (s *SyntaxErrors) Cover(node interface {
+	GetStart() antlr.Token
+	GetStop() antlr.Token
+}, from, to int) {
+	if start, stop, ok := NodeSpan(node); ok {
+		s.covered = append(s.covered, [2]int{start, stop})
+		return
+	}
+	s.covered = append(s.covered, [2]int{from, to})
+}
+
+// Uncovered reports whether the parser stumbled over text no reported statement
+// covers, which is SQL the caller will run and we never looked at.
+func (s *SyntaxErrors) Uncovered() bool {
 	for _, at := range s.at {
 		covered := false
-		for _, span := range spans {
+		for _, span := range s.covered {
 			if at >= span[0] && at < span[1] {
 				covered = true
 				break

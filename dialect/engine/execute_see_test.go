@@ -363,7 +363,7 @@ func TestExecuteLocalRejectsSubqueryOverSeeDenied(t *testing.T) {
 // on it already is. A subquery filtering on it stays ordinary work.
 func TestExecuteLocalFilterSubqueryPassesWithSeeDenied(t *testing.T) {
 	for _, sql := range []string{
-		"SELECT id FROM users WHERE EXISTS (SELECT email FROM users)",
+		"SELECT id FROM users WHERE EXISTS (SELECT 1 FROM users)",
 		"SELECT id FROM users WHERE id IN (SELECT id FROM users)",
 	} {
 		t.Run(sql, func(t *testing.T) {
@@ -394,7 +394,7 @@ func TestExecuteLocalFilterSubqueryPassesWithSeeDenied(t *testing.T) {
 func TestExecuteLocalAggregateOverFilterSubqueryPasses(t *testing.T) {
 	for _, sql := range []string{
 		"SELECT count(*) FROM users WHERE id > 0",
-		"SELECT count(*) FROM users WHERE EXISTS (SELECT email FROM users)",
+		"SELECT count(*) FROM users WHERE EXISTS (SELECT 1 FROM users)",
 		"SELECT count(*) FROM users WHERE id IN (SELECT id FROM users WHERE age > 0)",
 	} {
 		t.Run(sql, func(t *testing.T) {
@@ -436,14 +436,14 @@ func setupContactsDB(t *testing.T) (*sql.DB, *core.Metadata) {
 	return db, meta
 }
 
-// A clause that chooses or orders rows returns none of them, so naming the
-// hidden column there must not mask a column of the same name that is shown.
+// A clause that chooses or orders rows returns none of them, so naming a
+// visible column there must not mask a column of the same name that is shown.
 func TestExecuteLocalClauseSubqueryDoesNotMask(t *testing.T) {
 	for _, sql := range []string{
-		"SELECT c.email FROM contacts c WHERE EXISTS (SELECT u.email FROM users u)",
-		"SELECT c.email FROM contacts c GROUP BY c.email HAVING EXISTS (SELECT u.email FROM users u)",
-		"SELECT c.email FROM contacts c ORDER BY (SELECT u.email FROM users u LIMIT 1)",
-		"SELECT c.email FROM contacts c LIMIT (SELECT count(u.email) FROM users u)",
+		"SELECT c.email FROM contacts c WHERE EXISTS (SELECT u.id FROM users u)",
+		"SELECT c.email FROM contacts c GROUP BY c.email HAVING EXISTS (SELECT u.id FROM users u)",
+		"SELECT c.email FROM contacts c ORDER BY (SELECT u.id FROM users u LIMIT 1)",
+		"SELECT c.email FROM contacts c LIMIT (SELECT count(u.id) FROM users u)",
 	} {
 		t.Run(sql, func(t *testing.T) {
 			db, meta := setupContactsDB(t)
@@ -732,5 +732,41 @@ func TestExecuteLocalReturningShowsVisibleColumns(t *testing.T) {
 		if v == core.MaskedValue {
 			t.Errorf("a column the role may see was masked: %v", result.Rows[0])
 		}
+	}
+}
+
+// A filter compares what it selects against something, which answers a question
+// about those values exactly as a WHERE on them does. The shortest form is a
+// scalar subquery: each spelling of the pattern returns a row count, and enough
+// of them are the value.
+func TestExecuteLocalFilterSelectingAHiddenColumnIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT count(*) FROM users WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'",
+		"SELECT id FROM users WHERE EXISTS (SELECT email FROM users)",
+		"SELECT id FROM users WHERE id IN (SELECT id FROM users WHERE email > '')",
+		"SELECT id FROM users ORDER BY (SELECT email FROM users LIMIT 1)",
+		"SELECT id FROM users GROUP BY id HAVING EXISTS (SELECT email FROM users)",
+		"UPDATE users SET age = 1 WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %v", result.Rows)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
 	}
 }

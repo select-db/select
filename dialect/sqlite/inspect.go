@@ -61,7 +61,6 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	var results []core.InspectStatement
-	var spans [][2]int
 	idx := 0
 	for idx < len(stmtLists) {
 		// Collect consecutive stmt_lists connected by compound operators (UNION/INTERSECT/EXCEPT).
@@ -82,12 +81,12 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// of the script its row actions.
 		groupFrom, _ := core.TokenSpan(tokenStream, stmtLists, first)
 		_, groupTo := core.TokenSpan(tokenStream, stmtLists, idx)
-		spans = append(spans, coveredSpan(stmtLists[idx], groupFrom, groupTo))
+		syntax.Cover(stmtLists[idx], groupFrom, groupTo)
 
 		if len(group) > 1 {
 			read := core.OrUnknown(i.mergeCompoundSelectGroup(group))
-			unreadable := syntax.In(groupFrom, groupTo) && len(read.Tables) == 0
-			if callsHostFunction(tokenStream, groupFrom, groupTo) || unreadable {
+			read = core.NestUnderUnknownIfUnreadable(read, syntax, groupFrom, groupTo)
+			if callsHostFunction(tokenStream, groupFrom, groupTo) {
 				read = core.NestUnderUnknown(read)
 			}
 			results = append(results, read)
@@ -100,8 +99,8 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 			read := core.OrUnknown(i.inspectStatement(stmts[si]))
 			from, to := core.TokenSpan(tokenStream, stmts, si)
 			to = core.Clamp(to, from, groupTo)
-			unreadable := syntax.In(from, to) && len(read.Tables) == 0
-			if callsHostFunction(tokenStream, from, to) || unreadable {
+			read = core.NestUnderUnknownIfUnreadable(read, syntax, from, to)
+			if callsHostFunction(tokenStream, from, to) {
 				read = core.NestUnderUnknown(read)
 			}
 			results = append(results, read)
@@ -109,9 +108,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		idx++
 	}
 
-	// Text the parser stumbled over that no statement covers is SQL the caller
-	// will run and we never reported.
-	if syntax.Outside(spans) {
+	if syntax.Uncovered() {
 		results = append(results, core.UnknownStatement())
 	}
 
@@ -1600,19 +1597,6 @@ func (l *subqueryExtractorListener) EnterTable_or_subquery(ctx *sqlite.Table_or_
 // resolve binds the shared resolution rules to this inspector's metadata.
 func (i *Inspector) resolve() core.Resolver {
 	return core.Resolver{Meta: i.meta, Dialect: i.dialect}
-}
-
-// coveredSpan is the token span a statement accounts for. A node error recovery
-// left without bounds falls back to the span up to the next statement, which
-// covers more and so reports less.
-func coveredSpan(node interface {
-	GetStart() antlr.Token
-	GetStop() antlr.Token
-}, from, to int) [2]int {
-	if start, stop, ok := core.NodeSpan(node); ok {
-		return [2]int{start, stop}
-	}
-	return [2]int{from, to}
 }
 
 // addReturningFields records the columns a RETURNING clause hands back. They
