@@ -54,6 +54,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 	var results []core.InspectStatement
 	idx := 0
+	cursor := 0
 	for idx < len(stmtLists) {
 		// Collect consecutive stmt_lists connected by compound operators (UNION/INTERSECT/EXCEPT).
 		// The SQLite grammar emits each UNION branch as a separate sql_stmt_list at the top level.
@@ -75,6 +76,13 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// of the script its row actions.
 		groupFrom, _ := core.TokenSpan(tokenStream, stmtLists, first)
 		_, groupTo := core.TokenSpan(tokenStream, stmtLists, idx)
+		// Error recovery can skip the tokens before a statement, which leaves
+		// them belonging to nobody: "REVOKE SELECT ON t1 FROM bob" starts its
+		// only statement at the SELECT, so the error on REVOKE falls outside
+		// every span and the salvaged read looks like a statement of its own.
+		// Every token belongs to the statement that follows it.
+		groupFrom = core.Clamp(cursor, 0, groupFrom)
+		cursor = groupTo
 		syntax.Cover(stmtLists[idx], groupFrom, groupTo)
 
 		if len(group) > 1 {
@@ -92,6 +100,9 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		for si := range stmts {
 			read := core.OrUnknown(i.inspectStatement(stmts[si]))
 			from, to := core.TokenSpan(tokenStream, stmts, si)
+			if si == 0 {
+				from = core.Clamp(groupFrom, 0, from)
+			}
 			to = core.Clamp(to, from, groupTo)
 			read = core.NestUnderUnknownIfUnreadable(read, syntax, from, to)
 			if callsHostFunction(tokenStream, from, to) {
@@ -571,6 +582,17 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.Upsert_clause()),
 			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
+
+	// REPLACE, and its INSERT OR REPLACE spelling, delete whatever conflicts
+	// before inserting, and an upsert rewrites it. Either way the row that was
+	// there does not survive, so insert alone is not the right the statement
+	// needs.
+	if stmt.REPLACE_() != nil {
+		core.AlsoPerforms(result, core.InspectOpDelete)
+	}
+	if upsert := stmt.Upsert_clause(); upsert != nil && upsert.UPDATE_() != nil {
+		core.AlsoPerforms(result, core.InspectOpUpdate)
+	}
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 

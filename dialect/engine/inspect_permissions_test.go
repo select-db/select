@@ -930,23 +930,28 @@ func TestPermissions_AWriteNamingNoTableIsRefused(t *testing.T) {
 	}
 }
 
-// The same spelling on the dialect that owns it still resolves to its table and
-// needs exactly insert, so refusing it everywhere was never the fix.
+// The same spelling on the dialect that owns it still resolves to its table, so
+// refusing it everywhere was never the fix. OR REPLACE deletes the row it
+// conflicts with and OR IGNORE leaves it alone, which is the difference
+// between the two rights they ask for.
 func TestPermissions_SQLiteStillReadsItsOwnUpsert(t *testing.T) {
-	for _, sql := range []string{
-		"INSERT OR REPLACE INTO t1 VALUES (1, 'a')",
-		"INSERT OR IGNORE INTO t1 VALUES (1, 'a')",
+	for _, tt := range []struct {
+		sql   string
+		needs []string
+	}{
+		{"INSERT OR REPLACE INTO t1 VALUES (1, 'a')", []string{core.ActionInsert, core.ActionDelete}},
+		{"INSERT OR IGNORE INTO t1 VALUES (1, 'a')", []string{core.ActionInsert}},
 	} {
-		t.Run(sql, func(t *testing.T) {
-			inspected := Inspect(GetDialect("sqlite"), permMeta(), sql)
+		t.Run(tt.sql, func(t *testing.T) {
+			inspected := Inspect(GetDialect("sqlite"), permMeta(), tt.sql)
 			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpInsert, Schema: "main", Name: "t1"}) {
 				t.Fatalf("no insert on main.t1 reported: %+v", inspected)
 			}
 			if err := core.CheckQueryPermissions(inspected, permDBID, holding(core.ActionSelect)); err == nil {
 				t.Error("ran holding select alone")
 			}
-			if err := core.CheckQueryPermissions(inspected, permDBID, holding(core.ActionInsert)); err != nil {
-				t.Errorf("holding insert still refused it: %v", err)
+			if err := core.CheckQueryPermissions(inspected, permDBID, holding(tt.needs...)); err != nil {
+				t.Errorf("holding %v still refused it: %v", tt.needs, err)
 			}
 		})
 	}

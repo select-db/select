@@ -53,6 +53,9 @@ func TestInspectSQLiteSpecific(t *testing.T) {
 					Tables: []core.InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 					},
+					Subqueries: []core.InspectStatement{
+						{Operation: core.InspectOpUpdate, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}},
+					},
 				},
 			},
 		},

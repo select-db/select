@@ -556,9 +556,17 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 
 	// An ON CONFLICT clause chooses which rows it updates and reads values into
 	// them, both against the target table, so what it names is tested.
+	conflict := stmt.Opt_on_conflict()
 	result.Where = core.MergeInspectFields(result.Where,
-		i.testedFields(core.TreeOrNil(stmt.Opt_on_conflict()),
+		i.testedFields(core.TreeOrNil(conflict),
 			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
+
+	// DO UPDATE rewrites the row it conflicts with, so the row that was there
+	// does not survive and insert alone is not the right the statement needs.
+	// DO NOTHING leaves it exactly as it was.
+	if conflict != nil && conflict.UPDATE() != nil {
+		core.AlsoPerforms(result, core.InspectOpUpdate)
+	}
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
