@@ -217,6 +217,10 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	result.Where = core.MergeInspectFields(result.Where,
 		i.tailClauseFields(selectNoParens, core.RelationRefsOf(result)))
 
+	result.Where = core.DistinctTestsProjection(
+		core.DedupsRows(selectNoParens, compoundOperators, pg.PostgreSQLParserALL),
+		result.Where, result.Fields)
+
 	return result
 }
 
@@ -413,6 +417,14 @@ func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef
 		fields = core.MergeInspectFields(fields, i.testedFields(filter, refs))
 	}
 	return fields
+}
+
+// compoundOperators are the set operators whose plain form collapses duplicate
+// rows.
+var compoundOperators = []int{
+	pg.PostgreSQLParserUNION,
+	pg.PostgreSQLParserINTERSECT,
+	pg.PostgreSQLParserEXCEPT,
 }
 
 // plainDistinct reports whether a DISTINCT clause collapses rows on the whole

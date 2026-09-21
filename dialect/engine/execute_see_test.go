@@ -1119,3 +1119,100 @@ func TestExecuteLocalDerivedTableAliasesKeepTheirColumns(t *testing.T) {
 		t.Error("y.id wrongly masked")
 	}
 }
+
+// A derived table or a CTE that renames a hidden column hands it up under the
+// new name. Testing it there is testing the column.
+func TestExecuteLocalRenamedHiddenColumnIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT s.id FROM (SELECT id, email AS e FROM users) s WHERE s.e LIKE 'a%'",
+		"SELECT s.id FROM (SELECT id, email AS e FROM users) s ORDER BY s.e",
+		"SELECT s.id FROM (SELECT id, email AS e FROM users) s GROUP BY s.e, s.id",
+		"WITH q AS (SELECT id, email AS e FROM users) SELECT q.id FROM q WHERE q.e LIKE 'a%'",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %d rows, which answers for the hidden column", result.RowCount)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// Renaming a hidden column and returning it is still masking, not refusal, and
+// renaming a visible one changes nothing.
+func TestExecuteLocalRenamedColumnStillMasks(t *testing.T) {
+	db, meta := setupUsersDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn, "SELECT s.e FROM (SELECT email AS e FROM users) s")
+	if len(result.Errors) != 0 {
+		t.Fatalf("ordinary work refused: %v", result.Errors)
+	}
+	if result.RowCount == 0 {
+		t.Fatal("no rows, so nothing here was checked")
+	}
+	if result.Rows[0][0] != core.MaskedValue {
+		t.Errorf("s.e = %v, want masked", result.Rows[0][0])
+	}
+
+	visible := runQuery(ctx, conn, "SELECT s.a FROM (SELECT age AS a FROM users) s WHERE s.a > 0")
+	if len(visible.Errors) != 0 {
+		t.Fatalf("a renamed visible column refused: %v", visible.Errors)
+	}
+}
+
+// The plain form of a set operator collapses duplicate rows, so the row count
+// says whether a value the caller supplies is in the hidden column. ALL keeps
+// the duplicates and asks nothing.
+func TestExecuteLocalSetOperationDedupIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT email FROM users UNION SELECT 'alice@example.com'",
+		"SELECT email FROM users INTERSECT SELECT 'alice@example.com'",
+		"SELECT email FROM users EXCEPT SELECT 'alice@example.com'",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %d rows, which answers for the hidden column", result.RowCount)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+func TestExecuteLocalSetOperationKeepingDuplicatesRuns(t *testing.T) {
+	db, meta := setupUsersDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn, "SELECT email FROM users UNION ALL SELECT 'alice@example.com'")
+	if len(result.Errors) != 0 {
+		t.Fatalf("ordinary work refused: %v", result.Errors)
+	}
+	if result.RowCount != 3 {
+		t.Fatalf("expected 3 rows, got %d", result.RowCount)
+	}
+	for i, row := range result.Rows[:2] {
+		if row[0] != core.MaskedValue {
+			t.Errorf("row %d: email = %v, want masked", i, row[0])
+		}
+	}
+}

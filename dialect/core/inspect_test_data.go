@@ -895,6 +895,9 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 
 		// Both sides of UNION must be inspected, both tables need permission
 		{
+			// The plain form of a set operator collapses duplicate rows, so
+			// the row count says how many values the branches share, and the
+			// projection is tested as a DISTINCT's is.
 			Name: "UNION both sides inspected",
 			SQL:  "SELECT c1 FROM t1 UNION SELECT c1 FROM t2",
 			Expected: []InspectStatement{
@@ -907,6 +910,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -1217,6 +1224,9 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 
 		// INTERSECT, right side is accessed and must be permission-checked.
 		{
+			// The plain form of a set operator collapses duplicate rows, so
+			// the row count says how many values the branches share, and the
+			// projection is tested as a DISTINCT's is.
 			Name: "INTERSECT both sides inspected",
 			SQL:  "SELECT c1 FROM t1 INTERSECT SELECT c1 FROM t2",
 			Expected: []InspectStatement{
@@ -1230,12 +1240,19 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
 					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
 				},
 			},
 		},
 
 		// EXCEPT, right side is scanned even though its rows are excluded from output.
 		{
+			// The plain form of a set operator collapses duplicate rows, so
+			// the row count says how many values the branches share, and the
+			// projection is tested as a DISTINCT's is.
 			Name: "EXCEPT both sides inspected",
 			SQL:  "SELECT c1 FROM t1 EXCEPT SELECT c1 FROM t2",
 			Expected: []InspectStatement{
@@ -1248,6 +1265,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
 					},
 				},
 			},
@@ -1288,6 +1309,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "unknown_table", Schema: ""},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "unknown_table", Schema: ""},
 					},
 				},
 			},

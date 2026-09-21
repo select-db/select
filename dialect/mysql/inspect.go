@@ -250,6 +250,10 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	result.Where = core.MergeInspectFields(result.Where,
 		i.tailClauseFields(qe, core.RelationRefsOf(result)))
 
+	result.Where = core.DistinctTestsProjection(
+		core.DedupsRows(qe, compoundOperators, mysql.MySQLParserALL_SYMBOL),
+		result.Where, result.Fields)
+
 	return result
 }
 
@@ -434,6 +438,14 @@ func isDistinct(spec mysql.IQuerySpecificationContext) bool {
 		}
 	}
 	return false
+}
+
+// compoundOperators are the set operators whose plain form collapses duplicate
+// rows.
+var compoundOperators = []int{
+	mysql.MySQLParserUNION_SYMBOL,
+	mysql.MySQLParserINTERSECT_SYMBOL,
+	mysql.MySQLParserEXCEPT_SYMBOL,
 }
 
 // tailClauseFields are the columns ORDER BY names. It sits after every branch

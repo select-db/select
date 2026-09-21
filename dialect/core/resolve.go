@@ -278,15 +278,20 @@ func (r Resolver) ThroughVirtual(fields []InspectField, refs []RelationRef, s Sc
 			continue
 		}
 		for _, source := range underlying {
-			if r.Dialect.NormalizeIdentifier(source.Name) == r.Dialect.NormalizeIdentifier(field.Name) {
-				resolved = append(resolved, InspectField{
-					Name:   field.Name,
-					Alias:  field.Alias,
-					Table:  source.Table,
-					Schema: source.Schema,
-				})
-				break
+			// The name to match is the one the subquery hands up, which an
+			// alias replaces: "(SELECT email AS e FROM users) s" gives s.e.
+			if r.Dialect.NormalizeIdentifier(OutputName(source)) != r.Dialect.NormalizeIdentifier(field.Name) {
+				continue
 			}
+			// The column carries its own name from here on, since that is the
+			// name a rule hides. What the outer statement calls it stays as
+			// the alias, which is the name its result column comes out under.
+			rewritten := InspectField{Name: source.Name, Table: source.Table, Schema: source.Schema}
+			if outer := OutputName(field); r.Dialect.NormalizeIdentifier(outer) != r.Dialect.NormalizeIdentifier(source.Name) {
+				rewritten.Alias = &outer
+			}
+			resolved = append(resolved, rewritten)
+			break
 		}
 	}
 	return resolved

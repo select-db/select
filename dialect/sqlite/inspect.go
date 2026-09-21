@@ -68,7 +68,9 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// The SQLite grammar emits each UNION branch as a separate sql_stmt_list at the top level.
 		first := idx
 		group := []sqlite.ISql_stmt_listContext{stmtLists[idx]}
+		dedups := false
 		for idx+1 < len(stmtLists) && hasCompoundOperatorBetween(tokenStream, stmtLists[idx], stmtLists[idx+1]) {
+			dedups = dedups || compoundDedupsBetween(tokenStream, stmtLists[idx], stmtLists[idx+1])
 			idx++
 			group = append(group, stmtLists[idx])
 		}
@@ -85,7 +87,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		syntax.Cover(stmtLists[idx], groupFrom, groupTo)
 
 		if len(group) > 1 {
-			read := core.OrUnknown(i.mergeCompoundSelectGroup(group))
+			read := core.OrUnknown(i.mergeCompoundSelectGroup(group, dedups))
 			read = core.NestUnderUnknownIfUnreadable(read, syntax, groupFrom, groupTo)
 			if callsHostFunction(tokenStream, groupFrom, groupTo) {
 				read = core.NestUnderUnknown(read)
@@ -140,8 +142,36 @@ func hasCompoundOperatorBetween(tokens *antlr.CommonTokenStream, a, b antlr.Pars
 	return false
 }
 
-// mergeCompoundSelectGroup merges consecutive stmt_lists that are compound SELECT branches.
-func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContext) *core.InspectStatement {
+// compoundDedupsBetween reports whether the compound operator between two
+// branches collapses duplicate rows, which every one of UNION, INTERSECT and
+// EXCEPT does unless it is written with ALL.
+func compoundDedupsBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRuleContext) bool {
+	if a == nil || b == nil || a.GetStop() == nil || b.GetStart() == nil {
+		return false
+	}
+	allTokens := tokens.GetAllTokens()
+	operator := false
+	for ti := a.GetStop().GetTokenIndex(); ti < b.GetStart().GetTokenIndex() && ti < len(allTokens); ti++ {
+		token := allTokens[ti]
+		if token.GetChannel() != antlr.TokenDefaultChannel {
+			continue
+		}
+		switch strings.ToUpper(token.GetText()) {
+		case "UNION", "INTERSECT", "EXCEPT":
+			operator = true
+		case "ALL":
+			if operator {
+				return false
+			}
+		}
+	}
+	return operator
+}
+
+// mergeCompoundSelectGroup merges consecutive stmt_lists that are compound
+// SELECT branches. dedups says the operator joining them collapses duplicate
+// rows, which makes the row count a test on the values.
+func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContext, dedups bool) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpSelect}
 	var last sqlite.ISelect_stmtContext
 	for _, stmtList := range group {
@@ -164,6 +194,7 @@ func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContex
 	// relations the branches named.
 	result.Where = core.MergeInspectFields(result.Where,
 		i.tailClauseFields(last, core.RelationRefsOf(result)))
+	result.Where = core.DistinctTestsProjection(dedups, result.Where, result.Fields)
 	return result
 }
 
@@ -253,7 +284,19 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	result.Where = core.MergeInspectFields(result.Where,
 		i.tailClauseFields(selectStmt, core.RelationRefsOf(result)))
 
+	result.Where = core.DistinctTestsProjection(
+		core.DedupsRows(selectStmt, compoundOperators, sqlite.SQLiteParserALL_),
+		result.Where, result.Fields)
+
 	return result
+}
+
+// compoundOperators are the set operators whose plain form collapses duplicate
+// rows.
+var compoundOperators = []int{
+	sqlite.SQLiteParserUNION_,
+	sqlite.SQLiteParserINTERSECT_,
+	sqlite.SQLiteParserEXCEPT_,
 }
 
 // tailClauseFields are the columns ORDER BY and LIMIT name. They sit after

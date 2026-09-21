@@ -1,6 +1,7 @@
 package core
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -158,4 +159,21 @@ func TreeOrNil[T antlr.ParseTree](ctx T) antlr.ParseTree {
 		return nil
 	}
 	return ctx
+}
+
+// DedupsRows reports whether a compound operator under tree collapses duplicate
+// rows, which every one of UNION, INTERSECT and EXCEPT does unless it is
+// written with ALL. The row count then reports how many values the branches
+// have in common, which is a test on them.
+func DedupsRows(tree antlr.Tree, operators []int, all int) bool {
+	terminals := CollectNodes[antlr.TerminalNode](tree)
+	for idx, terminal := range terminals {
+		if !slices.Contains(operators, terminal.GetSymbol().GetTokenType()) {
+			continue
+		}
+		if idx+1 >= len(terminals) || terminals[idx+1].GetSymbol().GetTokenType() != all {
+			return true
+		}
+	}
+	return false
 }
