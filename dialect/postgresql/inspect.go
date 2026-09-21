@@ -560,6 +560,11 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(conflict),
 			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
+	// The clause chooses which rows it touches and reads values into them, and
+	// a subquery in either is a read of its own.
+	if conflict != nil {
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(conflict)...)
+	}
 
 	// DO UPDATE rewrites the row it conflicts with, so the row that was there
 	// does not survive and insert alone is not the right the statement needs.

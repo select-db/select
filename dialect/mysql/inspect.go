@@ -753,6 +753,16 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 	}
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), relationRefs, scope))
+
+	// A multi-table UPDATE writes the tables its SET list names and reads the
+	// rest. Leaving them in Tables asks for update on a table the statement
+	// only joins against, which is a right it does not need and not the one
+	// the read does.
+	written, read := core.SplitWrittenTables(result.Tables, result.Fields)
+	if len(written) > 0 {
+		result.Tables = written
+		core.AlsoReads(result, read)
+	}
 	return result
 }
 
@@ -838,6 +848,10 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	}
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), sourceRefs, scope))
+
+	// The relations a multi-table DELETE joins against without deleting from
+	// are read, and nothing else in the statement reaches them.
+	core.AlsoReads(result, core.TablesExcept(i.resolver.Tables(sourceRefs, scope), result.Tables))
 	return result
 }
 
