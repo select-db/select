@@ -369,7 +369,7 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		}
 	} else {
 		// No explicit column list, expand to all columns from metadata.
-		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
+		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
 	// INSERT … SELECT: attach source as subquery when it has real tables.
@@ -1152,14 +1152,7 @@ func (i *Inspector) expandStar(
 		}
 
 		// Regular table - lookup in metadata
-		tableCols := core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect)
-		for _, col := range tableCols {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
+		fields = append(fields, core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)...)
 	}
 
 	return fields
@@ -1205,15 +1198,7 @@ func (i *Inspector) expandQualifiedStar(
 		}
 
 		// Regular table
-		tableCols := core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect)
-		var fields []core.InspectField
-		for _, col := range tableCols {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
+		fields := core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)
 		return fields
 	}
 
@@ -1469,7 +1454,7 @@ func (i *Inspector) extractWhereFieldsFromExpr(whereExpr sqlite.IExprContext, re
 	}
 	antlr.ParseTreeWalkerDefault.Walk(listener, whereExpr)
 
-	subqueries := i.extractEmbeddedSubqueries(whereExpr)
+	subqueries := core.AsFilter(i.extractEmbeddedSubqueries(whereExpr))
 	return listener.fields, subqueries
 }
 

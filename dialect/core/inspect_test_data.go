@@ -45,6 +45,13 @@ type InspectStatement struct {
 	Tables     []InspectTable     // Tables involved
 	Where      []InspectField     // Fields used in WHERE clause (for permission/filtering context)
 	Subqueries []InspectStatement // Nested CTEs and subqueries - allows recursive permission checking
+
+	// Filter marks a subquery whose rows are a condition rather than a result,
+	// the IN or EXISTS of a WHERE. Its columns do not reach the row, so a check
+	// on the values that do must not read them. A subquery nobody marks is
+	// taken to reach the row, which is the answer that refuses rather than
+	// leaks.
+	Filter bool
 }
 
 // InspectTestCase represents a single inspect test case.

@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -349,27 +350,20 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	}
 
 	// A see-denied column the statement selects under no name of its own is
-	// used inside an expression, which has no position to mask. Only the
-	// statement's own fields are read here: a subquery naming one may be
-	// filtering on it, which is what WHERE does and is not a read of the value.
-	// readFields appends them first, so they are the head of the slice.
-	own := fields[:len(stmt.Fields)]
-	if denied := firstSeeDenied(own, matched, dbInstanceID, perms); denied != nil {
+	// used inside an expression, which has no position to mask. A subquery may
+	// select one the outer statement then drops, so only the statement's own
+	// fields are read here. readFields appends them first.
+	if denied := firstSeeDenied(stmt.Fields, matched, dbInstanceID, perms); denied != nil {
 		return nil, denied
 	}
 
 	// A result column no field accounts for may be carrying one: an expression
 	// over it, a subquery whose alias the inspector does not follow, or a column
-	// added to the table since the metadata was read. With a see-denied column
-	// anywhere in the statement, it cannot be shown.
-	for i := range driverCols {
-		if accounted[i] {
-			continue
-		}
+	// added to the table since the metadata was read.
+	if slices.Contains(accounted, false) {
 		if denied := firstSeeDenied(fields, nil, dbInstanceID, perms); denied != nil {
 			return nil, denied
 		}
-		break
 	}
 
 	return maskPositions, nil
@@ -403,12 +397,16 @@ func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, 
 	return nil
 }
 
-// readFields returns every field the statement reads, its subqueries included.
-// A derived table or a scalar subquery reads a column just as the outer select
-// does, and the value it returns is the one that reaches the row.
+// readFields returns every field whose value the statement can return, its own
+// first. A derived table or a scalar subquery reads a column just as the outer
+// select does, and the value it returns is the one that reaches the row. A
+// filter's rows are a condition, so it is skipped.
 func readFields(stmt InspectStatement, into []InspectField) []InspectField {
 	into = append(into, stmt.Fields...)
 	for _, sub := range stmt.Subqueries {
+		if sub.Filter {
+			continue
+		}
 		into = readFields(sub, into)
 	}
 	return into

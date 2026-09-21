@@ -378,15 +378,17 @@ func (i *Inspector) inspectTableShorthand(ref mysql.ITableRefContext) *core.Insp
 	if table == "" {
 		return &unknown
 	}
-	if !core.TableExistsInMetadata(i.meta, schema, table, i.dialect) {
-		schema = ""
-	}
 	// The columns are the statement, as they are for the SELECT * it stands
 	// for. Without them the see check has no field to find and hides nothing.
+	// No column means no such table, which resolves to no schema and is refused.
+	fields := core.TableFields(i.meta, schema, table, i.dialect)
+	if len(fields) == 0 {
+		schema = ""
+	}
 	return &core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
-		Fields:    core.TableFields(i.meta, schema, table, i.dialect),
+		Fields:    fields,
 	}
 }
 
@@ -438,7 +440,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 		}
 	} else {
 		// No column list: expand to all columns from metadata.
-		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
+		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
 	// INSERT … SELECT: source SELECT becomes a subquery.
@@ -502,7 +504,7 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 			}
 		}
 	} else {
-		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
+		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
 	if iqe := stmt.InsertQueryExpression(); iqe != nil {
@@ -1249,13 +1251,7 @@ func (i *Inspector) expandStar(
 			}
 		}
 		// Physical table.
-		for _, col := range core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect) {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
+		fields = append(fields, core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)...)
 	}
 	return fields
 }
@@ -1282,15 +1278,7 @@ func (i *Inspector) expandQualifiedStar(
 				}
 			}
 		}
-		var fields []core.InspectField
-		for _, col := range core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect) {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
-		return fields
+		return core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)
 	}
 	return nil
 }
@@ -1542,7 +1530,7 @@ func (i *Inspector) extractWhereFieldsFromExpr(expr mysql.IExprContext, refs []c
 	}
 	antlr.ParseTreeWalkerDefault.Walk(listener, expr)
 
-	subs := i.extractEmbeddedSubqueries(expr)
+	subs := core.AsFilter(i.extractEmbeddedSubqueries(expr))
 	return listener.fields, subs
 }
 

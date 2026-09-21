@@ -49,12 +49,14 @@ SELECT says which columns a role may query; SEE says which values it may read.
 A role holding SELECT but not SEE on a column can still join, filter and sort on
 it, and gets `*****` where its cells would be.
 
-The whole statement is read, subqueries included, so a column hidden at the
-bottom stays hidden when a derived table or a CTE hands it up. Where a result
-column cannot be traced back to a column of a table, the statement is refused
-rather than run: an expression over a hidden column, a subquery returning it
-under a name of its own, and a column added since the metadata was last read all
-land here.
+The whole statement is read, so a column hidden at the bottom stays hidden when
+a derived table or a CTE hands it up. A subquery in a WHERE is a filter, not a
+result, so naming the column there is the same as filtering on it directly.
+
+Where a result column cannot be traced back to a column of a table, the
+statement is refused rather than run: an expression over a hidden column, a
+subquery returning it under a name of its own, and a column added since the
+metadata was last read all land here.
 
 ## Allow and deny
 

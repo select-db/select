@@ -597,8 +597,8 @@ func GetColumnsForTableAsColumns(meta Metadata, schemaName, tableName string, di
 }
 
 // TableFields returns one field per column the table has, which is what a
-// statement naming no column of its own reads: SELECT *, TABLE t1, an INSERT
-// with no column list. A table the metadata does not know returns none.
+// statement naming no column of its own reads: a star, TABLE t1, an INSERT with
+// no column list. A table the metadata does not know returns none.
 func TableFields(meta Metadata, schemaName, tableName string, dialect SQLDialect) []InspectField {
 	columns := GetColumnsForTableAsColumns(meta, schemaName, tableName, dialect)
 	fields := make([]InspectField, 0, len(columns))

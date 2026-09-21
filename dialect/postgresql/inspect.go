@@ -342,17 +342,18 @@ func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *co
 	if table == "" {
 		return &unknown
 	}
-	if !core.TableExistsInMetadata(i.meta, schema, table, i.dialect) {
-		schema = ""
-	}
-	result := &core.InspectStatement{
-		Operation: core.InspectOpSelect,
-		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
-	}
 	// The columns are the statement, as they are for the SELECT * it stands
 	// for. Without them the see check has no field to find and hides nothing.
-	result.Fields = core.TableFields(i.meta, schema, table, i.dialect)
-	return result
+	// No column means no such table, which resolves to no schema and is refused.
+	fields := core.TableFields(i.meta, schema, table, i.dialect)
+	if len(fields) == 0 {
+		schema = ""
+	}
+	return &core.InspectStatement{
+		Operation: core.InspectOpSelect,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+		Fields:    fields,
+	}
 }
 
 // inspectInsert analyzes an INSERT statement.
@@ -390,7 +391,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 		}
 	} else {
 		// No explicit column list, expand to all columns from metadata.
-		result.Fields = append(result.Fields, core.TableFields(i.meta, schema, tableName, i.dialect)...)
+		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
 	_, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
@@ -868,14 +869,7 @@ func (i *Inspector) expandStar(
 		}
 
 		// Regular table - lookup in metadata
-		tableCols := core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect)
-		for _, col := range tableCols {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
+		fields = append(fields, core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)...)
 	}
 
 	return fields
@@ -921,16 +915,7 @@ func (i *Inspector) expandQualifiedStar(
 		}
 
 		// Regular table
-		tableCols := core.GetColumnsForTableAsColumns(i.meta, ref.Schema, ref.Table, i.dialect)
-		var fields []core.InspectField
-		for _, col := range tableCols {
-			fields = append(fields, core.InspectField{
-				Name:   col.Name,
-				Table:  ref.Table,
-				Schema: ref.Schema,
-			})
-		}
-		return fields
+		return core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)
 	}
 
 	return nil
@@ -1355,7 +1340,7 @@ func (i *Inspector) extractWhereFieldsFromPrimary(primary pg.ISimple_select_pram
 	}
 	antlr.ParseTreeWalkerDefault.Walk(listener, whereExpr)
 
-	subqueries := i.extractEmbeddedSubqueries(whereExpr)
+	subqueries := core.AsFilter(i.extractEmbeddedSubqueries(whereExpr))
 
 	return listener.fields, subqueries
 }

@@ -374,3 +374,29 @@ func TestExecuteLocalFilterSubqueryPassesWithSeeDenied(t *testing.T) {
 		})
 	}
 }
+
+// A result column no field accounts for refuses only over the columns that can
+// reach the row. Counting rows a filter selected is the same work as counting
+// rows a WHERE selected, and neither returns the hidden column.
+func TestExecuteLocalAggregateOverFilterSubqueryPasses(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT count(*) FROM users WHERE email > ''",
+		"SELECT count(*) FROM users WHERE EXISTS (SELECT email FROM users)",
+		"SELECT count(*) FROM users WHERE id IN (SELECT id FROM users WHERE email > '')",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount != 1 || result.Rows[0][0] == core.MaskedValue {
+				t.Fatalf("expected one unmasked count, got %+v", result.Rows)
+			}
+		})
+	}
+}

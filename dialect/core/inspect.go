@@ -27,6 +27,14 @@ func NestUnderUnknown(read InspectStatement) InspectStatement {
 	}
 }
 
+// AsFilter marks stmts as filters and returns them. See InspectStatement.Filter.
+func AsFilter(stmts []InspectStatement) []InspectStatement {
+	for i := range stmts {
+		stmts[i].Filter = true
+	}
+	return stmts
+}
+
 // DropVirtualTables strips, in place and throughout the tree, the tables naming
 // a CTE the enclosing query declared. A CTE is a relation at any depth, so a
 // subquery inspected without that scope reports one as a table resolving to no
