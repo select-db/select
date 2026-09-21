@@ -54,10 +54,16 @@ a derived table or a CTE hands it up. A subquery in a WHERE, HAVING, GROUP BY,
 ORDER BY or window clause returns none of its rows, so naming the column there
 is the same as filtering on it directly.
 
-Where a result column cannot be traced back to a column of a table, the
-statement is refused rather than run: an expression over a hidden column, a
-subquery returning it under a name of its own, and a column added since the
-metadata was last read all land here.
+Where a result column cannot be traced back to a column of a table, and a hidden
+column in the statement has no result column of its own, the statement is
+refused rather than run: an expression over a hidden column, a subquery
+returning it under a name of its own, and a column added since the metadata was
+last read all land here. A literal, a count or a window function beside a hidden
+column is not one of these, since the hidden column still has its own position
+to mask.
+
+Where two scopes spell a column the same way, the statement's own result columns
+say which one comes out.
 
 ## Allow and deny
 

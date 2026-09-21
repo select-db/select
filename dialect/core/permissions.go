@@ -320,30 +320,23 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	}
 
 	fields := readFields(stmt, nil)
+	nested := fields[len(stmt.Fields):]
 	matched := make([]bool, len(fields))
 	accounted := make([]bool, len(driverCols))
 	var maskPositions []int
 
 	for i, dc := range driverCols {
-		deny := false
-		for fi := range fields {
-			f := &fields[fi]
-			if !fieldOutputName(*f, dc) {
-				continue
-			}
-
-			matched[fi] = true
-			accounted[i] = true
-			if f.Schema == "" || f.Table == "" {
-				continue
-			}
-
-			allowed, _ := perms.isAllowed(dbInstanceID, f.Schema, f.Table, f.Name, ActionSee)
-			if !allowed {
-				deny = true
-			}
+		// Where the statement's own projection resolves the column to a table,
+		// it decides, so a name another scope reuses cannot hide a column this
+		// one shows. A name it carries up from a subquery resolves to none, and
+		// the subquery is what knows where the value came from.
+		found, resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
+		if !resolved {
+			nestedFound, _, nestedDeny := seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
+			found = found || nestedFound
+			deny = deny || nestedDeny
 		}
-
+		accounted[i] = found
 		if deny {
 			maskPositions = append(maskPositions, i)
 		}
@@ -359,9 +352,10 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 
 	// A result column no field accounts for may be carrying one: an expression
 	// over it, a subquery whose alias the inspector does not follow, or a column
-	// added to the table since the metadata was read.
+	// added to the table since the metadata was read. A field already matched
+	// is already masked, so only the ones left over can be what it carries.
 	if slices.Contains(accounted, false) {
-		if denied := firstSeeDenied(fields, nil, dbInstanceID, perms); denied != nil {
+		if denied := firstSeeDenied(fields, matched, dbInstanceID, perms); denied != nil {
 			return nil, denied
 		}
 	}
@@ -369,11 +363,41 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	return maskPositions, nil
 }
 
+// seeColumn scans the fields a result column named dc could come out under and
+// marks each in matched at its offset. found reports whether any matched,
+// resolved whether any of those named a table, and deny whether any of those is
+// a column no role may see.
+func seeColumn(
+	fields []InspectField,
+	offset int,
+	dc string,
+	matched []bool,
+	dbInstanceID string,
+	perms CompiledPermissions,
+) (found, resolved, deny bool) {
+	for fi := range fields {
+		f := &fields[fi]
+		if !fieldOutputName(*f, dc) {
+			continue
+		}
+		found = true
+		matched[offset+fi] = true
+		if f.Schema == "" || f.Table == "" {
+			continue
+		}
+		resolved = true
+		if allowed, _ := perms.isAllowed(dbInstanceID, f.Schema, f.Table, f.Name, ActionSee); !allowed {
+			deny = true
+		}
+	}
+	return found, resolved, deny
+}
+
 // firstSeeDenied returns the error for the first field no role may see, or nil.
 // A field marked in matched is skipped, as is one that resolved to no table.
 func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, perms CompiledPermissions) *PermissionDeniedError {
 	for fi, f := range fields {
-		if matched != nil && matched[fi] {
+		if matched[fi] {
 			continue
 		}
 		if f.Schema == "" || f.Table == "" {

@@ -456,3 +456,65 @@ func TestExecuteLocalClauseSubqueryDoesNotMask(t *testing.T) {
 		})
 	}
 }
+
+// A result column that is not a column of a table sits beside masked ones all
+// the time: a literal, a count, a window function. It must not turn masking
+// into refusal, since every hidden column here has a position to mask.
+func TestExecuteLocalComputedColumnBesideMaskedOne(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT id, email, 'lit' AS tag FROM users ORDER BY id",
+		"SELECT email, count(*) FROM users GROUP BY email ORDER BY email",
+		"SELECT id, email, row_number() OVER (ORDER BY id) AS rn FROM users ORDER BY id",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount == 0 {
+				t.Fatal("no rows, so nothing here was checked")
+			}
+			masked := false
+			for _, v := range result.Rows[0] {
+				if v == core.MaskedValue {
+					masked = true
+				}
+			}
+			if !masked {
+				t.Errorf("email reached the row: %+v", result.Rows[0])
+			}
+		})
+	}
+}
+
+// Two scopes may spell a column the same way. The statement's own projection
+// says which one comes out, so a hidden column elsewhere must not claim it.
+func TestExecuteLocalNameReusedInAnotherScope(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT u.id FROM users u JOIN (SELECT email AS id FROM users) q ON 1=1 LIMIT 1",
+		"WITH q AS (SELECT email AS id FROM users) SELECT id FROM users ORDER BY id LIMIT 1",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: seeEmailDenied()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount != 1 {
+				t.Fatalf("expected one row, got %d", result.RowCount)
+			}
+			if result.Rows[0][0] == core.MaskedValue {
+				t.Error("users.id masked by a name another scope reuses")
+			}
+		})
+	}
+}
