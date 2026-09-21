@@ -24,9 +24,9 @@ type Resolver struct {
 	Dialect SQLDialect
 }
 
-// VirtualNames returns the normalized names in scope that resolve to something
+// virtualNames returns the normalized names in scope that resolve to something
 // the statement declared rather than to a table.
-func (r Resolver) VirtualNames(s Scope) map[string]bool {
+func (r Resolver) virtualNames(s Scope) map[string]bool {
 	names := make(map[string]bool, len(s.CTEs)+len(s.Subqueries))
 	for _, cte := range s.CTEs {
 		names[r.Dialect.NormalizeIdentifier(cte.Table)] = true
@@ -42,7 +42,7 @@ func (r Resolver) VirtualNames(s Scope) map[string]bool {
 // is refused for every role. Only an unqualified name can be virtual: dropping
 // a qualified one would be a read nobody checks.
 func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
-	virtual := r.VirtualNames(s)
+	virtual := r.virtualNames(s)
 	var tables []InspectTable
 	seen := make(map[string]bool)
 
@@ -174,7 +174,7 @@ func (r Resolver) DropVirtual(stmts []InspectStatement, virtual map[string]bool)
 // declared. Only the CTE names travel: a subquery alias is not a relation
 // outside the statement that declared it.
 func (r Resolver) DropCTETables(stmts []InspectStatement, ctes []RelationRef) {
-	r.DropVirtual(stmts, r.VirtualNames(Scope{CTEs: ctes}))
+	r.DropVirtual(stmts, r.virtualNames(Scope{CTEs: ctes}))
 }
 
 // matchCTE returns the CTE a relation refers to, if any. A qualified name is
@@ -314,14 +314,14 @@ func (r Resolver) ThroughVirtual(fields []InspectField, refs []RelationRef, s Sc
 		for _, source := range underlying {
 			// The name to match is the one the subquery hands up, which an
 			// alias replaces: "(SELECT email AS e FROM users) s" gives s.e.
-			if r.Dialect.NormalizeIdentifier(OutputName(source)) != r.Dialect.NormalizeIdentifier(field.Name) {
+			if r.Dialect.NormalizeIdentifier(outputName(source)) != r.Dialect.NormalizeIdentifier(field.Name) {
 				continue
 			}
 			// The column carries its own name from here on, since that is the
 			// name a rule hides. What the outer statement calls it stays as
 			// the alias, which is the name its result column comes out under.
 			rewritten := InspectField{Name: source.Name, Table: source.Table, Schema: source.Schema}
-			if outer := OutputName(field); r.Dialect.NormalizeIdentifier(outer) != r.Dialect.NormalizeIdentifier(source.Name) {
+			if outer := outputName(field); r.Dialect.NormalizeIdentifier(outer) != r.Dialect.NormalizeIdentifier(source.Name) {
 				rewritten.Alias = &outer
 			}
 			resolved = append(resolved, rewritten)

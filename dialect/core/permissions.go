@@ -482,9 +482,9 @@ func nestedReadFields(stmt InspectStatement, into []InspectField) []InspectField
 	return into
 }
 
-// OutputName is the name a field comes out under: its alias where it has one,
+// outputName is the name a field comes out under: its alias where it has one,
 // its own name otherwise.
-func OutputName(f InspectField) string {
+func outputName(f InspectField) string {
 	if f.Alias != nil && *f.Alias != "" {
 		return *f.Alias
 	}
@@ -492,7 +492,7 @@ func OutputName(f InspectField) string {
 }
 
 func fieldOutputName(f InspectField, driverCol string) bool {
-	return strings.EqualFold(OutputName(f), driverCol)
+	return strings.EqualFold(outputName(f), driverCol)
 }
 
 // operationToAction maps an inspected operation to the permission it needs.
