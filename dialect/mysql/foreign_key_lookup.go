@@ -12,11 +12,11 @@ func (d *Dialect) BuildForeignKeyLookupSQL(p core.ForeignKeyLookupParams) string
 	return core.BuildForeignKeyLookupSQL(p, core.ForeignKeySQLSyntax{
 		QuoteIdent:   fkQuoteIdent,
 		QuoteLiteral: fkQuoteLiteral,
-		Matches: func(column, pattern, escape string) string {
+		Matches: func(column, pattern string) string {
 			// CAST to CHAR is the MySQL spelling for "to text". Wrapping both
 			// sides in LOWER() gives a stable case-insensitive match across
 			// every collation (utf8mb4_bin would otherwise be case-sensitive).
-			return fmt.Sprintf("LOWER(CAST(%s AS CHAR)) LIKE LOWER(%s) ESCAPE '%s'", column, pattern, escape)
+			return fmt.Sprintf("LOWER(CAST(%s AS CHAR)) LIKE LOWER(%s) ESCAPE '%s'", column, pattern, core.LikeEscape)
 		},
 		Equals: func(column, literal string) string {
 			return fmt.Sprintf("CAST(%s AS CHAR) = %s", column, literal)

@@ -197,7 +197,7 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	}
 
 	tail := i.extractTailSubqueries(selectNoParens)
-	core.DropVirtualTables(tail, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
+	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
 
 	return result
@@ -297,7 +297,7 @@ func (i *Inspector) inspectSelectPrimary(
 	subqueries := append(fromSubqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(primary)...)
-	core.DropVirtualTables(subqueries, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
+	i.resolve().DropCTETables(subqueries, ctes)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -1351,7 +1351,7 @@ func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext)
 		// the two slices index-aligned for cteToSubqueryMap.
 		subqueries = append(subqueries, i.inspectPreparable(cteEl.Preparablestmt()))
 		body := subqueries[len(subqueries)-1:]
-		core.DropVirtualTables(body, core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
+		i.resolve().DropVirtual(body, core.CTEScope(names, idx, recursive))
 
 		var cteColumns []core.Column
 		for _, field := range body[0].Fields {

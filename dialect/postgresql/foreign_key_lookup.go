@@ -12,8 +12,8 @@ func (d *Dialect) BuildForeignKeyLookupSQL(p core.ForeignKeyLookupParams) string
 	return core.BuildForeignKeyLookupSQL(p, core.ForeignKeySQLSyntax{
 		QuoteIdent:   fkQuoteIdent,
 		QuoteLiteral: fkQuoteLiteral,
-		Matches: func(column, pattern, escape string) string {
-			return fmt.Sprintf("%s::text ILIKE %s ESCAPE '%s'", column, pattern, escape)
+		Matches: func(column, pattern string) string {
+			return fmt.Sprintf("%s::text ILIKE %s ESCAPE '%s'", column, pattern, core.LikeEscape)
 		},
 		Equals: func(column, literal string) string {
 			// Comparing as text lets the picker work for a non-string key

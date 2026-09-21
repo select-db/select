@@ -42,18 +42,19 @@ type ForeignKeyLookupParams struct {
 //
 // QuoteIdent and QuoteLiteral quote unconditionally. Matches is the
 // case-insensitive LIKE of an already-quoted column against an already-quoted
-// pattern, with escape as the ESCAPE character. Equals compares an
-// already-quoted column to an already-quoted literal as text.
+// pattern, and must attach ESCAPE LikeEscape. Equals compares an already-quoted
+// column to an already-quoted literal as text.
 type ForeignKeySQLSyntax struct {
 	QuoteIdent   func(name string) string
 	QuoteLiteral func(value string) string
-	Matches      func(column, pattern, escape string) string
+	Matches      func(column, pattern string) string
 	Equals       func(column, literal string) string
 }
 
-// LikeEscape is the character the picker's LIKE patterns escape with. Every
-// dialect uses it: it means nothing in a string literal and is not a wildcard,
-// so it carries meaning only through the ESCAPE clause.
+// LikeEscape is the character the picker's LIKE patterns escape with. It means
+// nothing in a string literal in any of the three dialects and is not a
+// wildcard, so it carries meaning only through the ESCAPE clause. A backslash
+// would not: MySQL consumes it in the literal before LIKE sees the pattern.
 const LikeEscape = "$"
 
 // BuildForeignKeyLookupSQL builds the picker's SELECT. The row p.CurrentValue
@@ -65,6 +66,9 @@ func BuildForeignKeyLookupSQL(p ForeignKeyLookupParams, s ForeignKeySQLSyntax) s
 		columns[i] = s.QuoteIdent(c)
 	}
 
+	// An empty schema means the connection's own: the database in MySQL, the
+	// search path in PostgreSQL, the attached databases in SQLite. Qualifying
+	// it with nothing would name a schema called "".
 	from := s.QuoteIdent(p.Table)
 	if p.Schema != "" {
 		from = s.QuoteIdent(p.Schema) + "." + from
@@ -81,10 +85,10 @@ func BuildForeignKeyLookupSQL(p ForeignKeyLookupParams, s ForeignKeySQLSyntax) s
 		if len(searched) == 0 {
 			searched = []string{p.FKColumn}
 		}
-		pattern := s.QuoteLiteral("%" + EscapeLike(q) + "%")
+		pattern := s.QuoteLiteral("%" + escapeLike(q) + "%")
 		ors := make([]string, len(searched))
 		for i, c := range searched {
-			ors[i] = s.Matches(s.QuoteIdent(c), pattern, LikeEscape)
+			ors[i] = s.Matches(s.QuoteIdent(c), pattern)
 		}
 		where = " WHERE (" + strings.Join(ors, " OR ") + ")"
 		if current != "" {
@@ -105,9 +109,9 @@ func BuildForeignKeyLookupSQL(p ForeignKeyLookupParams, s ForeignKeySQLSyntax) s
 	return "SELECT " + strings.Join(columns, ", ") + " FROM " + from + where + orderBy + limit
 }
 
-// EscapeLike escapes the LIKE wildcards % and _, and the escape character
+// escapeLike escapes the LIKE wildcards % and _, and the escape character
 // itself, so the search text matches literally.
-func EscapeLike(v string) string {
+func escapeLike(v string) string {
 	v = strings.ReplaceAll(v, LikeEscape, LikeEscape+LikeEscape)
 	v = strings.ReplaceAll(v, "%", LikeEscape+"%")
 	v = strings.ReplaceAll(v, "_", LikeEscape+"_")

@@ -12,12 +12,12 @@ func (d *Dialect) BuildForeignKeyLookupSQL(p core.ForeignKeyLookupParams) string
 	return core.BuildForeignKeyLookupSQL(p, core.ForeignKeySQLSyntax{
 		QuoteIdent:   fkQuoteIdent,
 		QuoteLiteral: fkQuoteLiteral,
-		Matches: func(column, pattern, escape string) string {
-			// SQLite's default LIKE is case-insensitive for ASCII but case
-			// sensitive for non-ASCII. Wrapping both sides in LOWER() makes
-			// the match symmetric for ASCII; non-ASCII case folding stays a
-			// known limitation of SQLite's stock LIKE implementation.
-			return fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(%s) ESCAPE '%s'", column, pattern, escape)
+		Matches: func(column, pattern string) string {
+			// SQLite's LIKE has no default escape character, so without the
+			// ESCAPE clause a % or _ in the search text always wildcards. It is
+			// also case-insensitive for ASCII only, which is why both sides are
+			// lowered; non-ASCII folding stays a limitation of its stock LIKE.
+			return fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(%s) ESCAPE '%s'", column, pattern, core.LikeEscape)
 		},
 		Equals: func(column, literal string) string {
 			return fmt.Sprintf("CAST(%s AS TEXT) = %s", column, literal)

@@ -222,7 +222,7 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	}
 
 	tail := i.extractTailSubqueries(selectStmt)
-	core.DropVirtualTables(tail, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
+	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
 
 	return result
@@ -272,7 +272,7 @@ func (i *Inspector) inspectSelectCore(
 	subqueries := append(fromSubqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(selectCore)...)
-	core.DropVirtualTables(subqueries, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
+	i.resolve().DropCTETables(subqueries, ctes)
 
 	return core.InspectStatement{
 		Tables:     tables,
@@ -470,7 +470,7 @@ func (i *Inspector) inspectWithClause(with sqlite.IWith_clauseContext) ([]core.R
 		if idx < len(bodies) {
 			subqueries = append(subqueries, core.OrUnknown(i.inspectSelect(bodies[idx])))
 			body := subqueries[len(subqueries)-1:]
-			core.DropVirtualTables(body, core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
+			i.resolve().DropVirtual(body, core.CTEScope(names, idx, recursive))
 		}
 	}
 	return ctes, subqueries
@@ -1503,7 +1503,7 @@ func (i *Inspector) extractCTEsWithSubqueries(commonTableStmt sqlite.ICommon_tab
 		if selectStmt := cteEl.Select_stmt(); selectStmt != nil {
 			if subResult := i.inspectSelect(selectStmt); subResult != nil {
 				subqueries = append(subqueries, *subResult)
-				core.DropVirtualTables(subqueries[len(subqueries)-1:], core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
+				i.resolve().DropVirtual(subqueries[len(subqueries)-1:], core.CTEScope(names, idx, recursive))
 				// Extract column names from the subquery's fields
 				for _, field := range subqueries[len(subqueries)-1].Fields {
 					cteColumns = append(cteColumns, core.Column{

@@ -226,7 +226,7 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	}
 
 	tail := i.extractTailSubqueries(qe)
-	core.DropVirtualTables(tail, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
+	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
 
 	return result
@@ -319,7 +319,7 @@ func (i *Inspector) inspectQueryPrimary(
 	subqueries = append(subqueries, whereSubqueries...)
 	subqueries = append(subqueries, selectSubqueries...)
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(spec)...)
-	core.DropVirtualTables(subqueries, i.resolve().VirtualNames(core.Scope{CTEs: ctes}), i.dialect.NormalizeIdentifier)
+	i.resolve().DropCTETables(subqueries, ctes)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -1632,7 +1632,7 @@ func (i *Inspector) extractCTEsFromWithClause(w mysql.IWithClauseContext) ([]cor
 		if sq := cte.Subquery(); sq != nil {
 			if sub := i.inspectSubquery(sq); sub != nil {
 				subs = append(subs, *sub)
-				core.DropVirtualTables(subs[len(subs)-1:], core.CTEScope(names, idx, recursive), i.dialect.NormalizeIdentifier)
+				i.resolve().DropVirtual(subs[len(subs)-1:], core.CTEScope(names, idx, recursive))
 				for _, f := range subs[len(subs)-1].Fields {
 					cols = append(cols, core.Column{Name: f.Name, Type: "unknown"})
 				}

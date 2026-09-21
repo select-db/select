@@ -2,14 +2,13 @@ package core
 
 // Resolution is the half of inspecting a statement that has nothing to do with
 // the grammar: given the relations a clause named, say which tables and columns
-// the statement reads. Each dialect turns its own parse tree into RelationRefs
-// and raw names; from there the rules are the same, and keeping one copy of
-// them is what stops the three drifting apart.
+// the statement reads.
 
 // Scope is what a statement declared that a name in it can resolve to instead
-// of a table: its CTEs, the columns of each aliased subquery, and the
-// inspection of each CTE body where there is one. The zero value is a statement
-// that declared nothing.
+// of a table. The zero value is a statement that declared nothing.
+//
+// Subqueries is keyed by the alias as written; CTEResults by the normalized CTE
+// name.
 type Scope struct {
 	CTEs       []RelationRef
 	Subqueries map[string][]Column
@@ -37,12 +36,9 @@ func (r Resolver) VirtualNames(s Scope) map[string]bool {
 }
 
 // Tables turns the relations a statement named into the tables a permission
-// check reads, dropping the ones that name something the statement declared and
-// deduplicating the rest.
-//
-// A table the metadata does not know resolves to no schema, which is refused
-// for every role. Only an unqualified name can be virtual: dropping a qualified
-// one would be a read nobody checks.
+// check reads. A table the metadata does not know resolves to no schema, which
+// is refused for every role. Only an unqualified name can be virtual: dropping
+// a qualified one would be a read nobody checks.
 func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 	virtual := r.VirtualNames(s)
 	var tables []InspectTable
@@ -142,8 +138,7 @@ func (r Resolver) QualifiedStar(prefix string, refs []RelationRef, s Scope) []In
 
 // CTEColumn finds where a column a CTE returns was read from. The CTE's own
 // inspection says so where we have it; otherwise the name is looked up across
-// the metadata, which is a guess, but a guess that names a table beats one that
-// names none.
+// the metadata, which names a table where a failure would name none.
 func (r Resolver) CTEColumn(columnName string, cte *InspectStatement) *InspectField {
 	normalized := r.Dialect.NormalizeIdentifier(columnName)
 
@@ -166,6 +161,18 @@ func (r Resolver) CTEColumn(columnName string, cte *InspectStatement) *InspectFi
 	}
 
 	return nil
+}
+
+// DropVirtual strips, throughout stmts, the tables naming something in virtual.
+func (r Resolver) DropVirtual(stmts []InspectStatement, virtual map[string]bool) {
+	DropVirtualTables(stmts, virtual, r.Dialect.NormalizeIdentifier)
+}
+
+// DropCTETables strips the tables naming a CTE the enclosing statement
+// declared. Only the CTE names travel: a subquery alias is not a relation
+// outside the statement that declared it.
+func (r Resolver) DropCTETables(stmts []InspectStatement, ctes []RelationRef) {
+	r.DropVirtual(stmts, r.VirtualNames(Scope{CTEs: ctes}))
 }
 
 // matchCTE returns the CTE a name refers to, if any.
