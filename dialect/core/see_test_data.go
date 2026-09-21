@@ -165,10 +165,22 @@ func GetSeeTestCases() []SeeCase {
 		{Name: "a correlated reference to it", SQL: "SELECT u.id FROM users u WHERE EXISTS (SELECT 1 FROM contacts c WHERE c.email = u.email)", Refused: true},
 		{Name: "a subquery selecting it for a comparison", SQL: "SELECT count(*) FROM users WHERE (SELECT email FROM users WHERE id = 1) LIKE 'a%'", Refused: true},
 		{Name: "a set operator collapsing duplicates of it", SQL: "SELECT email FROM users UNION SELECT 'a@b.c'", Refused: true},
+		{Name: "INTERSECT, which collapses them too", SQL: "SELECT email FROM users INTERSECT SELECT 'a@b.c'", Refused: true},
+		{Name: "EXCEPT, which collapses them too", SQL: "SELECT email FROM users EXCEPT SELECT 'a@b.c'", Refused: true},
 		{
-			Name: "an expression over it, which leaves nowhere to mask",
-			SQL:  "SELECT upper(email) FROM users", Refused: true,
-			Columns: []string{"upper(email)"},
+			// The expression comes out under one name, so there is one place
+			// to mask and the value never leaves.
+			Name:    "an expression over it, named",
+			SQL:     "SELECT upper(email) AS shouted FROM users",
+			Columns: []string{"shouted"},
+			Masked:  []int{0},
+		},
+		{
+			// Unnamed, the dialects call it whatever they call it, and none of
+			// those names is the column's. Nothing accounts for the hidden
+			// field, so the statement is refused rather than guessed at.
+			Name: "an expression over it, unnamed", SQL: "SELECT upper(email) FROM users",
+			Refused: true, Columns: []string{"whatever the driver calls it"},
 		},
 		{Name: "a write filtered on it", SQL: "UPDATE users SET age = 1 WHERE email LIKE 'a%'", Refused: true},
 		{Name: "a delete filtered on it", SQL: "DELETE FROM users WHERE email LIKE 'a%'", Refused: true},
@@ -187,9 +199,11 @@ func GetSeeTestCases() []SeeCase {
 			Columns: []string{"id", "age"},
 		},
 		{
+			// Aliased because the dialects name an unaliased count differently,
+			// and Columns are what the driver reports.
 			Name:    "groups and orders on a visible column",
-			SQL:     "SELECT age, count(*) FROM users GROUP BY age ORDER BY age",
-			Columns: []string{"age", "count(*)"},
+			SQL:     "SELECT age, count(*) AS n FROM users GROUP BY age ORDER BY age",
+			Columns: []string{"age", "n"},
 		},
 		{
 			Name:    "joins on a visible column",
