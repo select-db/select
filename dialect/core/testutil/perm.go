@@ -7,9 +7,6 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// PermTestDBInstanceID names the connection the cases are checked against.
-const PermTestDBInstanceID = "db1"
-
 // RunPermCases checks a dialect against a table of permission cases. inspect
 // is the seam the caller measures through: engine.Inspect, which floors a
 // statement nobody read to manage, rather than a dialect's Inspect, which
@@ -30,12 +27,12 @@ func RunPermCases(t *testing.T, inspect func(sql string) []core.InspectStatement
 
 			for idx, withheld := range testCase.Needs {
 				rest := slices.Delete(slices.Clone(testCase.Needs), idx, idx+1)
-				if err := core.CheckQueryPermissions(statements, PermTestDBInstanceID, PermHolding(rest...)); err == nil {
+				if err := core.CheckQueryPermissions(statements, TestDBInstanceID, PermHolding(TestDBInstanceID, rest...)); err == nil {
 					t.Errorf("ran without %q, and %s:\n  %s", withheld, testCase.Why, testCase.SQL)
 				}
 			}
 
-			if err := core.CheckQueryPermissions(statements, PermTestDBInstanceID, PermHolding(testCase.Needs...)); err != nil {
+			if err := core.CheckQueryPermissions(statements, TestDBInstanceID, PermHolding(TestDBInstanceID, testCase.Needs...)); err != nil {
 				t.Errorf("holding %v still refused it: %v\n  %s", testCase.Needs, err, testCase.SQL)
 			}
 		})
@@ -45,8 +42,8 @@ func RunPermCases(t *testing.T, inspect func(sql string) []core.InspectStatement
 // PermHolding is a policy granting these actions on everything, and nothing
 // else. WithDenyUnmanaged is what makes an empty grant mean "no rights" rather
 // than "this connection has no rules, so let it through".
-func PermHolding(actions ...string) core.CompiledPermissions {
-	id := PermTestDBInstanceID
+func PermHolding(dbID string, actions ...string) core.CompiledPermissions {
+	id := dbID
 	entries := make([]core.PermissionEntry, 0, len(actions))
 	for _, action := range actions {
 		entries = append(entries, core.PermissionEntry{

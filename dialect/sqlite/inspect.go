@@ -87,7 +87,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 		if len(group) > 1 {
 			read := core.OrUnknown(i.mergeCompoundSelectGroup(group, dedups))
-			read = core.NestUnderUnknownIfUnreadable(read, syntax, groupFrom, groupTo)
+			read = core.SalvageOrUnknown(read, syntax, groupFrom, groupTo)
 			if callsHostFunction(tokenStream, groupFrom, groupTo) {
 				read = core.NestUnderUnknown(read)
 			}
@@ -104,7 +104,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 				from = core.Clamp(groupFrom, 0, from)
 			}
 			to = core.Clamp(to, from, groupTo)
-			read = core.NestUnderUnknownIfUnreadable(read, syntax, from, to)
+			read = core.SalvageOrUnknown(read, syntax, from, to)
 			if callsHostFunction(tokenStream, from, to) {
 				read = core.NestUnderUnknown(read)
 			}
@@ -588,15 +588,43 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 	// there does not survive, so insert alone is not the right the statement
 	// needs.
 	if stmt.REPLACE_() != nil {
-		core.AlsoPerforms(result, core.InspectOpDelete)
+		core.AlsoPerforms(result, core.InspectOpDelete, nil)
 	}
 	if upsert := stmt.Upsert_clause(); upsert != nil && upsert.UPDATE_() != nil {
-		core.AlsoPerforms(result, core.InspectOpUpdate)
+		core.AlsoPerforms(result, core.InspectOpUpdate,
+			i.upsertSetFields(upsert, schema, tableName))
 	}
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
+}
+
+// upsertSetFields are the columns DO UPDATE writes. The clause names columns
+// on both sides of SET, the conflict target before it and the assignments
+// after, so the token index is what tells them apart.
+func (i *Inspector) upsertSetFields(
+	upsert sqlite.IUpsert_clauseContext,
+	schema, table string,
+) []core.InspectField {
+	set := upsert.SET_()
+	if set == nil {
+		return nil
+	}
+	after := set.GetSymbol().GetTokenIndex()
+	var fields []core.InspectField
+	for _, name := range upsert.AllColumn_name() {
+		start := name.GetStart()
+		if start == nil || start.GetTokenIndex() < after {
+			continue
+		}
+		fields = append(fields, core.InspectField{
+			Name:   i.dialect.NormalizeIdentifier(name.GetText()),
+			Table:  table,
+			Schema: schema,
+		})
+	}
+	return fields
 }
 
 // inspectUpdate analyzes an UPDATE statement.
@@ -1612,15 +1640,20 @@ func (i *Inspector) addReturningFields(
 		return
 	}
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
+	var returned []core.InspectField
 	for _, column := range ret.AllResult_column() {
 		if column.STAR() != nil {
-			result.Fields = core.MergeInspectFields(result.Fields,
+			returned = core.MergeInspectFields(returned,
 				core.TableFields(i.meta, schema, table, i.dialect))
 			continue
 		}
 		if expr := column.Expr(); expr != nil {
-			result.Fields = core.MergeInspectFields(result.Fields,
+			returned = core.MergeInspectFields(returned,
 				i.extractFieldsFromExpr(expr, refs, nil, nil, nil))
 		}
 	}
+	result.Fields = core.MergeInspectFields(result.Fields, returned)
+	// RETURNING hands rows back, and rows handed back are a read whatever
+	// wrote them.
+	core.AlsoPerforms(result, core.InspectOpSelect, returned)
 }

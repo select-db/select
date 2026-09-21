@@ -224,6 +224,6 @@ func observe(statement, first, second string) (answer testutil.SeeAnswer, err er
 
 	result := engine.ExecuteLocal(ctx,
 		engine.Conn{DB: db, Meta: meta, Perms: testutil.GetSeeTestPermissions()},
-		engine.DBInstance{ID: testutil.SeeTestDBInstanceID, DBType: "sqlite"}, statement, engine.Options{})
+		engine.DBInstance{ID: testutil.TestDBInstanceID, DBType: "sqlite"}, statement, engine.Options{})
 	return testutil.ReadSeeAnswer(result.RowCount, result.Rows, result.Errors), nil
 }

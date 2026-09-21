@@ -43,15 +43,10 @@ func (s *SyntaxErrors) In(from, to int) bool {
 	return false
 }
 
-// AtStart reports whether the parser stumbled over the first token of a span.
-// An error there means the statement never began: what error recovery went on
-// to salvage is a fragment of something else, and the tables it names are not
-// tables the statement read. An error later in the span leaves the statement's
-// own head parsed, so what it named still stands and only a clause the grammar
-// does not carry was missed.
-func (s *SyntaxErrors) AtStart(from int) bool {
+// At reports whether an error falls on one token, which is In over a point.
+func (s *SyntaxErrors) At(index int) bool {
 	for _, at := range s.at {
-		if at == from {
+		if at == index {
 			return true
 		}
 	}
