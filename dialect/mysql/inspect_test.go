@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	core "github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/core/testutil"
 )
 
 func ptr(s string) *string { return &s }
@@ -26,7 +27,7 @@ func TestInspect(t *testing.T) {
 			}
 
 			for i, expected := range tc.Expected {
-				compareResult(t, i, expected, results[i])
+				testutil.CompareResult(t, i, expected, results[i])
 			}
 		})
 	}
@@ -478,89 +479,8 @@ func TestInspectMySQLSpecific(t *testing.T) {
 				return
 			}
 			for i, expected := range tc.Expected {
-				compareResult(t, i, expected, results[i])
+				testutil.CompareResult(t, i, expected, results[i])
 			}
 		})
 	}
-}
-
-func compareResult(t *testing.T, idx int, expected, actual core.InspectStatement) {
-	prefix := ""
-	if idx >= 0 {
-		prefix = "Result " + string(rune('0'+idx)) + ": "
-	}
-
-	if actual.Operation != expected.Operation {
-		t.Errorf("%sexpected operation %q, got %q", prefix, expected.Operation, actual.Operation)
-	}
-
-	if !compareTables(expected.Tables, actual.Tables) {
-		t.Errorf("%stables mismatch\nExpected: %+v\nGot: %+v", prefix, expected.Tables, actual.Tables)
-	}
-
-	if !compareFields(expected.Fields, actual.Fields) {
-		t.Errorf("%sfields mismatch\nExpected: %+v\nGot: %+v", prefix, expected.Fields, actual.Fields)
-	}
-
-	if !compareFields(expected.Where, actual.Where) {
-		t.Errorf("%sWHERE fields mismatch\nExpected: %+v\nGot: %+v", prefix, expected.Where, actual.Where)
-	}
-
-	if len(expected.Subqueries) != len(actual.Subqueries) {
-		t.Errorf("%ssubqueries count mismatch: expected %d, got %d", prefix, len(expected.Subqueries), len(actual.Subqueries))
-	} else {
-		for j, expSub := range expected.Subqueries {
-			compareResult(t, -1, expSub, actual.Subqueries[j])
-		}
-	}
-}
-
-func compareTables(expected, actual []core.InspectTable) bool {
-	if len(expected) != len(actual) {
-		return false
-	}
-	for i := range expected {
-		if expected[i].Name != actual[i].Name {
-			return false
-		}
-		if expected[i].Schema != actual[i].Schema {
-			return false
-		}
-		if (expected[i].Alias == nil) != (actual[i].Alias == nil) {
-			return false
-		}
-		if expected[i].Alias != nil && actual[i].Alias != nil && *expected[i].Alias != *actual[i].Alias {
-			return false
-		}
-	}
-	return true
-}
-
-func compareFields(expected, actual []core.InspectField) bool {
-	if len(expected) != len(actual) {
-		return false
-	}
-	for i := range expected {
-		if expected[i].Name != actual[i].Name {
-			return false
-		}
-		if expected[i].Table != actual[i].Table {
-			return false
-		}
-		if expected[i].Schema != actual[i].Schema {
-			return false
-		}
-		expectedAlias := ""
-		actualAlias := ""
-		if expected[i].Alias != nil {
-			expectedAlias = *expected[i].Alias
-		}
-		if actual[i].Alias != nil {
-			actualAlias = *actual[i].Alias
-		}
-		if expectedAlias != actualAlias {
-			return false
-		}
-	}
-	return true
 }
