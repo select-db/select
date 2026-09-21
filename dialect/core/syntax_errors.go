@@ -43,6 +43,21 @@ func (s *SyntaxErrors) In(from, to int) bool {
 	return false
 }
 
+// AtStart reports whether the parser stumbled over the first token of a span.
+// An error there means the statement never began: what error recovery went on
+// to salvage is a fragment of something else, and the tables it names are not
+// tables the statement read. An error later in the span leaves the statement's
+// own head parsed, so what it named still stands and only a clause the grammar
+// does not carry was missed.
+func (s *SyntaxErrors) AtStart(from int) bool {
+	for _, at := range s.at {
+		if at == from {
+			return true
+		}
+	}
+	return false
+}
+
 // Cover records that a reported statement accounts for the span a node covers,
 // falling back to [from, to) for a node error recovery left without bounds,
 // which covers more and so reports less.

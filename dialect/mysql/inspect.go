@@ -574,17 +574,21 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 	if fc := stmt.InsertFromConstructor(); fc != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(fc)...)
 	}
-	// ON DUPLICATE KEY UPDATE: subqueries in RHS of SET expressions.
+	// ON DUPLICATE KEY UPDATE: subqueries in RHS of SET expressions. The
+	// clause also rewrites the row it conflicts with, so the row that was
+	// there does not survive and insert alone is not the right it needs.
 	if iul := stmt.InsertUpdateList(); iul != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(iul)...)
+		core.AlsoPerforms(result, core.InspectOpUpdate)
 	}
 
 	return result
 }
 
 // inspectReplace handles REPLACE statements. REPLACE shares its grammar shape
-// with INSERT, so it goes through the same field/subquery extraction. We use
-// InspectOpInsert because the permission semantics are identical (write).
+// with INSERT, so it goes through the same field and subquery extraction. It
+// deletes whatever row it conflicts with before inserting, which is a right of
+// its own rather than part of the write.
 func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpInsert}
 
@@ -636,6 +640,7 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 	if fc := stmt.InsertFromConstructor(); fc != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(fc)...)
 	}
+	core.AlsoPerforms(result, core.InspectOpDelete)
 	return result
 }
 

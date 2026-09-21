@@ -1,14 +1,42 @@
 ---
 name: dialect-audit
-description: Audit a layer of the dialect package (permissions, linting, completion, hovering, operators) by probing real SQL through the real code path and measuring what it does, rather than reading the source and reasoning about it. Use this whenever you are asked to find bugs in the SQL language support, harden permission enforcement, check what an inspector or the analyzer reports for some SQL, investigate a false denial or a missed check, or whenever work touches dialect/postgresql, dialect/mysql, dialect/sqlite, dialect/engine or dialect/core/tokenanalyzer. Use it even when the request sounds like a single narrow question ("does CREATE TABLE AS check permissions?"), because the method's whole value is that the answer is usually "no, and neither do six other things".
+description: The standing mission for the dialect package: draft every statement case each dialect can express, state the expected verdict for permissions, completion, linting and resolution, measure what the code actually does, and change the code until the two agree. Use whenever work touches dialect/postgresql, dialect/mysql, dialect/sqlite, dialect/engine or dialect/core/tokenanalyzer, whenever asked to find or fix bugs in SQL language support, harden permission enforcement, investigate a false denial or a missed check, or check what an inspector, the analyzer or the completion reports for some SQL. Use it even when the request sounds like one narrow question ("does CREATE TABLE AS check permissions?"), because the answer is usually "no, and neither do six other things".
 ---
 
-# Auditing the dialect package
+# The dialect package
 
 This package decides what a query is allowed to do, what is wrong with it, and
 what to suggest next. It has two parsers: ANTLR inspectors in Go (`Inspect()`,
 feeding permissions) and sqlglot in a Python subprocess (lint, completion,
-references). Both are large and both fail the same way.
+references).
+
+## The mission
+
+Draft every statement case each dialect can express, with the expected verdict,
+for each of these layers **in this order**:
+
+1. **Permissions** -- which rights a statement requires.
+2. **Completion** -- what is suggested at a position.
+3. **Linter** -- which diagnostics a statement raises, and where.
+4. **Resolution** -- hover text, references, go-to-definition.
+
+Where the measured verdict does not match the expectation, change the code
+until it does. Layer 1 is finished on all three dialects before layer 2 starts.
+"Finished" means the case table covers the statement space for that layer and
+every case passes on PostgreSQL, MySQL and SQLite.
+
+Two standing constraints:
+
+**Fix, do not report and stop.** A mismatch between expectation and measurement
+is work to do, not a finding to hand over. Stop and ask only where the
+expectation itself is a product decision nobody has made, and say which
+expectation is in question rather than describing the code.
+
+**Fix generically.** The fourth dialect must inherit the fix without writing it
+again. A rule belongs in `core` unless the grammar forces it per dialect; a
+case belongs in the shared table unless the SQL is one only some dialects
+accept. Where a fix has to be per dialect, write it the same way in all three,
+so the pattern is obvious to whoever adds the fourth.
 
 ## The defect class this package has
 
@@ -19,32 +47,76 @@ A branch the inspector cannot read becomes zero tables. A nested statement it
 does not dispatch on becomes no statement at all. A rule that cannot place its
 diagnostic becomes a zero-width range at the origin. A consumer that iterates
 and finds nothing concludes there is nothing to do, so the query runs
-unchecked, the file lints clean, the user sees no marker. Every audit worth
-doing starts by looking for a place where absence is being read as correctness.
+unchecked, the file lints clean, the user sees no marker.
 
-One case is already closed: `engine.Inspect` floors a whole statement that
-comes back unrecognised to `core.UnknownStatement()`, which takes manage. The
-floor is per top-level statement, so everything below it (a table list, a CTE
-body, a source query) still degrades silently. Probe through `engine.Inspect`,
-not `dialect.Inspect`, or you measure a hole the seam already closes.
+`engine.Inspect` floors a whole statement that comes back unrecognised to
+`core.UnknownStatement()`, which takes manage. The floor is per top-level
+statement, so everything below it (a table list, a CTE body, a source query)
+still degrades silently. Probe through `engine.Inspect`, not `dialect.Inspect`,
+or you measure a hole the seam already closes.
 
 Hold this as a prior, not a conclusion. Confirm it by measurement.
 
+## Enumerating the statement space
+
+"All possible cases" is only checkable if the enumeration has a shape. Walk the
+axes and take each cell; a cell with no case is a gap, and a gap is the thing
+this mission exists to remove.
+
+### Axes for permissions
+
+- **Operation**: select, insert, update, delete, create, alter, drop, truncate,
+  grant, revoke, and what one dialect alone has (COPY, REPLACE, upsert, ATTACH,
+  PRAGMA, VACUUM, CALL, SET, EXPLAIN, ANALYZE, multi-table UPDATE and DELETE).
+- **Where a read hides**: the FROM list, a join, a CTE body, a derived table, a
+  scalar subquery in the select list, a subquery in WHERE, GROUP BY, HAVING,
+  ORDER BY or LIMIT, a RETURNING clause, an upsert predicate, the source of an
+  INSERT ... SELECT or a CREATE TABLE AS, a view body, each branch of a set
+  operation.
+- **How a relation is named**: bare, schema-qualified, aliased, quoted in each
+  way the dialect accepts, in another case, shadowing a CTE, shadowed by one.
+- **What the statement does with the table**: returns it, writes it, tests it
+  without returning it (which is the see boundary), or names it without
+  reading it.
+- **Policy**: deny-all, the four data actions without manage, per-table grants,
+  manage alone.
+
+### Axes for the later layers
+
+Completion: the position in the statement (after SELECT, after FROM, after a
+dot, inside a function call, in a WHERE, mid-identifier), what is in scope at
+it (tables, CTEs, aliases, columns of each), and what the user has typed so
+far. Linting: one case per rule, times the ways a statement can make the rule
+fire, plus the range the diagnostic must carry. Resolution: one case per
+identifier kind, at each position it can appear.
+
 ## Method
 
-### 1. Probe before you read
+### 1. Write the expectation first
+
+The case states the verdict before anything is measured. For permissions that
+is the exact set of rights: `select on main.users`, `manage`, and so on. An
+expectation written after reading the output is a transcript, not a test.
+
+Where the measurement disagrees, decide which side is wrong on the semantics of
+SQL and of the permission model, not on which is easier to change. Both
+outcomes happen: three expectations in the see work were wrong and the code was
+right.
+
+### 2. Probe before you read the source
 
 Do not reason about an inspector from its source. Ask it.
 
 `dialect/cmd/sqlprobe` is the first reach: one statement, every layer it
-covers, enough to isolate which one is wrong. Where it does not reach, write a
-throwaway Go or Python probe. `references/probes.md` says what each covers and
-carries the templates.
+covers, enough to isolate which one is wrong. `dialect/cmd/seesweep` generates
+statements and runs them through the engine against a twin database, which is
+how a case nobody thought to write gets found. Where neither reaches, write a
+throwaway Go or Python probe; `references/probes.md` carries the templates.
 
 The parse tree and the server are both more surprising than the source reads,
 so a prediction made from the source is a hypothesis, not a finding.
 
-### 2. Measure the verdict, not the shape
+### 3. Measure the verdict, not the shape
 
 An intermediate structure is a clue. The decision function is the finding.
 
@@ -54,11 +126,10 @@ ALLOWED under a policy granting nothing  <- a finding
 ```
 
 Always run the probe's output through the thing that decides:
-`core.CheckQueryPermissions` for permissions, `analyze()` for lint, the
-completion entry point for suggestions. A reviewer can argue with a shape. They
-cannot argue with "this statement ran and nobody was asked".
+`core.CheckQueryPermissions` and `core.CheckSeePredicates` for permissions,
+`analyze()` for lint, the completion entry point for suggestions.
 
-### 3. Bracket with two policies
+### 4. Bracket with two policies
 
 For permissions, run every candidate under both:
 
@@ -70,7 +141,7 @@ For permissions, run every candidate under both:
 
 The gap between them is where the findings are.
 
-### 4. Probe the opposite direction too
+### 5. Probe the opposite direction too
 
 Every tightening risks a false denial, and a false denial is a support ticket
 from a user who did nothing wrong. After each fix, run ordinary work through a
@@ -82,7 +153,10 @@ subquery, a join with an alias. Reporting a new read is the shape that breaks
 these: a name the new code path does not know is virtual resolves to no schema,
 and the checker then denies it for every role.
 
-### 5. Ask the real server when the question is about the server
+Measure it rather than asserting it. Run the corpus before and after, diff the
+set of statements that ran, and account for every statement that moved.
+
+### 6. Ask the real server when the question is about the server
 
 When the question is "what does the database do", start one and ask. Do not
 infer from catalog names or documentation.
@@ -90,56 +164,36 @@ infer from catalog names or documentation.
 Executing every operator the completion offers against a real PostgreSQL found
 30 it refuses, `point = point` and `json = json` among them. An in-memory
 SQLite settles whether a statement parses at all, which decides whether a
-misclassification is even reachable. Both take minutes and both change the
-design.
+misclassification is even reachable.
 
-## Classify before proposing
+## Where the cases live
 
-Findings are prioritised by service and by cause, so present them grouped both
-ways.
+The see work built the shape the other layers follow.
 
-**By service**: permissions, linting, completion, hovering, references.
+- **`core/testutil/see_data.go`** holds the case type and the tables: one
+  shared table every dialect runs, plus a table for SQL that only some accept
+  (`GetSeeCasesPostgreSQLAndSQLite`).
+- **`core/testutil/see.go`** holds the runner. A dialect's entry point is three
+  lines, so a fourth dialect inherits the whole table by calling it.
+- **`dialect/<dialect>/see_test.go`** holds only what that dialect alone
+  expresses: its quoting, its own statement forms.
 
-**By cause**: the ANTLR inspectors (`dialect/*/inspect.go`), the sqlglot
-analyzer (`dialect/core/tokenanalyzer/python/`), metadata resolution, or the
-consumer itself (`dialect/core/permissions.go`).
+Build each new layer the same way: a case type that states the expectation, one
+runner in `core/testutil`, shared tables for what every dialect expresses, a
+per-dialect table for the rest. A case that two dialects accept goes in a table
+those two share rather than a copy each -- two copies of a case diverge, and
+the FILTER case proved it.
 
-Then order by severity, and be honest about what each one costs:
+`core/testutil` may import `core` but not `engine`, which is what lets the
+engine's own tests use it.
 
-- a **bypass** (ran with no grant) outranks
-- a **wrong right** (ran under the wrong permission) outranks
-- an **unchecked read** (the write was checked, the read inside was not) outranks
-- a **false denial** (fail-closed, annoying, not dangerous).
+Reuse `core.GetInspectTestMetadata()` or `testutil.GetSeeTestMetadata()` for
+the catalog rather than building a fixture.
 
-## Present findings before writing code
+## Writing a case that proves something
 
-Report what you measured and stop. The owner decides what to take and in what
-order. An audit usually turns up more than one PR's worth of work, and the
-split between "fix now" and "different mechanism, different PR" is a judgement
-about their roadmap.
-
-When you propose the split, group by **kind of resolution**, not by symptom.
-Three bugs that all come from "a nested statement vanished" are one PR. A
-fourth that comes from "a write is classified as a read" is a different PR even
-though it sits in the same file.
-
-## Regression tests
-
-A test that passes against the old code tests nothing. Verify it:
-
-```sh
-cd dialect
-git stash push -- postgresql/inspect.go mysql/inspect.go sqlite/inspect.go
-go test ./engine/ -run TestYourNewTest    # must fail, and count the failures
-git stash pop
-```
-
-State the count in the PR. "13 of 16 cases fail against the pre-fix inspectors"
-is a claim a reviewer can check in thirty seconds.
-
-**Necessary and sufficient.** A permission test that only asserts "refused"
-passes just as well when everything is refused. Assert both directions: holding
-every permission but one must be refused, and holding all of them must run.
+**Necessary and sufficient.** A permission case that only asserts "refused"
+passes just as well when everything is refused. Assert both directions:
 
 ```go
 for idx, missing := range tt.needs {
@@ -153,8 +207,10 @@ if err := core.CheckQueryPermissions(inspected, dbID, holding(tt.needs...)); err
 }
 ```
 
-**Guard against a vacuous pass.** If a test resolves no table, the check has
-nothing to refuse and goes green. Assert the fixture resolved:
+**Guard against a vacuous pass.** If a case resolves no table, the check has
+nothing to refuse and goes green. If a case expects masking but names no result
+columns, there is nothing to mask. Make the runner fail such a case rather than
+report it:
 
 ```go
 if len(stmt.Tables) == 0 {
@@ -162,38 +218,51 @@ if len(stmt.Tables) == 0 {
 }
 ```
 
-**Where tests go.** One file per dialect, never all the dialects in one file.
-A case goes in `dialect/<dialect>/` when that dialect is what makes it
-interesting, and only a permission outcome that every dialect expresses the
-same way belongs in `dialect/engine/inspect_permissions_test.go`, the seam
-where they meet.
+**Verify the case fails against the old code.** A test that passes before the
+fix tests nothing.
 
-Reuse `core.GetInspectTestMetadata()` for the catalog rather than building a
-fixture: every inspect suite already resolves against it, so a local catalog
-is one more thing to keep in step. `core/testutil` holds the statement-tree
-walker for assertions that have to reach into subqueries.
+```sh
+cd dialect
+git stash push -- core/resolve.go postgresql/inspect.go mysql/inspect.go sqlite/inspect.go
+go test ./... -run TestYourNewTest    # must fail, and count the failures
+git stash pop
+```
 
-Do not put shared cases in `core.GetInspectTestCases` unless the dialects
-produce identical trees. They often do not, and `compareResult` is exact, so a
-shared table quietly grows per-dialect expectations and stops being shared.
+State the count in the commit message. "13 of 16 cases fail against the
+pre-fix inspectors" is a claim a reviewer can check in thirty seconds.
+
+## Reporting
+
+Group by **service** (permissions, linting, completion, hovering, references)
+and by **cause** (the ANTLR inspectors, the sqlglot analyzer, metadata
+resolution, or the consumer in `core/permissions.go`), then order by severity:
+
+- a **bypass** (ran with no grant) outranks
+- a **wrong right** (ran under the wrong permission) outranks
+- an **unchecked read** (the write was checked, the read inside was not) outranks
+- a **false denial** (fail-closed, annoying, not dangerous).
+
+Split work by **kind of resolution**, not by symptom. Three bugs that all come
+from "a nested statement vanished" are one change. A fourth from "a write is
+classified as a read" is a different change even in the same file.
 
 ## House rules that bite here
 
 The root `CLAUDE.md` and `CONTRIBUTING.md` carry the repository's rules, and
-they win. Two of them have a specific shape in this package:
+they win. Two have a specific shape in this package:
 
-- Compose what exists before adding a layer. `core.OrUnknown` and
-  `core.UnknownStatement` already exist for "a dispatcher fell through", and
-  `engine.Inspect` already floors an unrecognised statement. Reach for those
-  before inventing a guard.
+- Compose what exists before adding a layer. `core.Resolver`, `core.Scope`,
+  `core.OrUnknown` and `core.UnknownStatement` already exist; `engine.Inspect`
+  already floors an unrecognised statement. Reach for those before inventing a
+  guard.
 - Never hand-edit the generated parser files under `*/parser/`. A grammar fix
   is a regeneration, not an edit.
 
 ## Cleanup
 
 Probes are scratch. Delete them before staging anything, and stage explicit
-paths rather than `git add -A`; a stray probe swept into a commit is easy to do
-and embarrassing to undo. Verify with `git status --short` before committing.
+paths rather than `git add -A`. Verify with `git status --short` and
+`find . -name 'zz_*'` before committing.
 
 ## Checks before pushing
 
@@ -202,8 +271,14 @@ cd dialect
 golangci-lint run ./...          # CONTRIBUTING.md: CI also fails on dead code
 SELECT_REQUIRE_ANALYZER=1 go test ./...
 gofmt -l <the files you touched>
+go run ./cmd/seesweep            # 0 leaks, 0 oracles
 ```
 
 `SELECT_REQUIRE_ANALYZER=1` makes the Python analyzer tests fail loudly instead
 of skipping, which is the difference between "the suite is green" and "the
 suite ran".
+
+`golangci-lint` may refuse to run locally when its binary is built against an
+older Go than the module targets. It still runs in CI, and dead code is what it
+caught the last two times, so re-read the diff for a helper that lost its last
+caller before pushing.
