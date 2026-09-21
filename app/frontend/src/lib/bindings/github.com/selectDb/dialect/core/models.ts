@@ -557,6 +557,14 @@ export class InspectStatement {
      */
     "Subqueries": InspectStatement[];
 
+    /**
+     * Filter marks a subquery the server runs to choose or order rows rather
+     * than to return them: a WHERE, HAVING, GROUP BY, ORDER BY or window
+     * clause. Unmarked means its value reaches the row, which is the answer
+     * that refuses rather than leaks.
+     */
+    "Filter": boolean;
+
     /** Creates a new InspectStatement instance. */
     constructor($$source: Partial<InspectStatement> = {}) {
         if (!("Operation" in $$source)) {
@@ -573,6 +581,9 @@ export class InspectStatement {
         }
         if (!("Subqueries" in $$source)) {
             this["Subqueries"] = [];
+        }
+        if (!("Filter" in $$source)) {
+            this["Filter"] = false;
         }
 
         Object.assign(this, $$source);
