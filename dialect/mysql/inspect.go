@@ -232,18 +232,6 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	return result
 }
 
-// cteNames is the set of relation names a nested statement can refer to beyond
-// the catalog. A FROM subquery's alias is not a relation outside its own query
-// level, so only the CTEs travel into a subquery inspected without the
-// enclosing scope.
-func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
-	names := make(map[string]bool, len(ctes))
-	for _, cte := range ctes {
-		names[i.dialect.NormalizeIdentifier(cte.Table)] = true
-	}
-	return names
-}
-
 // extractTailSubqueries collects the subqueries in ORDER BY, which sits after
 // every UNION branch rather than inside one. MySQL's LIMIT takes an integer or
 // a placeholder, never a subquery, so there is no tail clause beyond it.
@@ -310,15 +298,7 @@ func (i *Inspector) inspectQueryPrimary(
 	relationRefs, subqueryColumns := i.extractRelationRefs(spec)
 	fromSubqueries := i.extractFromSubqueries(spec)
 
-	virtualTables := make(map[string]bool)
-	for _, cte := range ctes {
-		virtualTables[i.dialect.NormalizeIdentifier(cte.Table)] = true
-	}
-	for name := range subqueryColumns {
-		virtualTables[i.dialect.NormalizeIdentifier(name)] = true
-	}
-
-	tables := i.convertRelationRefs(relationRefs, virtualTables)
+	tables := i.convertRelationRefs(relationRefs, i.virtualNames(ctes, subqueryColumns))
 	for _, sub := range cteSubqueries {
 		tables = core.MergeInspectTables(tables, sub.Tables)
 	}
@@ -562,8 +542,7 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 
 	relationRefs, _ := i.extractRelationRefsFromTableRefList(stmt.TableReferenceList())
 
-	virtualTables := make(map[string]bool)
-	result.Tables = i.convertRelationRefs(relationRefs, virtualTables)
+	result.Tables = i.convertRelationRefs(relationRefs, nil)
 	if len(result.Tables) == 0 {
 		return nil
 	}
@@ -1214,75 +1193,6 @@ func (i *Inspector) aliasName(sa mysql.ISelectAliasContext) string {
 	return ""
 }
 
-// expandStar expands SELECT * to all columns from all in-scope relations.
-func (i *Inspector) expandStar(
-	relationRefs []core.RelationRef,
-	ctes []core.RelationRef,
-	subqueryColumns map[string][]core.Column,
-	cteToSubqueryMap map[string]*core.InspectStatement,
-) []core.InspectField {
-	var fields []core.InspectField
-	for _, ref := range relationRefs {
-		// CTE?
-		matched := false
-		for _, cte := range ctes {
-			if i.normalizeEquals(cte.Table, ref.Table) {
-				if cteResult, ok := cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)]; ok {
-					fields = append(fields, cteResult.Fields...)
-				}
-				matched = true
-				break
-			}
-		}
-		if matched {
-			continue
-		}
-		// Subquery alias?
-		if ref.Schema == "" && subqueryColumns != nil {
-			if cols, ok := subqueryColumns[ref.Table]; ok {
-				for _, col := range cols {
-					fields = append(fields, core.InspectField{
-						Name:   col.Name,
-						Table:  ref.Table,
-						Schema: i.meta.DefaultSchema,
-					})
-				}
-				continue
-			}
-		}
-		// Physical table.
-		fields = append(fields, core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)...)
-	}
-	return fields
-}
-
-func (i *Inspector) expandQualifiedStar(
-	tablePrefix string,
-	relationRefs []core.RelationRef,
-	ctes []core.RelationRef,
-	cteToSubqueryMap map[string]*core.InspectStatement,
-) []core.InspectField {
-	target := i.dialect.NormalizeIdentifier(tablePrefix)
-	for _, ref := range relationRefs {
-		key := ref.Alias
-		if key == "" {
-			key = ref.Table
-		}
-		if i.dialect.NormalizeIdentifier(key) != target {
-			continue
-		}
-		for _, cte := range ctes {
-			if i.normalizeEquals(cte.Table, ref.Table) {
-				if cteResult, ok := cteToSubqueryMap[i.dialect.NormalizeIdentifier(cte.Table)]; ok {
-					return cteResult.Fields
-				}
-			}
-		}
-		return core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)
-	}
-	return nil
-}
-
 // ============================================
 // EXPRESSION FIELD EXTRACTION
 // ============================================
@@ -1473,35 +1383,6 @@ func (i *Inspector) resolveColumn(
 	}
 	if len(known) == 0 && len(unknown) == 1 {
 		return &core.InspectField{Name: col.name, Table: unknown[0].Table}
-	}
-	return nil
-}
-
-func (i *Inspector) resolveCTEColumnFromFields(columnName string, cteResult *core.InspectStatement) *core.InspectField {
-	if cteResult != nil {
-		for _, field := range cteResult.Fields {
-			if i.normalizeEquals(field.Name, columnName) {
-				return &core.InspectField{
-					Name:   field.Name,
-					Table:  field.Table,
-					Schema: field.Schema,
-				}
-			}
-		}
-	}
-	// Fallback: search metadata for any table with this column.
-	for _, schema := range i.meta.Schemas {
-		for _, table := range schema.Tables {
-			for _, col := range table.Columns {
-				if i.normalizeEquals(col.Name, columnName) {
-					return &core.InspectField{
-						Name:   columnName,
-						Table:  table.Name,
-						Schema: schema.Name,
-					}
-				}
-			}
-		}
 	}
 	return nil
 }
@@ -1766,38 +1647,39 @@ func (i *Inspector) extractCTEsFromWithClause(w mysql.IWithClauseContext) ([]cor
 // CONVERT REFS -> InspectTable
 // ============================================
 
-func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtualTables map[string]bool) []core.InspectTable {
-	var tables []core.InspectTable
-	seen := make(map[string]bool)
-	for _, ref := range refs {
-		if ref.Schema == "" && ref.Table == "" {
-			continue
-		}
-		// Skip virtual tables (CTEs, subqueries). Only an unqualified name can
-		// be one; dropping a qualified one is a read nobody checks.
-		if !ref.Qualified && virtualTables != nil && virtualTables[i.dialect.NormalizeIdentifier(ref.Table)] {
-			continue
-		}
-		schema := ref.Schema
-		if schema != "" && !core.TableExistsInMetadata(i.meta, ref.Schema, ref.Table, i.dialect) {
-			schema = ""
-		}
-		key := schema + "." + ref.Table
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		t := core.InspectTable{
-			Name:      ref.Table,
-			Schema:    schema,
-			StartLine: ref.Line,
-			StartCol:  ref.Col,
-			EndCol:    ref.EndCol,
-		}
-		if ref.Alias != "" {
-			t.Alias = &ref.Alias
-		}
-		tables = append(tables, t)
-	}
-	return tables
+// The rules below are the same for every dialect and live in core; these bind
+// them to this inspector's metadata.
+
+func (i *Inspector) virtualNames(ctes []core.RelationRef, subqueryColumns map[string][]core.Column) map[string]bool {
+	return core.VirtualNames(ctes, subqueryColumns, i.dialect)
+}
+
+func (i *Inspector) cteNames(ctes []core.RelationRef) map[string]bool {
+	return core.VirtualNames(ctes, nil, i.dialect)
+}
+
+func (i *Inspector) convertRelationRefs(refs []core.RelationRef, virtual map[string]bool) []core.InspectTable {
+	return core.ConvertRelationRefs(refs, virtual, i.meta, i.dialect)
+}
+
+func (i *Inspector) resolveCTEColumnFromFields(columnName string, cte *core.InspectStatement) *core.InspectField {
+	return core.ResolveCTEColumn(columnName, cte, i.meta, i.dialect)
+}
+
+func (i *Inspector) expandStar(
+	refs []core.RelationRef,
+	ctes []core.RelationRef,
+	subqueryColumns map[string][]core.Column,
+	cteResults map[string]*core.InspectStatement,
+) []core.InspectField {
+	return core.ExpandStar(refs, ctes, subqueryColumns, cteResults, i.meta, i.dialect)
+}
+
+func (i *Inspector) expandQualifiedStar(
+	prefix string,
+	refs []core.RelationRef,
+	ctes []core.RelationRef,
+	cteResults map[string]*core.InspectStatement,
+) []core.InspectField {
+	return core.ExpandQualifiedStar(prefix, refs, ctes, cteResults, i.meta, i.dialect)
 }

@@ -1125,6 +1125,40 @@ func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
 	}
 }
 
+// A CTE shadows a table spelled the same way, so a star over it reads the CTE
+// and nothing else. Reporting the table's columns too refuses the statement to
+// a role that may read everything the statement actually touches.
+func TestPermissions_ACTEShadowsTheTableItIsNamedAfter(t *testing.T) {
+	schema, table, db := "main", "t1", permDBID
+	onlyT1 := core.Compile([]core.PermissionEntry{{
+		DbInstanceID: &db, SchemaName: &schema, TableName: &table,
+		Action: core.ActionSelect, Effect: "allow", RoleName: "r",
+	}}).WithDenyUnmanaged()
+
+	for _, tt := range []dialectSQL{
+		{"postgresql", "WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2"},
+		{"mysql", "WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2"},
+		{"sqlite", "WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2"},
+	} {
+		t.Run(tt.dialect, func(t *testing.T) {
+			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
+				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
+			}
+			for _, stmt := range inspected {
+				for _, f := range stmt.Fields {
+					if f.Table == "t2" {
+						t.Errorf("read a column of the table the CTE shadows: %+v", stmt.Fields)
+					}
+				}
+			}
+			if err := core.CheckQueryPermissions(inspected, db, onlyT1); err != nil {
+				t.Errorf("refused holding select on every table it reads: %v", err)
+			}
+		})
+	}
+}
+
 // A table may be named after one of those routines, and the parenthesis that
 // follows the name is then a column list. Reading it as a call costs the role
 // manage for an ordinary write.

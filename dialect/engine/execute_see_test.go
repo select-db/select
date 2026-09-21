@@ -518,3 +518,29 @@ func TestExecuteLocalNameReusedInAnotherScope(t *testing.T) {
 		})
 	}
 }
+
+// A CTE named after a table reads the CTE, not the table. Reading the table's
+// columns as well hides a value the role may see, since a hidden column of the
+// shadowed table claims the result column the CTE returns.
+func TestExecuteLocalCTEShadowingATableDoesNotMask(t *testing.T) {
+	db, meta := setupContactsDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("contacts"),
+			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+	)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn, "WITH contacts AS (SELECT email FROM users) SELECT * FROM contacts ORDER BY email")
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected errors: %v", result.Errors)
+	}
+	if result.RowCount == 0 {
+		t.Fatal("no rows, so nothing here was checked")
+	}
+	if result.Rows[0][0] == core.MaskedValue {
+		t.Errorf("users.email masked by a rule on the table the CTE shadows")
+	}
+}
