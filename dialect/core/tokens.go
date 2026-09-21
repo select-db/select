@@ -127,3 +127,35 @@ func NodeSpan(node interface {
 	}
 	return start.GetTokenIndex(), stop.GetTokenIndex() + 1, true
 }
+
+// CollectNodes returns every node of type T under tree, in the order a
+// depth-first walk reaches them. The grammars give an ON clause, a joined table
+// or a name list no accessor that reaches through the nesting between it and
+// the clause that holds it.
+func CollectNodes[T any](tree antlr.Tree) []T {
+	var found []T
+	var walk func(antlr.Tree)
+	walk = func(node antlr.Tree) {
+		if node == nil {
+			return
+		}
+		if hit, ok := node.(T); ok {
+			found = append(found, hit)
+		}
+		for idx := 0; idx < node.GetChildCount(); idx++ {
+			walk(node.GetChild(idx))
+		}
+	}
+	walk(tree)
+	return found
+}
+
+// TreeOrNil returns ctx as a ParseTree, and nil where the accessor that
+// produced it returned a nil of its own interface type. A typed nil in an
+// antlr.ParseTree is not nil, and walking one panics.
+func TreeOrNil[T antlr.ParseTree](ctx T) antlr.ParseTree {
+	if any(ctx) == nil {
+		return nil
+	}
+	return ctx
+}

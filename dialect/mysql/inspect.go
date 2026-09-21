@@ -237,7 +237,7 @@ func (i *Inspector) inspectQueryExpression(qe mysql.IQueryExpressionContext) *co
 	tail := i.extractTailSubqueries(qe)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
-	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(qe, relationRefsOf(result)))
+	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(qe, core.RelationRefsOf(result)))
 
 	return result
 }
@@ -324,6 +324,7 @@ func (i *Inspector) inspectQueryPrimary(
 
 	where, whereSubqueries := i.extractWhereFields(spec, relationRefs)
 	where = core.MergeInspectFields(where, i.branchClauseFields(spec, relationRefs, fields))
+	where = core.MergeInspectFields(where, i.joinNameFields(spec.FromClause(), relationRefs, scope))
 	selectSubqueries := i.extractSelectListSubqueries(spec)
 
 	subqueries := append([]core.InspectStatement{}, fromSubqueries...)
@@ -359,6 +360,29 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 	return listener.fields
 }
 
+// joinNameFields are the columns a join pairs rows on where it names no
+// expression. USING gives bare column names, which belong to every relation
+// that carries them, and NATURAL names nothing at all.
+func (i *Inspector) joinNameFields(from mysql.IFromClauseContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+	if from == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, join := range core.CollectNodes[mysql.IJoinedTableContext](from) {
+		if list := join.IdentifierListWithParentheses(); list != nil && list.IdentifierList() != nil {
+			names := make([]string, 0, len(list.IdentifierList().AllIdentifier()))
+			for _, identifier := range list.IdentifierList().AllIdentifier() {
+				names = append(names, i.dialect.NormalizeIdentifier(identifier.GetText()))
+			}
+			fields = core.MergeInspectFields(fields, i.resolve().NamedColumns(names, refs, scope))
+		}
+		if join.NaturalJoinType() != nil {
+			fields = core.MergeInspectFields(fields, i.resolve().SharedColumns(refs, scope))
+		}
+	}
+	return fields
+}
+
 // branchClauseFields are the columns the clauses of one branch name without
 // returning: GROUP BY, HAVING, a named window, and a join condition.
 func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
@@ -367,17 +391,17 @@ func (i *Inspector) branchClauseFields(spec mysql.IQuerySpecificationContext, re
 	}
 	var fields []core.InspectField
 	for _, clause := range []antlr.ParseTree{
-		treeOrNil(spec.GroupByClause()),
-		treeOrNil(spec.HavingClause()),
-		treeOrNil(spec.WindowClause()),
+		core.TreeOrNil(spec.GroupByClause()),
+		core.TreeOrNil(spec.HavingClause()),
+		core.TreeOrNil(spec.WindowClause()),
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
 	}
 	if from := spec.FromClause(); from != nil {
-		for _, join := range collectJoinedTables(from) {
-			fields = core.MergeInspectFields(fields, i.testedFields(treeOrNil(join.Expr()), refs))
+		for _, join := range core.CollectNodes[mysql.IJoinedTableContext](from) {
+			fields = core.MergeInspectFields(fields, i.testedFields(core.TreeOrNil(join.Expr()), refs))
 			fields = core.MergeInspectFields(fields,
-				i.testedFields(treeOrNil(join.IdentifierListWithParentheses()), refs))
+				i.testedFields(core.TreeOrNil(join.IdentifierListWithParentheses()), refs))
 		}
 	}
 	return core.DistinctTestsProjection(isDistinct(spec), fields, projection)
@@ -403,48 +427,7 @@ func (i *Inspector) tailClauseFields(qe mysql.IQueryExpressionContext, refs []co
 	if qe == nil {
 		return nil
 	}
-	return i.testedFields(treeOrNil(qe.OrderClause()), refs)
-}
-
-// treeOrNil turns a typed nil context into an untyped nil, which a walk can
-// refuse rather than dereference.
-func treeOrNil[T antlr.ParseTree](ctx T) antlr.ParseTree {
-	if any(ctx) == nil {
-		return nil
-	}
-	return ctx
-}
-
-// relationRefsOf rebuilds the relations a statement read, which is what an
-// ORDER BY column resolves against.
-func relationRefsOf(stmt *core.InspectStatement) []core.RelationRef {
-	refs := make([]core.RelationRef, 0, len(stmt.Tables))
-	for _, table := range stmt.Tables {
-		ref := core.RelationRef{Table: table.Name, Schema: table.Schema}
-		if table.Alias != nil {
-			ref.Alias = *table.Alias
-		}
-		refs = append(refs, ref)
-	}
-	return refs
-}
-
-// collectJoinedTables returns the joins under a node. MySQL writes the ON
-// expression and the USING list inside the join rather than in a clause of
-// their own, and a join is made on the columns they name.
-func collectJoinedTables(tree antlr.Tree) []mysql.IJoinedTableContext {
-	var found []mysql.IJoinedTableContext
-	var walk func(antlr.Tree)
-	walk = func(node antlr.Tree) {
-		if join, ok := node.(mysql.IJoinedTableContext); ok {
-			found = append(found, join)
-		}
-		for idx := 0; idx < node.GetChildCount(); idx++ {
-			walk(node.GetChild(idx))
-		}
-	}
-	walk(tree)
-	return found
+	return i.testedFields(core.TreeOrNil(qe.OrderClause()), refs)
 }
 
 // extractBranchClauseSubqueries collects the subqueries in the clauses of a

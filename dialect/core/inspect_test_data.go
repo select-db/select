@@ -226,6 +226,50 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 				},
 			},
 		},
+		{
+			// USING names a column without qualifying it, and the join reads
+			// it on both sides.
+			Name: "SELECT with JOIN USING",
+			SQL:  "SELECT t1.c2 FROM t1 JOIN t2 USING (c1)",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c2", Table: "t1", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t1", Schema: defaultSchema},
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
+		{
+			// A natural join names no column at all: it pairs on every name
+			// both sides carry.
+			Name: "SELECT with NATURAL JOIN",
+			SQL:  "SELECT t1.c2 FROM t1 NATURAL JOIN t2",
+			Expected: []InspectStatement{
+				{
+					Operation: InspectOpSelect,
+					Fields: []InspectField{
+						{Name: "c2", Table: "t1", Schema: defaultSchema},
+					},
+					Tables: []InspectTable{
+						{Name: "t1", Schema: defaultSchema},
+						{Name: "t2", Schema: defaultSchema},
+					},
+					Where: []InspectField{
+						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "t2", Schema: defaultSchema},
+					},
+				},
+			},
+		},
 		// JOIN
 		{
 			// A join is made on the columns its condition names, which is a

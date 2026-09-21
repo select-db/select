@@ -200,3 +200,58 @@ func (r Resolver) cteFields(cte RelationRef, s Scope) []InspectField {
 	}
 	return nil
 }
+
+// NamedColumns returns the columns the bare names in a USING list refer to, one
+// field per relation in scope that carries the name: a join on USING (c) reads
+// c on both sides.
+func (r Resolver) NamedColumns(names []string, refs []RelationRef, s Scope) []InspectField {
+	if len(names) == 0 {
+		return nil
+	}
+	wanted := make(map[string]bool, len(names))
+	for _, name := range names {
+		wanted[r.Dialect.NormalizeIdentifier(name)] = true
+	}
+	var fields []InspectField
+	for _, field := range r.Star(refs, s) {
+		if wanted[r.Dialect.NormalizeIdentifier(field.Name)] {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
+// SharedColumns returns the columns a NATURAL join pairs rows on: every name
+// more than one relation in scope carries.
+func (r Resolver) SharedColumns(refs []RelationRef, s Scope) []InspectField {
+	all := r.Star(refs, s)
+	relations := make(map[string]map[string]bool, len(all))
+	for _, field := range all {
+		name := r.Dialect.NormalizeIdentifier(field.Name)
+		if relations[name] == nil {
+			relations[name] = make(map[string]bool, 2)
+		}
+		relations[name][field.Schema+"."+field.Table] = true
+	}
+	var fields []InspectField
+	for _, field := range all {
+		if len(relations[r.Dialect.NormalizeIdentifier(field.Name)]) > 1 {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
+// RelationRefsOf reads back the relations a statement resolved to, for a clause
+// inspected after the statement was built rather than alongside it.
+func RelationRefsOf(stmt *InspectStatement) []RelationRef {
+	refs := make([]RelationRef, 0, len(stmt.Tables))
+	for _, table := range stmt.Tables {
+		ref := RelationRef{Table: table.Name, Schema: table.Schema}
+		if table.Alias != nil {
+			ref.Alias = *table.Alias
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}

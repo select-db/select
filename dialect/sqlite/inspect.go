@@ -237,7 +237,7 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	tail := i.extractTailSubqueries(selectStmt)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
-	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectStmt, relationRefsOf(result)))
+	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectStmt, core.RelationRefsOf(result)))
 
 	return result
 }
@@ -258,20 +258,6 @@ func (i *Inspector) tailClauseFields(selectStmt sqlite.ISelect_stmtContext, refs
 	return fields
 }
 
-// relationRefsOf rebuilds the relations a statement read, which is what an
-// ORDER BY column resolves against.
-func relationRefsOf(stmt *core.InspectStatement) []core.RelationRef {
-	refs := make([]core.RelationRef, 0, len(stmt.Tables))
-	for _, table := range stmt.Tables {
-		ref := core.RelationRef{Table: table.Name, Schema: table.Schema}
-		if table.Alias != nil {
-			ref.Alias = *table.Alias
-		}
-		refs = append(refs, ref)
-	}
-	return refs
-}
-
 // testedFields are the columns a clause names to choose, group or order rows
 // rather than to return them. A role that may not see a column may not test it
 // either, so they are collected exactly as a WHERE's are. The listener does not
@@ -289,6 +275,37 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 	}
 	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
 	return listener.fields
+}
+
+// joinNameFields are the columns a join pairs rows on where it names no
+// expression. USING gives bare column names, which belong to every relation
+// that carries them, and NATURAL names nothing at all.
+func (i *Inspector) joinNameFields(selectCore sqlite.ISelect_coreContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+	if selectCore == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](selectCore) {
+		columns := constraint.AllColumn_name()
+		if len(columns) == 0 {
+			continue
+		}
+		names := make([]string, 0, len(columns))
+		for _, column := range columns {
+			names = append(names, i.dialect.NormalizeIdentifier(column.GetText()))
+		}
+		fields = core.MergeInspectFields(fields, i.resolve().NamedColumns(names, refs, scope))
+	}
+	// The keyword is read off the tokens because the grammar prefers to read
+	// the NATURAL in "t1 NATURAL JOIN t2" as an alias of t1, leaving the join
+	// operator holding JOIN alone.
+	for _, node := range core.CollectNodes[antlr.TerminalNode](selectCore) {
+		if node.GetSymbol().GetTokenType() == sqlite.SQLiteParserNATURAL_ {
+			fields = core.MergeInspectFields(fields, i.resolve().SharedColumns(refs, scope))
+			break
+		}
+	}
+	return fields
 }
 
 // branchClauseFields are the columns the clauses of one branch name without
@@ -324,26 +341,10 @@ func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, re
 // rows pair up, which is a test on their values.
 func (i *Inspector) joinConstraintFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
 	var fields []core.InspectField
-	for _, constraint := range collectJoinConstraints(tree) {
+	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](tree) {
 		fields = core.MergeInspectFields(fields, i.testedFields(constraint, refs))
 	}
 	return fields
-}
-
-// collectJoinConstraints returns the ON and USING clauses under a node.
-func collectJoinConstraints(tree antlr.ParseTree) []sqlite.IJoin_constraintContext {
-	var found []sqlite.IJoin_constraintContext
-	var walk func(antlr.Tree)
-	walk = func(node antlr.Tree) {
-		if constraint, ok := node.(sqlite.IJoin_constraintContext); ok {
-			found = append(found, constraint)
-		}
-		for idx := 0; idx < node.GetChildCount(); idx++ {
-			walk(node.GetChild(idx))
-		}
-	}
-	walk(tree)
-	return found
 }
 
 // extractTailSubqueries collects the subqueries in the clauses that sit after
@@ -399,9 +400,11 @@ func (i *Inspector) inspectSelectCore(
 	i.resolve().DropCTETables(subqueries, ctes)
 
 	return core.InspectStatement{
-		Tables:     tables,
-		Fields:     fields,
-		Where:      core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields)),
+		Tables: tables,
+		Fields: fields,
+		Where: core.MergeInspectFields(
+			core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields)),
+			i.joinNameFields(selectCore, relationRefs, scope)),
 		Subqueries: subqueries,
 	}
 }

@@ -785,6 +785,8 @@ func TestExecuteLocalOrderByHiddenColumnRefused(t *testing.T) {
 		"SELECT id, count(*) FROM users GROUP BY id HAVING max(email) > 'm'",
 		"SELECT DISTINCT email FROM users",
 		"SELECT u.id FROM users u JOIN contacts c ON c.email = u.email",
+		"SELECT u.id FROM users u JOIN contacts c USING (email)",
+		"SELECT u.id FROM users u NATURAL JOIN contacts c",
 		"SELECT u.id FROM users u LEFT JOIN contacts c ON c.id = u.id AND u.email > 'm'",
 	} {
 		t.Run(sql, func(t *testing.T) {

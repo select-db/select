@@ -208,7 +208,7 @@ func (i *Inspector) inspectSelectNoParens(selectNoParens pg.ISelect_no_parensCon
 	tail := i.extractTailSubqueries(selectNoParens)
 	i.resolve().DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
-	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectNoParens, relationRefsOf(result)))
+	result.Where = core.MergeInspectFields(result.Where, i.tailClauseFields(selectNoParens, core.RelationRefsOf(result)))
 
 	return result
 }
@@ -310,26 +310,14 @@ func (i *Inspector) inspectSelectPrimary(
 	i.resolve().DropCTETables(subqueries, ctes)
 
 	return &core.InspectStatement{
-		Operation:  core.InspectOpSelect,
-		Tables:     tables,
-		Fields:     fields,
-		Where:      core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields)),
+		Operation: core.InspectOpSelect,
+		Tables:    tables,
+		Fields:    fields,
+		Where: core.MergeInspectFields(
+			core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, fields)),
+			i.joinNameFields(primary.From_clause(), relationRefs, scope)),
 		Subqueries: subqueries,
 	}
-}
-
-// relationRefsOf rebuilds the relations a statement read, which is what an
-// ORDER BY column resolves against.
-func relationRefsOf(stmt *core.InspectStatement) []core.RelationRef {
-	refs := make([]core.RelationRef, 0, len(stmt.Tables))
-	for _, table := range stmt.Tables {
-		ref := core.RelationRef{Table: table.Name, Schema: table.Schema}
-		if table.Alias != nil {
-			ref.Alias = *table.Alias
-		}
-		refs = append(refs, ref)
-	}
-	return refs
 }
 
 // testedFields are the columns a clause names to choose, group or order rows
@@ -351,6 +339,34 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 	return listener.fields
 }
 
+// joinNameFields are the columns a join pairs rows on where it names no
+// expression. USING gives bare column names, which belong to every relation
+// that carries them, and NATURAL names nothing at all.
+func (i *Inspector) joinNameFields(from pg.IFrom_clauseContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+	if from == nil {
+		return nil
+	}
+	var fields []core.InspectField
+	for _, qual := range core.CollectNodes[pg.IJoin_qualContext](from) {
+		list := qual.Name_list()
+		if list == nil {
+			continue
+		}
+		names := make([]string, 0, len(list.AllName()))
+		for _, name := range list.AllName() {
+			names = append(names, i.dialect.NormalizeIdentifier(name.GetText()))
+		}
+		fields = core.MergeInspectFields(fields, i.resolve().NamedColumns(names, refs, scope))
+	}
+	for _, joined := range core.CollectNodes[pg.IJoined_tableContext](from) {
+		if joined.NATURAL() != nil {
+			fields = core.MergeInspectFields(fields, i.resolve().SharedColumns(refs, scope))
+			break
+		}
+	}
+	return fields
+}
+
 // branchClauseFields are the columns the clauses of one branch name without
 // returning: DISTINCT ON, GROUP BY, HAVING, a named window, and a join
 // condition.
@@ -360,15 +376,15 @@ func (i *Inspector) branchClauseFields(primary pg.ISimple_select_pramaryContext,
 	}
 	var fields []core.InspectField
 	for _, clause := range []antlr.ParseTree{
-		treeOrNil(primary.Distinct_clause()),
-		treeOrNil(primary.Group_clause()),
-		treeOrNil(primary.Having_clause()),
-		treeOrNil(primary.Window_clause()),
+		core.TreeOrNil(primary.Distinct_clause()),
+		core.TreeOrNil(primary.Group_clause()),
+		core.TreeOrNil(primary.Having_clause()),
+		core.TreeOrNil(primary.Window_clause()),
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
 	}
 	if from := primary.From_clause(); from != nil {
-		for _, qual := range collectJoinQuals(from) {
+		for _, qual := range core.CollectNodes[pg.IJoin_qualContext](from) {
 			fields = core.MergeInspectFields(fields, i.testedFields(qual, refs))
 		}
 	}
@@ -390,39 +406,13 @@ func (i *Inspector) tailClauseFields(selectNoParens pg.ISelect_no_parensContext,
 	}
 	var fields []core.InspectField
 	for _, clause := range []antlr.ParseTree{
-		treeOrNil(selectNoParens.Opt_sort_clause()),
-		treeOrNil(selectNoParens.Select_limit()),
-		treeOrNil(selectNoParens.Opt_select_limit()),
+		core.TreeOrNil(selectNoParens.Opt_sort_clause()),
+		core.TreeOrNil(selectNoParens.Select_limit()),
+		core.TreeOrNil(selectNoParens.Opt_select_limit()),
 	} {
 		fields = core.MergeInspectFields(fields, i.testedFields(clause, refs))
 	}
 	return fields
-}
-
-// treeOrNil turns a typed nil context into an untyped nil, which a walk can
-// refuse rather than dereference.
-func treeOrNil[T antlr.ParseTree](ctx T) antlr.ParseTree {
-	if any(ctx) == nil {
-		return nil
-	}
-	return ctx
-}
-
-// collectJoinQuals returns the ON and USING clauses under a node. A join is
-// made on the columns they name, which chooses which rows pair up.
-func collectJoinQuals(tree antlr.Tree) []pg.IJoin_qualContext {
-	var found []pg.IJoin_qualContext
-	var walk func(antlr.Tree)
-	walk = func(node antlr.Tree) {
-		if qual, ok := node.(pg.IJoin_qualContext); ok {
-			found = append(found, qual)
-		}
-		for idx := 0; idx < node.GetChildCount(); idx++ {
-			walk(node.GetChild(idx))
-		}
-	}
-	walk(tree)
-	return found
 }
 
 // extractBranchClauseSubqueries collects the subqueries in the clauses of a
