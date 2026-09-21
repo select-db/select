@@ -1,10 +1,8 @@
 package postgresql
 
 import (
-	"strings"
-
 	"github.com/antlr4-go/antlr/v4"
-	pg "github.com/selectDb/dialect/postgresql/parser"
+	"github.com/selectDb/dialect/core"
 )
 
 // hostFunctions reach past the rows into the server itself: its filesystem, its
@@ -35,44 +33,8 @@ var hostFunctions = map[string]bool{
 	"pg_terminate_backend": true,
 }
 
-// callsHostFunction reports whether the tokens between from and to name one of
-// those in a call position. Reading the tokens rather than the tree keeps this
-// working on a statement error recovery left incomplete.
+// callsHostFunction reports whether the tokens between from and to call one of
+// them.
 func callsHostFunction(tokens *antlr.CommonTokenStream, from, to int) bool {
-	all := tokens.GetAllTokens()
-	if to > len(all) {
-		to = len(all)
-	}
-	for ti := from; ti < to; ti++ {
-		if !isCallTo(all, ti, to) {
-			continue
-		}
-		if hostFunctions[normalizeCallName(all[ti].GetText())] {
-			return true
-		}
-	}
-	return false
-}
-
-// isCallTo reports whether the token at ti is an identifier the next default
-// token opens a call on.
-func isCallTo(all []antlr.Token, ti, to int) bool {
-	if all[ti].GetChannel() != antlr.TokenDefaultChannel {
-		return false
-	}
-	for next := ti + 1; next < to; next++ {
-		if all[next].GetChannel() != antlr.TokenDefaultChannel {
-			continue
-		}
-		return all[next].GetTokenType() == pg.PostgreSQLParserOPEN_PAREN
-	}
-	return false
-}
-
-// normalizeCallName lowercases and strips the quoting a call name may carry.
-func normalizeCallName(text string) string {
-	if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' {
-		text = text[1 : len(text)-1]
-	}
-	return strings.ToLower(text)
+	return core.CallsAnyOf(tokens, from, to, hostFunctions, `"`)
 }

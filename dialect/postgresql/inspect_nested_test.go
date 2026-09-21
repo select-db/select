@@ -155,6 +155,24 @@ func TestInspectClauseSubqueriesReachTheResult(t *testing.T) {
 func TestInspectClassifyingIntoKeepsNestedReads(t *testing.T) {
 	read := testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t2"}
 
+	// Losing the nested read runs main.t2 on a grant covering main.t1 alone,
+	// and losing the alias with it refuses the statement to every role, so both
+	// directions are pinned.
+	db, schema, t1, all := "db1", "main", "t1", "*"
+	onlyT1 := core.Compile([]core.PermissionEntry{{
+		DbInstanceID: &db, SchemaName: &schema, TableName: &t1,
+		Action: core.ActionSelect, Effect: "allow", RoleName: "r",
+	}}).WithDenyUnmanaged()
+
+	var entries []core.PermissionEntry
+	for _, a := range []string{core.ActionSelect, core.ActionInsert, core.ActionUpdate, core.ActionDelete, core.ActionManage} {
+		entries = append(entries, core.PermissionEntry{
+			DbInstanceID: &db, SchemaName: &all,
+			Action: a, Effect: "allow", RoleName: "r",
+		})
+	}
+	everyAction := core.Compile(entries).WithDenyUnmanaged()
+
 	for _, sql := range []string{
 		"SELECT * FROM t1 WHERE c1 IN (SELECT c1 INTO t9 FROM t2)",
 		"SELECT * FROM t1 ORDER BY (SELECT c1 INTO t9 FROM t2)",
@@ -165,28 +183,10 @@ func TestInspectClassifyingIntoKeepsNestedReads(t *testing.T) {
 				t.Fatalf("the nested read of main.t2 was lost: %+v", stmts)
 			}
 
-			// Losing it read main.t2 on a grant covering main.t1 alone, and
-			// losing the alias with it refused the statement to every role, so
-			// both directions are pinned.
-			schema, t1 := "main", "t1"
-			db := "db1"
-			onlyT1 := core.Compile([]core.PermissionEntry{{
-				DbInstanceID: &db, SchemaName: &schema, TableName: &t1,
-				Action: core.ActionSelect, Effect: "allow", RoleName: "r",
-			}}).WithDenyUnmanaged()
 			if err := core.CheckQueryPermissions(stmts, db, onlyT1); err == nil {
 				t.Error("read main.t2 holding select on main.t1 alone")
 			}
-
-			all := "*"
-			var entries []core.PermissionEntry
-			for _, a := range []string{core.ActionSelect, core.ActionInsert, core.ActionUpdate, core.ActionDelete, core.ActionManage} {
-				entries = append(entries, core.PermissionEntry{
-					DbInstanceID: &db, SchemaName: &all,
-					Action: a, Effect: "allow", RoleName: "r",
-				})
-			}
-			if err := core.CheckQueryPermissions(stmts, db, core.Compile(entries).WithDenyUnmanaged()); err != nil {
+			if err := core.CheckQueryPermissions(stmts, db, everyAction); err != nil {
 				t.Errorf("holding every action still refused it: %v", err)
 			}
 		})

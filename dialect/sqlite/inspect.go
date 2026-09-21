@@ -63,55 +63,37 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	for idx < len(stmtLists) {
 		// Collect consecutive stmt_lists connected by compound operators (UNION/INTERSECT/EXCEPT).
 		// The SQLite grammar emits each UNION branch as a separate sql_stmt_list at the top level.
+		first := idx
 		group := []sqlite.ISql_stmt_listContext{stmtLists[idx]}
 		for idx+1 < len(stmtLists) && hasCompoundOperatorBetween(tokenStream, stmtLists[idx], stmtLists[idx+1]) {
 			idx++
 			group = append(group, stmtLists[idx])
 		}
 
-		var produced []core.InspectStatement
-		if len(group) > 1 {
-			produced = append(produced, core.OrUnknown(i.mergeCompoundSelectGroup(group)))
-		} else {
-			for _, stmt := range group[0].AllSql_stmt() {
-				produced = append(produced, core.OrUnknown(i.inspectStatement(stmt)))
-			}
-		}
-
 		// A call that reaches the filesystem is not covered by the four row
 		// actions, so the read becomes the nested statement of an unclassified
 		// one: manage for the call, and whatever the rows still need.
-		from, to := groupTokenRange(tokenStream, group, stmtLists, idx)
-		if callsHostFunction(tokenStream, from, to) {
-			for pi := range produced {
-				produced[pi] = core.InspectStatement{
-					Operation:  core.InspectOpUnknown,
-					Subqueries: []core.InspectStatement{produced[pi]},
-				}
+		from, _ := core.TokenSpan(tokenStream, stmtLists, first)
+		_, to := core.TokenSpan(tokenStream, stmtLists, idx)
+		reachesHost := callsHostFunction(tokenStream, from, to)
+		keep := func(stmt core.InspectStatement) {
+			if reachesHost {
+				stmt = core.NestUnderUnknown(stmt)
+			}
+			results = append(results, stmt)
+		}
+
+		if len(group) > 1 {
+			keep(core.OrUnknown(i.mergeCompoundSelectGroup(group)))
+		} else {
+			for _, stmt := range group[0].AllSql_stmt() {
+				keep(core.OrUnknown(i.inspectStatement(stmt)))
 			}
 		}
-		results = append(results, produced...)
 		idx++
 	}
 
 	return results
-}
-
-// groupTokenRange is the half-open token span of one compound group, bounded by
-// the statement list after it so a script does not leak one statement's calls
-// into another.
-func groupTokenRange(tokens *antlr.CommonTokenStream, group, all []sqlite.ISql_stmt_listContext, idx int) (int, int) {
-	from := 0
-	if start := group[0].GetStart(); start != nil {
-		from = start.GetTokenIndex()
-	}
-	to := len(tokens.GetAllTokens())
-	if idx+1 < len(all) && all[idx+1] != nil {
-		if start := all[idx+1].GetStart(); start != nil {
-			to = start.GetTokenIndex()
-		}
-	}
-	return from, to
 }
 
 // hasCompoundOperatorBetween reports whether UNION/INTERSECT/EXCEPT tokens appear between two parse-tree nodes.

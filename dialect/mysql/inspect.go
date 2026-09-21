@@ -73,40 +73,13 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// clause is read off the tokens rather than the tree because the
 		// spellings that follow a locking clause raise a syntax error here and
 		// error recovery drops the tail, leaving no node to find.
-		from, to := queryTokenRange(tokenStream, q, queryAfter(queries, idx))
+		from, to := core.TokenSpan(tokenStream, queries, idx)
 		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) {
-			read = core.InspectStatement{
-				Operation:  core.InspectOpUnknown,
-				Subqueries: []core.InspectStatement{read},
-			}
+			read = core.NestUnderUnknown(read)
 		}
 		results = append(results, read)
 	}
 	return results
-}
-
-// queryAfter returns the query following idx, or nil at the end.
-func queryAfter(queries []mysql.IQueryContext, idx int) mysql.IQueryContext {
-	for _, q := range queries[idx+1:] {
-		if q != nil {
-			return q
-		}
-	}
-	return nil
-}
-
-// queryTokenRange is the half-open token span of one query, bounded by the one
-// after it so a script does not leak one statement's clauses into another.
-func queryTokenRange(tokens *antlr.CommonTokenStream, q, next mysql.IQueryContext) (int, int) {
-	from := 0
-	if q != nil && q.GetStart() != nil {
-		from = q.GetStart().GetTokenIndex()
-	}
-	to := len(tokens.GetAllTokens())
-	if next != nil && next.GetStart() != nil {
-		to = next.GetStart().GetTokenIndex()
-	}
-	return from, to
 }
 
 // writesAFile reports whether the tokens between from and to name a file to
@@ -168,20 +141,15 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 // inspectSelectStatement handles MySQL's SelectStatement -> QueryExpression /
 // QueryExpressionParens / SelectStatementWithInto.
 func (i *Inspector) inspectSelectStatement(stmt mysql.ISelectStatementContext) *core.InspectStatement {
-	var read *core.InspectStatement
 	switch {
 	case stmt.QueryExpression() != nil:
-		read = i.inspectQueryExpression(stmt.QueryExpression())
+		return i.inspectQueryExpression(stmt.QueryExpression())
 	case stmt.QueryExpressionParens() != nil:
-		read = i.inspectQueryExpressionParens(stmt.QueryExpressionParens())
+		return i.inspectQueryExpressionParens(stmt.QueryExpressionParens())
 	case stmt.SelectStatementWithInto() != nil:
-		read = i.inspectSelectStatementWithInto(stmt.SelectStatementWithInto())
+		return i.inspectSelectStatementWithInto(stmt.SelectStatementWithInto())
 	}
-	if read == nil {
-		return nil
-	}
-
-	return read
+	return nil
 }
 
 func (i *Inspector) inspectSelectStatementWithInto(ctx mysql.ISelectStatementWithIntoContext) *core.InspectStatement {

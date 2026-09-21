@@ -57,38 +57,14 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// A call that reaches the server itself is not covered by the four row
 		// actions, so the read becomes the nested statement of an unclassified
 		// one: manage for the call, and whatever the rows still need.
-		from, to := statementTokenRange(statements, idx, tokenStream)
+		from, to := core.TokenSpan(tokenStream, statements, idx)
 		if callsHostFunction(tokenStream, from, to) {
-			read = core.InspectStatement{
-				Operation:  core.InspectOpUnknown,
-				Subqueries: []core.InspectStatement{read},
-			}
+			read = core.NestUnderUnknown(read)
 		}
 		results = append(results, read)
 	}
 
 	return results
-}
-
-// statementTokenRange is the half-open token span of statements[idx], bounded
-// by the statement after it so a script does not leak one statement's calls
-// into another.
-func statementTokenRange(statements []pg.IStmtContext, idx int, tokens *antlr.CommonTokenStream) (int, int) {
-	from := 0
-	if start := statements[idx].GetStart(); start != nil {
-		from = start.GetTokenIndex()
-	}
-	to := len(tokens.GetAllTokens())
-	for _, next := range statements[idx+1:] {
-		if next == nil {
-			continue
-		}
-		if start := next.GetStart(); start != nil {
-			to = start.GetTokenIndex()
-		}
-		break
-	}
-	return from, to
 }
 
 // topLevelStatements returns the statement nodes the parser produced, or nil.
@@ -238,10 +214,8 @@ func (i *Inspector) inspectTopLevelSelect(stmt pg.ISelectstmtContext) *core.Insp
 	if !selectsInto(stmt) {
 		return read
 	}
-	return &core.InspectStatement{
-		Operation:  core.InspectOpUnknown,
-		Subqueries: []core.InspectStatement{core.OrUnknown(read)},
-	}
+	wrapped := core.NestUnderUnknown(core.OrUnknown(read))
+	return &wrapped
 }
 
 // selectsInto reports whether any INTO clause appears under tree. The clause
