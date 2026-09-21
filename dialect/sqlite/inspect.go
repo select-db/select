@@ -30,10 +30,6 @@ func (d *Dialect) Inspect(meta core.Metadata, sql string) []core.InspectStatemen
 	return NewInspector(d, meta).Inspect(sql)
 }
 
-// ============================================
-// HELPER METHODS - Reduce repeated patterns
-// ============================================
-
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	if strings.TrimSpace(sql) == "" {
