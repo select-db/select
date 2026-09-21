@@ -252,7 +252,7 @@ func (i *Inspector) extractTailSubqueries(selectNoParens pg.ISelect_no_parensCon
 	if limit := selectNoParens.Opt_select_limit(); limit != nil {
 		subqueries = append(subqueries, i.extractEmbeddedSubqueries(limit)...)
 	}
-	return subqueries
+	return core.AsFilter(subqueries)
 }
 
 // inspectSelectPrimary analyzes a single simple_select_pramary, one branch of a UNION.
@@ -329,7 +329,7 @@ func (i *Inspector) extractBranchClauseSubqueries(primary pg.ISimple_select_pram
 	if window := primary.Window_clause(); window != nil {
 		subqueries = append(subqueries, i.extractEmbeddedSubqueries(window)...)
 	}
-	return subqueries
+	return core.AsFilter(subqueries)
 }
 
 // inspectTableShorthand analyzes TABLE t1, which is SELECT * FROM t1.

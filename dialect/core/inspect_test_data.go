@@ -46,11 +46,10 @@ type InspectStatement struct {
 	Where      []InspectField     // Fields used in WHERE clause (for permission/filtering context)
 	Subqueries []InspectStatement // Nested CTEs and subqueries - allows recursive permission checking
 
-	// Filter marks a subquery whose rows are a condition rather than a result,
-	// the IN or EXISTS of a WHERE. Its columns do not reach the row, so a check
-	// on the values that do must not read them. A subquery nobody marks is
-	// taken to reach the row, which is the answer that refuses rather than
-	// leaks.
+	// Filter marks a subquery the server runs to choose or order rows rather
+	// than to return them: a WHERE, HAVING, GROUP BY, ORDER BY or window
+	// clause. Unmarked means its value reaches the row, which is the answer
+	// that refuses rather than leaks.
 	Filter bool
 }
 

@@ -400,3 +400,59 @@ func TestExecuteLocalAggregateOverFilterSubqueryPasses(t *testing.T) {
 		})
 	}
 }
+
+// setupContactsDB adds a second table sharing the column name, so a mask on one
+// is attributable: only main.users.email is hidden.
+func setupContactsDB(t *testing.T) (*sql.DB, *core.Metadata) {
+	t.Helper()
+	db, meta := setupUsersDB(t)
+	if _, err := db.Exec(`CREATE TABLE contacts(id INTEGER PRIMARY KEY, email TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO contacts VALUES (1,'carol@example.com')`); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	meta.Schemas[0].Tables = append(meta.Schemas[0].Tables, core.Table{
+		Name:       "contacts",
+		PrimaryKey: []string{"id"},
+		Columns: []core.Column{
+			{Name: "id", Type: "INTEGER", IsPrimaryKey: true},
+			{Name: "email", Type: "TEXT"},
+		},
+	})
+	return db, meta
+}
+
+// A clause that chooses or orders rows returns none of them, so naming the
+// hidden column there must not mask a column of the same name that is shown.
+func TestExecuteLocalClauseSubqueryDoesNotMask(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT c.email FROM contacts c WHERE EXISTS (SELECT u.email FROM users u)",
+		"SELECT c.email FROM contacts c GROUP BY c.email HAVING EXISTS (SELECT u.email FROM users u)",
+		"SELECT c.email FROM contacts c ORDER BY (SELECT u.email FROM users u LIMIT 1)",
+		"SELECT c.email FROM contacts c LIMIT (SELECT count(u.email) FROM users u)",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) != 0 {
+				t.Fatalf("ordinary work refused: %v", result.Errors)
+			}
+			if result.RowCount != 1 {
+				t.Fatalf("expected one row, got %d", result.RowCount)
+			}
+			if result.Rows[0][0] != "carol@example.com" {
+				t.Errorf("contacts.email = %v, want it shown", result.Rows[0][0])
+			}
+		})
+	}
+}

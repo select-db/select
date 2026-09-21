@@ -255,7 +255,7 @@ func (i *Inspector) extractTailSubqueries(qe mysql.IQueryExpressionContext) []co
 	if order == nil {
 		return nil
 	}
-	return i.extractEmbeddedSubqueries(order)
+	return core.AsFilter(i.extractEmbeddedSubqueries(order))
 }
 
 // mergeBranchesIntoResult walks every QueryPrimary inside a QueryExpressionBody
@@ -368,7 +368,7 @@ func (i *Inspector) extractBranchClauseSubqueries(spec mysql.IQuerySpecification
 	if window := spec.WindowClause(); window != nil {
 		subqueries = append(subqueries, i.extractEmbeddedSubqueries(window)...)
 	}
-	return subqueries
+	return core.AsFilter(subqueries)
 }
 
 // inspectTableShorthand analyzes TABLE t1, which is SELECT * FROM t1.

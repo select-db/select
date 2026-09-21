@@ -243,7 +243,7 @@ func (i *Inspector) extractTailSubqueries(selectStmt sqlite.ISelect_stmtContext)
 	if limit := selectStmt.Limit_stmt(); limit != nil {
 		subqueries = append(subqueries, i.extractEmbeddedSubqueries(limit)...)
 	}
-	return subqueries
+	return core.AsFilter(subqueries)
 }
 
 // inspectSelectCore processes a single select_core (one branch of a compound query).
@@ -304,7 +304,7 @@ func (i *Inspector) extractBranchClauseSubqueries(selectCore sqlite.ISelect_core
 			subqueries = append(subqueries, i.extractEmbeddedSubqueries(window)...)
 		}
 	}
-	return subqueries
+	return core.AsFilter(subqueries)
 }
 
 // effectiveSchema is the schema an unqualified name resolves in. SQLite is the
@@ -1198,8 +1198,7 @@ func (i *Inspector) expandQualifiedStar(
 		}
 
 		// Regular table
-		fields := core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)
-		return fields
+		return core.TableFields(i.meta, ref.Schema, ref.Table, i.dialect)
 	}
 
 	return nil
