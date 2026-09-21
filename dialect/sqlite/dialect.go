@@ -326,7 +326,16 @@ func (d *Dialect) InferColumnsFromSubquery(parser antlr.Parser, meta core.Metada
 		return nil
 	}
 	cts.Fill()
-	tokens := cts.GetAllTokens()
+	// Whitespace sits on the hidden channel but still comes back here, so the
+	// select list is read off the default channel alone: a neighbouring token
+	// is the next word, not the space before it, and "email AS e" keeps its
+	// alias.
+	var tokens []antlr.Token
+	for _, token := range cts.GetAllTokens() {
+		if token.GetChannel() == antlr.TokenDefaultChannel {
+			tokens = append(tokens, token)
+		}
+	}
 
 	// Token types we'll need
 	selectTok := sqlite.SQLiteLexerSELECT_

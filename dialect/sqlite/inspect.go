@@ -189,7 +189,7 @@ func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContex
 	// orders the rows of every branch, so it is read again against all of the
 	// relations the branches named.
 	result.Where = core.MergeInspectFields(result.Where,
-		i.tailClauseFields(last, core.RelationRefsOf(result)))
+		i.tailClauseFields(last, core.RelationRefsOf(result), core.Scope{}))
 	result.Where = core.DistinctTestsProjection(dedups, result.Where, result.Fields)
 	return result
 }
@@ -278,7 +278,7 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	// against the tables the statement ended up reading, which is what
 	// resolves one the derived table passed straight through.
 	result.Where = core.MergeInspectFields(result.Where,
-		i.tailClauseFields(selectStmt, core.RelationRefsOf(result)))
+		i.tailClauseFields(selectStmt, core.RelationRefsOf(result), core.Scope{}))
 
 	result.Where = core.DistinctTestsProjection(
 		core.DedupsRows(selectStmt, compoundOperators, sqlite.SQLiteParserALL_),
@@ -297,16 +297,16 @@ var compoundOperators = []int{
 
 // tailClauseFields are the columns ORDER BY and LIMIT name. They sit after
 // every branch of a compound select rather than inside one.
-func (i *Inspector) tailClauseFields(selectStmt sqlite.ISelect_stmtContext, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) tailClauseFields(selectStmt sqlite.ISelect_stmtContext, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if selectStmt == nil {
 		return nil
 	}
 	var fields []core.InspectField
 	if order := selectStmt.Order_by_stmt(); order != nil {
-		fields = core.MergeInspectFields(fields, i.testedFields(order, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(order, refs, scope))
 	}
 	if limit := selectStmt.Limit_stmt(); limit != nil {
-		fields = core.MergeInspectFields(fields, i.testedFields(limit, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(limit, refs, scope))
 	}
 	return fields
 }
@@ -314,7 +314,7 @@ func (i *Inspector) tailClauseFields(selectStmt sqlite.ISelect_stmtContext, refs
 // testedFields are the columns a clause names to choose, group or order rows
 // rather than to return them, collected exactly as a WHERE's are. The listener
 // does not descend into subqueries, which are collected in their own right.
-func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if tree == nil {
 		return nil
 	}
@@ -322,6 +322,7 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef) 
 		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},
 		inspector:                i,
 		relationRefs:             refs,
+		scope:                    scope,
 		fields:                   []core.InspectField{},
 		seenFields:               make(map[string]bool),
 	}
@@ -341,7 +342,7 @@ func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope c
 	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](tree) {
 		columns := constraint.AllColumn_name()
 		if len(columns) == 0 {
-			fields = core.MergeInspectFields(fields, i.testedFields(constraint, refs))
+			fields = core.MergeInspectFields(fields, i.testedFields(constraint, refs, scope))
 			continue
 		}
 		names := make([]string, 0, len(columns))
@@ -364,23 +365,23 @@ func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope c
 
 // branchClauseFields are the columns the clauses of one branch name without
 // returning: GROUP BY, HAVING and a named window.
-func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, refs []core.RelationRef, projection []core.InspectField) []core.InspectField {
+func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, refs []core.RelationRef, scope core.Scope, projection []core.InspectField) []core.InspectField {
 	if selectCore == nil {
 		return nil
 	}
 	var fields []core.InspectField
 	for _, group := range selectCore.GetGroupByExpr() {
-		fields = core.MergeInspectFields(fields, i.testedFields(group, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(group, refs, scope))
 	}
 	if having := selectCore.GetHavingExpr(); having != nil {
-		fields = core.MergeInspectFields(fields, i.testedFields(having, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(having, refs, scope))
 	}
 	for _, window := range selectCore.AllWindow_defn() {
 		if window != nil {
-			fields = core.MergeInspectFields(fields, i.testedFields(window, refs))
+			fields = core.MergeInspectFields(fields, i.testedFields(window, refs, scope))
 		}
 	}
-	fields = core.MergeInspectFields(fields, i.overAndFilterFields(selectCore, refs))
+	fields = core.MergeInspectFields(fields, i.overAndFilterFields(selectCore, refs, scope))
 	return core.DistinctTestsProjection(selectCore.DISTINCT_() != nil, fields, projection)
 }
 
@@ -388,13 +389,13 @@ func (i *Inspector) branchClauseFields(selectCore sqlite.ISelect_coreContext, re
 // clause is written inline on a result column rather than as a WINDOW clause
 // of its own. Both order or choose the rows an aggregate counts, so what they
 // name is tested even where the column itself is never returned.
-func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef) []core.InspectField {
+func (i *Inspector) overAndFilterFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	var fields []core.InspectField
 	for _, over := range core.CollectNodes[sqlite.IOver_clauseContext](tree) {
-		fields = core.MergeInspectFields(fields, i.testedFields(over, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(over, refs, scope))
 	}
 	for _, filter := range core.CollectNodes[sqlite.IFilter_clauseContext](tree) {
-		fields = core.MergeInspectFields(fields, i.testedFields(filter, refs))
+		fields = core.MergeInspectFields(fields, i.testedFields(filter, refs, scope))
 	}
 	return fields
 }
@@ -444,7 +445,7 @@ func (i *Inspector) inspectSelectCore(
 	allSubqueries = append(allSubqueries, fromSubqueries...)
 	fields := i.extractSelectFieldsWithResolution(selectCore, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
-	where, whereSubqueries := i.extractWhereFields(selectCore, relationRefs)
+	where, whereSubqueries := i.extractWhereFields(selectCore, relationRefs, scope)
 	selectSubqueries := i.extractSelectListSubqueries(selectCore)
 
 	subqueries := append(fromSubqueries, whereSubqueries...)
@@ -452,9 +453,9 @@ func (i *Inspector) inspectSelectCore(
 	subqueries = append(subqueries, i.extractBranchClauseSubqueries(selectCore)...)
 	i.resolver.DropCTETables(subqueries, ctes)
 
-	tested := core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, fields))
+	tested := core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, scope, fields))
 	tested = core.MergeInspectFields(tested, i.joinFields(selectCore, relationRefs, scope))
-	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs))
+	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs, scope))
 
 	return core.InspectStatement{
 		Tables:     tables,
@@ -569,7 +570,7 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 	// them, both against the target table, so what it names is tested.
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.Upsert_clause()),
-			[]core.RelationRef{{Table: tableName, Schema: schema}}))
+			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -617,7 +618,7 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	if stmt.WHERE_() != nil {
 		if len(allExprs) > 0 {
 			whereExpr := allExprs[len(allExprs)-1]
-			where, whereSubqueries := i.extractWhereFieldsFromExpr(whereExpr, whereRefs)
+			where, whereSubqueries := i.extractWhereFieldsFromExpr(whereExpr, whereRefs, core.Scope{CTEs: ctes})
 			result.Where = where
 			result.Subqueries = append(result.Subqueries, whereSubqueries...)
 		}
@@ -722,7 +723,7 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 
 	if stmt.WHERE_() != nil && stmt.Expr() != nil {
 		targetRef := []core.RelationRef{{Table: tableName, Schema: schema}}
-		where, whereSubqueries := i.extractWhereFieldsFromExpr(stmt.Expr(), targetRef)
+		where, whereSubqueries := i.extractWhereFieldsFromExpr(stmt.Expr(), targetRef, core.Scope{})
 		result.Where = where
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
@@ -1352,16 +1353,16 @@ func (i *Inspector) resolveColumn(
 }
 
 // extractWhereFields extracts column references and embedded subqueries from a select_core's WHERE.
-func (i *Inspector) extractWhereFields(selectCore sqlite.ISelect_coreContext, relationRefs []core.RelationRef) ([]core.InspectField, []core.InspectStatement) {
+func (i *Inspector) extractWhereFields(selectCore sqlite.ISelect_coreContext, relationRefs []core.RelationRef, scope core.Scope) ([]core.InspectField, []core.InspectStatement) {
 	whereExpr := selectCore.GetWhereExpr()
 	if whereExpr == nil {
 		return nil, nil
 	}
-	return i.extractWhereFieldsFromExpr(whereExpr, relationRefs)
+	return i.extractWhereFieldsFromExpr(whereExpr, relationRefs, scope)
 }
 
 // extractWhereFieldsFromExpr extracts column references and embedded subqueries from a WHERE expression.
-func (i *Inspector) extractWhereFieldsFromExpr(whereExpr sqlite.IExprContext, relationRefs []core.RelationRef) ([]core.InspectField, []core.InspectStatement) {
+func (i *Inspector) extractWhereFieldsFromExpr(whereExpr sqlite.IExprContext, relationRefs []core.RelationRef, scope core.Scope) ([]core.InspectField, []core.InspectStatement) {
 	if whereExpr == nil {
 		return nil, nil
 	}
@@ -1370,6 +1371,7 @@ func (i *Inspector) extractWhereFieldsFromExpr(whereExpr sqlite.IExprContext, re
 		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},
 		inspector:                i,
 		relationRefs:             relationRefs,
+		scope:                    scope,
 		fields:                   []core.InspectField{},
 		seenFields:               make(map[string]bool),
 	}
@@ -1426,8 +1428,11 @@ func (i *Inspector) extractSelectListSubqueries(selectCore sqlite.ISelect_coreCo
 // It does not descend into subqueries, those are handled separately as InspectStatements.
 type whereColumnExtractorListener struct {
 	*sqlite.BaseSQLiteParserListener
-	inspector     *Inspector
-	relationRefs  []core.RelationRef
+	inspector    *Inspector
+	relationRefs []core.RelationRef
+	// scope is what the statement declared, so a name a CTE or a derived
+	// table returns resolves to the column behind it.
+	scope         core.Scope
 	fields        []core.InspectField
 	seenFields    map[string]bool
 	subqueryDepth int
@@ -1464,7 +1469,7 @@ func (l *whereColumnExtractorListener) EnterExpr(ctx *sqlite.ExprContext) {
 			if tablePrefix != "" {
 				resolvedField = l.inspector.resolver.Column(tablePrefix, normalizedCol, l.relationRefs)
 			} else {
-				resolvedField = l.inspector.resolver.UnqualifiedColumn(normalizedCol, l.relationRefs)
+				resolvedField = l.inspector.resolver.UnqualifiedColumn(normalizedCol, l.relationRefs, l.scope)
 			}
 
 			if resolvedField != nil {

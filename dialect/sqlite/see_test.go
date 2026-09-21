@@ -3,7 +3,6 @@ package sqlite
 import (
 	"testing"
 
-	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/core/testutil"
 )
 
@@ -11,14 +10,15 @@ import (
 // tests a hidden column must be refused, and one that returns it must be
 // masked at the right positions.
 func TestSee(t *testing.T) {
-	testutil.RunSeeCases(t, NewDialect(), core.GetSeeTestCases())
+	testutil.RunSeeCases(t, NewDialect(), testutil.GetSeeTestCases())
+	testutil.RunSeeCases(t, NewDialect(), testutil.GetSeeCasesPostgreSQLAndSQLite())
 }
 
 // TestSeeQuoting covers the three ways SQLite lets a statement quote a name.
 // A column wearing quotes the dialect does not strip matches no rule, so it
 // comes back in the clear.
 func TestSeeQuoting(t *testing.T) {
-	testutil.RunSeeCases(t, NewDialect(), []core.SeeCase{
+	testutil.RunSeeCases(t, NewDialect(), []testutil.SeeCase{
 		{
 			Name:    "double quotes around the hidden column",
 			SQL:     `SELECT "email" FROM users`,
@@ -64,30 +64,6 @@ func TestSeeQuoting(t *testing.T) {
 		{
 			Name:    "quoting visible columns changes nothing",
 			SQL:     "SELECT `id`, `age` FROM users WHERE `age` > 20",
-			Columns: []string{"id", "age"},
-		},
-	})
-}
-
-// TestSeeSQLiteSpecific covers the ways only SQLite has of reading a column:
-// the FROM of an UPDATE, a FILTER on an aggregate, a named window, RETURNING
-// and an upsert predicate.
-func TestSeeSQLiteSpecific(t *testing.T) {
-	testutil.RunSeeCases(t, NewDialect(), []core.SeeCase{
-		{Name: "UPDATE ... FROM filtered on it", SQL: "UPDATE contacts SET id = id FROM users WHERE users.email LIKE 'a%'", Refused: true},
-		{Name: "a join condition in an UPDATE ... FROM", SQL: "UPDATE contacts SET id = id FROM users WHERE contacts.email = users.email", Refused: true},
-		{Name: "FILTER on an aggregate", SQL: "SELECT count(*) FILTER (WHERE email LIKE 'a%') AS n FROM users", Refused: true},
-		{Name: "a named window ordering by it", SQL: "SELECT id, row_number() OVER w AS rn FROM users WINDOW w AS (ORDER BY email)", Refused: true},
-		{Name: "an upsert predicate reading it", SQL: "INSERT INTO users (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET age = 1 WHERE users.email LIKE 'a%'", Refused: true},
-		{
-			Name:    "RETURNING the hidden column",
-			SQL:     "UPDATE users SET age = 1 WHERE id = 1 RETURNING id, email",
-			Columns: []string{"id", "email"},
-			Masked:  []int{1},
-		},
-		{
-			Name:    "RETURNING visible columns only",
-			SQL:     "UPDATE users SET age = 1 WHERE id = 1 RETURNING id, age",
 			Columns: []string{"id", "age"},
 		},
 	})
