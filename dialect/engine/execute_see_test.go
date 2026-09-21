@@ -124,9 +124,6 @@ func TestExecuteLocalMasksNullInSeeDeniedColumn(t *testing.T) {
 	}
 }
 
-// A predicate on a hidden column answers questions about its values one at a
-// time, and enough answers are the value. Masking hides a column from the eye;
-
 func TestExecuteLocalSchemaDriftFailsClosed(t *testing.T) {
 	db, meta := setupUsersDB(t)
 	// Lie about the schema: rename email to "secret" in metadata. The
@@ -164,10 +161,9 @@ func TestExecuteLocalNoSeeRulesNoMasking(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// No see rules at all: every Field is see-denied, every bare projection
-	// gets masked. This verifies the default-deny behavior. Nothing is ordered
-	// or grouped on: with no see rules an ORDER BY column is a refusal, which
-	// TestExecuteLocalOrderByHiddenColumnRefused covers.
+	// No see rules at all: every field is see-denied, so a bare projection
+	// masks. Nothing is ordered or grouped on, since with no see rules that
+	// would be a refusal rather than a mask.
 	result := runQuery(ctx, conn, "SELECT email FROM users")
 	if len(result.Errors) != 0 {
 		t.Fatalf("unexpected errors: %v", result.Errors)
@@ -178,44 +174,3 @@ func TestExecuteLocalNoSeeRulesNoMasking(t *testing.T) {
 		}
 	}
 }
-
-// A clause that chooses or orders rows returns none of them, so naming a
-// A result column that is not a column of a table sits beside masked ones all
-// the time: a literal, a count, a window function. It must not turn masking
-// Two scopes may spell a column the same way. The statement's own projection
-// A CTE named after a table reads the CTE, not the table. Reading the table's
-// columns as well hides a value the role may see, since a hidden column of the
-// A qualified name is the real table even where a CTE shadows the bare one, so
-// the star over it selects the table's columns and a rule on them still hides
-// A derived table resolves to the columns it reads. A CTE anywhere in the
-// statement must not change that: the inspector walks its subqueries by
-// position, and handing it the wrong list left the alias resolving to a table
-// A CTE may rename what it returns through a column list, which the inspectors
-// do not follow. The column then names no table, so it cannot be masked; it
-// RETURNING hands rows back from a write, and they are rows like any other. A
-// role that may change a row but not see a column must not read the column by
-// A filter compares what it selects against something, which answers a question
-// about those values exactly as a WHERE on them does. The shortest form is a
-// scalar subquery: each spelling of the pattern returns a row count, and enough
-// GROUP BY, ORDER BY, HAVING and a JOIN condition read a column without
-// projecting it, so each one answers questions about a hidden column a row at a
-// time: the ordering of two rows, whether a group exists, whether a join
-// The same clauses on a visible column are ordinary work. A single hidden
-// A write stores what it reads, and stored rows are out of reach of masking: a
-// hidden column copied into a table the caller may select from is the value
-// An UPDATE ... FROM filters on the relations it joins against, and its row
-// A derived table or a CTE renames a hidden column without unhiding it. The
-// outer statement testing it under the new name is the same oracle as testing
-// An upsert chooses which rows it updates, and the predicate it chooses them
-// An upsert that names no hidden column is ordinary work, including one that
-// Derived tables are paired with the statements behind them by the order the
-// FROM list names them. Aliases that do not read in that order used to pair an
-// alias with another subquery's columns, which resolved a hidden column to
-// The column each alias returns is the one its own subquery read, whichever
-// A derived table or a CTE that renames a hidden column hands it up under the
-// Renaming a hidden column and returning it is still masking, not refusal, and
-// The plain form of a set operator collapses duplicate rows, so the row count
-// says whether a value the caller supplies is in the hidden column. ALL keeps
-// A subquery is read against its own FROM, so a column it takes from the
-// statement around it names a relation that is not in its scope. It is still
-// A column written in quotes is the same column, and SQLite matches it

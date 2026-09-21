@@ -384,8 +384,9 @@ func (r Resolver) virtualFields(refs []RelationRef, s Scope, subqueries []Inspec
 // against the relations in scope, taking the first that holds it.
 //
 // A name no relation holds under that spelling is tried again ignoring case,
-// which SQLite and MySQL do whichever way the name is written, and then
-// against what the CTEs and derived tables in scope return.
+// which SQLite and MySQL do whichever way the name is written. A name still
+// unplaced is asked of each relation in turn, which is what reaches a CTE or
+// a derived table: only the scope says what those return.
 func (r Resolver) UnqualifiedColumn(name string, refs []RelationRef, s Scope) *InspectField {
 	if field := r.firstHolding(name, refs, false); field != nil {
 		return field

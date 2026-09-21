@@ -2,15 +2,12 @@ package engine
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	_ "modernc.org/sqlite"
 
-	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/core/testutil"
 )
 
 // oracleShapes are the statements that read main.users.email without
@@ -157,83 +154,39 @@ var oracleShapes = []string{
 	"WITH s AS (SELECT id, email AS x FROM users) SELECT s.id FROM s WHERE s.x LIKE 'z%'",
 }
 
-// twoUsersDB returns a database whose only difference from its twin is the
-// value of the hidden column.
-func twoUsersDB(t *testing.T, first, second string) (*sql.DB, *core.Metadata) {
-	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT, age INTEGER);
-		CREATE TABLE contacts(id INTEGER PRIMARY KEY, email TEXT);`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO users VALUES (1,?,30),(2,?,25)`, first, second); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO contacts VALUES (1,'carol@example.com')`); err != nil {
-		t.Fatal(err)
-	}
-	column := func(name, kind string) core.Column { return core.Column{Name: name, Type: kind} }
-	meta := &core.Metadata{DefaultSchema: "main", Schemas: []core.Schema{{
-		Name: "main",
-		Tables: []core.Table{
-			{Name: "users", PrimaryKey: []string{"id"}, Columns: []core.Column{
-				{Name: "id", Type: "INTEGER", IsPrimaryKey: true}, column("email", "TEXT"), column("age", "INTEGER")}},
-			{Name: "contacts", PrimaryKey: []string{"id"}, Columns: []core.Column{
-				{Name: "id", Type: "INTEGER", IsPrimaryKey: true}, column("email", "TEXT")}},
-		},
-	}}}
-	return db, meta
-}
-
 // A statement that runs must answer the same on two databases that differ only
 // in the hidden column. Where it does not, it has reported that column: not
 // necessarily as a value, since a row count, a row order or which rows came
 // back says as much, one answer at a time. Masking cannot catch those, which
 // is why the check refuses rather than masks.
 func TestExecuteLocalAnswersNothingAboutAHiddenColumn(t *testing.T) {
-	perms := compileFor("db1",
-		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
-		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
-		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
-			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
-	)
-	observe := func(sql, first, second string) string {
-		db, meta := twoUsersDB(t, first, second)
-		conn := Conn{DB: db, Meta: meta, Perms: perms}
+	perms := testutil.GetSeeTestPermissions()
+	observe := func(sql, first, second string) testutil.SeeAnswer {
+		db, meta, err := testutil.SeeOracleDB(first, second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		result := runQuery(ctx, conn, sql)
-		if len(result.Errors) > 0 {
-			if strings.Contains(strings.Join(result.Errors, " "), "permission denied") {
-				return "refused"
-			}
-			return "not valid SQLite"
-		}
-		var seen strings.Builder
-		fmt.Fprintf(&seen, "rows=%d|", result.RowCount)
-		for _, row := range result.Rows {
-			for _, value := range row {
-				fmt.Fprintf(&seen, "%v,", value)
-			}
-			seen.WriteString(";")
-		}
-		return seen.String()
+		result := runQuery(ctx, Conn{DB: db, Meta: meta, Perms: perms}, sql)
+		return testutil.ReadSeeAnswer(result.RowCount, result.Rows, result.Errors)
 	}
 
 	ran := 0
 	for _, shape := range oracleShapes {
 		answer := observe(shape, "SECRET-alice", "SECRET-bob")
-		if answer == "refused" || answer == "not valid SQLite" {
+		if answer.Outcome != testutil.SeeRan {
 			continue
 		}
 		ran++
-		if other := observe(shape, "zzz-1", "zzz-2"); other != answer {
+		if answer.Leaked {
+			t.Errorf("a value of the hidden column reached a row:\n  %s", shape)
+			continue
+		}
+		if other := observe(shape, "zzz-1", "zzz-2"); other.Rows != answer.Rows {
 			t.Errorf("answers for the hidden column:\n  %s\n  one database: %.120s\n  the other:    %.120s",
-				shape, answer, other)
+				shape, answer.Rows, other.Rows)
 		}
 	}
 	if ran == 0 {

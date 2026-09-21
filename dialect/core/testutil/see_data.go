@@ -1,4 +1,6 @@
-package core
+package testutil
+
+import core "github.com/selectDb/dialect/core"
 
 // SeeCase is one statement and what the see rules must do with it. Deciding
 // that needs no database, so a case is data.
@@ -8,11 +10,13 @@ package core
 // inspector that reads it.
 //
 // Columns are the result columns the statement hands back, in order, and are
-// what the driver would report. Refused says the caller gets no rows at all,
+// what the driver would report. A case that runs states them, writing an
+// empty slice where the statement returns none: leaving them out checks no
+// masking at all, which the runner refuses rather than reports green. Refused says the caller gets no rows at all,
 // whether the statement was turned away before running or once its result
 // columns showed a hidden column with nowhere to mask it. Masked are the
 // positions in Columns whose values a role holding select but not see reads
-// as MaskedValue.
+// as core.MaskedValue.
 type SeeCase struct {
 	Name    string
 	SQL     string
@@ -26,16 +30,16 @@ const SeeTestDBInstanceID = "db1"
 
 // GetSeeTestMetadata describes two tables that share a column name, which is
 // what tells a rule hiding one table's column from a rule hiding the other's.
-func GetSeeTestMetadata() Metadata {
-	return Metadata{
+func GetSeeTestMetadata() core.Metadata {
+	return core.Metadata{
 		DefaultSchema: "main",
-		Schemas: []Schema{{
+		Schemas: []core.Schema{{
 			Name: "main",
-			Tables: []Table{
+			Tables: []core.Table{
 				{
 					Name:       "users",
 					PrimaryKey: []string{"id"},
-					Columns: []Column{
+					Columns: []core.Column{
 						{Name: "id", Type: "INTEGER", IsPrimaryKey: true},
 						{Name: "email", Type: "TEXT"},
 						{Name: "age", Type: "INTEGER"},
@@ -44,7 +48,7 @@ func GetSeeTestMetadata() Metadata {
 				{
 					Name:       "contacts",
 					PrimaryKey: []string{"id"},
-					Columns: []Column{
+					Columns: []core.Column{
 						{Name: "id", Type: "INTEGER", IsPrimaryKey: true},
 						{Name: "email", Type: "TEXT"},
 					},
@@ -57,20 +61,20 @@ func GetSeeTestMetadata() Metadata {
 // GetSeeTestPermissions is the policy the cases are read against: every row
 // action and see on the schema, with see denied on main.users.email alone.
 // main.contacts.email stays visible, so a case that confuses the two shows up.
-func GetSeeTestPermissions() CompiledPermissions {
+func GetSeeTestPermissions() core.CompiledPermissions {
 	instance := SeeTestDBInstanceID
 	schema := "main"
 	users := "users"
 	email := "email"
-	return Compile([]PermissionEntry{
-		{DbInstanceID: &instance, SchemaName: &schema, Action: ActionSelect, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: ActionInsert, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: ActionUpdate, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: ActionDelete, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: ActionSee, Effect: "allow"},
+	return core.Compile([]core.PermissionEntry{
+		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionSelect, Effect: "allow"},
+		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionInsert, Effect: "allow"},
+		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionUpdate, Effect: "allow"},
+		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionDelete, Effect: "allow"},
+		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionSee, Effect: "allow"},
 		{
 			DbInstanceID: &instance, SchemaName: &schema, TableName: &users, ColumnName: &email,
-			Action: ActionSee, Effect: "deny",
+			Action: core.ActionSee, Effect: "deny",
 		},
 	})
 }
@@ -370,14 +374,14 @@ func GetSeeTestCases() []SeeCase {
 		{
 			Name:    "writes to the hidden column without reading it",
 			SQL:     "UPDATE users SET email = 'x' WHERE id = 1",
-			Columns: nil,
+			Columns: []string{},
 		},
 		{
 			Name:    "a write reading only visible columns",
 			SQL:     "INSERT INTO contacts (id, email) SELECT id, 'x' FROM users",
-			Columns: nil,
+			Columns: []string{},
 		},
-		{Name: "a write filtered on a visible column", SQL: "UPDATE contacts SET id = id + 100", Columns: nil},
+		{Name: "a write filtered on a visible column", SQL: "UPDATE contacts SET id = id + 100", Columns: []string{}},
 		{
 			Name:    "a filter subquery over visible columns",
 			SQL:     "SELECT id, age FROM users WHERE id IN (SELECT id FROM users WHERE age > 0)",
@@ -399,5 +403,62 @@ func GetSeeTestCases() []SeeCase {
 			Columns: []string{"id", "email"},
 			Masked:  []int{1},
 		},
+	}
+}
+
+// GetSeeCasesPostgreSQLAndSQLite are cases in SQL that PostgreSQL and SQLite
+// both accept and MySQL does not: RETURNING, ON CONFLICT, UPDATE ... FROM, a
+// FILTER on an aggregate, a named window, and a subquery in LIMIT. A dialect
+// that reads this SQL runs them beside the shared cases.
+func GetSeeCasesPostgreSQLAndSQLite() []SeeCase {
+	return []SeeCase{
+		{
+			Name:    "RETURNING a star over the written table",
+			SQL:     "UPDATE users SET age = age WHERE id = 1 RETURNING *",
+			Columns: []string{"id", "email", "age"},
+			Masked:  []int{1},
+		},
+		{
+			Name:    "RETURNING the hidden column",
+			SQL:     "UPDATE users SET age = 1 WHERE id = 1 RETURNING id, email",
+			Columns: []string{"id", "email"},
+			Masked:  []int{1},
+		},
+		{
+			Name:    "RETURNING visible columns only",
+			SQL:     "UPDATE users SET age = 1 WHERE id = 1 RETURNING id, age",
+			Columns: []string{"id", "age"},
+		},
+		{
+			Name:    "a DELETE returning it",
+			SQL:     "DELETE FROM users WHERE id = 2 RETURNING email",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
+			Name:    "an upsert writing to it without reading it",
+			SQL:     "INSERT INTO users (id, email) VALUES (1, 'x') ON CONFLICT (id) DO UPDATE SET email = 'y'",
+			Columns: []string{},
+		},
+		{
+			Name:    "an upsert that reads nothing hidden",
+			SQL:     "INSERT INTO users (id, age) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET age = 3",
+			Columns: []string{},
+		},
+		{
+			Name:    "a filter subquery in LIMIT",
+			SQL:     "SELECT c.email FROM contacts c LIMIT (SELECT count(u.id) FROM users u)",
+			Columns: []string{"email"},
+		},
+		{Name: "UPDATE ... FROM filtered on it", SQL: "UPDATE contacts SET id = id FROM users WHERE users.email LIKE 'a%'", Refused: true},
+		{Name: "a join condition in an UPDATE ... FROM", SQL: "UPDATE contacts SET id = id FROM users WHERE contacts.email = users.email", Refused: true},
+		{Name: "a named window ordering by it", SQL: "SELECT id, row_number() OVER w AS rn FROM users WINDOW w AS (ORDER BY email)", Refused: true},
+		{Name: "an upsert predicate reading it", SQL: "INSERT INTO users (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET age = 1 WHERE users.email LIKE 'a%'", Refused: true},
+		{Name: "an upsert reading it into another column", SQL: "INSERT INTO users (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET age = length(users.email)", Refused: true},
+		// A FILTER reaches the hidden column whether the aggregate it guards
+		// is returned or only tested, and each dialect's grammar takes one of
+		// the two spellings more readily.
+		{Name: "FILTER on a returned aggregate", SQL: "SELECT count(*) FILTER (WHERE email LIKE 'a%') AS n FROM users", Refused: true},
+		{Name: "FILTER on an aggregate in HAVING", SQL: "SELECT count(*) AS n FROM users GROUP BY id HAVING count(*) FILTER (WHERE email LIKE 'a%') > 0", Refused: true},
 	}
 }

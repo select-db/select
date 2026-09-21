@@ -1,17 +1,10 @@
 // Command seesweep generates SQL that reads a hidden column every way it can
-// and checks that none of it gets an answer about that column.
-//
-// The see cases in core are the regression net; this is the net that finds
-// what to add to them. It builds statements by combining sources, projections
-// and clauses, runs each against SQLite through the same path a query takes,
-// and reports two things: a value of the hidden column reaching a row, and a
-// statement answering differently on two databases that differ in nothing but
-// that column, which is the same leak told one answer at a time.
+// and reports what got an answer about it. The shared see cases are the
+// regression net; this is what finds the cases to add to them.
 package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -22,14 +15,13 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/core/testutil"
 	"github.com/selectDb/dialect/engine"
 )
 
-const (
-	instanceID = "db1"
-	hidden     = "main.users.email"
-)
+// hidden is the column GetSeeTestPermissions denies see on, named here only
+// for the report.
+const hidden = "main.users.email"
 
 func main() {
 	out := flag.String("out", "", "write the generated statements to this file as JSON and stop")
@@ -165,16 +157,16 @@ func sweep(statements []string, examples int) error {
 		if err != nil {
 			return err
 		}
-		switch first.outcome {
-		case outcomeRefused:
+		switch first.Outcome {
+		case testutil.SeeRefused:
 			refused++
 			continue
-		case outcomeInvalid:
+		case testutil.SeeInvalid:
 			invalid++
 			continue
 		}
 		ran++
-		if first.leaked {
+		if first.Leaked {
 			leaks++
 			if len(leaked) < examples {
 				leaked = append(leaked, statement)
@@ -185,11 +177,11 @@ func sweep(statements []string, examples int) error {
 		if err != nil {
 			return err
 		}
-		if second.rows != first.rows {
+		if second.Rows != first.Rows {
 			oracles++
 			if len(answered) < examples {
 				answered = append(answered, fmt.Sprintf("%s\n      one: %.70s\n      two: %.70s",
-					statement, first.rows, second.rows))
+					statement, first.Rows, second.Rows))
 			}
 		}
 	}
@@ -210,83 +202,28 @@ func sweep(statements []string, examples int) error {
 	return nil
 }
 
-type outcome int
-
-const (
-	outcomeRan outcome = iota
-	outcomeRefused
-	outcomeInvalid
-)
-
-type observation struct {
-	outcome outcome
-	rows    string
-	leaked  bool
-}
-
 // observe runs one statement against a database holding the two given values
 // in the hidden column, and reports what came back.
-func observe(statement, first, second string) (obs observation, err error) {
+func observe(statement, first, second string) (answer testutil.SeeAnswer, err error) {
 	defer func() {
 		// A statement the inspectors stumble over must not take the sweep
 		// down: that is a result too.
 		if recovered := recover(); recovered != nil {
-			obs, err = observation{outcome: outcomeInvalid}, nil
+			answer, err = testutil.SeeAnswer{Outcome: testutil.SeeInvalid}, nil
 		}
 	}()
 
-	db, meta, err := database(first, second)
+	db, meta, err := testutil.SeeOracleDB(first, second)
 	if err != nil {
-		return observation{}, err
+		return testutil.SeeAnswer{}, err
 	}
 	defer func() { _ = db.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	result := engine.ExecuteLocal(ctx, engine.Conn{DB: db, Meta: meta, Perms: permissions()},
-		engine.DBInstance{ID: instanceID, DBType: "sqlite"}, statement, engine.Options{})
-	if len(result.Errors) > 0 {
-		if strings.Contains(strings.Join(result.Errors, " "), "permission denied") {
-			return observation{outcome: outcomeRefused}, nil
-		}
-		return observation{outcome: outcomeInvalid}, nil
-	}
-
-	var rows strings.Builder
-	fmt.Fprintf(&rows, "n=%d|", result.RowCount)
-	for _, row := range result.Rows {
-		for _, value := range row {
-			fmt.Fprintf(&rows, "%v,", value)
-			if text, ok := value.(string); ok && strings.Contains(text, "SECRET") {
-				obs.leaked = true
-			}
-		}
-		rows.WriteString(";")
-	}
-	obs.rows = rows.String()
-	return obs, nil
-}
-
-func database(first, second string) (*sql.DB, *core.Metadata, error) {
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		return nil, nil, err
-	}
-	if _, err := db.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT, age INTEGER);
-		CREATE TABLE contacts(id INTEGER PRIMARY KEY, email TEXT);`); err != nil {
-		return nil, nil, err
-	}
-	if _, err := db.Exec(`INSERT INTO users VALUES (1,?,30),(2,?,25)`, first, second); err != nil {
-		return nil, nil, err
-	}
-	if _, err := db.Exec(`INSERT INTO contacts VALUES (1,'carol@example.com')`); err != nil {
-		return nil, nil, err
-	}
-	meta := core.GetSeeTestMetadata()
-	return db, &meta, nil
-}
-
-func permissions() core.CompiledPermissions {
-	return core.GetSeeTestPermissions()
+	result := engine.ExecuteLocal(ctx,
+		engine.Conn{DB: db, Meta: meta, Perms: testutil.GetSeeTestPermissions()},
+		engine.DBInstance{ID: testutil.SeeTestDBInstanceID, DBType: "sqlite"}, statement, engine.Options{})
+	return testutil.ReadSeeAnswer(result.RowCount, result.Rows, result.Errors), nil
 }

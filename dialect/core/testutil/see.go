@@ -12,15 +12,21 @@ import (
 // path a query takes, minus the database: the statement is inspected, checked
 // against the policy, and its result columns are matched to the fields the
 // inspection found.
-func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []core.SeeCase) {
+func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []SeeCase) {
 	t.Helper()
-	meta := core.GetSeeTestMetadata()
-	perms := core.GetSeeTestPermissions()
+	meta := GetSeeTestMetadata()
+	perms := GetSeeTestPermissions()
 
 	for _, testCase := range cases {
 		t.Run(testCase.Name, func(t *testing.T) {
 			if len(testCase.Masked) > 0 && len(testCase.Columns) == 0 {
 				t.Fatal("the case expects masking but names no result columns, so nothing would be checked")
+			}
+			// A case that runs and leaves Columns nil checks no masking at
+			// all. Where the statement really hands back no columns, the case
+			// says so with an empty slice rather than by omission.
+			if !testCase.Refused && testCase.Columns == nil {
+				t.Fatal("the case runs but names no result columns; write Columns: []string{} if it returns none")
 			}
 
 			statements := dialect.Inspect(meta, testCase.SQL)
@@ -30,9 +36,9 @@ func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []core.SeeCase) {
 				statements = []core.InspectStatement{core.UnknownStatement()}
 			}
 
-			err := core.CheckQueryPermissions(statements, core.SeeTestDBInstanceID, perms)
+			err := core.CheckQueryPermissions(statements, SeeTestDBInstanceID, perms)
 			if err == nil {
-				err = core.CheckSeePredicates(statements, core.SeeTestDBInstanceID, perms)
+				err = core.CheckSeePredicates(statements, SeeTestDBInstanceID, perms)
 			}
 
 			var masked []int
@@ -72,7 +78,7 @@ func seeOnResult(statements []core.InspectStatement, columns []string, perms cor
 		if !core.ReturnsRows(statement.Operation) {
 			continue
 		}
-		return core.EvaluateSee(statement, columns, core.SeeTestDBInstanceID, perms)
+		return core.EvaluateSee(statement, columns, SeeTestDBInstanceID, perms)
 	}
 	return nil, nil
 }
