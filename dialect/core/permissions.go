@@ -405,7 +405,7 @@ func seeColumn(
 // A field marked in matched is skipped, as is one that resolved to no table.
 func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, perms CompiledPermissions) *PermissionDeniedError {
 	for fi, f := range fields {
-		if matched[fi] {
+		if fi < len(matched) && matched[fi] {
 			continue
 		}
 		if f.Schema == "" || f.Table == "" {
@@ -427,6 +427,38 @@ func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, 
 		}
 	}
 	return nil
+}
+
+// CheckSeePredicates refuses a statement that tests a column no role may see.
+// Such a statement reports the column's values one answer at a time, and enough
+// answers are the value: "WHERE email LIKE 'a%'" returning a count is a prefix
+// oracle, and so is the row count of an update filtered the same way. Masking
+// hides a column from the eye; this is what hides it from the query.
+//
+// It runs whether or not the statement returns rows, which is why it is not
+// part of EvaluateSee: that one needs the driver's columns and only a statement
+// handing rows back has any.
+func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms CompiledPermissions) error {
+	if !perms.IsManaged(dbInstanceID) {
+		return nil
+	}
+	for _, stmt := range stmts {
+		if denied := firstSeeDenied(predicateFields(stmt, nil), nil, dbInstanceID, perms); denied != nil {
+			return denied
+		}
+	}
+	return nil
+}
+
+// predicateFields returns every field the statement tests rather than returns,
+// its subqueries included. A filter's rows do not reach the caller, but what it
+// compares still decides which rows do.
+func predicateFields(stmt InspectStatement, into []InspectField) []InspectField {
+	into = append(into, stmt.Where...)
+	for _, sub := range stmt.Subqueries {
+		into = predicateFields(sub, into)
+	}
+	return into
 }
 
 // readFields returns every field whose value the statement can return, its own

@@ -126,28 +126,39 @@ func TestExecuteLocalMasksNullInSeeDeniedColumn(t *testing.T) {
 	}
 }
 
-func TestExecuteLocalWherePassesWithSeeDenied(t *testing.T) {
-	db, meta := setupUsersDB(t)
-	conn := Conn{
-		DB:   db,
-		Meta: meta,
-		Perms: compileFor("db1",
-			core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"), Action: "select", Effect: "allow"},
-			core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"), ColumnName: sptr("id"), Action: "see", Effect: "allow"},
-			core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"), ColumnName: sptr("age"), Action: "see", Effect: "allow"},
-		),
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+// A predicate on a hidden column answers questions about its values one at a
+// time, and enough answers are the value. Masking hides a column from the eye;
+// refusing here is what hides it from the query.
+func TestExecuteLocalPredicateOnHiddenColumnIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT id, age FROM users WHERE email = 'alice@example.com'",
+		"SELECT id FROM users WHERE email LIKE 'a%'",
+		"SELECT count(*) FROM users WHERE email > ''",
+		"SELECT id FROM users WHERE id IN (SELECT id FROM users WHERE email > '')",
+		"UPDATE users SET age = 1 WHERE email = 'alice@example.com'",
+		"DELETE FROM users WHERE email = 'alice@example.com'",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "delete", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 
-	// WHERE filter on see-denied column must still work (the engine evaluates
-	// it; the value never leaves). Result projects only see-allowed columns.
-	result := runQuery(ctx, conn, "SELECT id, age FROM users WHERE email = 'alice@example.com'")
-	if len(result.Errors) != 0 {
-		t.Fatalf("unexpected errors: %v", result.Errors)
-	}
-	if result.RowCount != 1 {
-		t.Fatalf("expected 1 row, got %d", result.RowCount)
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %v", result.Rows)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
 	}
 }
 
@@ -353,7 +364,7 @@ func TestExecuteLocalRejectsSubqueryOverSeeDenied(t *testing.T) {
 func TestExecuteLocalFilterSubqueryPassesWithSeeDenied(t *testing.T) {
 	for _, sql := range []string{
 		"SELECT id FROM users WHERE EXISTS (SELECT email FROM users)",
-		"SELECT id FROM users WHERE id IN (SELECT id FROM users WHERE email > '')",
+		"SELECT id FROM users WHERE id IN (SELECT id FROM users)",
 	} {
 		t.Run(sql, func(t *testing.T) {
 			db, meta := setupUsersDB(t)
@@ -382,9 +393,9 @@ func TestExecuteLocalFilterSubqueryPassesWithSeeDenied(t *testing.T) {
 // rows a WHERE selected, and neither returns the hidden column.
 func TestExecuteLocalAggregateOverFilterSubqueryPasses(t *testing.T) {
 	for _, sql := range []string{
-		"SELECT count(*) FROM users WHERE email > ''",
+		"SELECT count(*) FROM users WHERE id > 0",
 		"SELECT count(*) FROM users WHERE EXISTS (SELECT email FROM users)",
-		"SELECT count(*) FROM users WHERE id IN (SELECT id FROM users WHERE email > '')",
+		"SELECT count(*) FROM users WHERE id IN (SELECT id FROM users WHERE age > 0)",
 	} {
 		t.Run(sql, func(t *testing.T) {
 			db, meta := setupUsersDB(t)

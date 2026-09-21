@@ -46,13 +46,19 @@ API keys let automated clients authenticate with the roles bound to the key, so 
 ### Hiding a column
 
 SELECT says which columns a role may query; SEE says which values it may read.
-A role holding SELECT but not SEE on a column can still join, filter and sort on
-it, and gets `*****` where its cells would be.
+A role holding SELECT but not SEE on a column gets `*****` where its cells would
+be, and may not use the column any other way.
+
+A statement that tests a hidden column is refused rather than run. Answering
+"are there rows where email starts with a" is answering a question about the
+values, and enough answers are the value; the row count of an update filtered
+the same way answers it just as well, which is why the refusal does not wait for
+a statement to return rows. Hiding a column from the eye is not hiding it, so
+SEE hides it from the query.
 
 The whole statement is read, so a column hidden at the bottom stays hidden when
-a derived table or a CTE hands it up. A subquery in a WHERE, HAVING, GROUP BY,
-ORDER BY or window clause returns none of its rows, so naming the column there
-is the same as filtering on it directly.
+a derived table or a CTE hands it up, and the rows a write returns through
+RETURNING are masked like any others.
 
 Where a result column cannot be traced back to a column of a table, and a hidden
 column in the statement has no result column of its own, the statement is
