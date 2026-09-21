@@ -73,8 +73,15 @@ which stored rows an upsert changes.
 The whole statement is read, so a column hidden at the bottom stays hidden when
 a derived table or a CTE hands it up, and the rows a write returns through
 RETURNING are masked like any others. Renaming it on the way up does not unhide
-it: a statement testing `s.email` where `s` is a derived table is refused like
-one testing `users.email`.
+it: a statement testing `s.e` where `s` is `(SELECT email AS e FROM users)` is
+refused like one testing `users.email`. A subquery reading a column of the
+statement around it is reading that statement's column, so a correlated
+`WHERE c.email = u.email` is refused too, and quoting a name or writing it in
+another case does not make it a different column.
+
+A set operator refuses on the same terms as SELECT DISTINCT. UNION, INTERSECT
+and EXCEPT collapse duplicate rows unless written with ALL, so the row count
+reports whether a value the caller supplies is one of the hidden column's.
 
 A write is refused where it reads a hidden column, rather than masked. Masking
 works on the rows a statement hands back, and what a write reads it stores:

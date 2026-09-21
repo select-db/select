@@ -73,6 +73,11 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		results = append(results, core.UnknownStatement())
 	}
 
+	// A subquery was inspected against its own FROM alone, so a name it takes
+	// from the statement around it resolved to nothing there. The enclosing
+	// relations are in scope here.
+	i.resolver.ResolveCorrelated(results, nil)
+
 	return results
 }
 
@@ -1377,23 +1382,7 @@ func (l *whereColumnExtractorListener) EnterColumnref(ctx *pg.ColumnrefContext) 
 	if tablePrefix != "" {
 		resolvedField = l.inspector.resolver.Column(tablePrefix, normalizedCol, l.relationRefs)
 	} else {
-		// Unqualified column reference - search all tables
-		for _, ref := range l.relationRefs {
-			tableCols := core.GetColumnsForTableAsColumns(l.inspector.meta, ref.Schema, ref.Table, l.inspector.dialect)
-			for _, col := range tableCols {
-				if l.inspector.dialect.NormalizeIdentifier(col.Name) == normalizedCol {
-					resolvedField = &core.InspectField{
-						Name:   col.Name,
-						Table:  ref.Table,
-						Schema: ref.Schema,
-					}
-					break
-				}
-			}
-			if resolvedField != nil {
-				break
-			}
-		}
+		resolvedField = l.inspector.resolver.UnqualifiedColumn(normalizedCol, l.relationRefs)
 	}
 
 	// Add field if resolved and not already seen

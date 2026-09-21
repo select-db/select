@@ -1216,3 +1216,114 @@ func TestExecuteLocalSetOperationKeepingDuplicatesRuns(t *testing.T) {
 		}
 	}
 }
+
+// A subquery is read against its own FROM, so a column it takes from the
+// statement around it names a relation that is not in its scope. It is still
+// the enclosing statement's column, and testing it there answers for it.
+func TestExecuteLocalCorrelatedReferenceIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT u.id FROM users u WHERE EXISTS (SELECT 1 FROM contacts c WHERE c.email = u.email)",
+		"SELECT u.id FROM users u ORDER BY (SELECT count(*) FROM contacts c WHERE c.email = u.email)",
+		"SELECT u.id FROM users u GROUP BY u.id HAVING EXISTS (SELECT 1 FROM contacts c WHERE c.email = u.email)",
+		"UPDATE contacts SET id = id WHERE EXISTS (SELECT 1 FROM users u WHERE u.email = contacts.email)",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupContactsDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %d rows, which answers for the hidden column", result.RowCount)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// A correlated reference to a visible column is ordinary work.
+func TestExecuteLocalCorrelatedReferenceToVisibleColumnRuns(t *testing.T) {
+	db, meta := setupContactsDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+	)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn,
+		"SELECT u.id FROM users u WHERE EXISTS (SELECT 1 FROM contacts c WHERE c.id = u.id)")
+	if len(result.Errors) != 0 {
+		t.Fatalf("ordinary work refused: %v", result.Errors)
+	}
+	if result.RowCount == 0 {
+		t.Fatal("no rows, so nothing here was checked")
+	}
+}
+
+// A column written in quotes is the same column, and SQLite matches it
+// whichever case it is written in.
+func TestExecuteLocalQuotedHiddenColumnIsRefused(t *testing.T) {
+	for _, sql := range []string{
+		`SELECT id FROM users WHERE "Email" LIKE 'a%'`,
+		`SELECT id FROM users WHERE "EMAIL" LIKE 'a%'`,
+		`SELECT id FROM users ORDER BY "Email"`,
+		`UPDATE users SET age = 1 WHERE "Email" LIKE 'a%'`,
+	} {
+		t.Run(sql, func(t *testing.T) {
+			db, meta := setupUsersDB(t)
+			conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "update", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+				core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+					ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+			)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result := runQuery(ctx, conn, sql)
+			if len(result.Errors) == 0 {
+				t.Fatalf("ran, returning %d rows, which answers for the hidden column", result.RowCount)
+			}
+			if !strings.Contains(strings.Join(result.Errors, " "), "see") {
+				t.Errorf("refused for the wrong reason: %v", result.Errors)
+			}
+		})
+	}
+}
+
+// Quoting a hidden column in the projection masks it rather than refusing.
+func TestExecuteLocalQuotedNamesStillRun(t *testing.T) {
+	db, meta := setupUsersDB(t)
+	conn := Conn{DB: db, Meta: meta, Perms: compileFor("db1",
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "select", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), Action: "see", Effect: "allow"},
+		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("users"),
+			ColumnName: sptr("email"), Action: "see", Effect: "deny"},
+	)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := runQuery(ctx, conn, `SELECT "Email" FROM users`)
+	if len(result.Errors) != 0 {
+		t.Fatalf("ordinary work refused: %v", result.Errors)
+	}
+	if result.RowCount == 0 {
+		t.Fatal("no rows, so nothing here was checked")
+	}
+	if result.Rows[0][0] != core.MaskedValue {
+		t.Errorf(`"Email" = %v, want masked`, result.Rows[0][0])
+	}
+}

@@ -1,5 +1,7 @@
 package core
 
+import "strings"
+
 // Resolution is the half of inspecting a statement that has nothing to do with
 // the grammar: given the relations a clause named, say which tables and columns
 // the statement reads.
@@ -256,6 +258,38 @@ func RelationRefsOf(stmt *InspectStatement) []RelationRef {
 	return refs
 }
 
+// ResolveCorrelated resolves what a subquery reads from a relation of the
+// statement enclosing it, which its own inspection could not: only the FROM of
+// the subquery itself was in scope there. "WHERE EXISTS (SELECT 1 FROM logs l
+// WHERE l.email = u.email)" tests u.email, and the row count answers for it.
+//
+// A name still resolving to no relation after this is dropped: it carries no
+// table, so there is nothing to check it against.
+func (r Resolver) ResolveCorrelated(stmts []InspectStatement, outer []RelationRef) {
+	for idx := range stmts {
+		stmt := &stmts[idx]
+		inScope := append(append([]RelationRef{}, outer...), RelationRefsOf(stmt)...)
+		stmt.Where = r.resolveEach(stmt.Where, outer)
+		r.ResolveCorrelated(stmt.Subqueries, inScope)
+	}
+}
+
+// resolveEach retries the fields that named a relation nothing in their own
+// statement matched, and drops the ones still naming none.
+func (r Resolver) resolveEach(fields []InspectField, refs []RelationRef) []InspectField {
+	kept := fields[:0]
+	for _, field := range fields {
+		if field.Schema != "" {
+			kept = append(kept, field)
+			continue
+		}
+		if resolved := r.Column(field.Table, field.Name, refs); resolved != nil && resolved.Schema != "" {
+			kept = append(kept, *resolved)
+		}
+	}
+	return kept
+}
+
 // ThroughVirtual rewrites a field read from a name the statement declared
 // itself, a CTE or a derived table, into the column of the table that name
 // returns: "SELECT s.c FROM (SELECT c FROM t) s" reads t.c. A field naming
@@ -346,6 +380,34 @@ func (r Resolver) virtualFields(refs []RelationRef, s Scope, subqueries []Inspec
 	return virtual
 }
 
+// UnqualifiedColumn resolves a column written without a relation prefix
+// against the relations in scope, taking the first that holds it.
+//
+// A name no relation holds under that spelling is tried again ignoring case.
+// SQLite and MySQL match column names case-insensitively whichever way the
+// name is written, so "Email" in quotes is the email column, and reading it as
+// a name of its own would leave the rule hiding that column with nothing to
+// match.
+func (r Resolver) UnqualifiedColumn(name string, refs []RelationRef) *InspectField {
+	if field := r.firstHolding(name, refs, false); field != nil {
+		return field
+	}
+	return r.firstHolding(name, refs, true)
+}
+
+func (r Resolver) firstHolding(name string, refs []RelationRef, foldCase bool) *InspectField {
+	wanted := r.Dialect.NormalizeIdentifier(name)
+	for _, ref := range refs {
+		for _, column := range TableFields(r.Meta, ref.Schema, ref.Table, r.Dialect) {
+			held := r.Dialect.NormalizeIdentifier(column.Name)
+			if held == wanted || (foldCase && strings.EqualFold(held, wanted)) {
+				return &InspectField{Name: column.Name, Table: ref.Table, Schema: ref.Schema}
+			}
+		}
+	}
+	return nil
+}
+
 // Column resolves a column written with a relation prefix, "s.c", against the
 // relations in scope. A prefix naming a relation the metadata holds no columns
 // for is a CTE or a derived table: the field keeps that name, for
@@ -361,12 +423,16 @@ func (r Resolver) Column(prefix, name string, refs []RelationRef) *InspectField 
 		if r.Dialect.NormalizeIdentifier(named) != wanted {
 			continue
 		}
+		wantedColumn := r.Dialect.NormalizeIdentifier(name)
 		for _, column := range TableFields(r.Meta, ref.Schema, ref.Table, r.Dialect) {
-			if r.Dialect.NormalizeIdentifier(column.Name) == r.Dialect.NormalizeIdentifier(name) {
+			held := r.Dialect.NormalizeIdentifier(column.Name)
+			if held == wantedColumn || strings.EqualFold(held, wantedColumn) {
 				return &InspectField{Name: column.Name, Table: ref.Table, Schema: ref.Schema}
 			}
 		}
 		return &InspectField{Name: name, Table: ref.Table, Schema: ref.Schema}
 	}
-	return nil
+	// The prefix may name a relation of an enclosing statement, which is not in
+	// scope here. The field is kept under that name for ResolveCorrelated.
+	return &InspectField{Name: name, Table: prefix}
 }

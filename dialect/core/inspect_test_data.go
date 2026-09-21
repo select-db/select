@@ -1043,10 +1043,12 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 							Tables: []InspectTable{
 								{Name: "t2", Schema: defaultSchema},
 							},
-							// Correlated ref t1.c1 resolves against t2's refs only, not captured here.
-							// Permission for t1 is already enforced by the outer query.
+							// The correlated t1.c1 is a column the subquery tests,
+							// so it is reported even though t1 is the outer
+							// statement's relation.
 							Where: []InspectField{
 								{Name: "c1", Table: "t2", Schema: defaultSchema},
+								{Name: "c1", Table: "t1", Schema: defaultSchema},
 							},
 						},
 					},
@@ -1211,10 +1213,11 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 							Tables: []InspectTable{
 								{Name: "t2", Schema: defaultSchema},
 							},
-							// t2.c1 is inside subquery scope; t1.c1 is a correlated ref
-							// from outer scope, not resolved here, already checked by outer query.
+							// t1.c1 is a correlated ref: the subquery tests a
+							// column of the relation the outer statement named.
 							Where: []InspectField{
 								{Name: "c1", Table: "t2", Schema: defaultSchema},
+								{Name: "c1", Table: "t1", Schema: defaultSchema},
 							},
 						},
 					},
@@ -1310,9 +1313,11 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "unknown_table", Schema: ""},
 					},
+					// The unknown relation's column carries no schema, so there
+					// is nothing to check it against and it is dropped. The
+					// table itself is still reported, and refused.
 					Where: []InspectField{
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
-						{Name: "c1", Table: "unknown_table", Schema: ""},
 					},
 				},
 			},

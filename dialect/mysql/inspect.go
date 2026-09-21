@@ -91,6 +91,12 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	if syntax.Uncovered() {
 		results = append(results, core.UnknownStatement())
 	}
+
+	// A subquery was inspected against its own FROM alone, so a name it takes
+	// from the statement around it resolved to nothing there. The enclosing
+	// relations are in scope here.
+	i.resolver.ResolveCorrelated(results, nil)
+
 	return results
 }
 
@@ -1544,18 +1550,7 @@ func (l *whereColumnListener) EnterColumnRef(ctx *mysql.ColumnRefContext) {
 	if cr.tablePrefix != "" {
 		resolved = l.inspector.resolver.Column(cr.tablePrefix, cr.name, l.relationRefs)
 	} else {
-		for _, ref := range l.relationRefs {
-			cols := core.GetColumnsForTableAsColumns(l.inspector.meta, ref.Schema, ref.Table, l.inspector.dialect)
-			for _, c := range cols {
-				if l.inspector.normalizeEquals(c.Name, cr.name) {
-					resolved = &core.InspectField{Name: cr.name, Table: ref.Table, Schema: ref.Schema}
-					break
-				}
-			}
-			if resolved != nil {
-				break
-			}
-		}
+		resolved = l.inspector.resolver.UnqualifiedColumn(cr.name, l.relationRefs)
 		if resolved == nil && len(l.relationRefs) == 1 {
 			ref := l.relationRefs[0]
 			resolved = &core.InspectField{Name: cr.name, Table: ref.Table, Schema: ref.Schema}
