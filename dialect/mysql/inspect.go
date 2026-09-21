@@ -783,14 +783,8 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), relationRefs, scope))
 
 	// A multi-table UPDATE writes the tables its SET list names and reads the
-	// rest. Leaving them in Tables asks for update on a table the statement
-	// only joins against, which is a right it does not need and not the one
-	// the read does.
-	written, read := core.SplitWrittenTables(result.Tables, result.Fields)
-	if len(written) > 0 {
-		result.Tables = written
-		core.AlsoReads(result, read)
-	}
+	// rest.
+	core.SplitWrite(result)
 	return result
 }
 

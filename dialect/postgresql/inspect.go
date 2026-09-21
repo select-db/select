@@ -561,13 +561,12 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	}
 
 	// An ON CONFLICT clause chooses which rows it updates and reads values into
-	// them, both against the target table, so what it names is tested.
+	// them, both against the target table, so what it names is tested and a
+	// subquery in either is a read of its own.
 	conflict := stmt.Opt_on_conflict()
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(conflict),
 			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
-	// The clause chooses which rows it touches and reads values into them, and
-	// a subquery in either is a read of its own.
 	if conflict != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(conflict)...)
 	}
@@ -610,8 +609,10 @@ func (i *Inspector) conflictSetFields(
 	return fields
 }
 
-// inspectExplainable reads the statement an EXPLAIN wraps. A form this does
-// not list resolves to nothing, which the floor reports as unknown.
+// inspectExplainable reads the statement an EXPLAIN wraps. Every form the
+// grammar allows there is listed: a form left out resolves to nothing, and the
+// floor that catches it takes manage without the read the statement does, so
+// wrapping a statement in EXPLAIN would ask for less than the statement does.
 func (i *Inspector) inspectExplainable(stmt pg.IExplainablestmtContext) *core.InspectStatement {
 	if stmt == nil {
 		return nil
@@ -625,6 +626,14 @@ func (i *Inspector) inspectExplainable(stmt pg.IExplainablestmtContext) *core.In
 		return i.inspectUpdate(stmt.Updatestmt())
 	case stmt.Deletestmt() != nil:
 		return i.inspectDelete(stmt.Deletestmt())
+	case stmt.Createasstmt() != nil:
+		as := stmt.Createasstmt()
+		return i.inspectCreateFrom(targetName(as.Create_as_target()), as.Selectstmt())
+	case stmt.Creatematviewstmt() != nil:
+		mv := stmt.Creatematviewstmt()
+		return i.inspectCreateFrom(targetName(mv.Create_mv_target()), mv.Selectstmt())
+	case stmt.Declarecursorstmt() != nil:
+		return i.inspectTopLevelSelect(stmt.Declarecursorstmt().Selectstmt())
 	}
 	return nil
 }
