@@ -176,6 +176,21 @@ func GetSeeTestCases() []SeeCase {
 			Masked:  []int{0},
 		},
 		{
+			// The statements behind the names are paired with them by the
+			// order the statement declares them, so more than one CTE before a
+			// derived table is where a pairing by any other order goes wrong.
+			Name:    "a star over a derived table behind two CTEs",
+			SQL:     "WITH a AS (SELECT id FROM users), b AS (SELECT id FROM contacts) SELECT * FROM (SELECT email FROM users) q",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
+			Name:    "the same with a CTE that reads no table",
+			SQL:     "WITH z AS (SELECT 1) SELECT * FROM (SELECT email FROM users) q",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
 			// The metadata has not caught up with the table, so a column comes
 			// back that no field accounts for. The hidden one still has its own
 			// position, so the row is masked rather than refused.
@@ -294,6 +309,11 @@ func GetSeeTestCases() []SeeCase {
 		{Name: "an EXISTS subquery selecting it", SQL: "SELECT id FROM users WHERE EXISTS (SELECT email FROM users)", Refused: true},
 		{Name: "a HAVING subquery selecting it", SQL: "SELECT id FROM users GROUP BY id HAVING EXISTS (SELECT email FROM users)", Refused: true},
 		{Name: "an ORDER BY subquery selecting it", SQL: "SELECT id FROM users ORDER BY (SELECT email FROM users LIMIT 1)", Refused: true},
+		{
+			Name: "a recursive CTE renaming it in its column list",
+			SQL:  "WITH RECURSIVE r(x) AS (SELECT email FROM users) SELECT x FROM r", Refused: true,
+			Columns: []string{"x"},
+		},
 		{Name: "a correlated subquery in ORDER BY", SQL: "SELECT u.id FROM users u ORDER BY (SELECT count(*) FROM contacts c WHERE c.email = u.email)", Refused: true},
 		{Name: "a correlated subquery in HAVING", SQL: "SELECT u.id FROM users u GROUP BY u.id HAVING EXISTS (SELECT 1 FROM contacts c WHERE c.email = u.email)", Refused: true},
 		{Name: "a join condition naming it beside a visible one", SQL: "SELECT u.id FROM users u LEFT JOIN contacts c ON c.id = u.id AND u.email > 'm'", Refused: true},

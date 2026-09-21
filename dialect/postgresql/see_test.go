@@ -19,6 +19,41 @@ func TestSee(t *testing.T) {
 // aggregate, a named window, RETURNING and an upsert predicate.
 func TestSeePostgreSQLSpecific(t *testing.T) {
 	testutil.RunSeeCases(t, NewDialect(), []core.SeeCase{
+		{
+			Name:    "RETURNING a star over the written table",
+			SQL:     "UPDATE users SET age = age WHERE id = 1 RETURNING *",
+			Columns: []string{"id", "email", "age"},
+			Masked:  []int{1},
+		},
+		{
+			Name:    "RETURNING the hidden column alone",
+			SQL:     "UPDATE users SET age = age WHERE id = 1 RETURNING email",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
+			Name:    "a DELETE returning it",
+			SQL:     "DELETE FROM users WHERE id = 2 RETURNING email",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
+			Name:    "an INSERT returning it",
+			SQL:     "INSERT INTO users (id, email) VALUES (9, 'ninth@example.com') RETURNING email",
+			Columns: []string{"email"},
+			Masked:  []int{0},
+		},
+		{
+			Name:    "an upsert writing to it without reading it",
+			SQL:     "INSERT INTO users (id, email) VALUES (1, 'x') ON CONFLICT (id) DO UPDATE SET email = 'y'",
+			Columns: nil,
+		},
+		{
+			// MySQL takes no subquery in LIMIT, so this is not a shared case.
+			Name:    "a filter subquery in LIMIT",
+			SQL:     "SELECT c.email FROM contacts c LIMIT (SELECT count(u.id) FROM users u)",
+			Columns: []string{"email"},
+		},
 		{Name: "UPDATE ... FROM filtered on it", SQL: "UPDATE contacts SET id = id FROM users WHERE users.email LIKE 'a%'", Refused: true},
 		{Name: "DELETE ... USING filtered on it", SQL: "DELETE FROM contacts USING users WHERE users.email LIKE 'a%'", Refused: true},
 		{Name: "a join condition in an UPDATE ... FROM", SQL: "UPDATE contacts SET id = id FROM users WHERE contacts.email = users.email", Refused: true},
