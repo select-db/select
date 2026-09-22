@@ -90,23 +90,14 @@ def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, di
     sg_dialect = sqlglot_dialect_name(dialect)
 
     if for_completion:
-        caret_line = req.get("caret_line", 1)
-        caret_col = req.get("caret_col", 0)
-        patched = caret_patch.sanitize(sql, caret_line, caret_col)
-        stmts, errors, _ = _parse_sql(patched, sg_dialect)
-        if errors:
-            # A statement being typed usually does not parse, and what breaks
-            # it is the item under the caret, which has no separator yet. The
-            # clauses around it are what names the relations, so they are kept
-            # and the unfinished item is dropped.
-            reduced = caret_patch.sanitize(
-                caret_patch.reduce_to_clause(sql, caret_line, caret_col),
-                caret_line, caret_col,
-            )
-            retried, retried_errors, _ = _parse_sql(reduced, sg_dialect)
-            if not retried_errors:
-                return reduced, retried, schema_dict, default_schema, sg_dialect
-        return patched, stmts, schema_dict, default_schema, sg_dialect
+        def parse(text):
+            statements, errors, _ = _parse_sql(text, sg_dialect)
+            return statements, errors
+
+        sql, stmts = caret_patch.readable_at(
+            sql, req.get("caret_line", 1), req.get("caret_col", 0), parse,
+        )
+        return sql, stmts, schema_dict, default_schema, sg_dialect
 
     stmts, _, _ = _parse_sql(sql, sg_dialect)
     return sql, stmts, schema_dict, default_schema, sg_dialect

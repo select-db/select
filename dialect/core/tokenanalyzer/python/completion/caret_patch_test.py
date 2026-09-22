@@ -8,7 +8,7 @@ where a request is patched and its response cleaned.
 import server
 from completion.caret_patch import (
     PLACEHOLDER,
-    reduce_to_clause,
+    readable_at,
     unwrap_explain,
     without_placeholders,
 )
@@ -122,20 +122,36 @@ class TestUnwrapExplain:
             assert unwrap_explain(sql).strip() == "SELECT 1"
 
 
-class TestReduceToClause:
-    def test_the_unfinished_item_goes_and_the_clauses_stay(self):
-        sql = "SELECT\n  c.\n  c.c2\nFROM\n  t1 c"
-        reduced = reduce_to_clause(sql, 2, 4)
-        assert "c.c2" not in reduced
-        assert "FROM" in reduced and "t1 c" in reduced
+def _sqlglot_parse(text):
+    """What the dispatcher passes in, so these cases read the same statement
+    the caller would."""
+    import sqlglot
+    from sqlglot.errors import ParseError
+    try:
+        return [sqlglot.parse_one(text, read="postgres")], []
+    except ParseError as e:
+        return [], [str(e)]
 
-    def test_offsets_do_not_move(self):
-        sql = "SELECT\n  c.\n  c.c2\nFROM\n  t1 c"
-        assert len(reduce_to_clause(sql, 2, 4)) == len(sql)
-        assert reduce_to_clause(sql, 2, 4).count("\n") == sql.count("\n")
 
-    def test_a_closing_paren_stops_it(self):
-        sql = "SELECT * FROM t1 WHERE c1 IN (SELECT a. b FROM t2 a) AND c2 = 1"
-        reduced = reduce_to_clause(sql, 1, 39)
-        assert reduced.endswith("AND c2 = 1")
-        assert ")" in reduced
+class TestReadableAt:
+    def test_an_item_with_no_separator_yet(self):
+        sql = "SELECT\n  c.\n  c.c2\nFROM\n  t1 c"
+        text, statements = readable_at(sql, 2, 4, _sqlglot_parse)
+        assert statements and "c.c2" not in text
+        assert "FROM" in text and "t1 c" in text
+
+    def test_a_statement_that_already_parses_is_left_alone(self):
+        sql = "SELECT c., c.c2 FROM t1 c"
+        text, statements = readable_at(sql, 1, 9, _sqlglot_parse)
+        assert statements and "c.c2" in text
+
+    def test_the_caret_still_points_at_the_same_character(self):
+        sql = "SELECT\n  c.\n  c.c2\nFROM\n  t1 c"
+        text, _ = readable_at(sql, 2, 4, _sqlglot_parse)
+        assert text.count("\n") == sql.count("\n")
+        assert text.index("FROM") >= sql.index("FROM")
+
+    def test_a_statement_no_reduction_saves_keeps_the_first_read(self):
+        sql = "SELECT ((("
+        text, _ = readable_at(sql, 1, 10, _sqlglot_parse)
+        assert text.startswith("SELECT")
