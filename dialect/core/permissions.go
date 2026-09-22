@@ -263,9 +263,9 @@ func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissio
 // where the action is scoped to one.
 //
 // A select is scoped by every column it reads, the ones it tests included. A
-// write is scoped by the columns it writes: one it only tests asks for a right
-// of its own, but never stands in for the right on the table, or a grant on
-// one column would delete the whole row.
+// write is scoped by the columns it writes, and a column it only tests is read
+// rather than written: that column needs select, and never stands in for the
+// right on the table, or a grant on one column would delete the whole row.
 func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	scoping, tested := stmt.Fields, stmt.Where
 	if action == ActionSelect {
@@ -317,7 +317,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 			if !fieldOf(field, table) {
 				continue
 			}
-			if denied := checkColumn(field, table, action, dbInstanceID, compiledPermissions); denied != nil {
+			if denied := checkColumn(field, table, ActionSelect, dbInstanceID, compiledPermissions); denied != nil {
 				return denied
 			}
 		}

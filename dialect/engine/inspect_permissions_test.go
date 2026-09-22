@@ -868,9 +868,9 @@ func TestPermissions_EveryNestedReadIsReported(t *testing.T) {
 		// A WHERE clause is collected after the CTE bodies, so assigning its
 		// subqueries rather than appending them threw the bodies away.
 		{"WITH x AS (SELECT c1 FROM t1) DELETE FROM t2 WHERE c1 > 0",
-			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionDelete}}},
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionDelete}, {s, "t2", core.ActionSelect}}},
 		{"WITH x AS (SELECT c1 FROM t1) UPDATE t2 SET c3 = 'x' WHERE c1 > 0",
-			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionUpdate}}},
+			[]tableGrant{{s, "t1", core.ActionSelect}, {s, "t2", core.ActionUpdate}, {s, "t2", core.ActionSelect}}},
 	} {
 		for _, dialect := range BuiltinDialects() {
 			t.Run(dialect+": "+tt.sql, func(t *testing.T) {

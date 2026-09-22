@@ -81,6 +81,22 @@ this mission exists to remove.
 - **Policy**: deny-all, the four data actions without manage, per-table grants,
   manage alone.
 
+### Settled rules of the permission model
+
+Decisions already taken, so a case that contradicts one is wrong rather than a
+finding:
+
+- **A column a statement tests is read.** It needs `select` on that column,
+  whatever the statement's own action. `UPDATE t1 SET c1 = 1 WHERE c2 = 'x'`
+  needs update on c1 and select on c2. A role holding a write right and no
+  select cannot run a filtered write, which is what PostgreSQL and MySQL do.
+- **A write is scoped by the columns it writes.** A column it only tests never
+  stands in for the right on the table, or a grant on one column would delete
+  the whole row. Delete is not column-scoped at all.
+- **A view is a relation of its own.** The right is held on the view, since the
+  statement carries no trace of what the view reads.
+- **Manage is not a data right, and the four data rights are not manage.**
+
 ### Axes for the later layers
 
 Completion: the position in the statement (after SELECT, after FROM, after a
