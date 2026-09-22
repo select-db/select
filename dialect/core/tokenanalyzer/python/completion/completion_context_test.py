@@ -137,6 +137,18 @@ class TestValuePosition:
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN (|")
         assert _detect_value_position(tokens, caret).in_list
 
+    def test_a_typed_prefix_is_still_a_value_slot(self):
+        tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 = ac|")
+        assert _detect_value_position(tokens, caret).column == {"name": "c1"}
+
+    def test_a_typed_prefix_in_an_in_list_is_still_a_value_slot(self):
+        tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN (ac|")
+        assert _detect_value_position(tokens, caret).in_list
+
+    def test_a_finished_word_is_not_a_typed_prefix(self):
+        tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 = ac |")
+        assert _detect_value_position(tokens, caret).column is None
+
     def test_a_plain_slot_does_not(self):
         tokens, _, caret = _at_caret("UPDATE t SET c1 = |")
         assert not _detect_value_position(tokens, caret).in_list
