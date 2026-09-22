@@ -814,6 +814,9 @@ func GetCompletionClauseCases() []CompletionClauseCase {
 		{"a sort direction finishes the item", "SELECT * FROM t1 ORDER BY c1 ASC |", "sort_item"},
 		{"a CASE test waits for THEN", "SELECT CASE WHEN c1 = 1 |", "case_test"},
 		{"a CASE arm waits for WHEN or END", "SELECT CASE WHEN c1 = 1 THEN 2 |", "case_body"},
+		{"a closed CASE is one finished item", "SELECT CASE WHEN c1 = 1 THEN 2 END |", "select_item"},
+		{"a nested one closes only its own", "SELECT CASE WHEN c1 = 1 THEN CASE WHEN c2 = 2 THEN 1 END |", "case_body"},
+		{"a rename list is an alias too", "SELECT * FROM t1 t(a, b) |", "aliased_relation"},
 	}
 }
 

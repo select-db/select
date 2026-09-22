@@ -459,6 +459,21 @@ class TestClauseFollowers:
         assert self._group("SELECT CASE WHEN c1 = 1 |") == "case_test"
         assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 |") == "case_body"
 
+    def test_a_closed_case_is_one_finished_item(self):
+        assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 END |") == "select_item"
+        assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 END AS x |") == "aliased_select_item"
+
+    def test_a_nested_case_closes_only_its_own(self):
+        sql = "SELECT CASE WHEN c1 = 1 THEN CASE WHEN c2 = 2 THEN 1 END |"
+        assert self._group(sql) == "case_body"
+
+    def test_a_rename_list_is_an_alias_too(self):
+        assert self._group("SELECT * FROM t1 t(a, b) |") == "aliased_relation"
+        assert self._group("SELECT * FROM (SELECT 1) s(a) |") == "aliased_relation"
+
+    def test_a_call_is_not_a_rename_list(self):
+        assert self._group("SELECT count(c1) |") == "select_item"
+
     def test_a_sort_direction_finishes_the_item(self):
         assert self._group("SELECT * FROM t1 ORDER BY c1 ASC |") == "sort_item"
 

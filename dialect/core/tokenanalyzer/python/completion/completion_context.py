@@ -412,8 +412,16 @@ def _walk_back(tokens: list, idx: int):
     be the answer: a merge is what puts two relations together in a MERGE.
     """
     depth = 0
+    closed_cases = 0
     for i in range(idx - 1, -1, -1):
         token_type = tokens[i].token_type
+        if token_type == TokenType.END:
+            closed_cases += 1
+            continue
+        if closed_cases:
+            if tokens[i].text.upper() == "CASE":
+                closed_cases -= 1
+            continue
         if token_type == TokenType.R_PAREN:
             depth += 1
             continue
@@ -630,6 +638,8 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
         return group
 
     if last.token_type in _FINISHED_ITEM_TOKENS:
+        if group in _ITEM_IS_COMPLETE_AT_A_NAME and _already_renamed(tokens):
+            group = _ALIASED.get(group, group)
         return _in_the_statement(group, tokens)
     if not _is_identifier_token(last):
         return _opening_an_item(clause, last)
@@ -708,7 +718,12 @@ def _enclosing_call(tokens: list, idx: int) -> str:
 def _already_renamed(tokens: list) -> bool:
     """Whether the item the caret follows already carries an alias: a second
     name stands after the one the clause named, with or without AS."""
-    if len(tokens) < 2 or not _is_identifier_token(tokens[-1]):
+    if len(tokens) < 2:
+        return False
+    if tokens[-1].token_type == TokenType.R_PAREN:
+        # "FROM t1 a (x, y)" renames the relation and its columns at once.
+        return _renames_a_relation(tokens, _opening_paren(tokens, len(tokens) - 1))
+    if not _is_identifier_token(tokens[-1]):
         return False
     before = tokens[-2]
     # A derived table is the name's item, and its closing paren stands here.
@@ -786,6 +801,7 @@ def _walk_to_clause(tokens: list) -> Clause:
         return Clause(TARGET_SCHEMA_AND_TABLE_ALL, "")
 
     paren_depth = 0
+    case_depth = 0
     inside_call = False
     i = len(tokens) - 1
 
@@ -796,6 +812,18 @@ def _walk_to_clause(tokens: list) -> Clause:
         tok = tokens[i]
         tt = tok.token_type
         upper = tok.text.upper()
+
+        # A closed CASE is one finished item, so its arms are not the clause
+        # the caret stands in: "SELECT CASE ... END " waits for FROM.
+        if tt == TokenType.END:
+            case_depth += 1
+            i -= 1
+            continue
+        if case_depth:
+            if upper == "CASE":
+                case_depth -= 1
+            i -= 1
+            continue
 
         if tt == TokenType.R_PAREN:
             paren_depth += 1
