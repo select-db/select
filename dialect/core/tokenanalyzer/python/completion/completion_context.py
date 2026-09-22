@@ -75,14 +75,14 @@ def detect_completion_context(
                 elif keyword_ctx == TARGET_ALL:
                     targets = 0
             else:
-                value_col = _detect_value_position(tokens, caret_offset)
+                value_col, quoted = _detect_value_position(tokens, caret_offset)
                 if value_col:
                     preceding_column = value_col
                     value_position = True
                     targets = TARGET_ENUM_VALUE
                     # Outside a literal an expression fits here too, so the
                     # clause still says what else may be written.
-                    if not value_col.get("quoted"):
+                    if not quoted:
                         targets |= keyword_ctx
 
     return {
@@ -334,14 +334,14 @@ def _column_ref_at(tokens: list, idx: int) -> dict | None:
     return {"name": name}
 
 
-def _detect_value_position(tokens: list, caret_offset: int) -> dict | None:
+def _detect_value_position(tokens: list, caret_offset: int) -> tuple[dict | None, bool]:
     """Detect caret in a value slot: col = '|', col IN ('|'), col = |.
 
-    quoted says the caret sits inside a literal, where a value is the only
-    thing that can be written. Unquoted, an expression can go there too.
+    The second result says the caret sits inside a literal, where a value is
+    the only thing that can be written.
     """
     if not tokens:
-        return None
+        return None, False
 
     i = len(tokens) - 1
     quoted = False
@@ -349,31 +349,24 @@ def _detect_value_position(tokens: list, caret_offset: int) -> dict | None:
     last = tokens[i]
     if last.token_type == TokenType.STRING:
         if not (last.start < caret_offset <= last.end + 1):
-            return None
+            return None, False
         quoted = True
         i -= 1
 
     if i < 0:
-        return None
+        return None, False
 
     if tokens[i].token_type in (TokenType.EQ, TokenType.NEQ):
-        return _with_quoted(_column_ref_at(tokens, i - 1), quoted)
+        return _column_ref_at(tokens, i - 1), quoted
 
     j = i
     while j >= 0 and tokens[j].token_type in (TokenType.STRING, TokenType.COMMA):
         j -= 1
     if j >= 0 and tokens[j].token_type == TokenType.L_PAREN \
             and j >= 1 and tokens[j - 1].token_type == TokenType.IN:
-        return _with_quoted(_column_ref_at(tokens, j - 2), quoted)
+        return _column_ref_at(tokens, j - 2), quoted
 
-    return None
-
-
-def _with_quoted(ref: dict | None, quoted: bool) -> dict | None:
-    if ref is None:
-        return None
-    ref["quoted"] = quoted
-    return ref
+    return None, False
 
 
 # --- Token utilities ---
