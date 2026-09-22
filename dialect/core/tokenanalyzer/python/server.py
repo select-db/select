@@ -28,10 +28,11 @@ from completion import caret_patch
 
 
 def _dispatch(req: dict) -> dict:
-    # A completion request had its SQL patched at the caret, so the response
-    # is cleaned once here rather than in each handler: a handler added later
-    # cannot forget to.
+    # A completion request is patched on the way in and cleaned on the way
+    # out, once here rather than in each handler: a handler added later cannot
+    # forget either half.
     if "caret_line" in req:
+        req = {**req, "sql": caret_patch.unwrap_explain(req.get("sql", ""))}
         return caret_patch.without_placeholders(_handle(req))
     return _handle(req)
 

@@ -1,14 +1,50 @@
-"""Patching incomplete SQL at the caret, and undoing the patch on the way out.
+"""Patching SQL so sqlglot can see the statement being typed, and undoing the
+patch on the way out.
 
 sqlglot parses statements, and a statement being typed is rarely one. The
 caret sits after a dot, a comma or an open paren more often than not, so a
 name is written in to give the parser something to hold. That name is this
 module's invention, and nothing downstream may report it back as a relation or
 a column somebody can complete.
+
+A patch never moves what precedes the caret, because the caret is found by
+offset; unwrap_explain moves nothing at all.
 """
 from __future__ import annotations
 
+import re
+
 PLACEHOLDER = '__placeholder__'
+
+# sqlglot reads what follows EXPLAIN as one opaque string on postgres and
+# sqlite, so a caret anywhere inside sees no statement at all. Its options go
+# with it, since what is left does not parse with them in front.
+_EXPLAIN = re.compile(
+    r"""(?:\A|(?<=;))                              # only where a statement may begin
+        (?:\s|--[^\n]*|\#[^\n]*|/\*.*?\*/)*         # comments and space before it
+        (EXPLAIN\b                                 # the group that gets blanked
+         (?:\s*\([^)]*\))?                         # EXPLAIN (ANALYZE, VERBOSE)
+         (?:\s+(?:ANALYZE|VERBOSE|COSTS|BUFFERS|TIMING|SUMMARY|WAL|EXTENDED
+                  |QUERY\s+PLAN                     # sqlite
+                  |FORMAT\s*=?\s*\w+))*)             # mysql writes FORMAT=JSON
+    """,
+    re.IGNORECASE | re.VERBOSE | re.DOTALL,
+)
+
+
+def unwrap_explain(sql: str) -> str:
+    """Blank every statement's leading EXPLAIN and its options, leaving the
+    statement under them to be read."""
+    out = sql
+    for match in _EXPLAIN.finditer(sql):
+        out = out[:match.start(1)] + _blanked(match.group(1)) + out[match.end(1):]
+    return out
+
+
+def _blanked(text: str) -> str:
+    """The same text as whitespace. Newlines survive, so a caret on a later
+    line is still on it."""
+    return ''.join(ch if ch == '\n' else ' ' for ch in text)
 
 
 def sanitize(sql: str, caret_line: int, caret_col: int) -> str:
