@@ -569,7 +569,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
-	// INSERT … SELECT: source SELECT becomes a subquery.
+	// INSERT ... SELECT: source SELECT becomes a subquery.
 	if iqe := stmt.InsertQueryExpression(); iqe != nil {
 		if qop := iqe.QueryExpressionOrParens(); qop != nil {
 			if sub := i.inspectQueryExpressionOrParens(qop); sub != nil && len(sub.Tables) > 0 {
@@ -711,7 +711,7 @@ func (i *Inspector) inspectExplainable(stmt mysql.IExplainableStatementContext) 
 	return nil
 }
 
-// collectInsertFields collects the column names listed in (col1, col2, …).
+// collectInsertFields collects the column names listed in (col1, col2, ...).
 func (i *Inspector) collectInsertFields(f mysql.IFieldsContext) []string {
 	var names []string
 	for _, ii := range f.AllInsertIdentifier() {
@@ -812,8 +812,6 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.OrderClause()), relationRefs, scope))
 
-	// A name the WITH clause declared is not a relation, so a nested read that
-	// resolved to it would ask for a right nobody can hold.
 	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	// A multi-table UPDATE writes the tables its SET list names and reads the
@@ -909,8 +907,6 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.OrderClause()), sourceRefs, scope))
 
-	// A name the WITH clause declared is not a relation, so a nested read that
-	// resolved to it would ask for a right nobody can hold.
 	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	// The relations a multi-table DELETE joins against without deleting from

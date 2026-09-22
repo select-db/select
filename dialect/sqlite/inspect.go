@@ -605,8 +605,6 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 			i.upsertSetFields(upsert, schema, tableName))
 	}
 
-	// A name the WITH clause declared is not a relation, so a nested read that
-	// resolved to it would ask for a right nobody can hold.
 	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
@@ -700,8 +698,6 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	// A name the WITH clause declared is not a relation, so a nested read that
-	// resolved to it would ask for a right nobody can hold.
 	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
@@ -807,8 +803,6 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
 
-	// A name the WITH clause declared is not a relation, so a nested read that
-	// resolved to it would ask for a right nobody can hold.
 	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
