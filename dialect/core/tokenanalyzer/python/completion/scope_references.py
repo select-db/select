@@ -76,13 +76,13 @@ class _ScopeBounds:
                 enclosing = start
         return enclosing
 
-    def range_around(self, offset: int) -> tuple[int, int]:
-        """Where the scope beginning at this offset runs: the parenthesis
-        holding it, or the statement when nothing holds it."""
+    def range_from(self, offset: int) -> tuple[int, int]:
+        """Where the scope opening at this offset runs: the parenthesis holding
+        it, or the rest of the statement when nothing holds it."""
         open_paren = self.enclosing_paren(offset)
         if open_paren >= 0:
             return open_paren + 1, self.paren_pairs.get(open_paren, -1)
-        return self.find_select_before(offset), self.find_statement_end(offset)
+        return offset, self.find_statement_end(offset)
 
     def depth_at(self, offset: int) -> int:
         """How many parentheses stand open at this offset."""
@@ -217,16 +217,15 @@ def _collect_from_scopes(
                 return cte_ranges[name]
         return -1, -1
 
-    def _root_scope_range(scope) -> tuple[int, int]:
-        """Get (start, end) offsets for a ROOT-level scope."""
+    def _scope_range(scope) -> tuple[int, int]:
+        """Where this scope runs. Anchored at the word it opens with, since a
+        projection can be parenthesised and the range would clamp to it."""
         if not bounds:
             return -1, -1
         first_meta = _first_token_meta(scope.expression)
         if not first_meta:
             return -1, -1
-        start = bounds.find_select_before(first_meta["start"])
-        end = bounds.find_statement_end(first_meta["start"])
-        return start, end
+        return bounds.range_from(bounds.find_select_before(first_meta["start"]))
 
     # Sub-pass 1: CTE/UNION scopes, process body refs, then add CTE vtab
     for scope in scopes:
@@ -234,19 +233,17 @@ def _collect_from_scopes(
             continue
         nesting = _nesting_level(scope, bounds)
         cte_open, cte_close = _owning_cte_range(scope)
-        # Scope starts one char AFTER the opening paren (inside the body)
-        cte_body_start = cte_open + 1 if cte_open >= 0 else -1
-        if cte_open < 0 and bounds:
+        # The body starts one character after the parenthesis that opens it.
+        body_start, body_close = cte_open + 1, cte_close
+        if cte_open < 0:
             # A union branch owned by no CTE: what holds it is the parenthesis
             # around it, not the whole statement, or its names leak out.
-            first_meta = _first_token_meta(scope.expression)
-            if first_meta:
-                cte_body_start, cte_close = bounds.range_around(first_meta["start"])
+            body_start, body_close = _scope_range(scope)
         for alias, source in _ordered_sources(scope):
             if isinstance(source, exp.Table):
                 _add_table_ref(
                     source, alias, nesting, default_schema, relations, seen_rels, stmt_idx,
-                    scope_start_offset=cte_body_start, scope_end_offset=cte_close,
+                    scope_start_offset=body_start, scope_end_offset=body_close,
                 )
             elif isinstance(source, Scope):
                 source_name = (_cte_name_for(source) or alias).lower()
@@ -254,12 +251,12 @@ def _collect_from_scopes(
                     continue
                 _add_virtual_usage_ref(
                     alias, "", nesting, relations, seen_rels, stmt_idx,
-                    scope_start_offset=cte_body_start, scope_end_offset=cte_close,
+                    scope_start_offset=body_start, scope_end_offset=body_close,
                 )
                 if source_name not in seen_vtabs:
                     vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs, bounds)
-                    vtab["scope_start_offset"] = cte_body_start
-                    vtab["scope_end_offset"] = cte_close
+                    vtab["scope_start_offset"] = body_start
+                    vtab["scope_end_offset"] = body_close
                     seen_vtabs.add(source_name)
                     virtual_tables.append(vtab)
 
@@ -287,7 +284,7 @@ def _collect_from_scopes(
         if scope.scope_type != ScopeType.ROOT:
             continue
         nesting = _nesting_level(scope, bounds)
-        root_start, root_end = _root_scope_range(scope)
+        root_start, root_end = _scope_range(scope)
         for alias, source in _ordered_sources(scope):
             if isinstance(source, Scope):
                 source_name = (_cte_name_for(source) or alias).lower()
@@ -321,11 +318,7 @@ def _collect_from_scopes(
         if scope.scope_type in (ScopeType.CTE, ScopeType.UNION, ScopeType.ROOT):
             continue
         nesting = _nesting_level(scope, bounds)
-        scope_start, scope_end = -1, -1
-        if bounds:
-            first_meta = _first_token_meta(scope.expression)
-            if first_meta:
-                scope_start, scope_end = bounds.range_around(first_meta["start"])
+        scope_start, scope_end = _scope_range(scope)
 
         # Nesting level where the vtab is available = one level up from where it's defined
         parent_nesting = max(0, nesting - 1)
@@ -668,6 +661,21 @@ def _usable_nesting(scope, bounds) -> int:
     return max(0, _nesting_level(scope, bounds) - 1)
 
 
+def _explicit_columns(projected, wrapper) -> list[str]:
+    """The names a relation's own column list gives it, as in "(SELECT 1) s(x)".
+
+    The list sits on whichever wrapper carries the alias: a subquery's own, or
+    the LATERAL holding it.
+    """
+    for node in (projected.parent, wrapper, wrapper.parent):
+        if node is None:
+            continue
+        alias = node.args.get("alias")
+        if isinstance(alias, exp.TableAlias) and alias.columns:
+            return [c.name for c in alias.columns]
+    return []
+
+
 def _build_virtual_table(
     name: str,
     scope_or_scope_obj,
@@ -682,25 +690,21 @@ def _build_virtual_table(
         expr = scope.expression
     else:
         expr = scope
-    # A LATERAL holds the query whose columns these are; the wrapper itself
-    # projects nothing.
-    while isinstance(expr, (exp.Lateral, exp.Subquery)):
-        expr = expr.this
+    # A LATERAL holds the query whose columns these are, in a subquery, and
+    # neither wrapper projects anything itself. Half written SQL can leave a
+    # wrapper holding nothing at all.
+    projected = expr
+    while isinstance(projected, (exp.Lateral, exp.Subquery)) and projected.this is not None:
+        projected = projected.this
 
-    columns = _infer_columns(expr, scope, schema_dict, default_schema, cte_defs)
+    columns = _infer_columns(projected, scope, schema_dict, default_schema, cte_defs)
 
-    # Check for explicit column list: (SELECT ...) subq(col1, col2)
-    parent = expr.parent
-    if parent:
-        table_alias = parent.args.get("alias")
-        if isinstance(table_alias, exp.TableAlias) and table_alias.columns:
-            explicit_names = [c.name for c in table_alias.columns]
-            # Rename inferred columns with explicit names
-            for i, ename in enumerate(explicit_names):
-                if i < len(columns):
-                    columns[i] = {**columns[i], "name": ename}
-                else:
-                    columns.append({"name": ename, "type": "unknown", "nullable": True})
+    explicit_names = _explicit_columns(projected, expr)
+    for i, ename in enumerate(explicit_names):
+        if i < len(columns):
+            columns[i] = {**columns[i], "name": ename}
+        else:
+            columns.append({"name": ename, "type": "unknown", "nullable": True})
 
     # Try to get position from CTE alias node
     line, col = 1, 0
