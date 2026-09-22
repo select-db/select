@@ -140,11 +140,21 @@ def detect_completion_context(
                     if not slot.quoted:
                         targets |= keyword_ctx
 
-    if _writes_an_expression(tokens, clause, targets, column_list_relation,
-                             shared_columns, bool(parts) or caret_after_dot):
+    writes_expression = _writes_an_expression(
+        tokens, clause, targets, column_list_relation,
+        shared_columns, bool(parts) or caret_after_dot)
+    if writes_expression:
         targets |= TARGET_FUNCTION
 
-    if keyword_group:
+    if keyword_group in _GROUPS_BESIDE_NAMES:
+        # An expression may open with a word as well as with a name, so these
+        # words are added to the names rather than put in their place. Where no
+        # value may be written the words do not stand either.
+        if writes_expression:
+            targets |= TARGET_KEYWORD
+        else:
+            keyword_group = ""
+    elif keyword_group:
         # A finished item leaves the clause waiting for a word, not for another
         # name: "SELECT c1 " takes FROM. An operator continues the expression
         # it already holds, so that one stands too.
@@ -488,6 +498,9 @@ _STATEMENT_GROUPS = frozenset({
     ("UPDATE", "predicate"),
 })
 
+# The groups whose words stand beside the names rather than in their place.
+_GROUPS_BESIDE_NAMES = frozenset({"select_start", "expression_start"})
+
 _SET_OPERATIONS = frozenset({"UNION", "EXCEPT", "INTERSECT"})
 
 # What a word that does not finish its clause waits for: "LEFT " waits for
@@ -575,10 +588,15 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
         return ""
 
     last = tokens[-1]
-    if _caret_touches(last, caret_offset):
+    if not _is_identifier_token(last) and caret_offset <= last.end:
+        # The caret is within the token rather than after it, so a literal
+        # still being written is not a finished item.
+        return ""
+    if _is_identifier_token(last) and _caret_touches(last, caret_offset):
         # The word is being typed, so what stands before it decides: the first
-        # keystroke of AND must not take the answer back to columns.
-        if not _is_identifier_token(last) or len(tokens) == 1:
+        # keystroke of AND must not take the answer back to columns. Only a
+        # word is written letter by letter; a paren the caret follows is done.
+        if len(tokens) == 1:
             return ""
         tokens = tokens[:-1]
         last = tokens[-1]
@@ -607,14 +625,14 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     else:
         group = _CLAUSE_FOLLOWERS.get(clause.word, "")
     if not group:
-        return ""
+        return _opening_an_item(clause, last)
     if group in _COMPLETE_AT_THE_CLAUSE_WORD:
         return group
 
     if last.token_type in _FINISHED_ITEM_TOKENS:
         return _in_the_statement(group, tokens)
     if not _is_identifier_token(last):
-        return ""
+        return _opening_an_item(clause, last)
     if group in _ITEM_IS_COMPLETE_AT_A_NAME:
         # An item that already carries an alias must not be offered the word
         # that would give it another.
@@ -625,7 +643,15 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     # unless one already stands between the clause and here.
     if group == "predicate" and _compared_since_the_clause(tokens):
         return _in_the_statement(group, tokens)
-    return ""
+    return _opening_an_item(clause, last)
+def _opening_an_item(clause: Clause, last) -> str:
+    """The words an item may open with, where nothing of it is written yet. A
+    SELECT list takes two more, which say how the whole list is read."""
+    if clause.word == "SELECT" and last.text.upper() == "SELECT":
+        return "select_start"
+    return "expression_start"
+
+
 def _statement_word(tokens: list) -> str:
     """The word the statement holding the caret opens with. A statement inside
     parentheses is the one the caret is in, so the walk stops at the nearest."""

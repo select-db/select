@@ -60,7 +60,7 @@ func TestCompletionContext(t *testing.T) {
 		{
 			name: "a single @ is a user variable, not a setting",
 			sql:  "SELECT @my|",
-			want: testutil.CompletionContextWant{Targets: core.CompletionTargetAll | core.CompletionTargetFunction},
+			want: testutil.CompletionContextWant{Targets: core.CompletionTargetAll | core.CompletionTargetFunction | core.CompletionTargetKeyword},
 		},
 	}
 

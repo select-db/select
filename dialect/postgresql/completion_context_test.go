@@ -99,6 +99,13 @@ func TestKeywordGroupWords(t *testing.T) {
 			"ROLE", "USER",
 		}},
 		{"conflict_target", []string{"CONFLICT"}},
+		{"expression_start", []string{
+			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
+		}},
+		{"select_start", []string{
+			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
+			"DISTINCT", "ALL",
+		}},
 		{"insert_target", []string{"VALUES", "SELECT", "AS"}},
 		{"update_target", []string{"SET", "AS"}},
 		{"delete_target", []string{"FROM"}},

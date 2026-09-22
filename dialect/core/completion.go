@@ -332,6 +332,10 @@ var relationWords = setOf(
 	"UNION", "EXCEPT", "INTERSECT", "FETCH",
 )
 
+var expressionStartWords = setOf(
+	"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
+)
+
 var selectItemWords = setOf("FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO")
 
 var predicateWords = setOf(
@@ -391,6 +395,10 @@ var keywordGroups = map[string]map[string]bool{
 		"EXTENSION", "ROLE", "USER", "EVENT",
 	),
 	"conflict_target": setOf("CONFLICT", "DUPLICATE KEY UPDATE"),
+	// What an item may open with, offered beside the names rather than in
+	// their place. A SELECT list takes two more, which say how it is read.
+	"expression_start": expressionStartWords,
+	"select_start":     with(expressionStartWords, "DISTINCT", "ALL"),
 }
 
 // with and without derive a group from another, so a word added to the base

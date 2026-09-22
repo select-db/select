@@ -406,8 +406,28 @@ class TestClauseFollowers:
         assert self._group("SELECT 1 UNION ALL |") == "query_word"
 
     def test_a_select_list_quantifier_is_not_a_set_operand(self):
-        assert self._group("SELECT ALL |") == ""
-        assert self._group("SELECT DISTINCT |") == ""
+        assert self._group("SELECT ALL |") == "expression_start"
+        assert self._group("SELECT DISTINCT |") == "expression_start"
+
+    def test_an_item_opens_with_a_word_as_well_as_a_name(self):
+        assert self._group("SELECT |") == "select_start"
+        assert self._group("SELECT c1, |") == "expression_start"
+        assert self._group("SELECT * FROM t1 WHERE |") == "expression_start"
+        assert self._group("INSERT INTO t1 VALUES (|") == "expression_start"
+
+    def test_those_words_stand_beside_the_names(self):
+        targets = _field("SELECT * FROM t1 WHERE |", "targets")
+        assert targets & TARGET_KEYWORD
+        assert targets & TARGET_COLUMN
+
+    def test_a_name_being_named_takes_no_word(self):
+        assert self._group("INSERT INTO t1 (|") == ""
+        assert self._group("SELECT * FROM t1 JOIN t2 USING (|") == ""
+        assert self._group("UPDATE t1 SET |") == ""
+
+    def test_a_relation_is_not_an_expression(self):
+        assert self._group("SELECT * FROM |") == ""
+        assert self._group("SELECT * FROM t1, |") == ""
 
     def test_a_ddl_statement_waits_for_what_it_acts_on(self):
         assert self._group("CREATE |") == "object_kind"
@@ -418,7 +438,7 @@ class TestClauseFollowers:
         assert self._group("INSERT INTO t1 (c1) VALUES (1) ON |") == "conflict_target"
 
     def test_a_join_on_still_takes_a_predicate(self):
-        assert self._group("SELECT * FROM t1 JOIN t2 ON |") == ""
+        assert self._group("SELECT * FROM t1 JOIN t2 ON |") == "expression_start"
 
     def test_a_write_statement_waits_for_its_word(self):
         assert self._group("INSERT INTO t1 |") == "insert_target"
@@ -468,8 +488,8 @@ class TestClauseFollowers:
     def test_a_half_written_predicate_is_not_one(self):
         assert self._group("SELECT * FROM t1 WHERE c1 |") == ""
 
-    def test_an_empty_clause_is_not_a_finished_item(self):
-        assert self._group("SELECT |") == ""
+    def test_an_empty_clause_opens_an_item_instead(self):
+        assert self._group("SELECT |") == "select_start"
         assert self._group("SELECT * FROM |") == ""
         assert self._group("SELECT * FROM t1, |") == ""
 
@@ -478,9 +498,9 @@ class TestClauseFollowers:
         assert self._group("SELECT * FROM t1 W|") == "relation"
         assert self._group("SELECT c1 F|") == "select_item"
 
-    def test_a_name_being_typed_in_a_clause_is_not_one(self):
-        assert self._group("SELECT c|") == ""
-        assert self._group("SELECT c1, c|") == ""
+    def test_a_name_being_typed_in_a_clause_is_not_a_finished_item(self):
+        assert self._group("SELECT c|") == "select_start"
+        assert self._group("SELECT c1, c|") == "expression_start"
         assert self._group("SELECT * FROM t|") == ""
 
 
@@ -583,7 +603,8 @@ class TestValuePosition:
     def test_an_in_list_offers_its_clause_as_well_as_values(self):
         sql = "SELECT * FROM t1 WHERE c1 IN ("
         targets = detect_completion_context(sql, 1, len(sql), ["main"], "postgres")["targets"]
-        assert targets == TARGET_ENUM_VALUE | TARGET_TABLE_AND_COLUMN | TARGET_FUNCTION
+        assert targets == (TARGET_ENUM_VALUE | TARGET_TABLE_AND_COLUMN
+                           | TARGET_FUNCTION | TARGET_KEYWORD)
 
     def test_inside_a_literal_offers_values_alone(self):
         sql = "SELECT * FROM t1 WHERE c1 IN ('"
