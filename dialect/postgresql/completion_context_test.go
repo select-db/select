@@ -82,7 +82,7 @@ func TestKeywordGroupWords(t *testing.T) {
 		want  []string
 	}{
 		{"select_item", []string{"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO"}},
-		{"sort_item", []string{"LIMIT", "OFFSET", "FETCH", "ASC", "DESC"}},
+		{"sort_item", []string{"LIMIT", "OFFSET", "FETCH", "ASC", "DESC", "NULLS"}},
 		{"group_item", []string{"ORDER BY", "HAVING", "LIMIT", "OFFSET"}},
 		{"row_count", []string{"OFFSET", "FETCH"}},
 		{"after_cte", []string{"SELECT", "INSERT", "UPDATE", "DELETE"}},
@@ -100,6 +100,9 @@ func TestKeywordGroupWords(t *testing.T) {
 			"ROLE", "USER",
 		}},
 		{"conflict_target", []string{"CONFLICT"}},
+		{"conflict_action", []string{"DO", "ON CONSTRAINT"}},
+		{"conflict_resolution", []string{"NOTHING", "UPDATE"}},
+		{"null_ordering", []string{"FIRST", "LAST"}},
 		{"lock_strength", []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"}},
 		{"expression_start", []string{
 			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",

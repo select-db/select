@@ -453,6 +453,14 @@ class TestClauseFollowers:
         assert self._group('SELECT * FROM t1 "a" |') == "aliased_relation"
         assert self._group('SELECT "c1" |') == "select_item"
 
+    def test_an_upsert_names_what_to_do(self):
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON CONFLICT |") == "conflict_action"
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) |") == "conflict_do"
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO |") == "conflict_resolution"
+
+    def test_nulls_waits_for_where_they_go(self):
+        assert self._group("SELECT * FROM t1 ORDER BY c1 DESC NULLS |") == "null_ordering"
+
     def test_a_lock_names_its_strength(self):
         assert self._group("SELECT * FROM t1 FOR |") == "lock_strength"
 

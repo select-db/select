@@ -431,6 +431,7 @@ func defaultKeywords() []string {
 		"CASE", "WHEN", "THEN", "ELSE", "END",
 		"DEFAULT VALUES", "DISTINCT FROM", "INTO",
 		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
+		"DO", "NOTHING", "ON CONSTRAINT", "NULLS", "FIRST", "LAST",
 		"SHARE", "NO KEY UPDATE", "KEY SHARE", "INTERVAL",
 		// What a DDL statement acts on.
 		"TABLE", "TEMPORARY TABLE", "VIEW", "MATERIALIZED VIEW",

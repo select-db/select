@@ -362,7 +362,7 @@ var keywordGroups = map[string]map[string]bool{
 	// Only a join allows ON and USING.
 	"joined_relation": with(relationWords, "ON", "USING"),
 	"predicate":       predicateWords,
-	"sort_item":       setOf("ASC", "DESC", "LIMIT", "OFFSET", "FETCH"),
+	"sort_item":       setOf("ASC", "DESC", "NULLS", "LIMIT", "OFFSET", "FETCH"),
 	"group_item":      setOf("HAVING", "ORDER BY", "LIMIT", "OFFSET"),
 	"assignment":      setOf("WHERE", "RETURNING", "FROM"),
 	"values":          setOf("RETURNING", "ON"),
@@ -398,6 +398,11 @@ var keywordGroups = map[string]map[string]bool{
 		"EXTENSION", "ROLE", "USER", "EVENT",
 	),
 	"conflict_target": setOf("CONFLICT", "DUPLICATE KEY UPDATE"),
+	// What an upsert does with a row that is already there.
+	"conflict_action":     setOf("DO", "ON CONSTRAINT"),
+	"conflict_do":         setOf("DO"),
+	"conflict_resolution": setOf("NOTHING", "UPDATE"),
+	"null_ordering":       setOf("FIRST", "LAST"),
 	// How strongly a query locks the rows it reads.
 	"lock_strength": setOf("UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"),
 	// What an item may open with, offered beside the names rather than in

@@ -533,6 +533,9 @@ _WORD_FOLLOWERS = {
     "EXCEPT":    "set_operand",
     "INTERSECT": "set_operand",
     "FOR":       "lock_strength",
+    "CONFLICT":  "conflict_action",
+    "DO":        "conflict_resolution",
+    "NULLS":     "null_ordering",
     "CREATE":    "object_kind",
     "DROP":      "object_kind",
     "ALTER":     "object_kind",
@@ -639,6 +642,8 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     if last.token_type in _FINISHED_ITEM_TOKENS:
         if _closes_a_row_choice(tokens):
             return _opening_an_item(clause, last)
+        if _closes_a_conflict_target(tokens):
+            return "conflict_do"
         if group in _ITEM_IS_COMPLETE_AT_A_NAME and _already_renamed(tokens):
             group = _ALIASED.get(group, group)
         return _in_the_statement(group, tokens)
@@ -741,6 +746,15 @@ def _enclosing_call(tokens: list, idx: int) -> str:
             else:
                 return ""
     return ""
+
+
+def _closes_a_conflict_target(tokens: list) -> bool:
+    """Whether the last token closes an ON CONFLICT column list, which leaves
+    the DO clause still to be written."""
+    if tokens[-1].token_type != TokenType.R_PAREN:
+        return False
+    opening = _opening_paren(tokens, len(tokens) - 1)
+    return opening >= 1 and tokens[opening - 1].text.upper() == "CONFLICT"
 
 
 def _closes_a_row_choice(tokens: list) -> bool:
