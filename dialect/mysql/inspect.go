@@ -586,6 +586,8 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 	// there does not survive and insert alone is not the right it needs.
 	if iul := stmt.InsertUpdateList(); iul != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(iul)...)
+		result.Where = core.MergeInspectFields(result.Where,
+			i.updateListReads(iul.UpdateList(), schema, tableName))
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.updateListFields(iul.UpdateList(), schema, tableName))
 	}
@@ -664,6 +666,25 @@ func (i *Inspector) updateListFields(
 	for _, el := range list.AllUpdateElement() {
 		if name := i.columnRefName(el.ColumnRef()); name != "" {
 			fields = append(fields, core.InspectField{Name: name, Table: table, Schema: schema})
+		}
+	}
+	return fields
+}
+
+// updateListReads are the columns the right of a SET list reads, whose values
+// the assignment stores where masking cannot reach them.
+func (i *Inspector) updateListReads(
+	list mysql.IUpdateListContext,
+	schema, table string,
+) []core.InspectField {
+	if list == nil {
+		return nil
+	}
+	refs := []core.RelationRef{{Table: table, Schema: schema}}
+	var fields []core.InspectField
+	for _, el := range list.AllUpdateElement() {
+		if expr := el.Expr(); expr != nil {
+			fields = core.MergeInspectFields(fields, i.testedFields(expr, refs, core.Scope{}))
 		}
 	}
 	return fields
@@ -1522,6 +1543,10 @@ type whereColumnListener struct {
 	fields        []core.InspectField
 	seen          map[string]bool
 	subqueryDepth int
+	// valuesDepth counts the VALUES(col) calls being walked. Inside one, the
+	// name is the value the INSERT proposed for that column rather than the
+	// one the row holds, so nothing is read there.
+	valuesDepth int
 }
 
 func (l *whereColumnListener) EnterSubquery(_ *mysql.SubqueryContext) {
@@ -1531,8 +1556,20 @@ func (l *whereColumnListener) ExitSubquery(_ *mysql.SubqueryContext) {
 	l.subqueryDepth--
 }
 
+func (l *whereColumnListener) EnterRuntimeFunctionCall(ctx *mysql.RuntimeFunctionCallContext) {
+	if ctx.VALUES_SYMBOL() != nil {
+		l.valuesDepth++
+	}
+}
+
+func (l *whereColumnListener) ExitRuntimeFunctionCall(ctx *mysql.RuntimeFunctionCallContext) {
+	if ctx.VALUES_SYMBOL() != nil {
+		l.valuesDepth--
+	}
+}
+
 func (l *whereColumnListener) EnterColumnRef(ctx *mysql.ColumnRefContext) {
-	if l.subqueryDepth > 0 || ctx == nil {
+	if l.subqueryDepth > 0 || l.valuesDepth > 0 || ctx == nil {
 		return
 	}
 	cr := l.inspector.columnRefParts(ctx)
