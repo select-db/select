@@ -99,7 +99,7 @@ type CompletionContext struct {
 	TargetTable       string               // Table from qualified parts
 	KeywordContext    CompletionTarget     // SQL keyword context (SELECT/FROM/JOIN)
 	PrecedingColumn   *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
-	InsertTargetTable string               // Table name from INSERT INTO <table> (for column list completion)
+	ColumnListRelation string              // Relation whose columns a parenthesised list names: an INSERT target, or one being renamed
 	ValuePosition     bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
 	SharedColumns     bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
 }
@@ -232,8 +232,8 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	if ctx.Targets&CompletionTargetColumn != 0 {
 		if ctx.SharedColumns {
 			columns = cs.completeSharedColumns(inScopeRefs, inScopeCtes, meta, caretQuoted, reservedKeywords)
-		} else if ctx.InsertTargetTable != "" {
-			columns = cs.completeColumnsForTable(ctx.InsertTargetTable, inScopeCtes, inScopeRefs, inScopeRefs, meta, caretQuoted, reservedKeywords)
+		} else if ctx.ColumnListRelation != "" {
+			columns = cs.completeColumnsForTable(ctx.ColumnListRelation, inScopeCtes, inScopeRefs, inScopeRefs, meta, caretQuoted, reservedKeywords)
 		} else if ctx.TargetTable != "" {
 			columns = cs.completeColumnsForTable(ctx.TargetTable, inScopeCtes, inScopeRefs, inScopeRefs, meta, caretQuoted, reservedKeywords)
 		} else {

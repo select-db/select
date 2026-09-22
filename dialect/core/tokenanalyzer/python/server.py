@@ -134,7 +134,7 @@ def _complete_context(req: dict) -> dict:
         return {"parts": [], "caret_after_dot": False, "targets": 0,
                 "schema_filter": "", "target_table": "",
                 "keyword_context": 0, "preceding_column": None,
-                "insert_target_table": ""}
+                "column_list_relation": ""}
 
     return detect_completion_context(sql, caret_line, caret_col, schema_names, sg_dialect)
 

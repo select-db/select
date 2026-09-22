@@ -123,7 +123,8 @@ def collect_references(
             )
 
         _collect_dml_target(
-            stmt, scopes, default_schema, relations, seen_rels, stmt_idx, bounds,
+            stmt, scopes, schema_dict, default_schema,
+            relations, virtual_tables, seen_rels, seen_vtabs, stmt_idx, bounds,
             insert_index=root_refs_start,
         )
 
@@ -413,12 +414,51 @@ def _cte_name_for(source) -> str:
     return owner.alias if isinstance(owner, exp.CTE) else ""
 
 
+def _dml_sources(source: exp.Expression):
+    """The relations one item of a FROM or USING names, each on its own.
+
+    Only what the clause names, never what a subquery reads: a table inside a
+    derived table belongs to that query's scope, not to the statement holding
+    it, and lifting it here reports it twice.
+    """
+    node = source.this if isinstance(source, exp.From) else source
+    if isinstance(node, (exp.Table, exp.Subquery)):
+        yield node
+    for join in source.args.get("joins") or []:
+        yield from _dml_sources(join.this)
+
+
+def _add_derived_source(
+    subquery: exp.Subquery,
+    schema_dict: dict,
+    default_schema: str,
+    relations: list[dict],
+    virtual_tables: list[dict],
+    seen: set[tuple],
+    seen_vtabs: set[str],
+    stmt_idx: int,
+) -> None:
+    """Report a derived table a DML statement names, the way a query's FROM
+    reports one: a relation to refer to and the columns behind it."""
+    name = subquery.alias_or_name
+    if not name or name in seen_vtabs:
+        return
+    seen_vtabs.add(name)
+    virtual_tables.append(
+        _build_virtual_table(name, subquery.this, schema_dict, default_schema, {})
+    )
+    _add_virtual_usage_ref(name, "", 0, relations, seen, stmt_idx)
+
+
 def _collect_dml_target(
     stmt: exp.Expression,
     scopes: list,
+    schema_dict: dict,
     default_schema: str,
     relations: list[dict],
+    virtual_tables: list[dict],
     seen: set[tuple],
+    seen_vtabs: set[str],
     stmt_idx: int = 0,
     bounds: _ScopeBounds | None = None,
     insert_index: int | None = None,
@@ -450,10 +490,20 @@ def _collect_dml_target(
     if isinstance(table_node, exp.Table):
         tables_to_add.append(table_node)
 
-    # PostgreSQL UPDATE...FROM, DELETE...USING
-    from_clause = stmt.args.get("from_") or stmt.args.get("using")
-    if from_clause:
-        tables_to_add.extend(from_clause.find_all(exp.Table))
+    # PostgreSQL UPDATE...FROM, DELETE...USING. A USING carries a list of
+    # relations where a FROM carries one node, so both are read as a list.
+    sources = stmt.args.get("from_") or stmt.args.get("using") or []
+    if not isinstance(sources, list):
+        sources = [sources]
+    for source in sources:
+        for named in _dml_sources(source):
+            if isinstance(named, exp.Table):
+                tables_to_add.append(named)
+            else:
+                _add_derived_source(
+                    named, schema_dict, default_schema,
+                    relations, virtual_tables, seen, seen_vtabs, stmt_idx,
+                )
 
     # Build set of tables captured by ROOT scopes (not CTE-internal tables)
     scoped_tables: set[str] = set()

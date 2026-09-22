@@ -45,7 +45,7 @@ def detect_completion_context(
             "target_table":       "",
             "keyword_context":    0,
             "preceding_column":   None,
-            "insert_target_table": "",
+            "column_list_relation": "",
             "value_position":     False,
             "shared_columns":     False,
         }
@@ -62,15 +62,15 @@ def detect_completion_context(
             parts, caret_after_dot, schema_names,
         )
 
-    insert_target = ""
+    column_list_relation = ""
     preceding_column = None
     value_position = False
     shared_columns = False
 
     if not caret_after_dot and not parts:
         shared_columns = _in_a_join_using_list(tokens)
-        insert_target = _detect_insert_column_list(tokens)
-        if insert_target:
+        column_list_relation = _detect_column_list(tokens)
+        if column_list_relation:
             targets = TARGET_COLUMN
         else:
             preceding_column = _detect_preceding_column(tokens, caret_offset)
@@ -99,7 +99,7 @@ def detect_completion_context(
         "target_table":       target_table,
         "keyword_context":    keyword_ctx,
         "preceding_column":   preceding_column,
-        "insert_target_table": insert_target,
+        "column_list_relation": column_list_relation,
         "value_position":     value_position,
         "shared_columns":     shared_columns,
     }
@@ -227,6 +227,8 @@ def _opens_query(tokens: list, paren_idx: int) -> bool:
     which reads as a name and is not a call: only AS can precede one."""
     if paren_idx == 0:
         return True
+    if _renames_a_relation(tokens, paren_idx):
+        return False
     if tokens[paren_idx - 1].token_type in _QUERY_OPENING_TOKENS:
         # A window definition borrows the CTE's spelling, "WINDOW w AS (", and
         # what goes inside it is a partition and an order over this query.
@@ -436,10 +438,116 @@ def _detect_keyword_context(tokens: list) -> int:
     return TARGET_SCHEMA_AND_TABLE_ALL
 
 
-# --- INSERT column list detection ---
+# --- Column list detection ---
 
-def _detect_insert_column_list(tokens: list) -> str:
-    """Detect INSERT INTO <table> (col1, |) and return the table name."""
+# What a relation may be written after. A name in one of these positions is a
+# relation the statement reads, so a column list attached to it renames that
+# relation rather than opening a query.
+_RELATION_POSITIONS = frozenset({
+    TokenType.FROM, TokenType.JOIN, TokenType.USING,
+    TokenType.INTO, TokenType.UPDATE, TokenType.TABLE,
+})
+
+# The clauses a comma separates relations in, against the ones it separates
+# definitions in: "FROM a, b" lists relations where "WITH a AS (), b AS ()"
+# and a WINDOW clause list names being declared.
+_RELATION_LISTS = frozenset({TokenType.FROM, TokenType.JOIN, TokenType.USING})
+_DEFINITION_LISTS = frozenset({TokenType.WITH, TokenType.WINDOW})
+
+
+def _renames_a_relation(tokens: list, paren_idx: int) -> bool:
+    """Whether the paren at paren_idx opens a list renaming a relation's
+    columns, as in "FROM t AS a (" or "FROM (SELECT 1) s (".
+
+    Asked apart from which relation is renamed, because a derived table has no
+    name to offer and is still not a query body.
+    """
+    return _relation_renamed_at(tokens, paren_idx) is not None
+
+
+def _renamed_relation(tokens: list, paren_idx: int) -> str:
+    """The relation such a list renames, or "" when it has no name to give:
+    the names being written are new, so the ones they replace are what helps,
+    and a derived table has none."""
+    return _relation_renamed_at(tokens, paren_idx) or ""
+
+
+def _relation_renamed_at(tokens: list, paren_idx: int) -> str | None:
+    """The name of the relation the list renames, "" when the relation has no
+    name, or None when this paren is not such a list."""
+    i = paren_idx - 1
+    if i >= 0 and _is_identifier_token(tokens[i]):
+        i -= 1
+    if i >= 0 and tokens[i].token_type == TokenType.ALIAS:
+        i -= 1
+    if i < 0:
+        return None
+
+    # A derived table or a call is the relation itself, and its closing paren
+    # is what stands here.
+    if tokens[i].token_type == TokenType.R_PAREN:
+        return "" if _relation_precedes(tokens, _opening_paren(tokens, i)) else None
+
+    if not _is_identifier_token(tokens[i]):
+        return None
+    start = _qualified_start(tokens, i)
+    if not _relation_precedes(tokens, start):
+        return None
+    return _normalize_identifier(tokens[i].text)
+
+
+def _qualified_start(tokens: list, name_idx: int) -> int:
+    """The index where a qualified name begins, so "main.t1" is asked about at
+    "main" rather than at the dot before "t1"."""
+    i = name_idx
+    while i >= 2 and tokens[i - 1].token_type == TokenType.DOT \
+            and _is_identifier_token(tokens[i - 2]):
+        i -= 2
+    return i
+
+
+def _opening_paren(tokens: list, close_idx: int) -> int:
+    """The index of the paren the one at close_idx closes, or -1."""
+    depth = 0
+    for i in range(close_idx, -1, -1):
+        if tokens[i].token_type == TokenType.R_PAREN:
+            depth += 1
+        elif tokens[i].token_type == TokenType.L_PAREN:
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _lists_relations(tokens: list, comma_idx: int) -> bool:
+    """Whether the comma at comma_idx separates relations rather than the
+    definitions of a WITH or a WINDOW clause."""
+    for i in _walk_back(tokens, comma_idx):
+        if tokens[i].token_type in _RELATION_LISTS:
+            return True
+        if tokens[i].token_type in _DEFINITION_LISTS:
+            return False
+    return False
+
+
+def _relation_precedes(tokens: list, idx: int) -> bool:
+    """Whether what starts at idx stands where a relation may be written. A
+    call in a FROM is a relation too, so the name before its paren counts."""
+    if idx <= 0:
+        return False
+    before = tokens[idx - 1]
+    if before.token_type in _RELATION_POSITIONS:
+        return True
+    if before.token_type == TokenType.COMMA:
+        return _lists_relations(tokens, idx - 1)
+    # "FROM generate_series(1, 2) g (" names the call, not the clause.
+    return _is_identifier_token(before) and idx >= 2 \
+        and tokens[idx - 2].token_type in _RELATION_POSITIONS
+
+
+def _detect_column_list(tokens: list) -> str:
+    """The relation whose columns a parenthesised list of names belongs to, or
+    "" when the caret is not in one or the relation has no name."""
     paren_depth = 0
     i = len(tokens) - 1
 
@@ -460,7 +568,7 @@ def _detect_insert_column_list(tokens: list) -> str:
                     if (_is_identifier_token(table_tok)
                             and prev_tok.text.upper() in ("INSERT INTO", "INTO")):
                         return _normalize_identifier(table_tok.text)
-                return ""
+                return _renamed_relation(tokens, i)
         elif tt == TokenType.SEMICOLON:
             return ""
         elif upper == "VALUES":

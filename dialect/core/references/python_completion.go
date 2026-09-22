@@ -15,7 +15,7 @@ type pyCompletionContext struct {
 	TargetTable       string                 `json:"target_table"`
 	KeywordContext    core.CompletionTarget  `json:"keyword_context"`
 	PrecedingColumn   *pyPrecedingColumnInfo `json:"preceding_column"`
-	InsertTargetTable string                 `json:"insert_target_table"`
+	ColumnListRelation string                `json:"column_list_relation"`
 	ValuePosition     bool                   `json:"value_position"`
 	SharedColumns     bool                   `json:"shared_columns"`
 }
@@ -64,7 +64,7 @@ func ParseCompletionContextFromPython(
 		SchemaFilter:      resp.SchemaFilter,
 		TargetTable:       resp.TargetTable,
 		KeywordContext:    resp.KeywordContext,
-		InsertTargetTable: resp.InsertTargetTable,
+		ColumnListRelation: resp.ColumnListRelation,
 		ValuePosition:     resp.ValuePosition,
 		SharedColumns:     resp.SharedColumns,
 	}

@@ -22,9 +22,15 @@ def _at_caret(sql_with_caret: str, sg_dialect: str = "postgres"):
     return _tokenize_up_to(sql, caret, sg_dialect), sql, caret
 
 
-def _shared(sql_with_caret: str, sg_dialect: str = "postgres") -> bool:
+def _field(sql_with_caret: str, key: str, sg_dialect: str = "postgres"):
+    """One field of the whole context, for the cases a token walk alone cannot
+    answer."""
     _, sql, caret = _at_caret(sql_with_caret, sg_dialect)
-    return detect_completion_context(sql, 1, caret, ["main"], sg_dialect)["shared_columns"]
+    return detect_completion_context(sql, 1, caret, ["main"], sg_dialect)[key]
+
+
+def _shared(sql_with_caret: str, sg_dialect: str = "postgres") -> bool:
+    return _field(sql_with_caret, "shared_columns", sg_dialect)
 
 
 def _check(sql_with_caret: str, sg_dialect: str = "postgres") -> bool:
@@ -170,6 +176,14 @@ class TestContextualWords:
         tokens, _, _ = _at_caret("SELECT c1 FROM t1 WINDOW w AS (ORDER BY c1), v AS (|")
         assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
 
+    def test_a_derived_table_rename_is_not_a_query_body(self):
+        tokens, _, _ = _at_caret("SELECT * FROM (SELECT 1) s (|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_table_function_rename_is_not_a_query_body(self):
+        tokens, _, _ = _at_caret("SELECT * FROM generate_series(1,2) g (|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
     def test_a_later_cte_body_is_still_one(self):
         tokens, _, _ = _at_caret("WITH w AS (SELECT 1), v AS (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
@@ -245,6 +259,47 @@ class TestInsideACall:
     def test_a_subquery_in_from_still_takes_relations(self):
         tokens, _, _ = _at_caret("SELECT * FROM (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+
+class TestColumnListRelation:
+    def _relation(self, sql_with_caret: str) -> str:
+        return _field(sql_with_caret, "column_list_relation")
+
+    def test_a_rename_with_as(self):
+        assert self._relation("SELECT * FROM t1 AS a (|") == "t1"
+
+    def test_a_rename_without_as(self):
+        assert self._relation("SELECT * FROM t1 a (|") == "t1"
+
+    def test_a_rename_of_a_joined_relation(self):
+        assert self._relation("SELECT * FROM t1 JOIN t2 b (|") == "t2"
+
+    def test_a_qualified_relation(self):
+        assert self._relation("SELECT * FROM main.t1 AS a (|") == "t1"
+
+    def test_a_relation_after_a_comma(self):
+        assert self._relation("SELECT * FROM t1, t2 b (|") == "t2"
+
+    def test_a_relation_a_delete_uses(self):
+        assert self._relation("DELETE FROM t1 USING t2 AS b (|") == "t2"
+
+    def test_a_relation_an_update_reads(self):
+        assert self._relation("UPDATE t1 SET c1 = 1 FROM t2 b (|") == "t2"
+
+    def test_an_upsert_alias(self):
+        assert self._relation("INSERT INTO t1 AS a (|") == "t1"
+
+    def test_a_derived_table_has_no_name_to_give(self):
+        assert self._relation("SELECT * FROM (SELECT 1) s (|") == ""
+
+    def test_a_cte_body_is_not_a_rename(self):
+        assert self._relation("WITH x AS (|") == ""
+
+    def test_a_materialization_hint_is_not_a_rename(self):
+        assert self._relation("WITH x AS MATERIALIZED (|") == ""
+
+    def test_an_insert_column_list_still_reads(self):
+        assert self._relation("INSERT INTO t1 (|") == "t1"
 
 
 class TestSharedColumns:
