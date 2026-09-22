@@ -182,9 +182,7 @@ _KEYWORD_MATCHERS: list[tuple[str, int]] = [
     ("OR",          TARGET_TABLE_AND_COLUMN),
     ("HAVING",      TARGET_TABLE_AND_COLUMN),
     ("WHERE",       TARGET_TABLE_AND_COLUMN),
-    ("ON",          TARGET_TABLE_AND_COLUMN),
     ("FROM",        TARGET_SCHEMA_AND_TABLE_ALL),
-    ("USING",       TARGET_COLUMN),
     ("INNER",       TARGET_SCHEMA_AND_TABLE_ALL),
     ("LEFT",        TARGET_SCHEMA_AND_TABLE_ALL),
     ("RIGHT",       TARGET_SCHEMA_AND_TABLE_ALL),
@@ -198,6 +196,7 @@ _KEYWORD_MATCHERS: list[tuple[str, int]] = [
     ("LIMIT",       TARGET_TABLE_AND_COLUMN),
     ("OFFSET",      TARGET_TABLE_AND_COLUMN),
     ("VALUES",      TARGET_COLUMN),
+    ("RETURNING",   TARGET_COLUMN),
     ("SELECT",      TARGET_ALL),
     ("UPDATE",      TARGET_SCHEMA_AND_TABLE_ALL),
 ]
@@ -225,7 +224,9 @@ def _opens_query(tokens: list, paren_idx: int) -> bool:
     if paren_idx == 0:
         return True
     if tokens[paren_idx - 1].token_type in _QUERY_OPENING_TOKENS:
-        return True
+        # A window definition borrows the CTE's spelling, "WINDOW w AS (", and
+        # what goes inside it is a partition and an order over this query.
+        return not _names_a_window(tokens, paren_idx - 1)
     i = paren_idx - 1
     while i >= 0 and (_is_identifier_token(tokens[i]) or tokens[i].token_type == TokenType.NOT):
         i -= 1
@@ -238,6 +239,93 @@ _NAME_FOLLOWERS = {
     TokenType.EQ, TokenType.NEQ, TokenType.GT, TokenType.LT,
     TokenType.GTE, TokenType.LTE, TokenType.DOT,
 }
+
+
+# The words that begin a statement. The walk stops at one, because anything
+# before it belongs to a statement the caret is not in.
+_STATEMENT_WORDS = frozenset({
+    "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "GRANT", "REVOKE", "WITH",
+})
+
+
+def _contextual_target(tokens: list, idx: int, upper: str) -> int | None:
+    """The target for a word the rest of the statement gives a meaning to, or
+    None when this word is not one of those and the table can answer."""
+    if upper == "AS":
+        return TARGET_TABLE_AND_COLUMN if _names_a_window(tokens, idx) else None
+    if upper == "UPDATE":
+        # MySQL spells an upsert "ON DUPLICATE KEY UPDATE <column> = ...".
+        if idx > 0 and tokens[idx - 1].text.upper() == "KEY":
+            return TARGET_COLUMN
+        return None
+    if upper in ("FIRST", "NEXT"):
+        # Either word is a row count after FETCH and a name anywhere else.
+        if idx > 0 and tokens[idx - 1].token_type == TokenType.FETCH:
+            return TARGET_TABLE_AND_COLUMN
+        return None
+    if upper not in ("ON", "USING"):
+        return None
+    if upper == "ON" and idx + 1 < len(tokens) \
+            and tokens[idx + 1].text.upper() == "CONFLICT":
+        return TARGET_COLUMN
+    joined = _join_kind_before(tokens, idx)
+    if upper == "USING":
+        # A merge's USING names the relation it merges from, a join's names
+        # the columns the two sides share.
+        return TARGET_COLUMN if joined == TokenType.JOIN else TARGET_SCHEMA_AND_TABLE_ALL
+    return TARGET_TABLE_AND_COLUMN if joined else TARGET_SCHEMA_AND_TABLE_ALL
+
+
+def _join_kind_before(tokens: list, idx: int) -> TokenType | None:
+    """The kind of thing that put two relations together before idx: a join, a
+    merge, or None.
+
+    A joined subquery holds a statement of its own, so what is inside a paren
+    is skipped rather than read as this statement's words.
+    """
+    for i in _walk_back(tokens, idx):
+        if tokens[i].token_type in (TokenType.JOIN, TokenType.MERGE):
+            return tokens[i].token_type
+    return None
+
+
+def _names_a_window(tokens: list, alias_idx: int) -> bool:
+    """Report the AS at alias_idx as naming a window rather than a CTE."""
+    if tokens[alias_idx].token_type != TokenType.ALIAS:
+        return False
+    for i in _walk_back(tokens, alias_idx):
+        if tokens[i].token_type == TokenType.WINDOW:
+            return True
+        if tokens[i].token_type in (TokenType.WITH, TokenType.FROM):
+            return False
+    return False
+
+
+def _walk_back(tokens: list, idx: int):
+    """The indexes before idx that belong to this statement and this nesting,
+    nearest first, ending with the word the statement begins with.
+
+    A parenthesised group is skipped whole, since a statement inside one is not
+    the statement the caret is in. The opening word is yielded because it can
+    be the answer: a merge is what puts two relations together in a MERGE.
+    """
+    depth = 0
+    for i in range(idx - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+            continue
+        if token_type == TokenType.L_PAREN:
+            if depth > 0:
+                depth -= 1
+            continue
+        if depth > 0:
+            continue
+        if token_type == TokenType.SEMICOLON:
+            return
+        yield i
+        if tokens[i].text.upper() in _STATEMENT_WORDS:
+            return
 
 
 def _reads_as_a_name(tokens: list, idx: int) -> bool:
@@ -288,11 +376,14 @@ def _detect_keyword_context(tokens: list) -> int:
             continue
 
         if not _reads_as_a_name(tokens, i):
+            contextual = _contextual_target(tokens, i, upper)
+            if contextual is not None:
+                return contextual
             for kw_text, target in _KEYWORD_MATCHERS:
                 if upper == kw_text:
                     return target
 
-        if upper in ("SELECT", "UPDATE", "INSERT", "DELETE", "INSERT INTO"):
+        if upper in _STATEMENT_WORDS and upper != "WITH":
             break
 
         i -= 1
