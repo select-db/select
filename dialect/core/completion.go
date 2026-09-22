@@ -398,6 +398,8 @@ var keywordGroups = map[string]map[string]bool{
 		"EXTENSION", "ROLE", "USER", "EVENT",
 	),
 	"conflict_target": setOf("CONFLICT", "DUPLICATE KEY UPDATE"),
+	// How strongly a query locks the rows it reads.
+	"lock_strength": setOf("UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"),
 	// What an item may open with, offered beside the names rather than in
 	// their place. A SELECT list takes two more, which say how it is read.
 	"expression_start": expressionStartWords,

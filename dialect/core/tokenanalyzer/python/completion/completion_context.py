@@ -532,6 +532,7 @@ _WORD_FOLLOWERS = {
     "UNION":     "set_operand",
     "EXCEPT":    "set_operand",
     "INTERSECT": "set_operand",
+    "FOR":       "lock_strength",
     "CREATE":    "object_kind",
     "DROP":      "object_kind",
     "ALTER":     "object_kind",
@@ -615,26 +616,7 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
         tokens = tokens[:-1]
         last = tokens[-1]
 
-    word = last.text.upper()
-    if word in ("ALL", "DISTINCT") and len(tokens) >= 2 \
-            and tokens[-2].text.upper() in _SET_OPERATIONS:
-        return "query_word"
-    if word == "ON" and _statement_word(tokens) == "INSERT":
-        # A join's ON takes a predicate; an INSERT's takes the clause that
-        # says what to do with a row that is already there.
-        return "conflict_target"
-    if word == "NOT":
-        before = tokens[-2] if len(tokens) >= 2 else None
-        if before is not None and before.token_type == TokenType.IS:
-            # "IS NOT " tests the same things "IS " does, less the NOT it has.
-            return "is_not_test"
-        if before is not None and (_is_identifier_token(before)
-                                   or before.token_type == TokenType.R_PAREN):
-            # "c1 NOT " tests the name before it; a NOT opening a predicate
-            # negates whatever is written next instead.
-            return "not_test"
-        return _opening_an_item(clause, last)
-    waiting = _WORD_FOLLOWERS.get(word)
+    waiting = _word_waiting(tokens, clause, last)
     if waiting:
         return waiting
 
@@ -673,6 +655,33 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     if group == "predicate" and _compared_since_the_clause(tokens):
         return _in_the_statement(group, tokens)
     return _opening_an_item(clause, last)
+
+
+def _word_waiting(tokens: list, clause: Clause, last) -> str:
+    """The group a word that begins something without finishing it waits for,
+    or "" when the last word finishes nothing on its own."""
+    word = last.text.upper()
+    if word in ("ALL", "DISTINCT") and len(tokens) >= 2 \
+            and tokens[-2].text.upper() in _SET_OPERATIONS:
+        return "query_word"
+    if word == "ON" and _statement_word(tokens) == "INSERT":
+        # A join's ON takes a predicate; an INSERT's takes the clause that
+        # says what to do with a row that is already there.
+        return "conflict_target"
+    if word == "NOT":
+        before = tokens[-2] if len(tokens) >= 2 else None
+        if before is not None and before.token_type == TokenType.IS:
+            # "IS NOT " tests the same things "IS " does, less the NOT it has.
+            return "is_not_test"
+        if before is not None and (_is_identifier_token(before)
+                                   or before.token_type == TokenType.R_PAREN):
+            # "c1 NOT " tests the name before it; a NOT opening a predicate
+            # negates whatever is written next instead.
+            return "not_test"
+        return _opening_an_item(clause, last)
+    return _WORD_FOLLOWERS.get(word, "")
+
+
 def _opening_an_item(clause: Clause, last) -> str:
     """The words an item may open with, where nothing of it is written yet. A
     SELECT list takes two more, which say how the whole list is read."""

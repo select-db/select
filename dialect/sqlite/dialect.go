@@ -192,7 +192,9 @@ func (d *Dialect) KeywordsOutsideGroup() map[string][]string {
 		"statement":       {"SET"},
 		"delete_relation": {"USING"},
 		"set_operand":     {"TABLE"},
-		"query_word":      {"TABLE"},
+		// SQLite locks a whole database and reads no FOR UPDATE.
+		"lock_strength": {"UPDATE"},
+		"query_word":    {"TABLE"},
 	}
 }
 

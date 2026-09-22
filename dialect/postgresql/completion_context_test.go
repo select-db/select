@@ -100,6 +100,7 @@ func TestKeywordGroupWords(t *testing.T) {
 			"ROLE", "USER",
 		}},
 		{"conflict_target", []string{"CONFLICT"}},
+		{"lock_strength", []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"}},
 		{"expression_start", []string{
 			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
 		}},
