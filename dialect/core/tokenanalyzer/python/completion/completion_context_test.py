@@ -2,8 +2,10 @@
 from completion.completion_context import (
     TARGET_ALL,
     TARGET_COLUMN,
+    TARGET_ENUM_VALUE,
     TARGET_SCHEMA_AND_TABLE_ALL,
     TARGET_TABLE_AND_COLUMN,
+    detect_completion_context,
     _detect_keyword_context,
     _detect_setting_context,
     _detect_value_position,
@@ -67,8 +69,16 @@ class TestCallParen:
         tokens, _, _ = _at_caret("SELECT * FROM t1 WHERE lower(|)")
         assert _detect_keyword_context(tokens) & TARGET_COLUMN
 
-    def test_a_paren_a_keyword_opens_is_still_a_nested_query(self):
+    def test_an_in_list_keeps_its_clause(self):
         tokens, _, _ = _at_caret("SELECT * FROM t1 WHERE c1 IN (|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_comparison_opens_a_query(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 WHERE c1 = (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_quantified_comparison_opens_a_query(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 WHERE c1 = ANY (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
 
     def test_a_word_of_the_syntax_before_a_paren_is_not_a_call(self):
@@ -143,9 +153,9 @@ class TestValuePosition:
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN ('|')")
         assert _detect_value_position(tokens, caret).quoted
 
-    def test_an_in_list_says_so(self):
+    def test_an_in_list_is_a_value_slot(self):
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN (|")
-        assert _detect_value_position(tokens, caret).in_list
+        assert _detect_value_position(tokens, caret).column == {"name": "c1"}
 
     def test_a_typed_prefix_is_still_a_value_slot(self):
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 = ac|")
@@ -153,15 +163,21 @@ class TestValuePosition:
 
     def test_a_typed_prefix_in_an_in_list_is_still_a_value_slot(self):
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN (ac|")
-        assert _detect_value_position(tokens, caret).in_list
+        assert _detect_value_position(tokens, caret).column == {"name": "c1"}
 
     def test_a_finished_word_is_not_a_typed_prefix(self):
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 = ac |")
         assert _detect_value_position(tokens, caret).column is None
 
-    def test_a_plain_slot_does_not(self):
-        tokens, _, caret = _at_caret("UPDATE t SET c1 = |")
-        assert not _detect_value_position(tokens, caret).in_list
+    def test_an_in_list_offers_its_clause_as_well_as_values(self):
+        sql = "SELECT * FROM t1 WHERE c1 IN ("
+        targets = detect_completion_context(sql, 1, len(sql), ["main"], "postgres")["targets"]
+        assert targets == TARGET_ENUM_VALUE | TARGET_TABLE_AND_COLUMN
+
+    def test_inside_a_literal_offers_values_alone(self):
+        sql = "SELECT * FROM t1 WHERE c1 IN ('"
+        targets = detect_completion_context(sql, 1, len(sql), ["main"], "postgres")["targets"]
+        assert targets == TARGET_ENUM_VALUE
 
 
 class TestNonTriggers:

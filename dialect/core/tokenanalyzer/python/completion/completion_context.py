@@ -82,10 +82,10 @@ def detect_completion_context(
                     preceding_column = slot.column
                     value_position = True
                     targets = TARGET_ENUM_VALUE
-                    # An expression fits a plain value slot too, so the clause
-                    # still says what else may be written. An IN list's paren
-                    # reads as a nested query, whose targets are its own.
-                    if not slot.quoted and not slot.in_list:
+                    # Only inside a literal is a value the one thing that fits.
+                    # Anywhere else an expression does too, so the clause still
+                    # says what else may be written.
+                    if not slot.quoted:
                         targets |= keyword_ctx
 
     return {
@@ -171,43 +171,50 @@ def _detect_setting_context(tokens: list, sql: str, caret_offset: int) -> bool:
 
 # --- Keyword context detection ---
 
-# (keyword_text, target, top_level_only). First match wins.
+# (keyword_text, target). First match wins.
 # SQLGlot combines compound keywords into single tokens.
-_KEYWORD_MATCHERS: list[tuple[str, int, bool]] = [
-    ("ORDER BY",    TARGET_TABLE_AND_COLUMN, False),
-    ("GROUP BY",    TARGET_TABLE_AND_COLUMN, False),
-    ("INSERT INTO", TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("AS",          0, False),
-    ("AND",         TARGET_TABLE_AND_COLUMN, False),
-    ("OR",          TARGET_TABLE_AND_COLUMN, False),
-    ("HAVING",      TARGET_TABLE_AND_COLUMN, False),
-    ("WHERE",       TARGET_TABLE_AND_COLUMN, False),
-    ("ON",          TARGET_TABLE_AND_COLUMN, False),
-    ("FROM",        TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("USING",       TARGET_COLUMN, False),
-    ("INNER",       TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("LEFT",        TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("RIGHT",       TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("FULL",        TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("CROSS",       TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("NATURAL",     TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("JOIN",        TARGET_SCHEMA_AND_TABLE_ALL, False),
-    ("SET",         TARGET_COLUMN, False),
-    # A row count takes an expression, so a column stands there; a relation
-    # never does.
-    ("LIMIT",       TARGET_TABLE_AND_COLUMN, False),
-    ("OFFSET",      TARGET_TABLE_AND_COLUMN, False),
-    ("VALUES",      TARGET_COLUMN, False),
-    ("SELECT",      TARGET_ALL, True),
-    ("UPDATE",      TARGET_SCHEMA_AND_TABLE_ALL, True),
+_KEYWORD_MATCHERS: list[tuple[str, int]] = [
+    ("ORDER BY",    TARGET_TABLE_AND_COLUMN),
+    ("GROUP BY",    TARGET_TABLE_AND_COLUMN),
+    ("INSERT INTO", TARGET_SCHEMA_AND_TABLE_ALL),
+    ("AS",          0),
+    ("AND",         TARGET_TABLE_AND_COLUMN),
+    ("OR",          TARGET_TABLE_AND_COLUMN),
+    ("HAVING",      TARGET_TABLE_AND_COLUMN),
+    ("WHERE",       TARGET_TABLE_AND_COLUMN),
+    ("ON",          TARGET_TABLE_AND_COLUMN),
+    ("FROM",        TARGET_SCHEMA_AND_TABLE_ALL),
+    ("USING",       TARGET_COLUMN),
+    ("INNER",       TARGET_SCHEMA_AND_TABLE_ALL),
+    ("LEFT",        TARGET_SCHEMA_AND_TABLE_ALL),
+    ("RIGHT",       TARGET_SCHEMA_AND_TABLE_ALL),
+    ("FULL",        TARGET_SCHEMA_AND_TABLE_ALL),
+    ("CROSS",       TARGET_SCHEMA_AND_TABLE_ALL),
+    ("NATURAL",     TARGET_SCHEMA_AND_TABLE_ALL),
+    ("JOIN",        TARGET_SCHEMA_AND_TABLE_ALL),
+    ("SET",         TARGET_COLUMN),
+    # A row count takes an expression, so a column stands there. Relations are
+    # listed only to qualify one, never to be selected from.
+    ("LIMIT",       TARGET_TABLE_AND_COLUMN),
+    ("OFFSET",      TARGET_TABLE_AND_COLUMN),
+    ("VALUES",      TARGET_COLUMN),
+    ("SELECT",      TARGET_ALL),
+    ("UPDATE",      TARGET_SCHEMA_AND_TABLE_ALL),
 ]
 
 
 # The tokens a nested query may follow. A paren after any of them opens one;
 # a paren anywhere else is part of an expression.
+#
+# IN is not one of them. All three of a value, a column and a subquery are
+# legal in an IN list, so the clause around it says more than "a query starts
+# here" would.
 _QUERY_OPENING_TOKENS = {
-    TokenType.FROM, TokenType.JOIN, TokenType.IN, TokenType.EXISTS,
+    TokenType.FROM, TokenType.JOIN, TokenType.EXISTS,
     TokenType.ALIAS, TokenType.UNION, TokenType.INTERSECT, TokenType.EXCEPT,
+    TokenType.ANY, TokenType.ALL, TokenType.SOME,
+    TokenType.EQ, TokenType.NEQ, TokenType.GT, TokenType.LT,
+    TokenType.GTE, TokenType.LTE,
 }
 
 
@@ -225,12 +232,26 @@ def _opens_query(tokens: list, paren_idx: int) -> bool:
     return i >= 0 and tokens[i].token_type == TokenType.ALIAS
 
 
+# What a word is followed by when it names a column rather than opening a
+# clause: an assignment, a comparison, or the dot of a qualified name.
+_NAME_FOLLOWERS = {
+    TokenType.EQ, TokenType.NEQ, TokenType.GT, TokenType.LT,
+    TokenType.GTE, TokenType.LTE, TokenType.DOT,
+}
+
+
+def _reads_as_a_name(tokens: list, idx: int) -> bool:
+    """Report the token at idx as a column name rather than a clause word.
+    The tokenizer has no context, so "UPDATE t SET limit = 1" gives LIMIT the
+    same token as a row count does, and the clause behind it would be lost."""
+    return idx + 1 < len(tokens) and tokens[idx + 1].token_type in _NAME_FOLLOWERS
+
+
 def _detect_keyword_context(tokens: list) -> int:
     if not tokens:
         return TARGET_SCHEMA_AND_TABLE_ALL
 
     paren_depth = 0
-    seen_close_paren = False
     i = len(tokens) - 1
 
     if i >= 0 and tokens[i].token_type == TokenType.DOT:
@@ -243,7 +264,6 @@ def _detect_keyword_context(tokens: list) -> int:
 
         if tt == TokenType.R_PAREN:
             paren_depth += 1
-            seen_close_paren = True
             i -= 1
             continue
 
@@ -252,8 +272,6 @@ def _detect_keyword_context(tokens: list) -> int:
                 paren_depth -= 1
                 i -= 1
                 continue
-            if i > 0 and tokens[i - 1].text.upper() == "VALUES":
-                return TARGET_COLUMN
             if _opens_query(tokens, i):
                 return TARGET_SCHEMA_AND_TABLE_ALL
             # An expression's paren -- a call's arguments, a window spec, a
@@ -269,14 +287,12 @@ def _detect_keyword_context(tokens: list) -> int:
             i -= 1
             continue
 
-        for kw_text, target, top_level_only in _KEYWORD_MATCHERS:
-            if top_level_only and paren_depth > 0:
-                continue
-            if upper == kw_text:
-                return target
+        if not _reads_as_a_name(tokens, i):
+            for kw_text, target in _KEYWORD_MATCHERS:
+                if upper == kw_text:
+                    return target
 
-        if paren_depth == 0 and upper in ("SELECT", "UPDATE", "INSERT", "DELETE",
-                                           "INSERT INTO"):
+        if upper in ("SELECT", "UPDATE", "INSERT", "DELETE", "INSERT INTO"):
             break
 
         i -= 1
@@ -323,6 +339,13 @@ def _detect_insert_column_list(tokens: list) -> str:
 
 # --- Preceding column detection ---
 
+def _caret_touches(tok, caret_offset: int) -> bool:
+    """Report the caret as still on this token, so what it holds is being
+    typed. end is the last character's index, so the position after the token
+    is end + 1, and a caret there is still on it."""
+    return tok.end + 1 >= caret_offset
+
+
 def _detect_preceding_column(tokens: list, caret_offset: int) -> dict | None:
     """Return the column ref if the last token is a finished identifier, else None."""
     if not tokens:
@@ -332,7 +355,7 @@ def _detect_preceding_column(tokens: list, caret_offset: int) -> dict | None:
     if not _is_identifier_token(last):
         return None
 
-    if last.end + 1 >= caret_offset:
+    if _caret_touches(last, caret_offset):
         return None
 
     name = _normalize_identifier(last.text)
@@ -369,10 +392,9 @@ class ValueSlot(NamedTuple):
 
     column: dict | None
     quoted: bool
-    in_list: bool
 
 
-_NO_VALUE_SLOT = ValueSlot(None, False, False)
+_NO_VALUE_SLOT = ValueSlot(None, False)
 
 
 def _detect_value_position(tokens: list, caret_offset: int) -> ValueSlot:
@@ -384,28 +406,28 @@ def _detect_value_position(tokens: list, caret_offset: int) -> ValueSlot:
 
     last = tokens[i]
     if last.token_type == TokenType.STRING:
-        if not (last.start < caret_offset <= last.end + 1):
+        if not (last.start < caret_offset and _caret_touches(last, caret_offset)):
             return _NO_VALUE_SLOT
         quoted = True
         i -= 1
-    elif _is_identifier_token(last) and last.end + 1 >= caret_offset:
-        # A word the caret is still inside is what is being typed, not a value
-        # already written, so the slot is the one before it. Without this the
-        # first keystroke of a value loses the column's values.
+    elif _is_identifier_token(last) and _caret_touches(last, caret_offset):
+        # A word the caret is still inside is being typed, not a value already
+        # written, so the slot is the one before it. Without this the first
+        # keystroke of a value loses the column's values.
         i -= 1
 
     if i < 0:
         return _NO_VALUE_SLOT
 
     if tokens[i].token_type in (TokenType.EQ, TokenType.NEQ):
-        return ValueSlot(_column_ref_at(tokens, i - 1), quoted, False)
+        return ValueSlot(_column_ref_at(tokens, i - 1), quoted)
 
     j = i
     while j >= 0 and tokens[j].token_type in (TokenType.STRING, TokenType.COMMA):
         j -= 1
     if j >= 0 and tokens[j].token_type == TokenType.L_PAREN \
             and j >= 1 and tokens[j - 1].token_type == TokenType.IN:
-        return ValueSlot(_column_ref_at(tokens, j - 2), quoted, True)
+        return ValueSlot(_column_ref_at(tokens, j - 2), quoted)
 
     return _NO_VALUE_SLOT
 

@@ -441,9 +441,22 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
-			Name: "an IN list offers values, not relations",
+			Name: "an IN list offers values and its clause, not every relation",
 			SQL:  "SELECT * FROM t1 WHERE c2 IN (|",
-			Expected: nil,
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a scalar subquery after a comparison",
+			SQL:  "SELECT * FROM t1 WHERE c1 = (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
 		},
 		{
 			Name: "a grouping paren in a WHERE",
