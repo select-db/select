@@ -38,6 +38,11 @@ class _ScopeBounds:
                 self.paren_pairs[open_off] = t.start
                 self.paren_pairs[t.start] = open_off
 
+        # Where every parenthesis stands, so a depth can be counted the way the
+        # caller counts the caret's: over the text, not over sqlglot's scopes.
+        self._opens = [t.start for t in tokens if t.token_type == TokenType.L_PAREN]
+        self._closes = [t.start for t in tokens if t.token_type == TokenType.R_PAREN]
+
         # Semicolons
         self.semicolons = [t.start for t in tokens if t.token_type == TokenType.SEMICOLON]
 
@@ -58,6 +63,30 @@ class _ScopeBounds:
                 return i, close
             i += 1
         return -1, -1
+
+    def enclosing_paren(self, offset: int) -> int:
+        """The innermost parenthesis still open at this offset, or -1. The
+        nearest one before it is a different question: a CTE body closes
+        before the statement that reads it begins."""
+        enclosing = -1
+        for start in self._opens:
+            if start >= offset:
+                break
+            close = self.paren_pairs.get(start, -1)
+            if close < 0 or close > offset:
+                enclosing = start
+        return enclosing
+
+    def depth_at(self, offset: int) -> int:
+        """How many parentheses stand open before this offset."""
+        depth = 0
+        for start in self._opens:
+            if start < offset:
+                depth += 1
+        for start in self._closes:
+            if start < offset and depth > 0:
+                depth -= 1
+        return depth
 
     def find_statement_end(self, offset: int) -> int:
         """Find the semicolon offset that ends the statement containing offset, or -1."""
@@ -195,7 +224,7 @@ def _collect_from_scopes(
     for scope in scopes:
         if scope.scope_type not in (ScopeType.CTE, ScopeType.UNION):
             continue
-        nesting = _nesting_level(scope)
+        nesting = _nesting_level(scope, bounds)
         cte_open, cte_close = _owning_cte_range(scope)
         # Scope starts one char AFTER the opening paren (inside the body)
         cte_body_start = cte_open + 1 if cte_open >= 0 else -1
@@ -243,7 +272,7 @@ def _collect_from_scopes(
     for scope in scopes:
         if scope.scope_type != ScopeType.ROOT:
             continue
-        nesting = _nesting_level(scope)
+        nesting = _nesting_level(scope, bounds)
         root_start, root_end = _root_scope_range(scope)
         for alias, source in _ordered_sources(scope):
             if isinstance(source, Scope):
@@ -277,12 +306,12 @@ def _collect_from_scopes(
     for scope in reversed(scopes):
         if scope.scope_type in (ScopeType.CTE, ScopeType.UNION, ScopeType.ROOT):
             continue
-        nesting = _nesting_level(scope)
+        nesting = _nesting_level(scope, bounds)
         scope_start, scope_end = -1, -1
         if bounds:
             first_meta = _first_token_meta(scope.expression)
             if first_meta:
-                open_paren = bounds.sql.rfind("(", 0, first_meta["start"])
+                open_paren = bounds.enclosing_paren(first_meta["start"])
                 if open_paren >= 0:
                     scope_start = open_paren + 1
                     scope_end = bounds.paren_pairs.get(open_paren, -1)
@@ -544,10 +573,19 @@ def _first_token_meta(expr: exp.Expression) -> dict | None:
     return None
 
 
-def _nesting_level(scope) -> int:
-    """Compute nesting depth from the scope's parent chain."""
+def _nesting_level(scope, bounds=None) -> int:
+    """How deep in parentheses this scope sits.
+
+    The caller compares this against the parentheses standing open at the
+    caret, so it is counted over the text too. Sqlglot's own scope tree is a
+    different shape: a LATERAL adds a level the text does not have.
+    """
     if scope.scope_type in (ScopeType.ROOT, ScopeType.UNION):
         return 0
+    if bounds:
+        first_meta = _first_token_meta(scope.expression)
+        if first_meta:
+            return max(bounds.depth_at(first_meta["start"]), 1)
     depth = 0
     s = scope
     while s.parent:
