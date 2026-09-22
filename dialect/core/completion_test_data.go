@@ -524,6 +524,71 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			Name: "RETURNING names the columns of the row",
+			SQL:  "DELETE FROM t1 RETURNING |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a fetch row count is not a relation slot",
+			SQL:  "SELECT * FROM t1 FETCH FIRST |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a window definition is not a CTE body",
+			SQL:  "SELECT c1 FROM t1 WINDOW w AS (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "EXPLAIN does not hide the statement under it",
+			SQL:  "EXPLAIN SELECT | FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a join over a subquery still names a join column",
+			SQL:  "SELECT * FROM t1 JOIN (SELECT c1 FROM t2) s ON |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "s"},
+				{Type: CandidateTypeColumn, Text: "t1.c1"},
+				{Type: CandidateTypeColumn, Text: "s.c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a later window definition is not a CTE body",
+			SQL:  "SELECT c1 FROM t1 WINDOW w AS (ORDER BY c1), v AS (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "EXPLAIN does not hide a WHERE either",
+			SQL:  "EXPLAIN SELECT c1 FROM t1 WHERE |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
 			Name: "DISTINCT select list completion",
 			SQL:  "SELECT DISTINCT | FROM t1",
 			Expected: []CompletionTestExpectation{

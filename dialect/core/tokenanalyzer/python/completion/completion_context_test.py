@@ -140,6 +140,74 @@ class TestRowCount:
         assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
 
 
+class TestContextualWords:
+    def test_a_join_using_names_columns(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 JOIN t2 USING (|")
+        assert _detect_keyword_context(tokens) == TARGET_COLUMN
+
+    def test_a_delete_using_names_a_relation(self):
+        tokens, _, _ = _at_caret("DELETE FROM t1 USING |")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_merge_using_names_a_relation(self):
+        tokens, _, _ = _at_caret("MERGE INTO t1 USING |")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_join_over_a_subquery_still_names_columns(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 JOIN (SELECT 1 AS i) s ON |")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_join_does_not_reach_across_a_statement(self):
+        tokens, _, _ = _at_caret("SELECT * FROM a JOIN b ON a.i=b.i; CREATE INDEX i ON |")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_later_window_definition_is_not_a_cte_body(self):
+        tokens, _, _ = _at_caret("SELECT c1 FROM t1 WINDOW w AS (ORDER BY c1), v AS (|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_later_cte_body_is_still_one(self):
+        tokens, _, _ = _at_caret("WITH w AS (SELECT 1), v AS (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_mysql_upsert_names_columns(self):
+        tokens, _, _ = _at_caret(
+            "INSERT INTO t1 (c1) VALUES (1) ON DUPLICATE KEY UPDATE |", "mysql")
+        assert _detect_keyword_context(tokens) == TARGET_COLUMN
+
+    def test_a_merge_on_names_columns(self):
+        tokens, _, _ = _at_caret("MERGE INTO t1 USING t2 ON |")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_grant_on_names_a_relation(self):
+        tokens, _, _ = _at_caret("GRANT SELECT ON |")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_conflict_target_names_columns(self):
+        tokens, _, _ = _at_caret("INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (|")
+        assert _detect_keyword_context(tokens) == TARGET_COLUMN
+
+    def test_fetch_first_is_a_row_count(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 FETCH FIRST |")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_first_alone_is_not_a_row_count(self):
+        sql = "INSERT INTO t1 (first, "
+        targets = detect_completion_context(sql, 1, len(sql), ["main"], "postgres")["targets"]
+        assert targets == TARGET_COLUMN
+
+    def test_a_window_definition_is_not_a_cte_body(self):
+        tokens, _, _ = _at_caret("SELECT c1 FROM t1 WINDOW w AS (|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_cte_body_is_still_one(self):
+        tokens, _, _ = _at_caret("WITH w AS (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_returning_names_columns(self):
+        tokens, _, _ = _at_caret("DELETE FROM t1 RETURNING |")
+        assert _detect_keyword_context(tokens) == TARGET_COLUMN
+
+
 class TestValuePosition:
     def test_inside_a_literal_is_quoted(self):
         tokens, _, caret = _at_caret("UPDATE t SET c1 = '|'")
