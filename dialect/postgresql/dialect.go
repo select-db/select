@@ -420,6 +420,10 @@ func defaultKeywords() []string {
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
 		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
 		"FETCH", "ONLY", "VALUES", "RETURNING",
+		// The words a statement opens with, which is what an empty buffer takes.
+		"CREATE", "ALTER", "DROP", "TRUNCATE", "EXPLAIN", "MERGE",
+		"GRANT", "REVOKE", "SET", "SHOW", "VACUUM", "ANALYZE",
+		"BEGIN", "COMMIT", "ROLLBACK", "CALL",
 	}
 }
 

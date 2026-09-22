@@ -3,6 +3,7 @@ package core_references_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -164,6 +165,51 @@ func TestCompletion(t *testing.T) {
 					}
 					if len(filtered) != len(expected) {
 						t.Errorf("got %d candidates, want %d", len(filtered), len(expected))
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestCompletionKeywords runs the keyword cases across all dialects. The words
+// are the dialect's own, so one table covers three vocabularies.
+func TestCompletionKeywords(t *testing.T) {
+	analyzer := testutil.NewTestAnalyzer(t)
+	defer analyzer.Close()
+
+	for _, di := range dialects {
+		t.Run(di.name, func(t *testing.T) {
+			di.dialect.SetAnalyzer(analyzer)
+
+			meta := core.GetCompletionTestMetadata()
+			meta.DefaultSchema = di.defaultSchema
+			if len(meta.Schemas) > 0 {
+				meta.Schemas[0].Name = di.defaultSchema
+			}
+			openers := core.StatementOpenersOf(di.dialect)
+			if len(openers) == 0 {
+				t.Fatalf("%s declares no word a statement can open with", di.name)
+			}
+
+			for _, tc := range core.GetCompletionKeywordCases(openers) {
+				t.Run(tc.Name, func(t *testing.T) {
+					text, caretCharPos := removeCaret(tc.SQL)
+					caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
+
+					got, err := di.dialect.Complete(context.Background(), text, caretLine, caretOffset, meta)
+					if err != nil {
+						t.Fatalf("complete: %v", err)
+					}
+
+					var words []string
+					for _, c := range got {
+						if c.Type == core.CandidateTypeKeyword {
+							words = append(words, c.Text)
+						}
+					}
+					if !slices.Equal(words, tc.Expected) {
+						t.Errorf("keywords = %v, want %v", words, tc.Expected)
 					}
 				})
 			}

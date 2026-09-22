@@ -3,6 +3,7 @@ from completion.completion_context import (
     TARGET_ALL,
     TARGET_COLUMN,
     TARGET_ENUM_VALUE,
+    TARGET_KEYWORD,
     TARGET_SCHEMA_AND_TABLE_ALL,
     TARGET_TABLE_AND_COLUMN,
     detect_completion_context,
@@ -259,6 +260,44 @@ class TestInsideACall:
     def test_a_subquery_in_from_still_takes_relations(self):
         tokens, _, _ = _at_caret("SELECT * FROM (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+
+class TestStatementStart:
+    def _targets(self, sql_with_caret: str) -> int:
+        return _field(sql_with_caret, "targets")
+
+    def test_an_empty_buffer(self):
+        assert self._targets("|") == TARGET_KEYWORD
+
+    def test_whitespace_alone(self):
+        assert self._targets("   |") == TARGET_KEYWORD
+
+    def test_after_a_semicolon(self):
+        assert self._targets("SELECT 1; |") == TARGET_KEYWORD
+
+    def test_after_a_comment(self):
+        assert self._targets("-- a note\n|") == TARGET_KEYWORD
+
+    def test_a_select_list_is_not_one(self):
+        assert self._targets("SELECT |") != TARGET_KEYWORD
+
+    def test_a_from_clause_is_not_one(self):
+        assert self._targets("SELECT * FROM |") != TARGET_KEYWORD
+
+    def test_the_opening_word_being_typed_is_still_one(self):
+        assert self._targets("SEL|") == TARGET_KEYWORD
+
+    def test_one_letter_is_still_one(self):
+        assert self._targets("S|") == TARGET_KEYWORD
+
+    def test_a_typed_opener_after_a_semicolon(self):
+        assert self._targets("SELECT 1; SEL|") == TARGET_KEYWORD
+
+    def test_a_finished_opener_is_not_one(self):
+        assert self._targets("SELECT |") != TARGET_KEYWORD
+
+    def test_a_column_being_typed_is_not_one(self):
+        assert self._targets("SELECT c|") != TARGET_KEYWORD
 
 
 class TestColumnListRelation:

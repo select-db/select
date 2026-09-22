@@ -19,6 +19,7 @@ _ALL_FLAG       = 1 << 4
 TARGET_OPERATOR = 1 << 5
 TARGET_ENUM_VALUE = 1 << 6
 TARGET_SETTING = 1 << 7
+TARGET_KEYWORD = 1 << 8
 
 TARGET_SCHEMA_AND_TABLE      = TARGET_SCHEMA | TARGET_TABLE
 TARGET_SCHEMA_AND_TABLE_ALL  = TARGET_SCHEMA | TARGET_TABLE | _ALL_FLAG
@@ -52,6 +53,22 @@ def detect_completion_context(
 
     parts, caret_after_dot = _parse_qualified_parts(tokens)
     keyword_ctx = _detect_keyword_context(tokens)
+
+    if _at_a_statement_start(tokens, caret_offset):
+        # Nothing names a relation or a column yet, so the only thing that can
+        # be written is the word the statement opens with.
+        return {
+            "parts":              [],
+            "caret_after_dot":    False,
+            "targets":            TARGET_KEYWORD,
+            "schema_filter":      "",
+            "target_table":       "",
+            "keyword_context":    TARGET_KEYWORD,
+            "preceding_column":   None,
+            "column_list_relation": "",
+            "value_position":     False,
+            "shared_columns":     False,
+        }
 
     targets = keyword_ctx
     schema_filter = ""
@@ -376,6 +393,29 @@ def _narrowed_to_a_call(target: int, inside_call: bool) -> int:
     if inside_call and _offers_new_relations(target):
         return TARGET_TABLE_AND_COLUMN
     return target
+
+
+def _at_a_statement_start(tokens: list, caret_offset: int) -> bool:
+    """Whether the caret stands where a statement may begin: the buffer holds
+    nothing yet, the last thing before it ended one, or the word it opens with
+    is still being typed.
+
+    The last of those is what a caller sees most: the first keystroke of
+    SELECT must not turn the answer into every relation in the database.
+    """
+    if not tokens or tokens[-1].token_type == TokenType.SEMICOLON:
+        return True
+    written = _since_the_last_statement(tokens)
+    return (len(written) == 1 and _is_identifier_token(written[0])
+            and _caret_touches(written[0], caret_offset))
+
+
+def _since_the_last_statement(tokens: list) -> list:
+    """The tokens of the statement the caret is in."""
+    for i in range(len(tokens) - 1, -1, -1):
+        if tokens[i].token_type == TokenType.SEMICOLON:
+            return tokens[i + 1:]
+    return tokens
 
 
 def _detect_keyword_context(tokens: list) -> int:

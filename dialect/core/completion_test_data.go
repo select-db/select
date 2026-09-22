@@ -708,3 +708,44 @@ func GetCompletionCasesPostgreSQLAndMySQL(defaultSchema, identifierQuote string)
 		},
 	}
 }
+
+// CompletionKeywordCase states which words a caret can open a statement with.
+// The keyword candidates are asserted exactly, so a word a dialect does not
+// have is a failure rather than a harmless extra.
+type CompletionKeywordCase struct {
+	Name     string
+	SQL      string
+	Expected []string
+}
+
+// GetCompletionKeywordCases returns the keyword cases every dialect runs, with
+// openers naming the words that dialect declares. An empty buffer is the first
+// thing a caller sees, and it used to offer nothing at all.
+func GetCompletionKeywordCases(openers []string) []CompletionKeywordCase {
+	return []CompletionKeywordCase{
+		{Name: "an empty buffer opens a statement", SQL: "|", Expected: openers},
+		{Name: "whitespace alone opens a statement", SQL: "   |", Expected: openers},
+		{Name: "after a semicolon a statement opens again", SQL: "SELECT 1; |", Expected: openers},
+		{Name: "after a comment a statement still opens", SQL: "-- a note\n|", Expected: openers},
+		{Name: "a select list is not a statement start", SQL: "SELECT |", Expected: nil},
+		{Name: "a FROM clause is not a statement start", SQL: "SELECT * FROM |", Expected: nil},
+		{Name: "a WHERE clause is not a statement start", SQL: "SELECT * FROM t1 WHERE |", Expected: nil},
+		{Name: "a half-written statement is not a statement start", SQL: "SELECT 1; SELECT |", Expected: nil},
+		{Name: "the opening word being typed still opens one", SQL: "SEL|", Expected: openers},
+		{Name: "one letter still opens one", SQL: "S|", Expected: openers},
+		{Name: "a typed opener after a semicolon", SQL: "SELECT 1; SEL|", Expected: openers},
+		{Name: "a column being typed is not a statement start", SQL: "SELECT c|", Expected: nil},
+	}
+}
+
+// StatementOpenersOf are the words of a dialect's keyword list that can open a
+// statement, which is what the keyword cases expect to be offered.
+func StatementOpenersOf(d SQLDialect) []string {
+	var openers []string
+	for _, word := range d.GetDefaultKeywords() {
+		if statementOpeners[strings.ToUpper(word)] {
+			openers = append(openers, word)
+		}
+	}
+	return openers
+}

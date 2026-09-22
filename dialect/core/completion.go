@@ -76,6 +76,7 @@ const (
 	CompletionTargetOperator    // Operator completion (=, <>, LIKE, etc.)
 	CompletionTargetEnumValue   // Enum value completion (col = '|', col IN ('|'))
 	CompletionTargetSetting     // Runtime parameter completion (@@var, SHOW, PRAGMA)
+	CompletionTargetKeyword     // The word a statement opens with
 
 	CompletionTargetSchemaAndTable           = CompletionTargetSchema | CompletionTargetTable
 	CompletionTargetSchemaAndRelationRefOnly = CompletionTargetSchema | CompletionTargetTable | completionTargetRefOnlyFlag
@@ -135,7 +136,11 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	inScopeRefs := filterByCharScope(refs, caretOffset, nestingLevel)
 	inScopeCtes := filterByCharScope(cteTables, caretOffset, nestingLevel)
 
-	var schemas, tables, views, columns, operators, enumValues []Candidate
+	var schemas, tables, views, columns, operators, enumValues, keywords []Candidate
+
+	if ctx.Targets&CompletionTargetKeyword != 0 {
+		keywords = cs.completeStatementKeywords()
+	}
 
 	if ctx.Targets&CompletionTargetSchema != 0 {
 		schemas = cs.completeSchemas(meta, caretQuoted, reservedKeywords)
@@ -256,7 +261,39 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	all = append(all, columns...)
 	all = append(all, operators...)
 	all = append(all, enumValues...)
+	all = append(all, keywords...)
 	return all
+}
+
+// statementOpeners are the words a statement can begin with. Which of them a
+// dialect has is the dialect's own list to answer; that any of them can only
+// open a statement is the same question everywhere.
+var statementOpeners = map[string]bool{
+	"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
+	"WITH": true, "CREATE": true, "ALTER": true, "DROP": true,
+	"TRUNCATE": true, "EXPLAIN": true, "REPLACE": true, "MERGE": true,
+	"GRANT": true, "REVOKE": true, "SET": true, "SHOW": true,
+	"PRAGMA": true, "VACUUM": true, "ANALYZE": true, "BEGIN": true,
+	"COMMIT": true, "ROLLBACK": true, "CALL": true, "USE": true,
+	"ATTACH": true,
+}
+
+// completeStatementKeywords are the words this dialect can open a statement
+// with. An empty buffer used to offer nothing at all, which reads to a caller
+// exactly like a buffer with nothing to offer.
+func (cs *CompletionStrategy) completeStatementKeywords() []Candidate {
+	var keywords []Candidate
+	for _, word := range cs.dialect.GetDefaultKeywords() {
+		if !statementOpeners[strings.ToUpper(word)] {
+			continue
+		}
+		keywords = append(keywords, Candidate{
+			Type:       CandidateTypeKeyword,
+			Text:       word,
+			Definition: word,
+		})
+	}
+	return keywords
 }
 
 func charOffsetFromLineCol(sql string, line, col int) int {

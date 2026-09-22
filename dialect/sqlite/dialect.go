@@ -55,7 +55,7 @@ func NewDialect() *Dialect {
 	d := &Dialect{
 		reservedKeywords:     make(map[string]bool),
 		builtinFunctions:     []string{},
-		defaultKeywords:      []string{},
+		defaultKeywords:      defaultKeywords(),
 		quotedTokenTypes:     make(map[int]bool),
 		identifierTokenTypes: make(map[int]bool),
 		joinKeywords:         []int{},
@@ -940,4 +940,18 @@ func (l *relationRefListener) normalizeTableAlias(ctx sqlite.ITable_aliasContext
 	}
 	// If it's a keyword, return empty string
 	return "", nil // SQLite doesn't support column aliases in table aliases
+}
+
+// defaultKeywords are the words SQLite completes, the ones a statement opens
+// with among them. SQLite has no TRUNCATE, GRANT, SHOW or CALL, and the list
+// says so by leaving them out.
+func defaultKeywords() []string {
+	return []string{
+		"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "WITH", "AS",
+		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "INNER JOIN", "CROSS JOIN",
+		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
+		"VALUES", "RETURNING",
+		"CREATE", "ALTER", "DROP", "EXPLAIN", "REPLACE",
+		"PRAGMA", "VACUUM", "ANALYZE", "ATTACH", "BEGIN", "COMMIT", "ROLLBACK",
+	}
 }
