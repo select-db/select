@@ -199,10 +199,23 @@ _KEYWORD_MATCHERS: list[tuple[str, int, bool]] = [
 ]
 
 
-def _opens_cte_body(tokens: list, name_idx: int) -> bool:
-    """Report the name at name_idx as a materialization hint rather than a
-    function: only AS can precede one, and no call may stand there."""
-    i = name_idx
+# The tokens a nested query may follow. A paren after any of them opens one;
+# a paren anywhere else is part of an expression.
+_QUERY_OPENING_TOKENS = {
+    TokenType.FROM, TokenType.JOIN, TokenType.IN, TokenType.EXISTS,
+    TokenType.ALIAS, TokenType.UNION, TokenType.INTERSECT, TokenType.EXCEPT,
+}
+
+
+def _opens_query(tokens: list, paren_idx: int) -> bool:
+    """Report the paren at paren_idx as opening a nested query rather than an
+    expression. A CTE body may carry a materialization hint before its paren,
+    which reads as a name and is not a call: only AS can precede one."""
+    if paren_idx == 0:
+        return True
+    if tokens[paren_idx - 1].token_type in _QUERY_OPENING_TOKENS:
+        return True
+    i = paren_idx - 1
     while i >= 0 and (_is_identifier_token(tokens[i]) or tokens[i].token_type == TokenType.NOT):
         i -= 1
     return i >= 0 and tokens[i].token_type == TokenType.ALIAS
@@ -237,14 +250,13 @@ def _detect_keyword_context(tokens: list) -> int:
                 continue
             if i > 0 and tokens[i - 1].text.upper() == "VALUES":
                 return TARGET_COLUMN
-            # What belongs inside a call belongs in the clause around it, so a
-            # call's paren is scanned past. A CTE body's is not: it opens a
-            # query, whose targets are its own.
-            if i > 0 and _is_identifier_token(tokens[i - 1]) \
-                    and not _opens_cte_body(tokens, i - 1):
-                i -= 2
-                continue
-            return TARGET_SCHEMA_AND_TABLE_ALL
+            if _opens_query(tokens, i):
+                return TARGET_SCHEMA_AND_TABLE_ALL
+            # An expression's paren -- a call's arguments, a window spec, a
+            # grouping -- writes what the clause around it writes, so the walk
+            # continues rather than treating the paren as a new query.
+            i -= 1
+            continue
 
         if tt == TokenType.SEMICOLON:
             break
