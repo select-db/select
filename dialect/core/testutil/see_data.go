@@ -56,7 +56,7 @@ func GetSeeTestMetadata() core.Metadata {
 			},
 			// A view is a relation of its own and the rules name its columns,
 			// not the ones its body reads. Creating one takes manage, which is
-			// what keeps it from being a way around a hidden column.
+			// what this rests on.
 			Views: []core.Table{
 				{
 					Name: "v_users",
@@ -400,8 +400,7 @@ func GetSeeTestCases() []SeeCase {
 		{Name: "a write filtered on a visible column", SQL: "UPDATE contacts SET id = id + 100", Columns: []string{}},
 		{
 			// The right is held on the view, so a rule hiding a column of
-			// users says nothing about a column of v_users. Only manage can
-			// create a view, so only manage can open this door.
+			// users says nothing about a column of v_users.
 			Name:    "a view exposing the hidden column of the table under it",
 			SQL:     "SELECT email FROM v_users",
 			Columns: []string{"email"},
