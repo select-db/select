@@ -1675,7 +1675,6 @@ func (i *Inspector) addReturningFields(
 	}
 	// RETURNING hands rows back, and rows handed back are a read whatever
 	// wrote them. They stay out of the write's own fields, which are the
-	// columns it stores: a grant scoped to those must not stretch to cover a
-	// column the clause only shows.
+	// columns it stores.
 	core.AlsoPerforms(result, core.InspectOpSelect, returned)
 }
