@@ -484,6 +484,15 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			Name: "a subquery in FROM still opens a query",
+			SQL:  "SELECT * FROM (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
 			Name: "EXISTS still opens a query",
 			SQL:  "SELECT * FROM t1 WHERE EXISTS (|",
 			Expected: []CompletionTestExpectation{
