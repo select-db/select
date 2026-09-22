@@ -351,6 +351,23 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			// A parenthesis inside a literal is text. Both sides count the
+			// caret's depth and a scope's over tokens, so neither sees one.
+			Name: "a parenthesis inside a literal",
+			SQL:  "SELECT * FROM t1 WHERE c1 IN (SELECT ')' , s.| FROM t2 s)",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
+			Name: "a derived table inside a CTE body",
+			SQL:  "WITH a AS (SELECT * FROM (SELECT c1 FROM t2 y) w WHERE w.|) SELECT * FROM a",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+			},
+		},
+		{
 			// The CTE body closes before the statement that reads it begins,
 			// so the parenthesis nearest the caret is not the one around it.
 			Name: "a CTE defined inside a subquery",

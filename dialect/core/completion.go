@@ -104,6 +104,7 @@ type CompletionContext struct {
 	PrecedingColumn    *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
 	ColumnListRelation string               // Relation whose columns a parenthesised list names: an INSERT target, or one being renamed
 	KeywordGroup       string               // Which words the caret's position allows, when it allows words
+	CaretNesting       int                  // Parentheses standing open at the caret, counted over tokens
 	ValuePosition      bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
 	SharedColumns      bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
 }
@@ -134,7 +135,7 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 
 	caretOffset := charOffsetFromLineCol(sql, caretLine, caretCol)
 	caretQuoted := caretOffset > 0 && caretOffset < len(sql) && sql[caretOffset] == '"'
-	nestingLevel := countParenNesting(sql, caretOffset)
+	nestingLevel := ctx.CaretNesting
 
 	inScopeRefs := filterByCharScope(refs, caretOffset, nestingLevel)
 	inScopeCtes := filterByCharScope(cteTables, caretOffset, nestingLevel)
@@ -509,18 +510,6 @@ func charOffsetFromLineCol(sql string, line, col int) int {
 		}
 	}
 	return len(sql)
-}
-
-func countParenNesting(sql string, offset int) int {
-	level := 0
-	for i := 0; i < len(sql) && i < offset; i++ {
-		if sql[i] == '(' {
-			level++
-		} else if sql[i] == ')' && level > 0 {
-			level--
-		}
-	}
-	return level
 }
 
 func filterByCharScope(refs []RelationRef, caretOffset, maxNesting int) []RelationRef {

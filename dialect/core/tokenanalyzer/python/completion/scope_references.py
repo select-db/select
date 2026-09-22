@@ -41,7 +41,6 @@ class _ScopeBounds:
         # Where every parenthesis stands, so a depth can be counted the way the
         # caller counts the caret's: over the text, not over sqlglot's scopes.
         self._opens = [t.start for t in tokens if t.token_type == TokenType.L_PAREN]
-        self._closes = [t.start for t in tokens if t.token_type == TokenType.R_PAREN]
 
         # Semicolons
         self.semicolons = [t.start for t in tokens if t.token_type == TokenType.SEMICOLON]
@@ -65,9 +64,9 @@ class _ScopeBounds:
         return -1, -1
 
     def enclosing_paren(self, offset: int) -> int:
-        """The innermost parenthesis still open at this offset, or -1. The
-        nearest one before it is a different question: a CTE body closes
-        before the statement that reads it begins."""
+        """The innermost parenthesis still open at this offset, or -1. A CTE
+        body closes before the statement that reads it begins, so the nearest
+        one before the offset is a different question."""
         enclosing = -1
         for start in self._opens:
             if start >= offset:
@@ -78,14 +77,14 @@ class _ScopeBounds:
         return enclosing
 
     def depth_at(self, offset: int) -> int:
-        """How many parentheses stand open before this offset."""
+        """How many parentheses stand open at this offset."""
         depth = 0
         for start in self._opens:
-            if start < offset:
+            if start >= offset:
+                break
+            close = self.paren_pairs.get(start, -1)
+            if close < 0 or close > offset:
                 depth += 1
-        for start in self._closes:
-            if start < offset and depth > 0:
-                depth -= 1
         return depth
 
     def find_statement_end(self, offset: int) -> int:
@@ -176,6 +175,7 @@ def _collect_from_scopes(
                 if cte_name:
                     vtab = _build_virtual_table(
                         cte_name, scope, schema_dict, default_schema, cte_defs,
+                        bounds,
                     )
                     cte_defs[cte_name.lower()] = vtab
 
@@ -243,7 +243,7 @@ def _collect_from_scopes(
                     scope_start_offset=cte_body_start, scope_end_offset=cte_close,
                 )
                 if source_name not in seen_vtabs:
-                    vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs)
+                    vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs, bounds)
                     vtab["scope_start_offset"] = cte_body_start
                     vtab["scope_end_offset"] = cte_close
                     seen_vtabs.add(source_name)
@@ -290,7 +290,7 @@ def _collect_from_scopes(
                         scope_start_offset=root_start, scope_end_offset=root_end,
                     )
                     if source_name not in seen_vtabs:
-                        vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs)
+                        vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs, bounds)
                         vtab["scope_start_offset"] = root_start
                         vtab["scope_end_offset"] = root_end
                         vtab["nesting_level"] = 0  # available at root level
@@ -339,7 +339,7 @@ def _collect_from_scopes(
                         scope_start_offset=scope_start, scope_end_offset=scope_end,
                     )
                     if source_name not in seen_vtabs:
-                        vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs)
+                        vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs, bounds)
                         vtab["scope_start_offset"] = scope_start
                         vtab["scope_end_offset"] = scope_end
                         vtab["nesting_level"] = parent_nesting
@@ -573,25 +573,16 @@ def _first_token_meta(expr: exp.Expression) -> dict | None:
     return None
 
 
-def _nesting_level(scope, bounds=None) -> int:
-    """How deep in parentheses this scope sits.
-
-    The caller compares this against the parentheses standing open at the
-    caret, so it is counted over the text too. Sqlglot's own scope tree is a
-    different shape: a LATERAL adds a level the text does not have.
-    """
+def _nesting_level(scope, bounds) -> int:
+    """How deep in parentheses this scope sits, counted the way the caret's
+    depth is. Sqlglot's scope tree is a different shape: a LATERAL is a level
+    the text has no parenthesis for."""
     if scope.scope_type in (ScopeType.ROOT, ScopeType.UNION):
         return 0
-    if bounds:
-        first_meta = _first_token_meta(scope.expression)
-        if first_meta:
-            return max(bounds.depth_at(first_meta["start"]), 1)
-    depth = 0
-    s = scope
-    while s.parent:
-        depth += 1
-        s = s.parent
-    return max(depth, 1)
+    first_meta = _first_token_meta(scope.expression)
+    if not first_meta:
+        return 1
+    return max(bounds.depth_at(first_meta["start"]), 1)
 
 
 def _add_table_ref(
@@ -662,12 +653,20 @@ def _add_virtual_usage_ref(
     })
 
 
+def _usable_nesting(scope, bounds) -> int:
+    """The depth a virtual table can be named at: one out from its body."""
+    if not bounds or not isinstance(scope, Scope):
+        return 0
+    return max(0, _nesting_level(scope, bounds) - 1)
+
+
 def _build_virtual_table(
     name: str,
     scope_or_scope_obj,
     schema_dict: dict,
     default_schema: str,
     cte_defs: dict[str, dict],
+    bounds=None,
 ) -> dict:
     """Build a virtual table entry with inferred columns."""
     scope = scope_or_scope_obj
@@ -704,7 +703,9 @@ def _build_virtual_table(
         "database":           "",
         "alias":              name,
         "is_virtual":         True,
-        "nesting_level":      _nesting_level(scope) if isinstance(scope, Scope) else 0,
+        # A virtual table is named one level out from the body that defines
+        # it, which is the level a caret can reach it at.
+        "nesting_level":      _usable_nesting(scope, bounds),
         "line":               line,
         "col":                col,
         "end_col":            col + len(name),

@@ -31,7 +31,19 @@ TARGET_TABLE_AND_COLUMN      = TARGET_TABLE | TARGET_COLUMN
 TARGET_ALL                   = TARGET_SCHEMA | TARGET_TABLE | TARGET_COLUMN
 
 
-def _bare_context(targets: int) -> dict:
+def _parens_open(tokens: list) -> int:
+    """How many parentheses stand open at the caret. Counted over tokens, so
+    one inside a literal or a comment is text rather than nesting."""
+    depth = 0
+    for token in tokens:
+        if token.token_type == TokenType.L_PAREN:
+            depth += 1
+        elif token.token_type == TokenType.R_PAREN and depth > 0:
+            depth -= 1
+    return depth
+
+
+def _bare_context(targets: int, caret_nesting: int = 0) -> dict:
     """A context that names only what may be written, with no slot to fill."""
     return {
         "parts":              [],
@@ -45,6 +57,7 @@ def _bare_context(targets: int) -> dict:
         "value_position":     False,
         "shared_columns":     False,
         "keyword_group":      "",
+        "caret_nesting":      caret_nesting,
     }
 
 
@@ -71,13 +84,13 @@ def detect_completion_context(
 
     if _caret_in_a_comment(sql, tokens, caret_offset):
         # Nothing a writer types in a comment is SQL.
-        return _bare_context(0)
+        return _bare_context(0, _parens_open(tokens))
 
     if _writes_a_type(tokens, caret_offset):
-        return _bare_context(TARGET_TYPE)
+        return _bare_context(TARGET_TYPE, _parens_open(tokens))
 
     if _detect_setting_context(tokens, sql, caret_offset):
-        return _bare_context(TARGET_SETTING)
+        return _bare_context(TARGET_SETTING, _parens_open(tokens))
 
     parts, caret_after_dot = _parse_qualified_parts(tokens)
     clause = _walk_to_clause(tokens)
@@ -98,6 +111,7 @@ def detect_completion_context(
             "value_position":     False,
             "shared_columns":     False,
             "keyword_group":      "statement",
+            "caret_nesting":      _parens_open(tokens),
         }
 
     keyword_group = "" if parts or caret_after_dot else _keyword_group_after(
@@ -172,6 +186,7 @@ def detect_completion_context(
         "value_position":     value_position,
         "shared_columns":     shared_columns,
         "keyword_group":      keyword_group,
+        "caret_nesting":      _parens_open(tokens),
     }
 
 
