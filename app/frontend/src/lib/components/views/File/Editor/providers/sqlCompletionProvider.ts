@@ -12,18 +12,18 @@ import type * as sqllang from '$lib/bindings/selectDb/internal/sqllang/models';
  * start at 1 because the snippet provider claims 0.
  */
 const RANK_BY_KIND = new Map<number, number>([
-	[0, 1], // Text: an operator, offered only where one is the answer
 	[16, 1], // EnumMember: a value of the column being compared
 	[5, 2], // Field: a column
 	[7, 3], // Class: a table, a foreign table, a type
 	[11, 3], // Interface: a view, a materialized view
 	[2, 4], // Module: a schema
 	[14, 5], // Keyword
-	[1, 6] // Function
+	[0, 6], // Text: an operator, which shares a caret only with the words
+	[1, 7] // Function
 ]);
 
 function sortTextFor(kind: number, label: string): string {
-	return `${RANK_BY_KIND.get(kind) ?? 5}_${label.toLowerCase()}`;
+	return `${RANK_BY_KIND.get(kind) ?? 8}_${label.toLowerCase()}`;
 }
 
 export function createSqlCompletionProvider(
