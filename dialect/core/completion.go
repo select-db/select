@@ -332,6 +332,8 @@ var relationWords = setOf(
 	"UNION", "EXCEPT", "INTERSECT", "FETCH",
 )
 
+var isTestWords = setOf("NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM")
+
 var expressionStartWords = setOf(
 	"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
 )
@@ -383,7 +385,8 @@ var keywordGroups = map[string]map[string]bool{
 	// The words that begin something without finishing it: a join, a test
 	// against a name, a set operation.
 	"join_word":   setOf("JOIN", "OUTER JOIN"),
-	"is_test":     setOf("NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM"),
+	"is_test":     isTestWords,
+	"is_not_test": without(isTestWords, "NOT"),
 	"not_test":    setOf("NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS", "GLOB", "REGEXP"),
 	"set_operand": setOf("SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"),
 	"query_word":  setOf("SELECT", "VALUES", "TABLE"),

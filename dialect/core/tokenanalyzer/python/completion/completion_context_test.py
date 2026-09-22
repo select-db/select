@@ -397,8 +397,12 @@ class TestClauseFollowers:
 
     def test_is_and_not_wait_for_what_they_test(self):
         assert self._group("SELECT * FROM t1 WHERE c1 IS |") == "is_test"
-        assert self._group("SELECT * FROM t1 WHERE c1 IS NOT |") == "not_test"
+        assert self._group("SELECT * FROM t1 WHERE c1 IS NOT |") == "is_not_test"
         assert self._group("SELECT * FROM t1 WHERE c1 NOT |") == "not_test"
+
+    def test_a_not_opening_a_predicate_opens_an_item(self):
+        assert self._group("SELECT * FROM t1 WHERE NOT |") == "expression_start"
+        assert self._group("SELECT NOT |") == "expression_start"
 
     def test_a_set_operation_waits_for_a_query(self):
         assert self._group("SELECT 1 UNION |") == "set_operand"

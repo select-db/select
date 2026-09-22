@@ -795,6 +795,8 @@ func GetCompletionClauseCases() []CompletionClauseCase {
 		{"a bare CROSS too", "SELECT * FROM t1 CROSS |", "join_word"},
 		{"IS waits for what it tests", "SELECT * FROM t1 WHERE c1 IS |", "is_test"},
 		{"NOT too", "SELECT * FROM t1 WHERE c1 NOT |", "not_test"},
+		{"IS NOT keeps its own words", "SELECT * FROM t1 WHERE c1 IS NOT |", "is_not_test"},
+		{"a NOT opening a predicate opens an item", "SELECT * FROM t1 WHERE NOT |", "expression_start"},
 		{"a set operation waits for its query", "SELECT 1 UNION |", "set_operand"},
 		{"CREATE waits for what it makes", "CREATE |", "object_kind"},
 		{"DROP too", "DROP |", "object_kind"},

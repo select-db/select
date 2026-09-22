@@ -89,6 +89,7 @@ func TestKeywordGroupWords(t *testing.T) {
 		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT", "INTO"}},
 		{"join_word", []string{"JOIN"}},
 		{"is_test", []string{"NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM"}},
+		{"is_not_test", []string{"NULL", "TRUE", "FALSE", "DISTINCT FROM"}},
 		{"not_test", []string{"NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS"}},
 		{"set_operand", []string{"SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"}},
 		{"query_word", []string{"SELECT", "VALUES", "TABLE"}},

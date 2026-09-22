@@ -522,7 +522,6 @@ _WORD_FOLLOWERS = {
     "NATURAL":   "join_word",
     "OUTER":     "join_word",
     "IS":        "is_test",
-    "NOT":       "not_test",
     "UNION":     "set_operand",
     "EXCEPT":    "set_operand",
     "INTERSECT": "set_operand",
@@ -617,6 +616,17 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
         # A join's ON takes a predicate; an INSERT's takes the clause that
         # says what to do with a row that is already there.
         return "conflict_target"
+    if word == "NOT":
+        before = tokens[-2] if len(tokens) >= 2 else None
+        if before is not None and before.token_type == TokenType.IS:
+            # "IS NOT " tests the same things "IS " does, less the NOT it has.
+            return "is_not_test"
+        if before is not None and (_is_identifier_token(before)
+                                   or before.token_type == TokenType.R_PAREN):
+            # "c1 NOT " tests the name before it; a NOT opening a predicate
+            # negates whatever is written next instead.
+            return "not_test"
+        return _opening_an_item(clause, last)
     waiting = _WORD_FOLLOWERS.get(word)
     if waiting:
         return waiting
