@@ -17,6 +17,7 @@ type pyCompletionContext struct {
 	PrecedingColumn   *pyPrecedingColumnInfo `json:"preceding_column"`
 	InsertTargetTable string                 `json:"insert_target_table"`
 	ValuePosition     bool                   `json:"value_position"`
+	SharedColumns     bool                   `json:"shared_columns"`
 }
 
 type pyPrecedingColumnInfo struct {
@@ -65,6 +66,7 @@ func ParseCompletionContextFromPython(
 		KeywordContext:    resp.KeywordContext,
 		InsertTargetTable: resp.InsertTargetTable,
 		ValuePosition:     resp.ValuePosition,
+		SharedColumns:     resp.SharedColumns,
 	}
 
 	if resp.PrecedingColumn != nil {

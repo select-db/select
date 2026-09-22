@@ -589,6 +589,55 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			Name: "a join's USING list takes only a shared bare name",
+			SQL:  "SELECT * FROM t1 JOIN t2 USING (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+			},
+		},
+		{
+			Name: "a third USING joins onto what the first two made",
+			SQL:  "WITH x AS (SELECT c2, c3 FROM t1) SELECT * FROM t1 JOIN t2 USING (c1) JOIN x USING (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c2"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
+			Name: "a USING list with a side nobody knows still offers the other",
+			SQL:  "SELECT * FROM t1 JOIN nowhere USING (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a table function's arguments are values, not relations",
+			SQL:  "SELECT * FROM generate_series(|",
+			Expected: []CompletionTestExpectation{},
+		},
+		{
+			Name: "a table function joined to a table reads its columns",
+			SQL:  "SELECT * FROM t1 JOIN generate_series(|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a CTE counted once is not an ambiguous column",
+			SQL:  "WITH x AS (SELECT c2 FROM t1) SELECT | FROM x, t2",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "x"},
+				{Type: CandidateTypeTable, Text: "t2"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
 			Name: "DISTINCT select list completion",
 			SQL:  "SELECT DISTINCT | FROM t1",
 			Expected: []CompletionTestExpectation{

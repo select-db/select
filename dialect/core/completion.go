@@ -101,6 +101,7 @@ type CompletionContext struct {
 	PrecedingColumn   *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
 	InsertTargetTable string               // Table name from INSERT INTO <table> (for column list completion)
 	ValuePosition     bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
+	SharedColumns     bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
 }
 
 type CompletionStrategy struct {
@@ -229,7 +230,9 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	}
 
 	if ctx.Targets&CompletionTargetColumn != 0 {
-		if ctx.InsertTargetTable != "" {
+		if ctx.SharedColumns {
+			columns = cs.completeSharedColumns(inScopeRefs, inScopeCtes, meta, caretQuoted, reservedKeywords)
+		} else if ctx.InsertTargetTable != "" {
 			columns = cs.completeColumnsForTable(ctx.InsertTargetTable, inScopeCtes, inScopeRefs, inScopeRefs, meta, caretQuoted, reservedKeywords)
 		} else if ctx.TargetTable != "" {
 			columns = cs.completeColumnsForTable(ctx.TargetTable, inScopeCtes, inScopeRefs, inScopeRefs, meta, caretQuoted, reservedKeywords)
@@ -603,14 +606,8 @@ func (cs *CompletionStrategy) completeColumnsUnqualified(
 	shouldCheckAmbiguity := len(allTableKeys) > 1
 	columnOccurrencesByName := make(map[string]int)
 	if shouldCheckAmbiguity {
-		for _, ref := range filteredRefs {
-			cols := cs.getColumnsForRef(ref, cteMap, meta)
-			for _, col := range cols {
-				columnOccurrencesByName[col.Name]++
-			}
-		}
-		for _, cte := range filteredCteTables {
-			for _, col := range cte.Columns {
+		for _, relation := range cs.columnsPerRelation(filteredRefs, filteredCteTables, meta) {
+			for _, col := range relation {
 				columnOccurrencesByName[col.Name]++
 			}
 		}
@@ -650,6 +647,86 @@ func (cs *CompletionStrategy) completeColumnsUnqualified(
 	columns = append(columns, prefixedColumns...)
 	columns = append(columns, simpleColumns...)
 	return columns
+}
+
+// completeSharedColumns returns what a join's USING list can hold: a name the
+// relation being joined carries and the ones already joined carry too, written
+// without a qualifier, which is the only spelling the clause accepts.
+//
+// A side whose columns the metadata does not know says nothing about what the
+// join shares, so it is left out rather than emptying the answer: a caret that
+// offers nothing reads exactly like one with nothing to offer.
+func (cs *CompletionStrategy) completeSharedColumns(
+	filteredRefs []RelationRef,
+	filteredCteTables []RelationRef,
+	meta Metadata,
+	caretQuoted bool,
+	reservedKeywords map[string]bool,
+) []Candidate {
+	var known [][]Column
+	for _, side := range cs.columnsPerRelation(filteredRefs, filteredCteTables, meta) {
+		if len(side) > 0 {
+			known = append(known, side)
+		}
+	}
+	if len(known) == 0 {
+		return []Candidate{}
+	}
+
+	// The last relation is the one being joined; the ones before it are the
+	// result it joins onto, and a name on any of them is a name that result has.
+	joined := known[len(known)-1]
+	alreadyJoined := known[:len(known)-1]
+
+	var columns []Candidate
+	for _, col := range joined {
+		if len(alreadyJoined) > 0 && !cs.heldBySome(col.Name, alreadyJoined) {
+			continue
+		}
+		columns = append(columns, cs.buildColumnCandidate(col, "", "", nil, caretQuoted, reservedKeywords))
+	}
+	return columns
+}
+
+// heldBySome reports whether any side carries a column of this name, by the
+// dialect's own reading of when two identifiers are the same one.
+func (cs *CompletionStrategy) heldBySome(name string, sides [][]Column) bool {
+	normalize := cs.dialect.NormalizeIdentifier
+	wanted := normalize(name)
+	for _, side := range sides {
+		for _, col := range side {
+			if normalize(col.Name) == wanted {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// columnsPerRelation returns the columns of every relation in scope, in the
+// order the statement named them, a CTE standing in for the table it shadows.
+func (cs *CompletionStrategy) columnsPerRelation(
+	filteredRefs []RelationRef,
+	filteredCteTables []RelationRef,
+	meta Metadata,
+) [][]Column {
+	cteMap := make(map[string]*RelationRef, len(filteredCteTables))
+	for i := range filteredCteTables {
+		cteMap[filteredCteTables[i].Table] = &filteredCteTables[i]
+	}
+
+	named := make(map[string]bool, len(filteredRefs))
+	relations := make([][]Column, 0, len(filteredRefs)+len(filteredCteTables))
+	for _, ref := range filteredRefs {
+		named[ref.Table] = true
+		relations = append(relations, cs.getColumnsForRef(ref, cteMap, meta))
+	}
+	for _, cte := range filteredCteTables {
+		if !named[cte.Table] {
+			relations = append(relations, cte.Columns)
+		}
+	}
+	return relations
 }
 
 // getTableKey returns the display key for a reference (alias preferred, fallback to table)
