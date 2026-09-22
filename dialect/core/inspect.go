@@ -124,10 +124,10 @@ func SalvageOrUnknown(read InspectStatement, syntax *SyntaxErrors, from, to int)
 // subquery inspected without that scope reports one as a table resolving to no
 // schema, which is refused for every role.
 //
-// Only a name that resolved to no schema is dropped: a qualified one is the
-// real table even where a CTE shadows the bare name, and dropping it would be
-// a read nobody checks. normalize applies to both sides, so virtual may hold
-// any casing.
+// Only a name the SQL wrote without a schema is dropped: a qualified one is
+// the real table even where a CTE shadows the bare name, and dropping it would
+// be a read nobody checks. normalize applies to both sides, so virtual may
+// hold any casing.
 func DropVirtualTables(stmts []InspectStatement, virtual map[string]bool, normalize func(string) string) {
 	if len(virtual) == 0 {
 		return
@@ -144,10 +144,7 @@ func dropDeclaredTables(stmts []InspectStatement, declared map[string]bool, norm
 		stmt := &stmts[idx]
 		kept := stmt.Tables[:0]
 		for _, table := range stmt.Tables {
-			// Only a bare name can be the CTE. The catalog may have resolved
-			// it to a schema before anything knew a CTE shadowed it, so the
-			// schema cannot stand in for the question.
-			if !table.Qualified && declared[normalize(table.Name)] {
+			if table.Bare && declared[normalize(table.Name)] {
 				continue
 			}
 			kept = append(kept, table)

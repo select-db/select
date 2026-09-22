@@ -33,10 +33,11 @@ type InspectTable struct {
 	Name   string  // Table name
 	Alias  *string // Optional alias (e.g., FROM t1 AS a)
 	Schema string  // Resolved schema name
-	// Qualified means the SQL named a schema. Schema cannot say so on its own,
-	// since an unqualified name is given the default one, and it is what tells
-	// a name a CTE can shadow from one it cannot.
-	Qualified bool
+	// Bare means the SQL wrote no schema, which Schema cannot say on its own:
+	// an unqualified name is given the default one. Only a bare name can be
+	// the CTE another part of the statement declared, so leaving this unset
+	// keeps a table rather than dropping it.
+	Bare      bool
 	StartLine int // 1-based line of the identifier token (0 = unknown)
 	StartCol  int // 0-based column
 	EndCol    int // 0-based exclusive end column
