@@ -109,7 +109,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect),
 			},
 			Op:  core.InspectOpDelete,
-			Why: "which rows go depends on what t2 holds",
+			Why: "which rows go depends on what t2 holds, and on the c1 of t1 the predicate compares",
 		},
 
 		// --- where a read hides. Each names a second relation somewhere the
@@ -198,12 +198,19 @@ func permCases() []PermCase {
 		// statement reaches. A case that passes holding one column short of
 		// that set is a column read without a right on it.
 		{
-			Name:   "a column the select list names",
+			Name:  "a column the select list names",
+			SQL:   "SELECT c1 FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "a grant on c1 alone is enough for a statement that reads c1 alone",
+		},
+		{
+			Name:   "manage is not a right to read rows",
 			SQL:    "SELECT c1 FROM t1",
 			Needs:  []Right{mainT1(core.ActionSelect).Only("c1")},
 			Denied: []Right{Manage},
 			Op:     core.InspectOpSelect,
-			Why:    "a grant on c1 alone is enough for a statement that reads c1 alone, and administration is not a right to read rows",
+			Why:    "administration is a right over the connection, not over what the tables hold",
 		},
 		{
 			Name:  "a star reaching every column",
@@ -616,6 +623,13 @@ func permCases() []PermCase {
 			Name:  "dropping a table is administration",
 			SQL:   "DROP TABLE t1",
 			Needs: []Right{Manage},
+			Op:    core.InspectOpDrop,
+			Why:   "delete removes rows, drop removes the table",
+		},
+		{
+			Name:  "the four row rights together are not manage",
+			SQL:   "DROP TABLE t1",
+			Needs: []Right{Manage},
 			Denied: []Right{
 				mainT1(core.ActionSelect),
 				mainT1(core.ActionInsert),
@@ -623,7 +637,7 @@ func permCases() []PermCase {
 				mainT1(core.ActionDelete),
 			},
 			Op:  core.InspectOpDrop,
-			Why: "delete removes rows, drop removes the table, and every row right together is not the one",
+			Why: "every right over the rows of a table is still not the right to remove the table",
 		},
 
 		// --- asking the planner about a statement. It reports what the server
@@ -720,7 +734,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect),
 			},
 			Op:  core.InspectOpUpdate,
-			Why: "t2 is read to decide which rows of t1 change, and it is not written",
+			Why: "t2 is read to decide which rows of t1 change, it is not written, and the c1 of t1 it matches on is read too",
 		},
 		{
 			On:   []string{"postgresql", "sqlite"},
@@ -732,7 +746,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect),
 			},
 			Op:  core.InspectOpInsert,
-			Why: "whether the row is inserted is an answer about t2",
+			Why: "whether the row is inserted is an answer about t2, reached through the c1 of t1 the predicate reads",
 		},
 		{
 			On:    []string{"postgresql", "sqlite"},
@@ -873,7 +887,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect).Only("c1"),
 			},
 			Op:  core.InspectOpUpdate,
-			Why: "both are named by the SET list, so both are written",
+			Why: "both are named by the SET list, so both are written, and the join reads the c1 of each",
 		},
 		{
 			On:   []string{"mysql"},

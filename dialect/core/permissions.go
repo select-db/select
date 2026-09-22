@@ -267,9 +267,13 @@ func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissio
 // rather than written: that column needs select, and never stands in for the
 // right on the table, or a grant on one column would delete the whole row.
 func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
-	scoping, tested := stmt.Fields, stmt.Where
+	// scoping is what names the table for the action. A select is scoped by
+	// every column it reads, so a table reached only through a predicate is
+	// named by one; a write is not, since a column it reads is no part of what
+	// it writes.
+	scoping := stmt.Fields
 	if action == ActionSelect {
-		scoping, tested = slices.Concat(stmt.Fields, stmt.Where), nil
+		scoping = slices.Concat(stmt.Fields, stmt.Where)
 	}
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
@@ -313,7 +317,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 			}
 		}
 
-		for _, field := range tested {
+		for _, field := range stmt.Where {
 			if !fieldOf(field, table) {
 				continue
 			}
