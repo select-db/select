@@ -362,6 +362,19 @@ class TestTypePositions:
     def test_the_shorthand_cast_too(self):
         assert self._targets("SELECT c1::|") == TARGET_TYPE
 
+    def test_a_column_being_defined_takes_a_type(self):
+        assert self._targets("CREATE TABLE t (c1 |") == TARGET_TYPE
+        assert self._targets("CREATE TABLE IF NOT EXISTS t (c1 |") == TARGET_TYPE
+        assert self._targets("CREATE TABLE t (c1 INTEGER, c2 |") == TARGET_TYPE
+        assert self._targets("ALTER TABLE t1 ADD COLUMN c1 |") == TARGET_TYPE
+
+    def test_a_name_still_being_typed_takes_none(self):
+        assert self._targets("CREATE TABLE t (c|") != TARGET_TYPE
+
+    def test_a_relation_is_not_a_column_definition(self):
+        assert self._targets("INSERT INTO t1 (c1 |") != TARGET_TYPE
+        assert self._targets("SELECT * FROM t1 a |") != TARGET_TYPE
+
     def test_an_alias_is_not_a_type(self):
         assert self._targets("SELECT c1 AS |") != TARGET_TYPE
         assert self._targets("SELECT * FROM t1 AS |") != TARGET_TYPE
@@ -477,6 +490,11 @@ class TestClauseFollowers:
 
     def test_a_lock_names_its_strength(self):
         assert self._group("SELECT * FROM t1 FOR |") == "lock_strength"
+
+    def test_a_table_definition_waits_for_a_constraint(self):
+        assert self._group("CREATE TABLE t (|") == "table_constraint"
+        assert self._group("CREATE TABLE t (c1 INTEGER, |") == "table_constraint"
+        assert self._group("CREATE TABLE t (c1 INTEGER |") == "column_constraint"
 
     def test_a_ddl_statement_waits_for_what_it_acts_on(self):
         assert self._group("CREATE |") == "object_kind"

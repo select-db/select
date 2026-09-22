@@ -405,6 +405,15 @@ var keywordGroups = map[string]map[string]bool{
 	"conflict_do":         setOf("DO"),
 	"conflict_resolution": setOf("NOTHING", "UPDATE"),
 	"null_ordering":       setOf("FIRST", "LAST"),
+	// What a table definition takes: a constraint on the whole table where a
+	// name is about to be written, or one on the column just typed.
+	"table_constraint": setOf(
+		"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
+	),
+	"column_constraint": setOf(
+		"NOT NULL", "PRIMARY KEY", "UNIQUE", "DEFAULT", "REFERENCES", "CHECK",
+		"COLLATE", "GENERATED", "AUTO_INCREMENT", "AUTOINCREMENT", "COMMENT",
+	),
 	// A window names the rows it reads, then how they are ordered, then the
 	// frame it takes from them.
 	"window_start":     setOf("PARTITION BY", "ORDER BY", "ROWS", "RANGE", "GROUPS"),

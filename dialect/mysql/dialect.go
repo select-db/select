@@ -311,6 +311,9 @@ func defaultKeywords() []string {
 		"INTO", "REGEXP",
 		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
 		"OVER", "WINDOW", "PARTITION BY", "ROWS", "RANGE", "GROUPS",
+		"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
+		"NOT NULL", "DEFAULT", "REFERENCES", "COLLATE", "GENERATED",
+		"AUTO_INCREMENT", "COMMENT",
 		"SHARE",
 		// What a DDL statement acts on.
 		"TABLE", "TEMPORARY TABLE", "VIEW", "INDEX", "UNIQUE INDEX",

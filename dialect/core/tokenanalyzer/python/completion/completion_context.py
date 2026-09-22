@@ -73,7 +73,7 @@ def detect_completion_context(
         # Nothing a writer types in a comment is SQL.
         return _bare_context(0)
 
-    if _writes_a_type(tokens):
+    if _writes_a_type(tokens, caret_offset):
         return _bare_context(TARGET_TYPE)
 
     if _detect_setting_context(tokens, sql, caret_offset):
@@ -627,6 +627,12 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     if waiting:
         return waiting
 
+    if _defines_a_table(tokens) >= 0:
+        if last.token_type in (TokenType.L_PAREN, TokenType.COMMA):
+            # The name is the writer's own; only a table constraint is a word.
+            return "table_constraint"
+        return "column_constraint"
+
     if clause.word == "AS":
         alias_at = _alias_index(tokens)
         if _names_a_cte(tokens, alias_at):
@@ -751,15 +757,59 @@ def _in_the_statement(group: str, tokens: list) -> str:
 _CAST_WORDS = frozenset({"CAST", "TRY_CAST", "SAFE_CAST"})
 
 
-def _writes_a_type(tokens: list) -> bool:
-    """Whether a type name stands here: after :: or after a cast's AS."""
+def _writes_a_type(tokens: list, caret_offset: int) -> bool:
+    """Whether a type name stands here: after ::, after a cast's AS, or after
+    the name a column is being given."""
     if not tokens:
         return False
     last = tokens[-1]
     if last.token_type == TokenType.DCOLON:
         return True
-    return (last.token_type == TokenType.ALIAS
-            and _enclosing_call(tokens, len(tokens) - 1) in _CAST_WORDS)
+    if last.token_type == TokenType.ALIAS:
+        return _enclosing_call(tokens, len(tokens) - 1) in _CAST_WORDS
+    return _names_a_new_column(tokens, caret_offset)
+
+
+def _names_a_new_column(tokens: list, caret_offset: int) -> bool:
+    """Whether the last token is the name a column is being given, which the
+    type follows: "CREATE TABLE t (c1 " and "ADD COLUMN c1 "."""
+    if len(tokens) < 2 or not _is_identifier_token(tokens[-1]):
+        return False
+    if _caret_touches(tokens[-1], caret_offset):
+        # The name itself is still being written, and it is the writer's own.
+        return False
+    before = tokens[-2]
+    if before.token_type == TokenType.COLUMN:
+        return True
+    return (before.token_type in (TokenType.L_PAREN, TokenType.COMMA)
+            and _defines_a_table(tokens) >= 0)
+
+
+def _defines_a_table(tokens: list) -> int:
+    """The index of the parenthesis holding a CREATE TABLE's definitions, or
+    -1 when the caret stands outside one."""
+    depth = 0
+    for i in range(len(tokens) - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+        elif token_type == TokenType.L_PAREN:
+            if depth:
+                depth -= 1
+                continue
+            return i if _follows_a_new_table(tokens, i) else -1
+    return -1
+
+
+def _follows_a_new_table(tokens: list, paren: int) -> bool:
+    """Whether the paren at this index follows the name a CREATE TABLE gives."""
+    for i in range(paren - 1, -1, -1):
+        upper = tokens[i].text.upper()
+        if upper == "TABLE":
+            return i > 0 and tokens[i - 1].text.upper() == "CREATE"
+        if upper in _STATEMENT_WORDS or tokens[i].token_type == TokenType.SEMICOLON:
+            return False
+    return False
 
 
 def _enclosing_call(tokens: list, idx: int) -> str:
