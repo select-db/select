@@ -47,10 +47,12 @@ func TestInspectPostgreSQLSpecific(t *testing.T) {
 					Operation: core.InspectOpInsert,
 					Fields: []core.InspectField{
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
-						{Name: "c2", Table: "t1", Schema: defaultSchema},
 					},
 					Tables: []core.InspectTable{
 						{Name: "t1", Schema: defaultSchema},
+					},
+					Also: []core.InspectStatement{
+						{Operation: core.InspectOpSelect, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}, Fields: []core.InspectField{{Name: "c2", Table: "t1", Schema: defaultSchema}}},
 					},
 				},
 			},

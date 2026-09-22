@@ -511,6 +511,16 @@ func (i *Inspector) effectiveSchema() string {
 	return i.meta.DefaultSchema
 }
 
+// targetAlias is the name an UPDATE or DELETE target goes by in the rest of
+// the statement. Without it a column qualified with the alias resolves to no
+// table, and a column that resolves to no table is checked against nothing.
+func (i *Inspector) targetAlias(qtname sqlite.IQualified_table_nameContext) string {
+	if qtname == nil || qtname.Alias() == nil {
+		return ""
+	}
+	return i.dialect.NormalizeIdentifier(qtname.Alias().GetText())
+}
+
 // resolveQualifiedTableName extracts schema and table name from a qualified_table_name context.
 func (i *Inspector) resolveQualifiedTableName(qtname sqlite.IQualified_table_nameContext) (schema, table string) {
 	if qtname == nil {
@@ -652,15 +662,21 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 		})
 	}
 
-	whereRefs := append([]core.RelationRef{{Table: tableName, Schema: schema}}, sourceRefs...)
+	whereRefs := append([]core.RelationRef{
+		{Table: tableName, Schema: schema, Alias: i.targetAlias(stmt.Qualified_table_name())},
+	}, sourceRefs...)
 
-	// RHS expressions: scan for embedded subqueries, excluding the WHERE expr.
+	// RHS expressions: the columns they read and the subqueries they embed,
+	// excluding the WHERE expr.
 	allExprs := stmt.AllExpr()
 	rhsExprs := allExprs
 	if stmt.WHERE_() != nil && len(allExprs) > 0 {
 		rhsExprs = allExprs[:len(allExprs)-1]
 	}
+	var stored []core.InspectField
 	for _, expr := range rhsExprs {
+		stored = core.MergeInspectFields(stored,
+			i.testedFields(expr, whereRefs, core.Scope{CTEs: ctes}))
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(expr)...)
 	}
 
@@ -676,6 +692,9 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(stmt, whereRefs, core.Scope{CTEs: ctes}))
+	// A column on the right of an assignment is read and its value stored, so
+	// it belongs with what the statement reads without returning it.
+	result.Where = core.MergeInspectFields(result.Where, stored)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -772,7 +791,9 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 	result.Tables = []core.InspectTable{{Name: tableName, Schema: schema}}
 
 	if stmt.WHERE_() != nil && stmt.Expr() != nil {
-		targetRef := []core.RelationRef{{Table: tableName, Schema: schema}}
+		targetRef := []core.RelationRef{
+			{Table: tableName, Schema: schema, Alias: i.targetAlias(stmt.Qualified_table_name())},
+		}
 		where, whereSubqueries := i.extractWhereFieldsFromExpr(stmt.Expr(), targetRef, core.Scope{})
 		result.Where = where
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
@@ -1652,8 +1673,9 @@ func (i *Inspector) addReturningFields(
 				i.extractFieldsFromExpr(expr, refs, nil, nil, nil))
 		}
 	}
-	result.Fields = core.MergeInspectFields(result.Fields, returned)
 	// RETURNING hands rows back, and rows handed back are a read whatever
-	// wrote them.
+	// wrote them. They stay out of the write's own fields, which are the
+	// columns it stores: a grant scoped to those must not stretch to cover a
+	// column the clause only shows.
 	core.AlsoPerforms(result, core.InspectOpSelect, returned)
 }

@@ -8,22 +8,34 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// Right is one grant a statement needs: an action on a table, or manage, which
-// is held on the connection and names no table.
+// Right is one grant a statement needs: an action on a table, on one column of
+// a table, or manage, which is held on the connection and names no table.
 type Right struct {
 	Action string
 	Schema string
 	Table  string
+	Column string
 }
 
 // Manage is the administration right.
 var Manage = Right{Action: core.ActionManage}
 
+// Only narrows a right to one column, which is what a case uses to say the
+// statement reaches that column and not the rest of the table.
+func (r Right) Only(column string) Right {
+	r.Column = column
+	return r
+}
+
 func (r Right) String() string {
-	if r.Table == "" {
+	switch {
+	case r.Table == "":
 		return r.Action
+	case r.Column == "":
+		return fmt.Sprintf("%s on %s.%s", r.Action, r.Schema, r.Table)
+	default:
+		return fmt.Sprintf("%s on %s.%s.%s", r.Action, r.Schema, r.Table, r.Column)
 	}
-	return fmt.Sprintf("%s on %s.%s", r.Action, r.Schema, r.Table)
 }
 
 // RunPermCases checks a dialect against a table of permission cases. inspect is
@@ -94,6 +106,10 @@ func PermGranting(rights ...Right) core.CompiledPermissions {
 		if right.Table != "" {
 			schema, table := right.Schema, right.Table
 			entry.SchemaName, entry.TableName = &schema, &table
+		}
+		if right.Column != "" {
+			column := right.Column
+			entry.ColumnName = &column
 		}
 		entries = append(entries, entry)
 	}

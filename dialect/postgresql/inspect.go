@@ -674,9 +674,10 @@ func (i *Inspector) addReturningFields(
 		}
 		returned = core.MergeInspectFields(returned, []core.InspectField{*field})
 	}
-	result.Fields = core.MergeInspectFields(result.Fields, returned)
 	// RETURNING hands rows back, and rows handed back are a read whatever
-	// wrote them.
+	// wrote them. They stay out of the write's own fields, which are the
+	// columns it stores: a grant scoped to those must not stretch to cover a
+	// column the clause only shows.
 	core.AlsoPerforms(result, core.InspectOpSelect, returned)
 }
 
@@ -856,7 +857,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	// The target table ref used for column resolution.
-	targetRef := core.RelationRef{Table: tableName, Schema: schema}
+	targetRef := core.RelationRef{Table: tableName, Schema: schema, Alias: i.targetAlias(relOptAlias)}
 	whereRefs := []core.RelationRef{targetRef}
 
 	fromClause := stmt.From_clause()
@@ -867,6 +868,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	}
 
 	// Collect SET columns from set_clause_list.
+	var stored []core.InspectField
 	if setList := stmt.Set_clause_list(); setList != nil {
 		for _, clause := range setList.AllSet_clause() {
 			if target := clause.Set_target(); target != nil {
@@ -879,8 +881,9 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 					})
 				}
 			}
-			// Walk the RHS expression for embedded subqueries.
 			if expr := clause.A_expr(); expr != nil {
+				stored = core.MergeInspectFields(stored,
+					i.testedFields(expr, whereRefs, core.Scope{CTEs: ctes}))
 				result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(expr)...)
 			}
 		}
@@ -906,10 +909,23 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(fromClause), whereRefs, core.Scope{CTEs: ctes}))
+	// A column on the right of an assignment is read and its value stored, so
+	// it belongs with what the statement reads without returning it.
+	result.Where = core.MergeInspectFields(result.Where, stored)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
+}
+
+// targetAlias is the name an UPDATE or DELETE target goes by in the rest of
+// the statement. Without it a column qualified with the alias resolves to no
+// table, and a column that resolves to no table is checked against nothing.
+func (i *Inspector) targetAlias(rel pg.IRelation_expr_opt_aliasContext) string {
+	if rel == nil || rel.Colid() == nil {
+		return ""
+	}
+	return i.dialect.NormalizeIdentifier(rel.Colid().GetText())
 }
 
 // inspectDelete analyzes a DELETE statement.
@@ -929,7 +945,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	ctes, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
-	whereRefs := []core.RelationRef{{Table: tableName, Schema: schema}}
+	whereRefs := []core.RelationRef{{Table: tableName, Schema: schema, Alias: i.targetAlias(relOptAlias)}}
 	usingClause := stmt.Using_clause()
 	if usingClause != nil {
 		reads, sourceRefs := i.readSources(usingClause.From_list(), ctes)
