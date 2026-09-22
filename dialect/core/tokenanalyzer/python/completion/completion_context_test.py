@@ -70,6 +70,18 @@ class TestCallParen:
         tokens, _, _ = _at_caret("SELECT * FROM t1 WHERE c1 IN (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
 
+    def test_a_word_of_the_syntax_before_a_paren_is_not_a_call(self):
+        tokens, _, _ = _at_caret("WITH x AS MATERIALIZED (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_the_same_with_not(self):
+        tokens, _, _ = _at_caret("WITH x AS NOT MATERIALIZED (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_plain_cte_body_is_a_nested_query(self):
+        tokens, _, _ = _at_caret("WITH x AS (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
 
 class TestValuePosition:
     def test_inside_a_literal_is_quoted(self):
@@ -83,6 +95,14 @@ class TestValuePosition:
     def test_inside_an_in_list_is_quoted(self):
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN ('|')")
         assert _detect_value_position(tokens, caret)[1]
+
+    def test_an_in_list_says_so(self):
+        tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN (|")
+        assert _detect_value_position(tokens, caret)[2]
+
+    def test_a_plain_slot_does_not(self):
+        tokens, _, caret = _at_caret("UPDATE t SET c1 = |")
+        assert not _detect_value_position(tokens, caret)[2]
 
 
 class TestNonTriggers:
