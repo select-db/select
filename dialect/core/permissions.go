@@ -213,16 +213,35 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 	// A CREATE TABLE AS or an INSERT ... SELECT carries its source query here,
 	// so holding manage never stands in for the select the source still needs.
 	for _, sub := range stmt.Subqueries {
-		if err := checkStatement(sub, dbInstanceID, compiledPermissions); err != nil {
+		if err := checkStatement(scopedBy(sub, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
 			return err
 		}
 	}
 	for _, also := range stmt.Also {
-		if err := checkStatement(also, dbInstanceID, compiledPermissions); err != nil {
+		if err := checkStatement(scopedBy(also, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// scopedBy gives a nested read the columns of it the statement above resolved.
+// The tables a multi-table write joins against are named in that statement's
+// predicates rather than in the read, so without them the read asks for a
+// right on the whole relation and a column-scoped grant cannot answer.
+func scopedBy(read InspectStatement, tested []InspectField) InspectStatement {
+	if len(tested) == 0 || len(read.Fields) > 0 || len(read.Where) > 0 {
+		return read
+	}
+	for _, field := range tested {
+		for _, table := range read.Tables {
+			if field.Table == table.Name && field.Schema == table.Schema {
+				read.Where = append(read.Where, field)
+				break
+			}
+		}
+	}
+	return read
 }
 
 // checkInstance checks manage, which is granted on the connection rather than

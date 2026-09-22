@@ -311,6 +311,78 @@ func permCases() []PermCase {
 			Why:   "the column written and the column handed back are scoped apart",
 		},
 
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a column a write reads the table it joins against on",
+			SQL:  "UPDATE t1 SET c1 = 2 FROM t2 WHERE t1.c1 = t2.c1",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "t2 is matched on c1 and nothing else of it is read",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a column a multi-table write reads the other table on",
+			SQL:  "UPDATE t1 JOIN t2 ON t1.c1 = t2.c1 SET t1.c2 = 'x'",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c1"),
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "the join reads c1 of both and the SET list writes c2 of t1",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a column ON DUPLICATE KEY UPDATE reads",
+			SQL:  "INSERT INTO t1 (c1) VALUES (1) ON DUPLICATE KEY UPDATE c1 = c2",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionInsert).Only("c2"),
+				mainT1(core.ActionUpdate).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the value written over the old one is read out of c2",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "the column VALUES names is the one the insert proposed",
+			SQL:  "INSERT INTO t1 (c1, c2) VALUES (1, 'x') ON DUPLICATE KEY UPDATE c2 = VALUES(c2)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionInsert).Only("c2"),
+				mainT1(core.ActionUpdate).Only("c2"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "VALUES(c2) is the caller's own value, so the row's c2 is written and not read",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "the column EXCLUDED names is the one the insert proposed",
+			SQL:  "INSERT INTO t1 (c1, c2) VALUES (1, 'x') ON CONFLICT (c1) DO UPDATE SET c2 = EXCLUDED.c2",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionInsert).Only("c2"),
+				mainT1(core.ActionUpdate).Only("c2"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "EXCLUDED.c2 is the caller's own value, so the row's c2 is written and not read",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a column an upsert reads to update from",
+			SQL:  "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c1 = t1.c2",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionInsert).Only("c2"),
+				mainT1(core.ActionUpdate).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the value written over the old one is read out of c2",
+		},
+
 		// --- a view. The statement names it as it names a table and carries
 		// nothing of what it reads, so the right is the one held on the view.
 		{
