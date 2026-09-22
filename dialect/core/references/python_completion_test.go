@@ -156,11 +156,9 @@ func TestCompletion(t *testing.T) {
 							t.Errorf("Missing: Type=%d, Text=%s", exp.Type, exp.Text)
 						}
 					}
-					if len(expected) > 0 {
-						for key, cand := range gotMap {
-							if _, found := expectedMap[key]; !found {
-								t.Errorf("Unexpected: Type=%d, Text=%s", cand.Type, cand.Text)
-							}
+					for key, cand := range gotMap {
+						if _, found := expectedMap[key]; !found {
+							t.Errorf("Unexpected: Type=%d, Text=%s", cand.Type, cand.Text)
 						}
 					}
 					if len(filtered) != len(expected) {

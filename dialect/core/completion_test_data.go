@@ -360,10 +360,41 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
-			Name: "a CROSS JOIN LATERAL too",
+			Name: "a CROSS JOIN LATERAL relation read from outside it",
 			SQL:  "SELECT * FROM t1 a CROSS JOIN LATERAL (SELECT c1 FROM t2 b) l WHERE l.|",
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
+			},
+		},
+		{
+			// The column list sits on the LATERAL, not on the subquery it
+			// holds, so it is reached by looking at both wrappers.
+			Name: "a LATERAL relation renamed by a column list",
+			SQL:  "SELECT * FROM t1 a JOIN LATERAL (SELECT c1, c3 FROM t2 b) l(x, y) ON true WHERE l.|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "x"},
+				{Type: CandidateTypeColumn, Text: "y"},
+			},
+		},
+		{
+			// A LATERAL waiting for its body holds nothing to project.
+			Name: "a LATERAL with no body yet",
+			SQL:  "SELECT * FROM t1 a, LATERAL |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "a"},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
+			// A branch is anchored at the word it opens with: its first token
+			// can be a parenthesis, and the branch would clamp to that.
+			Name: "a union branch opening on a parenthesised projection",
+			SQL:  "SELECT c1 FROM t1 p UNION SELECT (c1) FROM t2 q WHERE q.|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c3"},
 			},
 		},
 		{
@@ -374,7 +405,7 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			Expected: nil,
 		},
 		{
-			Name: "the union's own alias is read there instead",
+			Name: "a union's own alias is read outside its parenthesis",
 			SQL:  "SELECT * FROM (SELECT c1 FROM t1 p UNION SELECT c1 FROM t2 q) u WHERE u.|",
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
