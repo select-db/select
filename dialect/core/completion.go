@@ -351,7 +351,7 @@ var keywordGroups = map[string]map[string]bool{
 		"SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "CREATE", "ALTER",
 		"DROP", "TRUNCATE", "EXPLAIN", "REPLACE", "MERGE", "GRANT", "REVOKE",
 		"SET", "SHOW", "PRAGMA", "VACUUM", "ANALYZE", "BEGIN", "COMMIT",
-		"ROLLBACK", "CALL", "USE", "ATTACH",
+		"ROLLBACK", "CALL", "USE", "ATTACH", "DETACH",
 	),
 	"select_item": selectItemWords,
 	"relation":    relationWords,

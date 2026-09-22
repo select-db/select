@@ -87,7 +87,7 @@ func TestKeywordGroupWords(t *testing.T) {
 		{"row_count", []string{"OFFSET", "FETCH"}},
 		{"after_cte", []string{"SELECT", "INSERT", "UPDATE", "DELETE"}},
 		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT", "INTO"}},
-		{"join_word", []string{"JOIN"}},
+		{"join_word", []string{"JOIN", "OUTER JOIN"}},
 		{"is_test", []string{"NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM"}},
 		{"is_not_test", []string{"NULL", "TRUE", "FALSE", "DISTINCT FROM"}},
 		{"not_test", []string{"NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS"}},
@@ -118,7 +118,7 @@ func TestKeywordGroupWords(t *testing.T) {
 		{"predicate", []string{
 			"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
 			"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
-			"UNION", "EXCEPT", "INTERSECT", "FETCH",
+			"CROSS JOIN", "UNION", "EXCEPT", "INTERSECT", "FETCH",
 		}},
 	}
 	for _, tc := range cases {

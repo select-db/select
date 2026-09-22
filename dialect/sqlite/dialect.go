@@ -921,6 +921,7 @@ func defaultKeywords() []string {
 		"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "WITH", "AS",
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "INNER JOIN", "CROSS JOIN",
 		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
+		"RIGHT JOIN", "FULL JOIN", "OUTER JOIN", "DETACH",
 		"VALUES", "RETURNING",
 		"AND", "OR", "NOT", "ASC", "DESC", "IN", "LIKE", "BETWEEN",
 		"CASE", "WHEN", "THEN", "ELSE", "END",
