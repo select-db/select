@@ -384,6 +384,11 @@ def _detect_value_position(tokens: list, caret_offset: int) -> ValueSlot:
             return _NO_VALUE_SLOT
         quoted = True
         i -= 1
+    elif _is_identifier_token(last) and last.end + 1 >= caret_offset:
+        # A word the caret is still inside is what is being typed, not a value
+        # already written, so the slot is the one before it. Without this the
+        # first keystroke of a value loses the column's values.
+        i -= 1
 
     if i < 0:
         return _NO_VALUE_SLOT
