@@ -20,12 +20,12 @@ type simpleRelationRefListener struct {
 	meta          core.Metadata
 }
 
-func (l *simpleRelationRefListener) GetReferences() []core.RelationRef       { return l.refs }
+func (l *simpleRelationRefListener) GetReferences() []core.RelationRef         { return l.refs }
 func (l *simpleRelationRefListener) GetVirtualTables() []core.RelationRef      { return l.vtabs }
-func (l *simpleRelationRefListener) SetReferences(refs []core.RelationRef)   { l.refs = refs }
+func (l *simpleRelationRefListener) SetReferences(refs []core.RelationRef)     { l.refs = refs }
 func (l *simpleRelationRefListener) SetVirtualTables(vtabs []core.RelationRef) { l.vtabs = vtabs }
-func (l *simpleRelationRefListener) GetDefaultSchema() string                   { return l.defaultSchema }
-func (l *simpleRelationRefListener) GetMeta() core.Metadata                     { return l.meta }
+func (l *simpleRelationRefListener) GetDefaultSchema() string                  { return l.defaultSchema }
+func (l *simpleRelationRefListener) GetMeta() core.Metadata                    { return l.meta }
 
 // Register the SQLite dialect on package init. The "sqlite3" driver is registered
 // by the app (backend/app.go); dialect tests register it in schema_test.go.
@@ -290,32 +290,6 @@ func (d *Dialect) IsReservedKeyword(word string) bool {
 	return d.reservedKeywords[strings.ToUpper(word)]
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // InferColumnsFromSubquery implements the core.SQLDialect interface for SQLite.
 // We heuristically parse the SELECT list of the subquery to extract simple column names
 // (e.g., SELECT c1, c2 FROM t2). For each name, we look up type/nullability in metadata.
@@ -528,8 +502,6 @@ func (d *Dialect) InferColumnsFromSubquery(parser antlr.Parser, meta core.Metada
 	}
 	return cols
 }
-
-
 
 // GetOperatorsForType returns operators valid for a given SQLite column type
 func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
@@ -950,7 +922,8 @@ func defaultKeywords() []string {
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "INNER JOIN", "CROSS JOIN",
 		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
 		"VALUES", "RETURNING",
-		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN", "GLOB",
+		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN",
+		"CASE", "WHEN", "THEN", "ELSE", "END", "SET", "GLOB",
 		"CREATE", "ALTER", "DROP", "EXPLAIN", "REPLACE",
 		"PRAGMA", "VACUUM", "ANALYZE", "ATTACH", "BEGIN", "COMMIT", "ROLLBACK",
 	}
