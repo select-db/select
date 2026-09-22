@@ -19,6 +19,7 @@ type pyCompletionContext struct {
 	ValuePosition      bool                   `json:"value_position"`
 	SharedColumns      bool                   `json:"shared_columns"`
 	KeywordGroup       string                 `json:"keyword_group"`
+	CaretNesting       int                    `json:"caret_nesting"`
 }
 
 type pyPrecedingColumnInfo struct {
@@ -69,6 +70,7 @@ func ParseCompletionContextFromPython(
 		ValuePosition:      resp.ValuePosition,
 		SharedColumns:      resp.SharedColumns,
 		KeywordGroup:       resp.KeywordGroup,
+		CaretNesting:       resp.CaretNesting,
 	}
 
 	if resp.PrecedingColumn != nil {
