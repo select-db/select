@@ -178,7 +178,7 @@ func TestScopePositions(t *testing.T) {
 			SQL:  "SELECT * FROM (SELECT c1 FROM t1) subq",
 			ExpectedRefs: []core.RelationRef{
 				{Schema: "", Table: "subq", ScopeStartPos: 0, ScopeEndPos: -1},
-				{Schema: "public", Table: "t1", ScopeStartPos: 25, ScopeEndPos: 32, NestingLevel: 1},
+				{Schema: "public", Table: "t1", ScopeStartPos: 15, ScopeEndPos: 32, NestingLevel: 1},
 			},
 			ExpectedVtabs: []core.RelationRef{
 				{Table: "subq", ScopeStartPos: 0, ScopeEndPos: -1},
@@ -204,7 +204,7 @@ func TestScopePositions(t *testing.T) {
 			ExpectedRefs: []core.RelationRef{
 				{Schema: "", Table: "outer_query", ScopeStartPos: 0, ScopeEndPos: -1},
 				{Schema: "", Table: "inner_query", ScopeStartPos: 15, ScopeEndPos: 78, NestingLevel: 1},
-				{Schema: "public", Table: "t2", ScopeStartPos: 44, ScopeEndPos: 51, NestingLevel: 2},
+				{Schema: "public", Table: "t2", ScopeStartPos: 30, ScopeEndPos: 51, NestingLevel: 2},
 			},
 			ExpectedVtabs: []core.RelationRef{
 				{Table: "outer_query", ScopeStartPos: 0, ScopeEndPos: -1},
