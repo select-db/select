@@ -300,6 +300,7 @@ func defaultKeywords() []string {
 		"ON", "USING", "DISTINCT", "UNION", "LIMIT", "OFFSET",
 		"VALUES",
 		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN",
+		"CASE", "WHEN", "THEN", "ELSE", "END",
 		// The words a statement opens with, which is what an empty buffer takes.
 		"CREATE", "ALTER", "DROP", "TRUNCATE", "EXPLAIN", "REPLACE",
 		"GRANT", "REVOKE", "SET", "SHOW", "ANALYZE",

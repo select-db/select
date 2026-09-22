@@ -764,9 +764,9 @@ func GetCompletionClauseCases() []CompletionClauseCase {
 	return []CompletionClauseCase{
 		{"a finished select item takes FROM", "SELECT c1 |", "select_item"},
 		{"a call is a finished select item", "SELECT count(c1) |", "select_item"},
-		{"an aliased select item too", "SELECT c1 AS x |", "select_item"},
+		{"an aliased select item takes no second AS", "SELECT c1 AS x |", "aliased_select_item"},
 		{"a finished relation takes a clause", "SELECT * FROM t1 |", "relation"},
-		{"an aliased relation too", "SELECT * FROM t1 AS a |", "relation"},
+		{"an aliased relation takes no second AS", "SELECT * FROM t1 AS a |", "aliased_relation"},
 		{"a derived table too", "SELECT * FROM (SELECT 1) s |", "relation"},
 		{"a joined relation also takes ON", "SELECT * FROM t1 JOIN t2 |", "joined_relation"},
 		{"a finished predicate takes AND", "SELECT * FROM t1 WHERE c1 = 1 |", "predicate"},
@@ -783,6 +783,13 @@ func GetCompletionClauseCases() []CompletionClauseCase {
 		{"a follower being typed is still one", "SELECT * FROM t1 W|", "relation"},
 		{"a predicate follower being typed too", "SELECT * FROM t1 WHERE c1 = 1 AN|", "predicate"},
 		{"a name being typed is not a follower", "SELECT * FROM t|", ""},
+		{"an INSERT target waits for VALUES", "INSERT INTO t1 |", "insert_target"},
+		{"an INSERT column list too", "INSERT INTO t1 (c1) |", "insert_target"},
+		{"an UPDATE target waits for SET", "UPDATE t1 |", "update_target"},
+		{"a DELETE waits for FROM", "DELETE |", "delete_target"},
+		{"a sort direction finishes the item", "SELECT * FROM t1 ORDER BY c1 ASC |", "sort_item"},
+		{"a CASE test waits for THEN", "SELECT CASE WHEN c1 = 1 |", "case_test"},
+		{"a CASE arm waits for WHEN or END", "SELECT CASE WHEN c1 = 1 THEN 2 |", "case_body"},
 	}
 }
 

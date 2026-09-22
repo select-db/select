@@ -5,6 +5,7 @@ from completion.completion_context import (
     TARGET_ENUM_VALUE,
     TARGET_FUNCTION,
     TARGET_KEYWORD,
+    TARGET_OPERATOR,
     TARGET_SCHEMA_AND_TABLE_ALL,
     TARGET_TABLE_AND_COLUMN,
     detect_completion_context,
@@ -279,6 +280,9 @@ class TestStatementStart:
     def test_after_a_comment(self):
         assert self._targets("-- a note\n|") == TARGET_KEYWORD
 
+    def test_an_unclosed_quote_is_not_an_empty_buffer(self):
+        assert self._targets('SELECT "S|') != TARGET_KEYWORD
+
     def test_a_select_list_is_not_one(self):
         assert self._targets("SELECT |") != TARGET_KEYWORD
 
@@ -346,9 +350,26 @@ class TestClauseFollowers:
     def test_a_joined_relation_allows_on(self):
         assert self._group("SELECT * FROM t1 JOIN t2 |") == "joined_relation"
 
-    def test_an_alias_follows_the_item_it_renames(self):
-        assert self._group("SELECT * FROM t1 AS a |") == "relation"
-        assert self._group("SELECT c1 AS x |") == "select_item"
+    def test_an_alias_follows_the_item_it_renames_without_a_second_as(self):
+        assert self._group("SELECT * FROM t1 AS a |") == "aliased_relation"
+        assert self._group("SELECT c1 AS x |") == "aliased_select_item"
+
+    def test_a_write_statement_waits_for_its_word(self):
+        assert self._group("INSERT INTO t1 |") == "insert_target"
+        assert self._group("UPDATE t1 |") == "update_target"
+        assert self._group("DELETE |") == "delete_target"
+
+    def test_a_case_names_its_arms(self):
+        assert self._group("SELECT CASE WHEN c1 = 1 |") == "case_test"
+        assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 |") == "case_body"
+
+    def test_a_sort_direction_finishes_the_item(self):
+        assert self._group("SELECT * FROM t1 ORDER BY c1 ASC |") == "sort_item"
+
+    def test_an_operator_stands_beside_the_words(self):
+        targets = _field("SELECT * FROM t1 ORDER BY c1 |", "targets")
+        assert targets & TARGET_KEYWORD
+        assert targets & TARGET_OPERATOR
 
     def test_a_defined_cte_takes_its_statement(self):
         assert self._group("WITH x AS (SELECT 1) |") == "after_cte"

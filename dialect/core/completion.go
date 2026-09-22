@@ -310,6 +310,15 @@ var keywordGroups = map[string]map[string]bool{
 		"CROSS JOIN", "OUTER JOIN",
 		"UNION", "EXCEPT", "INTERSECT", "FETCH",
 	),
+	// An item that already carries an alias takes the same words, less the
+	// one that would give it another.
+	"aliased_relation": setOf(
+		"WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+		"CROSS JOIN", "OUTER JOIN",
+		"UNION", "EXCEPT", "INTERSECT", "FETCH",
+	),
+	"aliased_select_item": setOf("FROM", "UNION", "EXCEPT", "INTERSECT"),
 	// A join's relation takes the words a plain one does, and the two that
 	// only a join allows.
 	"joined_relation": setOf(
@@ -329,6 +338,14 @@ var keywordGroups = map[string]map[string]bool{
 	"values":     setOf("RETURNING", "ON"),
 	"row_count":  setOf("OFFSET", "FETCH"),
 	"after_cte":  setOf("SELECT", "INSERT", "UPDATE", "DELETE"),
+	// The write statements, which name their relation before anything else.
+	"insert_target": setOf("VALUES", "SELECT", "AS", "DEFAULT VALUES"),
+	"update_target": setOf("SET", "AS"),
+	"delete_target": setOf("FROM"),
+	"merge_target":  setOf("USING", "AS"),
+	// A CASE names its test and then its arms.
+	"case_test": setOf("THEN"),
+	"case_body": setOf("WHEN", "ELSE", "END"),
 }
 
 func setOf(words ...string) map[string]bool {

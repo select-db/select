@@ -4,6 +4,8 @@ Scans tokens backward from caret to determine what to complete.
 """
 from __future__ import annotations
 
+import re
+
 from typing import NamedTuple
 
 from sqlglot.tokens import TokenType
@@ -57,7 +59,7 @@ def detect_completion_context(
     clause = _walk_to_clause(tokens)
     keyword_ctx = clause.target
 
-    if _at_a_statement_start(tokens, caret_offset):
+    if _at_a_statement_start(tokens, sql, caret_offset):
         # Nothing names a relation or a column yet, so the only thing that can
         # be written is the word the statement opens with.
         return {
@@ -120,8 +122,9 @@ def detect_completion_context(
 
     if keyword_group:
         # A finished item leaves the clause waiting for a word, not for another
-        # name: "SELECT c1 " takes FROM.
-        targets = TARGET_KEYWORD
+        # name: "SELECT c1 " takes FROM. An operator continues the expression
+        # it already holds, so that one stands too.
+        targets = TARGET_KEYWORD | (targets & TARGET_OPERATOR)
 
     return {
         "parts":              parts,
@@ -228,6 +231,9 @@ _KEYWORD_MATCHERS: list[tuple[str, int]] = [
     ("NATURAL",     TARGET_SCHEMA_AND_TABLE_ALL),
     ("JOIN",        TARGET_SCHEMA_AND_TABLE_ALL),
     ("SET",         TARGET_COLUMN),
+    ("WHEN",        TARGET_TABLE_AND_COLUMN),
+    ("THEN",        TARGET_ALL),
+    ("ELSE",        TARGET_ALL),
     # A row count takes an expression, so a column stands there. Relations are
     # listed only to qualify one, never to be selected from.
     ("LIMIT",       TARGET_TABLE_AND_COLUMN),
@@ -435,7 +441,19 @@ _CLAUSE_FOLLOWERS = {
     "VALUES":      "values",
     "LIMIT":       "row_count",
     "OFFSET":      "row_count",
+    "INSERT":      "insert_target",
+    "INSERT INTO": "insert_target",
+    "UPDATE":      "update_target",
+    "DELETE":      "delete_target",
+    "MERGE":       "merge_target",
+    "WHEN":        "case_test",
+    "THEN":        "case_body",
+    "ELSE":        "case_body",
 }
+
+# What an item that already carries an alias takes: the same words, less the
+# one that gives it another.
+_ALIASED = {"relation": "aliased_relation", "select_item": "aliased_select_item"}
 
 # The words a clause opens with, which is where a search backwards stops.
 _CLAUSE_WORDS = frozenset(_CLAUSE_FOLLOWERS)
@@ -445,7 +463,13 @@ _CLAUSE_WORDS = frozenset(_CLAUSE_FOLLOWERS)
 # follows instead, which is why those clauses are not here.
 _ITEM_IS_COMPLETE_AT_A_NAME = frozenset({
     "select_item", "relation", "joined_relation", "sort_item", "group_item",
+    "aliased_relation", "aliased_select_item",
+    "insert_target", "update_target", "merge_target",
 })
+
+# The clauses whose own word is already the whole item: "DELETE" waits for
+# FROM with nothing written between them.
+_COMPLETE_AT_THE_CLAUSE_WORD = frozenset({"delete_target"})
 
 # What stands between the two sides of a predicate.
 _COMPARISONS = frozenset({
@@ -457,6 +481,7 @@ _COMPARISONS = frozenset({
 # What reads as a finished item: a name, a literal, a closing paren, a star.
 _FINISHED_ITEM_TOKENS = frozenset({
     TokenType.NUMBER, TokenType.STRING, TokenType.R_PAREN, TokenType.STAR,
+    TokenType.ASC, TokenType.DESC, TokenType.END,
 })
 
 
@@ -500,12 +525,15 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
             group = "after_cte"
         else:
             # An alias belongs to the item it renames, so what may follow it is
-            # what may follow that item.
+            # what may follow that item, less the word that renames it again.
             group = _CLAUSE_FOLLOWERS.get(_walk_to_clause(tokens[:alias_at]).word, "")
+            group = _ALIASED.get(group, group)
     else:
         group = _CLAUSE_FOLLOWERS.get(clause.word, "")
     if not group:
         return ""
+    if group in _COMPLETE_AT_THE_CLAUSE_WORD:
+        return group
     last = tokens[-1]
     if _caret_touches(last, caret_offset):
         # The word is being typed, so the item before it is what decides: the
@@ -550,10 +578,21 @@ def _compared_since_the_clause(tokens: list) -> bool:
     return False
 
 
-def _at_a_statement_start(tokens: list, caret_offset: int) -> bool:
+_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+
+
+def _without_comments(text: str) -> str:
+    return _COMMENT.sub(" ", text)
+
+
+def _at_a_statement_start(tokens: list, sql: str, caret_offset: int) -> bool:
     """Whether a statement may begin here: the buffer holds nothing, the last
     thing before the caret ended one, or its opening word is being typed."""
-    if not tokens or tokens[-1].token_type == TokenType.SEMICOLON:
+    if not tokens:
+        # A quote the writer has not closed yields no token at all, which is
+        # not the same as having written nothing.
+        return not _without_comments(sql[:caret_offset]).strip()
+    if tokens[-1].token_type == TokenType.SEMICOLON:
         return True
     written = _since_the_last_statement(tokens)
     return (len(written) == 1 and _is_identifier_token(written[0])
@@ -633,7 +672,9 @@ def _walk_to_clause(tokens: list) -> Clause:
                     return Clause(_narrowed_to_a_call(target, inside_call), upper)
 
         if upper in _STATEMENT_WORDS and upper != "WITH":
-            break
+            # Nothing else matched, so the statement's own word is the clause:
+            # "DELETE " waits for FROM and "UPDATE t1 " for SET.
+            return Clause(TARGET_SCHEMA_AND_TABLE_ALL, upper)
 
         i -= 1
 
