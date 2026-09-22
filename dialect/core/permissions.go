@@ -213,23 +213,23 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 	// A CREATE TABLE AS or an INSERT ... SELECT carries its source query here,
 	// so holding manage never stands in for the select the source still needs.
 	for _, sub := range stmt.Subqueries {
-		if err := checkStatement(scopedBy(sub, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
+		if err := checkStatement(scopeBareRead(sub, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
 			return err
 		}
 	}
 	for _, also := range stmt.Also {
-		if err := checkStatement(scopedBy(also, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
+		if err := checkStatement(scopeBareRead(also, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// scopedBy gives a nested read the columns of it the statement above resolved.
-// The tables a multi-table write joins against are named in that statement's
-// predicates rather than in the read, so without them the read asks for a
-// right on the whole relation and a column-scoped grant cannot answer.
-func scopedBy(read InspectStatement, tested []InspectField) InspectStatement {
+// scopeBareRead gives a read that named no column of its own the columns the
+// statement above resolved to it. A multi-table write names them in its own
+// predicates, so without this the read asks for a right on the whole relation
+// and a column-scoped grant cannot answer.
+func scopeBareRead(read InspectStatement, tested []InspectField) InspectStatement {
 	if len(tested) == 0 || len(read.Fields) > 0 || len(read.Where) > 0 {
 		return read
 	}
@@ -260,10 +260,8 @@ func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissio
 }
 
 // checkTables asks for a right on every table the statement names, per column
-// where it named columns of it. A field the statement tests counts with the
-// ones it returns: a column-scoped grant that covered the select list alone
-// would let a WHERE, a GROUP BY or a join condition read a column the grant
-// withheld, one answer at a time.
+// where it named columns of it. A field it tests counts with the ones it
+// returns: a predicate reads its column one answer at a time.
 func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
 	fields := slices.Concat(stmt.Fields, stmt.Where)
 	for _, table := range stmt.Tables {
@@ -395,8 +393,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 
 // returnedFields are the columns a statement hands back: its own, and those of
 // a read it also performs, which is where a RETURNING clause lands. A read
-// that names no column is a whole relation a write only joined against, and
-// none of it reaches the caller.
+// naming no column is a relation a write only joined against.
 func returnedFields(stmt InspectStatement) []InspectField {
 	fields := stmt.Fields
 	for _, also := range stmt.Also {
