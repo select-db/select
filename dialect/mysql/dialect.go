@@ -299,8 +299,9 @@ func defaultKeywords() []string {
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "OUTER JOIN",
 		"ON", "USING", "DISTINCT", "UNION", "LIMIT", "OFFSET",
 		"VALUES",
-		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN",
+		"AND", "OR", "NOT", "ASC", "DESC", "IN", "LIKE", "BETWEEN",
 		"CASE", "WHEN", "THEN", "ELSE", "END",
+		"INTO", "REGEXP",
 		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
 		// What a DDL statement acts on.
 		"TABLE", "TEMPORARY TABLE", "VIEW", "INDEX", "UNIQUE INDEX",

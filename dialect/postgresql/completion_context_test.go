@@ -81,14 +81,14 @@ func TestKeywordGroupWords(t *testing.T) {
 		group string
 		want  []string
 	}{
-		{"select_item", []string{"FROM", "AS", "UNION", "EXCEPT", "INTERSECT"}},
+		{"select_item", []string{"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO"}},
 		{"sort_item", []string{"LIMIT", "OFFSET", "FETCH", "ASC", "DESC"}},
 		{"group_item", []string{"ORDER BY", "HAVING", "LIMIT", "OFFSET"}},
 		{"row_count", []string{"OFFSET", "FETCH"}},
 		{"after_cte", []string{"SELECT", "INSERT", "UPDATE", "DELETE"}},
-		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT"}},
+		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT", "INTO"}},
 		{"join_word", []string{"JOIN"}},
-		{"is_test", []string{"NULL", "NOT", "TRUE", "FALSE"}},
+		{"is_test", []string{"NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM"}},
 		{"not_test", []string{"NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS"}},
 		{"set_operand", []string{"SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"}},
 		{"query_word", []string{"SELECT", "VALUES", "TABLE"}},
@@ -106,7 +106,7 @@ func TestKeywordGroupWords(t *testing.T) {
 			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
 			"DISTINCT", "ALL",
 		}},
-		{"insert_target", []string{"VALUES", "SELECT", "AS"}},
+		{"insert_target", []string{"VALUES", "SELECT", "AS", "DEFAULT VALUES"}},
 		{"update_target", []string{"SET", "AS"}},
 		{"delete_target", []string{"FROM"}},
 		{"case_test", []string{"THEN"}},

@@ -404,7 +404,7 @@ func defaultReserved() map[string]bool {
 		"SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "HAVING", "WITH", "AS",
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT", "RIGHT", "FULL", "INNER", "OUTER",
 		"ON", "USING", "DISTINCT", "ALL", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
-		"FETCH", "ONLY", "INTO", "VALUES", "RETURNING", "AND", "OR", "NOT",
+		"FETCH", "INTO", "VALUES", "RETURNING", "AND", "OR", "NOT",
 		"SET",
 	}
 	m := make(map[string]bool, len(words))
@@ -419,9 +419,10 @@ func defaultKeywords() []string {
 		"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "WITH", "AS",
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
 		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
-		"FETCH", "ONLY", "VALUES", "RETURNING",
-		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN",
+		"FETCH", "VALUES", "RETURNING",
+		"AND", "OR", "NOT", "ASC", "DESC", "IN", "LIKE", "BETWEEN",
 		"CASE", "WHEN", "THEN", "ELSE", "END",
+		"DEFAULT VALUES", "DISTINCT FROM", "INTO",
 		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST", "INTERVAL",
 		// What a DDL statement acts on.
 		"TABLE", "TEMPORARY TABLE", "VIEW", "MATERIALIZED VIEW",

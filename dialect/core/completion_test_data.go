@@ -752,6 +752,25 @@ func KeywordsOfGroup(d SQLDialect, group string) []string {
 	return words
 }
 
+// UnreachableKeywords are the words a dialect declares that no group offers,
+// which is vocabulary kept for nothing: a word no caret can reach is a word
+// the dialect claims to complete and never does.
+func UnreachableKeywords(d SQLDialect) []string {
+	offered := map[string]bool{}
+	for group := range keywordGroups {
+		for _, word := range KeywordsOfGroup(d, group) {
+			offered[strings.ToUpper(word)] = true
+		}
+	}
+	var stranded []string
+	for _, word := range d.GetDefaultKeywords() {
+		if !offered[strings.ToUpper(word)] {
+			stranded = append(stranded, word)
+		}
+	}
+	return stranded
+}
+
 // CompletionClauseCase names the group of words a caret allows. The words
 // themselves are the dialect's, so one case covers three vocabularies.
 type CompletionClauseCase struct {
