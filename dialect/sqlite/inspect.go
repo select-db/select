@@ -552,7 +552,7 @@ func (i *Inspector) resolveInsertTarget(stmt sqlite.IInsert_stmtContext) (schema
 func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpInsert}
 
-	_, cteBodies := i.inspectWithClause(stmt.With_clause())
+	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	schema, tableName := i.resolveInsertTarget(stmt)
@@ -604,6 +604,10 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.upsertSetFields(upsert, schema, tableName))
 	}
+
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -696,6 +700,10 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
+
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
@@ -781,7 +789,7 @@ func (i *Inspector) readSources(stmt sqlite.IUpdate_stmtContext, ctes []core.Rel
 func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpDelete}
 
-	_, cteBodies := i.inspectWithClause(stmt.With_clause())
+	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	schema, tableName := i.resolveQualifiedTableName(stmt.Qualified_table_name())
@@ -798,6 +806,10 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Where = where
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
+
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
