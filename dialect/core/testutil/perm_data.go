@@ -571,7 +571,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect).Only("c1"),
 			},
 			Op:  core.InspectOpUpdate,
-			Why: "x is not a table here either",
+			Why: "x is not a table, and the right is on the c1 of t2 its body reads",
 		},
 		{
 			On:   []string{"postgresql", "sqlite"},
@@ -584,7 +584,6 @@ func permCases() []PermCase {
 			Op:  core.InspectOpInsert,
 			Why: "the rows come from t2 through a name that is not a relation",
 		},
-
 		{
 			Name: "a CTE an insert declares inside itself",
 			SQL:  "INSERT INTO t1 (c1) WITH x AS (SELECT c1 FROM t2) SELECT c1 FROM x",
