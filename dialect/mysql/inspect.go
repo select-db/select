@@ -812,6 +812,10 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.OrderClause()), relationRefs, scope))
 
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
+
 	// A multi-table UPDATE writes the tables its SET list names and reads the
 	// rest.
 	core.SplitWrite(result)
@@ -904,6 +908,10 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	// goes is an answer about the column it orders by.
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.OrderClause()), sourceRefs, scope))
+
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	// The relations a multi-table DELETE joins against without deleting from
 	// are read, and nothing else in the statement reaches them.

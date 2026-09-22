@@ -548,6 +548,43 @@ func permCases() []PermCase {
 			Why:   "a column inside a call is read whether or not it comes back under its own name",
 		},
 
+		// --- a CTE a write reads. The name is not a relation, so a right on
+		// it is a right nobody can hold: what the case asks for is the right
+		// on what the body reads.
+		{
+			Name: "a CTE a delete filters on",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "x is not a table, and what it reads is c1 of t2",
+		},
+		{
+			Name: "a CTE an update filters on",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) UPDATE t1 SET c1 = 1 WHERE c1 IN (SELECT c1 FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c1"),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "x is not a table here either",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a CTE an insert copies from",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) INSERT INTO t1 (c1) SELECT c1 FROM x",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the rows come from t2 through a name that is not a relation",
+		},
+
 		// --- a view. The statement names it as it names a table and carries
 		// nothing of what it reads, so the right is the one held on the view.
 		{

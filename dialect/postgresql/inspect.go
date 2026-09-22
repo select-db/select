@@ -545,7 +545,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
-	_, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
+	ctes, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	// INSERT ... SELECT: the grammar always wraps the source as a Selectstmt.
@@ -578,6 +578,10 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.conflictSetFields(conflict, schema, tableName))
 	}
+
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -912,6 +916,10 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
+
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
@@ -969,6 +977,10 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
+
+	// A name the WITH clause declared is not a relation, so a nested read that
+	// resolved to it would ask for a right nobody can hold.
+	i.resolver.DropCTETables(result.Subqueries, ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
