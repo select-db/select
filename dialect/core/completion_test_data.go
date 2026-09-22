@@ -347,5 +347,59 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 				{Type: CandidateTypeColumn, Text: "c2"},
 			},
 		},
+		{
+			Name: "DELETE target completion",
+			SQL:  "DELETE FROM |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
+			Name: "DELETE WHERE completion",
+			SQL:  "DELETE FROM t1 WHERE |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "INSERT column list completion",
+			SQL:  "INSERT INTO t1 (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "inside a function call",
+			SQL:  "SELECT count(|) FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "UPDATE SET value completion",
+			SQL:  "UPDATE t1 SET c1 = |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "DISTINCT select list completion",
+			SQL:  "SELECT DISTINCT | FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
 	}
 }

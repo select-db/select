@@ -80,6 +80,10 @@ def detect_completion_context(
                     preceding_column = value_col
                     value_position = True
                     targets = TARGET_ENUM_VALUE
+                    # Outside a literal an expression fits here too, so the
+                    # clause still says what else may be written.
+                    if not value_col.get("quoted"):
+                        targets |= keyword_ctx
 
     return {
         "parts":              parts,
@@ -221,6 +225,11 @@ def _detect_keyword_context(tokens: list) -> int:
                 continue
             if i > 0 and tokens[i - 1].text.upper() == "VALUES":
                 return TARGET_COLUMN
+            # A paren an identifier opens is a call, not a nested query, and
+            # what belongs inside it is what belongs in the clause around it.
+            if i > 0 and _is_identifier_token(tokens[i - 1]):
+                i -= 2
+                continue
             return TARGET_SCHEMA_AND_TABLE_ALL
 
         if tt == TokenType.SEMICOLON:
@@ -326,32 +335,45 @@ def _column_ref_at(tokens: list, idx: int) -> dict | None:
 
 
 def _detect_value_position(tokens: list, caret_offset: int) -> dict | None:
-    """Detect caret in enum value slot: col = '|', col IN ('|'), etc."""
+    """Detect caret in a value slot: col = '|', col IN ('|'), col = |.
+
+    quoted says the caret sits inside a literal, where a value is the only
+    thing that can be written. Unquoted, an expression can go there too.
+    """
     if not tokens:
         return None
 
     i = len(tokens) - 1
+    quoted = False
 
     last = tokens[i]
     if last.token_type == TokenType.STRING:
         if not (last.start < caret_offset <= last.end + 1):
             return None
+        quoted = True
         i -= 1
 
     if i < 0:
         return None
 
     if tokens[i].token_type in (TokenType.EQ, TokenType.NEQ):
-        return _column_ref_at(tokens, i - 1)
+        return _with_quoted(_column_ref_at(tokens, i - 1), quoted)
 
     j = i
     while j >= 0 and tokens[j].token_type in (TokenType.STRING, TokenType.COMMA):
         j -= 1
     if j >= 0 and tokens[j].token_type == TokenType.L_PAREN \
             and j >= 1 and tokens[j - 1].token_type == TokenType.IN:
-        return _column_ref_at(tokens, j - 2)
+        return _with_quoted(_column_ref_at(tokens, j - 2), quoted)
 
     return None
+
+
+def _with_quoted(ref: dict | None, quoted: bool) -> dict | None:
+    if ref is None:
+        return None
+    ref["quoted"] = quoted
+    return ref
 
 
 # --- Token utilities ---
