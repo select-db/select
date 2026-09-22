@@ -30,6 +30,34 @@ TARGET_TABLE_AND_COLUMN      = TARGET_TABLE | TARGET_COLUMN
 TARGET_ALL                   = TARGET_SCHEMA | TARGET_TABLE | TARGET_COLUMN
 
 
+def _bare_context(targets: int) -> dict:
+    """A context that names only what may be written, with no slot to fill."""
+    return {
+        "parts":              [],
+        "caret_after_dot":    False,
+        "targets":            targets,
+        "schema_filter":      "",
+        "target_table":       "",
+        "keyword_context":    0,
+        "preceding_column":   None,
+        "column_list_relation": "",
+        "value_position":     False,
+        "shared_columns":     False,
+        "keyword_group":      "",
+    }
+
+
+def _caret_in_a_comment(sql: str, tokens: list, caret_offset: int) -> bool:
+    """Whether the caret sits inside a comment. Only whitespace and comments
+    stand between the last token and the caret, so that gap is enough to tell."""
+    gap = sql[tokens[-1].end + 1:caret_offset] if tokens else sql[:caret_offset]
+    line = gap.rfind("--")
+    if line != -1 and "\n" not in gap[line:]:
+        return True
+    block = gap.rfind("/*")
+    return block != -1 and "*/" not in gap[block:]
+
+
 def detect_completion_context(
     sql: str,
     caret_line: int,
@@ -40,20 +68,12 @@ def detect_completion_context(
     caret_offset = _line_col_to_offset(sql, caret_line, caret_col)
     tokens = _tokenize_up_to(sql, caret_offset, sg_dialect)
 
+    if _caret_in_a_comment(sql, tokens, caret_offset):
+        # Nothing a writer types in a comment is SQL.
+        return _bare_context(0)
+
     if _detect_setting_context(tokens, sql, caret_offset):
-        return {
-            "parts":              [],
-            "caret_after_dot":    False,
-            "targets":            TARGET_SETTING,
-            "schema_filter":      "",
-            "target_table":       "",
-            "keyword_context":    0,
-            "preceding_column":   None,
-            "column_list_relation": "",
-            "value_position":     False,
-            "shared_columns":     False,
-            "keyword_group":      "",
-        }
+        return _bare_context(TARGET_SETTING)
 
     parts, caret_after_dot = _parse_qualified_parts(tokens)
     clause = _walk_to_clause(tokens)

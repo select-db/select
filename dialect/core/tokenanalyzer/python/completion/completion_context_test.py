@@ -283,6 +283,9 @@ class TestStatementStart:
     def test_an_unclosed_quote_is_not_an_empty_buffer(self):
         assert self._targets('SELECT "S|') != TARGET_KEYWORD
 
+    def test_an_unterminated_block_comment_does_not_raise(self):
+        assert self._targets("/* a note|") == 0
+
     def test_a_select_list_is_not_one(self):
         assert self._targets("SELECT |") != TARGET_KEYWORD
 
@@ -365,6 +368,16 @@ class TestClauseFollowers:
 
     def test_a_sort_direction_finishes_the_item(self):
         assert self._group("SELECT * FROM t1 ORDER BY c1 ASC |") == "sort_item"
+
+    def test_a_comment_holds_no_sql(self):
+        assert _field("SELECT 1 /* x|", "targets") == 0
+        assert _field("SELECT -- x|", "targets") == 0
+
+    def test_a_closed_comment_leaves_the_clause_as_it_was(self):
+        assert self._group("SELECT c1 /* x */ |") == "select_item"
+
+    def test_a_comment_marker_inside_a_literal_is_not_one(self):
+        assert _field("SELECT * FROM t1 WHERE c1 = '--a|", "targets") != 0
 
     def test_an_operator_stands_beside_the_words(self):
         targets = _field("SELECT * FROM t1 ORDER BY c1 |", "targets")

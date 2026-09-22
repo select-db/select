@@ -70,13 +70,14 @@ def tokenize(sql: str, sg_dialect: str) -> list:
     try:
         return list(dialect.tokenize(sql))
     except TokenError:
-        # A quote the caret sits inside is unterminated, which is the normal
-        # state of an identifier or a string being typed. Closing it costs
-        # nothing: the added character lands past the caret, so no earlier
+        # A quote or a block comment the caret sits inside is unterminated,
+        # which is the normal state of one being typed. Closing it costs
+        # nothing: the added characters land past the caret, so no earlier
         # token moves.
         closers = {
             **dialect.tokenizer_class._IDENTIFIERS,
             **dialect.tokenizer_class._QUOTES,
+            **{k: v for k, v in dialect.tokenizer_class._COMMENTS.items() if v},
         }
         for closer in dict.fromkeys(closers.values()):
             try:
