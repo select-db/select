@@ -34,7 +34,7 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 		wantTargetTable  string
 		wantParts        []string
 		wantCaretDot     bool
-		wantInsert       string
+		wantColumnList   string
 	}{
 		{name: "SELECT without FROM", sql: "SELECT | ", wantTargets: core.CompletionTargetAll},
 		{name: "SELECT with FROM", sql: "SELECT | FROM t1", wantTargets: core.CompletionTargetAll},
@@ -54,7 +54,7 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 		{name: "schema.table qualified", sql: "SELECT public.t1.| FROM public.t1",
 			wantTargets: core.CompletionTargetColumn, wantParts: []string{"public", "t1"}, wantCaretDot: true, wantSchemaFilter: "public", wantTargetTable: "t1"},
 		{name: "subquery in WHERE", sql: "SELECT * FROM t1 WHERE c1 IN (SELECT | FROM t2)", wantTargets: core.CompletionTargetAll},
-		{name: "INSERT column list", sql: "INSERT INTO t1 (|", wantTargets: core.CompletionTargetColumn, wantInsert: "t1"},
+		{name: "INSERT column list", sql: "INSERT INTO t1 (|", wantTargets: core.CompletionTargetColumn, wantColumnList: "t1"},
 		{name: "operator context", sql: "SELECT * FROM t1 WHERE c1 |", wantTargets: core.CompletionTargetOperator},
 		{name: "enum value equality", sql: "SELECT * FROM t1 WHERE c1 = '|'", wantTargets: core.CompletionTargetEnumValue},
 		{name: "enum value in list", sql: "SELECT * FROM t1 WHERE c1 IN ('|')", wantTargets: core.CompletionTargetEnumValue},
@@ -95,8 +95,8 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 			if ctx.CaretAfterDot != tt.wantCaretDot {
 				t.Errorf("CaretAfterDot = %v, want %v", ctx.CaretAfterDot, tt.wantCaretDot)
 			}
-			if ctx.InsertTargetTable != tt.wantInsert {
-				t.Errorf("InsertTargetTable = %q, want %q", ctx.InsertTargetTable, tt.wantInsert)
+			if ctx.ColumnListRelation != tt.wantColumnList {
+				t.Errorf("ColumnListRelation = %q, want %q", ctx.ColumnListRelation, tt.wantColumnList)
 			}
 			if tt.wantParts != nil && len(ctx.Parts) != len(tt.wantParts) {
 				t.Errorf("Parts = %v, want %v", ctx.Parts, tt.wantParts)
@@ -120,6 +120,14 @@ func TestCompletion(t *testing.T) {
 				meta.Schemas[0].Name = di.defaultSchema
 			}
 			testCases := core.GetCompletionTestCases(di.defaultSchema, di.identifierQuote)
+			if di.name == "postgresql" {
+				testCases = append(testCases,
+					core.GetCompletionCasesPostgreSQL(di.defaultSchema, di.identifierQuote)...)
+			}
+			if di.name == "postgresql" || di.name == "mysql" {
+				testCases = append(testCases,
+					core.GetCompletionCasesPostgreSQLAndMySQL(di.defaultSchema, di.identifierQuote)...)
+			}
 
 			for _, tc := range testCases {
 				t.Run(tc.Name, func(t *testing.T) {

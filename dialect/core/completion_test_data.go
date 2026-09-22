@@ -649,3 +649,62 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 		},
 	}
 }
+
+// GetCompletionCasesPostgreSQL returns the cases only PostgreSQL accepts: a
+// column list that renames a relation's columns, which MySQL and SQLite have
+// no syntax for.
+func GetCompletionCasesPostgreSQL(defaultSchema, identifierQuote string) []CompletionTestCase {
+	return []CompletionTestCase{
+		{
+			Name: "a column list renaming a relation names that relation's columns",
+			SQL:  "SELECT * FROM t1 AS a (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a rename without AS reads the same",
+			SQL:  "SELECT * FROM t1 JOIN t2 b (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
+			Name: "a rename reads a schema-qualified relation",
+			SQL:  "SELECT * FROM " + defaultSchema + ".t1 AS a (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+	}
+}
+
+// GetCompletionCasesPostgreSQLAndMySQL returns the cases those two accept and
+// SQLite does not: a DELETE naming the relations it reads after USING.
+func GetCompletionCasesPostgreSQLAndMySQL(defaultSchema, identifierQuote string) []CompletionTestCase {
+	return []CompletionTestCase{
+		{
+			Name: "a DELETE reads the relations its USING names",
+			SQL:  "DELETE FROM t1 USING t2 WHERE |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+				{Type: CandidateTypeColumn, Text: "t1.c1"},
+				{Type: CandidateTypeColumn, Text: "t2.c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
+			Name: "a rename of a relation a DELETE uses",
+			SQL:  "DELETE FROM t1 USING t2 AS b (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+	}
+}
