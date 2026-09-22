@@ -75,14 +75,16 @@ def detect_completion_context(
                 elif keyword_ctx == TARGET_ALL:
                     targets = 0
             else:
-                value_col, quoted = _detect_value_position(tokens, caret_offset)
+                value_col, quoted, in_list = _detect_value_position(tokens, caret_offset)
                 if value_col:
                     preceding_column = value_col
                     value_position = True
                     targets = TARGET_ENUM_VALUE
-                    # Outside a literal an expression fits here too, so the
-                    # clause still says what else may be written.
-                    if not quoted:
+                    # Outside a literal an expression fits in a plain value
+                    # slot too, so the clause still says what else may be
+                    # written. An IN list is not one: its paren reads as a
+                    # nested query, whose targets are not this clause's.
+                    if not quoted and not in_list:
                         targets |= keyword_ctx
 
     return {
@@ -225,9 +227,13 @@ def _detect_keyword_context(tokens: list) -> int:
                 continue
             if i > 0 and tokens[i - 1].text.upper() == "VALUES":
                 return TARGET_COLUMN
-            # A paren an identifier opens is a call, not a nested query, and
-            # what belongs inside it is what belongs in the clause around it.
-            if i > 0 and _is_identifier_token(tokens[i - 1]):
+            # A call's paren touches its name. Anything else that reads as a
+            # name before a paren, MATERIALIZED among them, is a word of the
+            # syntax rather than a function, and the paren after it opens a
+            # query. What belongs inside a call is what belongs in the clause
+            # around it, so only that one is scanned past.
+            if i > 0 and _is_identifier_token(tokens[i - 1]) \
+                    and tokens[i - 1].end + 1 == tokens[i].start:
                 i -= 2
                 continue
             return TARGET_SCHEMA_AND_TABLE_ALL
@@ -334,14 +340,14 @@ def _column_ref_at(tokens: list, idx: int) -> dict | None:
     return {"name": name}
 
 
-def _detect_value_position(tokens: list, caret_offset: int) -> tuple[dict | None, bool]:
+def _detect_value_position(tokens: list, caret_offset: int) -> tuple[dict | None, bool, bool]:
     """Detect caret in a value slot: col = '|', col IN ('|'), col = |.
 
     The second result says the caret sits inside a literal, where a value is
-    the only thing that can be written.
+    the only thing that can be written. The third says the slot is an IN list.
     """
     if not tokens:
-        return None, False
+        return None, False, False
 
     i = len(tokens) - 1
     quoted = False
@@ -349,24 +355,24 @@ def _detect_value_position(tokens: list, caret_offset: int) -> tuple[dict | None
     last = tokens[i]
     if last.token_type == TokenType.STRING:
         if not (last.start < caret_offset <= last.end + 1):
-            return None, False
+            return None, False, False
         quoted = True
         i -= 1
 
     if i < 0:
-        return None, False
+        return None, False, False
 
     if tokens[i].token_type in (TokenType.EQ, TokenType.NEQ):
-        return _column_ref_at(tokens, i - 1), quoted
+        return _column_ref_at(tokens, i - 1), quoted, False
 
     j = i
     while j >= 0 and tokens[j].token_type in (TokenType.STRING, TokenType.COMMA):
         j -= 1
     if j >= 0 and tokens[j].token_type == TokenType.L_PAREN \
             and j >= 1 and tokens[j - 1].token_type == TokenType.IN:
-        return _column_ref_at(tokens, j - 2), quoted
+        return _column_ref_at(tokens, j - 2), quoted, True
 
-    return None, False
+    return None, False, False
 
 
 # --- Token utilities ---

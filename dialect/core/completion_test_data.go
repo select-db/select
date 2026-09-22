@@ -392,6 +392,35 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			Name: "inside a call in a WHERE",
+			SQL:  "SELECT * FROM t1 WHERE lower(|)",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a later argument of a call",
+			SQL:  "SELECT substr(c1, 1, |) FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a CTE body is still a nested query",
+			SQL:  "WITH x AS (SELECT | FROM t1) SELECT c1 FROM x",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
 			Name: "DISTINCT select list completion",
 			SQL:  "SELECT DISTINCT | FROM t1",
 			Expected: []CompletionTestExpectation{
