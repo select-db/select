@@ -101,6 +101,7 @@ type CompletionContext struct {
 	KeywordContext    CompletionTarget     // SQL keyword context (SELECT/FROM/JOIN)
 	PrecedingColumn   *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
 	ColumnListRelation string              // Relation whose columns a parenthesised list names: an INSERT target, or one being renamed
+	KeywordGroup       string              // Which words the caret's position allows, when it allows words
 	ValuePosition     bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
 	SharedColumns     bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
 }
@@ -139,7 +140,7 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	var schemas, tables, views, columns, operators, enumValues, keywords []Candidate
 
 	if ctx.Targets&CompletionTargetKeyword != 0 {
-		keywords = cs.completeStatementKeywords()
+		keywords = cs.completeKeywords(ctx.KeywordGroup)
 	}
 
 	if ctx.Targets&CompletionTargetSchema != 0 {
@@ -265,26 +266,65 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	return all
 }
 
-// statementOpeners are the words a statement can begin with. Which of them a
-// dialect has is the dialect's own list to answer; that any of them can only
-// open a statement is the same question everywhere.
-var statementOpeners = map[string]bool{
-	"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
-	"WITH": true, "CREATE": true, "ALTER": true, "DROP": true,
-	"TRUNCATE": true, "EXPLAIN": true, "REPLACE": true, "MERGE": true,
-	"GRANT": true, "REVOKE": true, "SET": true, "SHOW": true,
-	"PRAGMA": true, "VACUUM": true, "ANALYZE": true, "BEGIN": true,
-	"COMMIT": true, "ROLLBACK": true, "CALL": true, "USE": true,
-	"ATTACH": true,
+// keywordGroups name the words that may be written at a kind of caret. Which
+// of them a dialect has is the dialect's own list to answer; which words the
+// position allows is the same question in every dialect.
+var keywordGroups = map[string]map[string]bool{
+	"statement": setOf(
+		"SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "CREATE", "ALTER",
+		"DROP", "TRUNCATE", "EXPLAIN", "REPLACE", "MERGE", "GRANT", "REVOKE",
+		"SET", "SHOW", "PRAGMA", "VACUUM", "ANALYZE", "BEGIN", "COMMIT",
+		"ROLLBACK", "CALL", "USE", "ATTACH",
+	),
+	"select_item": setOf(
+		"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO",
+	),
+	"relation": setOf(
+		"AS", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+		"CROSS JOIN", "OUTER JOIN",
+		"UNION", "EXCEPT", "INTERSECT", "FETCH",
+	),
+	// A join's relation takes the words a plain one does, and the two that
+	// only a join allows.
+	"joined_relation": setOf(
+		"AS", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+		"CROSS JOIN", "OUTER JOIN", "ON", "USING",
+		"UNION", "EXCEPT", "INTERSECT", "FETCH",
+	),
+	"predicate": setOf(
+		"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+		"CROSS JOIN", "UNION", "EXCEPT", "INTERSECT", "FETCH", "RETURNING",
+	),
+	"sort_item":  setOf("ASC", "DESC", "LIMIT", "OFFSET", "FETCH"),
+	"group_item": setOf("HAVING", "ORDER BY", "LIMIT", "OFFSET"),
+	"assignment": setOf("WHERE", "RETURNING", "FROM"),
+	"values":     setOf("RETURNING", "ON"),
+	"row_count":  setOf("OFFSET", "FETCH"),
+	"after_cte":  setOf("SELECT", "INSERT", "UPDATE", "DELETE"),
 }
 
-// completeStatementKeywords are the words this dialect can open a statement
-// with. An empty buffer used to offer nothing at all, which reads to a caller
-// exactly like a buffer with nothing to offer.
-func (cs *CompletionStrategy) completeStatementKeywords() []Candidate {
+func setOf(words ...string) map[string]bool {
+	set := make(map[string]bool, len(words))
+	for _, word := range words {
+		set[word] = true
+	}
+	return set
+}
+
+// completeKeywords are the words of this dialect that the caret's position
+// allows. A caret with nothing to offer reads to a caller exactly like one
+// whose clause is complete, so a finished clause names what may follow it.
+func (cs *CompletionStrategy) completeKeywords(group string) []Candidate {
+	allowed := keywordGroups[group]
+	if allowed == nil {
+		return nil
+	}
 	var keywords []Candidate
 	for _, word := range cs.dialect.GetDefaultKeywords() {
-		if !statementOpeners[strings.ToUpper(word)] {
+		if !allowed[strings.ToUpper(word)] {
 			continue
 		}
 		keywords = append(keywords, Candidate{

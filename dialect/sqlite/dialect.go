@@ -951,6 +951,7 @@ func defaultKeywords() []string {
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "INNER JOIN", "CROSS JOIN",
 		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
 		"VALUES", "RETURNING",
+		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN", "GLOB",
 		"CREATE", "ALTER", "DROP", "EXPLAIN", "REPLACE",
 		"PRAGMA", "VACUUM", "ANALYZE", "ATTACH", "BEGIN", "COMMIT", "ROLLBACK",
 	}

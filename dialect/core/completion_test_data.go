@@ -738,14 +738,52 @@ func GetCompletionKeywordCases(openers []string) []CompletionKeywordCase {
 	}
 }
 
-// StatementOpenersOf are the words of a dialect's keyword list that can open a
-// statement, which is what the keyword cases expect to be offered.
-func StatementOpenersOf(d SQLDialect) []string {
-	var openers []string
+// KeywordsOfGroup are the words of a dialect's keyword list that the named
+// position allows, which is what the keyword cases expect to be offered.
+func KeywordsOfGroup(d SQLDialect, group string) []string {
+	allowed := keywordGroups[group]
+	var words []string
 	for _, word := range d.GetDefaultKeywords() {
-		if statementOpeners[strings.ToUpper(word)] {
-			openers = append(openers, word)
+		if allowed[strings.ToUpper(word)] {
+			words = append(words, word)
 		}
 	}
-	return openers
+	return words
+}
+
+// GetCompletionClauseCases names, for each caret, the group of words that
+// position allows. The words themselves are the dialect's, so one table states
+// the rule for three vocabularies.
+func GetCompletionClauseCases() []struct {
+	Name  string
+	SQL   string
+	Group string
+} {
+	return []struct {
+		Name  string
+		SQL   string
+		Group string
+	}{
+		{"a finished select item takes FROM", "SELECT c1 |", "select_item"},
+		{"a call is a finished select item", "SELECT count(c1) |", "select_item"},
+		{"an aliased select item too", "SELECT c1 AS x |", "select_item"},
+		{"a finished relation takes a clause", "SELECT * FROM t1 |", "relation"},
+		{"an aliased relation too", "SELECT * FROM t1 AS a |", "relation"},
+		{"a derived table too", "SELECT * FROM (SELECT 1) s |", "relation"},
+		{"a joined relation also takes ON", "SELECT * FROM t1 JOIN t2 |", "joined_relation"},
+		{"a finished predicate takes AND", "SELECT * FROM t1 WHERE c1 = 1 |", "predicate"},
+		{"a join predicate too", "SELECT * FROM t1 JOIN t2 ON t1.c1 = t2.c1 |", "predicate"},
+		{"a sort item takes ASC", "SELECT * FROM t1 ORDER BY c1 |", "sort_item"},
+		{"a group item takes HAVING", "SELECT * FROM t1 GROUP BY c1 |", "group_item"},
+		{"an assignment takes WHERE", "UPDATE t1 SET c1 = 1 |", "assignment"},
+		{"a row count takes OFFSET", "SELECT * FROM t1 LIMIT 10 |", "row_count"},
+		{"a defined CTE takes its statement", "WITH x AS (SELECT 1) |", "after_cte"},
+		{"a half-written predicate takes an operator", "SELECT * FROM t1 WHERE c1 |", ""},
+		{"an empty select list takes no keyword", "SELECT |", ""},
+		{"an empty FROM takes no keyword", "SELECT * FROM |", ""},
+		{"a relation after a comma takes no keyword", "SELECT * FROM t1, |", ""},
+		{"a follower being typed is still one", "SELECT * FROM t1 W|", "relation"},
+		{"a predicate follower being typed too", "SELECT * FROM t1 WHERE c1 = 1 AN|", "predicate"},
+		{"a name being typed is not a follower", "SELECT * FROM t|", ""},
+	}
 }

@@ -172,6 +172,51 @@ func TestCompletion(t *testing.T) {
 	}
 }
 
+// TestCompletionClauses runs the cases naming which group of words each caret
+// allows. The words are the dialect's own, so the rule is stated once.
+func TestCompletionClauses(t *testing.T) {
+	analyzer := testutil.NewTestAnalyzer(t)
+	defer analyzer.Close()
+
+	for _, di := range dialects {
+		t.Run(di.name, func(t *testing.T) {
+			di.dialect.SetAnalyzer(analyzer)
+
+			meta := core.GetCompletionTestMetadata()
+			meta.DefaultSchema = di.defaultSchema
+			if len(meta.Schemas) > 0 {
+				meta.Schemas[0].Name = di.defaultSchema
+			}
+
+			for _, tc := range core.GetCompletionClauseCases() {
+				t.Run(tc.Name, func(t *testing.T) {
+					text, caretCharPos := removeCaret(tc.SQL)
+					caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
+
+					got, err := di.dialect.Complete(context.Background(), text, caretLine, caretOffset, meta)
+					if err != nil {
+						t.Fatalf("complete: %v", err)
+					}
+
+					var words []string
+					for _, c := range got {
+						if c.Type == core.CandidateTypeKeyword {
+							words = append(words, c.Text)
+						}
+					}
+					want := core.KeywordsOfGroup(di.dialect, tc.Group)
+					if tc.Group == "" {
+						want = nil
+					}
+					if !slices.Equal(words, want) {
+						t.Errorf("keywords = %v, want %v", words, want)
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestCompletionKeywords runs the keyword cases across all dialects. The words
 // are the dialect's own, so one table covers three vocabularies.
 func TestCompletionKeywords(t *testing.T) {
@@ -187,7 +232,7 @@ func TestCompletionKeywords(t *testing.T) {
 			if len(meta.Schemas) > 0 {
 				meta.Schemas[0].Name = di.defaultSchema
 			}
-			openers := core.StatementOpenersOf(di.dialect)
+			openers := core.KeywordsOfGroup(di.dialect, "statement")
 			if len(openers) == 0 {
 				t.Fatalf("%s declares no word a statement can open with", di.name)
 			}

@@ -300,6 +300,50 @@ class TestStatementStart:
         assert self._targets("SELECT c|") != TARGET_KEYWORD
 
 
+class TestClauseFollowers:
+    def _group(self, sql_with_caret: str) -> str:
+        return _field(sql_with_caret, "keyword_group")
+
+    def test_a_finished_select_item(self):
+        assert self._group("SELECT c1 |") == "select_item"
+
+    def test_a_finished_relation(self):
+        assert self._group("SELECT * FROM t1 |") == "relation"
+
+    def test_a_joined_relation_allows_on(self):
+        assert self._group("SELECT * FROM t1 JOIN t2 |") == "joined_relation"
+
+    def test_an_alias_follows_the_item_it_renames(self):
+        assert self._group("SELECT * FROM t1 AS a |") == "relation"
+        assert self._group("SELECT c1 AS x |") == "select_item"
+
+    def test_a_defined_cte_takes_its_statement(self):
+        assert self._group("WITH x AS (SELECT 1) |") == "after_cte"
+        assert self._group("WITH x AS (SELECT 1), y AS (SELECT 2) |") == "after_cte"
+
+    def test_a_finished_predicate(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 = 1 |") == "predicate"
+        assert self._group("SELECT * FROM t1 JOIN t2 ON t1.c1 = t2.c1 |") == "predicate"
+
+    def test_a_half_written_predicate_is_not_one(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 |") == ""
+
+    def test_an_empty_clause_is_not_a_finished_item(self):
+        assert self._group("SELECT |") == ""
+        assert self._group("SELECT * FROM |") == ""
+        assert self._group("SELECT * FROM t1, |") == ""
+
+    def test_a_follower_being_typed_is_still_one(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 = 1 AN|") == "predicate"
+        assert self._group("SELECT * FROM t1 W|") == "relation"
+        assert self._group("SELECT c1 F|") == "select_item"
+
+    def test_a_name_being_typed_in_a_clause_is_not_one(self):
+        assert self._group("SELECT c|") == ""
+        assert self._group("SELECT c1, c|") == ""
+        assert self._group("SELECT * FROM t|") == ""
+
+
 class TestColumnListRelation:
     def _relation(self, sql_with_caret: str) -> str:
         return _field(sql_with_caret, "column_list_relation")

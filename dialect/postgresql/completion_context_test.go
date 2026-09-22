@@ -11,6 +11,40 @@ import (
 // TestCompletionContext covers the completion context PostgreSQL spells its own
 // way: double quoted identifiers, and SHOW for a runtime parameter. The cases
 // every dialect shares live in core/references.
+// TestKeywordGroupWords pins the words themselves for one dialect. The shared
+// cases pin which group each caret takes; this pins what a group holds, so a
+// word added to the wrong group fails somewhere.
+func TestKeywordGroupWords(t *testing.T) {
+	d := NewDialect()
+	cases := []struct {
+		group string
+		want  []string
+	}{
+		{"select_item", []string{"FROM", "AS", "UNION", "EXCEPT", "INTERSECT"}},
+		{"sort_item", []string{"LIMIT", "OFFSET", "FETCH", "ASC", "DESC"}},
+		{"group_item", []string{"ORDER BY", "HAVING", "LIMIT", "OFFSET"}},
+		{"row_count", []string{"OFFSET", "FETCH"}},
+		{"after_cte", []string{"SELECT", "INSERT", "UPDATE", "DELETE"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.group, func(t *testing.T) {
+			got := core.KeywordsOfGroup(d, tc.group)
+			if len(got) != len(tc.want) {
+				t.Fatalf("%s = %v, want %v", tc.group, got, tc.want)
+			}
+			seen := make(map[string]bool, len(got))
+			for _, w := range got {
+				seen[w] = true
+			}
+			for _, w := range tc.want {
+				if !seen[w] {
+					t.Errorf("%s is missing %q (got %v)", tc.group, w, got)
+				}
+			}
+		})
+	}
+}
+
 func TestCompletionContext(t *testing.T) {
 	analyzer := testutil.NewTestAnalyzer(t)
 	defer analyzer.Close()

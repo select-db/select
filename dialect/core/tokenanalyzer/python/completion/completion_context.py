@@ -49,10 +49,12 @@ def detect_completion_context(
             "column_list_relation": "",
             "value_position":     False,
             "shared_columns":     False,
+            "keyword_group":      "",
         }
 
     parts, caret_after_dot = _parse_qualified_parts(tokens)
-    keyword_ctx = _detect_keyword_context(tokens)
+    clause = _walk_to_clause(tokens)
+    keyword_ctx = clause.target
 
     if _at_a_statement_start(tokens, caret_offset):
         # Nothing names a relation or a column yet, so the only thing that can
@@ -68,8 +70,11 @@ def detect_completion_context(
             "column_list_relation": "",
             "value_position":     False,
             "shared_columns":     False,
+            "keyword_group":      "statement",
         }
 
+    keyword_group = "" if parts or caret_after_dot else _keyword_group_after(
+        tokens, caret_offset, clause)
     targets = keyword_ctx
     schema_filter = ""
     target_table = ""
@@ -108,6 +113,11 @@ def detect_completion_context(
                     if not slot.quoted:
                         targets |= keyword_ctx
 
+    if keyword_group:
+        # A finished item leaves the clause waiting for a word, not for another
+        # name: "SELECT c1 " takes FROM, and offered nothing at all before.
+        targets = TARGET_KEYWORD
+
     return {
         "parts":              parts,
         "caret_after_dot":    caret_after_dot,
@@ -119,6 +129,7 @@ def detect_completion_context(
         "column_list_relation": column_list_relation,
         "value_position":     value_position,
         "shared_columns":     shared_columns,
+        "keyword_group":      keyword_group,
     }
 
 
@@ -395,6 +406,124 @@ def _narrowed_to_a_call(target: int, inside_call: bool) -> int:
     return target
 
 
+# What may be written once the current clause holds a finished item. The words
+# are named here; which of them a dialect has is the dialect's list to answer.
+_CLAUSE_FOLLOWERS = {
+    "SELECT":      "select_item",
+    "FROM":        "relation",
+    "JOIN":        "joined_relation",
+    "INNER":       "joined_relation",
+    "LEFT":        "joined_relation",
+    "RIGHT":       "joined_relation",
+    "FULL":        "joined_relation",
+    "CROSS":       "joined_relation",
+    "NATURAL":     "joined_relation",
+    "USING":       "relation",
+    "ON":          "predicate",
+    "WHERE":       "predicate",
+    "HAVING":      "predicate",
+    "AND":         "predicate",
+    "OR":          "predicate",
+    "ORDER BY":    "sort_item",
+    "GROUP BY":    "group_item",
+    "SET":         "assignment",
+    "VALUES":      "values",
+    "LIMIT":       "row_count",
+    "OFFSET":      "row_count",
+}
+
+# The clauses whose finished item is the whole item, so a keyword follows it.
+# In a WHERE a finished name is the left side of a predicate and an operator
+# follows instead, which is why those clauses are not here.
+_ITEM_IS_COMPLETE_AT_A_NAME = frozenset({
+    "select_item", "relation", "joined_relation", "sort_item", "group_item",
+})
+
+# What stands between the two sides of a predicate.
+_COMPARISONS = frozenset({
+    TokenType.EQ, TokenType.NEQ, TokenType.GT, TokenType.LT,
+    TokenType.GTE, TokenType.LTE, TokenType.IS, TokenType.IN,
+    TokenType.LIKE, TokenType.ILIKE, TokenType.BETWEEN,
+})
+
+# What reads as a finished item: a name, a literal, a closing paren, a star.
+_FINISHED_ITEM_TOKENS = frozenset({
+    TokenType.NUMBER, TokenType.STRING, TokenType.R_PAREN, TokenType.STAR,
+})
+
+
+def _alias_index(tokens: list) -> int:
+    """Where the AS nearest the caret stands, so the clause behind it can be
+    asked what follows. A CTE's AS is followed by its whole body, which the
+    walk steps over."""
+    for i in _walk_back(tokens, len(tokens)):
+        if tokens[i].token_type == TokenType.ALIAS:
+            return i
+    return len(tokens)
+
+
+def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str:
+    """The group of words that may follow what the clause already holds, or ""
+    when the caret is not standing after a finished item."""
+    if not tokens:
+        return ""
+    if clause.word == "AS":
+        alias_at = _alias_index(tokens)
+        if _names_a_cte(tokens, alias_at):
+            # The CTE is defined; what follows is the statement that reads it.
+            group = "after_cte"
+        else:
+            # An alias belongs to the item it renames, so what may follow it is
+            # what may follow that item.
+            group = _CLAUSE_FOLLOWERS.get(_walk_to_clause(tokens[:alias_at]).word, "")
+    else:
+        group = _CLAUSE_FOLLOWERS.get(clause.word, "")
+    if not group:
+        return ""
+    last = tokens[-1]
+    if _caret_touches(last, caret_offset):
+        # The word is being typed, so the item before it is what decides: the
+        # first keystroke of AND must not take the answer back to columns.
+        if not _is_identifier_token(last) or len(tokens) == 1:
+            return ""
+        tokens = tokens[:-1]
+        last = tokens[-1]
+    if last.token_type in _FINISHED_ITEM_TOKENS:
+        return group
+    if not _is_identifier_token(last):
+        return ""
+    if group in _ITEM_IS_COMPLETE_AT_A_NAME:
+        return group
+    # A name in a predicate is its left side, and an operator comes next,
+    # unless one already stands between the clause and here.
+    if group == "predicate" and _compared_since_the_clause(tokens):
+        return group
+    return ""
+
+
+def _names_a_cte(tokens: list, alias_idx: int) -> bool:
+    """Report the AS at alias_idx as defining a CTE."""
+    if alias_idx >= len(tokens):
+        return False
+    for i in _walk_back(tokens, alias_idx):
+        if tokens[i].token_type == TokenType.WITH:
+            return True
+        if tokens[i].token_type in (TokenType.FROM, TokenType.SELECT):
+            return False
+    return False
+
+
+def _compared_since_the_clause(tokens: list) -> bool:
+    """Whether a comparison already stands between the clause word and the
+    caret, which is what makes the predicate whole rather than half written."""
+    for i in _walk_back(tokens, len(tokens)):
+        if tokens[i].token_type in _COMPARISONS:
+            return True
+        if tokens[i].text.upper() in _CLAUSE_FOLLOWERS:
+            return False
+    return False
+
+
 def _at_a_statement_start(tokens: list, caret_offset: int) -> bool:
     """Whether the caret stands where a statement may begin: the buffer holds
     nothing yet, the last thing before it ended one, or the word it opens with
@@ -418,9 +547,21 @@ def _since_the_last_statement(tokens: list) -> list:
     return tokens
 
 
+class Clause(NamedTuple):
+    """The clause the caret stands in: what may be written, and the word that
+    opened it. The word is "" where the walk found none and defaulted."""
+
+    target: int
+    word: str
+
+
 def _detect_keyword_context(tokens: list) -> int:
+    return _walk_to_clause(tokens).target
+
+
+def _walk_to_clause(tokens: list) -> Clause:
     if not tokens:
-        return TARGET_SCHEMA_AND_TABLE_ALL
+        return Clause(TARGET_SCHEMA_AND_TABLE_ALL, "")
 
     paren_depth = 0
     inside_call = False
@@ -445,7 +586,7 @@ def _detect_keyword_context(tokens: list) -> int:
                 i -= 1
                 continue
             if _opens_query(tokens, i):
-                return TARGET_SCHEMA_AND_TABLE_ALL
+                return Clause(TARGET_SCHEMA_AND_TABLE_ALL, "")
             # An expression's paren -- a call's arguments, a window spec, a
             # grouping -- writes what the clause around it writes, so the walk
             # continues rather than treating the paren as a new query. Only a
@@ -465,17 +606,17 @@ def _detect_keyword_context(tokens: list) -> int:
         if not _reads_as_a_name(tokens, i):
             contextual = _contextual_target(tokens, i, upper)
             if contextual is not None:
-                return _narrowed_to_a_call(contextual, inside_call)
+                return Clause(_narrowed_to_a_call(contextual, inside_call), upper)
             for kw_text, target in _KEYWORD_MATCHERS:
                 if upper == kw_text:
-                    return _narrowed_to_a_call(target, inside_call)
+                    return Clause(_narrowed_to_a_call(target, inside_call), upper)
 
         if upper in _STATEMENT_WORDS and upper != "WITH":
             break
 
         i -= 1
 
-    return TARGET_SCHEMA_AND_TABLE_ALL
+    return Clause(TARGET_SCHEMA_AND_TABLE_ALL, "")
 
 
 # --- Column list detection ---
