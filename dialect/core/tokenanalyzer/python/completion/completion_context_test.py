@@ -74,9 +74,21 @@ class TestCallParen:
         tokens, _, _ = _at_caret("WITH x AS MATERIALIZED (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
 
-    def test_the_same_with_not(self):
+    def test_not_materialized_is_not_a_call(self):
         tokens, _, _ = _at_caret("WITH x AS NOT MATERIALIZED (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_materialization_hint_touching_its_paren_is_not_a_call(self):
+        tokens, _, _ = _at_caret("WITH x AS MATERIALIZED(|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_not_materialized_touching_its_paren_is_not_a_call(self):
+        tokens, _, _ = _at_caret("WITH x AS NOT MATERIALIZED(|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_call_with_a_space_before_its_paren_is_still_a_call(self):
+        tokens, _, _ = _at_caret("SELECT count (|) FROM t1")
+        assert _detect_keyword_context(tokens) == TARGET_ALL
 
     def test_a_plain_cte_body_is_a_nested_query(self):
         tokens, _, _ = _at_caret("WITH x AS (|")
@@ -86,23 +98,23 @@ class TestCallParen:
 class TestValuePosition:
     def test_inside_a_literal_is_quoted(self):
         tokens, _, caret = _at_caret("UPDATE t SET c1 = '|'")
-        assert _detect_value_position(tokens, caret)[1]
+        assert _detect_value_position(tokens, caret).quoted
 
     def test_after_an_equals_is_not_quoted(self):
         tokens, _, caret = _at_caret("UPDATE t SET c1 = |")
-        assert not _detect_value_position(tokens, caret)[1]
+        assert not _detect_value_position(tokens, caret).quoted
 
     def test_inside_an_in_list_is_quoted(self):
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN ('|')")
-        assert _detect_value_position(tokens, caret)[1]
+        assert _detect_value_position(tokens, caret).quoted
 
     def test_an_in_list_says_so(self):
         tokens, _, caret = _at_caret("SELECT * FROM t WHERE c1 IN (|")
-        assert _detect_value_position(tokens, caret)[2]
+        assert _detect_value_position(tokens, caret).in_list
 
     def test_a_plain_slot_does_not(self):
         tokens, _, caret = _at_caret("UPDATE t SET c1 = |")
-        assert not _detect_value_position(tokens, caret)[2]
+        assert not _detect_value_position(tokens, caret).in_list
 
 
 class TestNonTriggers:

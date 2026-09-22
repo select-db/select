@@ -421,6 +421,31 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			Name: "a call with a space before its paren",
+			SQL:  "SELECT count (|) FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a materialization hint is not a call",
+			SQL:  "WITH x AS MATERIALIZED (SELECT | FROM t1) SELECT c1 FROM x",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "an IN list offers values, not relations",
+			SQL:  "SELECT * FROM t1 WHERE c2 IN (|",
+			Expected: nil,
+		},
+		{
 			Name: "DISTINCT select list completion",
 			SQL:  "SELECT DISTINCT | FROM t1",
 			Expected: []CompletionTestExpectation{

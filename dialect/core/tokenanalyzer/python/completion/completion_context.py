@@ -4,6 +4,8 @@ Scans tokens backward from caret to determine what to complete.
 """
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from sqlglot.tokens import TokenType
 
 from analysis.schema import tokenize
@@ -75,16 +77,15 @@ def detect_completion_context(
                 elif keyword_ctx == TARGET_ALL:
                     targets = 0
             else:
-                value_col, quoted, in_list = _detect_value_position(tokens, caret_offset)
-                if value_col:
-                    preceding_column = value_col
+                slot = _detect_value_position(tokens, caret_offset)
+                if slot.column:
+                    preceding_column = slot.column
                     value_position = True
                     targets = TARGET_ENUM_VALUE
-                    # Outside a literal an expression fits in a plain value
-                    # slot too, so the clause still says what else may be
-                    # written. An IN list is not one: its paren reads as a
-                    # nested query, whose targets are not this clause's.
-                    if not quoted and not in_list:
+                    # An expression fits a plain value slot too, so the clause
+                    # still says what else may be written. An IN list's paren
+                    # reads as a nested query, whose targets are its own.
+                    if not slot.quoted and not slot.in_list:
                         targets |= keyword_ctx
 
     return {
@@ -198,6 +199,15 @@ _KEYWORD_MATCHERS: list[tuple[str, int, bool]] = [
 ]
 
 
+def _opens_cte_body(tokens: list, name_idx: int) -> bool:
+    """Report the name at name_idx as a materialization hint rather than a
+    function: only AS can precede one, and no call may stand there."""
+    i = name_idx
+    while i >= 0 and (_is_identifier_token(tokens[i]) or tokens[i].token_type == TokenType.NOT):
+        i -= 1
+    return i >= 0 and tokens[i].token_type == TokenType.ALIAS
+
+
 def _detect_keyword_context(tokens: list) -> int:
     if not tokens:
         return TARGET_SCHEMA_AND_TABLE_ALL
@@ -227,13 +237,11 @@ def _detect_keyword_context(tokens: list) -> int:
                 continue
             if i > 0 and tokens[i - 1].text.upper() == "VALUES":
                 return TARGET_COLUMN
-            # A call's paren touches its name. Anything else that reads as a
-            # name before a paren, MATERIALIZED among them, is a word of the
-            # syntax rather than a function, and the paren after it opens a
-            # query. What belongs inside a call is what belongs in the clause
-            # around it, so only that one is scanned past.
+            # What belongs inside a call belongs in the clause around it, so a
+            # call's paren is scanned past. A CTE body's is not: it opens a
+            # query, whose targets are its own.
             if i > 0 and _is_identifier_token(tokens[i - 1]) \
-                    and tokens[i - 1].end + 1 == tokens[i].start:
+                    and not _opens_cte_body(tokens, i - 1):
                 i -= 2
                 continue
             return TARGET_SCHEMA_AND_TABLE_ALL
@@ -340,14 +348,20 @@ def _column_ref_at(tokens: list, idx: int) -> dict | None:
     return {"name": name}
 
 
-def _detect_value_position(tokens: list, caret_offset: int) -> tuple[dict | None, bool, bool]:
-    """Detect caret in a value slot: col = '|', col IN ('|'), col = |.
+class ValueSlot(NamedTuple):
+    """Where a value may be written: col = '|', col IN ('|'), col = |."""
 
-    The second result says the caret sits inside a literal, where a value is
-    the only thing that can be written. The third says the slot is an IN list.
-    """
+    column: dict | None
+    quoted: bool
+    in_list: bool
+
+
+_NO_VALUE_SLOT = ValueSlot(None, False, False)
+
+
+def _detect_value_position(tokens: list, caret_offset: int) -> ValueSlot:
     if not tokens:
-        return None, False, False
+        return _NO_VALUE_SLOT
 
     i = len(tokens) - 1
     quoted = False
@@ -355,24 +369,24 @@ def _detect_value_position(tokens: list, caret_offset: int) -> tuple[dict | None
     last = tokens[i]
     if last.token_type == TokenType.STRING:
         if not (last.start < caret_offset <= last.end + 1):
-            return None, False, False
+            return _NO_VALUE_SLOT
         quoted = True
         i -= 1
 
     if i < 0:
-        return None, False, False
+        return _NO_VALUE_SLOT
 
     if tokens[i].token_type in (TokenType.EQ, TokenType.NEQ):
-        return _column_ref_at(tokens, i - 1), quoted, False
+        return ValueSlot(_column_ref_at(tokens, i - 1), quoted, False)
 
     j = i
     while j >= 0 and tokens[j].token_type in (TokenType.STRING, TokenType.COMMA):
         j -= 1
     if j >= 0 and tokens[j].token_type == TokenType.L_PAREN \
             and j >= 1 and tokens[j - 1].token_type == TokenType.IN:
-        return _column_ref_at(tokens, j - 2), quoted, True
+        return ValueSlot(_column_ref_at(tokens, j - 2), quoted, True)
 
-    return None, False, False
+    return _NO_VALUE_SLOT
 
 
 # --- Token utilities ---
