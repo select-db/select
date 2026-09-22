@@ -260,10 +260,17 @@ func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissio
 }
 
 // checkTables asks for a right on every table the statement names, per column
-// where it named columns of it. A field it tests counts with the ones it
-// returns: a predicate reads its column one answer at a time.
+// where the action is scoped to one.
+//
+// A select is scoped by every column it reads, the ones it tests included. A
+// write is scoped by the columns it writes: one it only tests asks for a right
+// of its own, but never stands in for the right on the table, or a grant on
+// one column would delete the whole row.
 func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
-	fields := slices.Concat(stmt.Fields, stmt.Where)
+	scoping, tested := stmt.Fields, stmt.Where
+	if action == ActionSelect {
+		scoping, tested = slices.Concat(stmt.Fields, stmt.Where), nil
+	}
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
 			return &PermissionDeniedError{
@@ -277,54 +284,79 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 		}
 
 		named := false
-		for _, field := range fields {
-			if field.Table != table.Name || field.Schema != table.Schema {
+		for _, field := range scoping {
+			if !fieldOf(field, table) {
 				continue
 			}
 			named = true
+			if denied := checkColumn(field, table, action, dbInstanceID, compiledPermissions); denied != nil {
+				return denied
+			}
+		}
 
-			allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, field.Name, action)
+		if !named {
+			// A table none of the fields came from is still read: joined for
+			// its rows, filtered on in a WHERE. The per-column walk matches
+			// nothing for it, so the table as a whole is what there is to ask
+			// about.
+			allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, "", action)
 			if !allowed {
-				startLine, startCol, endCol := field.StartLine, field.StartCol, field.EndCol
-				if startLine == 0 {
-					// No position on field (e.g. expanded from SELECT *), use table position
-					startLine, startCol, endCol = table.StartLine, table.StartCol, table.EndCol
-				}
-
 				return &PermissionDeniedError{
 					Action:    action,
 					Schema:    table.Schema,
 					Table:     table.Name,
-					Column:    field.Name,
 					RoleName:  role,
-					StartLine: startLine,
-					StartCol:  startCol,
-					EndCol:    endCol,
+					StartLine: table.StartLine,
+					StartCol:  table.StartCol,
+					EndCol:    table.EndCol,
 				}
 			}
 		}
-		if named {
-			continue
-		}
 
-		// A table none of the fields came from is still read: joined for its
-		// rows, filtered on in a WHERE. The per-column walk matches nothing for
-		// it, so the table as a whole is what there is to ask about.
-		allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, "", action)
-		if !allowed {
-			return &PermissionDeniedError{
-				Action:    action,
-				Schema:    table.Schema,
-				Table:     table.Name,
-				RoleName:  role,
-				StartLine: table.StartLine,
-				StartCol:  table.StartCol,
-				EndCol:    table.EndCol,
+		for _, field := range tested {
+			if !fieldOf(field, table) {
+				continue
+			}
+			if denied := checkColumn(field, table, action, dbInstanceID, compiledPermissions); denied != nil {
+				return denied
 			}
 		}
 	}
 
 	return nil
+}
+
+func fieldOf(field InspectField, table InspectTable) bool {
+	return field.Table == table.Name && field.Schema == table.Schema
+}
+
+// checkColumn reports the error for a column the role may not act on, or nil.
+// A field expanded from a star carries no position of its own, so the table's
+// is what the marker has to go on.
+func checkColumn(
+	field InspectField,
+	table InspectTable,
+	action, dbInstanceID string,
+	compiledPermissions CompiledPermissions,
+) *PermissionDeniedError {
+	allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, field.Name, action)
+	if allowed {
+		return nil
+	}
+	startLine, startCol, endCol := field.StartLine, field.StartCol, field.EndCol
+	if startLine == 0 {
+		startLine, startCol, endCol = table.StartLine, table.StartCol, table.EndCol
+	}
+	return &PermissionDeniedError{
+		Action:    action,
+		Schema:    table.Schema,
+		Table:     table.Name,
+		Column:    field.Name,
+		RoleName:  role,
+		StartLine: startLine,
+		StartCol:  startCol,
+		EndCol:    endCol,
+	}
 }
 
 // EvaluateSee returns which driver-column positions to mask, or errors when a
