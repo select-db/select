@@ -2,11 +2,11 @@
 incomplete statement. That name must never reach the caller as something to
 complete: a table or column that does not exist reads as one that does.
 
-These go through the dispatcher rather than a collector, because that is where
-the response is cleaned and where a handler added later is covered.
+The cases that need a collector go through the dispatcher, because that is
+where a request is patched and its response cleaned.
 """
 import server
-from completion.caret_patch import PLACEHOLDER, without_placeholders
+from completion.caret_patch import PLACEHOLDER, unwrap_explain, without_placeholders
 
 SCHEMA = {
     "schemas": [
@@ -80,3 +80,38 @@ class TestWithoutPlaceholders:
     def test_it_keeps_what_the_caller_wrote(self):
         response = {"relations": [{"table": "t1", "alias": ""}]}
         assert without_placeholders(response) == response
+
+
+class TestUnwrapExplain:
+    def test_it_blanks_the_word(self):
+        assert unwrap_explain("EXPLAIN SELECT 1") == "        SELECT 1"
+
+    def test_it_blanks_the_options(self):
+        for sql in ("EXPLAIN ANALYZE SELECT 1",
+                    "EXPLAIN (ANALYZE, VERBOSE) SELECT 1",
+                    "EXPLAIN QUERY PLAN SELECT 1"):
+            assert unwrap_explain(sql).strip() == "SELECT 1"
+
+    def test_it_keeps_every_offset(self):
+        sql = "EXPLAIN ANALYZE\nSELECT 1"
+        patched = unwrap_explain(sql)
+        assert len(patched) == len(sql)
+        assert patched.count("\n") == sql.count("\n")
+
+    def test_it_leaves_a_column_named_explain_alone(self):
+        assert unwrap_explain("SELECT explain FROM t") == "SELECT explain FROM t"
+
+    def test_it_leaves_a_commented_explain_alone(self):
+        sql = "SELECT 1 -- EXPLAIN SELECT 2"
+        assert unwrap_explain(sql) == sql
+
+    def test_it_reaches_a_later_statement(self):
+        assert unwrap_explain("SELECT 1; EXPLAIN SELECT 2").endswith("SELECT 2")
+        assert "EXPLAIN" not in unwrap_explain("SELECT 1; EXPLAIN SELECT 2")
+
+    def test_it_reaches_past_a_leading_comment(self):
+        assert "EXPLAIN" not in unwrap_explain("-- c\nEXPLAIN SELECT 1")
+
+    def test_it_blanks_the_dialects_own_spellings(self):
+        for sql in ("EXPLAIN FORMAT=JSON SELECT 1", "EXPLAIN EXTENDED SELECT 1"):
+            assert unwrap_explain(sql).strip() == "SELECT 1"
