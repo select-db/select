@@ -351,6 +351,36 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			// A LATERAL wraps the query whose columns these are, and projects
+			// nothing itself.
+			Name: "a LATERAL relation read from outside it",
+			SQL:  "SELECT * FROM t1 a JOIN LATERAL (SELECT c1 FROM t2 b) l ON true WHERE l.|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+			},
+		},
+		{
+			Name: "a CROSS JOIN LATERAL too",
+			SQL:  "SELECT * FROM t1 a CROSS JOIN LATERAL (SELECT c1 FROM t2 b) l WHERE l.|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+			},
+		},
+		{
+			// A union branch names its relations for itself. Outside the
+			// parenthesis they are gone, and only the derived table remains.
+			Name:     "a union branch's alias does not leave its parenthesis",
+			SQL:      "SELECT * FROM (SELECT c1 FROM t1 p UNION SELECT c1 FROM t2 q) u WHERE p.|",
+			Expected: nil,
+		},
+		{
+			Name: "the union's own alias is read there instead",
+			SQL:  "SELECT * FROM (SELECT c1 FROM t1 p UNION SELECT c1 FROM t2 q) u WHERE u.|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+			},
+		},
+		{
 			// A parenthesis inside a literal is text. Both sides count the
 			// caret's depth and a scope's over tokens, so neither sees one.
 			Name: "a parenthesis inside a literal",
