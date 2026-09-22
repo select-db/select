@@ -47,6 +47,7 @@ def detect_completion_context(
             "preceding_column":   None,
             "insert_target_table": "",
             "value_position":     False,
+            "shared_columns":     False,
         }
 
     parts, caret_after_dot = _parse_qualified_parts(tokens)
@@ -64,8 +65,10 @@ def detect_completion_context(
     insert_target = ""
     preceding_column = None
     value_position = False
+    shared_columns = False
 
     if not caret_after_dot and not parts:
+        shared_columns = _in_a_join_using_list(tokens)
         insert_target = _detect_insert_column_list(tokens)
         if insert_target:
             targets = TARGET_COLUMN
@@ -98,6 +101,7 @@ def detect_completion_context(
         "preceding_column":   preceding_column,
         "insert_target_table": insert_target,
         "value_position":     value_position,
+        "shared_columns":     shared_columns,
     }
 
 
@@ -248,6 +252,29 @@ _STATEMENT_WORDS = frozenset({
 })
 
 
+# --- Join USING list detection ---
+
+def _in_a_join_using_list(tokens: list) -> bool:
+    """Report the caret as inside a join's USING list, where only a name every
+    side carries is legal, and only unqualified.
+
+    The clause the USING opens is asked for rather than decided again here: a
+    merge's and a delete's USING are the same word and name a relation.
+    """
+    depth = 0
+    for i in range(len(tokens) - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+        elif token_type == TokenType.L_PAREN:
+            if depth > 0:
+                depth -= 1
+                continue
+            return (i > 0 and tokens[i - 1].token_type == TokenType.USING
+                    and _contextual_target(tokens, i - 1, "USING") == TARGET_COLUMN)
+    return False
+
+
 def _contextual_target(tokens: list, idx: int, upper: str) -> int | None:
     """The target for a word the rest of the statement gives a meaning to, or
     None when this word is not one of those and the table can answer."""
@@ -335,11 +362,26 @@ def _reads_as_a_name(tokens: list, idx: int) -> bool:
     return idx + 1 < len(tokens) and tokens[idx + 1].token_type in _NAME_FOLLOWERS
 
 
+def _offers_new_relations(target: int) -> bool:
+    """Whether the clause names a relation the query does not hold yet."""
+    return bool(target & _ALL_FLAG)
+
+
+def _narrowed_to_a_call(target: int, inside_call: bool) -> int:
+    """The clause's target, less what a call's arguments cannot hold. A FROM
+    names relations, but a call standing in one takes values, so a caret
+    between its parens reads the columns rather than the catalogue."""
+    if inside_call and _offers_new_relations(target):
+        return TARGET_TABLE_AND_COLUMN
+    return target
+
+
 def _detect_keyword_context(tokens: list) -> int:
     if not tokens:
         return TARGET_SCHEMA_AND_TABLE_ALL
 
     paren_depth = 0
+    inside_call = False
     i = len(tokens) - 1
 
     if i >= 0 and tokens[i].token_type == TokenType.DOT:
@@ -364,7 +406,10 @@ def _detect_keyword_context(tokens: list) -> int:
                 return TARGET_SCHEMA_AND_TABLE_ALL
             # An expression's paren -- a call's arguments, a window spec, a
             # grouping -- writes what the clause around it writes, so the walk
-            # continues rather than treating the paren as a new query.
+            # continues rather than treating the paren as a new query. Only a
+            # call's paren narrows that clause, since a relation standing in a
+            # FROM is still a relation when a comma or LATERAL precedes it.
+            inside_call = inside_call or _is_identifier_token(tokens[i - 1])
             i -= 1
             continue
 
@@ -378,10 +423,10 @@ def _detect_keyword_context(tokens: list) -> int:
         if not _reads_as_a_name(tokens, i):
             contextual = _contextual_target(tokens, i, upper)
             if contextual is not None:
-                return contextual
+                return _narrowed_to_a_call(contextual, inside_call)
             for kw_text, target in _KEYWORD_MATCHERS:
                 if upper == kw_text:
-                    return target
+                    return _narrowed_to_a_call(target, inside_call)
 
         if upper in _STATEMENT_WORDS and upper != "WITH":
             break

@@ -22,6 +22,11 @@ def _at_caret(sql_with_caret: str, sg_dialect: str = "postgres"):
     return _tokenize_up_to(sql, caret, sg_dialect), sql, caret
 
 
+def _shared(sql_with_caret: str, sg_dialect: str = "postgres") -> bool:
+    _, sql, caret = _at_caret(sql_with_caret, sg_dialect)
+    return detect_completion_context(sql, 1, caret, ["main"], sg_dialect)["shared_columns"]
+
+
 def _check(sql_with_caret: str, sg_dialect: str = "postgres") -> bool:
     tokens, sql, caret = _at_caret(sql_with_caret, sg_dialect)
     return _detect_setting_context(tokens, sql, caret)
@@ -206,6 +211,66 @@ class TestContextualWords:
     def test_returning_names_columns(self):
         tokens, _, _ = _at_caret("DELETE FROM t1 RETURNING |")
         assert _detect_keyword_context(tokens) == TARGET_COLUMN
+
+
+class TestInsideACall:
+    def test_a_table_function_takes_values(self):
+        tokens, _, _ = _at_caret("SELECT * FROM generate_series(|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_joined_table_function_takes_values(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 JOIN generate_series(|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_relation_after_a_comma_is_still_a_relation(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1, (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_lateral_is_still_a_relation(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 JOIN LATERAL (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_merge_source_is_still_a_relation(self):
+        tokens, _, _ = _at_caret("MERGE INTO t1 USING (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_delete_source_is_still_a_relation(self):
+        tokens, _, _ = _at_caret("DELETE FROM t1 USING (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_from_clause_itself_still_takes_relations(self):
+        tokens, _, _ = _at_caret("SELECT * FROM |")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_subquery_in_from_still_takes_relations(self):
+        tokens, _, _ = _at_caret("SELECT * FROM (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+
+class TestSharedColumns:
+    def test_a_join_using_list(self):
+        assert _shared("SELECT * FROM t1 JOIN t2 USING (|")
+
+    def test_a_later_name_in_the_list(self):
+        assert _shared("SELECT * FROM t1 JOIN t2 USING (c1, |")
+
+    def test_a_join_over_a_subquery(self):
+        assert _shared("SELECT * FROM t1 JOIN (SELECT 1) s USING (|")
+
+    def test_a_delete_using_is_not_one(self):
+        assert not _shared("DELETE FROM t1 USING |")
+
+    def test_a_merge_using_is_not_one(self):
+        assert not _shared("MERGE INTO t1 USING |")
+
+    def test_an_insert_column_list_is_not_one(self):
+        assert not _shared("INSERT INTO t1 (|")
+
+    def test_a_join_on_is_not_one(self):
+        assert not _shared("SELECT * FROM t1 JOIN t2 ON |")
+
+    def test_a_qualified_caret_is_not_one(self):
+        assert not _shared("SELECT * FROM t1 JOIN t2 USING (t1.|")
 
 
 class TestValuePosition:
