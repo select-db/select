@@ -78,6 +78,7 @@ const (
 	CompletionTargetSetting     // Runtime parameter completion (@@var, SHOW, PRAGMA)
 	CompletionTargetKeyword     // The word a statement opens with, or the one a finished clause waits for
 	CompletionTargetFunction    // A call, which stands wherever a value does
+	CompletionTargetType        // A type name, which stands only in a cast
 
 	CompletionTargetSchemaAndTable           = CompletionTargetSchema | CompletionTargetTable
 	CompletionTargetSchemaAndRelationRefOnly = CompletionTargetSchema | CompletionTargetTable | completionTargetRefOnlyFlag
@@ -138,7 +139,7 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	inScopeRefs := filterByCharScope(refs, caretOffset, nestingLevel)
 	inScopeCtes := filterByCharScope(cteTables, caretOffset, nestingLevel)
 
-	var schemas, tables, views, columns, operators, enumValues, keywords, functions []Candidate
+	var schemas, tables, views, columns, operators, enumValues, keywords, functions, types []Candidate
 
 	if ctx.Targets&CompletionTargetKeyword != 0 {
 		keywords = cs.completeKeywords(ctx.KeywordGroup)
@@ -146,6 +147,10 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 
 	if ctx.Targets&CompletionTargetFunction != 0 {
 		functions = cs.completeFunctions()
+	}
+
+	if ctx.Targets&CompletionTargetType != 0 {
+		types = cs.completeTypes(meta)
 	}
 
 	if ctx.Targets&CompletionTargetSchema != 0 {
@@ -272,7 +277,31 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	all = append(all, enumValues...)
 	all = append(all, keywords...)
 	all = append(all, functions...)
+	all = append(all, types...)
 	return all
+}
+
+// completeTypes are the types this database holds: the dialect's own, which
+// introspection puts in the metadata beside the user's, so both arrive here by
+// the same road.
+func (cs *CompletionStrategy) completeTypes(meta Metadata) []Candidate {
+	known := meta.AllTypes()
+	types := make([]Candidate, 0, len(known))
+	seen := make(map[string]bool, len(known))
+	for _, t := range known {
+		name := t.Name
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		types = append(types, Candidate{
+			Type:       CandidateTypeType,
+			Text:       name,
+			Definition: t.Display,
+			Comment:    t.Description,
+		})
+	}
+	return types
 }
 
 // completeFunctions are the calls this dialect knows. A call stands wherever a

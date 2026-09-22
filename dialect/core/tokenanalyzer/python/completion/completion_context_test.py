@@ -8,6 +8,7 @@ from completion.completion_context import (
     TARGET_OPERATOR,
     TARGET_SCHEMA_AND_TABLE_ALL,
     TARGET_TABLE_AND_COLUMN,
+    TARGET_TYPE,
     detect_completion_context,
     _detect_keyword_context,
     _detect_setting_context,
@@ -338,6 +339,25 @@ class TestExpressionPositions:
 
     def test_a_from_clause_does_not(self):
         assert not self._takes_a_call("SELECT * FROM |")
+
+
+class TestTypePositions:
+    def _targets(self, sql_with_caret: str) -> int:
+        return _field(sql_with_caret, "targets")
+
+    def test_a_cast_takes_a_type(self):
+        assert self._targets("SELECT CAST(c1 AS |") == TARGET_TYPE
+        assert self._targets("SELECT CAST(count(c1) AS |") == TARGET_TYPE
+        assert self._targets("SELECT * FROM t1 WHERE CAST(c1 AS |") == TARGET_TYPE
+
+    def test_the_shorthand_cast_too(self):
+        assert self._targets("SELECT c1::|") == TARGET_TYPE
+
+    def test_an_alias_is_not_a_type(self):
+        assert self._targets("SELECT c1 AS |") != TARGET_TYPE
+        assert self._targets("SELECT * FROM t1 AS |") != TARGET_TYPE
+        assert self._targets("WITH x AS |") != TARGET_TYPE
+        assert self._targets("SELECT count(c1) AS |") != TARGET_TYPE
 
 
 class TestClauseFollowers:

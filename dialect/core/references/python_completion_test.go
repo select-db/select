@@ -175,6 +175,47 @@ func TestCompletion(t *testing.T) {
 // TestCompletionFunctions runs the cases naming which carets take a call. The
 // builtins are the dialect's hundreds, so the cases assert that they are
 // offered and that one the dialect declares is among them.
+// TestCompletionTypes runs the carets where a type name stands. The types are
+// the database's own, so the fixture's list is the whole answer.
+func TestCompletionTypes(t *testing.T) {
+	analyzer := testutil.NewTestAnalyzer(t)
+	defer analyzer.Close()
+
+	for _, di := range dialects {
+		t.Run(di.name, func(t *testing.T) {
+			di.dialect.SetAnalyzer(analyzer)
+
+			meta := core.GetCompletionTestMetadata()
+			meta.DefaultSchema = di.defaultSchema
+			if len(meta.Schemas) > 0 {
+				meta.Schemas[0].Name = di.defaultSchema
+			}
+
+			for _, tc := range core.GetCompletionTypeCases() {
+				t.Run(tc.Name, func(t *testing.T) {
+					text, caretCharPos := removeCaret(tc.SQL)
+					caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
+
+					got, err := di.dialect.Complete(context.Background(), text, caretLine, caretOffset, meta)
+					if err != nil {
+						t.Fatalf("complete: %v", err)
+					}
+
+					var names []string
+					for _, c := range got {
+						if c.Type == core.CandidateTypeType {
+							names = append(names, c.Text)
+						}
+					}
+					if !slices.Equal(names, tc.Expected) {
+						t.Errorf("types = %v, want %v", names, tc.Expected)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCompletionFunctions(t *testing.T) {
 	analyzer := testutil.NewTestAnalyzer(t)
 	defer analyzer.Close()

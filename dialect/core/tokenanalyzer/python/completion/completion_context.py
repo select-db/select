@@ -23,6 +23,7 @@ TARGET_ENUM_VALUE = 1 << 6
 TARGET_SETTING = 1 << 7
 TARGET_KEYWORD = 1 << 8
 TARGET_FUNCTION = 1 << 9
+TARGET_TYPE = 1 << 10
 
 TARGET_SCHEMA_AND_TABLE      = TARGET_SCHEMA | TARGET_TABLE
 TARGET_SCHEMA_AND_TABLE_ALL  = TARGET_SCHEMA | TARGET_TABLE | _ALL_FLAG
@@ -71,6 +72,9 @@ def detect_completion_context(
     if _caret_in_a_comment(sql, tokens, caret_offset):
         # Nothing a writer types in a comment is SQL.
         return _bare_context(0)
+
+    if _writes_a_type(tokens):
+        return _bare_context(TARGET_TYPE)
 
     if _detect_setting_context(tokens, sql, caret_offset):
         return _bare_context(TARGET_SETTING)
@@ -625,6 +629,38 @@ def _in_the_statement(group: str, tokens: list) -> str:
                 return f"{upper.lower()}_{group}"
             return group
     return group
+
+
+_CAST_WORDS = frozenset({"CAST", "TRY_CAST", "SAFE_CAST"})
+
+
+def _writes_a_type(tokens: list) -> bool:
+    """Whether a type name stands here: after :: or after a cast's AS."""
+    if not tokens:
+        return False
+    last = tokens[-1]
+    if last.token_type == TokenType.DCOLON:
+        return True
+    return (last.token_type == TokenType.ALIAS
+            and _enclosing_call(tokens, len(tokens) - 1) in _CAST_WORDS)
+
+
+def _enclosing_call(tokens: list, idx: int) -> str:
+    """The name of the call whose parentheses hold the token at idx, upper
+    cased, or "" when no open paren before it belongs to one."""
+    depth = 0
+    for i in range(idx - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+        elif token_type == TokenType.L_PAREN:
+            if depth:
+                depth -= 1
+            elif i > 0 and _is_identifier_token(tokens[i - 1]):
+                return tokens[i - 1].text.upper()
+            else:
+                return ""
+    return ""
 
 
 def _already_renamed(tokens: list) -> bool:

@@ -54,6 +54,10 @@ func GetCompletionTestMetadata() Metadata {
 						},
 					},
 				},
+				Types: []Type{
+					{Schema: "main", Name: "INTEGER", Kind: "b", Display: "INTEGER"},
+					{Schema: "main", Name: "TEXT", Kind: "b", Display: "TEXT"},
+				},
 			},
 		},
 	}
@@ -832,5 +836,29 @@ func GetCompletionFunctionCases() []CompletionFunctionCase {
 		{"a relation's columns after its dot do not", "SELECT t1.|", false},
 		{"a FROM clause does not", "SELECT * FROM |", false},
 		{"a rename list does not", "SELECT * FROM t1 AS a (|", false},
+	}
+}
+
+// CompletionTypeCase names a caret and the types it takes, or none.
+type CompletionTypeCase struct {
+	Name     string
+	SQL      string
+	Expected []string
+}
+
+// GetCompletionTypeCases returns the carets where a type name stands. A type
+// is written only in a cast, so everywhere else the answer is none.
+func GetCompletionTypeCases() []CompletionTypeCase {
+	types := []string{"INTEGER", "TEXT"}
+	return []CompletionTypeCase{
+		{"a cast takes a type", "SELECT CAST(c1 AS |) FROM t1", types},
+		{"the shorthand cast too", "SELECT c1::| FROM t1", types},
+		{"a cast of a call too", "SELECT CAST(count(c1) AS |) FROM t1", types},
+		{"a cast in a predicate too", "SELECT * FROM t1 WHERE CAST(c1 AS |)", types},
+		{"an alias is not a type", "SELECT c1 AS | FROM t1", nil},
+		{"a relation alias is not either", "SELECT * FROM t1 AS |", nil},
+		{"a CTE body is not", "WITH x AS |", nil},
+		{"a finished cast is not", "SELECT CAST(c1 AS text) | FROM t1", nil},
+		{"a select item is not", "SELECT | FROM t1", nil},
 	}
 }
