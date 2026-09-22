@@ -60,14 +60,6 @@ class _ScopeBounds:
             i += 1
         return -1, -1
 
-    def find_from_keyword(self, scope_start: int, scope_end: int) -> int:
-        """Find the FROM keyword offset within the given scope range."""
-        for t in self._tokens:
-            if t.token_type == TokenType.FROM and t.start >= scope_start:
-                if scope_end < 0 or t.start <= scope_end:
-                    return t.start
-        return -1
-
     def find_statement_end(self, offset: int) -> int:
         """Find the semicolon offset that ends the statement containing offset, or -1."""
         for sc in self.semicolons:
@@ -288,9 +280,6 @@ def _collect_from_scopes(
             continue
         nesting = _nesting_level(scope)
         scope_start, scope_end = -1, -1
-        # For physical table refs in FROM, use the FROM keyword position as scope
-        # start so they aren't visible before FROM (e.g. at "SELECT |" before FROM).
-        from_start = -1
         if bounds:
             first_meta = _first_token_meta(scope.expression)
             if first_meta:
@@ -301,11 +290,6 @@ def _collect_from_scopes(
                 else:
                     scope_start = bounds.find_select_before(first_meta["start"])
                     scope_end = bounds.find_statement_end(first_meta["start"])
-                # Find FROM keyword position for table ref visibility.
-                # Table refs should only be visible from the FROM keyword onward,
-                # not at the SELECT position before FROM.
-                if scope_start >= 0 and scope_end >= 0:
-                    from_start = bounds.find_from_keyword(scope_start, scope_end)
 
         # Nesting level where the vtab is available = one level up from where it's defined
         parent_nesting = max(0, nesting - 1)
@@ -333,9 +317,10 @@ def _collect_from_scopes(
                         vtab["nesting_level"] = parent_nesting
                         seen_vtabs.add(source_name)
                         virtual_tables.append(vtab)
-        # Physical table refs: scope starts at FROM (not at SELECT) so they
-        # aren't visible before the FROM clause in the same scope
-        table_scope_start = from_start if from_start >= 0 else scope_start
+        # A relation a scope reads is in scope for the whole of it, which is
+        # what the outermost query already does. Starting at the FROM instead
+        # left "(SELECT s. FROM t2 s)" with nothing to offer.
+        table_scope_start = scope_start
         for alias, source in nested_sources:
             if isinstance(source, exp.Table):
                 _add_table_ref(

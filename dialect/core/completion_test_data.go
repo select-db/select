@@ -333,13 +333,34 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			Name: "a derived table's own relation, named before its FROM",
+			SQL:  "SELECT * FROM (SELECT c.| FROM t1 c) s",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a subquery's own relation, named before its FROM",
+			SQL:  "SELECT * FROM t1 WHERE c1 IN (SELECT s.| FROM t2 s)",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
+			// The subquery reads t2 and the query around it reads t1, so both
+			// are in scope and c1, which both hold, is offered qualified.
 			Name: "subquery in WHERE IN clause",
 			SQL:  "SELECT * FROM t1 WHERE c1 IN (SELECT | FROM t2)",
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeSchema, Text: defaultSchema},
 				{Type: CandidateTypeTable, Text: "t1"},
-				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+				{Type: CandidateTypeColumn, Text: "t1.c1"},
+				{Type: CandidateTypeColumn, Text: "t2.c1"},
 				{Type: CandidateTypeColumn, Text: "c2"},
+				{Type: CandidateTypeColumn, Text: "c3"},
 			},
 		},
 		{
