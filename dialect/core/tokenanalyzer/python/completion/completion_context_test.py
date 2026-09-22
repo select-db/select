@@ -491,6 +491,17 @@ class TestClauseFollowers:
     def test_a_lock_names_its_strength(self):
         assert self._group("SELECT * FROM t1 FOR |") == "lock_strength"
 
+    def test_a_ddl_statement_waits_for_its_body(self):
+        assert self._group("ALTER TABLE t1 |") == "alter_action"
+        assert self._group("ALTER TABLE t1 ADD |") == "alter_target"
+        assert self._group("ALTER TABLE t1 DROP |") == "alter_target"
+        assert self._group("CREATE VIEW v |") == "create_body"
+        assert self._group("DROP TABLE t1 |") == "cascade_option"
+
+    def test_a_drop_statement_is_not_an_alters_drop(self):
+        assert self._group("DROP |") == "object_kind"
+        assert self._group("SELECT 1; DROP |") == "object_kind"
+
     def test_a_table_definition_waits_for_a_constraint(self):
         assert self._group("CREATE TABLE t (|") == "table_constraint"
         assert self._group("CREATE TABLE t (c1 INTEGER, |") == "table_constraint"

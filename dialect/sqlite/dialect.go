@@ -194,7 +194,9 @@ func (d *Dialect) KeywordsOutsideGroup() map[string][]string {
 		"set_operand":     {"TABLE"},
 		// SQLite locks a whole database and reads no FOR UPDATE.
 		"lock_strength": {"UPDATE"},
-		"query_word":    {"TABLE"},
+		// Its ALTER TABLE adds, drops and renames, and does nothing else.
+		"alter_action": {"ALTER", "SET"},
+		"query_word":   {"TABLE"},
 	}
 }
 
@@ -942,6 +944,7 @@ func defaultKeywords() []string {
 		"DEFAULT VALUES", "DISTINCT FROM", "REGEXP",
 		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
 		"OVER", "WINDOW", "PARTITION BY", "ROWS", "RANGE", "GROUPS",
+		"ADD", "RENAME", "COLUMN",
 		"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
 		"NOT NULL", "DEFAULT", "REFERENCES", "COLLATE", "GENERATED",
 		"AUTOINCREMENT",

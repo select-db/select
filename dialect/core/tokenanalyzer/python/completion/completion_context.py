@@ -325,6 +325,7 @@ _NAME_FOLLOWERS = {
 # before it belongs to a statement the caret is not in.
 _STATEMENT_WORDS = frozenset({
     "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "GRANT", "REVOKE", "WITH",
+    "CREATE", "ALTER", "DROP", "TRUNCATE",
 })
 
 
@@ -490,6 +491,10 @@ _CLAUSE_FOLLOWERS = {
     "SET":         "assignment",
     "VALUES":      "values",
     "PARTITION BY": "partition_item",
+    "ALTER":       "alter_action",
+    "CREATE":      "create_body",
+    "DROP":        "cascade_option",
+    "TRUNCATE":    "cascade_option",
     "LIMIT":       "row_count",
     "OFFSET":      "row_count",
     "INSERT":      "insert_target",
@@ -555,6 +560,7 @@ _ITEM_IS_COMPLETE_AT_A_NAME = frozenset({
     "aliased_relation", "aliased_select_item",
     "insert_target", "update_target", "merge_target",
     "partition_item", "window_sort_item",
+    "alter_action", "create_body", "cascade_option",
 })
 
 # The clauses whose own word is already the whole item: "DELETE" waits for
@@ -682,6 +688,10 @@ def _word_waiting(tokens: list, clause: Clause, last) -> str:
     if word in ("ALL", "DISTINCT") and len(tokens) >= 2 \
             and tokens[-2].text.upper() in _SET_OPERATIONS:
         return "query_word"
+    if word in ("ADD", "DROP") and _statement_word(tokens[:-1]) == "ALTER":
+        # Inside an ALTER these name a part of the table, not a whole object.
+        # The word itself opens a statement, so the search starts before it.
+        return "alter_target"
     if word == "ON" and _statement_word(tokens) == "INSERT":
         # A join's ON takes a predicate; an INSERT's takes the clause that
         # says what to do with a row that is already there.

@@ -405,6 +405,14 @@ var keywordGroups = map[string]map[string]bool{
 	"conflict_do":         setOf("DO"),
 	"conflict_resolution": setOf("NOTHING", "UPDATE"),
 	"null_ordering":       setOf("FIRST", "LAST"),
+	// What a DDL statement takes once it has named its object.
+	"alter_action": setOf("ADD", "DROP", "RENAME", "ALTER", "SET"),
+	"alter_target": setOf(
+		"COLUMN", "CONSTRAINT", "INDEX", "PRIMARY KEY", "UNIQUE",
+		"FOREIGN KEY", "CHECK",
+	),
+	"create_body":    setOf("AS", "ON"),
+	"cascade_option": setOf("CASCADE", "RESTRICT"),
 	// What a table definition takes: a constraint on the whole table where a
 	// name is about to be written, or one on the column just typed.
 	"table_constraint": setOf(

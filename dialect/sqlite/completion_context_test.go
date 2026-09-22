@@ -91,6 +91,8 @@ func TestWordsSQLiteWritesOnlyElsewhere(t *testing.T) {
 		{"delete_relation", "USING", "joined_relation"},
 		{"set_operand", "TABLE", "object_kind"},
 		{"lock_strength", "UPDATE", "statement"},
+		{"alter_action", "ALTER", "statement"},
+		{"alter_action", "SET", "update_target"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.group+"/"+tc.absent, func(t *testing.T) {

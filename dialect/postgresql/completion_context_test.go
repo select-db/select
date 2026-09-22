@@ -103,6 +103,13 @@ func TestKeywordGroupWords(t *testing.T) {
 		{"conflict_action", []string{"DO", "ON CONSTRAINT"}},
 		{"conflict_resolution", []string{"NOTHING", "UPDATE"}},
 		{"null_ordering", []string{"FIRST", "LAST"}},
+		{"alter_action", []string{"ADD", "DROP", "RENAME", "ALTER", "SET"}},
+		{"alter_target", []string{
+			"COLUMN", "CONSTRAINT", "INDEX", "PRIMARY KEY", "UNIQUE",
+			"FOREIGN KEY", "CHECK",
+		}},
+		{"create_body", []string{"AS", "ON"}},
+		{"cascade_option", []string{"CASCADE", "RESTRICT"}},
 		{"table_constraint", []string{
 			"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
 		}},
