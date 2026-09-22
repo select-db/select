@@ -33,6 +33,7 @@ var (
 	mainT1  = func(action string) Right { return Right{Action: action, Schema: "main", Table: "t1"} }
 	mainT2  = func(action string) Right { return Right{Action: action, Schema: "main", Table: "t2"} }
 	otherT3 = func(action string) Right { return Right{Action: action, Schema: "other", Table: "t3"} }
+	mainV1  = func(action string) Right { return Right{Action: action, Schema: "main", Table: "v1"} }
 )
 
 // PermCasesFor are the cases a dialect parses.
@@ -185,6 +186,153 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "whether a row survives is an answer about t2",
+		},
+
+		// --- column-scoped grants. A right naming a column covers that column
+		// and no other, so each case here is the whole set of columns the
+		// statement reaches. A case that passes holding one column short of
+		// that set is a column read without a right on it.
+		{
+			Name:  "a column the select list names",
+			SQL:   "SELECT c1 FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "a grant on c1 alone is enough for a statement that reads c1 alone",
+		},
+		{
+			Name:  "a star reaching every column",
+			SQL:   "SELECT * FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "the star is expanded against the catalog, so it returns c2 as surely as it names it",
+		},
+		{
+			Name:  "a column only the WHERE reads",
+			SQL:   "SELECT c1 FROM t1 WHERE c2 = 'x'",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "which rows come back is an answer about c2, one predicate at a time",
+		},
+		{
+			Name:  "a column only the GROUP BY reads",
+			SQL:   "SELECT count(*) FROM t1 GROUP BY c2",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "one group per distinct value is the list of values",
+		},
+		{
+			Name:  "a column only the ORDER BY reads",
+			SQL:   "SELECT c1 FROM t1 ORDER BY c2",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "the order the rows come back in is the ordering of c2",
+		},
+		{
+			Name: "a column only a join condition reads",
+			SQL:  "SELECT t1.c1 FROM t1 JOIN t2 ON t1.c2 = t2.c3",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+				mainT2(core.ActionSelect).Only("c3"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "which pairs of rows match is an answer about both sides of the condition",
+		},
+		{
+			Name:  "a column an expression reads",
+			SQL:   "SELECT c1 || c2 FROM t1",
+			On:    []string{"postgresql", "sqlite"},
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "a column inside an expression is read whether or not it comes back under its own name",
+		},
+		{
+			Name:  "a column a derived table reads",
+			SQL:   "SELECT q.c1 FROM (SELECT c1 FROM t2) q",
+			Needs: []Right{mainT2(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "the right is on the column of t2 the inner query reads, not on the alias",
+		},
+		{
+			Name:  "a column of the other schema",
+			SQL:   "SELECT c4 FROM other.t3",
+			Needs: []Right{otherT3(core.ActionSelect).Only("c4")},
+			Op:    core.InspectOpSelect,
+			Why:   "a column right carries the schema its table is in",
+		},
+		{
+			Name:  "the column an insert names",
+			SQL:   "INSERT INTO t1 (c1) VALUES (1)",
+			Needs: []Right{mainT1(core.ActionInsert).Only("c1")},
+			Op:    core.InspectOpInsert,
+			Why:   "insert is scoped to a column like every other data action",
+		},
+		{
+			Name:  "the column an update writes and the column it filters on",
+			SQL:   "UPDATE t1 SET c1 = 1 WHERE c2 = 'x'",
+			Needs: []Right{mainT1(core.ActionUpdate).Only("c1"), mainT1(core.ActionUpdate).Only("c2")},
+			Op:    core.InspectOpUpdate,
+			Why:   "how many rows changed is an answer about c2, so a grant naming c1 alone is not enough",
+		},
+		{
+			Name:  "the column a delete filters on",
+			SQL:   "DELETE FROM t1 WHERE c2 = 'x'",
+			Needs: []Right{mainT1(core.ActionDelete).Only("c2")},
+			Op:    core.InspectOpDelete,
+			Why:   "which rows go is an answer about c2",
+		},
+		{
+			Name:  "a column an assignment reads",
+			SQL:   "UPDATE t1 SET c1 = c2",
+			Needs: []Right{mainT1(core.ActionUpdate).Only("c1"), mainT1(core.ActionUpdate).Only("c2")},
+			Op:    core.InspectOpUpdate,
+			Why:   "the value stored in c1 is read out of c2",
+		},
+		{
+			Name:  "a column an aliased update filters on",
+			SQL:   "UPDATE t1 AS a SET c1 = 1 WHERE a.c2 = 'x'",
+			Needs: []Right{mainT1(core.ActionUpdate).Only("c1"), mainT1(core.ActionUpdate).Only("c2")},
+			Op:    core.InspectOpUpdate,
+			Why:   "the alias names the target table, so a.c2 is c2 of t1",
+		},
+		{
+			Name:  "a column an aliased delete filters on",
+			SQL:   "DELETE FROM t1 AS a WHERE a.c2 = 'x'",
+			Needs: []Right{mainT1(core.ActionDelete).Only("c2")},
+			Op:    core.InspectOpDelete,
+			Why:   "the alias names the target table here too",
+		},
+		{
+			On:    []string{"postgresql", "sqlite"},
+			Name:  "two actions on two columns of one table",
+			SQL:   "INSERT INTO t1 (c1) VALUES (1) RETURNING c2",
+			Needs: []Right{mainT1(core.ActionInsert).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpInsert,
+			Why:   "the column written and the column handed back are scoped apart",
+		},
+
+		// --- a view. The statement names it as it names a table and carries
+		// nothing of what it reads, so the right is the one held on the view.
+		{
+			Name:  "a read through a view",
+			SQL:   "SELECT c5 FROM v1",
+			Needs: []Right{mainV1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a right on t1 is not a right on a view over it",
+		},
+		{
+			Name:  "a column of a view",
+			SQL:   "SELECT c5 FROM v1 WHERE c1 = 1",
+			Needs: []Right{mainV1(core.ActionSelect).Only("c5"), mainV1(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "the columns of a view are scoped like a table's",
+		},
+		{
+			Name:  "a write through a view",
+			SQL:   "UPDATE v1 SET c5 = 'x'",
+			Needs: []Right{mainV1(core.ActionUpdate)},
+			Op:    core.InspectOpUpdate,
+			Why:   "an updatable view is written through, and the write is on the view",
 		},
 
 		// --- how a relation is named. The rule is one relation, however it is

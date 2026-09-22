@@ -750,6 +750,7 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 		}
 	}
 
+	var stored []core.InspectField
 	if ul := stmt.UpdateList(); ul != nil {
 		for _, el := range ul.AllUpdateElement() {
 			colName := i.columnRefName(el.ColumnRef())
@@ -767,6 +768,7 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 				Schema: schema,
 			})
 			if expr := el.Expr(); expr != nil {
+				stored = core.MergeInspectFields(stored, i.testedFields(expr, relationRefs, scope))
 				result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(expr)...)
 			}
 		}
@@ -781,6 +783,9 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 	}
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), relationRefs, scope))
+	// A column on the right of an assignment is read and its value stored, so
+	// it belongs with what the statement reads without returning it.
+	result.Where = core.MergeInspectFields(result.Where, stored)
 
 	// A multi-table UPDATE writes the tables its SET list names and reads the
 	// rest.
@@ -1504,17 +1509,7 @@ func (i *Inspector) extractWhereFieldsFromExpr(expr mysql.IExprContext, refs []c
 	if expr == nil {
 		return nil, nil
 	}
-	listener := &whereColumnListener{
-		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
-		inspector:               i,
-		relationRefs:            refs,
-		scope:                   scope,
-		seen:                    make(map[string]bool),
-	}
-	antlr.ParseTreeWalkerDefault.Walk(listener, expr)
-
-	subs := core.AsFilter(i.extractEmbeddedSubqueries(expr))
-	return listener.fields, subs
+	return i.testedFields(expr, refs, scope), core.AsFilter(i.extractEmbeddedSubqueries(expr))
 }
 
 type whereColumnListener struct {

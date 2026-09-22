@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -239,7 +240,13 @@ func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissio
 	return denied
 }
 
+// checkTables asks for a right on every table the statement names, per column
+// where it named columns of it. A field the statement tests counts with the
+// ones it returns: a column-scoped grant that covered the select list alone
+// would let a WHERE, a GROUP BY or a join condition read a column the grant
+// withheld, one answer at a time.
 func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
+	fields := slices.Concat(stmt.Fields, stmt.Where)
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
 			return &PermissionDeniedError{
@@ -253,7 +260,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 		}
 
 		named := false
-		for _, field := range stmt.Fields {
+		for _, field := range fields {
 			if field.Table != table.Name || field.Schema != table.Schema {
 				continue
 			}
@@ -325,8 +332,9 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 		return nil, nil
 	}
 
+	own := returnedFields(stmt)
 	nested := nestedReadFields(stmt, nil)
-	fields := append(append(make([]InspectField, 0, len(stmt.Fields)+len(nested)), stmt.Fields...), nested...)
+	fields := append(append(make([]InspectField, 0, len(own)+len(nested)), own...), nested...)
 	matched := make([]bool, len(fields))
 	allAccounted := true
 	var maskPositions []int
@@ -334,9 +342,9 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	for i, dc := range driverCols {
 		// The statement's own projection decides where it resolves the column
 		// to a table, so a name another scope reuses cannot hide one it shows.
-		resolved, deny := seeColumn(stmt.Fields, 0, dc, matched, dbInstanceID, perms)
+		resolved, deny := seeColumn(own, 0, dc, matched, dbInstanceID, perms)
 		if !resolved {
-			resolved, deny = seeColumn(nested, len(stmt.Fields), dc, matched, dbInstanceID, perms)
+			resolved, deny = seeColumn(nested, len(own), dc, matched, dbInstanceID, perms)
 		}
 		// A field that resolved to no table carries no permission, so it
 		// accounts for nothing.
@@ -351,7 +359,7 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	// A see-denied column the statement selects under no name of its own sits
 	// inside an expression, which has no position to mask. Only its own fields
 	// are read here: a subquery may select one the outer statement then drops.
-	if denied := firstSeeDenied(stmt.Fields, matched, dbInstanceID, perms); denied != nil {
+	if denied := firstSeeDenied(own, matched, dbInstanceID, perms); denied != nil {
 		return nil, denied
 	}
 
@@ -364,6 +372,19 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	}
 
 	return maskPositions, nil
+}
+
+// returnedFields are the columns a statement hands back: its own, and those of
+// a read it also performs, which is where a RETURNING clause lands.
+func returnedFields(stmt InspectStatement) []InspectField {
+	fields := stmt.Fields
+	for _, also := range stmt.Also {
+		if also.Operation != InspectOpSelect || len(also.Fields) == 0 {
+			continue
+		}
+		fields = slices.Concat(fields, also.Fields)
+	}
+	return fields
 }
 
 // ReturnsRows reports whether an operation can hand rows back to the caller. A

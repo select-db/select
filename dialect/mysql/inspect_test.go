@@ -225,6 +225,7 @@ func TestInspectMySQLSpecific(t *testing.T) {
 					Where: []core.InspectField{
 						{Name: "c1", Table: "t2", Schema: defaultSchema},
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c3", Table: "t2", Schema: defaultSchema},
 					},
 					Also: []core.InspectStatement{
 						{Operation: core.InspectOpSelect, Tables: []core.InspectTable{{Name: "t2", Schema: defaultSchema}}},

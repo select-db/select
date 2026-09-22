@@ -548,9 +548,10 @@ export class InspectStatement {
     "Tables": InspectTable[];
 
     /**
-     * Where holds the fields a statement tests rather than returns: WHERE,
+     * Where holds the fields a statement reads without returning them: WHERE,
      * GROUP BY, HAVING, ORDER BY, a join condition, a window or FILTER clause,
-     * and the projection of a DISTINCT select.
+     * the projection of a DISTINCT select, and the right of an assignment,
+     * whose value is stored where masking cannot reach it.
      */
     "Where": InspectField[];
 

@@ -43,9 +43,10 @@ type InspectStatement struct {
 	Operation InspectOperation // The operation type
 	Fields    []InspectField   // Fields/columns involved (for SELECT, UPDATE SET, INSERT columns)
 	Tables    []InspectTable   // Tables involved
-	// Where holds the fields a statement tests rather than returns: WHERE,
+	// Where holds the fields a statement reads without returning them: WHERE,
 	// GROUP BY, HAVING, ORDER BY, a join condition, a window or FILTER clause,
-	// and the projection of a DISTINCT select.
+	// the projection of a DISTINCT select, and the right of an assignment,
+	// whose value is stored where masking cannot reach it.
 	Where      []InspectField
 	Subqueries []InspectStatement // Nested CTEs and subqueries - allows recursive permission checking
 
@@ -95,6 +96,18 @@ func GetInspectTestMetadata() Metadata {
 						Columns: []Column{
 							{Name: "c1", Type: "INTEGER"},
 							{Name: "c3", Type: "TEXT"},
+						},
+					},
+				},
+				// A view is named in a statement exactly as a table is, and
+				// the statement carries no trace of what it reads, so the
+				// right has to be the one held on the view itself.
+				Views: []Table{
+					{
+						Name: "v1",
+						Columns: []Column{
+							{Name: "c1", Type: "INTEGER"},
+							{Name: "c5", Type: "TEXT"},
 						},
 					},
 				},
