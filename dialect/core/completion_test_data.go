@@ -341,6 +341,25 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			// Sqlglot wraps a LATERAL in a scope the text has no parenthesis
+			// for, so its depth has to be counted over the text.
+			Name: "a LATERAL relation, named before its FROM",
+			SQL:  "SELECT * FROM t1 a JOIN LATERAL (SELECT b.| FROM t2 b) l ON true",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
+			// The CTE body closes before the statement that reads it begins,
+			// so the parenthesis nearest the caret is not the one around it.
+			Name: "a CTE defined inside a subquery",
+			SQL:  "SELECT * FROM t1 WHERE c1 IN (WITH i AS (SELECT c1 FROM t2) SELECT k.| FROM i k)",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "c1"},
+			},
+		},
+		{
 			Name: "a subquery's own relation, named before its FROM",
 			SQL:  "SELECT * FROM t1 WHERE c1 IN (SELECT s.| FROM t2 s)",
 			Expected: []CompletionTestExpectation{
