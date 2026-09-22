@@ -6,7 +6,12 @@ The cases that need a collector go through the dispatcher, because that is
 where a request is patched and its response cleaned.
 """
 import server
-from completion.caret_patch import PLACEHOLDER, unwrap_explain, without_placeholders
+from completion.caret_patch import (
+    PLACEHOLDER,
+    reduce_to_clause,
+    unwrap_explain,
+    without_placeholders,
+)
 
 SCHEMA = {
     "schemas": [
@@ -115,3 +120,22 @@ class TestUnwrapExplain:
     def test_it_blanks_the_dialects_own_spellings(self):
         for sql in ("EXPLAIN FORMAT=JSON SELECT 1", "EXPLAIN EXTENDED SELECT 1"):
             assert unwrap_explain(sql).strip() == "SELECT 1"
+
+
+class TestReduceToClause:
+    def test_the_unfinished_item_goes_and_the_clauses_stay(self):
+        sql = "SELECT\n  c.\n  c.c2\nFROM\n  t1 c"
+        reduced = reduce_to_clause(sql, 2, 4)
+        assert "c.c2" not in reduced
+        assert "FROM" in reduced and "t1 c" in reduced
+
+    def test_offsets_do_not_move(self):
+        sql = "SELECT\n  c.\n  c.c2\nFROM\n  t1 c"
+        assert len(reduce_to_clause(sql, 2, 4)) == len(sql)
+        assert reduce_to_clause(sql, 2, 4).count("\n") == sql.count("\n")
+
+    def test_a_closing_paren_stops_it(self):
+        sql = "SELECT * FROM t1 WHERE c1 IN (SELECT a. b FROM t2 a) AND c2 = 1"
+        reduced = reduce_to_clause(sql, 1, 39)
+        assert reduced.endswith("AND c2 = 1")
+        assert ")" in reduced

@@ -902,3 +902,50 @@ func GetCompletionTypeCases() []CompletionTypeCase {
 		{"a select item is not", "SELECT | FROM t1", nil},
 	}
 }
+
+// CompletionEditingCase is a caret with text still after it, which is what a
+// writer's buffer looks like every keystroke before the last one. Expected
+// names the relations and columns offered, in the order they come back.
+type CompletionEditingCase struct {
+	Name     string
+	SQL      string
+	Expected []string
+}
+
+// GetCompletionEditingCases returns the carets that have a half-written
+// statement around them. A case with nothing after the caret exercises the
+// token walk alone; only these reach the parser with text it cannot read.
+func GetCompletionEditingCases() []CompletionEditingCase {
+	return []CompletionEditingCase{
+		{
+			"a qualified name with the next item under it",
+			"SELECT\n  c.|\n  c.c2\nFROM\n  t1 c\nORDER BY\n  c.c1 DESC",
+			[]string{"c1", "c2"},
+		},
+		{
+			"the same on one line",
+			"SELECT c.|\n  c.c2\nFROM t1 c",
+			[]string{"c1", "c2"},
+		},
+		{
+			"a separator makes it parse, and changes nothing",
+			"SELECT c.|, c.c2 FROM t1 c",
+			[]string{"c1", "c2"},
+		},
+		{
+			"an empty select item with the next one under it",
+			"SELECT |\n  c.c2\nFROM t1 c",
+			[]string{"c", "c1", "c2"},
+		},
+		{
+			"an empty predicate with the rest under it",
+			"SELECT * FROM t1 c WHERE |\n  c.c2 = 1",
+			[]string{"c", "c1", "c2"},
+		},
+		{
+			"an empty sort item with the rest under it",
+			"SELECT * FROM t1 c ORDER BY |\n  c.c2",
+			[]string{"c", "c1", "c2"},
+		},
+	}
+}

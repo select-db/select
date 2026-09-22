@@ -55,18 +55,7 @@ def sanitize(sql: str, caret_line: int, caret_col: int) -> str:
       - Trailing comma: "col1, |" -> "col1, x" (add dummy identifier)
       - Mid-statement caret: strip everything after caret
     """
-    offset = 0
-    current_line = 1
-    for i, ch in enumerate(sql):
-        if current_line == caret_line:
-            if caret_col == 0:
-                offset = i
-                break
-            caret_col -= 1
-        if ch == '\n':
-            current_line += 1
-    else:
-        offset = len(sql)
+    offset = _offset_of(sql, caret_line, caret_col)
 
     before = sql[:offset]
     after = sql[offset:]
@@ -81,6 +70,45 @@ def sanitize(sql: str, caret_line: int, caret_col: int) -> str:
         return stripped + ' ' + PLACEHOLDER + ' ' + after
 
     return sql
+
+
+# Where the item being written ends: the next clause, the paren around it, or
+# the end of the statement.
+_CLAUSE_AHEAD = re.compile(
+    r"""[);]
+      | \b(?: FROM | WHERE | GROUP\s+BY | HAVING | ORDER\s+BY | WINDOW
+            | LIMIT | OFFSET | FETCH | RETURNING | UNION | EXCEPT | INTERSECT
+            | INNER | LEFT | RIGHT | FULL | CROSS | NATURAL | JOIN | ON | USING
+            | SET | VALUES | INTO )\b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def reduce_to_clause(sql: str, caret_line: int, caret_col: int) -> str:
+    """Blank what stands between the caret and the clause after it.
+
+    The item under the caret is the one being written, and the writer has not
+    put the separator in yet, so it is what stops the statement parsing. The
+    clauses around it are what completion needs, and they survive.
+    """
+    offset = _offset_of(sql, caret_line, caret_col)
+    ahead = _CLAUSE_AHEAD.search(sql, offset)
+    end = ahead.start() if ahead else len(sql)
+    return sql[:offset] + _blanked(sql[offset:end]) + sql[end:]
+
+
+def _offset_of(sql: str, caret_line: int, caret_col: int) -> int:
+    """The character the caret stands before."""
+    line = 1
+    for i, ch in enumerate(sql):
+        if line == caret_line:
+            if caret_col == 0:
+                return i
+            caret_col -= 1
+        if ch == '\n':
+            line += 1
+    return len(sql)
 
 
 def without_placeholders(response: dict) -> dict:

@@ -187,6 +187,52 @@ func TestEveryKeywordIsReachable(t *testing.T) {
 	}
 }
 
+// TestCompletionWhileEditing runs the carets that still have text after them,
+// which every caret has until the writer stops typing. A caret at the end of
+// the buffer exercises the token walk alone; only these reach the parser with
+// a statement it cannot read.
+func TestCompletionWhileEditing(t *testing.T) {
+	analyzer := testutil.NewTestAnalyzer(t)
+	defer analyzer.Close()
+
+	for _, di := range dialects {
+		t.Run(di.name, func(t *testing.T) {
+			di.dialect.SetAnalyzer(analyzer)
+
+			meta := core.GetCompletionTestMetadata()
+			meta.DefaultSchema = di.defaultSchema
+			if len(meta.Schemas) > 0 {
+				meta.Schemas[0].Name = di.defaultSchema
+			}
+
+			for _, tc := range core.GetCompletionEditingCases() {
+				t.Run(tc.Name, func(t *testing.T) {
+					text, caretCharPos := removeCaret(tc.SQL)
+					caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
+
+					got, err := di.dialect.Complete(context.Background(), text, caretLine, caretOffset, meta)
+					if err != nil {
+						t.Fatalf("complete: %v", err)
+					}
+
+					var names []string
+					for _, c := range got {
+						switch c.Type {
+						case core.CandidateTypeColumn, core.CandidateTypeTable,
+							core.CandidateTypeView, core.CandidateTypeForeignTable,
+							core.CandidateTypeMaterializedView:
+							names = append(names, c.Text)
+						}
+					}
+					if !slices.Equal(names, tc.Expected) {
+						t.Errorf("names = %v, want %v", names, tc.Expected)
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestCompletionTypes runs the carets where a type name stands. The types are
 // the database's own, so the fixture's list is the whole answer.
 func TestCompletionTypes(t *testing.T) {
