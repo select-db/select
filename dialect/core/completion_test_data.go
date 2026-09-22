@@ -738,6 +738,8 @@ func GetCompletionKeywordCases(openers []string) []CompletionKeywordCase {
 		{Name: "one letter still opens one", SQL: "S|", Expected: openers},
 		{Name: "a typed opener after a semicolon", SQL: "SELECT 1; SEL|", Expected: openers},
 		{Name: "a column being typed is not a statement start", SQL: "SELECT c|", Expected: nil},
+		{Name: "a typed opener the tokenizer knows still opens one", SQL: "CREATE|", Expected: openers},
+		{Name: "and so does SELECT itself", SQL: "SELECT|", Expected: openers},
 	}
 }
 
@@ -779,6 +781,11 @@ func GetCompletionClauseCases() []CompletionClauseCase {
 		{"IS waits for what it tests", "SELECT * FROM t1 WHERE c1 IS |", "is_test"},
 		{"NOT too", "SELECT * FROM t1 WHERE c1 NOT |", "not_test"},
 		{"a set operation waits for its query", "SELECT 1 UNION |", "set_operand"},
+		{"CREATE waits for what it makes", "CREATE |", "object_kind"},
+		{"DROP too", "DROP |", "object_kind"},
+		{"ALTER too", "ALTER |", "object_kind"},
+		{"an INSERT ON names a conflict", "INSERT INTO t1 (c1) VALUES (1) ON |", "conflict_target"},
+		{"a join ON still takes a predicate", "SELECT * FROM t1 JOIN t2 ON |", ""},
 		{"and ALL does not repeat", "SELECT 1 UNION ALL |", "query_word"},
 		{"a joined relation also takes ON", "SELECT * FROM t1 JOIN t2 |", "joined_relation"},
 		{"a finished predicate takes AND", "SELECT * FROM t1 WHERE c1 = 1 |", "predicate"},

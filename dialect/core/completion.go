@@ -383,6 +383,14 @@ var keywordGroups = map[string]map[string]bool{
 	"not_test":    setOf("NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS", "GLOB", "REGEXP"),
 	"set_operand": setOf("SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"),
 	"query_word":  setOf("SELECT", "VALUES", "TABLE"),
+	// What a DDL statement acts on.
+	"object_kind": setOf(
+		"TABLE", "TEMPORARY TABLE", "VIEW", "MATERIALIZED VIEW",
+		"INDEX", "UNIQUE INDEX", "SCHEMA", "DATABASE",
+		"FUNCTION", "PROCEDURE", "TRIGGER", "SEQUENCE", "TYPE",
+		"EXTENSION", "ROLE", "USER", "EVENT",
+	),
+	"conflict_target": setOf("CONFLICT", "DUPLICATE KEY UPDATE"),
 }
 
 // with and without derive a group from another, so a word added to the base

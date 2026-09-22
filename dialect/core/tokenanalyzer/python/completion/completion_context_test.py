@@ -281,6 +281,10 @@ class TestStatementStart:
     def test_after_a_comment(self):
         assert self._targets("-- a note\n|") == TARGET_KEYWORD
 
+    def test_a_typed_opener_the_tokenizer_knows_is_still_one(self):
+        assert self._targets("CREATE|") == TARGET_KEYWORD
+        assert self._targets("SELECT|") == TARGET_KEYWORD
+
     def test_an_unclosed_quote_is_not_an_empty_buffer(self):
         assert self._targets('SELECT "S|') != TARGET_KEYWORD
 
@@ -404,6 +408,17 @@ class TestClauseFollowers:
     def test_a_select_list_quantifier_is_not_a_set_operand(self):
         assert self._group("SELECT ALL |") == ""
         assert self._group("SELECT DISTINCT |") == ""
+
+    def test_a_ddl_statement_waits_for_what_it_acts_on(self):
+        assert self._group("CREATE |") == "object_kind"
+        assert self._group("DROP |") == "object_kind"
+        assert self._group("ALTER |") == "object_kind"
+
+    def test_an_insert_on_names_a_conflict(self):
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON |") == "conflict_target"
+
+    def test_a_join_on_still_takes_a_predicate(self):
+        assert self._group("SELECT * FROM t1 JOIN t2 ON |") == ""
 
     def test_a_write_statement_waits_for_its_word(self):
         assert self._group("INSERT INTO t1 |") == "insert_target"

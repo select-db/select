@@ -422,7 +422,12 @@ func defaultKeywords() []string {
 		"FETCH", "ONLY", "VALUES", "RETURNING",
 		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN",
 		"CASE", "WHEN", "THEN", "ELSE", "END",
-		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "ILIKE",
+		"NULL", "TRUE", "FALSE", "EXISTS", "ALL",
+		// What a DDL statement acts on.
+		"TABLE", "TEMPORARY TABLE", "VIEW", "MATERIALIZED VIEW",
+		"INDEX", "UNIQUE INDEX", "SCHEMA", "DATABASE", "FUNCTION", "PROCEDURE",
+		"TRIGGER", "SEQUENCE", "TYPE", "EXTENSION", "ROLE", "USER",
+		"CONFLICT", "ILIKE",
 		// The words a statement opens with, which is what an empty buffer takes.
 		"CREATE", "ALTER", "DROP", "TRUNCATE", "EXPLAIN", "MERGE",
 		"GRANT", "REVOKE", "SET", "SHOW", "VACUUM", "ANALYZE",

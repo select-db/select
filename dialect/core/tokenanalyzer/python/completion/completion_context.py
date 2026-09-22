@@ -505,6 +505,9 @@ _WORD_FOLLOWERS = {
     "UNION":     "set_operand",
     "EXCEPT":    "set_operand",
     "INTERSECT": "set_operand",
+    "CREATE":    "object_kind",
+    "DROP":      "object_kind",
+    "ALTER":     "object_kind",
 }
 
 # The words a clause opens with, which is where a search backwards stops.
@@ -570,6 +573,28 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     when the caret is not standing after a finished item."""
     if not tokens:
         return ""
+
+    last = tokens[-1]
+    if _caret_touches(last, caret_offset):
+        # The word is being typed, so what stands before it decides: the first
+        # keystroke of AND must not take the answer back to columns.
+        if not _is_identifier_token(last) or len(tokens) == 1:
+            return ""
+        tokens = tokens[:-1]
+        last = tokens[-1]
+
+    word = last.text.upper()
+    if word in ("ALL", "DISTINCT") and len(tokens) >= 2 \
+            and tokens[-2].text.upper() in _SET_OPERATIONS:
+        return "query_word"
+    if word == "ON" and _statement_word(tokens) == "INSERT":
+        # A join's ON takes a predicate; an INSERT's takes the clause that
+        # says what to do with a row that is already there.
+        return "conflict_target"
+    waiting = _WORD_FOLLOWERS.get(word)
+    if waiting:
+        return waiting
+
     if clause.word == "AS":
         alias_at = _alias_index(tokens)
         if _names_a_cte(tokens, alias_at):
@@ -585,21 +610,7 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
         return ""
     if group in _COMPLETE_AT_THE_CLAUSE_WORD:
         return group
-    last = tokens[-1]
-    if _caret_touches(last, caret_offset):
-        # The word is being typed, so the item before it is what decides: the
-        # first keystroke of AND must not take the answer back to columns.
-        if not _is_identifier_token(last) or len(tokens) == 1:
-            return ""
-        tokens = tokens[:-1]
-        last = tokens[-1]
-    word = last.text.upper()
-    if word in ("ALL", "DISTINCT") and len(tokens) >= 2 \
-            and tokens[-2].text.upper() in _SET_OPERATIONS:
-        return "query_word"
-    waiting = _WORD_FOLLOWERS.get(word)
-    if waiting:
-        return waiting
+
     if last.token_type in _FINISHED_ITEM_TOKENS:
         return _in_the_statement(group, tokens)
     if not _is_identifier_token(last):
@@ -615,19 +626,24 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     if group == "predicate" and _compared_since_the_clause(tokens):
         return _in_the_statement(group, tokens)
     return ""
-
-
-def _in_the_statement(group: str, tokens: list) -> str:
-    """The group named for the statement it stands in, where the statement
-    decides what may follow. Everywhere else the group is already the answer."""
+def _statement_word(tokens: list) -> str:
+    """The word the statement holding the caret opens with. A statement inside
+    parentheses is the one the caret is in, so the walk stops at the nearest."""
     for i in _walk_back(tokens, len(tokens)):
         upper = tokens[i].text.upper()
         if upper == "INSERT INTO":
             upper = "INSERT"
         if upper in _STATEMENT_WORDS:
-            if (upper, group) in _STATEMENT_GROUPS:
-                return f"{upper.lower()}_{group}"
-            return group
+            return upper
+    return ""
+
+
+def _in_the_statement(group: str, tokens: list) -> str:
+    """The group named for the statement it stands in, where the statement
+    decides what may follow. Everywhere else the group is already the answer."""
+    statement = _statement_word(tokens)
+    if (statement, group) in _STATEMENT_GROUPS:
+        return f"{statement.lower()}_{group}"
     return group
 
 
@@ -713,9 +729,10 @@ def _at_a_statement_start(tokens: list, sql: str, caret_offset: int) -> bool:
         return not _without_comments(sql[:caret_offset]).strip()
     if tokens[-1].token_type == TokenType.SEMICOLON:
         return True
+    # One token, still being typed, is the opening word whatever it spells so
+    # far: a writer half way through CREATE is still choosing how to open.
     written = _since_the_last_statement(tokens)
-    return (len(written) == 1 and _is_identifier_token(written[0])
-            and _caret_touches(written[0], caret_offset))
+    return len(written) == 1 and _caret_touches(written[0], caret_offset)
 
 
 def _since_the_last_statement(tokens: list) -> list:

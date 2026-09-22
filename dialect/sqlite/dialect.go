@@ -924,7 +924,10 @@ func defaultKeywords() []string {
 		"VALUES", "RETURNING",
 		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN",
 		"CASE", "WHEN", "THEN", "ELSE", "END",
-		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "SET", "GLOB",
+		"NULL", "TRUE", "FALSE", "EXISTS", "ALL",
+		// What a DDL statement acts on.
+		"TABLE", "TEMPORARY TABLE", "VIEW", "INDEX", "UNIQUE INDEX",
+		"TRIGGER", "CONFLICT", "SET", "GLOB",
 		"CREATE", "ALTER", "DROP", "EXPLAIN", "REPLACE",
 		"PRAGMA", "VACUUM", "ANALYZE", "ATTACH", "BEGIN", "COMMIT", "ROLLBACK",
 	}
