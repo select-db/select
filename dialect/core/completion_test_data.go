@@ -739,19 +739,6 @@ func GetCompletionKeywordCases(openers []string) []CompletionKeywordCase {
 	}
 }
 
-// KeywordsOfGroup are the words of a dialect's keyword list that the named
-// position allows, which is what the keyword cases expect to be offered.
-func KeywordsOfGroup(d SQLDialect, group string) []string {
-	allowed := keywordGroups[group]
-	var words []string
-	for _, word := range d.GetDefaultKeywords() {
-		if allowed[strings.ToUpper(word)] {
-			words = append(words, word)
-		}
-	}
-	return words
-}
-
 // UnreachableKeywords are the words a dialect declares that no group offers,
 // which is vocabulary kept for nothing: a word no caret can reach is a word
 // the dialect claims to complete and never does.

@@ -433,19 +433,31 @@ func setOf(words ...string) map[string]bool {
 	return set
 }
 
+// KeywordsOfGroup are the words of a dialect's keyword list that the named
+// position allows, less the ones the dialect writes only in another role.
+func KeywordsOfGroup(d SQLDialect, group string) []string {
+	allowed := keywordGroups[group]
+	outside := map[string]bool{}
+	for _, word := range d.KeywordsOutsideGroup()[group] {
+		outside[strings.ToUpper(word)] = true
+	}
+	var words []string
+	for _, word := range d.GetDefaultKeywords() {
+		upper := strings.ToUpper(word)
+		if allowed[upper] && !outside[upper] {
+			words = append(words, word)
+		}
+	}
+	return words
+}
+
 // completeKeywords are the words of this dialect that the caret's position
 // allows. A caret with nothing to offer reads to a caller exactly like one
 // whose clause is complete, so a finished clause names what may follow it.
 func (cs *CompletionStrategy) completeKeywords(group string) []Candidate {
-	allowed := keywordGroups[group]
-	if allowed == nil {
-		return nil
-	}
-	var keywords []Candidate
-	for _, word := range cs.dialect.GetDefaultKeywords() {
-		if !allowed[strings.ToUpper(word)] {
-			continue
-		}
+	words := KeywordsOfGroup(cs.dialect, group)
+	keywords := make([]Candidate, 0, len(words))
+	for _, word := range words {
 		keywords = append(keywords, Candidate{
 			Type:       CandidateTypeKeyword,
 			Text:       word,

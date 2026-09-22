@@ -91,6 +91,10 @@ type SQLDialect interface {
 	GetReservedKeywords() map[string]bool
 	GetBuiltinFunctions() []string
 	GetDefaultKeywords() []string
+	// KeywordsOutsideGroup names, per completion group, the words this dialect
+	// has in some other role but not in that one: SQLite writes SET in an
+	// UPDATE and has no SET statement.
+	KeywordsOutsideGroup() map[string][]string
 	SupportsFeature(feature Feature) bool
 
 	// Identifier handling

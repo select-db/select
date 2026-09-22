@@ -184,6 +184,18 @@ func (d *Dialect) GetDefaultKeywords() []string {
 	return d.defaultKeywords
 }
 
+// KeywordsOutsideGroup implements the core.SQLDialect interface.
+func (d *Dialect) KeywordsOutsideGroup() map[string][]string {
+	return map[string][]string{
+		// SQLite writes SET in an UPDATE and has no SET statement, reads no
+		// USING in a DELETE, and has no bare TABLE query.
+		"statement":       {"SET"},
+		"delete_relation": {"USING"},
+		"set_operand":     {"TABLE"},
+		"query_word":      {"TABLE"},
+	}
+}
+
 // SupportsFeature checks if SQLite supports a specific feature
 func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 	switch feature {

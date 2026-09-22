@@ -102,6 +102,12 @@ func (d *Dialect) GetDefaultKeywords() []string {
 	return d.defaultKeywords
 }
 
+// KeywordsOutsideGroup implements the core.SQLDialect interface. Every word
+// this dialect has stands in every position the word names.
+func (d *Dialect) KeywordsOutsideGroup() map[string][]string {
+	return nil
+}
+
 func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 	switch feature {
 	case core.FeatureCTE, core.FeatureMaterializedViews,
