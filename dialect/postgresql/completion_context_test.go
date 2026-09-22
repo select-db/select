@@ -86,6 +86,17 @@ func TestKeywordGroupWords(t *testing.T) {
 		{"group_item", []string{"ORDER BY", "HAVING", "LIMIT", "OFFSET"}},
 		{"row_count", []string{"OFFSET", "FETCH"}},
 		{"after_cte", []string{"SELECT", "INSERT", "UPDATE", "DELETE"}},
+		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT"}},
+		{"join_word", []string{"JOIN"}},
+		{"is_test", []string{"NULL", "NOT", "TRUE", "FALSE"}},
+		{"not_test", []string{"NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS"}},
+		{"set_operand", []string{"SELECT", "ALL", "DISTINCT", "VALUES"}},
+		{"query_word", []string{"SELECT", "VALUES"}},
+		{"insert_target", []string{"VALUES", "SELECT", "AS"}},
+		{"update_target", []string{"SET", "AS"}},
+		{"delete_target", []string{"FROM"}},
+		{"case_test", []string{"THEN"}},
+		{"case_body", []string{"WHEN", "ELSE", "END"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.group, func(t *testing.T) {

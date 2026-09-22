@@ -357,6 +357,34 @@ class TestClauseFollowers:
         assert self._group("SELECT * FROM t1 AS a |") == "aliased_relation"
         assert self._group("SELECT c1 AS x |") == "aliased_select_item"
 
+    def test_an_alias_written_without_as_is_still_one(self):
+        assert self._group("SELECT * FROM t1 a |") == "aliased_relation"
+        assert self._group("SELECT c1 x |") == "aliased_select_item"
+        assert self._group("SELECT * FROM main.t1 a |") == "aliased_relation"
+        assert self._group("SELECT * FROM (SELECT 1) s |") == "aliased_relation"
+
+    def test_a_qualified_name_is_not_its_own_alias(self):
+        assert self._group("SELECT * FROM main.t1 |") == "relation"
+
+    def test_a_join_word_waits_for_join(self):
+        for sql in ("SELECT * FROM t1 LEFT |", "SELECT * FROM t1 CROSS |",
+                    "SELECT * FROM t1 LEFT OUTER |", "SELECT * FROM t1 NATURAL |"):
+            assert self._group(sql) == "join_word", sql
+
+    def test_is_and_not_wait_for_what_they_test(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 IS |") == "is_test"
+        assert self._group("SELECT * FROM t1 WHERE c1 IS NOT |") == "not_test"
+        assert self._group("SELECT * FROM t1 WHERE c1 NOT |") == "not_test"
+
+    def test_a_set_operation_waits_for_a_query(self):
+        assert self._group("SELECT 1 UNION |") == "set_operand"
+        assert self._group("SELECT 1 EXCEPT |") == "set_operand"
+        assert self._group("SELECT 1 UNION ALL |") == "query_word"
+
+    def test_a_select_list_quantifier_is_not_a_set_operand(self):
+        assert self._group("SELECT ALL |") == ""
+        assert self._group("SELECT DISTINCT |") == ""
+
     def test_a_write_statement_waits_for_its_word(self):
         assert self._group("INSERT INTO t1 |") == "insert_target"
         assert self._group("UPDATE t1 |") == "update_target"

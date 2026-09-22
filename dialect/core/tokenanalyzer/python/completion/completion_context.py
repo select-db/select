@@ -475,6 +475,25 @@ _CLAUSE_FOLLOWERS = {
 # one that gives it another.
 _ALIASED = {"relation": "aliased_relation", "select_item": "aliased_select_item"}
 
+_SET_OPERATIONS = frozenset({"UNION", "EXCEPT", "INTERSECT"})
+
+# What a word that does not finish its clause waits for: "LEFT " waits for
+# JOIN, "IS " for NULL, "UNION " for the query it combines.
+_WORD_FOLLOWERS = {
+    "LEFT":      "join_word",
+    "RIGHT":     "join_word",
+    "FULL":      "join_word",
+    "INNER":     "join_word",
+    "CROSS":     "join_word",
+    "NATURAL":   "join_word",
+    "OUTER":     "join_word",
+    "IS":        "is_test",
+    "NOT":       "not_test",
+    "UNION":     "set_operand",
+    "EXCEPT":    "set_operand",
+    "INTERSECT": "set_operand",
+}
+
 # The words a clause opens with, which is where a search backwards stops.
 _CLAUSE_WORDS = frozenset(_CLAUSE_FOLLOWERS)
 
@@ -545,9 +564,8 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
             group = "after_cte"
         else:
             # An alias belongs to the item it renames, so what may follow it is
-            # what may follow that item, less the word that renames it again.
+            # what may follow that item.
             group = _CLAUSE_FOLLOWERS.get(_walk_to_clause(tokens[:alias_at]).word, "")
-            group = _ALIASED.get(group, group)
     else:
         group = _CLAUSE_FOLLOWERS.get(clause.word, "")
     if not group:
@@ -562,17 +580,37 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
             return ""
         tokens = tokens[:-1]
         last = tokens[-1]
+    word = last.text.upper()
+    if word in ("ALL", "DISTINCT") and len(tokens) >= 2 \
+            and tokens[-2].text.upper() in _SET_OPERATIONS:
+        return "query_word"
+    waiting = _WORD_FOLLOWERS.get(word)
+    if waiting:
+        return waiting
     if last.token_type in _FINISHED_ITEM_TOKENS:
         return group
     if not _is_identifier_token(last):
         return ""
     if group in _ITEM_IS_COMPLETE_AT_A_NAME:
-        return group
+        # An item that already carries an alias must not be offered the word
+        # that would give it another.
+        return _ALIASED.get(group, group) if _already_renamed(tokens) else group
     # A name in a predicate is its left side, and an operator comes next,
     # unless one already stands between the clause and here.
     if group == "predicate" and _compared_since_the_clause(tokens):
         return group
     return ""
+
+
+def _already_renamed(tokens: list) -> bool:
+    """Whether the item the caret follows already carries an alias: a second
+    name stands after the one the clause named, with or without AS."""
+    if len(tokens) < 2 or not _is_identifier_token(tokens[-1]):
+        return False
+    before = tokens[-2]
+    # A derived table is the name's item, and its closing paren stands here.
+    return (before.token_type in (TokenType.ALIAS, TokenType.R_PAREN)
+            or _is_identifier_token(before))
 
 
 def _names_a_cte(tokens: list, alias_idx: int) -> bool:

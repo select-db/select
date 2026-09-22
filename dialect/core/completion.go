@@ -346,6 +346,13 @@ var keywordGroups = map[string]map[string]bool{
 	// A CASE names its test and then its arms.
 	"case_test": setOf("THEN"),
 	"case_body": setOf("WHEN", "ELSE", "END"),
+	// The words that begin something without finishing it: a join, a test
+	// against a name, a set operation.
+	"join_word":   setOf("JOIN", "OUTER JOIN"),
+	"is_test":     setOf("NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM"),
+	"not_test":    setOf("NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS", "GLOB", "REGEXP"),
+	"set_operand": setOf("SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"),
+	"query_word":  setOf("SELECT", "VALUES", "TABLE"),
 }
 
 func setOf(words ...string) map[string]bool {

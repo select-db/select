@@ -923,7 +923,8 @@ func defaultKeywords() []string {
 		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
 		"VALUES", "RETURNING",
 		"AND", "OR", "NOT", "ASC", "DESC", "IS", "IN", "LIKE", "BETWEEN",
-		"CASE", "WHEN", "THEN", "ELSE", "END", "SET", "GLOB",
+		"CASE", "WHEN", "THEN", "ELSE", "END",
+		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "SET", "GLOB",
 		"CREATE", "ALTER", "DROP", "EXPLAIN", "REPLACE",
 		"PRAGMA", "VACUUM", "ANALYZE", "ATTACH", "BEGIN", "COMMIT", "ROLLBACK",
 	}
