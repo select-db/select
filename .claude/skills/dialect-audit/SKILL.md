@@ -89,7 +89,10 @@ is the copy to read and to change:
 
 - What a tested column needs, and what scopes a write: the doc comment on
   `core.checkTables`.
-- What a view is a right on: the view section of `core/testutil/perm_data.go`.
+- What a view is a right on, and that see does not reach through one: the view
+  section of `core/testutil/perm_data.go` and the view case in
+  `core/testutil/see_data.go`. A view is opaque on purpose, since creating one
+  takes manage; revisit only if users ask for it.
 - That manage and the row rights do not stand in for each other: the cases
   named for it in the same table.
 
