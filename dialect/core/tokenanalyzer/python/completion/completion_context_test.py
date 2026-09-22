@@ -3,6 +3,7 @@ from completion.completion_context import (
     TARGET_ALL,
     TARGET_COLUMN,
     TARGET_SCHEMA_AND_TABLE_ALL,
+    TARGET_TABLE_AND_COLUMN,
     _detect_keyword_context,
     _detect_setting_context,
     _detect_value_position,
@@ -89,6 +90,30 @@ class TestCallParen:
     def test_a_call_with_a_space_before_its_paren_is_still_a_call(self):
         tokens, _, _ = _at_caret("SELECT count (|) FROM t1")
         assert _detect_keyword_context(tokens) == TARGET_ALL
+
+    def test_a_grouping_paren_keeps_its_clause(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 WHERE (|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_window_spec_keeps_its_clause(self):
+        tokens, _, _ = _at_caret("SELECT row_number() OVER (|) FROM t1")
+        assert _detect_keyword_context(tokens) == TARGET_ALL
+
+    def test_a_grouping_set_keeps_its_clause(self):
+        tokens, _, _ = _at_caret("SELECT c1 FROM t1 GROUP BY GROUPING SETS ((|")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_a_subquery_in_from_opens_a_query(self):
+        tokens, _, _ = _at_caret("SELECT * FROM (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_exists_opens_a_query(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 WHERE EXISTS (|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_paren_at_the_start_opens_a_query(self):
+        tokens, _, _ = _at_caret("(|")
+        assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
 
     def test_a_plain_cte_body_is_a_nested_query(self):
         tokens, _, _ = _at_caret("WITH x AS (|")

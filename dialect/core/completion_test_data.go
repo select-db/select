@@ -446,6 +446,53 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			Expected: nil,
 		},
 		{
+			Name: "a grouping paren in a WHERE",
+			SQL:  "SELECT * FROM t1 WHERE (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a grouping paren in the select list",
+			SQL:  "SELECT (| FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a window spec is not a nested query",
+			SQL:  "SELECT row_number() OVER (|) FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a grouping set is not a nested query",
+			SQL:  "SELECT c1 FROM t1 GROUP BY GROUPING SETS ((|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "EXISTS still opens a query",
+			SQL:  "SELECT * FROM t1 WHERE EXISTS (|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
 			Name: "DISTINCT select list completion",
 			SQL:  "SELECT DISTINCT | FROM t1",
 			Expected: []CompletionTestExpectation{
