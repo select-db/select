@@ -812,7 +812,7 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.OrderClause()), relationRefs, scope))
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	// A multi-table UPDATE writes the tables its SET list names and reads the
 	// rest.
@@ -907,7 +907,7 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	result.Where = core.MergeInspectFields(result.Where,
 		i.testedFields(core.TreeOrNil(stmt.OrderClause()), sourceRefs, scope))
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	// The relations a multi-table DELETE joins against without deleting from
 	// are read, and nothing else in the statement reaches them.

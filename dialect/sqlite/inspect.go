@@ -605,7 +605,7 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 			i.upsertSetFields(upsert, schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -698,7 +698,7 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -803,7 +803,7 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 

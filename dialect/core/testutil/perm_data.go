@@ -592,7 +592,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect).Only("c1"),
 			},
 			Op:  core.InspectOpInsert,
-			Why: "MySQL takes the WITH after the column list rather than before the INSERT, and it reads the same",
+			Why: "a WITH inside the query expression reads the same as one before the statement",
 		},
 		{
 			Name: "a recursive CTE a delete reads",
@@ -627,6 +627,32 @@ func permCases() []PermCase {
 			},
 			Op:  core.InspectOpDelete,
 			Why: "the CTE is read, the filter reads c1, and the clause hands c2 back",
+		},
+
+		{
+			Name: "a qualified name a CTE shares its spelling with",
+			SQL:  "WITH zz AS (SELECT c1 FROM t2) DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM other.zz)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+				Right{Action: core.ActionSelect, Schema: "other", Table: "zz"},
+			},
+			Op:  core.InspectOpDelete,
+			Why: "only a bare name can be the CTE, so other.zz is a relation of its own and is read",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a CTE body naming what a later CTE declares",
+			SQL:  "WITH a AS (SELECT c1 FROM t2), t2 AS (SELECT c1 FROM other.t3) DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM a)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "a plain WITH exposes only the names declared before a body, so a body reads relations rather than its siblings",
 		},
 
 		// --- a view. The statement names it as it names a table and carries
