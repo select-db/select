@@ -275,6 +275,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 	if action == ActionSelect {
 		scoping = slices.Concat(stmt.Fields, stmt.Where)
 	}
+	tested := slices.Concat(stmt.Where, reachingOut(stmt, nil))
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
 			return &PermissionDeniedError{
@@ -317,7 +318,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 			}
 		}
 
-		for _, field := range stmt.Where {
+		for _, field := range tested {
 			if !fieldOf(field, table) {
 				continue
 			}
@@ -328,6 +329,38 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 	}
 
 	return nil
+}
+
+// reachingOut are the columns a statement's nested reads name that belong to
+// none of their own relations. A correlated reference is resolved against the
+// statement above, so that is the only place a right on it can be asked for.
+func reachingOut(stmt InspectStatement, into []InspectField) []InspectField {
+	for _, nested := range stmt.Subqueries {
+		into = reachingOutOf(nested, into)
+	}
+	for _, nested := range stmt.Also {
+		into = reachingOutOf(nested, into)
+	}
+	return into
+}
+
+func reachingOutOf(stmt InspectStatement, into []InspectField) []InspectField {
+	for _, field := range slices.Concat(stmt.Fields, stmt.Where) {
+		if field.Schema == "" || field.Table == "" || ownsField(stmt, field) {
+			continue
+		}
+		into = append(into, field)
+	}
+	return reachingOut(stmt, into)
+}
+
+func ownsField(stmt InspectStatement, field InspectField) bool {
+	for _, table := range stmt.Tables {
+		if fieldOf(field, table) {
+			return true
+		}
+	}
+	return false
 }
 
 func fieldOf(field InspectField, table InspectTable) bool {
