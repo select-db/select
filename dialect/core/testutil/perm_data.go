@@ -297,7 +297,7 @@ func permCases() []PermCase {
 			Needs:  []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect).Only("c2")},
 			Denied: []Right{mainT1(core.ActionDelete).Only("c2")},
 			Op:     core.InspectOpDelete,
-			Why:    "the row goes whole, so a grant naming the column it was chosen by is not a right to remove it",
+			Why:    "the row goes whole, so a grant naming the column it was chosen by is not a right to remove it, and choosing by c2 reads c2",
 		},
 		{
 			Name:  "a column an assignment reads",
@@ -332,7 +332,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect).Only("c1"),
 			},
 			Op:  core.InspectOpUpdate,
-			Why: "t2 is matched on c1 and nothing else of it is read",
+			Why: "t2 is matched on c1 and nothing else of it is read, and the c1 of t1 it is matched against is read too",
 		},
 		{
 			On:   []string{"mysql"},
@@ -455,11 +455,59 @@ func permCases() []PermCase {
 			Why:   "which groups survive is an answer about c2",
 		},
 		{
-			Name:  "a column a correlated EXISTS reads",
-			SQL:   "SELECT c1 FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.c1 = t1.c1)",
-			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c1")},
-			Op:    core.InspectOpSelect,
-			Why:   "whether a row survives is an answer about c1 of t2",
+			Name: "a column a correlated EXISTS reads",
+			SQL:  "SELECT c1 FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.c1 = t1.c2)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "whether a row survives is an answer about c1 of t2 and about the c2 of t1 it is compared to",
+		},
+		{
+			Name: "a column an update's correlated subquery reaches out for",
+			SQL:  "UPDATE t1 SET c1 = 1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.c1 = t1.c2)",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "c2 belongs to no relation the subquery names, so the right on it can only be asked for out here",
+		},
+		{
+			Name: "a column a delete's correlated subquery reaches out for",
+			SQL:  "DELETE FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.c1 = t1.c2)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "which rows go is an answer about c2, reached from inside the subquery",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a column a write orders itself by",
+			SQL:  "UPDATE t1 SET c1 = 1 ORDER BY c2 LIMIT 1",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "which single row is written is an answer about c2",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a column a delete orders itself by",
+			SQL:  "DELETE FROM t1 ORDER BY c2 LIMIT 1",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "which single row goes is an answer about c2",
 		},
 		{
 			Name:  "a column an alias qualifies",
@@ -881,8 +929,8 @@ func permCases() []PermCase {
 			Name: "a multi-table UPDATE writing both tables",
 			SQL:  "UPDATE t1 JOIN t2 ON t1.c1 = t2.c1 SET t1.c1 = 2, t2.c3 = 'x'",
 			Needs: []Right{
-				mainT1(core.ActionUpdate),
-				mainT2(core.ActionUpdate),
+				mainT1(core.ActionUpdate).Only("c1"),
+				mainT2(core.ActionUpdate).Only("c3"),
 				mainT1(core.ActionSelect).Only("c1"),
 				mainT2(core.ActionSelect).Only("c1"),
 			},

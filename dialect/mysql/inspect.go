@@ -807,6 +807,10 @@ func (i *Inspector) inspectUpdate(stmt mysql.IUpdateStatementContext) *core.Insp
 	// A column on the right of an assignment is read and its value stored, so
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
+	// MySQL lets a single-table write order and limit itself, and which row it
+	// reaches is an answer about the column it orders by.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.testedFields(core.TreeOrNil(stmt.OrderClause()), relationRefs, scope))
 
 	// A multi-table UPDATE writes the tables its SET list names and reads the
 	// rest.
@@ -896,6 +900,10 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	}
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(stmt.TableReferenceList()), sourceRefs, scope))
+	// MySQL lets a single-table delete order and limit itself, and which row
+	// goes is an answer about the column it orders by.
+	result.Where = core.MergeInspectFields(result.Where,
+		i.testedFields(core.TreeOrNil(stmt.OrderClause()), sourceRefs, scope))
 
 	// The relations a multi-table DELETE joins against without deleting from
 	// are read, and nothing else in the statement reaches them.
