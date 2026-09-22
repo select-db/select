@@ -26,7 +26,6 @@ class _ScopeBounds:
     def __init__(self, sql: str, sg_dialect: str) -> None:
         self.sql = sql
         tokens = tokenize(sql, sg_dialect)
-        self._tokens = tokens
 
         # Matching paren pairs: maps open_offset -> close_offset and vice versa
         self.paren_pairs: dict[int, int] = {}
@@ -317,15 +316,12 @@ def _collect_from_scopes(
                         vtab["nesting_level"] = parent_nesting
                         seen_vtabs.add(source_name)
                         virtual_tables.append(vtab)
-        # A relation a scope reads is in scope for the whole of it, which is
-        # what the outermost query already does. Starting at the FROM instead
-        # left "(SELECT s. FROM t2 s)" with nothing to offer.
-        table_scope_start = scope_start
+        # A relation a scope reads is in scope for the whole of it.
         for alias, source in nested_sources:
             if isinstance(source, exp.Table):
                 _add_table_ref(
                     source, alias, nesting, default_schema, relations, seen_rels, stmt_idx,
-                    scope_start_offset=table_scope_start, scope_end_offset=scope_end,
+                    scope_start_offset=scope_start, scope_end_offset=scope_end,
                 )
 
     # Sub-pass 4: CTE usage refs (deferred to appear after nested refs)

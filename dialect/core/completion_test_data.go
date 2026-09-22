@@ -349,8 +349,7 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
-			// The subquery reads t2 and the query around it reads t1, so both
-			// are in scope and c1, which both hold, is offered qualified.
+			// Both relations are in scope, so c1, which both hold, is qualified.
 			Name: "subquery in WHERE IN clause",
 			SQL:  "SELECT * FROM t1 WHERE c1 IN (SELECT | FROM t2)",
 			Expected: []CompletionTestExpectation{
