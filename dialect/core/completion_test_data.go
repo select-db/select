@@ -612,8 +612,8 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
-			Name: "a table function's arguments are values, not relations",
-			SQL:  "SELECT * FROM generate_series(|",
+			Name:     "a table function's arguments are values, not relations",
+			SQL:      "SELECT * FROM generate_series(|",
 			Expected: []CompletionTestExpectation{},
 		},
 		{
@@ -719,8 +719,7 @@ type CompletionKeywordCase struct {
 }
 
 // GetCompletionKeywordCases returns the keyword cases every dialect runs, with
-// openers naming the words that dialect declares. An empty buffer is the first
-// thing a caller sees, and it used to offer nothing at all.
+// openers naming the words that dialect declares.
 func GetCompletionKeywordCases(openers []string) []CompletionKeywordCase {
 	return []CompletionKeywordCase{
 		{Name: "an empty buffer opens a statement", SQL: "|", Expected: openers},
@@ -751,19 +750,18 @@ func KeywordsOfGroup(d SQLDialect, group string) []string {
 	return words
 }
 
-// GetCompletionClauseCases names, for each caret, the group of words that
-// position allows. The words themselves are the dialect's, so one table states
-// the rule for three vocabularies.
-func GetCompletionClauseCases() []struct {
+// CompletionClauseCase names the group of words a caret allows. The words
+// themselves are the dialect's, so one case covers three vocabularies.
+type CompletionClauseCase struct {
 	Name  string
 	SQL   string
 	Group string
-} {
-	return []struct {
-		Name  string
-		SQL   string
-		Group string
-	}{
+}
+
+// GetCompletionClauseCases names, for each caret, the group of words that
+// position allows.
+func GetCompletionClauseCases() []CompletionClauseCase {
+	return []CompletionClauseCase{
 		{"a finished select item takes FROM", "SELECT c1 |", "select_item"},
 		{"a call is a finished select item", "SELECT count(c1) |", "select_item"},
 		{"an aliased select item too", "SELECT c1 AS x |", "select_item"},
@@ -785,5 +783,34 @@ func GetCompletionClauseCases() []struct {
 		{"a follower being typed is still one", "SELECT * FROM t1 W|", "relation"},
 		{"a predicate follower being typed too", "SELECT * FROM t1 WHERE c1 = 1 AN|", "predicate"},
 		{"a name being typed is not a follower", "SELECT * FROM t|", ""},
+	}
+}
+
+// CompletionFunctionCase states whether a caret takes a call. The words are
+// each dialect's hundreds of builtins, so the case asserts that they are
+// offered rather than listing them.
+type CompletionFunctionCase struct {
+	Name    string
+	SQL     string
+	Offered bool
+}
+
+// GetCompletionFunctionCases returns the cases every dialect runs. A call
+// stands wherever a value does, and nowhere a column is only being named.
+func GetCompletionFunctionCases() []CompletionFunctionCase {
+	return []CompletionFunctionCase{
+		{"a select list takes a call", "SELECT |", true},
+		{"a WHERE takes a call", "SELECT * FROM t1 WHERE |", true},
+		{"an ORDER BY takes a call", "SELECT * FROM t1 ORDER BY |", true},
+		{"a GROUP BY takes a call", "SELECT * FROM t1 GROUP BY |", true},
+		{"an assignment value takes a call", "UPDATE t1 SET c1 = |", true},
+		{"a VALUES row takes a call", "INSERT INTO t1 VALUES (|", true},
+		{"an argument takes a call", "SELECT count(|) FROM t1", true},
+		{"an assignment target does not", "UPDATE t1 SET |", false},
+		{"an INSERT column list does not", "INSERT INTO t1 (|", false},
+		{"a join's USING list does not", "SELECT * FROM t1 JOIN t2 USING (|", false},
+		{"a relation's columns after its dot do not", "SELECT t1.|", false},
+		{"a FROM clause does not", "SELECT * FROM |", false},
+		{"a rename list does not", "SELECT * FROM t1 AS a (|", false},
 	}
 }

@@ -942,9 +942,8 @@ func (l *relationRefListener) normalizeTableAlias(ctx sqlite.ITable_aliasContext
 	return "", nil // SQLite doesn't support column aliases in table aliases
 }
 
-// defaultKeywords are the words SQLite completes, the ones a statement opens
-// with among them. SQLite has no TRUNCATE, GRANT, SHOW or CALL, and the list
-// says so by leaving them out.
+// defaultKeywords are the words SQLite completes. It has no TRUNCATE, GRANT,
+// SHOW or CALL, and the list says so by leaving them out.
 func defaultKeywords() []string {
 	return []string{
 		"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "WITH", "AS",

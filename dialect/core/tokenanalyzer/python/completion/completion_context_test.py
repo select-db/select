@@ -3,6 +3,7 @@ from completion.completion_context import (
     TARGET_ALL,
     TARGET_COLUMN,
     TARGET_ENUM_VALUE,
+    TARGET_FUNCTION,
     TARGET_KEYWORD,
     TARGET_SCHEMA_AND_TABLE_ALL,
     TARGET_TABLE_AND_COLUMN,
@@ -300,6 +301,38 @@ class TestStatementStart:
         assert self._targets("SELECT c|") != TARGET_KEYWORD
 
 
+class TestExpressionPositions:
+    def _takes_a_call(self, sql_with_caret: str) -> bool:
+        return bool(_field(sql_with_caret, "targets") & TARGET_FUNCTION)
+
+    def test_a_select_list(self):
+        assert self._takes_a_call("SELECT |")
+
+    def test_a_where(self):
+        assert self._takes_a_call("SELECT * FROM t1 WHERE |")
+
+    def test_an_assignment_value(self):
+        assert self._takes_a_call("UPDATE t1 SET c1 = |")
+
+    def test_a_values_row(self):
+        assert self._takes_a_call("INSERT INTO t1 VALUES (|")
+
+    def test_an_assignment_target_does_not(self):
+        assert not self._takes_a_call("UPDATE t1 SET |")
+
+    def test_an_insert_column_list_does_not(self):
+        assert not self._takes_a_call("INSERT INTO t1 (|")
+
+    def test_a_using_list_does_not(self):
+        assert not self._takes_a_call("SELECT * FROM t1 JOIN t2 USING (|")
+
+    def test_a_qualified_caret_does_not(self):
+        assert not self._takes_a_call("SELECT t1.|")
+
+    def test_a_from_clause_does_not(self):
+        assert not self._takes_a_call("SELECT * FROM |")
+
+
 class TestClauseFollowers:
     def _group(self, sql_with_caret: str) -> str:
         return _field(sql_with_caret, "keyword_group")
@@ -443,7 +476,7 @@ class TestValuePosition:
     def test_an_in_list_offers_its_clause_as_well_as_values(self):
         sql = "SELECT * FROM t1 WHERE c1 IN ("
         targets = detect_completion_context(sql, 1, len(sql), ["main"], "postgres")["targets"]
-        assert targets == TARGET_ENUM_VALUE | TARGET_TABLE_AND_COLUMN
+        assert targets == TARGET_ENUM_VALUE | TARGET_TABLE_AND_COLUMN | TARGET_FUNCTION
 
     def test_inside_a_literal_offers_values_alone(self):
         sql = "SELECT * FROM t1 WHERE c1 IN ('"

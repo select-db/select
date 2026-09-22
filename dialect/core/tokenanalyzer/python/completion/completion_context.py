@@ -20,6 +20,7 @@ TARGET_OPERATOR = 1 << 5
 TARGET_ENUM_VALUE = 1 << 6
 TARGET_SETTING = 1 << 7
 TARGET_KEYWORD = 1 << 8
+TARGET_FUNCTION = 1 << 9
 
 TARGET_SCHEMA_AND_TABLE      = TARGET_SCHEMA | TARGET_TABLE
 TARGET_SCHEMA_AND_TABLE_ALL  = TARGET_SCHEMA | TARGET_TABLE | _ALL_FLAG
@@ -113,9 +114,13 @@ def detect_completion_context(
                     if not slot.quoted:
                         targets |= keyword_ctx
 
+    if _writes_an_expression(tokens, clause, targets, column_list_relation,
+                             shared_columns, bool(parts) or caret_after_dot):
+        targets |= TARGET_FUNCTION
+
     if keyword_group:
         # A finished item leaves the clause waiting for a word, not for another
-        # name: "SELECT c1 " takes FROM, and offered nothing at all before.
+        # name: "SELECT c1 " takes FROM.
         targets = TARGET_KEYWORD
 
     return {
@@ -432,6 +437,9 @@ _CLAUSE_FOLLOWERS = {
     "OFFSET":      "row_count",
 }
 
+# The words a clause opens with, which is where a search backwards stops.
+_CLAUSE_WORDS = frozenset(_CLAUSE_FOLLOWERS)
+
 # The clauses whose finished item is the whole item, so a keyword follows it.
 # In a WHERE a finished name is the left side of a predicate and an operator
 # follows instead, which is why those clauses are not here.
@@ -460,6 +468,24 @@ def _alias_index(tokens: list) -> int:
         if tokens[i].token_type == TokenType.ALIAS:
             return i
     return len(tokens)
+
+
+def _writes_an_expression(tokens: list, clause: Clause, targets: int,
+                          column_list: str, shared: bool, qualified: bool) -> bool:
+    """Whether a value may be written here, rather than only the name of one.
+
+    A call stands wherever a column's value does. It does not stand where a
+    column is being named: an INSERT's column list, a join's USING list, the
+    left side of an assignment.
+    """
+    if not targets & TARGET_COLUMN:
+        return False
+    if column_list or shared or qualified:
+        return False
+    if clause.word == "SET":
+        # "SET c1" names a column and "SET c1 = " writes its value.
+        return _compared_since_the_clause(tokens)
+    return True
 
 
 def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str:
@@ -502,7 +528,7 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
 
 
 def _names_a_cte(tokens: list, alias_idx: int) -> bool:
-    """Report the AS at alias_idx as defining a CTE."""
+    """Whether the AS at alias_idx defines a CTE rather than renaming an item."""
     if alias_idx >= len(tokens):
         return False
     for i in _walk_back(tokens, alias_idx):
@@ -519,19 +545,14 @@ def _compared_since_the_clause(tokens: list) -> bool:
     for i in _walk_back(tokens, len(tokens)):
         if tokens[i].token_type in _COMPARISONS:
             return True
-        if tokens[i].text.upper() in _CLAUSE_FOLLOWERS:
+        if tokens[i].text.upper() in _CLAUSE_WORDS:
             return False
     return False
 
 
 def _at_a_statement_start(tokens: list, caret_offset: int) -> bool:
-    """Whether the caret stands where a statement may begin: the buffer holds
-    nothing yet, the last thing before it ended one, or the word it opens with
-    is still being typed.
-
-    The last of those is what a caller sees most: the first keystroke of
-    SELECT must not turn the answer into every relation in the database.
-    """
+    """Whether a statement may begin here: the buffer holds nothing, the last
+    thing before the caret ended one, or its opening word is being typed."""
     if not tokens or tokens[-1].token_type == TokenType.SEMICOLON:
         return True
     written = _since_the_last_statement(tokens)

@@ -8,17 +8,17 @@ import (
 )
 
 type pyCompletionContext struct {
-	Parts             []string               `json:"parts"`
-	CaretAfterDot     bool                   `json:"caret_after_dot"`
-	Targets           core.CompletionTarget  `json:"targets"`
-	SchemaFilter      string                 `json:"schema_filter"`
-	TargetTable       string                 `json:"target_table"`
-	KeywordContext    core.CompletionTarget  `json:"keyword_context"`
-	PrecedingColumn   *pyPrecedingColumnInfo `json:"preceding_column"`
-	ColumnListRelation string                `json:"column_list_relation"`
-	ValuePosition     bool                   `json:"value_position"`
-	SharedColumns     bool                   `json:"shared_columns"`
-	KeywordGroup      string                 `json:"keyword_group"`
+	Parts              []string               `json:"parts"`
+	CaretAfterDot      bool                   `json:"caret_after_dot"`
+	Targets            core.CompletionTarget  `json:"targets"`
+	SchemaFilter       string                 `json:"schema_filter"`
+	TargetTable        string                 `json:"target_table"`
+	KeywordContext     core.CompletionTarget  `json:"keyword_context"`
+	PrecedingColumn    *pyPrecedingColumnInfo `json:"preceding_column"`
+	ColumnListRelation string                 `json:"column_list_relation"`
+	ValuePosition      bool                   `json:"value_position"`
+	SharedColumns      bool                   `json:"shared_columns"`
+	KeywordGroup       string                 `json:"keyword_group"`
 }
 
 type pyPrecedingColumnInfo struct {
@@ -59,16 +59,16 @@ func ParseCompletionContextFromPython(
 	}
 
 	ctx := core.CompletionContext{
-		Parts:             resp.Parts,
-		CaretAfterDot:     resp.CaretAfterDot,
-		Targets:           resp.Targets,
-		SchemaFilter:      resp.SchemaFilter,
-		TargetTable:       resp.TargetTable,
-		KeywordContext:    resp.KeywordContext,
+		Parts:              resp.Parts,
+		CaretAfterDot:      resp.CaretAfterDot,
+		Targets:            resp.Targets,
+		SchemaFilter:       resp.SchemaFilter,
+		TargetTable:        resp.TargetTable,
+		KeywordContext:     resp.KeywordContext,
 		ColumnListRelation: resp.ColumnListRelation,
-		ValuePosition:     resp.ValuePosition,
-		SharedColumns:     resp.SharedColumns,
-		KeywordGroup:      resp.KeywordGroup,
+		ValuePosition:      resp.ValuePosition,
+		SharedColumns:      resp.SharedColumns,
+		KeywordGroup:       resp.KeywordGroup,
 	}
 
 	if resp.PrecedingColumn != nil {

@@ -37,24 +37,24 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 		wantCaretDot     bool
 		wantColumnList   string
 	}{
-		{name: "SELECT without FROM", sql: "SELECT | ", wantTargets: core.CompletionTargetAll},
-		{name: "SELECT with FROM", sql: "SELECT | FROM t1", wantTargets: core.CompletionTargetAll},
+		{name: "SELECT without FROM", sql: "SELECT | ", wantTargets: core.CompletionTargetAll | core.CompletionTargetFunction},
+		{name: "SELECT with FROM", sql: "SELECT | FROM t1", wantTargets: core.CompletionTargetAll | core.CompletionTargetFunction},
 		{name: "qualified table column", sql: "SELECT t1.| FROM t1",
 			wantTargets: core.CompletionTargetColumn, wantParts: []string{"t1"}, wantCaretDot: true, wantTargetTable: "t1"},
 		{name: "FROM clause", sql: "SELECT * FROM |", wantTargets: core.CompletionTargetSchemaAndTableAll},
-		{name: "WHERE clause", sql: "SELECT * FROM t1 WHERE |", wantTargets: core.CompletionTargetTableAndColumn},
-		{name: "ORDER BY clause", sql: "SELECT * FROM t1 ORDER BY |", wantTargets: core.CompletionTargetTableAndColumn},
-		{name: "GROUP BY clause", sql: "SELECT * FROM t1 GROUP BY |", wantTargets: core.CompletionTargetTableAndColumn},
-		{name: "HAVING clause", sql: "SELECT * FROM t1 GROUP BY c1 HAVING |", wantTargets: core.CompletionTargetTableAndColumn},
+		{name: "WHERE clause", sql: "SELECT * FROM t1 WHERE |", wantTargets: core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
+		{name: "ORDER BY clause", sql: "SELECT * FROM t1 ORDER BY |", wantTargets: core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
+		{name: "GROUP BY clause", sql: "SELECT * FROM t1 GROUP BY |", wantTargets: core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
+		{name: "HAVING clause", sql: "SELECT * FROM t1 GROUP BY c1 HAVING |", wantTargets: core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
 		{name: "JOIN clause", sql: "SELECT * FROM t1 JOIN |", wantTargets: core.CompletionTargetSchemaAndTableAll},
-		{name: "ON clause", sql: "SELECT * FROM t1 JOIN t2 ON |", wantTargets: core.CompletionTargetTableAndColumn},
+		{name: "ON clause", sql: "SELECT * FROM t1 JOIN t2 ON |", wantTargets: core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
 		{name: "UPDATE SET", sql: "UPDATE t1 SET |", wantTargets: core.CompletionTargetColumn},
 		{name: "INSERT INTO", sql: "INSERT INTO |", wantTargets: core.CompletionTargetSchemaAndTableAll},
 		{name: "schema qualified", sql: "SELECT public.| FROM public.t1",
 			wantTargets: core.CompletionTargetTable, wantParts: []string{"public"}, wantCaretDot: true, wantSchemaFilter: "public"},
 		{name: "schema.table qualified", sql: "SELECT public.t1.| FROM public.t1",
 			wantTargets: core.CompletionTargetColumn, wantParts: []string{"public", "t1"}, wantCaretDot: true, wantSchemaFilter: "public", wantTargetTable: "t1"},
-		{name: "subquery in WHERE", sql: "SELECT * FROM t1 WHERE c1 IN (SELECT | FROM t2)", wantTargets: core.CompletionTargetAll},
+		{name: "subquery in WHERE", sql: "SELECT * FROM t1 WHERE c1 IN (SELECT | FROM t2)", wantTargets: core.CompletionTargetAll | core.CompletionTargetFunction},
 		{name: "INSERT column list", sql: "INSERT INTO t1 (|", wantTargets: core.CompletionTargetColumn, wantColumnList: "t1"},
 		{name: "operator context", sql: "SELECT * FROM t1 WHERE c1 |", wantTargets: core.CompletionTargetOperator},
 		{name: "enum value equality", sql: "SELECT * FROM t1 WHERE c1 = '|'", wantTargets: core.CompletionTargetEnumValue},
@@ -62,17 +62,17 @@ func TestParseCompletionContextFromPython(t *testing.T) {
 		{name: "a scalar subquery after a comparison", sql: "SELECT * FROM t1 WHERE c1 = (|",
 			wantTargets: core.CompletionTargetSchemaAndTableAll},
 		{name: "a clause word used as a column name", sql: "UPDATE t1 SET limit = |",
-			wantTargets: core.CompletionTargetColumn},
+			wantTargets: core.CompletionTargetColumn | core.CompletionTargetFunction},
 		{name: "enum value update set", sql: "UPDATE t1 SET c1 = '|'", wantTargets: core.CompletionTargetEnumValue},
 		{name: "enum value typing a prefix", sql: "SELECT * FROM t1 WHERE c1 = ac|",
-			wantTargets: core.CompletionTargetEnumValue | core.CompletionTargetTableAndColumn},
+			wantTargets: core.CompletionTargetEnumValue | core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
 		{name: "enum value in list typing a prefix", sql: "SELECT * FROM t1 WHERE c1 IN (ac|",
-			wantTargets: core.CompletionTargetEnumValue | core.CompletionTargetTableAndColumn},
+			wantTargets: core.CompletionTargetEnumValue | core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
 		{name: "enum value update set typing a prefix", sql: "UPDATE t1 SET c1 = ac|",
-			wantTargets: core.CompletionTargetEnumValue | core.CompletionTargetColumn},
-		{name: "SELECT mid-word typing", sql: "SELECT cus| FROM t1", wantTargets: core.CompletionTargetAll},
-		{name: "WHERE mid-word typing", sql: "SELECT * FROM t1 WHERE cus|", wantTargets: core.CompletionTargetTableAndColumn},
-		{name: "SELECT empty quoted identifier", sql: "SELECT \"|\" FROM t1", wantTargets: core.CompletionTargetAll},
+			wantTargets: core.CompletionTargetEnumValue | core.CompletionTargetColumn | core.CompletionTargetFunction},
+		{name: "SELECT mid-word typing", sql: "SELECT cus| FROM t1", wantTargets: core.CompletionTargetAll | core.CompletionTargetFunction},
+		{name: "WHERE mid-word typing", sql: "SELECT * FROM t1 WHERE cus|", wantTargets: core.CompletionTargetTableAndColumn | core.CompletionTargetFunction},
+		{name: "SELECT empty quoted identifier", sql: "SELECT \"|\" FROM t1", wantTargets: core.CompletionTargetAll | core.CompletionTargetFunction},
 	}
 
 	for _, tt := range tests {
@@ -165,6 +165,55 @@ func TestCompletion(t *testing.T) {
 					}
 					if len(filtered) != len(expected) {
 						t.Errorf("got %d candidates, want %d", len(filtered), len(expected))
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestCompletionFunctions runs the cases naming which carets take a call. The
+// builtins are the dialect's hundreds, so the cases assert that they are
+// offered and that one the dialect declares is among them.
+func TestCompletionFunctions(t *testing.T) {
+	analyzer := testutil.NewTestAnalyzer(t)
+	defer analyzer.Close()
+
+	for _, di := range dialects {
+		t.Run(di.name, func(t *testing.T) {
+			di.dialect.SetAnalyzer(analyzer)
+
+			meta := core.GetCompletionTestMetadata()
+			meta.DefaultSchema = di.defaultSchema
+			if len(meta.Schemas) > 0 {
+				meta.Schemas[0].Name = di.defaultSchema
+			}
+			builtins := di.dialect.GetBuiltinFunctions()
+			if len(builtins) == 0 {
+				t.Fatalf("%s declares no builtin function", di.name)
+			}
+
+			for _, tc := range core.GetCompletionFunctionCases() {
+				t.Run(tc.Name, func(t *testing.T) {
+					text, caretCharPos := removeCaret(tc.SQL)
+					caretLine, caretOffset := charPosToLineCol(text, caretCharPos)
+
+					got, err := di.dialect.Complete(context.Background(), text, caretLine, caretOffset, meta)
+					if err != nil {
+						t.Fatalf("complete: %v", err)
+					}
+
+					offered := map[string]bool{}
+					for _, c := range got {
+						if c.Type == core.CandidateTypeFunction {
+							offered[c.Text] = true
+						}
+					}
+					if tc.Offered && !offered[builtins[0]] {
+						t.Errorf("no call offered; %q is not among %d candidates", builtins[0], len(got))
+					}
+					if !tc.Offered && len(offered) > 0 {
+						t.Errorf("%d calls offered where a column is only being named", len(offered))
 					}
 				})
 			}

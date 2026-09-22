@@ -130,8 +130,6 @@ def _complete_context(req: dict) -> dict:
     schema_names = list(req.get("schema", {}).keys())
     sg_dialect = sqlglot_dialect_name(req.get("dialect", "postgresql"))
 
-    # An empty buffer is where a statement begins, which is an answer rather
-    # than a reason to give none.
     return detect_completion_context(sql, caret_line, caret_col, schema_names, sg_dialect)
 
 

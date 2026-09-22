@@ -76,7 +76,8 @@ const (
 	CompletionTargetOperator    // Operator completion (=, <>, LIKE, etc.)
 	CompletionTargetEnumValue   // Enum value completion (col = '|', col IN ('|'))
 	CompletionTargetSetting     // Runtime parameter completion (@@var, SHOW, PRAGMA)
-	CompletionTargetKeyword     // The word a statement opens with
+	CompletionTargetKeyword     // The word a statement opens with, or the one a finished clause waits for
+	CompletionTargetFunction    // A call, which stands wherever a value does
 
 	CompletionTargetSchemaAndTable           = CompletionTargetSchema | CompletionTargetTable
 	CompletionTargetSchemaAndRelationRefOnly = CompletionTargetSchema | CompletionTargetTable | completionTargetRefOnlyFlag
@@ -93,17 +94,17 @@ type PrecedingColumnInfo struct {
 
 // CompletionContext represents a parsed completion context
 type CompletionContext struct {
-	Parts             []string             // Qualified parts: ["schema", "table"] or ["table"]
-	CaretAfterDot     bool                 // True if caret is after a dot
-	Targets           CompletionTarget     // What to complete (schema/table/column)
-	SchemaFilter      string               // Schema from qualified parts
-	TargetTable       string               // Table from qualified parts
-	KeywordContext    CompletionTarget     // SQL keyword context (SELECT/FROM/JOIN)
-	PrecedingColumn   *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
-	ColumnListRelation string              // Relation whose columns a parenthesised list names: an INSERT target, or one being renamed
-	KeywordGroup       string              // Which words the caret's position allows, when it allows words
-	ValuePosition     bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
-	SharedColumns     bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
+	Parts              []string             // Qualified parts: ["schema", "table"] or ["table"]
+	CaretAfterDot      bool                 // True if caret is after a dot
+	Targets            CompletionTarget     // What to complete (schema/table/column)
+	SchemaFilter       string               // Schema from qualified parts
+	TargetTable        string               // Table from qualified parts
+	KeywordContext     CompletionTarget     // SQL keyword context (SELECT/FROM/JOIN)
+	PrecedingColumn    *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
+	ColumnListRelation string               // Relation whose columns a parenthesised list names: an INSERT target, or one being renamed
+	KeywordGroup       string               // Which words the caret's position allows, when it allows words
+	ValuePosition      bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
+	SharedColumns      bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
 }
 
 type CompletionStrategy struct {
@@ -137,10 +138,14 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	inScopeRefs := filterByCharScope(refs, caretOffset, nestingLevel)
 	inScopeCtes := filterByCharScope(cteTables, caretOffset, nestingLevel)
 
-	var schemas, tables, views, columns, operators, enumValues, keywords []Candidate
+	var schemas, tables, views, columns, operators, enumValues, keywords, functions []Candidate
 
 	if ctx.Targets&CompletionTargetKeyword != 0 {
 		keywords = cs.completeKeywords(ctx.KeywordGroup)
+	}
+
+	if ctx.Targets&CompletionTargetFunction != 0 {
+		functions = cs.completeFunctions()
 	}
 
 	if ctx.Targets&CompletionTargetSchema != 0 {
@@ -149,7 +154,10 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 
 	if ctx.Targets&CompletionTargetTable != 0 {
 		keywordIsAllMode := (ctx.KeywordContext & completionTargetAllFlag) != 0
-		isAllMode := keywordIsAllMode || (ctx.Targets == CompletionTargetAll && len(inScopeRefs) == 0 && len(inScopeCtes) == 0)
+		// The relation bits decide this, not the whole mask: a flag added
+		// beside them must not turn the catalogue off.
+		wantsEveryKind := ctx.Targets&CompletionTargetAll == CompletionTargetAll
+		isAllMode := keywordIsAllMode || (wantsEveryKind && len(inScopeRefs) == 0 && len(inScopeCtes) == 0)
 
 		if ctx.SchemaFilter != "" {
 			if !isAllMode && len(inScopeRefs) > 0 {
@@ -263,7 +271,24 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	all = append(all, operators...)
 	all = append(all, enumValues...)
 	all = append(all, keywords...)
+	all = append(all, functions...)
 	return all
+}
+
+// completeFunctions are the calls this dialect knows. A call stands wherever a
+// value does, so the caret that takes a column takes one of these too.
+func (cs *CompletionStrategy) completeFunctions() []Candidate {
+	builtins := cs.dialect.GetBuiltinFunctions()
+	functions := make([]Candidate, 0, len(builtins))
+	for _, name := range builtins {
+		functions = append(functions, Candidate{
+			Type:       CandidateTypeFunction,
+			Text:       name,
+			InsertText: name + "($0)",
+			Definition: name + "()",
+		})
+	}
+	return functions
 }
 
 // keywordGroups name the words that may be written at a kind of caret. Which
