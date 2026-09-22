@@ -193,6 +193,10 @@ _KEYWORD_MATCHERS: list[tuple[str, int, bool]] = [
     ("NATURAL",     TARGET_SCHEMA_AND_TABLE_ALL, False),
     ("JOIN",        TARGET_SCHEMA_AND_TABLE_ALL, False),
     ("SET",         TARGET_COLUMN, False),
+    # A row count takes an expression, so a column stands there; a relation
+    # never does.
+    ("LIMIT",       TARGET_TABLE_AND_COLUMN, False),
+    ("OFFSET",      TARGET_TABLE_AND_COLUMN, False),
     ("VALUES",      TARGET_COLUMN, False),
     ("SELECT",      TARGET_ALL, True),
     ("UPDATE",      TARGET_SCHEMA_AND_TABLE_ALL, True),

@@ -120,6 +120,16 @@ class TestCallParen:
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
 
 
+class TestRowCount:
+    def test_limit_offers_no_relation(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 LIMIT |")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+    def test_offset_offers_no_relation(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 LIMIT 10 OFFSET |")
+        assert _detect_keyword_context(tokens) == TARGET_TABLE_AND_COLUMN
+
+
 class TestValuePosition:
     def test_inside_a_literal_is_quoted(self):
         tokens, _, caret = _at_caret("UPDATE t SET c1 = '|'")
