@@ -655,6 +655,28 @@ func permCases() []PermCase {
 			Why: "a plain WITH exposes only the names declared before a body, so a body reads relations rather than its siblings",
 		},
 
+		{
+			Name: "a CTE shadowing a table a nested read names",
+			SQL:  "WITH t2 AS (SELECT c1 FROM other.t3) SELECT c1 FROM t1 WHERE c1 IN (SELECT c1 FROM t2)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "the bare t2 is the CTE, so main.t2 is never read and a right on it is not needed",
+		},
+		{
+			Name: "a schema-qualified name a CTE cannot shadow",
+			SQL:  "WITH t2 AS (SELECT c1 FROM other.t3) SELECT c1 FROM t1 WHERE c1 IN (SELECT c1 FROM main.t2)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "writing the schema names the table whatever the WITH declared, so both relations are read",
+		},
+
 		// --- a view. The statement names it as it names a table and carries
 		// nothing of what it reads, so the right is the one held on the view.
 		{

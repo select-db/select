@@ -144,7 +144,10 @@ func dropDeclaredTables(stmts []InspectStatement, declared map[string]bool, norm
 		stmt := &stmts[idx]
 		kept := stmt.Tables[:0]
 		for _, table := range stmt.Tables {
-			if table.Schema == "" && declared[normalize(table.Name)] {
+			// Only a bare name can be the CTE. The catalog may have resolved
+			// it to a schema before anything knew a CTE shadowed it, so the
+			// schema cannot stand in for the question.
+			if !table.Qualified && declared[normalize(table.Name)] {
 				continue
 			}
 			kept = append(kept, table)

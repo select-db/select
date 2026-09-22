@@ -654,6 +654,13 @@ export class InspectTable {
     "Schema": string;
 
     /**
+     * Qualified means the SQL named a schema. Schema cannot say so on its own,
+     * since an unqualified name is given the default one, and it is what tells
+     * a name a CTE can shadow from one it cannot.
+     */
+    "Qualified": boolean;
+
+    /**
      * 1-based line of the identifier token (0 = unknown)
      */
     "StartLine": number;
@@ -678,6 +685,9 @@ export class InspectTable {
         }
         if (!("Schema" in $$source)) {
             this["Schema"] = "";
+        }
+        if (!("Qualified" in $$source)) {
+            this["Qualified"] = false;
         }
         if (!("StartLine" in $$source)) {
             this["StartLine"] = 0;
