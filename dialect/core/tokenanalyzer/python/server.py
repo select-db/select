@@ -85,6 +85,11 @@ def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, di
     return sql, stmts, schema_dict, default_schema, sg_dialect
 
 
+# The name the caret patch below writes into the SQL. It must not read as a
+# relation or a column the caller can complete.
+_PLACEHOLDER = '__placeholder__'
+
+
 def _sanitize_for_completion(sql: str, caret_line: int, caret_col: int) -> str:
     """Patch incomplete SQL at the caret position so SQLGlot can parse it.
 
@@ -114,13 +119,30 @@ def _sanitize_for_completion(sql: str, caret_line: int, caret_col: int) -> str:
     # If the character before caret is a dot, add a dummy identifier
     stripped = before.rstrip()
     if stripped.endswith('.'):
-        return stripped + '__placeholder__ ' + after
+        return stripped + _PLACEHOLDER + ' ' + after
 
     # If the character before caret is a comma or open paren, add a dummy
     if stripped.endswith(',') or stripped.endswith('('):
-        return stripped + ' __placeholder__ ' + after
+        return stripped + ' ' + _PLACEHOLDER + ' ' + after
 
     return sql
+
+
+# The fields a reference carries an identifier in. A reference naming the
+# placeholder in any of them is the patch, not the caller's SQL.
+_REFERENCE_NAME_FIELDS = ("table", "column", "name", "alias")
+
+
+def _drop_placeholders(refs: dict) -> dict:
+    """Drop what the caret patch put there. A name this module invented is not
+    a relation or a column the caller may complete, and offering it names
+    something that does not exist."""
+    return {
+        key: [item for item in items
+              if not any(item.get(field) == _PLACEHOLDER
+                         for field in _REFERENCE_NAME_FIELDS)]
+        for key, items in refs.items()
+    }
 
 
 def _collect_references(req: dict) -> dict:
@@ -130,7 +152,10 @@ def _collect_references(req: dict) -> dict:
     sql, stmts, schema_dict, default_schema, sg_dialect = _prepare_sql(req, for_completion=for_completion)
     if not stmts:
         return {"relations": [], "virtual_tables": []}
-    return collect_references(sql, stmts, schema_dict, default_schema, sg_dialect)
+    refs = collect_references(sql, stmts, schema_dict, default_schema, sg_dialect)
+    if for_completion:
+        refs = _drop_placeholders(refs)
+    return refs
 
 
 def _collect_column_refs(req: dict) -> dict:
@@ -140,10 +165,13 @@ def _collect_column_refs(req: dict) -> dict:
     sql, stmts, schema_dict, default_schema, _ = _prepare_sql(req, for_completion=for_completion)
     if not stmts:
         return {"column_refs": [], "column_aliases": []}
-    return {
+    refs = {
         "column_refs":    collect_resolved_column_refs(stmts, schema_dict, default_schema),
         "column_aliases": collect_column_aliases(stmts, schema_dict, default_schema),
     }
+    if for_completion:
+        refs = _drop_placeholders(refs)
+    return refs
 
 
 def _complete_context(req: dict) -> dict:
