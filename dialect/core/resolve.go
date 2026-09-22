@@ -69,6 +69,7 @@ func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 		table := InspectTable{
 			Name:      ref.Table,
 			Schema:    schema,
+			Qualified: ref.Qualified,
 			StartLine: ref.Line,
 			StartCol:  ref.Col,
 			EndCol:    ref.EndCol,
