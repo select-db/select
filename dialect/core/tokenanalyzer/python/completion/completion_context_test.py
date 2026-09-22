@@ -433,6 +433,11 @@ class TestClauseFollowers:
         assert self._group("SELECT * FROM |") == ""
         assert self._group("SELECT * FROM t1, |") == ""
 
+    def test_a_distinct_on_list_is_not_a_join(self):
+        assert self._group("SELECT DISTINCT ON (c1) |") == "expression_start"
+        assert self._group("SELECT DISTINCT ON (c1) c2 |") == "select_item"
+        assert self._group("SELECT * FROM t1 JOIN t2 ON (c1 = c2) |") == "predicate"
+
     def test_a_ddl_statement_waits_for_what_it_acts_on(self):
         assert self._group("CREATE |") == "object_kind"
         assert self._group("DROP |") == "object_kind"

@@ -790,6 +790,7 @@ func GetCompletionClauseCases() []CompletionClauseCase {
 		{"ALTER too", "ALTER |", "object_kind"},
 		{"an INSERT ON names a conflict", "INSERT INTO t1 (c1) VALUES (1) ON |", "conflict_target"},
 		{"a join ON opens a predicate", "SELECT * FROM t1 JOIN t2 ON |", "expression_start"},
+		{"a parenthesised join ON finishes one", "SELECT * FROM t1 JOIN t2 ON (c1 = c2) |", "predicate"},
 		{"and ALL does not repeat", "SELECT 1 UNION ALL |", "query_word"},
 		{"a joined relation also takes ON", "SELECT * FROM t1 JOIN t2 |", "joined_relation"},
 		{"a finished predicate takes AND", "SELECT * FROM t1 WHERE c1 = 1 |", "predicate"},

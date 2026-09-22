@@ -438,6 +438,13 @@ def _walk_back(tokens: list, idx: int):
             return
 
 
+def _chooses_rows(tokens: list, idx: int) -> bool:
+    """Whether the ON at idx belongs to a DISTINCT rather than to a join. The
+    list that follows says how rows are chosen, not what they are joined on."""
+    return (tokens[idx].text.upper() == "ON" and idx > 0
+            and tokens[idx - 1].text.upper() == "DISTINCT")
+
+
 def _reads_as_a_name(tokens: list, idx: int) -> bool:
     """Report the token at idx as a column name rather than a clause word.
     The tokenizer has no context, so "UPDATE t SET limit = 1" gives LIMIT the
@@ -648,6 +655,8 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
         return group
 
     if last.token_type in _FINISHED_ITEM_TOKENS:
+        if _closes_a_row_choice(tokens):
+            return _opening_an_item(clause, last)
         if group in _ITEM_IS_COMPLETE_AT_A_NAME and _already_renamed(tokens):
             group = _ALIASED.get(group, group)
         return _in_the_statement(group, tokens)
@@ -725,6 +734,15 @@ def _enclosing_call(tokens: list, idx: int) -> str:
     return ""
 
 
+def _closes_a_row_choice(tokens: list) -> bool:
+    """Whether the last token closes a DISTINCT ON list, which leaves the
+    select item itself still to be written."""
+    if tokens[-1].token_type != TokenType.R_PAREN:
+        return False
+    opening = _opening_paren(tokens, len(tokens) - 1)
+    return opening >= 2 and _chooses_rows(tokens, opening - 1)
+
+
 def _already_renamed(tokens: list) -> bool:
     """Whether the item the caret follows already carries an alias: a second
     name stands after the one the clause named, with or without AS."""
@@ -736,9 +754,11 @@ def _already_renamed(tokens: list) -> bool:
     if not _is_identifier_token(tokens[-1]):
         return False
     before = tokens[-2]
-    # A derived table is the name's item, and its closing paren stands here.
-    return (before.token_type in (TokenType.ALIAS, TokenType.R_PAREN)
-            or _is_identifier_token(before))
+    if before.token_type == TokenType.R_PAREN:
+        # A derived table is the name's item and its closing paren stands
+        # here, but a DISTINCT ON list renames nothing.
+        return not _closes_a_row_choice(tokens[:-1])
+    return before.token_type == TokenType.ALIAS or _is_identifier_token(before)
 
 
 def _names_a_cte(tokens: list, alias_idx: int) -> bool:
@@ -863,7 +883,7 @@ def _walk_to_clause(tokens: list) -> Clause:
             i -= 1
             continue
 
-        if not _reads_as_a_name(tokens, i):
+        if not _reads_as_a_name(tokens, i) and not _chooses_rows(tokens, i):
             contextual = _contextual_target(tokens, i, upper)
             if contextual is not None:
                 return Clause(_narrowed_to_a_call(contextual, inside_call), upper)
