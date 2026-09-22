@@ -549,8 +549,10 @@ _WORD_FOLLOWERS = {
     "ALTER":     "object_kind",
 }
 
-# The words a clause opens with, which is where a search backwards stops.
-_CLAUSE_WORDS = frozenset(_CLAUSE_FOLLOWERS)
+# The words a clause opens with, which is where a search backwards stops and
+# where an item being written runs out.
+CLAUSE_WORDS = frozenset(_CLAUSE_FOLLOWERS)
+_CLAUSE_WORDS = CLAUSE_WORDS
 
 # The clauses whose finished item is the whole item, so a keyword follows it.
 # In a WHERE a finished name is the left side of a predicate and an operator

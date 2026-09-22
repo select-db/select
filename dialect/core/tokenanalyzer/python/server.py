@@ -87,12 +87,18 @@ def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, di
     var_re = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
     sql = var_re.sub("NULL", sql)
 
-    if for_completion:
-        caret_line = req.get("caret_line", 1)
-        caret_col = req.get("caret_col", 0)
-        sql = caret_patch.sanitize(sql, caret_line, caret_col)
-
     sg_dialect = sqlglot_dialect_name(dialect)
+
+    if for_completion:
+        def parse(text):
+            statements, errors, _ = _parse_sql(text, sg_dialect)
+            return statements, errors
+
+        sql, stmts = caret_patch.readable_at(
+            sql, req.get("caret_line", 1), req.get("caret_col", 0), parse,
+        )
+        return sql, stmts, schema_dict, default_schema, sg_dialect
+
     stmts, _, _ = _parse_sql(sql, sg_dialect)
     return sql, stmts, schema_dict, default_schema, sg_dialect
 
