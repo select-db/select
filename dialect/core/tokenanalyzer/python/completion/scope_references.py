@@ -76,6 +76,14 @@ class _ScopeBounds:
                 enclosing = start
         return enclosing
 
+    def range_around(self, offset: int) -> tuple[int, int]:
+        """Where the scope beginning at this offset runs: the parenthesis
+        holding it, or the statement when nothing holds it."""
+        open_paren = self.enclosing_paren(offset)
+        if open_paren >= 0:
+            return open_paren + 1, self.paren_pairs.get(open_paren, -1)
+        return self.find_select_before(offset), self.find_statement_end(offset)
+
     def depth_at(self, offset: int) -> int:
         """How many parentheses stand open at this offset."""
         depth = 0
@@ -228,6 +236,12 @@ def _collect_from_scopes(
         cte_open, cte_close = _owning_cte_range(scope)
         # Scope starts one char AFTER the opening paren (inside the body)
         cte_body_start = cte_open + 1 if cte_open >= 0 else -1
+        if cte_open < 0 and bounds:
+            # A union branch owned by no CTE: what holds it is the parenthesis
+            # around it, not the whole statement, or its names leak out.
+            first_meta = _first_token_meta(scope.expression)
+            if first_meta:
+                cte_body_start, cte_close = bounds.range_around(first_meta["start"])
         for alias, source in _ordered_sources(scope):
             if isinstance(source, exp.Table):
                 _add_table_ref(
@@ -311,13 +325,7 @@ def _collect_from_scopes(
         if bounds:
             first_meta = _first_token_meta(scope.expression)
             if first_meta:
-                open_paren = bounds.enclosing_paren(first_meta["start"])
-                if open_paren >= 0:
-                    scope_start = open_paren + 1
-                    scope_end = bounds.paren_pairs.get(open_paren, -1)
-                else:
-                    scope_start = bounds.find_select_before(first_meta["start"])
-                    scope_end = bounds.find_statement_end(first_meta["start"])
+                scope_start, scope_end = bounds.range_around(first_meta["start"])
 
         # Nesting level where the vtab is available = one level up from where it's defined
         parent_nesting = max(0, nesting - 1)
@@ -674,6 +682,10 @@ def _build_virtual_table(
         expr = scope.expression
     else:
         expr = scope
+    # A LATERAL holds the query whose columns these are; the wrapper itself
+    # projects nothing.
+    while isinstance(expr, (exp.Lateral, exp.Subquery)):
+        expr = expr.this
 
     columns = _infer_columns(expr, scope, schema_dict, default_schema, cte_defs)
 
