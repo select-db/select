@@ -38,9 +38,10 @@ func (r Resolver) virtualNames(s Scope) map[string]bool {
 }
 
 // Tables turns the relations a statement named into the tables a permission
-// check reads. A table the metadata does not know resolves to no schema, which
-// is refused for every role. Only an unqualified name can be virtual: dropping
-// a qualified one would be a read nobody checks.
+// check reads. An unqualified name the metadata does not know resolves to no
+// schema, which is refused for every role. Only such a name can be virtual:
+// dropping a qualified one would be a read nobody checks, so a qualified name
+// keeps the schema it was written with whether or not the metadata has it.
 func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 	virtual := r.virtualNames(s)
 	var tables []InspectTable
@@ -55,7 +56,7 @@ func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 		}
 
 		schema := ref.Schema
-		if !TableExistsInMetadata(r.Meta, schema, ref.Table, r.Dialect) {
+		if !ref.Qualified && !TableExistsInMetadata(r.Meta, schema, ref.Table, r.Dialect) {
 			schema = ""
 		}
 

@@ -579,7 +579,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 			i.conflictSetFields(conflict, schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -914,7 +914,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -974,7 +974,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
 
-	i.resolver.DropCTETables(result.Subqueries, ctes)
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
