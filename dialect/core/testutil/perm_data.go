@@ -19,12 +19,13 @@ import (
 //
 // On names the dialects that parse the SQL. None means all of them.
 type PermCase struct {
-	Name  string
-	SQL   string
-	Needs []Right
-	Op    core.InspectOperation
-	On    []string
-	Why   string
+	Name   string
+	SQL    string
+	Needs  []Right
+	Denied []Right
+	Op     core.InspectOperation
+	On     []string
+	Why    string
 }
 
 // The tables of GetInspectTestMetadata. mainT1 and mainT2 share a schema and
@@ -275,11 +276,12 @@ func permCases() []PermCase {
 			Why:   "how many rows changed is an answer about c2, so a grant naming c1 alone is not enough",
 		},
 		{
-			Name:  "the column a delete filters on",
-			SQL:   "DELETE FROM t1 WHERE c2 = 'x'",
-			Needs: []Right{mainT1(core.ActionDelete).Only("c2")},
-			Op:    core.InspectOpDelete,
-			Why:   "which rows go is an answer about c2",
+			Name:   "a delete is not scoped to a column",
+			SQL:    "DELETE FROM t1 WHERE c2 = 'x'",
+			Needs:  []Right{mainT1(core.ActionDelete)},
+			Denied: []Right{mainT1(core.ActionDelete).Only("c2")},
+			Op:     core.InspectOpDelete,
+			Why:    "the row goes whole, so a grant naming the column it was chosen by is not a right to remove it",
 		},
 		{
 			Name:  "a column an assignment reads",
@@ -294,13 +296,6 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionUpdate).Only("c1"), mainT1(core.ActionUpdate).Only("c2")},
 			Op:    core.InspectOpUpdate,
 			Why:   "the alias names the target table, so a.c2 is c2 of t1",
-		},
-		{
-			Name:  "a column an aliased delete filters on",
-			SQL:   "DELETE FROM t1 AS a WHERE a.c2 = 'x'",
-			Needs: []Right{mainT1(core.ActionDelete).Only("c2")},
-			Op:    core.InspectOpDelete,
-			Why:   "the alias names the target table here too",
 		},
 		{
 			On:    []string{"postgresql", "sqlite"},
@@ -383,14 +378,120 @@ func permCases() []PermCase {
 			Why: "the value written over the old one is read out of c2",
 		},
 
+		{
+			Name:  "a table-wide grant covers the columns under it",
+			SQL:   "SELECT c1 FROM t1 WHERE c2 = 'x'",
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a role granted the table reads every column of it, returned or tested",
+		},
+		{
+			Name:  "a column a CTE body reads",
+			SQL:   "WITH x AS (SELECT c1 FROM t2) SELECT c1 FROM x",
+			Needs: []Right{mainT2(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "x is not a table, and the column behind it is c1 of t2",
+		},
+		{
+			Name:  "a column each branch of a union reads",
+			SQL:   "SELECT c1 FROM t1 UNION SELECT c3 FROM t2",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c3")},
+			Op:    core.InspectOpSelect,
+			Why:   "a branch nobody scoped is a column read without a right",
+		},
+		{
+			Name:  "a column the source of an INSERT ... SELECT reads",
+			SQL:   "INSERT INTO t1 (c1) SELECT c3 FROM t2",
+			Needs: []Right{mainT1(core.ActionInsert).Only("c1"), mainT2(core.ActionSelect).Only("c3")},
+			Op:    core.InspectOpInsert,
+			Why:   "the column written and the column it comes from are scoped apart",
+		},
+		{
+			Name:  "a column the source of a CREATE TABLE AS reads",
+			SQL:   "CREATE TABLE t9 AS SELECT c3 FROM t2",
+			Needs: []Right{Manage, mainT2(core.ActionSelect).Only("c3")},
+			Why:   "the table it makes is administration, and the rows it fills it with are a read of c3",
+		},
+		{
+			Name:  "a column a scalar subquery in the select list reads",
+			SQL:   "SELECT c1, (SELECT c3 FROM t2 LIMIT 1) AS s FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c3")},
+			Op:    core.InspectOpSelect,
+			Why:   "its value reaches the row whether or not the FROM names t2",
+		},
+		{
+			Name: "a column a subquery in WHERE reads",
+			SQL:  "SELECT c1 FROM t1 WHERE c2 IN (SELECT c3 FROM t2)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+				mainT2(core.ActionSelect).Only("c3"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "which rows come back is an answer about c3 of t2 and c2 of t1",
+		},
+		{
+			Name:  "a column only a HAVING reads",
+			SQL:   "SELECT c1 FROM t1 GROUP BY c1 HAVING count(c2) > 1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "which groups survive is an answer about c2",
+		},
+		{
+			Name:  "a column a correlated EXISTS reads",
+			SQL:   "SELECT c1 FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.c1 = t1.c1)",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "whether a row survives is an answer about c1 of t2",
+		},
+		{
+			Name:  "a column an alias qualifies",
+			SQL:   "SELECT a.c1 FROM t1 a WHERE a.c2 = 'x'",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "a.c1 is c1 of t1, and the right is on the table rather than the alias",
+		},
+		{
+			Name:  "a column named in another case",
+			SQL:   "SELECT C1 FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "C1 and c1 are one column, so one right covers both spellings",
+		},
+		{
+			On:    []string{"postgresql", "sqlite"},
+			Name:  "a quoted column name",
+			SQL:   `SELECT "c1" FROM t1`,
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "quoting spells the name, it does not make another column",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a column quoted in backticks",
+			SQL:   "SELECT `c1` FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "MySQL quotes with backticks, and the name inside is the column",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a column an expression reads, in MySQL",
+			SQL:   "SELECT CONCAT(c1, c2) FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "a column inside a call is read whether or not it comes back under its own name",
+		},
+
 		// --- a view. The statement names it as it names a table and carries
 		// nothing of what it reads, so the right is the one held on the view.
 		{
-			Name:  "a read through a view",
-			SQL:   "SELECT c5 FROM v1",
-			Needs: []Right{mainV1(core.ActionSelect)},
-			Op:    core.InspectOpSelect,
-			Why:   "a right on t1 is not a right on a view over it",
+			Name:   "a read through a view",
+			SQL:    "SELECT c5 FROM v1",
+			Needs:  []Right{mainV1(core.ActionSelect).Only("c5")},
+			Denied: []Right{mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Op:     core.InspectOpSelect,
+			Why:    "a right on the tables a view may be over is not a right on the view",
 		},
 		{
 			Name:  "a column of a view",
@@ -402,7 +503,7 @@ func permCases() []PermCase {
 		{
 			Name:  "a write through a view",
 			SQL:   "UPDATE v1 SET c5 = 'x'",
-			Needs: []Right{mainV1(core.ActionUpdate)},
+			Needs: []Right{mainV1(core.ActionUpdate).Only("c5")},
 			Op:    core.InspectOpUpdate,
 			Why:   "an updatable view is written through, and the write is on the view",
 		},

@@ -48,6 +48,9 @@ func (r Right) String() string {
 // of them must run it, so the case is not passing because everything is
 // refused. Naming the table each right is on is what catches a statement that
 // asks for the right action against the wrong relation.
+//
+// Denied, where a case sets it, is a grant that must fall short, which is how
+// a case says a right does not stretch as far as it looks.
 func RunPermCases(t *testing.T, inspect func(sql string) []core.InspectStatement, cases []PermCase) {
 	t.Helper()
 	for _, testCase := range cases {
@@ -67,6 +70,12 @@ func RunPermCases(t *testing.T, inspect func(sql string) []core.InspectStatement
 
 			if err := core.CheckQueryPermissions(statements, TestDBInstanceID, PermGranting(testCase.Needs...)); err != nil {
 				t.Errorf("holding %v still refused it: %v\n  %s", testCase.Needs, err, testCase.SQL)
+			}
+
+			if len(testCase.Denied) > 0 {
+				if err := core.CheckQueryPermissions(statements, TestDBInstanceID, PermGranting(testCase.Denied...)); err == nil {
+					t.Errorf("ran holding only %v, and %s:\n  %s", testCase.Denied, testCase.Why, testCase.SQL)
+				}
 			}
 		})
 	}
