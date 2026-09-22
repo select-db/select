@@ -394,7 +394,9 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 }
 
 // returnedFields are the columns a statement hands back: its own, and those of
-// a read it also performs, which is where a RETURNING clause lands.
+// a read it also performs, which is where a RETURNING clause lands. A read
+// that names no column is a whole relation a write only joined against, and
+// none of it reaches the caller.
 func returnedFields(stmt InspectStatement) []InspectField {
 	fields := stmt.Fields
 	for _, also := range stmt.Also {
