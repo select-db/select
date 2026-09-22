@@ -585,6 +585,51 @@ func permCases() []PermCase {
 			Why: "the rows come from t2 through a name that is not a relation",
 		},
 
+		{
+			Name: "a CTE an insert declares inside itself",
+			SQL:  "INSERT INTO t1 (c1) WITH x AS (SELECT c1 FROM t2) SELECT c1 FROM x",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "MySQL takes the WITH after the column list rather than before the INSERT, and it reads the same",
+		},
+		{
+			Name: "a recursive CTE a delete reads",
+			SQL:  "WITH RECURSIVE x(n) AS (SELECT c1 FROM t2) DELETE FROM t1 WHERE c1 IN (SELECT n FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "the column list renames c1 to n, and the right is still on c1 of t2",
+		},
+		{
+			Name: "a CTE an assignment reads",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) UPDATE t1 SET c1 = (SELECT c1 FROM x LIMIT 1)",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "the value stored comes out of t2 through the CTE",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a CTE a delete reads beside a RETURNING",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM x) RETURNING c2",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "the CTE is read, the filter reads c1, and the clause hands c2 back",
+		},
+
 		// --- a view. The statement names it as it names a table and carries
 		// nothing of what it reads, so the right is the one held on the view.
 		{
