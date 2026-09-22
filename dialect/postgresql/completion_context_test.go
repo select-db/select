@@ -71,3 +71,92 @@ func TestCompletionContext(t *testing.T) {
 		})
 	}
 }
+
+// TestKeywordGroupWords pins the words themselves for one dialect. The shared
+// cases pin which group each caret takes; this pins what a group holds, so a
+// word added to the wrong group fails somewhere.
+func TestKeywordGroupWords(t *testing.T) {
+	d := NewDialect()
+	cases := []struct {
+		group string
+		want  []string
+	}{
+		{"select_item", []string{"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO", "OVER"}},
+		{"sort_item", []string{"LIMIT", "OFFSET", "FETCH", "ASC", "DESC", "NULLS"}},
+		{"group_item", []string{"ORDER BY", "HAVING", "LIMIT", "OFFSET"}},
+		{"row_count", []string{"OFFSET", "FETCH"}},
+		{"after_cte", []string{"SELECT", "INSERT", "UPDATE", "DELETE"}},
+		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT", "INTO", "OVER"}},
+		{"join_word", []string{"JOIN", "OUTER JOIN"}},
+		{"is_test", []string{"NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM"}},
+		{"is_not_test", []string{"NULL", "TRUE", "FALSE", "DISTINCT FROM"}},
+		{"not_test", []string{"NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS"}},
+		{"set_operand", []string{"SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"}},
+		{"query_word", []string{"SELECT", "VALUES", "TABLE"}},
+		{"object_kind", []string{
+			"TABLE", "TEMPORARY TABLE", "VIEW", "MATERIALIZED VIEW",
+			"INDEX", "UNIQUE INDEX", "SCHEMA", "DATABASE", "FUNCTION",
+			"PROCEDURE", "TRIGGER", "SEQUENCE", "TYPE", "EXTENSION",
+			"ROLE", "USER",
+		}},
+		{"conflict_target", []string{"CONFLICT"}},
+		{"conflict_action", []string{"DO", "ON CONSTRAINT"}},
+		{"conflict_resolution", []string{"NOTHING", "UPDATE"}},
+		{"null_ordering", []string{"FIRST", "LAST"}},
+		{"alter_action", []string{"ADD", "DROP", "RENAME", "ALTER", "SET"}},
+		{"alter_target", []string{
+			"COLUMN", "CONSTRAINT", "INDEX", "PRIMARY KEY", "UNIQUE",
+			"FOREIGN KEY", "CHECK",
+		}},
+		{"create_body", []string{"AS", "ON"}},
+		{"cascade_option", []string{"CASCADE", "RESTRICT"}},
+		{"table_constraint", []string{
+			"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
+		}},
+		{"column_constraint", []string{
+			"NOT NULL", "PRIMARY KEY", "UNIQUE", "DEFAULT", "REFERENCES",
+			"CHECK", "COLLATE", "GENERATED",
+		}},
+		{"window_start", []string{"PARTITION BY", "ORDER BY", "ROWS", "RANGE", "GROUPS"}},
+		{"partition_item", []string{"ORDER BY", "ROWS", "RANGE", "GROUPS"}},
+		{"window_sort_item", []string{"ASC", "DESC", "NULLS", "ROWS", "RANGE", "GROUPS"}},
+		{"lock_strength", []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"}},
+		{"expression_start", []string{
+			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
+		}},
+		{"select_start", []string{
+			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
+			"DISTINCT", "ALL",
+		}},
+		{"insert_target", []string{"VALUES", "SELECT", "AS", "DEFAULT VALUES"}},
+		{"update_target", []string{"SET", "AS"}},
+		{"delete_target", []string{"FROM"}},
+		{"case_test", []string{"THEN"}},
+		{"case_body", []string{"WHEN", "ELSE", "END"}},
+		{"delete_relation", []string{"AS", "WHERE", "USING", "RETURNING"}},
+		{"delete_aliased_relation", []string{"WHERE", "USING", "RETURNING"}},
+		{"delete_predicate", []string{"AND", "OR", "RETURNING"}},
+		{"predicate", []string{
+			"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+			"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+			"CROSS JOIN", "UNION", "EXCEPT", "INTERSECT", "FETCH",
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.group, func(t *testing.T) {
+			got := core.KeywordsOfGroup(d, tc.group)
+			if len(got) != len(tc.want) {
+				t.Fatalf("%s = %v, want %v", tc.group, got, tc.want)
+			}
+			seen := make(map[string]bool, len(got))
+			for _, w := range got {
+				seen[w] = true
+			}
+			for _, w := range tc.want {
+				if !seen[w] {
+					t.Errorf("%s is missing %q (got %v)", tc.group, w, got)
+				}
+			}
+		})
+	}
+}

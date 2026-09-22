@@ -4,6 +4,8 @@ Scans tokens backward from caret to determine what to complete.
 """
 from __future__ import annotations
 
+import re
+
 from typing import NamedTuple
 
 from sqlglot.tokens import TokenType
@@ -19,11 +21,42 @@ _ALL_FLAG       = 1 << 4
 TARGET_OPERATOR = 1 << 5
 TARGET_ENUM_VALUE = 1 << 6
 TARGET_SETTING = 1 << 7
+TARGET_KEYWORD = 1 << 8
+TARGET_FUNCTION = 1 << 9
+TARGET_TYPE = 1 << 10
 
 TARGET_SCHEMA_AND_TABLE      = TARGET_SCHEMA | TARGET_TABLE
 TARGET_SCHEMA_AND_TABLE_ALL  = TARGET_SCHEMA | TARGET_TABLE | _ALL_FLAG
 TARGET_TABLE_AND_COLUMN      = TARGET_TABLE | TARGET_COLUMN
 TARGET_ALL                   = TARGET_SCHEMA | TARGET_TABLE | TARGET_COLUMN
+
+
+def _bare_context(targets: int) -> dict:
+    """A context that names only what may be written, with no slot to fill."""
+    return {
+        "parts":              [],
+        "caret_after_dot":    False,
+        "targets":            targets,
+        "schema_filter":      "",
+        "target_table":       "",
+        "keyword_context":    0,
+        "preceding_column":   None,
+        "column_list_relation": "",
+        "value_position":     False,
+        "shared_columns":     False,
+        "keyword_group":      "",
+    }
+
+
+def _caret_in_a_comment(sql: str, tokens: list, caret_offset: int) -> bool:
+    """Whether the caret sits inside a comment. Only whitespace and comments
+    stand between the last token and the caret, so that gap is enough to tell."""
+    gap = sql[tokens[-1].end + 1:caret_offset] if tokens else sql[:caret_offset]
+    line = gap.rfind("--")
+    if line != -1 and "\n" not in gap[line:]:
+        return True
+    block = gap.rfind("/*")
+    return block != -1 and "*/" not in gap[block:]
 
 
 def detect_completion_context(
@@ -36,23 +69,39 @@ def detect_completion_context(
     caret_offset = _line_col_to_offset(sql, caret_line, caret_col)
     tokens = _tokenize_up_to(sql, caret_offset, sg_dialect)
 
+    if _caret_in_a_comment(sql, tokens, caret_offset):
+        # Nothing a writer types in a comment is SQL.
+        return _bare_context(0)
+
+    if _writes_a_type(tokens, caret_offset):
+        return _bare_context(TARGET_TYPE)
+
     if _detect_setting_context(tokens, sql, caret_offset):
+        return _bare_context(TARGET_SETTING)
+
+    parts, caret_after_dot = _parse_qualified_parts(tokens)
+    clause = _walk_to_clause(tokens)
+    keyword_ctx = clause.target
+
+    if _at_a_statement_start(tokens, sql, caret_offset):
+        # Nothing names a relation or a column yet, so the only thing that can
+        # be written is the word the statement opens with.
         return {
             "parts":              [],
             "caret_after_dot":    False,
-            "targets":            TARGET_SETTING,
+            "targets":            TARGET_KEYWORD,
             "schema_filter":      "",
             "target_table":       "",
-            "keyword_context":    0,
+            "keyword_context":    TARGET_KEYWORD,
             "preceding_column":   None,
             "column_list_relation": "",
             "value_position":     False,
             "shared_columns":     False,
+            "keyword_group":      "statement",
         }
 
-    parts, caret_after_dot = _parse_qualified_parts(tokens)
-    keyword_ctx = _detect_keyword_context(tokens)
-
+    keyword_group = "" if parts or caret_after_dot else _keyword_group_after(
+        tokens, caret_offset, clause)
     targets = keyword_ctx
     schema_filter = ""
     target_table = ""
@@ -91,6 +140,26 @@ def detect_completion_context(
                     if not slot.quoted:
                         targets |= keyword_ctx
 
+    writes_expression = _writes_an_expression(
+        tokens, clause, targets, column_list_relation,
+        shared_columns, bool(parts) or caret_after_dot)
+    if writes_expression:
+        targets |= TARGET_FUNCTION
+
+    if keyword_group in _GROUPS_BESIDE_NAMES:
+        # An expression may open with a word as well as with a name, so these
+        # words are added to the names rather than put in their place. Where no
+        # value may be written the words do not stand either.
+        if writes_expression:
+            targets |= TARGET_KEYWORD
+        else:
+            keyword_group = ""
+    elif keyword_group:
+        # A finished item leaves the clause waiting for a word, not for another
+        # name: "SELECT c1 " takes FROM. An operator continues the expression
+        # it already holds, so that one stands too.
+        targets = TARGET_KEYWORD | (targets & TARGET_OPERATOR)
+
     return {
         "parts":              parts,
         "caret_after_dot":    caret_after_dot,
@@ -102,6 +171,7 @@ def detect_completion_context(
         "column_list_relation": column_list_relation,
         "value_position":     value_position,
         "shared_columns":     shared_columns,
+        "keyword_group":      keyword_group,
     }
 
 
@@ -195,6 +265,10 @@ _KEYWORD_MATCHERS: list[tuple[str, int]] = [
     ("NATURAL",     TARGET_SCHEMA_AND_TABLE_ALL),
     ("JOIN",        TARGET_SCHEMA_AND_TABLE_ALL),
     ("SET",         TARGET_COLUMN),
+    ("PARTITION BY", TARGET_TABLE_AND_COLUMN),
+    ("WHEN",        TARGET_TABLE_AND_COLUMN),
+    ("THEN",        TARGET_ALL),
+    ("ELSE",        TARGET_ALL),
     # A row count takes an expression, so a column stands there. Relations are
     # listed only to qualify one, never to be selected from.
     ("LIMIT",       TARGET_TABLE_AND_COLUMN),
@@ -251,6 +325,7 @@ _NAME_FOLLOWERS = {
 # before it belongs to a statement the caret is not in.
 _STATEMENT_WORDS = frozenset({
     "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "GRANT", "REVOKE", "WITH",
+    "CREATE", "ALTER", "DROP", "TRUNCATE",
 })
 
 
@@ -339,8 +414,16 @@ def _walk_back(tokens: list, idx: int):
     be the answer: a merge is what puts two relations together in a MERGE.
     """
     depth = 0
+    closed_cases = 0
     for i in range(idx - 1, -1, -1):
         token_type = tokens[i].token_type
+        if token_type == TokenType.END:
+            closed_cases += 1
+            continue
+        if closed_cases:
+            if tokens[i].text.upper() == "CASE":
+                closed_cases -= 1
+            continue
         if token_type == TokenType.R_PAREN:
             depth += 1
             continue
@@ -355,6 +438,13 @@ def _walk_back(tokens: list, idx: int):
         yield i
         if tokens[i].text.upper() in _STATEMENT_WORDS:
             return
+
+
+def _chooses_rows(tokens: list, idx: int) -> bool:
+    """Whether the ON at idx belongs to a DISTINCT rather than to a join. The
+    list that follows says how rows are chosen, not what they are joined on."""
+    return (tokens[idx].text.upper() == "ON" and idx > 0
+            and tokens[idx - 1].text.upper() == "DISTINCT")
 
 
 def _reads_as_a_name(tokens: list, idx: int) -> bool:
@@ -378,11 +468,485 @@ def _narrowed_to_a_call(target: int, inside_call: bool) -> int:
     return target
 
 
-def _detect_keyword_context(tokens: list) -> int:
+# What may be written once the current clause holds a finished item. The words
+# are named here; which of them a dialect has is the dialect's list to answer.
+_CLAUSE_FOLLOWERS = {
+    "SELECT":      "select_item",
+    "FROM":        "relation",
+    "JOIN":        "joined_relation",
+    "INNER":       "joined_relation",
+    "LEFT":        "joined_relation",
+    "RIGHT":       "joined_relation",
+    "FULL":        "joined_relation",
+    "CROSS":       "joined_relation",
+    "NATURAL":     "joined_relation",
+    "USING":       "relation",
+    "ON":          "predicate",
+    "WHERE":       "predicate",
+    "HAVING":      "predicate",
+    "AND":         "predicate",
+    "OR":          "predicate",
+    "ORDER BY":    "sort_item",
+    "GROUP BY":    "group_item",
+    "SET":         "assignment",
+    "VALUES":      "values",
+    "PARTITION BY": "partition_item",
+    "ALTER":       "alter_action",
+    "CREATE":      "create_body",
+    "DROP":        "cascade_option",
+    "TRUNCATE":    "cascade_option",
+    "LIMIT":       "row_count",
+    "OFFSET":      "row_count",
+    "INSERT":      "insert_target",
+    "INSERT INTO": "insert_target",
+    "UPDATE":      "update_target",
+    "DELETE":      "delete_target",
+    "MERGE":       "merge_target",
+    "WHEN":        "case_test",
+    "THEN":        "case_body",
+    "ELSE":        "case_body",
+}
+
+# What an item that already carries an alias takes: the same words, less the
+# one that gives it another.
+_ALIASED = {"relation": "aliased_relation", "select_item": "aliased_select_item"}
+
+# A clause takes different words in different statements: what follows a
+# DELETE's relation is WHERE, not a join.
+_STATEMENT_GROUPS = frozenset({
+    ("DELETE", "relation"),
+    ("DELETE", "aliased_relation"),
+    ("DELETE", "predicate"),
+    ("UPDATE", "predicate"),
+})
+
+# The groups whose words stand beside the names rather than in their place.
+_GROUPS_BESIDE_NAMES = frozenset({"select_start", "expression_start",
+                                  "window_start"})
+
+_SET_OPERATIONS = frozenset({"UNION", "EXCEPT", "INTERSECT"})
+
+# What a word that does not finish its clause waits for: "LEFT " waits for
+# JOIN, "IS " for NULL, "UNION " for the query it combines.
+_WORD_FOLLOWERS = {
+    "LEFT":      "join_word",
+    "RIGHT":     "join_word",
+    "FULL":      "join_word",
+    "INNER":     "join_word",
+    "CROSS":     "join_word",
+    "NATURAL":   "join_word",
+    "OUTER":     "join_word",
+    "IS":        "is_test",
+    "UNION":     "set_operand",
+    "EXCEPT":    "set_operand",
+    "INTERSECT": "set_operand",
+    "FOR":       "lock_strength",
+    "CONFLICT":  "conflict_action",
+    "DO":        "conflict_resolution",
+    "NULLS":     "null_ordering",
+    "CREATE":    "object_kind",
+    "DROP":      "object_kind",
+    "ALTER":     "object_kind",
+}
+
+# The words a clause opens with, which is where a search backwards stops.
+_CLAUSE_WORDS = frozenset(_CLAUSE_FOLLOWERS)
+
+# The clauses whose finished item is the whole item, so a keyword follows it.
+# In a WHERE a finished name is the left side of a predicate and an operator
+# follows instead, which is why those clauses are not here.
+_ITEM_IS_COMPLETE_AT_A_NAME = frozenset({
+    "select_item", "relation", "joined_relation", "sort_item", "group_item",
+    "aliased_relation", "aliased_select_item",
+    "insert_target", "update_target", "merge_target",
+    "partition_item", "window_sort_item",
+    "alter_action", "create_body", "cascade_option",
+})
+
+# The clauses whose own word is already the whole item: "DELETE" waits for
+# FROM with nothing written between them.
+_COMPLETE_AT_THE_CLAUSE_WORD = frozenset({"delete_target"})
+
+# What stands between the two sides of a predicate.
+_COMPARISONS = frozenset({
+    TokenType.EQ, TokenType.NEQ, TokenType.GT, TokenType.LT,
+    TokenType.GTE, TokenType.LTE, TokenType.IS, TokenType.IN,
+    TokenType.LIKE, TokenType.ILIKE, TokenType.BETWEEN,
+})
+
+# What reads as a finished item: a name, a literal, a closing paren, a star.
+_FINISHED_ITEM_TOKENS = frozenset({
+    TokenType.NUMBER, TokenType.STRING, TokenType.R_PAREN, TokenType.STAR,
+    TokenType.ASC, TokenType.DESC, TokenType.END,
+})
+
+
+def _alias_index(tokens: list) -> int:
+    """Where the AS nearest the caret stands, so the clause behind it can be
+    asked what follows. A CTE's AS is followed by its whole body, which the
+    walk steps over."""
+    for i in _walk_back(tokens, len(tokens)):
+        if tokens[i].token_type == TokenType.ALIAS:
+            return i
+    return len(tokens)
+
+
+def _writes_an_expression(tokens: list, clause: Clause, targets: int,
+                          column_list: str, shared: bool, qualified: bool) -> bool:
+    """Whether a value may be written here, rather than only the name of one.
+
+    A call stands wherever a column's value does. It does not stand where a
+    column is being named: an INSERT's column list, a join's USING list, the
+    left side of an assignment.
+    """
+    if not targets & TARGET_COLUMN:
+        return False
+    if column_list or shared or qualified:
+        return False
+    if clause.word == "SET":
+        # "SET c1" names a column and "SET c1 = " writes its value.
+        return _compared_since_the_clause(tokens)
+    return True
+
+
+def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str:
+    """The group of words that may follow what the clause already holds, or ""
+    when the caret is not standing after a finished item."""
     if not tokens:
-        return TARGET_SCHEMA_AND_TABLE_ALL
+        return ""
+
+    last = tokens[-1]
+    if not _is_identifier_token(last) and caret_offset <= last.end:
+        # The caret is within the token rather than after it, so a literal
+        # still being written is not a finished item.
+        return ""
+    if _is_identifier_token(last) and _caret_touches(last, caret_offset):
+        # The word is being typed, so what stands before it decides: the first
+        # keystroke of AND must not take the answer back to columns. Only a
+        # word is written letter by letter; a paren the caret follows is done.
+        if len(tokens) == 1:
+            return ""
+        tokens = tokens[:-1]
+        last = tokens[-1]
+
+    waiting = _word_waiting(tokens, clause, last)
+    if waiting:
+        return waiting
+
+    if _defines_a_table(tokens) >= 0:
+        if last.token_type in (TokenType.L_PAREN, TokenType.COMMA):
+            # The name is the writer's own; only a table constraint is a word.
+            return "table_constraint"
+        return "column_constraint"
+
+    if clause.word == "AS":
+        alias_at = _alias_index(tokens)
+        if _names_a_cte(tokens, alias_at):
+            # The CTE is defined; what follows is the statement that reads it.
+            group = "after_cte"
+        else:
+            # An alias belongs to the item it renames, so what may follow it is
+            # what may follow that item.
+            group = _CLAUSE_FOLLOWERS.get(_walk_to_clause(tokens[:alias_at]).word, "")
+    else:
+        group = _CLAUSE_FOLLOWERS.get(clause.word, "")
+    if not group:
+        return _opening_an_item(tokens, clause, last)
+    if group in _COMPLETE_AT_THE_CLAUSE_WORD:
+        return group
+    if group == "sort_item" and _in_a_window_spec(tokens):
+        # A window's ordering is followed by its frame, not by a row count.
+        group = "window_sort_item"
+
+    if last.token_type in _FINISHED_ITEM_TOKENS:
+        if _closes_a_row_choice(tokens):
+            return _opening_an_item(tokens, clause, last)
+        if _closes_a_conflict_target(tokens):
+            return "conflict_do"
+        if group in _ITEM_IS_COMPLETE_AT_A_NAME and _already_renamed(tokens):
+            group = _ALIASED.get(group, group)
+        return _in_the_statement(group, tokens)
+    if not _is_identifier_token(last):
+        return _opening_an_item(tokens, clause, last)
+    if group in _ITEM_IS_COMPLETE_AT_A_NAME:
+        # An item that already carries an alias must not be offered the word
+        # that would give it another.
+        if _already_renamed(tokens):
+            group = _ALIASED.get(group, group)
+        return _in_the_statement(group, tokens)
+    # A name in a predicate is its left side, and an operator comes next,
+    # unless one already stands between the clause and here.
+    if group == "predicate" and _compared_since_the_clause(tokens):
+        return _in_the_statement(group, tokens)
+    return _opening_an_item(tokens, clause, last)
+
+
+def _word_waiting(tokens: list, clause: Clause, last) -> str:
+    """The group a word that begins something without finishing it waits for,
+    or "" when the last word finishes nothing on its own."""
+    word = last.text.upper()
+    if word in ("ALL", "DISTINCT") and len(tokens) >= 2 \
+            and tokens[-2].text.upper() in _SET_OPERATIONS:
+        return "query_word"
+    if word in ("ADD", "DROP") and _statement_word(tokens[:-1]) == "ALTER":
+        # Inside an ALTER these name a part of the table, not a whole object.
+        # The word itself opens a statement, so the search starts before it.
+        return "alter_target"
+    if word == "ON" and _statement_word(tokens) == "INSERT":
+        # A join's ON takes a predicate; an INSERT's takes the clause that
+        # says what to do with a row that is already there.
+        return "conflict_target"
+    if word == "NOT":
+        before = tokens[-2] if len(tokens) >= 2 else None
+        if before is not None and before.token_type == TokenType.IS:
+            # "IS NOT " tests the same things "IS " does, less the NOT it has.
+            return "is_not_test"
+        if before is not None and (_is_identifier_token(before)
+                                   or before.token_type == TokenType.R_PAREN):
+            # "c1 NOT " tests the name before it; a NOT opening a predicate
+            # negates whatever is written next instead.
+            return "not_test"
+        return _opening_an_item(tokens, clause, last)
+    return _WORD_FOLLOWERS.get(word, "")
+
+
+def _opening_an_item(tokens: list, clause: Clause, last) -> str:
+    """The words an item may open with, where nothing of it is written yet. A
+    SELECT list takes two more, which say how the whole list is read."""
+    if last.token_type == TokenType.L_PAREN and _in_a_window_spec(tokens):
+        # Nothing of the spec is written yet, so it takes the words a window
+        # opens with as well as the name of one already defined.
+        return "window_start"
+    if clause.word == "SELECT" and last.text.upper() == "SELECT":
+        return "select_start"
+    return "expression_start"
+
+
+def _in_a_window_spec(tokens: list) -> bool:
+    """Whether the paren still open around the caret opens a window spec,
+    where a frame follows the ordering rather than a row count."""
+    depth = 0
+    for i in range(len(tokens) - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+        elif token_type == TokenType.L_PAREN:
+            if depth:
+                depth -= 1
+                continue
+            if i == 0:
+                return False
+            before = tokens[i - 1]
+            return (before.token_type == TokenType.OVER
+                    or (before.token_type == TokenType.ALIAS and i >= 3
+                        and tokens[i - 3].token_type == TokenType.WINDOW))
+    return False
+
+
+def _statement_word(tokens: list) -> str:
+    """The word the statement holding the caret opens with. A statement inside
+    parentheses is the one the caret is in, so the walk stops at the nearest."""
+    for i in _walk_back(tokens, len(tokens)):
+        upper = tokens[i].text.upper()
+        if upper == "INSERT INTO":
+            upper = "INSERT"
+        if upper in _STATEMENT_WORDS:
+            return upper
+    return ""
+
+
+def _in_the_statement(group: str, tokens: list) -> str:
+    """The group named for the statement it stands in, where the statement
+    decides what may follow. Everywhere else the group is already the answer."""
+    statement = _statement_word(tokens)
+    if (statement, group) in _STATEMENT_GROUPS:
+        return f"{statement.lower()}_{group}"
+    return group
+
+
+_CAST_WORDS = frozenset({"CAST", "TRY_CAST", "SAFE_CAST"})
+
+
+def _writes_a_type(tokens: list, caret_offset: int) -> bool:
+    """Whether a type name stands here: after ::, after a cast's AS, or after
+    the name a column is being given."""
+    if not tokens:
+        return False
+    last = tokens[-1]
+    if last.token_type == TokenType.DCOLON:
+        return True
+    if last.token_type == TokenType.ALIAS:
+        return _enclosing_call(tokens, len(tokens) - 1) in _CAST_WORDS
+    return _names_a_new_column(tokens, caret_offset)
+
+
+def _names_a_new_column(tokens: list, caret_offset: int) -> bool:
+    """Whether the last token is the name a column is being given, which the
+    type follows: "CREATE TABLE t (c1 " and "ADD COLUMN c1 "."""
+    if len(tokens) < 2 or not _is_identifier_token(tokens[-1]):
+        return False
+    if _caret_touches(tokens[-1], caret_offset):
+        # The name itself is still being written, and it is the writer's own.
+        return False
+    before = tokens[-2]
+    if before.token_type == TokenType.COLUMN:
+        return True
+    return (before.token_type in (TokenType.L_PAREN, TokenType.COMMA)
+            and _defines_a_table(tokens) >= 0)
+
+
+def _defines_a_table(tokens: list) -> int:
+    """The index of the parenthesis holding a CREATE TABLE's definitions, or
+    -1 when the caret stands outside one."""
+    depth = 0
+    for i in range(len(tokens) - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+        elif token_type == TokenType.L_PAREN:
+            if depth:
+                depth -= 1
+                continue
+            return i if _follows_a_new_table(tokens, i) else -1
+    return -1
+
+
+def _follows_a_new_table(tokens: list, paren: int) -> bool:
+    """Whether the paren at this index follows the name a CREATE TABLE gives."""
+    for i in range(paren - 1, -1, -1):
+        upper = tokens[i].text.upper()
+        if upper == "TABLE":
+            return i > 0 and tokens[i - 1].text.upper() == "CREATE"
+        if upper in _STATEMENT_WORDS or tokens[i].token_type == TokenType.SEMICOLON:
+            return False
+    return False
+
+
+def _enclosing_call(tokens: list, idx: int) -> str:
+    """The name of the call whose parentheses hold the token at idx, upper
+    cased, or "" when no open paren before it belongs to one."""
+    depth = 0
+    for i in range(idx - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+        elif token_type == TokenType.L_PAREN:
+            if depth:
+                depth -= 1
+            elif i > 0 and _is_identifier_token(tokens[i - 1]):
+                return tokens[i - 1].text.upper()
+            else:
+                return ""
+    return ""
+
+
+def _closes_a_conflict_target(tokens: list) -> bool:
+    """Whether the last token closes an ON CONFLICT column list, which leaves
+    the DO clause still to be written."""
+    if tokens[-1].token_type != TokenType.R_PAREN:
+        return False
+    opening = _opening_paren(tokens, len(tokens) - 1)
+    return opening >= 1 and tokens[opening - 1].text.upper() == "CONFLICT"
+
+
+def _closes_a_row_choice(tokens: list) -> bool:
+    """Whether the last token closes a DISTINCT ON list, which leaves the
+    select item itself still to be written."""
+    if tokens[-1].token_type != TokenType.R_PAREN:
+        return False
+    opening = _opening_paren(tokens, len(tokens) - 1)
+    return opening >= 2 and _chooses_rows(tokens, opening - 1)
+
+
+def _already_renamed(tokens: list) -> bool:
+    """Whether the item the caret follows already carries an alias: a second
+    name stands after the one the clause named, with or without AS."""
+    if len(tokens) < 2:
+        return False
+    if tokens[-1].token_type == TokenType.R_PAREN:
+        # "FROM t1 a (x, y)" renames the relation and its columns at once.
+        return _renames_a_relation(tokens, _opening_paren(tokens, len(tokens) - 1))
+    if not _is_identifier_token(tokens[-1]):
+        return False
+    before = tokens[-2]
+    if before.token_type == TokenType.R_PAREN:
+        # A derived table is the name's item and its closing paren stands
+        # here, but a DISTINCT ON list renames nothing.
+        return not _closes_a_row_choice(tokens[:-1])
+    return before.token_type == TokenType.ALIAS or _is_identifier_token(before)
+
+
+def _names_a_cte(tokens: list, alias_idx: int) -> bool:
+    """Whether the AS at alias_idx defines a CTE rather than renaming an item."""
+    if alias_idx >= len(tokens):
+        return False
+    for i in _walk_back(tokens, alias_idx):
+        if tokens[i].token_type == TokenType.WITH:
+            return True
+        if tokens[i].token_type in (TokenType.FROM, TokenType.SELECT):
+            return False
+    return False
+
+
+def _compared_since_the_clause(tokens: list) -> bool:
+    """Whether a comparison already stands between the clause word and the
+    caret, which is what makes the predicate whole rather than half written."""
+    for i in _walk_back(tokens, len(tokens)):
+        if tokens[i].token_type in _COMPARISONS:
+            return True
+        if tokens[i].text.upper() in _CLAUSE_WORDS:
+            return False
+    return False
+
+
+_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+
+
+def _without_comments(text: str) -> str:
+    return _COMMENT.sub(" ", text)
+
+
+def _at_a_statement_start(tokens: list, sql: str, caret_offset: int) -> bool:
+    """Whether a statement may begin here: the buffer holds nothing, the last
+    thing before the caret ended one, or its opening word is being typed."""
+    if not tokens:
+        # A quote the writer has not closed yields no token at all, which is
+        # not the same as having written nothing.
+        return not _without_comments(sql[:caret_offset]).strip()
+    if tokens[-1].token_type == TokenType.SEMICOLON:
+        return True
+    # One token, still being typed, is the opening word whatever it spells so
+    # far: a writer half way through CREATE is still choosing how to open.
+    written = _since_the_last_statement(tokens)
+    return len(written) == 1 and _caret_touches(written[0], caret_offset)
+
+
+def _since_the_last_statement(tokens: list) -> list:
+    """The tokens of the statement the caret is in."""
+    for i in range(len(tokens) - 1, -1, -1):
+        if tokens[i].token_type == TokenType.SEMICOLON:
+            return tokens[i + 1:]
+    return tokens
+
+
+class Clause(NamedTuple):
+    """The clause the caret stands in: what may be written, and the word that
+    opened it. The word is "" where the walk found none and defaulted."""
+
+    target: int
+    word: str
+
+
+def _detect_keyword_context(tokens: list) -> int:
+    return _walk_to_clause(tokens).target
+
+
+def _walk_to_clause(tokens: list) -> Clause:
+    if not tokens:
+        return Clause(TARGET_SCHEMA_AND_TABLE_ALL, "")
 
     paren_depth = 0
+    case_depth = 0
     inside_call = False
     i = len(tokens) - 1
 
@@ -393,6 +957,18 @@ def _detect_keyword_context(tokens: list) -> int:
         tok = tokens[i]
         tt = tok.token_type
         upper = tok.text.upper()
+
+        # A closed CASE is one finished item, so its arms are not the clause
+        # the caret stands in: "SELECT CASE ... END " waits for FROM.
+        if tt == TokenType.END:
+            case_depth += 1
+            i -= 1
+            continue
+        if case_depth:
+            if upper == "CASE":
+                case_depth -= 1
+            i -= 1
+            continue
 
         if tt == TokenType.R_PAREN:
             paren_depth += 1
@@ -405,7 +981,7 @@ def _detect_keyword_context(tokens: list) -> int:
                 i -= 1
                 continue
             if _opens_query(tokens, i):
-                return TARGET_SCHEMA_AND_TABLE_ALL
+                return Clause(TARGET_SCHEMA_AND_TABLE_ALL, "")
             # An expression's paren -- a call's arguments, a window spec, a
             # grouping -- writes what the clause around it writes, so the walk
             # continues rather than treating the paren as a new query. Only a
@@ -422,20 +998,22 @@ def _detect_keyword_context(tokens: list) -> int:
             i -= 1
             continue
 
-        if not _reads_as_a_name(tokens, i):
+        if not _reads_as_a_name(tokens, i) and not _chooses_rows(tokens, i):
             contextual = _contextual_target(tokens, i, upper)
             if contextual is not None:
-                return _narrowed_to_a_call(contextual, inside_call)
+                return Clause(_narrowed_to_a_call(contextual, inside_call), upper)
             for kw_text, target in _KEYWORD_MATCHERS:
                 if upper == kw_text:
-                    return _narrowed_to_a_call(target, inside_call)
+                    return Clause(_narrowed_to_a_call(target, inside_call), upper)
 
         if upper in _STATEMENT_WORDS and upper != "WITH":
-            break
+            # Nothing else matched, so the statement's own word is the clause:
+            # "DELETE " waits for FROM and "UPDATE t1 " for SET.
+            return Clause(TARGET_SCHEMA_AND_TABLE_ALL, upper)
 
         i -= 1
 
-    return TARGET_SCHEMA_AND_TABLE_ALL
+    return Clause(TARGET_SCHEMA_AND_TABLE_ALL, "")
 
 
 # --- Column list detection ---

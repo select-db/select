@@ -20,12 +20,12 @@ type simpleRelationRefListener struct {
 	meta          core.Metadata
 }
 
-func (l *simpleRelationRefListener) GetReferences() []core.RelationRef       { return l.refs }
+func (l *simpleRelationRefListener) GetReferences() []core.RelationRef         { return l.refs }
 func (l *simpleRelationRefListener) GetVirtualTables() []core.RelationRef      { return l.vtabs }
-func (l *simpleRelationRefListener) SetReferences(refs []core.RelationRef)   { l.refs = refs }
+func (l *simpleRelationRefListener) SetReferences(refs []core.RelationRef)     { l.refs = refs }
 func (l *simpleRelationRefListener) SetVirtualTables(vtabs []core.RelationRef) { l.vtabs = vtabs }
-func (l *simpleRelationRefListener) GetDefaultSchema() string                   { return l.defaultSchema }
-func (l *simpleRelationRefListener) GetMeta() core.Metadata                     { return l.meta }
+func (l *simpleRelationRefListener) GetDefaultSchema() string                  { return l.defaultSchema }
+func (l *simpleRelationRefListener) GetMeta() core.Metadata                    { return l.meta }
 
 // Register the SQLite dialect on package init. The "sqlite3" driver is registered
 // by the app (backend/app.go); dialect tests register it in schema_test.go.
@@ -55,7 +55,7 @@ func NewDialect() *Dialect {
 	d := &Dialect{
 		reservedKeywords:     make(map[string]bool),
 		builtinFunctions:     []string{},
-		defaultKeywords:      []string{},
+		defaultKeywords:      defaultKeywords(),
 		quotedTokenTypes:     make(map[int]bool),
 		identifierTokenTypes: make(map[int]bool),
 		joinKeywords:         []int{},
@@ -81,7 +81,7 @@ func (d *Dialect) initializeKeywords() {
 		"ELSE", "END", "ESCAPE", "EXCEPT", "EXCLUSIVE", "EXISTS", "EXPLAIN", "FAIL", "FOR",
 		"FOREIGN", "FROM", "FULL", "GLOB", "GROUP", "HAVING", "IF", "IGNORE", "IMMEDIATE",
 		"IN", "INDEX", "INDEXED", "INITIALLY", "INNER", "INSERT", "INSTEAD", "INTERSECT",
-		"INTO", "IS", "ISNULL", "JOIN", "KEY", "LEFT", "LIKE", "LIMIT", "MATCH", "NATURAL",
+		"INTO", "ISNULL", "JOIN", "KEY", "LEFT", "LIKE", "LIMIT", "MATCH", "NATURAL",
 		"NO", "NOT", "NOTNULL", "NULL", "OF", "OFFSET", "ON", "OR", "ORDER", "OUTER",
 		"PLAN", "PRAGMA", "PRIMARY", "QUERY", "RAISE", "RECURSIVE", "REFERENCES", "REGEXP",
 		"REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RIGHT", "ROLLBACK", "ROW",
@@ -182,6 +182,22 @@ func (d *Dialect) GetBuiltinFunctions() []string {
 // GetDefaultKeywords returns default keywords for completion
 func (d *Dialect) GetDefaultKeywords() []string {
 	return d.defaultKeywords
+}
+
+// KeywordsOutsideGroup implements the core.SQLDialect interface.
+func (d *Dialect) KeywordsOutsideGroup() map[string][]string {
+	return map[string][]string{
+		// SQLite writes SET in an UPDATE and has no SET statement, reads no
+		// USING in a DELETE, and has no bare TABLE query.
+		"statement":       {"SET"},
+		"delete_relation": {"USING"},
+		"set_operand":     {"TABLE"},
+		// SQLite locks a whole database and reads no FOR UPDATE.
+		"lock_strength": {"UPDATE"},
+		// Its ALTER TABLE adds, drops and renames, and does nothing else.
+		"alter_action": {"ALTER", "SET"},
+		"query_word":   {"TABLE"},
+	}
 }
 
 // SupportsFeature checks if SQLite supports a specific feature
@@ -289,32 +305,6 @@ func (d *Dialect) IsValidUnquotedIdentifier(s string) bool {
 func (d *Dialect) IsReservedKeyword(word string) bool {
 	return d.reservedKeywords[strings.ToUpper(word)]
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // InferColumnsFromSubquery implements the core.SQLDialect interface for SQLite.
 // We heuristically parse the SELECT list of the subquery to extract simple column names
@@ -528,8 +518,6 @@ func (d *Dialect) InferColumnsFromSubquery(parser antlr.Parser, meta core.Metada
 	}
 	return cols
 }
-
-
 
 // GetOperatorsForType returns operators valid for a given SQLite column type
 func (d *Dialect) GetOperatorsForType(columnType string) []core.OperatorInfo {
@@ -940,4 +928,31 @@ func (l *relationRefListener) normalizeTableAlias(ctx sqlite.ITable_aliasContext
 	}
 	// If it's a keyword, return empty string
 	return "", nil // SQLite doesn't support column aliases in table aliases
+}
+
+// defaultKeywords are the words SQLite completes. It has no TRUNCATE, GRANT,
+// SHOW or CALL, and the list says so by leaving them out.
+func defaultKeywords() []string {
+	return []string{
+		"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "WITH", "AS",
+		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "INNER JOIN", "CROSS JOIN",
+		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
+		"RIGHT JOIN", "FULL JOIN", "OUTER JOIN", "DETACH",
+		"VALUES", "RETURNING",
+		"AND", "OR", "NOT", "ASC", "DESC", "IN", "LIKE", "BETWEEN",
+		"CASE", "WHEN", "THEN", "ELSE", "END",
+		"DEFAULT VALUES", "DISTINCT FROM", "REGEXP",
+		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
+		"OVER", "WINDOW", "PARTITION BY", "ROWS", "RANGE", "GROUPS",
+		"ADD", "RENAME", "COLUMN",
+		"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
+		"NOT NULL", "DEFAULT", "REFERENCES", "COLLATE", "GENERATED",
+		"AUTOINCREMENT",
+		"DO", "NOTHING", "NULLS", "FIRST", "LAST",
+		// What a DDL statement acts on.
+		"TABLE", "TEMPORARY TABLE", "VIEW", "INDEX", "UNIQUE INDEX",
+		"TRIGGER", "CONFLICT", "SET", "GLOB",
+		"CREATE", "ALTER", "DROP", "EXPLAIN", "REPLACE",
+		"PRAGMA", "VACUUM", "ANALYZE", "ATTACH", "BEGIN", "COMMIT", "ROLLBACK",
+	}
 }

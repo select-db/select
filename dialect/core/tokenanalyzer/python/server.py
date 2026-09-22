@@ -130,12 +130,6 @@ def _complete_context(req: dict) -> dict:
     schema_names = list(req.get("schema", {}).keys())
     sg_dialect = sqlglot_dialect_name(req.get("dialect", "postgresql"))
 
-    if not sql:
-        return {"parts": [], "caret_after_dot": False, "targets": 0,
-                "schema_filter": "", "target_table": "",
-                "keyword_context": 0, "preceding_column": None,
-                "column_list_relation": ""}
-
     return detect_completion_context(sql, caret_line, caret_col, schema_names, sg_dialect)
 
 

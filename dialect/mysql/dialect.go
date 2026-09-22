@@ -85,6 +85,12 @@ func (d *Dialect) GetDefaultKeywords() []string {
 	return d.defaultKeywords
 }
 
+// KeywordsOutsideGroup implements the core.SQLDialect interface. Every word
+// this dialect has stands in every position the word names.
+func (d *Dialect) KeywordsOutsideGroup() map[string][]string {
+	return nil
+}
+
 func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 	switch feature {
 	case core.FeatureCTE, core.FeatureRecursiveCTE, core.FeatureWindowFunctions:
@@ -297,8 +303,27 @@ func defaultKeywords() []string {
 	return []string{
 		"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "WITH", "AS",
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "OUTER JOIN",
-		"ON", "USING", "DISTINCT", "UNION", "LIMIT", "OFFSET",
+		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
+		"CROSS JOIN", "INTERVAL",
 		"VALUES",
+		"AND", "OR", "NOT", "ASC", "DESC", "IN", "LIKE", "BETWEEN",
+		"CASE", "WHEN", "THEN", "ELSE", "END",
+		"INTO", "REGEXP",
+		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
+		"OVER", "WINDOW", "PARTITION BY", "ROWS", "RANGE", "GROUPS",
+		"ADD", "RENAME", "COLUMN", "CASCADE", "RESTRICT",
+		"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
+		"NOT NULL", "DEFAULT", "REFERENCES", "COLLATE", "GENERATED",
+		"AUTO_INCREMENT", "COMMENT",
+		"SHARE",
+		// What a DDL statement acts on.
+		"TABLE", "TEMPORARY TABLE", "VIEW", "INDEX", "UNIQUE INDEX",
+		"SCHEMA", "DATABASE", "FUNCTION", "PROCEDURE", "TRIGGER", "EVENT",
+		"ROLE", "USER", "DUPLICATE KEY UPDATE",
+		// The words a statement opens with, which is what an empty buffer takes.
+		"CREATE", "ALTER", "DROP", "TRUNCATE", "EXPLAIN", "REPLACE",
+		"GRANT", "REVOKE", "SET", "SHOW", "ANALYZE",
+		"BEGIN", "COMMIT", "ROLLBACK", "CALL", "USE",
 	}
 }
 

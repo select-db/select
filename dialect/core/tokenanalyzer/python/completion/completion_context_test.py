@@ -3,8 +3,12 @@ from completion.completion_context import (
     TARGET_ALL,
     TARGET_COLUMN,
     TARGET_ENUM_VALUE,
+    TARGET_FUNCTION,
+    TARGET_KEYWORD,
+    TARGET_OPERATOR,
     TARGET_SCHEMA_AND_TABLE_ALL,
     TARGET_TABLE_AND_COLUMN,
+    TARGET_TYPE,
     detect_completion_context,
     _detect_keyword_context,
     _detect_setting_context,
@@ -26,7 +30,12 @@ def _field(sql_with_caret: str, key: str, sg_dialect: str = "postgres"):
     """One field of the whole context, for the cases a token walk alone cannot
     answer."""
     _, sql, caret = _at_caret(sql_with_caret, sg_dialect)
-    return detect_completion_context(sql, 1, caret, ["main"], sg_dialect)[key]
+    # The caller passes a line and a column, so a case spanning lines has to
+    # be asked about where it actually is.
+    before = sql[:caret]
+    line = before.count("\n") + 1
+    column = caret - (before.rfind("\n") + 1)
+    return detect_completion_context(sql, line, column, ["main"], sg_dialect)[key]
 
 
 def _shared(sql_with_caret: str, sg_dialect: str = "postgres") -> bool:
@@ -261,6 +270,333 @@ class TestInsideACall:
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
 
 
+class TestStatementStart:
+    def _targets(self, sql_with_caret: str) -> int:
+        return _field(sql_with_caret, "targets")
+
+    def test_an_empty_buffer(self):
+        assert self._targets("|") == TARGET_KEYWORD
+
+    def test_whitespace_alone(self):
+        assert self._targets("   |") == TARGET_KEYWORD
+
+    def test_after_a_semicolon(self):
+        assert self._targets("SELECT 1; |") == TARGET_KEYWORD
+
+    def test_after_a_comment(self):
+        assert self._targets("-- a note\n|") == TARGET_KEYWORD
+
+    def test_a_typed_opener_the_tokenizer_knows_is_still_one(self):
+        assert self._targets("CREATE|") == TARGET_KEYWORD
+        assert self._targets("SELECT|") == TARGET_KEYWORD
+
+    def test_an_unclosed_quote_is_not_an_empty_buffer(self):
+        assert self._targets('SELECT "S|') != TARGET_KEYWORD
+
+    def test_an_unterminated_block_comment_does_not_raise(self):
+        assert self._targets("/* a note|") == 0
+
+    def test_a_select_list_is_not_one(self):
+        assert self._targets("SELECT |") != TARGET_KEYWORD
+
+    def test_a_from_clause_is_not_one(self):
+        assert self._targets("SELECT * FROM |") != TARGET_KEYWORD
+
+    def test_the_opening_word_being_typed_is_still_one(self):
+        assert self._targets("SEL|") == TARGET_KEYWORD
+
+    def test_one_letter_is_still_one(self):
+        assert self._targets("S|") == TARGET_KEYWORD
+
+    def test_a_typed_opener_after_a_semicolon(self):
+        assert self._targets("SELECT 1; SEL|") == TARGET_KEYWORD
+
+    def test_a_finished_opener_is_not_one(self):
+        assert self._targets("SELECT |") != TARGET_KEYWORD
+
+    def test_a_column_being_typed_is_not_one(self):
+        assert self._targets("SELECT c|") != TARGET_KEYWORD
+
+
+class TestExpressionPositions:
+    def _takes_a_call(self, sql_with_caret: str) -> bool:
+        return bool(_field(sql_with_caret, "targets") & TARGET_FUNCTION)
+
+    def test_a_select_list(self):
+        assert self._takes_a_call("SELECT |")
+
+    def test_a_where(self):
+        assert self._takes_a_call("SELECT * FROM t1 WHERE |")
+
+    def test_an_assignment_value(self):
+        assert self._takes_a_call("UPDATE t1 SET c1 = |")
+
+    def test_a_values_row(self):
+        assert self._takes_a_call("INSERT INTO t1 VALUES (|")
+
+    def test_an_assignment_target_does_not(self):
+        assert not self._takes_a_call("UPDATE t1 SET |")
+
+    def test_an_insert_column_list_does_not(self):
+        assert not self._takes_a_call("INSERT INTO t1 (|")
+
+    def test_a_using_list_does_not(self):
+        assert not self._takes_a_call("SELECT * FROM t1 JOIN t2 USING (|")
+
+    def test_a_qualified_caret_does_not(self):
+        assert not self._takes_a_call("SELECT t1.|")
+
+    def test_a_from_clause_does_not(self):
+        assert not self._takes_a_call("SELECT * FROM |")
+
+
+class TestTypePositions:
+    def _targets(self, sql_with_caret: str) -> int:
+        return _field(sql_with_caret, "targets")
+
+    def test_a_cast_takes_a_type(self):
+        assert self._targets("SELECT CAST(c1 AS |") == TARGET_TYPE
+        assert self._targets("SELECT CAST(count(c1) AS |") == TARGET_TYPE
+        assert self._targets("SELECT * FROM t1 WHERE CAST(c1 AS |") == TARGET_TYPE
+
+    def test_the_shorthand_cast_too(self):
+        assert self._targets("SELECT c1::|") == TARGET_TYPE
+
+    def test_a_column_being_defined_takes_a_type(self):
+        assert self._targets("CREATE TABLE t (c1 |") == TARGET_TYPE
+        assert self._targets("CREATE TABLE IF NOT EXISTS t (c1 |") == TARGET_TYPE
+        assert self._targets("CREATE TABLE t (c1 INTEGER, c2 |") == TARGET_TYPE
+        assert self._targets("ALTER TABLE t1 ADD COLUMN c1 |") == TARGET_TYPE
+
+    def test_a_name_still_being_typed_takes_none(self):
+        assert self._targets("CREATE TABLE t (c|") != TARGET_TYPE
+
+    def test_a_relation_is_not_a_column_definition(self):
+        assert self._targets("INSERT INTO t1 (c1 |") != TARGET_TYPE
+        assert self._targets("SELECT * FROM t1 a |") != TARGET_TYPE
+
+    def test_an_alias_is_not_a_type(self):
+        assert self._targets("SELECT c1 AS |") != TARGET_TYPE
+        assert self._targets("SELECT * FROM t1 AS |") != TARGET_TYPE
+        assert self._targets("WITH x AS |") != TARGET_TYPE
+        assert self._targets("SELECT count(c1) AS |") != TARGET_TYPE
+
+
+class TestClauseFollowers:
+    def _group(self, sql_with_caret: str) -> str:
+        return _field(sql_with_caret, "keyword_group")
+
+    def test_a_finished_select_item(self):
+        assert self._group("SELECT c1 |") == "select_item"
+
+    def test_a_finished_relation(self):
+        assert self._group("SELECT * FROM t1 |") == "relation"
+
+    def test_a_joined_relation_allows_on(self):
+        assert self._group("SELECT * FROM t1 JOIN t2 |") == "joined_relation"
+
+    def test_an_alias_follows_the_item_it_renames_without_a_second_as(self):
+        assert self._group("SELECT * FROM t1 AS a |") == "aliased_relation"
+        assert self._group("SELECT c1 AS x |") == "aliased_select_item"
+
+    def test_an_alias_written_without_as_is_still_one(self):
+        assert self._group("SELECT * FROM t1 a |") == "aliased_relation"
+        assert self._group("SELECT c1 x |") == "aliased_select_item"
+        assert self._group("SELECT * FROM main.t1 a |") == "aliased_relation"
+        assert self._group("SELECT * FROM (SELECT 1) s |") == "aliased_relation"
+
+    def test_a_qualified_name_is_not_its_own_alias(self):
+        assert self._group("SELECT * FROM main.t1 |") == "relation"
+
+    def test_a_join_word_waits_for_join(self):
+        for sql in ("SELECT * FROM t1 LEFT |", "SELECT * FROM t1 CROSS |",
+                    "SELECT * FROM t1 LEFT OUTER |", "SELECT * FROM t1 NATURAL |"):
+            assert self._group(sql) == "join_word", sql
+
+    def test_is_and_not_wait_for_what_they_test(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 IS |") == "is_test"
+        assert self._group("SELECT * FROM t1 WHERE c1 IS NOT |") == "is_not_test"
+        assert self._group("SELECT * FROM t1 WHERE c1 NOT |") == "not_test"
+
+    def test_a_not_opening_a_predicate_opens_an_item(self):
+        assert self._group("SELECT * FROM t1 WHERE NOT |") == "expression_start"
+        assert self._group("SELECT NOT |") == "expression_start"
+
+    def test_a_set_operation_waits_for_a_query(self):
+        assert self._group("SELECT 1 UNION |") == "set_operand"
+        assert self._group("SELECT 1 EXCEPT |") == "set_operand"
+        assert self._group("SELECT 1 UNION ALL |") == "query_word"
+
+    def test_a_select_list_quantifier_is_not_a_set_operand(self):
+        assert self._group("SELECT ALL |") == "expression_start"
+        assert self._group("SELECT DISTINCT |") == "expression_start"
+
+    def test_an_item_opens_with_a_word_as_well_as_a_name(self):
+        assert self._group("SELECT |") == "select_start"
+        assert self._group("SELECT c1, |") == "expression_start"
+        assert self._group("SELECT * FROM t1 WHERE |") == "expression_start"
+        assert self._group("INSERT INTO t1 VALUES (|") == "expression_start"
+
+    def test_those_words_stand_beside_the_names(self):
+        targets = _field("SELECT * FROM t1 WHERE |", "targets")
+        assert targets & TARGET_KEYWORD
+        assert targets & TARGET_COLUMN
+
+    def test_a_name_being_named_takes_no_word(self):
+        assert self._group("INSERT INTO t1 (|") == ""
+        assert self._group("SELECT * FROM t1 JOIN t2 USING (|") == ""
+        assert self._group("UPDATE t1 SET |") == ""
+
+    def test_a_relation_is_not_an_expression(self):
+        assert self._group("SELECT * FROM |") == ""
+        assert self._group("SELECT * FROM t1, |") == ""
+
+    def test_a_distinct_on_list_is_not_a_join(self):
+        assert self._group("SELECT DISTINCT ON (c1) |") == "expression_start"
+        assert self._group("SELECT DISTINCT ON (c1) c2 |") == "select_item"
+        assert self._group("SELECT * FROM t1 JOIN t2 ON (c1 = c2) |") == "predicate"
+
+    def test_a_clause_on_its_own_line_is_still_one(self):
+        assert self._group("SELECT *\nFROM t1 |") == "relation"
+        assert self._group("SELECT *\r\nFROM t1 |") == "relation"
+        assert self._group("SELECT *\n\tFROM t1 |") == "relation"
+
+    def test_a_quoted_name_is_still_a_name(self):
+        assert self._group('SELECT * FROM "t1" |') == "relation"
+        assert self._group('SELECT * FROM t1 "a" |') == "aliased_relation"
+        assert self._group('SELECT "c1" |') == "select_item"
+
+    def test_an_upsert_names_what_to_do(self):
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON CONFLICT |") == "conflict_action"
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) |") == "conflict_do"
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO |") == "conflict_resolution"
+
+    def test_nulls_waits_for_where_they_go(self):
+        assert self._group("SELECT * FROM t1 ORDER BY c1 DESC NULLS |") == "null_ordering"
+
+    def test_a_window_spec_is_not_a_query_clause(self):
+        assert self._group("SELECT row_number() OVER (|) FROM t1") == "window_start"
+        assert self._group("SELECT * FROM t1 WINDOW w AS (|)") == "window_start"
+        assert self._group("SELECT row_number() OVER (PARTITION BY c1 |)") == "partition_item"
+        assert self._group("SELECT row_number() OVER (ORDER BY c1 |)") == "window_sort_item"
+        assert self._group("SELECT * FROM t1 WINDOW w AS (PARTITION BY c1 |)") == "partition_item"
+
+    def test_a_query_ordering_is_not_a_window_one(self):
+        assert self._group("SELECT * FROM t1 ORDER BY c1 |") == "sort_item"
+
+    def test_a_window_item_being_written_opens_normally(self):
+        assert self._group("SELECT row_number() OVER (PARTITION BY |)") == "expression_start"
+        assert self._group("SELECT row_number() OVER (ORDER BY |)") == "expression_start"
+
+    def test_a_lock_names_its_strength(self):
+        assert self._group("SELECT * FROM t1 FOR |") == "lock_strength"
+
+    def test_a_ddl_statement_waits_for_its_body(self):
+        assert self._group("ALTER TABLE t1 |") == "alter_action"
+        assert self._group("ALTER TABLE t1 ADD |") == "alter_target"
+        assert self._group("ALTER TABLE t1 DROP |") == "alter_target"
+        assert self._group("CREATE VIEW v |") == "create_body"
+        assert self._group("DROP TABLE t1 |") == "cascade_option"
+
+    def test_a_drop_statement_is_not_an_alters_drop(self):
+        assert self._group("DROP |") == "object_kind"
+        assert self._group("SELECT 1; DROP |") == "object_kind"
+
+    def test_a_table_definition_waits_for_a_constraint(self):
+        assert self._group("CREATE TABLE t (|") == "table_constraint"
+        assert self._group("CREATE TABLE t (c1 INTEGER, |") == "table_constraint"
+        assert self._group("CREATE TABLE t (c1 INTEGER |") == "column_constraint"
+
+    def test_a_ddl_statement_waits_for_what_it_acts_on(self):
+        assert self._group("CREATE |") == "object_kind"
+        assert self._group("DROP |") == "object_kind"
+        assert self._group("ALTER |") == "object_kind"
+
+    def test_an_insert_on_names_a_conflict(self):
+        assert self._group("INSERT INTO t1 (c1) VALUES (1) ON |") == "conflict_target"
+
+    def test_a_join_on_still_takes_a_predicate(self):
+        assert self._group("SELECT * FROM t1 JOIN t2 ON |") == "expression_start"
+
+    def test_a_write_statement_waits_for_its_word(self):
+        assert self._group("INSERT INTO t1 |") == "insert_target"
+        assert self._group("UPDATE t1 |") == "update_target"
+        assert self._group("DELETE |") == "delete_target"
+
+    def test_a_clause_is_named_for_its_statement(self):
+        assert self._group("DELETE FROM t1 |") == "delete_relation"
+        assert self._group("DELETE FROM t1 a |") == "delete_aliased_relation"
+        assert self._group("DELETE FROM t1 WHERE c1 = 1 |") == "delete_predicate"
+        assert self._group("UPDATE t1 SET c1 = 1 WHERE c1 = 2 |") == "update_predicate"
+
+    def test_a_subquery_is_named_for_its_own_statement(self):
+        sql = "DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM t2 WHERE c2 = 1 |"
+        assert self._group(sql) == "predicate"
+
+    def test_a_case_names_its_arms(self):
+        assert self._group("SELECT CASE WHEN c1 = 1 |") == "case_test"
+        assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 |") == "case_body"
+
+    def test_a_closed_case_is_one_finished_item(self):
+        assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 END |") == "select_item"
+        assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 END AS x |") == "aliased_select_item"
+
+    def test_a_nested_case_closes_only_its_own(self):
+        sql = "SELECT CASE WHEN c1 = 1 THEN CASE WHEN c2 = 2 THEN 1 END |"
+        assert self._group(sql) == "case_body"
+
+    def test_a_rename_list_is_an_alias_too(self):
+        assert self._group("SELECT * FROM t1 t(a, b) |") == "aliased_relation"
+        assert self._group("SELECT * FROM (SELECT 1) s(a) |") == "aliased_relation"
+
+    def test_a_call_is_not_a_rename_list(self):
+        assert self._group("SELECT count(c1) |") == "select_item"
+
+    def test_a_sort_direction_finishes_the_item(self):
+        assert self._group("SELECT * FROM t1 ORDER BY c1 ASC |") == "sort_item"
+
+    def test_a_comment_holds_no_sql(self):
+        assert _field("SELECT 1 /* x|", "targets") == 0
+        assert _field("SELECT -- x|", "targets") == 0
+
+    def test_a_closed_comment_leaves_the_clause_as_it_was(self):
+        assert self._group("SELECT c1 /* x */ |") == "select_item"
+
+    def test_a_comment_marker_inside_a_literal_is_not_one(self):
+        assert _field("SELECT * FROM t1 WHERE c1 = '--a|", "targets") != 0
+
+    def test_an_operator_stands_beside_the_words(self):
+        targets = _field("SELECT * FROM t1 ORDER BY c1 |", "targets")
+        assert targets & TARGET_KEYWORD
+        assert targets & TARGET_OPERATOR
+
+    def test_a_defined_cte_takes_its_statement(self):
+        assert self._group("WITH x AS (SELECT 1) |") == "after_cte"
+        assert self._group("WITH x AS (SELECT 1), y AS (SELECT 2) |") == "after_cte"
+
+    def test_a_finished_predicate(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 = 1 |") == "predicate"
+        assert self._group("SELECT * FROM t1 JOIN t2 ON t1.c1 = t2.c1 |") == "predicate"
+
+    def test_a_half_written_predicate_is_not_one(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 |") == ""
+
+    def test_an_empty_clause_opens_an_item_instead(self):
+        assert self._group("SELECT |") == "select_start"
+        assert self._group("SELECT * FROM |") == ""
+        assert self._group("SELECT * FROM t1, |") == ""
+
+    def test_a_follower_being_typed_is_still_one(self):
+        assert self._group("SELECT * FROM t1 WHERE c1 = 1 AN|") == "predicate"
+        assert self._group("SELECT * FROM t1 W|") == "relation"
+        assert self._group("SELECT c1 F|") == "select_item"
+
+    def test_a_name_being_typed_in_a_clause_is_not_a_finished_item(self):
+        assert self._group("SELECT c|") == "select_start"
+        assert self._group("SELECT c1, c|") == "expression_start"
+        assert self._group("SELECT * FROM t|") == ""
+
+
 class TestColumnListRelation:
     def _relation(self, sql_with_caret: str) -> str:
         return _field(sql_with_caret, "column_list_relation")
@@ -360,7 +696,8 @@ class TestValuePosition:
     def test_an_in_list_offers_its_clause_as_well_as_values(self):
         sql = "SELECT * FROM t1 WHERE c1 IN ("
         targets = detect_completion_context(sql, 1, len(sql), ["main"], "postgres")["targets"]
-        assert targets == TARGET_ENUM_VALUE | TARGET_TABLE_AND_COLUMN
+        assert targets == (TARGET_ENUM_VALUE | TARGET_TABLE_AND_COLUMN
+                           | TARGET_FUNCTION | TARGET_KEYWORD)
 
     def test_inside_a_literal_offers_values_alone(self):
         sql = "SELECT * FROM t1 WHERE c1 IN ('"

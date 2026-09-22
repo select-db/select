@@ -3,6 +3,29 @@ import { Complete } from '$lib/bindings/selectDb/internal/sqllang/sqllang';
 import type * as graph from '$lib/wails/graph';
 import type * as sqllang from '$lib/bindings/selectDb/internal/sqllang/models';
 
+/**
+ * How far up the list a kind of candidate belongs. Monaco sorts by sortText and
+ * falls back to the label, so without this the list is one alphabetical run and
+ * a column of the table being read sits below two hundred function names.
+ *
+ * The numbers are the Monaco kinds `candidateTypeToMonacoKind` produces. Ranks
+ * start at 1 because the snippet provider claims 0.
+ */
+const RANK_BY_KIND = new Map<number, number>([
+	[16, 1], // EnumMember: a value of the column being compared
+	[5, 2], // Field: a column
+	[7, 3], // Class: a table, a foreign table, a type
+	[11, 3], // Interface: a view, a materialized view
+	[2, 4], // Module: a schema
+	[14, 5], // Keyword
+	[0, 6], // Text: an operator, which shares a caret only with the words
+	[1, 7] // Function
+]);
+
+function sortTextFor(kind: number, label: string): string {
+	return `${RANK_BY_KIND.get(kind) ?? 8}_${label.toLowerCase()}`;
+}
+
 export function createSqlCompletionProvider(
 	getFile: () => graph.FileNode | null
 ): monaco.languages.CompletionItemProvider {
@@ -97,6 +120,7 @@ export function createSqlCompletionProvider(
 						label: candidate.Text,
 						kind: candidate.kind,
 						detail: detail,
+						sortText: sortTextFor(candidate.kind, candidate.Text),
 						insertText,
 						insertTextRules: hasSnippet
 							? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet

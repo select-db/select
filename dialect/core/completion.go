@@ -76,6 +76,9 @@ const (
 	CompletionTargetOperator    // Operator completion (=, <>, LIKE, etc.)
 	CompletionTargetEnumValue   // Enum value completion (col = '|', col IN ('|'))
 	CompletionTargetSetting     // Runtime parameter completion (@@var, SHOW, PRAGMA)
+	CompletionTargetKeyword     // The word a statement opens with, or the one a finished clause waits for
+	CompletionTargetFunction    // A call, which stands wherever a value does
+	CompletionTargetType        // A type name, which stands only in a cast
 
 	CompletionTargetSchemaAndTable           = CompletionTargetSchema | CompletionTargetTable
 	CompletionTargetSchemaAndRelationRefOnly = CompletionTargetSchema | CompletionTargetTable | completionTargetRefOnlyFlag
@@ -92,16 +95,17 @@ type PrecedingColumnInfo struct {
 
 // CompletionContext represents a parsed completion context
 type CompletionContext struct {
-	Parts             []string             // Qualified parts: ["schema", "table"] or ["table"]
-	CaretAfterDot     bool                 // True if caret is after a dot
-	Targets           CompletionTarget     // What to complete (schema/table/column)
-	SchemaFilter      string               // Schema from qualified parts
-	TargetTable       string               // Table from qualified parts
-	KeywordContext    CompletionTarget     // SQL keyword context (SELECT/FROM/JOIN)
-	PrecedingColumn   *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
-	ColumnListRelation string              // Relation whose columns a parenthesised list names: an INSERT target, or one being renamed
-	ValuePosition     bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
-	SharedColumns     bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
+	Parts              []string             // Qualified parts: ["schema", "table"] or ["table"]
+	CaretAfterDot      bool                 // True if caret is after a dot
+	Targets            CompletionTarget     // What to complete (schema/table/column)
+	SchemaFilter       string               // Schema from qualified parts
+	TargetTable        string               // Table from qualified parts
+	KeywordContext     CompletionTarget     // SQL keyword context (SELECT/FROM/JOIN)
+	PrecedingColumn    *PrecedingColumnInfo // Column before caret (for operator/enum-value completion in WHERE)
+	ColumnListRelation string               // Relation whose columns a parenthesised list names: an INSERT target, or one being renamed
+	KeywordGroup       string               // Which words the caret's position allows, when it allows words
+	ValuePosition      bool                 // Caret is in a value slot after an enum column (col = '|', col IN ('|'))
+	SharedColumns      bool                 // Caret is in a join's USING list, where only a name both sides carry is legal
 }
 
 type CompletionStrategy struct {
@@ -135,7 +139,19 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	inScopeRefs := filterByCharScope(refs, caretOffset, nestingLevel)
 	inScopeCtes := filterByCharScope(cteTables, caretOffset, nestingLevel)
 
-	var schemas, tables, views, columns, operators, enumValues []Candidate
+	var schemas, tables, views, columns, operators, enumValues, keywords, functions, types []Candidate
+
+	if ctx.Targets&CompletionTargetKeyword != 0 {
+		keywords = cs.completeKeywords(ctx.KeywordGroup)
+	}
+
+	if ctx.Targets&CompletionTargetFunction != 0 {
+		functions = cs.completeFunctions()
+	}
+
+	if ctx.Targets&CompletionTargetType != 0 {
+		types = cs.completeTypes(meta)
+	}
 
 	if ctx.Targets&CompletionTargetSchema != 0 {
 		schemas = cs.completeSchemas(meta, caretQuoted, reservedKeywords)
@@ -143,7 +159,10 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 
 	if ctx.Targets&CompletionTargetTable != 0 {
 		keywordIsAllMode := (ctx.KeywordContext & completionTargetAllFlag) != 0
-		isAllMode := keywordIsAllMode || (ctx.Targets == CompletionTargetAll && len(inScopeRefs) == 0 && len(inScopeCtes) == 0)
+		// The relation bits decide this, not the whole mask: a flag added
+		// beside them must not turn the catalogue off.
+		wantsEveryKind := ctx.Targets&CompletionTargetAll == CompletionTargetAll
+		isAllMode := keywordIsAllMode || (wantsEveryKind && len(inScopeRefs) == 0 && len(inScopeCtes) == 0)
 
 		if ctx.SchemaFilter != "" {
 			if !isAllMode && len(inScopeRefs) > 0 {
@@ -256,7 +275,227 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	all = append(all, columns...)
 	all = append(all, operators...)
 	all = append(all, enumValues...)
+	all = append(all, keywords...)
+	all = append(all, functions...)
+	all = append(all, types...)
 	return all
+}
+
+// completeTypes are the types this database holds: the dialect's own, which
+// introspection puts in the metadata beside the user's, so both arrive here by
+// the same road.
+func (cs *CompletionStrategy) completeTypes(meta Metadata) []Candidate {
+	known := meta.AllTypes()
+	types := make([]Candidate, 0, len(known))
+	seen := make(map[string]bool, len(known))
+	for _, t := range known {
+		name := t.Name
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		types = append(types, Candidate{
+			Type:       CandidateTypeType,
+			Text:       name,
+			Definition: t.Display,
+			Comment:    t.Description,
+		})
+	}
+	return types
+}
+
+// completeFunctions are the calls this dialect knows. A call stands wherever a
+// value does, so the caret that takes a column takes one of these too.
+func (cs *CompletionStrategy) completeFunctions() []Candidate {
+	builtins := cs.dialect.GetBuiltinFunctions()
+	functions := make([]Candidate, 0, len(builtins))
+	for _, name := range builtins {
+		functions = append(functions, Candidate{
+			Type:       CandidateTypeFunction,
+			Text:       name,
+			InsertText: name + "($0)",
+			Definition: name + "()",
+		})
+	}
+	return functions
+}
+
+// keywordGroups name the words that may be written at a kind of caret. Which
+// of them a dialect has is the dialect's own list to answer; which words the
+// position allows is the same question in every dialect.
+// relationWords are what may follow a relation in a query. The two variants
+// differ from it by one rule each, so they are derived rather than repeated.
+var relationWords = setOf(
+	"AS", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+	"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+	"CROSS JOIN", "OUTER JOIN",
+	"UNION", "EXCEPT", "INTERSECT", "FETCH", "WINDOW",
+)
+
+var isTestWords = setOf("NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM")
+
+var expressionStartWords = setOf(
+	"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
+)
+
+var selectItemWords = setOf(
+	"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO", "OVER",
+)
+
+var predicateWords = setOf(
+	"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+	"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+	"CROSS JOIN", "UNION", "EXCEPT", "INTERSECT", "FETCH",
+)
+
+var keywordGroups = map[string]map[string]bool{
+	"statement": setOf(
+		"SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "CREATE", "ALTER",
+		"DROP", "TRUNCATE", "EXPLAIN", "REPLACE", "MERGE", "GRANT", "REVOKE",
+		"SET", "SHOW", "PRAGMA", "VACUUM", "ANALYZE", "BEGIN", "COMMIT",
+		"ROLLBACK", "CALL", "USE", "ATTACH", "DETACH",
+	),
+	"select_item": selectItemWords,
+	"relation":    relationWords,
+	// An item that already carries an alias takes the same words, less the
+	// one that would give it another.
+	"aliased_relation":    without(relationWords, "AS"),
+	"aliased_select_item": without(selectItemWords, "AS"),
+	// Only a join allows ON and USING.
+	"joined_relation": with(relationWords, "ON", "USING"),
+	"predicate":       predicateWords,
+	"sort_item":       setOf("ASC", "DESC", "NULLS", "LIMIT", "OFFSET", "FETCH"),
+	"group_item":      setOf("HAVING", "ORDER BY", "LIMIT", "OFFSET"),
+	"assignment":      setOf("WHERE", "RETURNING", "FROM"),
+	"values":          setOf("RETURNING", "ON"),
+	"row_count":       setOf("OFFSET", "FETCH"),
+	"after_cte":       setOf("SELECT", "INSERT", "UPDATE", "DELETE"),
+	// The write statements, which name their relation before anything else.
+	"insert_target": setOf("VALUES", "SELECT", "AS", "DEFAULT VALUES"),
+	"update_target": setOf("SET", "AS"),
+	"delete_target": setOf("FROM"),
+	"merge_target":  setOf("USING", "AS"),
+	// A DELETE reads no join and returns rows, so its relation and its
+	// predicate are not a query's.
+	"delete_relation":         setOf("AS", "WHERE", "USING", "RETURNING"),
+	"delete_aliased_relation": setOf("WHERE", "USING", "RETURNING"),
+	"delete_predicate":        setOf("AND", "OR", "RETURNING"),
+	"update_predicate":        setOf("AND", "OR", "RETURNING"),
+	// A CASE names its test and then its arms.
+	"case_test": setOf("THEN"),
+	"case_body": setOf("WHEN", "ELSE", "END"),
+	// The words that begin something without finishing it: a join, a test
+	// against a name, a set operation.
+	"join_word":   setOf("JOIN", "OUTER JOIN"),
+	"is_test":     isTestWords,
+	"is_not_test": without(isTestWords, "NOT"),
+	"not_test":    setOf("NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS", "GLOB", "REGEXP"),
+	"set_operand": setOf("SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"),
+	"query_word":  setOf("SELECT", "VALUES", "TABLE"),
+	// What a DDL statement acts on.
+	"object_kind": setOf(
+		"TABLE", "TEMPORARY TABLE", "VIEW", "MATERIALIZED VIEW",
+		"INDEX", "UNIQUE INDEX", "SCHEMA", "DATABASE",
+		"FUNCTION", "PROCEDURE", "TRIGGER", "SEQUENCE", "TYPE",
+		"EXTENSION", "ROLE", "USER", "EVENT",
+	),
+	"conflict_target": setOf("CONFLICT", "DUPLICATE KEY UPDATE"),
+	// What an upsert does with a row that is already there.
+	"conflict_action":     setOf("DO", "ON CONSTRAINT"),
+	"conflict_do":         setOf("DO"),
+	"conflict_resolution": setOf("NOTHING", "UPDATE"),
+	"null_ordering":       setOf("FIRST", "LAST"),
+	// What a DDL statement takes once it has named its object.
+	"alter_action": setOf("ADD", "DROP", "RENAME", "ALTER", "SET"),
+	"alter_target": setOf(
+		"COLUMN", "CONSTRAINT", "INDEX", "PRIMARY KEY", "UNIQUE",
+		"FOREIGN KEY", "CHECK",
+	),
+	"create_body":    setOf("AS", "ON"),
+	"cascade_option": setOf("CASCADE", "RESTRICT"),
+	// What a table definition takes: a constraint on the whole table where a
+	// name is about to be written, or one on the column just typed.
+	"table_constraint": setOf(
+		"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
+	),
+	"column_constraint": setOf(
+		"NOT NULL", "PRIMARY KEY", "UNIQUE", "DEFAULT", "REFERENCES", "CHECK",
+		"COLLATE", "GENERATED", "AUTO_INCREMENT", "AUTOINCREMENT", "COMMENT",
+	),
+	// A window names the rows it reads, then how they are ordered, then the
+	// frame it takes from them.
+	"window_start":     setOf("PARTITION BY", "ORDER BY", "ROWS", "RANGE", "GROUPS"),
+	"partition_item":   setOf("ORDER BY", "ROWS", "RANGE", "GROUPS"),
+	"window_sort_item": setOf("ASC", "DESC", "NULLS", "ROWS", "RANGE", "GROUPS"),
+	// How strongly a query locks the rows it reads.
+	"lock_strength": setOf("UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"),
+	// What an item may open with, offered beside the names rather than in
+	// their place. A SELECT list takes two more, which say how it is read.
+	"expression_start": expressionStartWords,
+	"select_start":     with(expressionStartWords, "DISTINCT", "ALL"),
+}
+
+// with and without derive a group from another, so a word added to the base
+// reaches every group that shares it.
+func with(base map[string]bool, words ...string) map[string]bool {
+	derived := make(map[string]bool, len(base)+len(words))
+	for w := range base {
+		derived[w] = true
+	}
+	for _, w := range words {
+		derived[w] = true
+	}
+	return derived
+}
+
+func without(base map[string]bool, words ...string) map[string]bool {
+	derived := with(base)
+	for _, w := range words {
+		delete(derived, w)
+	}
+	return derived
+}
+
+func setOf(words ...string) map[string]bool {
+	set := make(map[string]bool, len(words))
+	for _, word := range words {
+		set[word] = true
+	}
+	return set
+}
+
+// KeywordsOfGroup are the words of a dialect's keyword list that the named
+// position allows, less the ones the dialect writes only in another role.
+func KeywordsOfGroup(d SQLDialect, group string) []string {
+	allowed := keywordGroups[group]
+	outside := map[string]bool{}
+	for _, word := range d.KeywordsOutsideGroup()[group] {
+		outside[strings.ToUpper(word)] = true
+	}
+	var words []string
+	for _, word := range d.GetDefaultKeywords() {
+		upper := strings.ToUpper(word)
+		if allowed[upper] && !outside[upper] {
+			words = append(words, word)
+		}
+	}
+	return words
+}
+
+// completeKeywords are the words of this dialect that the caret's position
+// allows. A caret with nothing to offer reads to a caller exactly like one
+// whose clause is complete, so a finished clause names what may follow it.
+func (cs *CompletionStrategy) completeKeywords(group string) []Candidate {
+	words := KeywordsOfGroup(cs.dialect, group)
+	keywords := make([]Candidate, 0, len(words))
+	for _, word := range words {
+		keywords = append(keywords, Candidate{
+			Type:       CandidateTypeKeyword,
+			Text:       word,
+			Definition: word,
+		})
+	}
+	return keywords
 }
 
 func charOffsetFromLineCol(sql string, line, col int) int {

@@ -102,6 +102,12 @@ func (d *Dialect) GetDefaultKeywords() []string {
 	return d.defaultKeywords
 }
 
+// KeywordsOutsideGroup implements the core.SQLDialect interface. Every word
+// this dialect has stands in every position the word names.
+func (d *Dialect) KeywordsOutsideGroup() map[string][]string {
+	return nil
+}
+
 func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 	switch feature {
 	case core.FeatureCTE, core.FeatureMaterializedViews,
@@ -404,7 +410,7 @@ func defaultReserved() map[string]bool {
 		"SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "HAVING", "WITH", "AS",
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT", "RIGHT", "FULL", "INNER", "OUTER",
 		"ON", "USING", "DISTINCT", "ALL", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
-		"FETCH", "ONLY", "INTO", "VALUES", "RETURNING", "AND", "OR", "NOT",
+		"FETCH", "INTO", "VALUES", "RETURNING", "AND", "OR", "NOT",
 		"SET",
 	}
 	m := make(map[string]bool, len(words))
@@ -419,7 +425,27 @@ func defaultKeywords() []string {
 		"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "WITH", "AS",
 		"INSERT", "UPDATE", "DELETE", "JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
 		"ON", "USING", "DISTINCT", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "OFFSET",
-		"FETCH", "ONLY", "VALUES", "RETURNING",
+		"CROSS JOIN", "OUTER JOIN",
+		"FETCH", "VALUES", "RETURNING",
+		"AND", "OR", "NOT", "ASC", "DESC", "IN", "LIKE", "BETWEEN",
+		"CASE", "WHEN", "THEN", "ELSE", "END",
+		"DEFAULT VALUES", "DISTINCT FROM", "INTO",
+		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
+		"OVER", "WINDOW", "PARTITION BY", "ROWS", "RANGE", "GROUPS",
+		"ADD", "RENAME", "COLUMN", "CASCADE", "RESTRICT",
+		"CONSTRAINT", "PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY",
+		"NOT NULL", "DEFAULT", "REFERENCES", "COLLATE", "GENERATED",
+		"DO", "NOTHING", "ON CONSTRAINT", "NULLS", "FIRST", "LAST",
+		"SHARE", "NO KEY UPDATE", "KEY SHARE", "INTERVAL",
+		// What a DDL statement acts on.
+		"TABLE", "TEMPORARY TABLE", "VIEW", "MATERIALIZED VIEW",
+		"INDEX", "UNIQUE INDEX", "SCHEMA", "DATABASE", "FUNCTION", "PROCEDURE",
+		"TRIGGER", "SEQUENCE", "TYPE", "EXTENSION", "ROLE", "USER",
+		"CONFLICT", "ILIKE",
+		// The words a statement opens with, which is what an empty buffer takes.
+		"CREATE", "ALTER", "DROP", "TRUNCATE", "EXPLAIN", "MERGE",
+		"GRANT", "REVOKE", "SET", "SHOW", "VACUUM", "ANALYZE",
+		"BEGIN", "COMMIT", "ROLLBACK", "CALL",
 	}
 }
 

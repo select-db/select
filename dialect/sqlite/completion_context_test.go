@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"slices"
 	"testing"
 
 	core "github.com/selectDb/dialect/core"
@@ -73,6 +74,34 @@ func TestCompletionContext(t *testing.T) {
 				t.Fatalf("complete_context: %v", err)
 			}
 			testutil.AssertCompletionContext(t, got, tt.want)
+		})
+	}
+}
+
+// TestWordsSQLiteWritesOnlyElsewhere pins the words SQLite has in one role and
+// not in another, which a flat keyword list cannot say on its own.
+func TestWordsSQLiteWritesOnlyElsewhere(t *testing.T) {
+	d := NewDialect()
+	cases := []struct {
+		group  string
+		absent string
+		holder string
+	}{
+		{"statement", "SET", "update_target"},
+		{"delete_relation", "USING", "joined_relation"},
+		{"set_operand", "TABLE", "object_kind"},
+		{"lock_strength", "UPDATE", "statement"},
+		{"alter_action", "ALTER", "statement"},
+		{"alter_action", "SET", "update_target"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.group+"/"+tc.absent, func(t *testing.T) {
+			if slices.Contains(core.KeywordsOfGroup(d, tc.group), tc.absent) {
+				t.Errorf("%s offers %q, which SQLite has no syntax for", tc.group, tc.absent)
+			}
+			if !slices.Contains(core.KeywordsOfGroup(d, tc.holder), tc.absent) {
+				t.Errorf("%s no longer offers %q, so the word is gone entirely", tc.holder, tc.absent)
+			}
 		})
 	}
 }

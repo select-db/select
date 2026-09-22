@@ -54,6 +54,10 @@ func GetCompletionTestMetadata() Metadata {
 						},
 					},
 				},
+				Types: []Type{
+					{Schema: "main", Name: "INTEGER", Kind: "b", Display: "INTEGER"},
+					{Schema: "main", Name: "TEXT", Kind: "b", Display: "TEXT"},
+				},
 			},
 		},
 	}
@@ -612,8 +616,8 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
-			Name: "a table function's arguments are values, not relations",
-			SQL:  "SELECT * FROM generate_series(|",
+			Name:     "a table function's arguments are values, not relations",
+			SQL:      "SELECT * FROM generate_series(|",
 			Expected: []CompletionTestExpectation{},
 		},
 		{
@@ -706,5 +710,195 @@ func GetCompletionCasesPostgreSQLAndMySQL(defaultSchema, identifierQuote string)
 				{Type: CandidateTypeColumn, Text: "c3"},
 			},
 		},
+	}
+}
+
+// CompletionKeywordCase states which words a caret can open a statement with.
+// The keyword candidates are asserted exactly, so a word a dialect does not
+// have is a failure rather than a harmless extra.
+type CompletionKeywordCase struct {
+	Name     string
+	SQL      string
+	Expected []string
+}
+
+// GetCompletionKeywordCases returns the keyword cases every dialect runs, with
+// openers naming the words that dialect declares.
+func GetCompletionKeywordCases(openers []string) []CompletionKeywordCase {
+	return []CompletionKeywordCase{
+		{Name: "an empty buffer opens a statement", SQL: "|", Expected: openers},
+		{Name: "whitespace alone opens a statement", SQL: "   |", Expected: openers},
+		{Name: "after a semicolon a statement opens again", SQL: "SELECT 1; |", Expected: openers},
+		{Name: "after a comment a statement still opens", SQL: "-- a note\n|", Expected: openers},
+		{Name: "a FROM clause is not a statement start", SQL: "SELECT * FROM |", Expected: nil},
+		{Name: "the opening word being typed still opens one", SQL: "SEL|", Expected: openers},
+		{Name: "one letter still opens one", SQL: "S|", Expected: openers},
+		{Name: "a typed opener after a semicolon", SQL: "SELECT 1; SEL|", Expected: openers},
+		{Name: "a typed opener the tokenizer knows still opens one", SQL: "CREATE|", Expected: openers},
+		{Name: "and so does SELECT itself", SQL: "SELECT|", Expected: openers},
+	}
+}
+
+// UnreachableKeywords are the words a dialect declares that no group offers,
+// which is vocabulary kept for nothing: a word no caret can reach is a word
+// the dialect claims to complete and never does.
+func UnreachableKeywords(d SQLDialect) []string {
+	offered := map[string]bool{}
+	for group := range keywordGroups {
+		for _, word := range KeywordsOfGroup(d, group) {
+			offered[strings.ToUpper(word)] = true
+		}
+	}
+	var stranded []string
+	for _, word := range d.GetDefaultKeywords() {
+		if !offered[strings.ToUpper(word)] {
+			stranded = append(stranded, word)
+		}
+	}
+	return stranded
+}
+
+// CompletionClauseCase names the group of words a caret allows. The words
+// themselves are the dialect's, so one case covers three vocabularies.
+type CompletionClauseCase struct {
+	Name  string
+	SQL   string
+	Group string
+}
+
+// GetCompletionClauseCases names, for each caret, the group of words that
+// position allows.
+func GetCompletionClauseCases() []CompletionClauseCase {
+	return []CompletionClauseCase{
+		{"a finished select item takes FROM", "SELECT c1 |", "select_item"},
+		{"a call is a finished select item", "SELECT count(c1) |", "select_item"},
+		{"an aliased select item takes no second AS", "SELECT c1 AS x |", "aliased_select_item"},
+		{"a finished relation takes a clause", "SELECT * FROM t1 |", "relation"},
+		{"an aliased relation takes no second AS", "SELECT * FROM t1 AS a |", "aliased_relation"},
+		{"a derived table is renamed by the name after it", "SELECT * FROM (SELECT 1) s |", "aliased_relation"},
+		{"a relation renamed without AS too", "SELECT * FROM t1 a |", "aliased_relation"},
+		{"a select item renamed without AS too", "SELECT c1 x |", "aliased_select_item"},
+		{"a join word waits for JOIN", "SELECT * FROM t1 LEFT |", "join_word"},
+		{"a bare CROSS too", "SELECT * FROM t1 CROSS |", "join_word"},
+		{"IS waits for what it tests", "SELECT * FROM t1 WHERE c1 IS |", "is_test"},
+		{"NOT too", "SELECT * FROM t1 WHERE c1 NOT |", "not_test"},
+		{"IS NOT keeps its own words", "SELECT * FROM t1 WHERE c1 IS NOT |", "is_not_test"},
+		{"a NOT opening a predicate opens an item", "SELECT * FROM t1 WHERE NOT |", "expression_start"},
+		{"a set operation waits for its query", "SELECT 1 UNION |", "set_operand"},
+		{"a window opens with its own words", "SELECT row_number() OVER (|) FROM t1", "window_start"},
+		{"a named window too", "SELECT * FROM t1 WINDOW w AS (|)", "window_start"},
+		{"a partition waits for the ordering", "SELECT row_number() OVER (PARTITION BY c1 |)", "partition_item"},
+		{"a window ordering waits for the frame", "SELECT row_number() OVER (ORDER BY c1 |)", "window_sort_item"},
+		{"a lock names its strength", "SELECT * FROM t1 FOR |", "lock_strength"},
+		{"CREATE waits for what it makes", "CREATE |", "object_kind"},
+		{"ALTER waits for what to change", "ALTER TABLE t1 |", "alter_action"},
+		{"ADD names a part of the table", "ALTER TABLE t1 ADD |", "alter_target"},
+		{"so does an ALTER's DROP", "ALTER TABLE t1 DROP |", "alter_target"},
+		{"a DROP statement still names an object", "DROP |", "object_kind"},
+		{"CREATE waits for the body", "CREATE VIEW v |", "create_body"},
+		{"DROP waits for how far it goes", "DROP TABLE t1 |", "cascade_option"},
+		{"a table definition opens with a constraint", "CREATE TABLE t (|", "table_constraint"},
+		{"a named column waits for its constraints", "CREATE TABLE t (c1 INTEGER |", "column_constraint"},
+		{"the next definition opens the same way", "CREATE TABLE t (c1 INTEGER, |", "table_constraint"},
+		{"DROP too", "DROP |", "object_kind"},
+		{"ALTER too", "ALTER |", "object_kind"},
+		{"an INSERT ON names a conflict", "INSERT INTO t1 (c1) VALUES (1) ON |", "conflict_target"},
+		{"a conflict waits for DO", "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT |", "conflict_action"},
+		{"its column list too", "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) |", "conflict_do"},
+		{"DO waits for what to do", "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO |", "conflict_resolution"},
+		{"NULLS waits for where they go", "SELECT * FROM t1 ORDER BY c1 DESC NULLS |", "null_ordering"},
+		{"a join ON opens a predicate", "SELECT * FROM t1 JOIN t2 ON |", "expression_start"},
+		{"a parenthesised join ON finishes one", "SELECT * FROM t1 JOIN t2 ON (c1 = c2) |", "predicate"},
+		{"and ALL does not repeat", "SELECT 1 UNION ALL |", "query_word"},
+		{"a joined relation also takes ON", "SELECT * FROM t1 JOIN t2 |", "joined_relation"},
+		{"a finished predicate takes AND", "SELECT * FROM t1 WHERE c1 = 1 |", "predicate"},
+		{"a join predicate too", "SELECT * FROM t1 JOIN t2 ON t1.c1 = t2.c1 |", "predicate"},
+		{"a sort item takes ASC", "SELECT * FROM t1 ORDER BY c1 |", "sort_item"},
+		{"a group item takes HAVING", "SELECT * FROM t1 GROUP BY c1 |", "group_item"},
+		{"an assignment takes WHERE", "UPDATE t1 SET c1 = 1 |", "assignment"},
+		{"a row count takes OFFSET", "SELECT * FROM t1 LIMIT 10 |", "row_count"},
+		{"a defined CTE takes its statement", "WITH x AS (SELECT 1) |", "after_cte"},
+		{"a half-written predicate takes an operator", "SELECT * FROM t1 WHERE c1 |", ""},
+		{"an empty select list opens an item", "SELECT |", "select_start"},
+		{"a later select item opens one too", "SELECT c1, |", "expression_start"},
+		{"a column being typed opens one", "SELECT c|", "select_start"},
+		{"a WHERE opens an expression", "SELECT * FROM t1 WHERE |", "expression_start"},
+		{"a second statement opens one", "SELECT 1; SELECT |", "select_start"},
+		{"an empty FROM takes no keyword", "SELECT * FROM |", ""},
+		{"a relation after a comma takes no keyword", "SELECT * FROM t1, |", ""},
+		{"a follower being typed is still one", "SELECT * FROM t1 W|", "relation"},
+		{"a predicate follower being typed too", "SELECT * FROM t1 WHERE c1 = 1 AN|", "predicate"},
+		{"a name being typed is not a follower", "SELECT * FROM t|", ""},
+		{"an INSERT target waits for VALUES", "INSERT INTO t1 |", "insert_target"},
+		{"an INSERT column list too", "INSERT INTO t1 (c1) |", "insert_target"},
+		{"an UPDATE target waits for SET", "UPDATE t1 |", "update_target"},
+		{"a DELETE waits for FROM", "DELETE |", "delete_target"},
+		{"a DELETE relation reads no join", "DELETE FROM t1 |", "delete_relation"},
+		{"nor does a renamed one", "DELETE FROM t1 a |", "delete_aliased_relation"},
+		{"a DELETE predicate returns rows", "DELETE FROM t1 WHERE c1 = 1 |", "delete_predicate"},
+		{"an UPDATE predicate too", "UPDATE t1 SET c1 = 1 WHERE c1 = 2 |", "update_predicate"},
+		{"a subquery in a DELETE is still a query", "DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM t2 WHERE c2 = 1 |", "predicate"},
+		{"a sort direction finishes the item", "SELECT * FROM t1 ORDER BY c1 ASC |", "sort_item"},
+		{"a CASE test waits for THEN", "SELECT CASE WHEN c1 = 1 |", "case_test"},
+		{"a CASE arm waits for WHEN or END", "SELECT CASE WHEN c1 = 1 THEN 2 |", "case_body"},
+		{"a closed CASE is one finished item", "SELECT CASE WHEN c1 = 1 THEN 2 END |", "select_item"},
+		{"a nested one closes only its own", "SELECT CASE WHEN c1 = 1 THEN CASE WHEN c2 = 2 THEN 1 END |", "case_body"},
+		{"a rename list is an alias too", "SELECT * FROM t1 t(a, b) |", "aliased_relation"},
+	}
+}
+
+// CompletionFunctionCase states whether a caret takes a call. The words are
+// each dialect's hundreds of builtins, so the case asserts that they are
+// offered rather than listing them.
+type CompletionFunctionCase struct {
+	Name    string
+	SQL     string
+	Offered bool
+}
+
+// GetCompletionFunctionCases returns the cases every dialect runs. A call
+// stands wherever a value does, and nowhere a column is only being named.
+func GetCompletionFunctionCases() []CompletionFunctionCase {
+	return []CompletionFunctionCase{
+		{"a select list takes a call", "SELECT |", true},
+		{"a WHERE takes a call", "SELECT * FROM t1 WHERE |", true},
+		{"an ORDER BY takes a call", "SELECT * FROM t1 ORDER BY |", true},
+		{"a GROUP BY takes a call", "SELECT * FROM t1 GROUP BY |", true},
+		{"an assignment value takes a call", "UPDATE t1 SET c1 = |", true},
+		{"a VALUES row takes a call", "INSERT INTO t1 VALUES (|", true},
+		{"an argument takes a call", "SELECT count(|) FROM t1", true},
+		{"an assignment target does not", "UPDATE t1 SET |", false},
+		{"an INSERT column list does not", "INSERT INTO t1 (|", false},
+		{"a join's USING list does not", "SELECT * FROM t1 JOIN t2 USING (|", false},
+		{"a relation's columns after its dot do not", "SELECT t1.|", false},
+		{"a FROM clause does not", "SELECT * FROM |", false},
+		{"a rename list does not", "SELECT * FROM t1 AS a (|", false},
+	}
+}
+
+// CompletionTypeCase names a caret and the types it takes, or none.
+type CompletionTypeCase struct {
+	Name     string
+	SQL      string
+	Expected []string
+}
+
+// GetCompletionTypeCases returns the carets where a type name stands. A type
+// is written only in a cast, so everywhere else the answer is none.
+func GetCompletionTypeCases() []CompletionTypeCase {
+	types := []string{"INTEGER", "TEXT"}
+	return []CompletionTypeCase{
+		{"a cast takes a type", "SELECT CAST(c1 AS |) FROM t1", types},
+		{"the shorthand cast too", "SELECT c1::| FROM t1", types},
+		{"a cast of a call too", "SELECT CAST(count(c1) AS |) FROM t1", types},
+		{"a cast in a predicate too", "SELECT * FROM t1 WHERE CAST(c1 AS |)", types},
+		{"a column being defined takes one", "CREATE TABLE t (c1 |)", types},
+		{"a column being added too", "ALTER TABLE t1 ADD COLUMN c1 |", types},
+		{"a name still being typed does not", "CREATE TABLE t (c|)", nil},
+		{"an alias is not a type", "SELECT c1 AS | FROM t1", nil},
+		{"a relation alias is not either", "SELECT * FROM t1 AS |", nil},
+		{"a CTE body is not", "WITH x AS |", nil},
+		{"a finished cast is not", "SELECT CAST(c1 AS text) | FROM t1", nil},
+		{"a select item is not", "SELECT | FROM t1", nil},
 	}
 }
