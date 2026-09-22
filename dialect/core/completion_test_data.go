@@ -903,9 +903,8 @@ func GetCompletionTypeCases() []CompletionTypeCase {
 	}
 }
 
-// CompletionEditingCase is a caret with text still after it, which is what a
-// writer's buffer looks like every keystroke before the last one. Expected
-// names the relations and columns offered, in the order they come back.
+// CompletionEditingCase is a caret with text still after it. Expected names
+// the relations and columns offered, in the order they come back.
 type CompletionEditingCase struct {
 	Name     string
 	SQL      string
@@ -913,8 +912,8 @@ type CompletionEditingCase struct {
 }
 
 // GetCompletionEditingCases returns the carets that have a half-written
-// statement around them. A case with nothing after the caret exercises the
-// token walk alone; only these reach the parser with text it cannot read.
+// statement around them, which is where the parser is given text it cannot
+// read.
 func GetCompletionEditingCases() []CompletionEditingCase {
 	return []CompletionEditingCase{
 		{
@@ -946,6 +945,21 @@ func GetCompletionEditingCases() []CompletionEditingCase {
 			"an empty sort item with the rest under it",
 			"SELECT * FROM t1 c ORDER BY |\n  c.c2",
 			[]string{"c", "c1", "c2"},
+		},
+		{
+			"a call standing after the caret",
+			"SELECT\n  c.|\n  count(*)\nFROM t1 c",
+			[]string{"c1", "c2"},
+		},
+		{
+			"an INSERT column list with the rest under it",
+			"INSERT INTO t1 (|\n  c2)",
+			[]string{"c1", "c2"},
+		},
+		{
+			"an UPDATE assignment with the rest under it",
+			"UPDATE t1 c SET c.|\n  , c2 = 1",
+			[]string{"c1", "c2"},
 		},
 	}
 }

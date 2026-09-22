@@ -6,6 +6,7 @@ The cases that need a collector go through the dispatcher, because that is
 where a request is patched and its response cleaned.
 """
 import server
+from analysis.analyze import _parse_sql
 from completion.caret_patch import (
     PLACEHOLDER,
     readable_at,
@@ -123,14 +124,10 @@ class TestUnwrapExplain:
 
 
 def _sqlglot_parse(text):
-    """What the dispatcher passes in, so these cases read the same statement
+    """The parser the dispatcher passes in, so these cases read the statement
     the caller would."""
-    import sqlglot
-    from sqlglot.errors import ParseError
-    try:
-        return [sqlglot.parse_one(text, read="postgres")], []
-    except ParseError as e:
-        return [], [str(e)]
+    statements, errors, _ = _parse_sql(text, "postgres")
+    return statements, errors
 
 
 class TestReadableAt:

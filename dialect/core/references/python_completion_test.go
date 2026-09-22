@@ -187,6 +187,89 @@ func TestEveryKeywordIsReachable(t *testing.T) {
 	}
 }
 
+// TestNothingChangesWhileAnItemIsUnfinished runs every completion case twice:
+// once as written, once with an unfinished item standing after the caret. An
+// item nobody has finished names no relation and defines no alias, so it can
+// change nothing, and each case answering differently is a hole.
+//
+// Six hand written cases would only cover the shapes somebody thought of.
+// This covers whatever the table holds, which is what the method was missing.
+func TestNothingChangesWhileAnItemIsUnfinished(t *testing.T) {
+	analyzer := testutil.NewTestAnalyzer(t)
+	defer analyzer.Close()
+
+	for _, di := range dialects {
+		t.Run(di.name, func(t *testing.T) {
+			di.dialect.SetAnalyzer(analyzer)
+
+			meta := core.GetCompletionTestMetadata()
+			meta.DefaultSchema = di.defaultSchema
+			if len(meta.Schemas) > 0 {
+				meta.Schemas[0].Name = di.defaultSchema
+			}
+
+			complete := func(t *testing.T, sql string, caretCharPos int) []core.Candidate {
+				t.Helper()
+				caretLine, caretOffset := charPosToLineCol(sql, caretCharPos)
+				got, err := di.dialect.Complete(context.Background(), sql, caretLine, caretOffset, meta)
+				if err != nil {
+					t.Fatalf("complete: %v", err)
+				}
+				return got
+			}
+
+			for _, tc := range core.GetCompletionTestCases(di.defaultSchema, di.identifierQuote) {
+				t.Run(tc.Name, func(t *testing.T) {
+					text, caretCharPos := removeCaret(tc.SQL)
+					if !inASelectList(text, caretCharPos) {
+						// Anywhere else the added name reads as something the
+						// statement wanted: a relation in a FROM, the target
+						// of an INSERT. Only in a list of items is a missing
+						// separator what the writer has done wrong.
+						t.Skip("not a list of items")
+					}
+					want := complete(t, text, caretCharPos)
+
+					// A second item on a line of its own with no comma before
+					// it, which is what a writer leaves behind mid-edit.
+					unfinished := text[:caretCharPos] + "\n  zz.zz\n" + text[caretCharPos:]
+					got := complete(t, unfinished, caretCharPos)
+
+					if len(got) != len(want) {
+						t.Fatalf("%d candidates with an unfinished item after the caret, %d without",
+							len(got), len(want))
+					}
+					for i := range got {
+						if got[i].Text != want[i].Text || got[i].Type != want[i].Type {
+							t.Errorf("candidate %d = %q, want %q", i, got[i].Text, want[i].Text)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+// inASelectList reports the caret as standing among a SELECT's items, where
+// the separator between two of them is a comma and leaving it out is the
+// ordinary state of a buffer being typed.
+func inASelectList(sql string, caret int) bool {
+	before := strings.ToUpper(sql[:caret])
+	if semi := strings.LastIndex(before, ";"); semi >= 0 {
+		before = before[semi+1:]
+	}
+	start := strings.LastIndex(before, "SELECT")
+	if start < 0 {
+		return false
+	}
+	for _, clause := range []string{"FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "(", ")"} {
+		if strings.Contains(before[start:], clause) {
+			return false
+		}
+	}
+	return true
+}
+
 // TestCompletionWhileEditing runs the carets that still have text after them,
 // which every caret has until the writer stops typing. A caret at the end of
 // the buffer exercises the token walk alone; only these reach the parser with
