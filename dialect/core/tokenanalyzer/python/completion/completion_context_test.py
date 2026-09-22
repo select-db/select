@@ -461,6 +461,20 @@ class TestClauseFollowers:
     def test_nulls_waits_for_where_they_go(self):
         assert self._group("SELECT * FROM t1 ORDER BY c1 DESC NULLS |") == "null_ordering"
 
+    def test_a_window_spec_is_not_a_query_clause(self):
+        assert self._group("SELECT row_number() OVER (|) FROM t1") == "window_start"
+        assert self._group("SELECT * FROM t1 WINDOW w AS (|)") == "window_start"
+        assert self._group("SELECT row_number() OVER (PARTITION BY c1 |)") == "partition_item"
+        assert self._group("SELECT row_number() OVER (ORDER BY c1 |)") == "window_sort_item"
+        assert self._group("SELECT * FROM t1 WINDOW w AS (PARTITION BY c1 |)") == "partition_item"
+
+    def test_a_query_ordering_is_not_a_window_one(self):
+        assert self._group("SELECT * FROM t1 ORDER BY c1 |") == "sort_item"
+
+    def test_a_window_item_being_written_opens_normally(self):
+        assert self._group("SELECT row_number() OVER (PARTITION BY |)") == "expression_start"
+        assert self._group("SELECT row_number() OVER (ORDER BY |)") == "expression_start"
+
     def test_a_lock_names_its_strength(self):
         assert self._group("SELECT * FROM t1 FOR |") == "lock_strength"
 

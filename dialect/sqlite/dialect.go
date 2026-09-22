@@ -941,6 +941,7 @@ func defaultKeywords() []string {
 		"CASE", "WHEN", "THEN", "ELSE", "END",
 		"DEFAULT VALUES", "DISTINCT FROM", "REGEXP",
 		"NULL", "TRUE", "FALSE", "EXISTS", "ALL", "CAST",
+		"OVER", "WINDOW", "PARTITION BY", "ROWS", "RANGE", "GROUPS",
 		"DO", "NOTHING", "NULLS", "FIRST", "LAST",
 		// What a DDL statement acts on.
 		"TABLE", "TEMPORARY TABLE", "VIEW", "INDEX", "UNIQUE INDEX",

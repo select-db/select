@@ -329,7 +329,7 @@ var relationWords = setOf(
 	"AS", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
 	"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
 	"CROSS JOIN", "OUTER JOIN",
-	"UNION", "EXCEPT", "INTERSECT", "FETCH",
+	"UNION", "EXCEPT", "INTERSECT", "FETCH", "WINDOW",
 )
 
 var isTestWords = setOf("NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM")
@@ -338,7 +338,9 @@ var expressionStartWords = setOf(
 	"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",
 )
 
-var selectItemWords = setOf("FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO")
+var selectItemWords = setOf(
+	"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO", "OVER",
+)
 
 var predicateWords = setOf(
 	"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
@@ -403,6 +405,11 @@ var keywordGroups = map[string]map[string]bool{
 	"conflict_do":         setOf("DO"),
 	"conflict_resolution": setOf("NOTHING", "UPDATE"),
 	"null_ordering":       setOf("FIRST", "LAST"),
+	// A window names the rows it reads, then how they are ordered, then the
+	// frame it takes from them.
+	"window_start":     setOf("PARTITION BY", "ORDER BY", "ROWS", "RANGE", "GROUPS"),
+	"partition_item":   setOf("ORDER BY", "ROWS", "RANGE", "GROUPS"),
+	"window_sort_item": setOf("ASC", "DESC", "NULLS", "ROWS", "RANGE", "GROUPS"),
 	// How strongly a query locks the rows it reads.
 	"lock_strength": setOf("UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"),
 	// What an item may open with, offered beside the names rather than in

@@ -81,12 +81,12 @@ func TestKeywordGroupWords(t *testing.T) {
 		group string
 		want  []string
 	}{
-		{"select_item", []string{"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO"}},
+		{"select_item", []string{"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO", "OVER"}},
 		{"sort_item", []string{"LIMIT", "OFFSET", "FETCH", "ASC", "DESC", "NULLS"}},
 		{"group_item", []string{"ORDER BY", "HAVING", "LIMIT", "OFFSET"}},
 		{"row_count", []string{"OFFSET", "FETCH"}},
 		{"after_cte", []string{"SELECT", "INSERT", "UPDATE", "DELETE"}},
-		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT", "INTO"}},
+		{"aliased_select_item", []string{"FROM", "UNION", "EXCEPT", "INTERSECT", "INTO", "OVER"}},
 		{"join_word", []string{"JOIN", "OUTER JOIN"}},
 		{"is_test", []string{"NULL", "NOT", "TRUE", "FALSE", "DISTINCT FROM"}},
 		{"is_not_test", []string{"NULL", "TRUE", "FALSE", "DISTINCT FROM"}},
@@ -103,6 +103,9 @@ func TestKeywordGroupWords(t *testing.T) {
 		{"conflict_action", []string{"DO", "ON CONSTRAINT"}},
 		{"conflict_resolution", []string{"NOTHING", "UPDATE"}},
 		{"null_ordering", []string{"FIRST", "LAST"}},
+		{"window_start", []string{"PARTITION BY", "ORDER BY", "ROWS", "RANGE", "GROUPS"}},
+		{"partition_item", []string{"ORDER BY", "ROWS", "RANGE", "GROUPS"}},
+		{"window_sort_item", []string{"ASC", "DESC", "NULLS", "ROWS", "RANGE", "GROUPS"}},
 		{"lock_strength", []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"}},
 		{"expression_start", []string{
 			"CASE", "NOT", "EXISTS", "NULL", "TRUE", "FALSE", "INTERVAL", "CAST",

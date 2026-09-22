@@ -265,6 +265,7 @@ _KEYWORD_MATCHERS: list[tuple[str, int]] = [
     ("NATURAL",     TARGET_SCHEMA_AND_TABLE_ALL),
     ("JOIN",        TARGET_SCHEMA_AND_TABLE_ALL),
     ("SET",         TARGET_COLUMN),
+    ("PARTITION BY", TARGET_TABLE_AND_COLUMN),
     ("WHEN",        TARGET_TABLE_AND_COLUMN),
     ("THEN",        TARGET_ALL),
     ("ELSE",        TARGET_ALL),
@@ -488,6 +489,7 @@ _CLAUSE_FOLLOWERS = {
     "GROUP BY":    "group_item",
     "SET":         "assignment",
     "VALUES":      "values",
+    "PARTITION BY": "partition_item",
     "LIMIT":       "row_count",
     "OFFSET":      "row_count",
     "INSERT":      "insert_target",
@@ -514,7 +516,8 @@ _STATEMENT_GROUPS = frozenset({
 })
 
 # The groups whose words stand beside the names rather than in their place.
-_GROUPS_BESIDE_NAMES = frozenset({"select_start", "expression_start"})
+_GROUPS_BESIDE_NAMES = frozenset({"select_start", "expression_start",
+                                  "window_start"})
 
 _SET_OPERATIONS = frozenset({"UNION", "EXCEPT", "INTERSECT"})
 
@@ -551,6 +554,7 @@ _ITEM_IS_COMPLETE_AT_A_NAME = frozenset({
     "select_item", "relation", "joined_relation", "sort_item", "group_item",
     "aliased_relation", "aliased_select_item",
     "insert_target", "update_target", "merge_target",
+    "partition_item", "window_sort_item",
 })
 
 # The clauses whose own word is already the whole item: "DELETE" waits for
@@ -635,20 +639,23 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     else:
         group = _CLAUSE_FOLLOWERS.get(clause.word, "")
     if not group:
-        return _opening_an_item(clause, last)
+        return _opening_an_item(tokens, clause, last)
     if group in _COMPLETE_AT_THE_CLAUSE_WORD:
         return group
+    if group == "sort_item" and _in_a_window_spec(tokens):
+        # A window's ordering is followed by its frame, not by a row count.
+        group = "window_sort_item"
 
     if last.token_type in _FINISHED_ITEM_TOKENS:
         if _closes_a_row_choice(tokens):
-            return _opening_an_item(clause, last)
+            return _opening_an_item(tokens, clause, last)
         if _closes_a_conflict_target(tokens):
             return "conflict_do"
         if group in _ITEM_IS_COMPLETE_AT_A_NAME and _already_renamed(tokens):
             group = _ALIASED.get(group, group)
         return _in_the_statement(group, tokens)
     if not _is_identifier_token(last):
-        return _opening_an_item(clause, last)
+        return _opening_an_item(tokens, clause, last)
     if group in _ITEM_IS_COMPLETE_AT_A_NAME:
         # An item that already carries an alias must not be offered the word
         # that would give it another.
@@ -659,7 +666,7 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     # unless one already stands between the clause and here.
     if group == "predicate" and _compared_since_the_clause(tokens):
         return _in_the_statement(group, tokens)
-    return _opening_an_item(clause, last)
+    return _opening_an_item(tokens, clause, last)
 
 
 def _word_waiting(tokens: list, clause: Clause, last) -> str:
@@ -683,16 +690,41 @@ def _word_waiting(tokens: list, clause: Clause, last) -> str:
             # "c1 NOT " tests the name before it; a NOT opening a predicate
             # negates whatever is written next instead.
             return "not_test"
-        return _opening_an_item(clause, last)
+        return _opening_an_item(tokens, clause, last)
     return _WORD_FOLLOWERS.get(word, "")
 
 
-def _opening_an_item(clause: Clause, last) -> str:
+def _opening_an_item(tokens: list, clause: Clause, last) -> str:
     """The words an item may open with, where nothing of it is written yet. A
     SELECT list takes two more, which say how the whole list is read."""
+    if last.token_type == TokenType.L_PAREN and _in_a_window_spec(tokens):
+        # Nothing of the spec is written yet, so it takes the words a window
+        # opens with as well as the name of one already defined.
+        return "window_start"
     if clause.word == "SELECT" and last.text.upper() == "SELECT":
         return "select_start"
     return "expression_start"
+
+
+def _in_a_window_spec(tokens: list) -> bool:
+    """Whether the paren still open around the caret opens a window spec,
+    where a frame follows the ordering rather than a row count."""
+    depth = 0
+    for i in range(len(tokens) - 1, -1, -1):
+        token_type = tokens[i].token_type
+        if token_type == TokenType.R_PAREN:
+            depth += 1
+        elif token_type == TokenType.L_PAREN:
+            if depth:
+                depth -= 1
+                continue
+            if i == 0:
+                return False
+            before = tokens[i - 1]
+            return (before.token_type == TokenType.OVER
+                    or (before.token_type == TokenType.ALIAS and i >= 3
+                        and tokens[i - 3].token_type == TokenType.WINDOW))
+    return False
 
 
 def _statement_word(tokens: list) -> str:
