@@ -30,7 +30,12 @@ def _field(sql_with_caret: str, key: str, sg_dialect: str = "postgres"):
     """One field of the whole context, for the cases a token walk alone cannot
     answer."""
     _, sql, caret = _at_caret(sql_with_caret, sg_dialect)
-    return detect_completion_context(sql, 1, caret, ["main"], sg_dialect)[key]
+    # The caller passes a line and a column, so a case spanning lines has to
+    # be asked about where it actually is.
+    before = sql[:caret]
+    line = before.count("\n") + 1
+    column = caret - (before.rfind("\n") + 1)
+    return detect_completion_context(sql, line, column, ["main"], sg_dialect)[key]
 
 
 def _shared(sql_with_caret: str, sg_dialect: str = "postgres") -> bool:
@@ -437,6 +442,16 @@ class TestClauseFollowers:
         assert self._group("SELECT DISTINCT ON (c1) |") == "expression_start"
         assert self._group("SELECT DISTINCT ON (c1) c2 |") == "select_item"
         assert self._group("SELECT * FROM t1 JOIN t2 ON (c1 = c2) |") == "predicate"
+
+    def test_a_clause_on_its_own_line_is_still_one(self):
+        assert self._group("SELECT *\nFROM t1 |") == "relation"
+        assert self._group("SELECT *\r\nFROM t1 |") == "relation"
+        assert self._group("SELECT *\n\tFROM t1 |") == "relation"
+
+    def test_a_quoted_name_is_still_a_name(self):
+        assert self._group('SELECT * FROM "t1" |') == "relation"
+        assert self._group('SELECT * FROM t1 "a" |') == "aliased_relation"
+        assert self._group('SELECT "c1" |') == "select_item"
 
     def test_a_lock_names_its_strength(self):
         assert self._group("SELECT * FROM t1 FOR |") == "lock_strength"
