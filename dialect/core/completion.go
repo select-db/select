@@ -294,6 +294,23 @@ func (cs *CompletionStrategy) completeFunctions() []Candidate {
 // keywordGroups name the words that may be written at a kind of caret. Which
 // of them a dialect has is the dialect's own list to answer; which words the
 // position allows is the same question in every dialect.
+// relationWords are what may follow a relation in a query. The two variants
+// differ from it by one rule each, so they are derived rather than repeated.
+var relationWords = setOf(
+	"AS", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+	"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+	"CROSS JOIN", "OUTER JOIN",
+	"UNION", "EXCEPT", "INTERSECT", "FETCH",
+)
+
+var selectItemWords = setOf("FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO")
+
+var predicateWords = setOf(
+	"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+	"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+	"CROSS JOIN", "UNION", "EXCEPT", "INTERSECT", "FETCH",
+)
+
 var keywordGroups = map[string]map[string]bool{
 	"statement": setOf(
 		"SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "CREATE", "ALTER",
@@ -301,48 +318,32 @@ var keywordGroups = map[string]map[string]bool{
 		"SET", "SHOW", "PRAGMA", "VACUUM", "ANALYZE", "BEGIN", "COMMIT",
 		"ROLLBACK", "CALL", "USE", "ATTACH",
 	),
-	"select_item": setOf(
-		"FROM", "AS", "UNION", "EXCEPT", "INTERSECT", "INTO",
-	),
-	"relation": setOf(
-		"AS", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
-		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
-		"CROSS JOIN", "OUTER JOIN",
-		"UNION", "EXCEPT", "INTERSECT", "FETCH",
-	),
+	"select_item": selectItemWords,
+	"relation":    relationWords,
 	// An item that already carries an alias takes the same words, less the
 	// one that would give it another.
-	"aliased_relation": setOf(
-		"WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
-		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
-		"CROSS JOIN", "OUTER JOIN",
-		"UNION", "EXCEPT", "INTERSECT", "FETCH",
-	),
-	"aliased_select_item": setOf("FROM", "UNION", "EXCEPT", "INTERSECT"),
-	// A join's relation takes the words a plain one does, and the two that
-	// only a join allows.
-	"joined_relation": setOf(
-		"AS", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
-		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
-		"CROSS JOIN", "OUTER JOIN", "ON", "USING",
-		"UNION", "EXCEPT", "INTERSECT", "FETCH",
-	),
-	"predicate": setOf(
-		"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
-		"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
-		"CROSS JOIN", "UNION", "EXCEPT", "INTERSECT", "FETCH", "RETURNING",
-	),
-	"sort_item":  setOf("ASC", "DESC", "LIMIT", "OFFSET", "FETCH"),
-	"group_item": setOf("HAVING", "ORDER BY", "LIMIT", "OFFSET"),
-	"assignment": setOf("WHERE", "RETURNING", "FROM"),
-	"values":     setOf("RETURNING", "ON"),
-	"row_count":  setOf("OFFSET", "FETCH"),
-	"after_cte":  setOf("SELECT", "INSERT", "UPDATE", "DELETE"),
+	"aliased_relation":    without(relationWords, "AS"),
+	"aliased_select_item": without(selectItemWords, "AS"),
+	// Only a join allows ON and USING.
+	"joined_relation": with(relationWords, "ON", "USING"),
+	"predicate":       predicateWords,
+	"sort_item":       setOf("ASC", "DESC", "LIMIT", "OFFSET", "FETCH"),
+	"group_item":      setOf("HAVING", "ORDER BY", "LIMIT", "OFFSET"),
+	"assignment":      setOf("WHERE", "RETURNING", "FROM"),
+	"values":          setOf("RETURNING", "ON"),
+	"row_count":       setOf("OFFSET", "FETCH"),
+	"after_cte":       setOf("SELECT", "INSERT", "UPDATE", "DELETE"),
 	// The write statements, which name their relation before anything else.
 	"insert_target": setOf("VALUES", "SELECT", "AS", "DEFAULT VALUES"),
 	"update_target": setOf("SET", "AS"),
 	"delete_target": setOf("FROM"),
 	"merge_target":  setOf("USING", "AS"),
+	// A DELETE reads no join and returns rows, so its relation and its
+	// predicate are not a query's.
+	"delete_relation":         setOf("AS", "WHERE", "USING", "RETURNING"),
+	"delete_aliased_relation": setOf("WHERE", "USING", "RETURNING"),
+	"delete_predicate":        setOf("AND", "OR", "RETURNING"),
+	"update_predicate":        setOf("AND", "OR", "RETURNING"),
 	// A CASE names its test and then its arms.
 	"case_test": setOf("THEN"),
 	"case_body": setOf("WHEN", "ELSE", "END"),
@@ -353,6 +354,27 @@ var keywordGroups = map[string]map[string]bool{
 	"not_test":    setOf("NULL", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS", "GLOB", "REGEXP"),
 	"set_operand": setOf("SELECT", "ALL", "DISTINCT", "VALUES", "TABLE"),
 	"query_word":  setOf("SELECT", "VALUES", "TABLE"),
+}
+
+// with and without derive a group from another, so a word added to the base
+// reaches every group that shares it.
+func with(base map[string]bool, words ...string) map[string]bool {
+	derived := make(map[string]bool, len(base)+len(words))
+	for w := range base {
+		derived[w] = true
+	}
+	for _, w := range words {
+		derived[w] = true
+	}
+	return derived
+}
+
+func without(base map[string]bool, words ...string) map[string]bool {
+	derived := with(base)
+	for _, w := range words {
+		delete(derived, w)
+	}
+	return derived
 }
 
 func setOf(words ...string) map[string]bool {

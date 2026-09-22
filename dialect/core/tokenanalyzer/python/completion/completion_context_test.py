@@ -390,6 +390,16 @@ class TestClauseFollowers:
         assert self._group("UPDATE t1 |") == "update_target"
         assert self._group("DELETE |") == "delete_target"
 
+    def test_a_clause_is_named_for_its_statement(self):
+        assert self._group("DELETE FROM t1 |") == "delete_relation"
+        assert self._group("DELETE FROM t1 a |") == "delete_aliased_relation"
+        assert self._group("DELETE FROM t1 WHERE c1 = 1 |") == "delete_predicate"
+        assert self._group("UPDATE t1 SET c1 = 1 WHERE c1 = 2 |") == "update_predicate"
+
+    def test_a_subquery_is_named_for_its_own_statement(self):
+        sql = "DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM t2 WHERE c2 = 1 |"
+        assert self._group(sql) == "predicate"
+
     def test_a_case_names_its_arms(self):
         assert self._group("SELECT CASE WHEN c1 = 1 |") == "case_test"
         assert self._group("SELECT CASE WHEN c1 = 1 THEN 2 |") == "case_body"

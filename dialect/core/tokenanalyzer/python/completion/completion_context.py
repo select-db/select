@@ -475,6 +475,15 @@ _CLAUSE_FOLLOWERS = {
 # one that gives it another.
 _ALIASED = {"relation": "aliased_relation", "select_item": "aliased_select_item"}
 
+# A clause takes different words in different statements: what follows a
+# DELETE's relation is WHERE, not a join.
+_STATEMENT_GROUPS = frozenset({
+    ("DELETE", "relation"),
+    ("DELETE", "aliased_relation"),
+    ("DELETE", "predicate"),
+    ("UPDATE", "predicate"),
+})
+
 _SET_OPERATIONS = frozenset({"UNION", "EXCEPT", "INTERSECT"})
 
 # What a word that does not finish its clause waits for: "LEFT " waits for
@@ -588,18 +597,34 @@ def _keyword_group_after(tokens: list, caret_offset: int, clause: Clause) -> str
     if waiting:
         return waiting
     if last.token_type in _FINISHED_ITEM_TOKENS:
-        return group
+        return _in_the_statement(group, tokens)
     if not _is_identifier_token(last):
         return ""
     if group in _ITEM_IS_COMPLETE_AT_A_NAME:
         # An item that already carries an alias must not be offered the word
         # that would give it another.
-        return _ALIASED.get(group, group) if _already_renamed(tokens) else group
+        if _already_renamed(tokens):
+            group = _ALIASED.get(group, group)
+        return _in_the_statement(group, tokens)
     # A name in a predicate is its left side, and an operator comes next,
     # unless one already stands between the clause and here.
     if group == "predicate" and _compared_since_the_clause(tokens):
-        return group
+        return _in_the_statement(group, tokens)
     return ""
+
+
+def _in_the_statement(group: str, tokens: list) -> str:
+    """The group named for the statement it stands in, where the statement
+    decides what may follow. Everywhere else the group is already the answer."""
+    for i in _walk_back(tokens, len(tokens)):
+        upper = tokens[i].text.upper()
+        if upper == "INSERT INTO":
+            upper = "INSERT"
+        if upper in _STATEMENT_WORDS:
+            if (upper, group) in _STATEMENT_GROUPS:
+                return f"{upper.lower()}_{group}"
+            return group
+    return group
 
 
 def _already_renamed(tokens: list) -> bool:

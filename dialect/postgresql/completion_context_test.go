@@ -97,6 +97,14 @@ func TestKeywordGroupWords(t *testing.T) {
 		{"delete_target", []string{"FROM"}},
 		{"case_test", []string{"THEN"}},
 		{"case_body", []string{"WHEN", "ELSE", "END"}},
+		{"delete_relation", []string{"AS", "WHERE", "USING", "RETURNING"}},
+		{"delete_aliased_relation", []string{"WHERE", "USING", "RETURNING"}},
+		{"delete_predicate", []string{"AND", "OR", "RETURNING"}},
+		{"predicate", []string{
+			"AND", "OR", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+			"JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN",
+			"UNION", "EXCEPT", "INTERSECT", "FETCH",
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.group, func(t *testing.T) {
