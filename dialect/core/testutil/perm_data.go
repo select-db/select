@@ -667,6 +667,41 @@ func permCases() []PermCase {
 			Why:    "the bare t2 is the CTE, so main.t2 is never read and a right on it is no help",
 		},
 
+		{
+			Name: "a CTE named like the table the write targets",
+			SQL:  "WITH t2 AS (SELECT c1 FROM other.t3) UPDATE main.t2 SET c3 = 'x' WHERE c1 IN (SELECT c1 FROM t2)",
+			Needs: []Right{
+				mainT2(core.ActionUpdate).Only("c3"),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "the target is written with its schema, so the CTE spelled the same way does not take it",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a CTE named like the table a data-modifying CTE writes",
+			SQL:  "WITH t2 AS (SELECT c1 FROM other.t3), x AS (DELETE FROM main.t2 RETURNING c1) SELECT c1 FROM x",
+			Needs: []Right{
+				mainT2(core.ActionDelete),
+				mainT2(core.ActionSelect),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "the delete is a nested statement, and a CTE spelled like its target does not take it",
+		},
+		{
+			Name: "a schema-qualified name a CTE cannot shadow",
+			SQL:  "WITH t2 AS (SELECT c1 FROM other.t3) SELECT c1 FROM t1 WHERE c1 IN (SELECT c1 FROM main.t2)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "writing the schema names the table whatever the WITH declared, so both relations are read",
+		},
+
 		// --- a view. The statement names it as it names a table and carries
 		// nothing of what it reads, so the right is the one held on the view.
 		{

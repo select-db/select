@@ -400,8 +400,10 @@ func GetSeeTestCases() []SeeCase {
 		{Name: "a write filtered on a visible column", SQL: "UPDATE contacts SET id = id + 100", Columns: []string{}},
 		{
 			// The right is held on the view, so a rule hiding a column of
-			// users says nothing about a column of v_users.
-			Name:    "a view exposing the hidden column of the table under it",
+			// users says nothing about a column of v_users. What the body
+			// reads is not in the metadata, so the opacity is a rule about
+			// where the right sits rather than something reachable from here.
+			Name:    "a rule on a table does not reach the view over it",
 			SQL:     "SELECT email FROM v_users",
 			Columns: []string{"email"},
 		},
