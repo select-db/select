@@ -122,7 +122,7 @@ right.
 
 Do not reason about an inspector from its source. Ask it.
 
-`dialect/cmd/sqlprobe` is the first reach: one statement, every layer it
+`dialect/cmd/agentprobe` is the first reach: one statement, every layer it
 covers, enough to isolate which one is wrong. `dialect/cmd/seesweep` generates
 statements and runs them through the engine against a twin database, which is
 how a case nobody thought to write gets found. Where neither reaches, write a

@@ -34,8 +34,8 @@
 #   ./dev.sh backend generate      codegen: apigen (schema -> sql+glue) then sqlc
 #
 #   ./dev.sh dialect test          go test ./... for the dialect module
-#   ./dev.sh dialect probe <args>  run one SQL string through lint, completion
-#                                  and inspect (-h for the flags)
+#   ./dev.sh dialect probe <args>  run SQL through lint, completion, inspect
+#                                  and permissions (-h for the flags)
 #   ./dev.sh test                  every module's tests, the way CI runs them
 #
 # `app test` and `app e2e` compile the app's Go code, which links the webview.
@@ -380,7 +380,7 @@ dialect_probe() {
     fi
     resolved+=("$arg")
   done
-  (cd "$ROOT/dialect" && go run ./cmd/sqlprobe "${resolved[@]}")
+  (cd "$ROOT/dialect" && go run ./cmd/agentprobe "${resolved[@]}")
 }
 
 dialect() {
