@@ -4,9 +4,10 @@ name: Dialect finder
 # files issues for what it finds. It never changes code. Its memory is the
 # agent/finder-memory branch; .claude/skills/dialect-finder has the rest.
 #
-# Repository settings it reads: secret ANTHROPIC_API_KEY, variable
-# FINDER_NOTIFY (the handle to assign and mention), and optionally
-# FINDER_MODEL.
+# Repository settings it reads: secret CLAUDE_CODE_OAUTH_TOKEN (made with
+# `claude setup-token`, so runs bill a Claude subscription rather than an API
+# key), variable FINDER_NOTIFY (the handle to assign and mention), and
+# optionally FINDER_MODEL.
 
 on:
   schedule:
@@ -103,7 +104,7 @@ jobs:
       - name: Find
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           # The repository's terse output style would leak into issue bodies.
           settings: '{"outputStyle": "default"}'
