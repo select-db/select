@@ -5,6 +5,11 @@
 set -uo pipefail
 
 mode=${1:-}
+required='codebase-design code-review'
+
+# The workflows ask which skills make a review, so the list lives here alone.
+[ "$mode" = required ] && { echo "$required"; exit 0; }
+
 input=$(cat)
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -15,8 +20,6 @@ root=${CLAUDE_PROJECT_DIR:-$PWD}
 gitdir=$(git -C "$root" rev-parse --absolute-git-dir 2>/dev/null) || exit 0
 session=$(json '.session_id // empty')
 state="$gitdir/pr-review-gate/${session:-nosession}"
-
-required='codebase-design code-review'
 
 case "$mode" in
 pr-opened)

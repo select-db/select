@@ -37,7 +37,7 @@ env:
     Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),
     Bash(git add:*),Bash(git commit:*),Bash(git stash:*),Bash(git switch:*),
     Bash(git fetch:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(git rebase:*),
-    Bash(.claude/skills/dialect-fixer/scripts/push.sh),
+    Bash(.claude/skills/dialect-fixer/scripts/push.sh),Bash(rm dialect/zz_probe.jsonl),
     Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),
     Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh pr diff:*),Bash(gh run view:*),
     Bash(date:*),Bash(jq:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),
@@ -132,6 +132,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AGENT_OUTCOME: ${{ steps.agent.outcome }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
         run: |
           issue=${{ steps.pick.outputs.issue }}
           gh issue edit "$issue" --remove-label fix:in-progress || true
@@ -139,6 +140,9 @@ jobs:
           pr=$(gh pr list --head "claude/fix-$issue" --state open --json number --jq '.[0].number // empty')
           if [ -n "$pr" ]; then
             gh issue edit "$issue" --add-label fix:pr-open
+            # The review gate is a hook the agent can finish past, so readiness
+            # rests on the skills this run's transcript shows.
+            $SKILL/scripts/reviewed.sh "$pr" "$EXECUTION_FILE"
             $SKILL/scripts/ready.sh "$issue"
           elif ! grep -qx fix:blocked <<<"$labels"; then
             # Neither a pull request nor a reasoned refusal: the run itself failed.
@@ -160,8 +164,8 @@ jobs:
             gh workflow run dialect-fixer.yml --ref "${{ github.event.repository.default_branch }}"
           fi
 
-  # CI finished on a fixer branch: green marks the pull request ready, red
-  # wakes the agent, three times at most.
+  # CI finished on a fixer branch: green marks a reviewed pull request ready,
+  # red wakes the agent, three times at most.
   ci:
     name: Follow CI
     if: >-
@@ -183,6 +187,7 @@ jobs:
     env:
       BRANCH: ${{ github.event.workflow_run.head_branch }}
       CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+      FIXER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       MAX_ATTEMPTS: "3"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -222,6 +227,7 @@ jobs:
           gh pr edit "$pr" --body-file "$RUNNER_TEMP/body.md"
           gh issue edit "$issue" --add-label fix:in-progress
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
           echo "FIXER_DEADLINE=$(( $(date +%s) + 15 * 60 ))" >> "$GITHUB_ENV"
 
@@ -262,7 +268,15 @@ jobs:
         if: always() && steps.decide.outputs.pr != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
+          PR: ${{ steps.decide.outputs.pr }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: |
+          # A pushed CI fix is new code, reviewed like the first push.
+          head=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
+          if [ "$head" != "${{ steps.decide.outputs.head }}" ]; then
+            $SKILL/scripts/reviewed.sh "$PR" "$EXECUTION_FILE"
+          fi
+          gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
 
   # "@claude" from a writer on a fixer pull request: answer or change the code.
   mention:
