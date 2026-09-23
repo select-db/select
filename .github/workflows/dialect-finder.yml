@@ -71,6 +71,9 @@ jobs:
             git worktree add --orphan -b agent/finder-memory "$FINDER_MEMORY"
           fi
           mkdir -p .finder-work
+          # What the Go case tables already pin, exported fresh each run so a
+          # case a merged fix added counts from the next run on.
+          dialect/agentprobe -export-cases > .finder-work/known.jsonl
 
       - name: Labels
         if: env.FINDER_DRY_RUN != '1'

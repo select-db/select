@@ -76,20 +76,27 @@ one issue proposing the switch to rotation, assigned to `$FINDER_NOTIFY`,
 unless `runs.jsonl` already records one (`rotation_proposal`). Then keep
 working on the layer with the lowest full-product coverage.
 
-### 2. Start the layer if it is new
+### 2. Start the layer, and place the existing cases
 
-If the current layer has no grid yet:
+If the current layer has no grid yet, write its dimensions into `grid.json`
+from the method's axes, as short snake_case values, bump `version`, and
+`checkpoint.sh "start <layer>"`.
 
-1. Write its dimensions into `grid.json` from the method's axes, as short
-   snake_case values, and bump `version`.
-2. Import the existing Go case tables for that layer as `origin: table` rows,
-   each placed on the grid position it covers and marked `pass` for the
-   dialects it runs on. Permission: `core/testutil/perm_data.go` and
-   `see_data.go`. Completion: `core/completion_test_data.go`. Resolution:
-   `core/references/relation_references_test_data.go`. Lint: the pytest
-   suites under `core/tokenanalyzer/python/lint_rules/`. Where a case covers
-   no clean position, leave it out.
-3. `checkpoint.sh "start <layer>"`.
+The Go case tables already pin hundreds of statements; the workflow exports
+them to `.finder-work/known.jsonl` each run. `dedupe` never runs one of them
+again, but they count toward coverage only once placed on the grid:
+
+```sh
+python3 .claude/skills/dialect-finder/scripts/ledger.py unplaced <layer> 40
+```
+
+For each case it lists, write one line to `.finder-work/place.jsonl`: `{"case":
+..., "position": {...}}` with a value for every dimension, or `{"case": ...,
+"skip": "<why>"}` when no position describes it. Then `ledger.py place
+.finder-work/place.jsonl`. It takes the SQL, the expectation and the dialects
+from the export, so you only classify. Spend at most a quarter of the run on
+this; the rest waits for the next run, and cases added by merged fixes appear
+here on their own.
 
 ### 3. Choose positions
 

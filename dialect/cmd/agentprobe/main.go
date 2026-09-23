@@ -26,7 +26,16 @@ func main() {
 	asJSON := flag.Bool("json", false, "print the result as JSON")
 	batchPath := flag.String("batch", "", "JSONL file of cases, or - for stdin; writes one JSON result per line")
 	completionLimit := flag.Int("completion-limit", 0, "keep only the first N suggestions, in the order offered; 0 keeps all")
+	export := flag.Bool("export-cases", false, "print every case of the Go case tables as JSONL, one line per dialect, and stop")
 	flag.Parse()
+
+	if *export {
+		if err := exportCases(os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "agentprobe: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if err := run(options{
 		dialect: *dialectName,

@@ -78,8 +78,10 @@ One row per position per dialect.
     column refs and whether each resolved.
 - `measured` keeps only what the comparison used. The full probe output is not
   stored.
-- `origin` is `probe` for a case this ledger ran, `table` for one imported
-  from a Go case table when its layer started.
+- `origin` is `probe` for a case this ledger ran, `table` for one of the Go
+  case tables. Table rows are written by `ledger.py place` and carry `case`,
+  the `table:name` key of `agentprobe -export-cases`, which marks the case as
+  placed.
 
 ## findings.jsonl
 
