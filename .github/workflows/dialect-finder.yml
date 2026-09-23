@@ -1,0 +1,138 @@
+name: Dialect finder
+
+# Wakes the dialect-finder skill: it probes grid positions not tried yet and
+# files issues for what it finds. It never changes code. Its memory is the
+# agent/finder-memory branch; .claude/skills/dialect-finder has the rest.
+#
+# Repository settings it reads: secret ANTHROPIC_API_KEY, variable
+# FINDER_NOTIFY (the handle to assign and mention), and optionally
+# FINDER_MODEL.
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: File no issues and push no ledger
+        type: boolean
+        default: false
+      positions:
+        description: Grid positions to try
+        type: number
+        default: 100
+
+permissions:
+  contents: write
+  issues: write
+
+# One writer to the ledger at a time. A queued run waits rather than cancels
+# a run halfway through its batches.
+concurrency:
+  group: dialect-finder
+  cancel-in-progress: false
+
+jobs:
+  find:
+    name: Find
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      FINDER_MEMORY: .finder-memory
+      FINDER_NOTIFY: ${{ vars.FINDER_NOTIFY }}
+      FINDER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+      FINDER_TARGET_POSITIONS: ${{ inputs.positions || 100 }}
+      FINDER_BATCH: "20"
+      FINDER_MAX_ISSUES: "5"
+      FINDER_QUIET_RUNS: "5"
+      FINDER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      GH_TOKEN: ${{ github.token }}
+      SCRIPTS: .claude/skills/dialect-finder/scripts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: dialect/go.mod
+          cache-dependency-path: dialect/go.sum
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - run: uv sync
+        working-directory: dialect/core/tokenanalyzer/python
+      # Built once so the agent's batches do not each pay for a compile.
+      - run: go build -o agentprobe ./cmd/agentprobe
+        working-directory: dialect
+
+      - name: Check out the ledger
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin agent/finder-memory >/dev/null; then
+            git fetch --depth=1 origin agent/finder-memory
+            git worktree add -B agent/finder-memory "$FINDER_MEMORY" FETCH_HEAD
+          else
+            git worktree add --orphan -b agent/finder-memory "$FINDER_MEMORY"
+          fi
+          mkdir -p .finder-work
+
+      - name: Labels
+        if: env.FINDER_DRY_RUN != '1'
+        run: $SCRIPTS/labels.sh
+
+      - name: Sync with filed issues
+        run: |
+          python3 $SCRIPTS/sync.py
+          $SCRIPTS/checkpoint.sh "sync with issues"
+
+      # Tools are an allowlist, so what the agent can reach is decided here
+      # rather than in the skill. Filing is absent from a dry run.
+      - name: Tools
+        id: tools
+        run: |
+          tools="Read,Grep,Glob,Agent,Task"
+          tools+=",Write(.finder-memory/**),Edit(.finder-memory/**)"
+          tools+=",Write(.finder-work/**),Edit(.finder-work/**)"
+          tools+=",Bash(dialect/agentprobe:*)"
+          tools+=",Bash(python3 $SCRIPTS/ledger.py:*),Bash($SCRIPTS/checkpoint.sh:*)"
+          tools+=",Bash(date:*),Bash(jq:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*)"
+          tools+=",Bash(gh issue view:*),Bash(gh issue list:*)"
+          if [ "$FINDER_DRY_RUN" != 1 ]; then
+            tools+=",Bash(gh issue create:*),Bash(gh issue comment:*)"
+          fi
+          echo "allowed=$tools" >> "$GITHUB_OUTPUT"
+          echo "FINDER_DEADLINE=$(( $(date +%s) + 40 * 60 ))" >> "$GITHUB_ENV"
+
+      - name: Find
+        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          # The repository's terse output style would leak into issue bodies.
+          settings: '{"outputStyle": "default"}'
+          prompt: |
+            This is a scheduled dialect finder run in ${{ github.repository }}.
+            Follow .claude/skills/dialect-finder/SKILL.md from step 1 to step 6.
+            The environment variables it names are set. Dry run: ${{ env.FINDER_DRY_RUN }}.
+          claude_args: >-
+            --model ${{ vars.FINDER_MODEL || 'opus' }}
+            --max-turns 150
+            --allowedTools "${{ steps.tools.outputs.allowed }}"
+
+      # Whatever the agent appended after its last checkpoint, a timeout included.
+      - name: Save the ledger
+        if: always() && hashFiles('.finder-memory/**') != ''
+        run: $SCRIPTS/checkpoint.sh "end of run ${{ github.run_id }}"
+
+      - name: Report
+        if: always()
+        run: |
+          if [ -s .finder-work/summary.md ]; then
+            cat .finder-work/summary.md >> "$GITHUB_STEP_SUMMARY"
+            if [ "$FINDER_DRY_RUN" != 1 ]; then
+              $SCRIPTS/post.sh log .finder-work/summary.md
+            fi
+          else
+            echo "The agent wrote no summary." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Report failure
+        if: failure() && env.FINDER_DRY_RUN != '1'
+        run: $SCRIPTS/post.sh failed "$FINDER_RUN_URL"
