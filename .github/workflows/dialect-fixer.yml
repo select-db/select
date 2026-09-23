@@ -1,0 +1,328 @@
+name: Dialect fixer
+
+# Turns agent:finder issues a maintainer approved with fix:go into draft pull
+# requests, one issue at a time, then follows each through CI and @claude
+# review comments. .claude/skills/dialect-fixer has the method.
+#
+# Needs the secret CLAUDE_CODE_OAUTH_TOKEN and the Claude GitHub App installed:
+# the agent pushes with the App's token, because a push made with the workflow
+# token does not trigger CI.
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions: {}
+
+env:
+  # Assigned, mentioned and asked to review.
+  FIXER_NOTIFY: Arthur-Mesplede
+  # The analyzer-backed tests fail rather than skip, as in CI.
+  SELECT_REQUIRE_ANALYZER: "1"
+  SKILL: .claude/skills/dialect-fixer
+  # What the agent may reach. Everything else is refused, so the rule lives
+  # here rather than in the skill.
+  TOOLS: >-
+    Read,Grep,Glob,Agent,Task,Skill,Edit(dialect/**),Write(dialect/**),
+    Bash(go -C dialect:*),Bash(gofmt:*),Bash(dialect/agentprobe:*),
+    Bash(uv run --directory dialect/core/tokenanalyzer/python:*),
+    Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),
+    Bash(git add:*),Bash(git commit:*),Bash(git stash:*),Bash(git switch:*),
+    Bash(git fetch:*),Bash(git merge-base:*),Bash(git rev-parse:*),
+    Bash(git push -u origin claude/fix-:*),Bash(git push origin claude/fix-:*),
+    Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),
+    Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh pr diff:*),Bash(gh run view:*),
+    Bash(date:*),Bash(jq:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),
+    Bash(wc:*),Bash(grep:*),Bash(find:*),
+    mcp__github__create_pull_request,mcp__github__update_pull_request
+  # Generated parsers and dependency files stay out of reach even inside dialect/.
+  DENIED: >-
+    Edit(dialect/*/parser/**),Write(dialect/*/parser/**),
+    Edit(dialect/go.mod),Write(dialect/go.mod),Edit(dialect/go.sum),Write(dialect/go.sum),
+    Edit(dialect/core/tokenanalyzer/python/uv.lock),Write(dialect/core/tokenanalyzer/python/uv.lock),
+    Edit(dialect/core/tokenanalyzer/python/pyproject.toml),Write(dialect/core/tokenanalyzer/python/pyproject.toml)
+
+jobs:
+  # One fix at a time. A queued run can be replaced by a newer one, so each run
+  # picks the oldest waiting issue itself and starts the next when it ends.
+  fix:
+    name: Fix
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && github.event.label.name == 'fix:go')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    concurrency:
+      group: dialect-fixer
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: write
+      id-token: write
+    env:
+      FIXER_MINUTES: "60"
+      FIXER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Pick the next issue
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue=$(python3 $SKILL/scripts/queue.py next)
+          echo "issue=$issue" >> "$GITHUB_OUTPUT"
+          if [ -z "$issue" ]; then
+            echo "Nothing queued." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh issue edit "$issue" --add-label fix:in-progress
+          echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
+          echo "FIXER_DEADLINE=$(( $(date +%s) + FIXER_MINUTES * 60 ))" >> "$GITHUB_ENV"
+          echo "hard_timeout=$(( FIXER_MINUTES + 10 ))" >> "$GITHUB_OUTPUT"
+
+      - if: steps.pick.outputs.issue != ''
+        uses: ./.github/actions/dialect-agent-env
+
+      - name: Fix
+        id: agent
+        if: steps.pick.outputs.issue != ''
+        timeout-minutes: ${{ fromJSON(steps.pick.outputs.hard_timeout) }}
+        # gh comments and labels as the workflow; git and the pull request tools
+        # use the Claude App's token, whose pushes trigger CI.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          settings: '{"outputStyle": "default"}'
+          prompt: |
+            Fix issue #${{ steps.pick.outputs.issue }} in ${{ github.repository }}.
+            Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "fix".
+            The environment variables it names are set.
+          claude_args: >-
+            --model ${{ vars.FIXER_MODEL || 'opus' }}
+            --max-turns 250
+            --allowedTools "${{ env.TOOLS }}"
+            --disallowedTools "${{ env.DENIED }}"
+
+      - name: Refused tool calls
+        if: always() && steps.agent.outputs.execution_file != ''
+        uses: ./.github/actions/refused-calls
+        with:
+          execution-file: ${{ steps.agent.outputs.execution_file }}
+
+      - name: Wrap up
+        if: always() && steps.pick.outputs.issue != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_OUTCOME: ${{ steps.agent.outcome }}
+        run: |
+          issue=${{ steps.pick.outputs.issue }}
+          gh issue edit "$issue" --remove-label fix:in-progress
+          labels=$(gh issue view "$issue" --json labels --jq '.labels[].name')
+          pr=$(gh pr list --head "claude/fix-$issue" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh issue edit "$issue" --add-label fix:pr-open
+            $SKILL/scripts/ready.sh "$issue"
+          elif ! grep -qx fix:blocked <<<"$labels"; then
+            # Neither a pull request nor a reasoned refusal: the run itself failed.
+            # Dropping fix:go keeps the queue from retrying it forever.
+            gh issue edit "$issue" --remove-label fix:go
+            gh issue comment "$issue" --body "@$FIXER_NOTIFY the fixer run ended without a pull request or a verdict ($AGENT_OUTCOME): $FIXER_RUN_URL. Add fix:go again to retry."
+          fi
+
+      - name: Start the next one
+        if: always() && steps.pick.outputs.issue != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(python3 $SKILL/scripts/queue.py waiting)" -gt 0 ]; then
+            gh workflow run dialect-fixer.yml --ref "${{ github.event.repository.default_branch }}"
+          fi
+
+  # CI finished on a fixer branch: green marks the pull request ready, red
+  # wakes the agent, three times at most.
+  ci:
+    name: Follow CI
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'claude/fix-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: dialect-fixer-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: read
+      id-token: write
+    env:
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+      CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+      MAX_ATTEMPTS: "3"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          issue=${BRANCH#claude/fix-}
+          echo "issue=$issue" >> "$GITHUB_OUTPUT"
+          if [ "$CONCLUSION" = success ]; then
+            $SKILL/scripts/ready.sh "$issue"
+            exit 0
+          fi
+          [ "$CONCLUSION" = failure ] || exit 0
+          # A run that still holds the issue will push again; its own red CI is not a retry.
+          if gh issue view "$issue" --json labels --jq '.labels[].name' | grep -qx fix:in-progress; then
+            exit 0
+          fi
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          [ -n "$pr" ] || exit 0
+          # The attempt count lives in the pull request body, not in a label.
+          body=$(gh pr view "$pr" --json body --jq .body)
+          attempts=$(grep -oP '<!-- fixer-ci-attempts: \K[0-9]+' <<<"$body" || echo 0)
+          if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
+            gh issue edit "$issue" --add-label fix:blocked --add-assignee "$FIXER_NOTIFY"
+            gh issue comment "$issue" --body "@$FIXER_NOTIFY CI is still red on #$pr after $attempts fixer attempts: $CI_RUN_URL"
+            exit 0
+          fi
+          body=$(sed '/<!-- fixer-ci-attempts: [0-9]* -->/d' <<<"$body")
+          printf '%s\n<!-- fixer-ci-attempts: %s -->\n' "$body" "$((attempts + 1))" > "$RUNNER_TEMP/body.md"
+          gh pr edit "$pr" --body-file "$RUNNER_TEMP/body.md"
+          gh issue edit "$issue" --add-label fix:in-progress
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
+          echo "FIXER_DEADLINE=$(( $(date +%s) + 15 * 60 ))" >> "$GITHUB_ENV"
+
+      - if: steps.decide.outputs.pr != ''
+        uses: ./.github/actions/dialect-agent-env
+
+      - name: Fix CI
+        id: agent
+        if: steps.decide.outputs.pr != ''
+        timeout-minutes: 25
+        # gh comments and labels as the workflow; git and the pull request tools
+        # use the Claude App's token, whose pushes trigger CI.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          settings: '{"outputStyle": "default"}'
+          prompt: |
+            CI failed on pull request #${{ steps.decide.outputs.pr }}, the fix for issue
+            #${{ steps.decide.outputs.issue }}. The failing run is ${{ github.event.workflow_run.html_url }}.
+            Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "ci".
+          claude_args: >-
+            --model ${{ vars.FIXER_MODEL || 'opus' }}
+            --max-turns 80
+            --allowedTools "${{ env.TOOLS }}"
+            --disallowedTools "${{ env.DENIED }}"
+
+      - name: Refused tool calls
+        if: always() && steps.agent.outputs.execution_file != ''
+        uses: ./.github/actions/refused-calls
+        with:
+          execution-file: ${{ steps.agent.outputs.execution_file }}
+
+      - name: Release the issue
+        if: always() && steps.decide.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
+
+  # "@claude" from a writer on a fixer pull request: answer or change the code.
+  mention:
+    name: Answer review
+    if: >-
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       contains(github.event.comment.body, '@claude') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+       startsWith(github.event.pull_request.head.ref, 'claude/fix-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: dialect-fixer-pr-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Only the fixer's pull requests
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          # A fork can name its branch claude/fix-anything; only this repository's count.
+          head=$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefName,isCrossRepository \
+            --jq 'if .isCrossRepository then "" else .headRefName end')
+          case "$head" in
+            claude/fix-*) echo "ok=true" >> "$GITHUB_OUTPUT"
+                          echo "FIXER_ISSUE=${head#claude/fix-}" >> "$GITHUB_ENV"
+                          echo "FIXER_DEADLINE=$(( $(date +%s) + 15 * 60 ))" >> "$GITHUB_ENV" ;;
+            *) echo "#$NUMBER is not a fixer pull request." >> "$GITHUB_STEP_SUMMARY" ;;
+          esac
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.scope.outputs.ok == 'true'
+        with:
+          fetch-depth: 0
+
+      - if: steps.scope.outputs.ok == 'true'
+        uses: ./.github/actions/dialect-agent-env
+
+      - name: Answer
+        id: agent
+        if: steps.scope.outputs.ok == 'true'
+        timeout-minutes: 25
+        # gh comments and labels as the workflow; git and the pull request tools
+        # use the Claude App's token, whose pushes trigger CI.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          settings: '{"outputStyle": "default"}'
+          trigger_phrase: "@claude"
+          claude_args: >-
+            --model ${{ vars.FIXER_MODEL || 'opus' }}
+            --max-turns 80
+            --allowedTools "${{ env.TOOLS }}"
+            --disallowedTools "${{ env.DENIED }}"
+            --append-system-prompt "Follow the Unattended runs section of .claude/skills/dialect-fixer/SKILL.md, mode review."
+
+      - name: Refused tool calls
+        if: always() && steps.agent.outputs.execution_file != ''
+        uses: ./.github/actions/refused-calls
+        with:
+          execution-file: ${{ steps.agent.outputs.execution_file }}

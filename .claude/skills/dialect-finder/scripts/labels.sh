@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Creates or updates every label a finder issue can carry. references/issue.md
-# says when each applies; this is the list.
+# Creates or updates every label a finder issue can carry, the fixer's fix:*
+# status included. references/issue.md says when each applies; this is the list.
 set -euo pipefail
 
 label() { gh label create "$1" --color "$2" --description "$3" --force >/dev/null; }
@@ -31,3 +31,8 @@ label verdict:fixed        0e8a16 "Closed: the code changed"
 label verdict:not-a-bug    0e8a16 "Closed: the expectation was wrong; the reason becomes a finder precedent"
 label verdict:duplicate    0e8a16 "Closed: duplicates another issue"
 label verdict:wontfix      0e8a16 "Closed: real, not worth changing"
+
+label fix:go               0052cc "Approved for the dialect fixer; only a writer's label counts"
+label fix:in-progress      c5def5 "The dialect fixer is working on this"
+label fix:pr-open          c5def5 "The dialect fixer opened a pull request for this"
+label fix:blocked          d93f0b "The dialect fixer disagrees or cannot fix this; see its comment"

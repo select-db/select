@@ -1,0 +1,26 @@
+name: refused-calls
+description: Lists the tool calls an agent's allowlist refused in the job summary.
+
+# claude-code-action hides the agent's own output, so a refused command is
+# otherwise invisible. Only the tool and a slice of its input are printed.
+
+inputs:
+  execution-file:
+    description: The execution_file output of claude-code-action.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        EXECUTION_FILE: ${{ inputs.execution-file }}
+      run: |
+        refused=$(jq -r '.. | objects | select(has("permission_denials")) | .permission_denials[]?
+          | "- `\(.tool_name)`: `\(.tool_input | tostring | .[0:160] | gsub("`"; "'"'"'"))`"' \
+          "$EXECUTION_FILE" 2>/dev/null | sort | uniq -c | sort -rn \
+          | sed -E 's/^ *([0-9]+) - /- \1x /' || true)
+        {
+          echo "### Refused tool calls"
+          if [ -n "$refused" ]; then echo "$refused"; else echo "None."; fi
+        } | tee -a "$GITHUB_STEP_SUMMARY"
