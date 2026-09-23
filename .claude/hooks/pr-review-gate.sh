@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Gate that keeps a session from finishing after it opened a pull request
-# without running the codebase-design and code-review skills over the diff.
+# without running the simplify and code-review skills over the diff. A pull
+# request changing fewer than $small lines is not gated.
 # State lives under the git directory, so it is per clone and never committed.
 set -uo pipefail
 
 mode=${1:-}
-required='codebase-design code-review'
+required='simplify code-review'
+small=50
 
-# The workflows ask which skills make a review, so the list lives here alone.
-[ "$mode" = required ] && { echo "$required"; exit 0; }
+# The skills a pull request changing $1 lines needs; unknown counts as large.
+required_for() { [ -n "${1:-}" ] && [ "$1" -lt "$small" ] || echo "$required"; }
+
+# The workflows share this list and this threshold through this mode.
+[ "$mode" = required ] && { required_for "${2:-}"; exit 0; }
 
 input=$(cat)
 
@@ -23,12 +28,16 @@ state="$gitdir/pr-review-gate/${session:-nosession}"
 
 case "$mode" in
 pr-opened)
+	base=$(json '.tool_input.base // empty')
+	lines=$(git -C "$root" diff --shortstat "origin/${base:-dev}...HEAD" 2>/dev/null |
+		awk '{ n = 0; for (i = 1; i < NF; i++) if ($(i + 1) ~ /^(insertion|deletion)/) n += $i; print n }')
+	[ -n "$(required_for "$lines")" ] || exit 0
 	mkdir -p "$state" || exit 0
 	: >"$state/pending"
 	jq -n '{
 		hookSpecificOutput: {
 			hookEventName: "PostToolUse",
-			additionalContext: "A pull request was just opened. Before finishing this turn, run the codebase-design skill over the diff of this branch against its base, then run the code-review skill with that base as the fixed point. Report both sets of findings and act on them."
+			additionalContext: "A pull request was just opened. Before finishing this turn, run the simplify skill over the diff of this branch against its base, then run the code-review skill with that base as the fixed point. Report both sets of findings and act on them."
 		}
 	}'
 	;;

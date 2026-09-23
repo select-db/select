@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Labels the fixer's pull request fix:reviewed when an agent run's transcript
-# shows every skill the review gate requires, and removes the label otherwise,
-# so ready.sh never marks unreviewed code ready.
+# shows every skill the review gate requires for its size, and removes the
+# label otherwise, so ready.sh never marks unreviewed code ready.
 #   reviewed.sh <pull request> <execution file>
 set -euo pipefail
 
 pr=$1
 transcript=${2:-}
+
+lines=$(gh pr view "$pr" --json additions,deletions --jq '.additions + .deletions')
+required=$(.claude/hooks/pr-review-gate.sh required "$lines")
+if [ -z "$required" ]; then
+	gh pr edit "$pr" --add-label fix:reviewed
+	exit 0
+fi
 
 if [ ! -s "$transcript" ]; then
 	gh pr edit "$pr" --remove-label fix:reviewed >/dev/null 2>&1 || true
@@ -20,7 +27,7 @@ ran=$(jq -r '.. | objects | select(.type? == "tool_use" and .name? == "Skill") |
 echo "Skills run: $(paste -sd' ' <<<"${ran:-none}")" >>"${GITHUB_STEP_SUMMARY:-/dev/stderr}"
 
 missing=''
-for want in $(.claude/hooks/pr-review-gate.sh required); do
+for want in $required; do
 	grep -qx "$want" <<<"$ran" || missing="$missing $want"
 done
 
