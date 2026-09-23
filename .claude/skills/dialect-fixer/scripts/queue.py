@@ -3,7 +3,6 @@
 first, that no fixer run has taken yet.
 
     queue.py next     print the issue number to work on, or nothing
-    queue.py waiting  print how many issues are queued
 """
 
 import os
@@ -33,8 +32,6 @@ def main(argv):
         numbers = queued()
         if numbers:
             print(numbers[0])
-    elif argv[1:] == ["waiting"]:
-        print(len(queued()))
     else:
         sys.exit(__doc__)
 
