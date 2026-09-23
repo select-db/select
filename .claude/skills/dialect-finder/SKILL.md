@@ -177,8 +177,8 @@ A finding counts as new for the quiet streak whether it was filed or held back.
 1. Append the run row with `ledger.py append runs`, coverage taken from a
    fresh `ledger.py status`.
 2. `checkpoint.sh "run <run id>"`.
-3. Write `.finder-work/summary.md`. The workflow posts it to the job summary
-   and to the run-log issue, where it notifies `$FINDER_NOTIFY`:
+3. Write `.finder-work/summary.md`. The workflow posts it to the job summary;
+   the issues themselves are what notifies `$FINDER_NOTIFY`:
 
 ```markdown
 ### Dialect finder: <layer>, <phase>

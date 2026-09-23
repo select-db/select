@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Posts outside the agent, so a run that crashed still reports.
-#   post.sh log <summary.md>   comment the run summary on the run-log issue
-#   post.sh failed <run url>   open or update the run-failed issue
-# Both notify $FINDER_NOTIFY: the log by mention, the failure by assignment.
+# Opens or updates the run-failed issue, outside the agent, so a run that
+# crashed still reports. It assigns and mentions $FINDER_NOTIFY.
+#   post.sh failed <run url>
 set -euo pipefail
 
 mode=$1
@@ -29,10 +28,6 @@ open_or_comment() {
 
 body=$(mktemp)
 case "$mode" in
-log)
-	{ echo "${mention}run summary"; echo; cat "$2"; } >"$body"
-	open_or_comment "Dialect finder: run log" "$body" agent:finder
-	;;
 failed)
 	cat >"$body" <<MSG
 ${mention}the dialect finder run failed: $2
@@ -43,7 +38,7 @@ MSG
 	open_or_comment "Dialect finder: run failed" "$body" agent:finder,needs-triage
 	;;
 *)
-	echo "usage: post.sh log <summary.md> | post.sh failed <run url>" >&2
+	echo "usage: post.sh failed <run url>" >&2
 	exit 2
 	;;
 esac
