@@ -132,6 +132,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AGENT_OUTCOME: ${{ steps.agent.outcome }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
         run: |
           issue=${{ steps.pick.outputs.issue }}
           gh issue edit "$issue" --remove-label fix:in-progress || true
@@ -139,6 +140,20 @@ jobs:
           pr=$(gh pr list --head "claude/fix-$issue" --state open --json number --jq '.[0].number // empty')
           if [ -n "$pr" ]; then
             gh issue edit "$issue" --add-label fix:pr-open
+            # The repository's review gate is a hook the agent can finish past,
+            # so readiness rests on the skills this run's transcript shows.
+            ran=$(jq -r '.. | objects | select(.type? == "tool_use" and .name? == "Skill") | .input.skill // empty | sub(".*:"; "")' \
+              "${EXECUTION_FILE:-/dev/null}" 2>/dev/null | sort -u || true)
+            echo "Skills run: $(echo ${ran:-none})" >> "$GITHUB_STEP_SUMMARY"
+            missing=''
+            for want in codebase-design code-review; do
+              grep -qx "$want" <<<"$ran" || missing="$missing $want"
+            done
+            if [ -z "$missing" ]; then
+              gh pr edit "$pr" --add-label fix:reviewed
+            else
+              gh pr comment "$pr" --body "@$FIXER_NOTIFY the fixer did not run${missing} over this pull request, so it stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
+            fi
             $SKILL/scripts/ready.sh "$issue"
           elif ! grep -qx fix:blocked <<<"$labels"; then
             # Neither a pull request nor a reasoned refusal: the run itself failed.
@@ -160,8 +175,8 @@ jobs:
             gh workflow run dialect-fixer.yml --ref "${{ github.event.repository.default_branch }}"
           fi
 
-  # CI finished on a fixer branch: green marks the pull request ready, red
-  # wakes the agent, three times at most.
+  # CI finished on a fixer branch: green marks a reviewed pull request ready,
+  # red wakes the agent, three times at most.
   ci:
     name: Follow CI
     if: >-
