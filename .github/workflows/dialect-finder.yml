@@ -6,8 +6,7 @@ name: Dialect finder
 #
 # Repository settings it reads: secret CLAUDE_CODE_OAUTH_TOKEN (made with
 # `claude setup-token`, so runs bill a Claude subscription rather than an API
-# key), variable FINDER_NOTIFY (the handle to assign and mention), and
-# optionally FINDER_MODEL.
+# key), and optionally the variable FINDER_MODEL.
 
 on:
   schedule:
@@ -40,7 +39,8 @@ jobs:
     timeout-minutes: 55
     env:
       FINDER_MEMORY: .finder-memory
-      FINDER_NOTIFY: ${{ vars.FINDER_NOTIFY }}
+      # Assigned and mentioned on what the finder files.
+      FINDER_NOTIFY: Arthur-Mesplede
       FINDER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
       FINDER_TARGET_POSITIONS: ${{ inputs.positions || 100 }}
       FINDER_BATCH: "20"
