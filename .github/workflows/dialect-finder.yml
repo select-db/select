@@ -8,8 +8,9 @@ name: Dialect finder
 # `claude setup-token`, so runs bill a Claude subscription rather than an API
 # key), and optionally the variable FINDER_MODEL.
 
-# Started by hand only: every run spends the subscription it bills.
 on:
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
     inputs:
       minutes:
@@ -46,8 +47,9 @@ jobs:
       # Assigned and mentioned on what the finder files.
       FINDER_NOTIFY: Arthur-Mesplede
       FINDER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
-      FINDER_TARGET_POSITIONS: ${{ inputs.positions }}
-      FINDER_MINUTES: ${{ inputs.minutes }}
+      # A scheduled run has no inputs, so these defaults are the nightly run's.
+      FINDER_TARGET_POSITIONS: ${{ inputs.positions || 100 }}
+      FINDER_MINUTES: ${{ inputs.minutes || 20 }}
       FINDER_BATCH: "20"
       FINDER_MAX_ISSUES: "5"
       FINDER_QUIET_RUNS: "5"
@@ -111,7 +113,7 @@ jobs:
 
       - name: Find
         id: find
-        timeout-minutes: ${{ fromJSON(inputs.minutes) }}
+        timeout-minutes: ${{ fromJSON(env.FINDER_MINUTES) }}
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
