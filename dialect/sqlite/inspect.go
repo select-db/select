@@ -173,10 +173,10 @@ func compoundRuns(tokens *antlr.CommonTokenStream, stmts []sqlite.ISql_stmtConte
 }
 
 // inspectCompoundRun inspects the statement a run of branches makes up. The
-// first branch carries the operation, so a run led by an INSERT is an insert
-// and not the select the grammar cut it down to; the branches after it are
-// reads of the source query that statement copies from, which inspectSelect
-// merges in when it reaches that query.
+// first statement carries the operation, so a run led by an INSERT is an insert
+// and not the select the grammar cut it down to; the branches after it are reads
+// of the source query it copies from, which inspectSelect merges in when it
+// reaches that query.
 func (i *Inspector) inspectCompoundRun(
 	stmts []sqlite.ISql_stmtContext,
 	dedups bool,
@@ -185,34 +185,41 @@ func (i *Inspector) inspectCompoundRun(
 		return i.inspectStatement(stmts[0])
 	}
 
+	// A branch that is not a query, and a first statement with no source query,
+	// are both malformed SQL. Reporting what is left of the run would report a
+	// write as a read, so the run takes manage instead. The first branch stands
+	// in for a missing source query, which keeps what the branches name.
 	group := compoundGroup{head: sourceSelect(stmts[0]), dedups: dedups}
+	unreadable := false
 	for _, stmt := range stmts[1:] {
-		if branch := stmt.Select_stmt(); branch != nil {
-			group.branches = append(group.branches, branch)
+		branch := stmt.Select_stmt()
+		if branch == nil {
+			unreadable = true
+			continue
 		}
+		group.branches = append(group.branches, branch)
 	}
-
-	// A statement with no source query cannot be reading the branches, which
-	// only malformed SQL reaches. What they name is still read, and what the
-	// statement itself does is no longer something we can name, so it takes
-	// manage. The first branch stands in as the query the rest merge into, so
-	// they are read under the one rule rather than a second copy of it.
-	nest := false
-	if group.head == nil {
+	standIn := group.head == nil
+	if standIn {
 		if len(group.branches) == 0 {
 			return nil
 		}
 		group.head, group.branches = group.branches[0], group.branches[1:]
-		nest = true
 	}
 
 	i.compound = group
 	defer func() { i.compound = compoundGroup{} }()
-	if nest {
-		nested := core.NestUnderUnknown(core.OrUnknown(i.inspectSelect(group.head)))
-		return &nested
+
+	if standIn {
+		read := core.NestUnderUnknown(core.OrUnknown(i.inspectSelect(group.head)))
+		return &read
 	}
-	return i.inspectStatement(stmts[0])
+
+	read := core.OrUnknown(i.inspectStatement(stmts[0]))
+	if unreadable {
+		read = core.NestUnderUnknown(read)
+	}
+	return &read
 }
 
 // sourceSelect is the query a statement reads its rows from. It mirrors
