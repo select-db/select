@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "phase": "layered",
+  "layers": {
+    "permission": {
+      "dimensions": {
+        "operation": [
+          "select",
+          "insert",
+          "update",
+          "delete",
+          "create_table",
+          "create_table_as",
+          "create_view",
+          "alter",
+          "drop",
+          "truncate",
+          "grant",
+          "revoke",
+          "copy",
+          "replace",
+          "upsert",
+          "attach",
+          "pragma",
+          "vacuum",
+          "call",
+          "set",
+          "explain",
+          "analyze",
+          "multi_update",
+          "multi_delete",
+          "merge"
+        ],
+        "read_site": [
+          "none",
+          "from",
+          "join",
+          "cte",
+          "derived",
+          "select_subquery",
+          "where_subquery",
+          "group_by_subquery",
+          "having_subquery",
+          "order_by_subquery",
+          "limit_subquery",
+          "returning",
+          "upsert_predicate",
+          "insert_select_source",
+          "ctas_source",
+          "view_body",
+          "set_operation_branch"
+        ],
+        "naming": [
+          "bare",
+          "qualified",
+          "aliased",
+          "quoted",
+          "other_case",
+          "shadowing_cte",
+          "shadowed_by_cte"
+        ],
+        "use": [
+          "returns",
+          "writes",
+          "tests",
+          "names"
+        ]
+      },
+      "notes": {
+        "read_site.returning": "PostgreSQL and SQLite only; MySQL rows are skips",
+        "read_site.none": "the statement reads no relation at all; the only clean site for truncate, vacuum, pragma, set",
+        "operation.replace": "MySQL and SQLite only",
+        "operation.pragma": "SQLite only",
+        "operation.attach": "SQLite only",
+        "operation.copy": "PostgreSQL only",
+        "operation.merge": "PostgreSQL only",
+        "operation.multi_update": "MySQL only",
+        "operation.multi_delete": "MySQL only",
+        "use.names": "the relation appears but is neither read nor written (a DROP target, an ANALYZE target)"
+      }
+    }
+  }
+}
