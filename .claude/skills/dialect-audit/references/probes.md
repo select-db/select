@@ -5,13 +5,16 @@ A probe asks the real code what it does. Write it, read the output, delete it.
 Run everything from `dialect/`. That module is separate from `app/`, so `go
 test` at the repository root does not find it.
 
-## One statement, every layer: sqlprobe
+## One statement, every layer: agentprobe
 
-`dialect/cmd/sqlprobe` already runs lint, completion and `Inspect` over one
-statement and prints each result. Reach for it before writing anything.
+`dialect/cmd/agentprobe` runs one statement, or a batch of them, through lint,
+completion, `engine.Inspect` and the permission check, and reports each result.
+Reach for it before writing anything.
 
-`-meta` is a JSON file unmarshalled straight into `core.Metadata`, so the keys
-are the Go field names. This one is enough to probe with:
+`-meta` is optional. Without it the catalog is `core.GetInspectTestMetadata()`:
+schema `main` with `t1(c1,c2)` and `t2(c1,c3)`, plus `other.t3`. With it, it is
+a JSON file unmarshalled straight into `core.Metadata`, so the keys are the Go
+field names:
 
 ```json
 {
@@ -31,8 +34,9 @@ are the Go field names. This one is enough to probe with:
 
 ```sh
 cd dialect
-go run ./cmd/sqlprobe -dialect postgresql -meta /tmp/meta.json \
-    -sql 'SELECT c1 FROM t1 WHERE |'
+go run ./cmd/agentprobe -dialect postgresql -sql 'SELECT c1 FROM t1 WHERE |'
+go run ./cmd/agentprobe -json -dialect mysql -sql 'DELETE FROM t1 WHERE c1 IN (SELECT c1 FROM t2)'
+go run ./cmd/agentprobe -batch cases.jsonl -completion-limit 40 > results.jsonl
 ```
 
 `|` marks the caret for completion, `@file` reads the SQL from a file, and
@@ -40,12 +44,25 @@ go run ./cmd/sqlprobe -dialect postgresql -meta /tmp/meta.json \
 and completion context it resolved. It needs the Python venv: `uv sync` in
 `dialect/core/tokenanalyzer/python`.
 
-It does not decide permissions, and it takes one statement at a time. For those
-two cases, write a Go probe.
+A batch line is `{"id": "...", "dialect": "...", "sql": "..."}` and each result
+line echoes the `id`. A line that cannot be probed comes back with `error` set
+instead of ending the batch.
 
-## Permissions: what does this statement need?
+The permission section reports:
 
-`dialect/engine/zz_probe_test.go`. Name it `zz_` so it sorts last and is
+- `policies`: the verdict under `deny_all`, `writer` (insert, update, delete),
+  `data` (the four data actions) and `manage`. The bracket of step 4.
+- `needs`: the rights the checker asks for, found by granting each right it
+  names in a refusal until it lets the statement run. `converged: false` means
+  it never did.
+
+`needs` is what the checker demands, not what the statement should demand.
+Comparing the two is the finding.
+
+## Permissions in a Go probe
+
+When agentprobe's policies are not the question, for a per-table grant or a
+deny rule, write a Go probe: `dialect/engine/zz_probe_test.go`. Name it `zz_` so it sorts last and is
 obvious, and delete it before staging. The `compileFor` helper already exists
 in `engine/execute_see_test.go`.
 
@@ -195,7 +212,7 @@ twenty. Copy that, pointed at whatever you suspect.
 Neither has a probe here, and neither lives in this module. Hover is
 `app/internal/sqllang/hover.go`, tested next to it, and it reads the catalog
 and the reference resolution this package produces. References come out of
-`core/references`; `sqlprobe -raw` prints what the analyzer resolved for a
+`core/references`; `agentprobe -raw` prints what the analyzer resolved for a
 statement, which is the fastest way to tell a hover bug from the reference
 resolution under it.
 
