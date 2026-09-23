@@ -1,0 +1,18 @@
+name: dialect-agent-env
+description: Go, the analyzer venv and a prebuilt agentprobe, for the dialect agents.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: dialect/go.mod
+        cache-dependency-path: dialect/go.sum
+    - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+    - shell: bash
+      working-directory: dialect/core/tokenanalyzer/python
+      run: uv sync
+    # Built once so an agent's batches do not each pay for a compile.
+    - shell: bash
+      working-directory: dialect
+      run: go build -o agentprobe ./cmd/agentprobe

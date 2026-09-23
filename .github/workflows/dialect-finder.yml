@@ -58,16 +58,7 @@ jobs:
       SCRIPTS: .claude/skills/dialect-finder/scripts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: dialect/go.mod
-          cache-dependency-path: dialect/go.sum
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-      - run: uv sync
-        working-directory: dialect/core/tokenanalyzer/python
-      # Built once so the agent's batches do not each pay for a compile.
-      - run: go build -o agentprobe ./cmd/agentprobe
-        working-directory: dialect
+      - uses: ./.github/actions/dialect-agent-env
 
       - name: Check out the ledger
         run: |
@@ -129,21 +120,11 @@ jobs:
             --max-turns 150
             --allowedTools "${{ steps.tools.outputs.allowed }}"
 
-      # The agent's own output is hidden, so a refused command is otherwise
-      # invisible. Only the tool and a slice of its input are printed.
       - name: Refused tool calls
         if: always() && steps.find.outputs.execution_file != ''
-        env:
-          EXECUTION_FILE: ${{ steps.find.outputs.execution_file }}
-        run: |
-          refused=$(jq -r '.. | objects | select(has("permission_denials")) | .permission_denials[]?
-            | "- `\(.tool_name)`: `\(.tool_input | tostring | .[0:160] | gsub("`"; "'"'"'"))`"' \
-            "$EXECUTION_FILE" 2>/dev/null | sort | uniq -c | sort -rn \
-            | sed -E 's/^ *([0-9]+) - /- \1x /' || true)
-          {
-            echo "### Refused tool calls"
-            if [ -n "$refused" ]; then echo "$refused"; else echo "None."; fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+        uses: ./.github/actions/refused-calls
+        with:
+          execution-file: ${{ steps.find.outputs.execution_file }}
 
       # Whatever the agent appended after its last checkpoint, a timeout included.
       - name: Save the ledger

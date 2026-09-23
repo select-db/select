@@ -101,7 +101,8 @@ One finding per root cause, not per case.
 - `status`: `suspected` (held back by the cap or the filter), `filed`,
   `contrived` (no realistic user writes it), `defended` (the adversarial
   review held), then what the issue's closing verdict says: `fixed`,
-  `rejected`, `duplicate`, `wontfix`. `sync.py` writes the closing statuses.
+  `rejected`, `duplicate`, `wontfix`. `sync.py` writes the closing statuses;
+  an issue closed by a pull request a maintainer merged counts as `fixed`.
 - A new mismatch whose `group_key` matches an open finding is appended to it
   (a new row with the grown `cases`), not filed again. One that matches a
   `fixed` finding is a regression: a new finding, whose issue links the old one.

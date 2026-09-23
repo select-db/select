@@ -4,8 +4,9 @@ filed. Runs in the workflow before the agent, so the agent reads statuses and
 precedents rather than issue threads.
 
 A verdict counts only when the verdict: label was added by someone with write
-access. Anyone else's label is ignored, so a passer-by cannot teach the finder
-that a bypass is intended.
+access, or, for a fix, when such a person merged the pull request that closed
+the issue. Anyone else's label is ignored, so a passer-by cannot teach the
+finder that a bypass is intended.
 """
 
 import json
@@ -60,19 +61,48 @@ def can_write(login):
     return _permissions[login]
 
 
-def trusted_verdict(number):
-    """The last verdict label a writer added, and who added it."""
+def trusted_label(number, names):
+    """The last of these labels a writer added to the issue, and who added it."""
     events = gh_json("api", "--paginate", "--slurp", f"repos/{REPO}/issues/{number}/events") or []
-    verdict = None
+    found = None
     for page in events:
         for event in page:
             if event.get("event") != "labeled":
                 continue
             name = event.get("label", {}).get("name", "")
             login = (event.get("actor") or {}).get("login", "")
-            if name in STATUS_BY_VERDICT and can_write(login):
-                verdict = (name, login)
-    return verdict
+            if name in names and can_write(login):
+                found = (name, login)
+    return found
+
+
+MERGED_CLOSER = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      timelineItems(itemTypes: [CLOSED_EVENT], last: 1) {
+        nodes { ... on ClosedEvent { closer { ... on PullRequest { merged mergedBy { login } } } } }
+      }
+    }
+  }
+}
+"""
+
+
+def merged_by_writer(number):
+    """Who merged the pull request that closed the issue, if a writer did.
+
+    Merging a fix is the maintainer's verdict, so it counts as verdict:fixed
+    without the label."""
+    owner, name = REPO.split("/")
+    answer = gh_json("api", "graphql", "-f", f"query={MERGED_CLOSER}",
+                     "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"number={number}")
+    nodes = answer["data"]["repository"]["issue"]["timelineItems"]["nodes"]
+    closer = (nodes[-1] if nodes else {}).get("closer") or {}
+    login = (closer.get("mergedBy") or {}).get("login", "")
+    if closer.get("merged") and can_write(login):
+        return login
+    return None
 
 
 def closing_rule(issue, login):
@@ -103,11 +133,15 @@ def main():
             if finding["status"] != "filed":
                 finding_rows.append({**finding, "run": RUN, "status": "filed", "reopened": True})
             continue
-        verdict = trusted_verdict(number)
-        if verdict is None:
-            continue
-        label, login = verdict
-        status = STATUS_BY_VERDICT[label]
+        verdict = trusted_label(number, STATUS_BY_VERDICT)
+        if verdict is not None:
+            label, login = verdict
+            status = STATUS_BY_VERDICT[label]
+        else:
+            login = merged_by_writer(number)
+            if login is None:
+                continue
+            status = "fixed"
         if status == finding["status"]:
             continue
         finding_rows.append({**finding, "run": RUN, "status": status, "verdict_by": login})
