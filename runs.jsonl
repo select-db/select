@@ -1,0 +1,1 @@
+{"run": "r1", "date": "2026-09-23", "phase": "layered", "layer": "permission", "grid_version": 1, "positions": 48, "cases": 162, "mismatches": 6, "new_findings": 2, "issues": [304], "suspected": ["f-r1-003"], "defended": ["f-r1-002"], "pairs": "205/915", "product": "48/11468", "quiet_streak": 0, "precedents_applied": [], "grid_added": ["permission grid seeded at version 1"]}
