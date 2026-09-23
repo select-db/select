@@ -218,7 +218,8 @@ stands, and stop. The run is killed 10 minutes later.
 5. Review the branch with the Skill tool, not by reading the skill files:
    `simplify` over the diff against `origin/dev`, then `code-review` with the
    arguments `fixed point origin/dev; the spec is issue #$FIXER_ISSUE, read it
-   with gh issue view; unattended, so do not ask`. Act on what they find, push
+   with gh issue view; unattended, so do not ask`. `simplify` edits the code
+   itself, so rerun the checks before pushing. Act on what they find, push
    again, and add what they found and what you changed to the pull request
    body with `mcp__github__update_pull_request`. There is no issue tracker
    file; the arguments stand in for it. A pull request under 50 changed lines
