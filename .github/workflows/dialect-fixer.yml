@@ -82,6 +82,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The fix:* labels must exist before the first one is added.
+          .claude/skills/dialect-finder/scripts/labels.sh
           issue=$(python3 $SKILL/scripts/queue.py next)
           echo "issue=$issue" >> "$GITHUB_OUTPUT"
           if [ -z "$issue" ]; then
@@ -132,7 +134,7 @@ jobs:
           AGENT_OUTCOME: ${{ steps.agent.outcome }}
         run: |
           issue=${{ steps.pick.outputs.issue }}
-          gh issue edit "$issue" --remove-label fix:in-progress
+          gh issue edit "$issue" --remove-label fix:in-progress || true
           labels=$(gh issue view "$issue" --json labels --jq '.labels[].name')
           pr=$(gh pr list --head "claude/fix-$issue" --state open --json number --jq '.[0].number // empty')
           if [ -n "$pr" ]; then
@@ -150,7 +152,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$(python3 $SKILL/scripts/queue.py waiting)" -gt 0 ]; then
+          # Only a different issue starts another run. If this one is still
+          # first in the queue, the run failed before taking it, and starting
+          # again would fail the same way forever.
+          next=$(python3 $SKILL/scripts/queue.py next)
+          if [ -n "$next" ] && [ "$next" != "${{ steps.pick.outputs.issue }}" ]; then
             gh workflow run dialect-fixer.yml --ref "${{ github.event.repository.default_branch }}"
           fi
 
