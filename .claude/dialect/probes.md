@@ -51,7 +51,7 @@ instead of ending the batch.
 The permission section reports:
 
 - `policies`: the verdict under `deny_all`, `writer` (insert, update, delete),
-  `data` (the four data actions) and `manage`. The bracket of step 4.
+  `data` (the four data actions) and `manage`. The bracket of method.md step 4.
 - `needs`: the rights the checker asks for, found by granting each right it
   names in a refusal until it lets the statement run. `converged: false` means
   it never did.
@@ -142,7 +142,7 @@ func dump(t *testing.T, indent string, stmts []core.InspectStatement) {
 ```
 
 A table with `Schema: ""` did not resolve in the metadata, and the checker
-denies it. That is the signature of the false denial the method's step 4 looks
+denies it. That is the signature of the false denial method.md step 5 looks
 for: a CTE or subquery alias read as a real table.
 
 ## Does the database accept this at all?
