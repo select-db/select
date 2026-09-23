@@ -5,6 +5,7 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/core/testutil"
+	"github.com/selectDb/dialect/sqlite/cases"
 )
 
 func TestInspect(t *testing.T) {
@@ -38,30 +39,9 @@ func TestInspectSQLiteSpecific(t *testing.T) {
 	inspector := NewInspector(dialect, meta)
 	defaultSchema := meta.DefaultSchema
 
-	cases := []core.InspectTestCase{
-		{
-			// SQLite supports ON CONFLICT DO UPDATE SET (UPSERT, since 3.24).
-			Name: "INSERT ON CONFLICT DO UPDATE SET",
-			SQL:  "INSERT INTO t1 (c1, c2) VALUES (1, 'foo') ON CONFLICT (c1) DO UPDATE SET c2 = EXCLUDED.c2",
-			Expected: []core.InspectStatement{
-				{
-					Operation: core.InspectOpInsert,
-					Fields: []core.InspectField{
-						{Name: "c1", Table: "t1", Schema: defaultSchema},
-						{Name: "c2", Table: "t1", Schema: defaultSchema},
-					},
-					Tables: []core.InspectTable{
-						{Name: "t1", Schema: defaultSchema},
-					},
-					Also: []core.InspectStatement{
-						{Operation: core.InspectOpUpdate, Tables: []core.InspectTable{{Name: "t1", Schema: defaultSchema}}, Fields: []core.InspectField{{Name: "c2", Table: "t1", Schema: defaultSchema}}},
-					},
-				},
-			},
-		},
-	}
+	testCases := cases.InspectCases(defaultSchema)
 
-	for _, tc := range cases {
+	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			results := inspector.Inspect(tc.SQL)
