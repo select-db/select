@@ -43,7 +43,9 @@ The workflow sets these; defaults in brackets.
 | `FINDER_DEADLINE` | Unix time to stop starting work and wrap up; the run is killed 10 minutes after |
 | `FINDER_RUN_URL` | this run's Actions URL, quoted in every issue |
 
-The probe is prebuilt at `dialect/agentprobe`. `scripts/ledger.py` does the
+The prompt repeats these values, so there is no need to read the environment.
+The probe is prebuilt at `dialect/agentprobe`: call it by that path, not
+through `go run` or from another directory. `scripts/ledger.py` does the
 arithmetic; `references/ledger.md` is the ledger's schema;
 `references/issue.md` is how an issue is written and labelled.
 

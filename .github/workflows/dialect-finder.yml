@@ -114,7 +114,13 @@ jobs:
           prompt: |
             This is a dialect finder run in ${{ github.repository }}.
             Follow .claude/skills/dialect-finder/SKILL.md from step 1 to step 6.
-            The environment variables it names are set. Dry run: ${{ env.FINDER_DRY_RUN }}.
+            The environment variables it names are set, with these values, so there
+            is no need to read the environment:
+            FINDER_MEMORY=${{ env.FINDER_MEMORY }} FINDER_NOTIFY=${{ env.FINDER_NOTIFY }}
+            FINDER_DRY_RUN=${{ env.FINDER_DRY_RUN }} FINDER_TARGET_POSITIONS=${{ env.FINDER_TARGET_POSITIONS }}
+            FINDER_BATCH=${{ env.FINDER_BATCH }} FINDER_MAX_ISSUES=${{ env.FINDER_MAX_ISSUES }}
+            FINDER_QUIET_RUNS=${{ env.FINDER_QUIET_RUNS }} FINDER_DEADLINE=${{ env.FINDER_DEADLINE }}
+            FINDER_RUN_URL=${{ env.FINDER_RUN_URL }}
           claude_args: >-
             --model ${{ vars.FINDER_MODEL || 'opus' }}
             --max-turns 150
