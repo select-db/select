@@ -222,6 +222,11 @@ func measurePermissions(statements []core.InspectStatement) Permissions {
 			break
 		}
 		right := testutil.Right{Action: denied.Action, Schema: denied.Schema, Table: denied.Table, Column: denied.Column}
+		// Manage is held on the connection, so a refusal that names the table
+		// it was checked against is only satisfied by the connection-wide grant.
+		if denied.Action == core.ActionManage {
+			right = testutil.Manage
+		}
 		if slices.Contains(held, right) {
 			break
 		}

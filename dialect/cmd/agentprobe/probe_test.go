@@ -30,6 +30,13 @@ func TestMeasurePermissions(t *testing.T) {
 			allowed: []string{"data"},
 		},
 		{
+			name:    "manage refused on a named object is granted on the connection",
+			dialect: "postgresql",
+			sql:     "CREATE VIEW v9 AS SELECT c1 FROM t1",
+			needs:   []string{"manage", "select on main.t1.c1"},
+			allowed: nil,
+		},
+		{
 			name:    "a statement nothing recognised takes manage",
 			dialect: "sqlite",
 			sql:     "VACUUM",
