@@ -18,7 +18,22 @@ Two local changes, both from this repository's own rules:
 To refresh, copy the upstream files again, reapply both changes, and update the
 commit above.
 
+## simplify
+
+`simplify/` is the skill that ships inside Claude Code 2.1.281, which keeps no
+copy on disk: its text was taken from what the Skill tool loads. It is checked
+in so the review gate's skills are the same in every container and in the
+fixer workflow, whatever Claude Code version they install.
+
+Two local changes:
+
+- The em dashes became colons, commas or semicolons, per `CLAUDE.md`.
+- The fallback diff base is `origin/dev`, where pull requests go, not `main`.
+
+To refresh, load the bundled skill in a checkout without this directory and
+copy its text again.
+
 ## Name collision
 
-`code-review/` shadows the `code-review` skill that ships with Claude Code.
-Project skills win, so `/code-review` in this repository runs the vendored one.
+`code-review/` and `simplify/` shadow the skills of the same name that ship
+with Claude Code. Project skills win, so both run the vendored copy here.
