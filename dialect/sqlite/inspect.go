@@ -14,6 +14,21 @@ type Inspector struct {
 	dialect  *Dialect
 	meta     core.Metadata
 	resolver core.Resolver
+
+	// compound is the branch group the statement being inspected belongs to.
+	// See compoundGroup.
+	compound compoundGroup
+}
+
+// compoundGroup is what a plain UNION, INTERSECT or EXCEPT splits off. The
+// SQLite grammar ends a statement at one, so "INSERT INTO t1 SELECT a UNION
+// SELECT b" arrives as an insert followed by a select. head is the source query
+// the branches belong to, which is the one select in the statement they have to
+// merge back into.
+type compoundGroup struct {
+	head     sqlite.ISelect_stmtContext
+	branches []sqlite.ISelect_stmtContext
+	dedups   bool
 }
 
 // NewInspector creates a new SQLite statement inspector
@@ -60,9 +75,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// The SQLite grammar emits each UNION branch as a separate sql_stmt_list at the top level.
 		first := idx
 		group := []sqlite.ISql_stmt_listContext{stmtLists[idx]}
-		dedups := false
 		for idx+1 < len(stmtLists) && hasCompoundOperatorBetween(tokenStream, stmtLists[idx], stmtLists[idx+1]) {
-			dedups = dedups || compoundDedupsBetween(tokenStream, stmtLists[idx], stmtLists[idx+1])
 			idx++
 			group = append(group, stmtLists[idx])
 		}
@@ -85,24 +98,19 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		cursor = groupTo
 		syntax.Cover(stmtLists[idx], groupFrom, groupTo)
 
-		if len(group) > 1 {
-			read := core.OrUnknown(i.mergeCompoundSelectGroup(group, dedups))
-			read = core.SalvageOrUnknown(read, syntax, groupFrom, groupTo)
-			if callsHostFunction(tokenStream, groupFrom, groupTo) {
-				read = core.NestUnderUnknown(read)
-			}
-			results = append(results, read)
-			idx++
-			continue
-		}
-
-		stmts := group[0].AllSql_stmt()
-		for si := range stmts {
-			read := core.OrUnknown(i.inspectStatement(stmts[si]))
-			from, to := core.TokenSpan(tokenStream, stmts, si)
-			if si == 0 {
+		// A compound operator joins branches of one statement and a semicolon
+		// ends one, and a group can hold both: "INSERT ... UNION SELECT 1;
+		// SELECT c1 FROM t3" is one insert of two branches followed by a
+		// select. Which of the two a branch belongs to is only visible between
+		// adjacent sql_stmts, so the run is cut there rather than between lists.
+		stmts := flattenStatements(group)
+		for _, run := range compoundRuns(tokenStream, stmts) {
+			read := core.OrUnknown(i.inspectCompoundRun(tokenStream, stmts[run.from:run.to]))
+			from, _ := core.TokenSpan(tokenStream, stmts, run.from)
+			if run.from == 0 {
 				from = core.Clamp(groupFrom, 0, from)
 			}
+			_, to := core.TokenSpan(tokenStream, stmts, run.to-1)
 			to = core.Clamp(to, from, groupTo)
 			read = core.SalvageOrUnknown(read, syntax, from, to)
 			if callsHostFunction(tokenStream, from, to) {
@@ -175,34 +183,124 @@ func compoundDedupsBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRul
 	return operator
 }
 
-// mergeCompoundSelectGroup merges consecutive stmt_lists that are compound
-// SELECT branches. dedups says the operator joining them collapses duplicate
-// rows, which makes the row count a test on the values.
-func (i *Inspector) mergeCompoundSelectGroup(group []sqlite.ISql_stmt_listContext, dedups bool) *core.InspectStatement {
-	result := &core.InspectStatement{Operation: core.InspectOpSelect}
-	var last sqlite.ISelect_stmtContext
+// flattenStatements are the sql_stmts of a group of lists, in the order they
+// were written.
+func flattenStatements(group []sqlite.ISql_stmt_listContext) []sqlite.ISql_stmtContext {
+	var stmts []sqlite.ISql_stmtContext
 	for _, stmtList := range group {
-		for _, stmt := range stmtList.AllSql_stmt() {
-			if selectStmt := stmt.Select_stmt(); selectStmt != nil {
-				branch := i.inspectSelect(selectStmt)
-				if branch == nil {
-					continue
-				}
-				last = selectStmt
-				result.Tables = core.MergeInspectTables(result.Tables, branch.Tables)
-				result.Fields = core.MergeInspectFields(result.Fields, branch.Fields)
-				result.Where = core.MergeInspectFields(result.Where, branch.Where)
-				result.Subqueries = append(result.Subqueries, branch.Subqueries...)
-			}
+		stmts = append(stmts, stmtList.AllSql_stmt()...)
+	}
+	return stmts
+}
+
+// stmtRun is the half-open range of sql_stmts one statement was split into.
+type stmtRun struct{ from, to int }
+
+// compoundRuns partitions stmts into the statements the reader wrote. Adjacent
+// statements a compound operator joins are branches of one; anything else
+// starts a new one.
+func compoundRuns(tokens *antlr.CommonTokenStream, stmts []sqlite.ISql_stmtContext) []stmtRun {
+	var runs []stmtRun
+	for idx := 0; idx < len(stmts); {
+		start := idx
+		for idx+1 < len(stmts) && hasCompoundOperatorBetween(tokens, stmts[idx], stmts[idx+1]) {
+			idx++
+		}
+		idx++
+		runs = append(runs, stmtRun{from: start, to: idx})
+	}
+	return runs
+}
+
+// inspectCompoundRun inspects the statement a run of branches makes up. The
+// first branch carries the operation, so a run led by an INSERT is an insert
+// and not the select the grammar cut it down to; the branches after it are
+// reads of the source query that statement copies from, which inspectSelect
+// merges in when it reaches that query.
+func (i *Inspector) inspectCompoundRun(
+	tokens *antlr.CommonTokenStream,
+	stmts []sqlite.ISql_stmtContext,
+) *core.InspectStatement {
+	if len(stmts) == 1 {
+		return i.inspectStatement(stmts[0])
+	}
+
+	group := compoundGroup{head: sourceSelect(stmts[0])}
+	for idx, stmt := range stmts[1:] {
+		group.dedups = group.dedups || compoundDedupsBetween(tokens, stmts[idx], stmt)
+		if branch := stmt.Select_stmt(); branch != nil {
+			group.branches = append(group.branches, branch)
 		}
 	}
-	// The ORDER BY of a compound select parses onto its last branch, but it
-	// orders the rows of every branch, so it is read again against all of the
-	// relations the branches named.
-	result.Where = core.MergeInspectFields(result.Where,
-		i.tailClauseFields(last, core.RelationRefsOf(result), core.Scope{}))
-	result.Where = core.DistinctTestsProjection(dedups, result.Where, result.Fields)
-	return result
+
+	// A statement with no source query cannot be reading the branches, which
+	// only malformed SQL reaches. What they name is still read, and what the
+	// statement itself does is no longer something we can name, so it takes
+	// manage.
+	if group.head == nil {
+		read := &core.InspectStatement{Operation: core.InspectOpSelect}
+		i.mergeCompoundBranches(read, group.branches)
+		nested := core.NestUnderUnknown(*read)
+		return &nested
+	}
+
+	i.compound = group
+	defer func() { i.compound = compoundGroup{} }()
+	return i.inspectStatement(stmts[0])
+}
+
+// sourceSelect is the query a statement reads its rows from. It mirrors
+// inspectStatement's dispatch: a statement missing here loses the branches a
+// compound operator split off it.
+func sourceSelect(stmt sqlite.ISql_stmtContext) sqlite.ISelect_stmtContext {
+	switch {
+	case stmt == nil:
+		return nil
+	case stmt.Select_stmt() != nil:
+		return stmt.Select_stmt()
+	case stmt.Insert_stmt() != nil:
+		return stmt.Insert_stmt().Select_stmt()
+	case stmt.Create_table_stmt() != nil:
+		return stmt.Create_table_stmt().Select_stmt()
+	case stmt.Create_view_stmt() != nil:
+		return stmt.Create_view_stmt().Select_stmt()
+	}
+	return nil
+}
+
+// takeCompoundBranches are the branches split off selectStmt, and nothing for
+// any other query. Taking them stops a branch from being merged twice, since
+// inspectSelect recurses through every subquery of the statement.
+func (i *Inspector) takeCompoundBranches(selectStmt sqlite.ISelect_stmtContext) compoundGroup {
+	if i.compound.head == nil || i.compound.head != selectStmt {
+		return compoundGroup{}
+	}
+	group := i.compound
+	i.compound = compoundGroup{}
+	return group
+}
+
+// mergeCompoundBranches reads each branch and merges what it names into result.
+// It returns the last branch that read anything, which is where the tail
+// clauses of the whole compound parse: ORDER BY and LIMIT sit on the final
+// branch and order the rows of every one of them.
+func (i *Inspector) mergeCompoundBranches(
+	result *core.InspectStatement,
+	branches []sqlite.ISelect_stmtContext,
+) sqlite.ISelect_stmtContext {
+	var last sqlite.ISelect_stmtContext
+	for _, branch := range branches {
+		read := i.inspectSelect(branch)
+		if read == nil {
+			continue
+		}
+		last = branch
+		result.Tables = core.MergeInspectTables(result.Tables, read.Tables)
+		result.Fields = core.MergeInspectFields(result.Fields, read.Fields)
+		result.Where = core.MergeInspectFields(result.Where, read.Where)
+		result.Subqueries = append(result.Subqueries, read.Subqueries...)
+	}
+	return last
 }
 
 // inspectStatement dispatches to the appropriate handler based on statement type
@@ -284,15 +382,24 @@ func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.I
 	i.resolver.DropCTETables(tail, ctes)
 	result.Subqueries = append(result.Subqueries, tail...)
 
+	// The branches a plain UNION, INTERSECT or EXCEPT split off this query are
+	// branches of it, so they merge here rather than becoming statements of
+	// their own. See compoundGroup.
+	group := i.takeCompoundBranches(selectStmt)
+	tailClauses := selectStmt
+	if last := i.mergeCompoundBranches(result, group.branches); last != nil {
+		tailClauses = last
+	}
+
 	// The branches read the tail against their own relations, which is what
 	// resolves a name a derived table gave. A bare name is read again here,
 	// against the tables the statement ended up reading, which is what
 	// resolves one the derived table passed straight through.
 	result.Where = core.MergeInspectFields(result.Where,
-		i.tailClauseFields(selectStmt, core.RelationRefsOf(result), core.Scope{}))
+		i.tailClauseFields(tailClauses, core.RelationRefsOf(result), core.Scope{}))
 
 	result.Where = core.DistinctTestsProjection(
-		core.DedupsRows(selectStmt, compoundOperators, sqlite.SQLiteParserALL_),
+		group.dedups || core.DedupsRows(selectStmt, compoundOperators, sqlite.SQLiteParserALL_),
 		result.Where, result.Fields)
 
 	return result
