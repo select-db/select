@@ -124,6 +124,52 @@ func permCases() []PermCase {
 			Why:   "holding insert alone would copy t2 into a table the role can read",
 		},
 		{
+			Name: "an insert from a compound select reads every branch",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 UNION SELECT c1 FROM other.t3",
+			Needs: []Right{
+				mainT1(core.ActionInsert),
+				mainT2(core.ActionSelect),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "every branch is copied into t1, and the statement is still the insert that copies them",
+		},
+		{
+			Name: "an insert from a compound select joined by EXCEPT",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 EXCEPT SELECT c1 FROM other.t3",
+			Needs: []Right{
+				mainT1(core.ActionInsert),
+				mainT2(core.ActionSelect),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "every set operator joins branches of one source query, not only UNION",
+		},
+		{
+			Name: "a statement after a compound one is its own statement",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 UNION SELECT 1; SELECT c1 FROM other.t3",
+			Needs: []Right{
+				mainT1(core.ActionInsert),
+				mainT2(core.ActionSelect),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "a compound query ends at the semicolon, so the insert is not the select that follows it",
+		},
+		{
+			On:   []string{"mysql", "sqlite"},
+			Name: "REPLACE from a compound select reads every branch",
+			SQL:  "REPLACE INTO t1 (c1) SELECT c1 FROM t2 UNION SELECT c1 FROM other.t3",
+			Needs: []Right{
+				mainT1(core.ActionInsert),
+				mainT1(core.ActionDelete),
+				mainT2(core.ActionSelect),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "it destroys rows of t1 and reads both branches to do it",
+		},
+		{
 			Name:  "an update from a subquery reads it",
 			SQL:   "UPDATE t1 SET c1 = (SELECT c1 FROM t2)",
 			Needs: []Right{mainT1(core.ActionUpdate), mainT2(core.ActionSelect)},
@@ -979,6 +1025,22 @@ func permCases() []PermCase {
 			Needs: []Right{Manage, mainT1(core.ActionSelect)},
 			Op:    core.InspectOpCreate,
 			Why:   "the view body is a read that anyone selecting the view inherits",
+		},
+		{
+			Name:   "creating a table from a compound query reads every branch",
+			SQL:    "CREATE TABLE t9 AS SELECT c1 FROM t2 UNION SELECT c1 FROM other.t3",
+			Needs:  []Right{Manage, mainT2(core.ActionSelect), otherT3(core.ActionSelect)},
+			Denied: rowRights,
+			Op:     core.InspectOpCreate,
+			Why:    "select on one branch does not make a table, and manage does not read the other",
+		},
+		{
+			Name:   "creating a view from a compound query reads every branch",
+			SQL:    "CREATE VIEW v9 AS SELECT c1 FROM t2 UNION SELECT c1 FROM other.t3",
+			Needs:  []Right{Manage, mainT2(core.ActionSelect), otherT3(core.ActionSelect)},
+			Denied: rowRights,
+			Op:     core.InspectOpCreate,
+			Why:    "the view body reads both branches, and anyone selecting the view inherits that read",
 		},
 		{
 			Name:  "altering a table is administration",
@@ -2127,6 +2189,13 @@ func permCases() []PermCase {
 		},
 
 		// --- SQLite's own spellings
+		{
+			On:    []string{"sqlite"},
+			Name:  "a compound branch on a statement that reads nothing",
+			SQL:   "DROP TABLE t1 UNION SELECT c1 FROM other.t3",
+			Needs: []Right{Manage, otherT3(core.ActionSelect)},
+			Why:   "no DROP reads a query, so what the branch names is read by a statement nobody can name",
+		},
 		{
 			On:    []string{"sqlite"},
 			Name:  "INSERT OR REPLACE deletes the row it conflicts with",
