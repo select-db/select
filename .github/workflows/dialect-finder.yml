@@ -102,6 +102,7 @@ jobs:
           echo "FINDER_DEADLINE=$(( $(date +%s) + 40 * 60 ))" >> "$GITHUB_ENV"
 
       - name: Find
+        id: find
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -116,6 +117,22 @@ jobs:
             --model ${{ vars.FINDER_MODEL || 'opus' }}
             --max-turns 150
             --allowedTools "${{ steps.tools.outputs.allowed }}"
+
+      # The agent's own output is hidden, so a refused command is otherwise
+      # invisible. Only the tool and a slice of its input are printed.
+      - name: Refused tool calls
+        if: always() && steps.find.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.find.outputs.execution_file }}
+        run: |
+          refused=$(jq -r '.. | objects | select(has("permission_denials")) | .permission_denials[]?
+            | "- `\(.tool_name)`: `\(.tool_input | tostring | .[0:160] | gsub("`"; "'"'"'"))`"' \
+            "$EXECUTION_FILE" 2>/dev/null | sort | uniq -c | sort -rn \
+            | sed -E 's/^ *([0-9]+) - /- \1x /' || true)
+          {
+            echo "### Refused tool calls"
+            if [ -n "$refused" ]; then echo "$refused"; else echo "None."; fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Whatever the agent appended after its last checkpoint, a timeout included.
       - name: Save the ledger
