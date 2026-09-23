@@ -142,9 +142,6 @@ jobs:
         run: |
           if [ -s .finder-work/summary.md ]; then
             cat .finder-work/summary.md >> "$GITHUB_STEP_SUMMARY"
-            if [ "$FINDER_DRY_RUN" != 1 ]; then
-              $SCRIPTS/post.sh log .finder-work/summary.md
-            fi
           else
             echo "The agent wrote no summary." >> "$GITHUB_STEP_SUMMARY"
           fi
