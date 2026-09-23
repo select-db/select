@@ -63,12 +63,17 @@ The see work built the shape the other layers follow.
   (`GetSeeCasesPostgreSQLAndSQLite`).
 - **`core/testutil/see.go`** holds the runner. A dialect's entry point is three
   lines, so a fourth dialect inherits the whole table by calling it.
-- **`dialect/<dialect>/see_test.go`** holds only what that dialect alone
-  expresses: its quoting, its own statement forms.
+- **`dialect/<dialect>/cases/`** holds only what that dialect alone
+  expresses: its quoting, its own statement forms. It is data, not tests, so
+  `agentprobe -export-cases` can read it; `dialect/<dialect>/see_test.go` and
+  `inspect_test.go` run it. A new function there is also added to
+  `exportDialects` in `cmd/agentprobe/export.go`; a test fails until it is.
 
 Build each new layer the same way: a case type that states the expectation, one
 runner in `core/testutil`, shared tables for what every dialect expresses, a
-per-dialect table for the rest. A case that two dialects accept goes in a table
+per-dialect table in `<dialect>/cases/` for the rest. A case written inline in
+a test function is invisible to the finder, which then probes it again as new
+ground. A case that two dialects accept goes in a table
 those two share rather than a copy each -- two copies of a case diverge, and
 the FILTER case proved it.
 
