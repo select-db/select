@@ -6,9 +6,12 @@ are computed rather than estimated by the agent.
     ledger.py next LAYER COUNT    positions that cover the most untried pairs
     ledger.py dedupe FILE         drop candidate cases whose SQL was already run
     ledger.py append TABLE FILE   validate rows and append them to TABLE.jsonl
+    ledger.py unplaced LAYER [N]  cases of the Go tables not yet on the grid
+    ledger.py place FILE          put table cases on the grid from {case, position} lines
 
-The ledger directory is $FINDER_MEMORY, default .finder-memory. The layout is
-in ../references/ledger.md.
+The ledger directory is $FINDER_MEMORY, default .finder-memory. The Go case
+tables, exported by `agentprobe -export-cases`, are read from $FINDER_KNOWN,
+default .finder-work/known.jsonl. The layout is in ../references/ledger.md.
 """
 
 import hashlib
@@ -22,6 +25,8 @@ LAYERS = ["permission", "completion", "lint", "resolution"]
 DIALECTS = ["postgresql", "mysql", "sqlite"]
 MEMORY = os.environ.get("FINDER_MEMORY", ".finder-memory")
 QUIET_RUNS = int(os.environ.get("FINDER_QUIET_RUNS", "5"))
+KNOWN = os.environ.get("FINDER_KNOWN", ".finder-work/known.jsonl")
+RUN = os.environ.get("GITHUB_RUN_ID", "local")
 # Past this many cells the product is sampled rather than enumerated.
 PRODUCT_ENUMERATION_LIMIT = 2_000_000
 
@@ -217,10 +222,19 @@ def next_positions(layer_name, count, seed):
     print(f"{len(chosen)} positions, {len(uncovered)} pairs still untried after them", file=sys.stderr)
 
 
+def read_known():
+    if not os.path.exists(KNOWN):
+        return []
+    with open(KNOWN, encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
 def dedupe(path):
     # The caret stays in the hashed text: the same SQL completed at another
-    # position is another case.
+    # position is another case. A statement a Go table already pins is not run
+    # again, placed on the grid or not.
     seen = {(c.get("sql_hash"), c.get("dialect")) for c in read_jsonl("cases.jsonl")}
+    seen |= {(sql_hash(k["sql"]), k["dialect"]) for k in read_known()}
     kept = dropped = 0
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -236,6 +250,73 @@ def dedupe(path):
             kept += 1
             print(json.dumps(case))
     print(f"kept {kept}, dropped {dropped} already run", file=sys.stderr)
+
+
+def placed_cases():
+    return {c["case"] for c in read_jsonl("cases.jsonl") if c.get("origin") == "table" and c.get("case")}
+
+
+def unplaced(layer, limit):
+    """One line per table case of the layer the ledger has not placed yet."""
+    placed = placed_cases()
+    by_case = {}
+    for known in read_known():
+        if known["layer"] == layer and known["case"] not in placed:
+            by_case.setdefault(known["case"], []).append(known)
+    for number, (case, rows) in enumerate(sorted(by_case.items())):
+        if limit and number >= limit:
+            break
+        sqls = {row["dialect"]: row["sql"] for row in rows}
+        line = {"case": case, "dialects": sorted(sqls), "expected": rows[0]["expected"]}
+        if len(set(sqls.values())) == 1:
+            line["sql"] = rows[0]["sql"]
+        else:
+            line["sql_by_dialect"] = sqls
+        print(json.dumps(line))
+    print(f"{len(by_case)} cases of layer {layer} unplaced", file=sys.stderr)
+
+
+def place(path):
+    """Writes the ledger rows for table cases from the agent's placements.
+
+    A placement is {"case": ..., "position": {...}}, or {"case": ..., "skip":
+    reason} for a case no grid position describes. The SQL, the expectation and
+    the dialects come from the export, so nothing is transcribed by hand."""
+    grid = read_grid()
+    known_by_case = {}
+    for known in read_known():
+        known_by_case.setdefault(known["case"], []).append(known)
+    placed = placed_cases()
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for number, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            placement = json.loads(line)
+            case = placement.get("case")
+            if case not in known_by_case:
+                sys.exit(f"{path}:{number}: no exported case {case!r}")
+            if case in placed:
+                continue
+            layer = known_by_case[case][0]["layer"]
+            if "skip" in placement:
+                rows.append({"id": f"t-{case}", "run": RUN, "layer": layer, "dialect": "all",
+                             "outcome": "skipped", "origin": "table", "case": case, "reason": placement["skip"]})
+                continue
+            dimensions = grid.get("layers", {}).get(layer, {}).get("dimensions", {})
+            position = placement.get("position") or {}
+            unknown = {d: v for d, v in position.items() if v not in dimensions.get(d, [])}
+            if unknown or set(position) != set(dimensions):
+                sys.exit(f"{path}:{number}: position {position} does not match the {layer} grid")
+            for known in known_by_case[case]:
+                rows.append({"id": f"t-{case}-{known['dialect']}", "run": RUN, "layer": layer,
+                             "grid_version": grid.get("version", 0), "position": position,
+                             "dialect": known["dialect"], "sql": known["sql"], "sql_hash": sql_hash(known["sql"]),
+                             "expected": known["expected"], "outcome": "pass", "origin": "table", "case": case})
+    with open(os.path.join(MEMORY, "cases.jsonl"), "a", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+    print(f"placed {len(rows)} rows", file=sys.stderr)
 
 
 REQUIRED = {
@@ -278,6 +359,10 @@ def main(argv):
         dedupe(argv[2])
     elif len(argv) >= 4 and argv[1] == "append":
         append(argv[2], argv[3])
+    elif len(argv) >= 3 and argv[1] == "unplaced":
+        unplaced(argv[2], int(argv[3]) if len(argv) >= 4 else 0)
+    elif len(argv) >= 3 and argv[1] == "place":
+        place(argv[2])
     else:
         sys.exit(__doc__)
 
