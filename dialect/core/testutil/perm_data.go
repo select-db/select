@@ -147,14 +147,14 @@ func permCases() []PermCase {
 		},
 		{
 			Name: "a statement after a compound one is its own statement",
-			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 UNION SELECT 1; SELECT c1 FROM other.t3",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 UNION SELECT 1; UPDATE other.t3 SET c1 = 2",
 			Needs: []Right{
 				mainT1(core.ActionInsert),
 				mainT2(core.ActionSelect),
-				otherT3(core.ActionSelect),
+				otherT3(core.ActionUpdate),
 			},
 			Op:  core.InspectOpInsert,
-			Why: "a compound query ends at the semicolon, so the insert is not the select that follows it",
+			Why: "a compound query ends at the semicolon, so the update after it is a write of its own and not a branch the insert reads",
 		},
 		{
 			On:   []string{"mysql", "sqlite"},
@@ -2195,6 +2195,13 @@ func permCases() []PermCase {
 			SQL:   "DROP TABLE t1 UNION SELECT c1 FROM other.t3",
 			Needs: []Right{Manage, otherT3(core.ActionSelect)},
 			Why:   "no DROP reads a query, so what the branch names is read by a statement nobody can name",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a compound branch that is not a query",
+			SQL:   "SELECT c1 FROM t2 UNION DELETE FROM t1",
+			Needs: []Right{Manage, mainT2(core.ActionSelect)},
+			Why:   "a branch nobody can read leaves a statement nobody can name, and reporting what is left of it would report a write as a read",
 		},
 		{
 			On:    []string{"sqlite"},
