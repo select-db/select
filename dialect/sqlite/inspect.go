@@ -15,8 +15,6 @@ type Inspector struct {
 	meta     core.Metadata
 	resolver core.Resolver
 
-	// compound is the branch group the statement being inspected belongs to.
-	// See compoundGroup.
 	compound compoundGroup
 }
 
@@ -67,58 +65,40 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		return []core.InspectStatement{core.UnknownStatement()}
 	}
 
-	var results []core.InspectStatement
-	idx := 0
-	cursor := 0
-	for idx < len(stmtLists) {
-		// Collect consecutive stmt_lists connected by compound operators (UNION/INTERSECT/EXCEPT).
-		// The SQLite grammar emits each UNION branch as a separate sql_stmt_list at the top level.
-		first := idx
-		group := []sqlite.ISql_stmt_listContext{stmtLists[idx]}
-		for idx+1 < len(stmtLists) && hasCompoundOperatorBetween(tokenStream, stmtLists[idx], stmtLists[idx+1]) {
-			idx++
-			group = append(group, stmtLists[idx])
-		}
+	var stmts []sqlite.ISql_stmtContext
+	for _, stmtList := range stmtLists {
+		stmts = append(stmts, stmtList.AllSql_stmt()...)
+	}
 
-		// A call that reaches the filesystem is not covered by the four row
-		// actions, and neither is a statement the parser stumbled over that
-		// named no table: a per-table check has nothing to ask about, so what
-		// error recovery salvaged would run on a policy granting nothing. A
-		// compound group is one statement, so its branches are read together; a
-		// list of statements is read one at a time, so neither costs the rest
-		// of the script its row actions.
-		groupFrom, _ := core.TokenSpan(tokenStream, stmtLists, first)
-		_, groupTo := core.TokenSpan(tokenStream, stmtLists, idx)
+	var results []core.InspectStatement
+	cursor := 0
+	for _, run := range compoundRuns(tokenStream, stmts) {
+		read := core.OrUnknown(i.inspectCompoundRun(stmts[run.from:run.to], run.dedups))
+
+		from, to := core.TokenSpan(tokenStream, stmts, run.from)
+		if run.to-1 > run.from {
+			_, to = core.TokenSpan(tokenStream, stmts, run.to-1)
+		}
 		// Error recovery can skip the tokens before a statement, which leaves
 		// them belonging to nobody: "REVOKE SELECT ON t1 FROM bob" starts its
 		// only statement at the SELECT, so the error on REVOKE falls outside
 		// every span and the salvaged read looks like a statement of its own.
 		// Every token belongs to the statement that follows it.
-		groupFrom = core.Clamp(cursor, 0, groupFrom)
-		cursor = groupTo
-		syntax.Cover(stmtLists[idx], groupFrom, groupTo)
-
-		// A compound operator joins branches of one statement and a semicolon
-		// ends one, and a group can hold both: "INSERT ... UNION SELECT 1;
-		// SELECT c1 FROM t3" is one insert of two branches followed by a
-		// select. Which of the two a branch belongs to is only visible between
-		// adjacent sql_stmts, so the run is cut there rather than between lists.
-		stmts := flattenStatements(group)
-		for _, run := range compoundRuns(tokenStream, stmts) {
-			read := core.OrUnknown(i.inspectCompoundRun(tokenStream, stmts[run.from:run.to]))
-			from, _ := core.TokenSpan(tokenStream, stmts, run.from)
-			if run.from == 0 {
-				from = core.Clamp(groupFrom, 0, from)
-			}
-			_, to := core.TokenSpan(tokenStream, stmts, run.to-1)
-			to = core.Clamp(to, from, groupTo)
-			read = core.SalvageOrUnknown(read, syntax, from, to)
-			if callsHostFunction(tokenStream, from, to) {
-				read = core.NestUnderUnknown(read)
-			}
-			results = append(results, read)
+		from = core.Clamp(cursor, 0, from)
+		cursor = to
+		for _, stmt := range stmts[run.from:run.to] {
+			syntax.Cover(stmt, from, to)
 		}
-		idx++
+
+		// A call that reaches the filesystem is not covered by the four row
+		// actions, and neither is a statement the parser stumbled over that
+		// named no table: a per-table check has nothing to ask about, so what
+		// error recovery salvaged would run on a policy granting nothing.
+		read = core.SalvageOrUnknown(read, syntax, from, to)
+		if callsHostFunction(tokenStream, from, to) {
+			read = core.NestUnderUnknown(read)
+		}
+		results = append(results, read)
 	}
 
 	if syntax.Uncovered() {
@@ -133,39 +113,20 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	return results
 }
 
-// hasCompoundOperatorBetween reports whether UNION/INTERSECT/EXCEPT tokens appear between two parse-tree nodes.
-// The compound operator is the last token of the first stmt_list, so we scan from stopIdx (inclusive).
-func hasCompoundOperatorBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRuleContext) bool {
+// compoundOperatorBetween reports whether a UNION, INTERSECT or EXCEPT joins two
+// parse-tree nodes, and whether it collapses duplicate rows, which every one of
+// them does unless it is written with ALL. The operator is the last token of the
+// first node, so the scan starts there.
+func compoundOperatorBetween(
+	tokens *antlr.CommonTokenStream,
+	a, b antlr.ParserRuleContext,
+) (joins, dedups bool) {
 	// Error recovery leaves a node without its bounding tokens, and reading one
 	// off it panics, which fails the request rather than refusing the statement.
 	if a == nil || b == nil || a.GetStop() == nil || b.GetStart() == nil {
-		return false
-	}
-	stopIdx := a.GetStop().GetTokenIndex()
-	startIdx := b.GetStart().GetTokenIndex()
-	allTokens := tokens.GetAllTokens()
-	for ti := stopIdx; ti < startIdx && ti < len(allTokens); ti++ {
-		tok := allTokens[ti]
-		if tok.GetChannel() != antlr.TokenDefaultChannel {
-			continue
-		}
-		switch strings.ToUpper(tok.GetText()) {
-		case "UNION", "INTERSECT", "EXCEPT":
-			return true
-		}
-	}
-	return false
-}
-
-// compoundDedupsBetween reports whether the compound operator between two
-// branches collapses duplicate rows, which every one of UNION, INTERSECT and
-// EXCEPT does unless it is written with ALL.
-func compoundDedupsBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRuleContext) bool {
-	if a == nil || b == nil || a.GetStop() == nil || b.GetStart() == nil {
-		return false
+		return false, false
 	}
 	allTokens := tokens.GetAllTokens()
-	operator := false
 	for ti := a.GetStop().GetTokenIndex(); ti < b.GetStart().GetTokenIndex() && ti < len(allTokens); ti++ {
 		token := allTokens[ti]
 		if token.GetChannel() != antlr.TokenDefaultChannel {
@@ -173,41 +134,40 @@ func compoundDedupsBetween(tokens *antlr.CommonTokenStream, a, b antlr.ParserRul
 		}
 		switch strings.ToUpper(token.GetText()) {
 		case "UNION", "INTERSECT", "EXCEPT":
-			operator = true
+			joins, dedups = true, true
 		case "ALL":
-			if operator {
-				return false
+			if joins {
+				return true, false
 			}
 		}
 	}
-	return operator
+	return joins, dedups
 }
 
-// flattenStatements are the sql_stmts of a group of lists, in the order they
-// were written.
-func flattenStatements(group []sqlite.ISql_stmt_listContext) []sqlite.ISql_stmtContext {
-	var stmts []sqlite.ISql_stmtContext
-	for _, stmtList := range group {
-		stmts = append(stmts, stmtList.AllSql_stmt()...)
-	}
-	return stmts
+// stmtRun is the half-open range of sql_stmts one statement was split into, and
+// whether an operator that collapses duplicate rows joins any two of them.
+type stmtRun struct {
+	from, to int
+	dedups   bool
 }
-
-// stmtRun is the half-open range of sql_stmts one statement was split into.
-type stmtRun struct{ from, to int }
 
 // compoundRuns partitions stmts into the statements the reader wrote. Adjacent
 // statements a compound operator joins are branches of one; anything else
-// starts a new one.
+// starts a new one, which is what a semicolon between them leaves.
 func compoundRuns(tokens *antlr.CommonTokenStream, stmts []sqlite.ISql_stmtContext) []stmtRun {
-	var runs []stmtRun
-	for idx := 0; idx < len(stmts); {
-		start := idx
-		for idx+1 < len(stmts) && hasCompoundOperatorBetween(tokens, stmts[idx], stmts[idx+1]) {
+	runs := make([]stmtRun, 0, len(stmts))
+	for idx := 0; idx < len(stmts); idx++ {
+		run := stmtRun{from: idx}
+		for idx+1 < len(stmts) {
+			joins, dedups := compoundOperatorBetween(tokens, stmts[idx], stmts[idx+1])
+			if !joins {
+				break
+			}
+			run.dedups = run.dedups || dedups
 			idx++
 		}
-		idx++
-		runs = append(runs, stmtRun{from: start, to: idx})
+		run.to = idx + 1
+		runs = append(runs, run)
 	}
 	return runs
 }
@@ -218,16 +178,15 @@ func compoundRuns(tokens *antlr.CommonTokenStream, stmts []sqlite.ISql_stmtConte
 // reads of the source query that statement copies from, which inspectSelect
 // merges in when it reaches that query.
 func (i *Inspector) inspectCompoundRun(
-	tokens *antlr.CommonTokenStream,
 	stmts []sqlite.ISql_stmtContext,
+	dedups bool,
 ) *core.InspectStatement {
 	if len(stmts) == 1 {
 		return i.inspectStatement(stmts[0])
 	}
 
-	group := compoundGroup{head: sourceSelect(stmts[0])}
-	for idx, stmt := range stmts[1:] {
-		group.dedups = group.dedups || compoundDedupsBetween(tokens, stmts[idx], stmt)
+	group := compoundGroup{head: sourceSelect(stmts[0]), dedups: dedups}
+	for _, stmt := range stmts[1:] {
 		if branch := stmt.Select_stmt(); branch != nil {
 			group.branches = append(group.branches, branch)
 		}
@@ -236,16 +195,23 @@ func (i *Inspector) inspectCompoundRun(
 	// A statement with no source query cannot be reading the branches, which
 	// only malformed SQL reaches. What they name is still read, and what the
 	// statement itself does is no longer something we can name, so it takes
-	// manage.
+	// manage. The first branch stands in as the query the rest merge into, so
+	// they are read under the one rule rather than a second copy of it.
+	nest := false
 	if group.head == nil {
-		read := &core.InspectStatement{Operation: core.InspectOpSelect}
-		i.mergeCompoundBranches(read, group.branches)
-		nested := core.NestUnderUnknown(*read)
-		return &nested
+		if len(group.branches) == 0 {
+			return nil
+		}
+		group.head, group.branches = group.branches[0], group.branches[1:]
+		nest = true
 	}
 
 	i.compound = group
 	defer func() { i.compound = compoundGroup{} }()
+	if nest {
+		nested := core.NestUnderUnknown(core.OrUnknown(i.inspectSelect(group.head)))
+		return &nested
+	}
 	return i.inspectStatement(stmts[0])
 }
 
@@ -272,7 +238,7 @@ func sourceSelect(stmt sqlite.ISql_stmtContext) sqlite.ISelect_stmtContext {
 // any other query. Taking them stops a branch from being merged twice, since
 // inspectSelect recurses through every subquery of the statement.
 func (i *Inspector) takeCompoundBranches(selectStmt sqlite.ISelect_stmtContext) compoundGroup {
-	if i.compound.head == nil || i.compound.head != selectStmt {
+	if i.compound.head != selectStmt {
 		return compoundGroup{}
 	}
 	group := i.compound
