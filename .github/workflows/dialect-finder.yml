@@ -8,17 +8,20 @@ name: Dialect finder
 # `claude setup-token`, so runs bill a Claude subscription rather than an API
 # key), and optionally the variable FINDER_MODEL.
 
+# Started by hand only: every run spends the subscription it bills.
 on:
-  schedule:
-    - cron: "17 2 * * *"
   workflow_dispatch:
     inputs:
+      minutes:
+        description: Minutes the agent may run (it starts wrapping up 5 minutes before)
+        type: number
+        default: 20
       dry_run:
         description: File no issues and push no ledger
         type: boolean
         default: false
       positions:
-        description: Grid positions to try
+        description: Grid positions to try, at most; the minutes usually run out first
         type: number
         default: 100
 
@@ -36,13 +39,15 @@ jobs:
   find:
     name: Find
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    # A ceiling only: the Find step's own timeout is what the minutes input sets.
+    timeout-minutes: 240
     env:
       FINDER_MEMORY: .finder-memory
       # Assigned and mentioned on what the finder files.
       FINDER_NOTIFY: Arthur-Mesplede
       FINDER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
-      FINDER_TARGET_POSITIONS: ${{ inputs.positions || 100 }}
+      FINDER_TARGET_POSITIONS: ${{ inputs.positions }}
+      FINDER_MINUTES: ${{ inputs.minutes }}
       FINDER_BATCH: "20"
       FINDER_MAX_ISSUES: "5"
       FINDER_QUIET_RUNS: "5"
@@ -99,10 +104,14 @@ jobs:
             tools+=",Bash(gh issue create:*),Bash(gh issue comment:*)"
           fi
           echo "allowed=$tools" >> "$GITHUB_OUTPUT"
-          echo "FINDER_DEADLINE=$(( $(date +%s) + 40 * 60 ))" >> "$GITHUB_ENV"
+          # The agent stops starting batches 5 minutes early so it can file and
+          # checkpoint before the step's hard timeout.
+          wrap_up=$(( FINDER_MINUTES > 10 ? FINDER_MINUTES - 5 : FINDER_MINUTES / 2 ))
+          echo "FINDER_DEADLINE=$(( $(date +%s) + wrap_up * 60 ))" >> "$GITHUB_ENV"
 
       - name: Find
         id: find
+        timeout-minutes: ${{ fromJSON(inputs.minutes) }}
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -110,7 +119,7 @@ jobs:
           # The repository's terse output style would leak into issue bodies.
           settings: '{"outputStyle": "default"}'
           prompt: |
-            This is a scheduled dialect finder run in ${{ github.repository }}.
+            This is a dialect finder run in ${{ github.repository }}.
             Follow .claude/skills/dialect-finder/SKILL.md from step 1 to step 6.
             The environment variables it names are set. Dry run: ${{ env.FINDER_DRY_RUN }}.
           claude_args: >-

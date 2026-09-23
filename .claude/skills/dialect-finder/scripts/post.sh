@@ -38,7 +38,7 @@ failed)
 ${mention}the dialect finder run failed: $2
 
 Whatever the ledger checkpointed before the failure is on \`agent/finder-memory\`.
-The next scheduled run starts from there.
+The next run starts from there.
 MSG
 	open_or_comment "Dialect finder: run failed" "$body" agent:finder,needs-triage
 	;;
