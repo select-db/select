@@ -36,4 +36,4 @@ label fix:go               0052cc "Approved for the dialect fixer; only a writer
 label fix:in-progress      c5def5 "The dialect fixer is working on this"
 label fix:pr-open          c5def5 "The dialect fixer opened a pull request for this"
 label fix:blocked          d93f0b "The dialect fixer disagrees or cannot fix this; see its comment"
-label fix:reviewed         c5def5 "The fixer ran codebase-design and code-review over its pull request"
+label fix:reviewed         c5def5 "The fixer ran the review gate's skills over its pull request"

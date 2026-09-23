@@ -216,12 +216,13 @@ stands, and stop. The run is killed 10 minutes later.
    against the old code, and any other open finder issue you believe shares
    the root cause (named, not fixed).
 5. Review the branch with the Skill tool, not by reading the skill files:
-   `codebase-design`, then `code-review` with the arguments `fixed point
-   origin/dev; the spec is issue #$FIXER_ISSUE, read it with gh issue view;
-   unattended, so do not ask`. Act on what they find, push again, and add what
-   they found and what you changed to the pull request body with
-   `mcp__github__update_pull_request`. There is no issue tracker file; the
-   arguments stand in for it.
+   `simplify` over the diff against `origin/dev`, then `code-review` with the
+   arguments `fixed point origin/dev; the spec is issue #$FIXER_ISSUE, read it
+   with gh issue view; unattended, so do not ask`. Act on what they find, push
+   again, and add what they found and what you changed to the pull request
+   body with `mcp__github__update_pull_request`. There is no issue tracker
+   file; the arguments stand in for it. A pull request under 50 changed lines
+   needs neither.
 6. Leave labels and readiness to the workflow. It reads this run's tool calls:
    when both skills ran, it labels the pull request `fix:reviewed`, and marks
    it ready and requests review once CI is green. Otherwise the pull request
