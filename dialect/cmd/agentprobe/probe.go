@@ -88,7 +88,7 @@ type Verdict struct {
 	Denial  string `json:"denial,omitempty"`
 }
 
-// policies brackets each statement the way the dialect-audit method does:
+// policies brackets each statement the way .claude/dialect/method.md does:
 // anything deny_all allows is a total bypass, anything data allows ran without
 // the administration right.
 var policies = []struct {
