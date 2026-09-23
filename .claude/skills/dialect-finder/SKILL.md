@@ -40,7 +40,7 @@ The workflow sets these; defaults in brackets.
 | `FINDER_BATCH` | positions per probe batch and checkpoint [20] |
 | `FINDER_MAX_ISSUES` | issues filed per run at most [5] |
 | `FINDER_QUIET_RUNS` | runs without a new finding before a layer is done [5] |
-| `FINDER_DEADLINE` | Unix time to stop starting batches and wrap up |
+| `FINDER_DEADLINE` | Unix time to stop starting work and wrap up; the run is killed 10 minutes after |
 | `FINDER_RUN_URL` | this run's Actions URL, quoted in every issue |
 
 The probe is prebuilt at `dialect/agentprobe`. `scripts/ledger.py` does the
@@ -136,8 +136,12 @@ A mismatch on your own expectation is a claim about SQL. Before recording it,
 reread the method's settled rules: a case that contradicts one is your error,
 not a finding. Record it as `pass` with the expectation corrected.
 
-Checkpoint after every batch: `checkpoint.sh "batch <n>"`. Stop starting
-batches once `date +%s` passes `$FINDER_DEADLINE`.
+Checkpoint after every batch: `checkpoint.sh "batch <n>"`.
+
+Check `date +%s` against `$FINDER_DEADLINE` before every step, the layer setup
+in step 2 included. Once it has passed, start nothing new: go to step 5 with
+what you have. The workflow kills the run 10 minutes after the deadline, and a
+killed run leaves no summary.
 
 ### 5. Turn mismatches into findings
 

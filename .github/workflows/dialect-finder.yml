@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       minutes:
-        description: Minutes the agent may run (it starts wrapping up 5 minutes before)
+        description: Minutes the agent spends finding; it gets 10 more to file and save
         type: number
         default: 20
       dry_run:
@@ -106,14 +106,14 @@ jobs:
             tools+=",Bash(gh issue create:*),Bash(gh issue comment:*)"
           fi
           echo "allowed=$tools" >> "$GITHUB_OUTPUT"
-          # The agent stops starting batches 5 minutes early so it can file and
-          # checkpoint before the step's hard timeout.
-          wrap_up=$(( FINDER_MINUTES > 10 ? FINDER_MINUTES - 5 : FINDER_MINUTES / 2 ))
-          echo "FINDER_DEADLINE=$(( $(date +%s) + wrap_up * 60 ))" >> "$GITHUB_ENV"
+          # The agent stops starting batches at the deadline; the hard timeout
+          # leaves it 10 minutes past that to file, summarise and checkpoint.
+          echo "FINDER_DEADLINE=$(( $(date +%s) + FINDER_MINUTES * 60 ))" >> "$GITHUB_ENV"
+          echo "hard_timeout=$(( FINDER_MINUTES + 10 ))" >> "$GITHUB_OUTPUT"
 
       - name: Find
         id: find
-        timeout-minutes: ${{ fromJSON(env.FINDER_MINUTES) }}
+        timeout-minutes: ${{ fromJSON(steps.tools.outputs.hard_timeout) }}
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
