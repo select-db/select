@@ -145,8 +145,10 @@ jobs:
             ran=$(jq -r '.. | objects | select(.type? == "tool_use" and .name? == "Skill") | .input.skill // empty | sub(".*:"; "")' \
               "${EXECUTION_FILE:-/dev/null}" 2>/dev/null | sort -u || true)
             echo "Skills run: $(echo ${ran:-none})" >> "$GITHUB_STEP_SUMMARY"
+            # The hook's list, so the two cannot disagree.
+            required=$(sed -n "s/^required='\(.*\)'$/\1/p" .claude/hooks/pr-review-gate.sh)
             missing=''
-            for want in codebase-design code-review; do
+            for want in ${required:?no required= line in the review gate}; do
               grep -qx "$want" <<<"$ran" || missing="$missing $want"
             done
             if [ -z "$missing" ]; then
