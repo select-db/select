@@ -111,7 +111,8 @@ jobs:
           prompt: |
             Fix issue #${{ steps.pick.outputs.issue }} in ${{ github.repository }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "fix".
-            The environment variables it names are set.
+            FIXER_ISSUE=${{ env.FIXER_ISSUE }} FIXER_DEADLINE=${{ env.FIXER_DEADLINE }}
+            FIXER_NOTIFY=${{ env.FIXER_NOTIFY }}; these are also in the environment.
           claude_args: >-
             --model ${{ vars.FIXER_MODEL || 'opus' }}
             --max-turns 250
@@ -237,6 +238,8 @@ jobs:
             CI failed on pull request #${{ steps.decide.outputs.pr }}, the fix for issue
             #${{ steps.decide.outputs.issue }}. The failing run is ${{ github.event.workflow_run.html_url }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "ci".
+            FIXER_ISSUE=${{ env.FIXER_ISSUE }} FIXER_DEADLINE=${{ env.FIXER_DEADLINE }}
+            FIXER_NOTIFY=${{ env.FIXER_NOTIFY }}; these are also in the environment.
           claude_args: >-
             --model ${{ vars.FIXER_MODEL || 'opus' }}
             --max-turns 80
