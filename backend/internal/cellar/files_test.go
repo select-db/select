@@ -3,7 +3,6 @@ package cellar
 import (
 	"context"
 	"database/sql"
-	"path/filepath"
 	"testing"
 
 	"backend/internal/auth"
@@ -60,5 +59,5 @@ func TestOpenRefuses(t *testing.T) {
 	missing := uuid.NewString()
 	_, err = files.Open(auth.CellarGrant{DB: missing, MaxBytes: 1 << 20}, nil)
 	require.Error(t, err, "a database that does not exist")
-	require.NoFileExists(t, filepath.Join(filepath.Dir(files.Path(id)), missing+".db"))
+	require.NoFileExists(t, files.Path(missing))
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/selectDb/dialect/sqlite"
 	parser "github.com/selectDb/dialect/sqlite/parser"
 )
 
@@ -36,15 +37,14 @@ func CheckStatement(sql string) error {
 	}
 	for i, t := range toks {
 		var name string
-		switch {
-		case t.GetTokenType() == parser.SQLiteLexerPRAGMA_:
+		switch t.GetTokenType() {
+		case parser.SQLiteLexerPRAGMA_:
 			name = pragmaName(toks[i+1:])
-		case t.GetTokenType() == parser.SQLiteLexerIDENTIFIER:
-			fn, ok := strings.CutPrefix(unquote(t.GetText()), "pragma_")
-			if !ok {
+		case parser.SQLiteLexerIDENTIFIER:
+			var ok bool
+			if name, ok = strings.CutPrefix(normalize(t.GetText()), "pragma_"); !ok {
 				continue
 			}
-			name = fn
 		default:
 			continue
 		}
@@ -63,16 +63,15 @@ func pragmaName(rest []antlr.Token) string {
 	if len(rest) == 0 {
 		return ""
 	}
-	return unquote(rest[0].GetText())
+	return normalize(rest[0].GetText())
 }
 
-// unquote lowercases a name and strips SQLite's quotes, which PRAGMA accepts.
-func unquote(s string) string {
-	if len(s) >= 2 {
-		switch s[0] {
-		case '"', '\'', '`', '[':
-			s = s[1 : len(s)-1]
-		}
+var dialect = sqlite.NewDialect()
+
+// normalize reads a name as SQLite does; PRAGMA also takes one as a string.
+func normalize(s string) string {
+	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
+		return strings.ToLower(strings.ReplaceAll(s[1:len(s)-1], "''", "'"))
 	}
-	return strings.ToLower(s)
+	return dialect.NormalizeIdentifier(s)
 }

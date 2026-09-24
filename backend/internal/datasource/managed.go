@@ -8,7 +8,6 @@ import (
 	"backend/internal/authz"
 	"backend/internal/cellar"
 
-	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -37,12 +36,6 @@ func OnCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (
 	if cellarClient == nil {
 		return nil, engine.DBInstance{}, ErrCellarOff
 	}
-	var entries []core.PermissionEntry
-	for _, e := range authz.EntriesFromRequest(r) {
-		if e.DbInstanceID == nil || *e.DbInstanceID == "*" || *e.DbInstanceID == id {
-			entries = append(entries, e)
-		}
-	}
 	plan := plans[ds.Plan]
 	t, err := cellarClient.Transport(auth.CellarGrant{
 		DB:       id,
@@ -50,7 +43,7 @@ func OnCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (
 		CellarID: ds.CellarID,
 		MaxBytes: plan.maxBytes,
 		PITRDays: plan.pitrDays,
-	}, entries)
+	}, authz.EntriesForDB(r, id))
 	if err != nil {
 		return nil, engine.DBInstance{}, err
 	}

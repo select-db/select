@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"backend/e2e"
@@ -143,5 +142,5 @@ func TestManagedDatabaseWithoutCellar(t *testing.T) {
 	rec := e2e.Do(t, m.f.H, http.MethodPost, "/datasources/"+m.id+"/execute", m.f.Actor.Token,
 		map[string]any{"workspace_id": m.f.Actor.WorkspaceID, "sql": "SELECT 1"})
 	require.Equal(t, http.StatusNotImplemented, rec.Code)
-	require.True(t, strings.Contains(rec.Body.String(), "not enabled"))
+	require.Contains(t, rec.Body.String(), "not enabled")
 }

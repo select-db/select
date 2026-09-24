@@ -37,7 +37,8 @@ func PermsFrom(r *http.Request) ([]core.PermissionEntry, error) {
 		return nil, err
 	}
 	var entries []core.PermissionEntry
-	return entries, json.Unmarshal(b, &entries)
+	err = json.Unmarshal(b, &entries)
+	return entries, err
 }
 
 // A token lives tokenTTL and is reused for reuseFor: each KMS sign is a remote
