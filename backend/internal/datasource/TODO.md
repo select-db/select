@@ -100,11 +100,17 @@ Settled. Reopen with a reason, not a preference.
   other roles.
 
 ### Cellar token
-- `CellarClaims{db, ws, cel, max, pitr}`, audience `select-cellar`, 60s,
-  signed with the existing JWT signer (`auth/jwt.go`). The backend caches one
-  token per db for about 50s because each KMS sign is a remote call.
+- `CellarClaims{db, ws, cel, max, pitr, perm}`, audience `selectdb-cellar`,
+  60s, signed with the existing JWT signer (`auth/jwt.go`). The backend reuses
+  a token for about 50s while nothing in it changes, because each KMS sign is
+  a remote call.
+- Permissions: the backend sends the caller's permission entries for the db in
+  the `X-Cellar-Perms` header, and `perm` is the sha256 of those exact bytes.
+  The cellar compiles them and runs `StreamLocal` unchanged, so the query
+  check and column masking are the same code as for proxified datasources.
 - The cellar holds only the public key. It rejects a token whose `db` differs
-  from the path or whose `cel` is not itself. User tokens have another
+  from the path, whose `cel` is not itself, or whose `perm` does not match
+  the header. User tokens have another
   audience and never open a db.
 
 ### Storage
@@ -192,13 +198,14 @@ Needs 0.
 - [ ] Cellar mode: execute, schema, ping, dump over the existing engine
       transport, `StreamLocal` against local files. `CELLAR=local` starts it
       in-process.
-- [ ] `CellarClaims` signing with cache in the backend, verification in the
-      cellar.
+- [x] `CellarClaims` signing with a reuse cache in the backend
+      (`cellar.Tokens`), verification in the cellar (`cellar.Authorize`).
 - [ ] Isolation: pragmas in the DSN, PRAGMA allowlist, and
       `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement.
       The engine pools connections and the driver has no per-connection hook
       that can set limits, so per statement is the only fail-closed place.
-- [ ] `InFlight` middleware, 60s cap, query-seconds recorded.
+- [x] `InFlight` middleware (`middlewares.InFlight`).
+- [ ] 60s cap and query-seconds recorded on the cellar execute route.
 - [ ] Error codes and request id, end to end to REST and MCP. The request id
       lives in the context so `ref` matches the request log; MCP's mid-stream
       `collectSink` error goes through the same classification.
