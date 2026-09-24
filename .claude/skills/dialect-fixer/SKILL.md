@@ -235,13 +235,13 @@ Pull request `#$FIXER_PR` is open for the issue, and reviewing it is this
 run's whole task. Work on `claude/fix-$FIXER_ISSUE` (`git switch` to it).
 
 1. Invoke the `simplify` skill with the Skill tool, arguments `origin/dev`. Let
-   it launch its four agents and apply what they find. Rerun the checks,
-   commit and push with `push.sh`.
+   it launch its four agents and apply what they find. Rerun the checks and
+   commit.
 2. Invoke the `code-review` skill with the arguments `fixed point origin/dev;
    the spec is issue #$FIXER_ISSUE, read it with gh issue view; unattended, so
    do not ask`. There is no issue tracker file; the arguments stand in for it.
    Let it launch its two agents. Fix what it finds that is in scope, rerun the
-   checks, commit and push.
+   checks, commit, and push once with `push.sh`.
 3. Append a `## Review` section to the pull request body with
    `mcp__github__update_pull_request`: for each skill, what it found, what you
    changed and what you skipped, and why.

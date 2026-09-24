@@ -32,7 +32,9 @@ fi
 
 if [ "$draft" = true ]; then
 	gh pr ready "$number"
-	# The fix and ci jobs can both get here for one push; the second request fails.
-	gh pr edit "$number" --add-reviewer "$FIXER_NOTIFY" || true
+	# The fix and ci jobs can both get here for one push, and the second request
+	# then fails; that is fine only if the reviewer is in fact requested.
+	gh pr edit "$number" --add-reviewer "$FIXER_NOTIFY" ||
+		gh pr view "$number" --json reviewRequests --jq '.reviewRequests[].login' | grep -qx "$FIXER_NOTIFY"
 	echo "#$number is ready and $FIXER_NOTIFY is asked to review"
 fi

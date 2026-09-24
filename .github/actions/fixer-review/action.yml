@@ -16,12 +16,6 @@ inputs:
   model:
     description: The model to review with.
     required: true
-  tools:
-    description: The allowlist, as the fixing agent has it.
-    required: true
-  denied:
-    description: The denylist, as the fixing agent has it.
-    required: true
 
 runs:
   using: composite
@@ -32,9 +26,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         PR: ${{ inputs.pr }}
       run: |
-        lines=$(gh pr view "$PR" --json additions,deletions --jq '.additions + .deletions')
-        required=$(.claude/hooks/pr-review-gate.sh required "$lines")
-        echo "required=$required" >> "$GITHUB_OUTPUT"
+        echo "required=$(.claude/skills/dialect-fixer/scripts/reviewed.sh required "$PR")" >> "$GITHUB_OUTPUT"
         echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV"
 
     - id: agent
@@ -55,8 +47,8 @@ runs:
         claude_args: >-
           --model ${{ inputs.model }}
           --max-turns 150
-          --allowedTools "${{ inputs.tools }}"
-          --disallowedTools "${{ inputs.denied }}"
+          --allowedTools "${{ env.TOOLS }}"
+          --disallowedTools "${{ env.DENIED }}"
 
     - if: always() && steps.agent.outputs.execution_file != ''
       uses: ./.github/actions/refused-calls

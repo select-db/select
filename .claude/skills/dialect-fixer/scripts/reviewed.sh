@@ -3,13 +3,19 @@
 # shows every skill the review gate requires for its size, and removes the
 # label otherwise, so ready.sh never marks unreviewed code ready.
 #   reviewed.sh <pull request> <execution file>
+#   reviewed.sh required <pull request>   prints the skills it needs
 set -euo pipefail
+
+gate=.claude/hooks/pr-review-gate.sh
+required_for_pr() {
+	"$gate" required "$(gh pr view "$1" --json additions,deletions --jq '.additions + .deletions')"
+}
+[ "$1" = required ] && { required_for_pr "$2"; exit 0; }
 
 pr=$1
 transcript=${2:-}
 
-lines=$(gh pr view "$pr" --json additions,deletions --jq '.additions + .deletions')
-required=$(.claude/hooks/pr-review-gate.sh required "$lines")
+required=$(required_for_pr "$pr")
 if [ -z "$required" ]; then
 	gh pr edit "$pr" --add-label fix:reviewed
 	exit 0
@@ -21,11 +27,7 @@ if [ ! -s "$transcript" ]; then
 	exit 0
 fi
 
-# Loading a skill only reads its instructions. Both skills fan out to
-# sub-agents, so a skill counts once an Agent or Task call follows it.
-ran=$(jq -r '.. | objects | select(.type? == "tool_use")
-	| if .name == "Skill" then "skill " + ((.input.skill // "") | sub(".*:"; "")) else .name end' "$transcript" |
-	awk '$1 == "skill" { current = $2; next } ($1 == "Agent" || $1 == "Task") && current != "" { print current }' | sort -u)
+ran=$(jq -r -f .github/actions/refused-calls/tool-calls.jq "$transcript" | "$gate" fanned-out)
 echo "Skills that ran their agents: $(paste -sd' ' <<<"${ran:-none}")" >>"${GITHUB_STEP_SUMMARY:-/dev/stderr}"
 
 missing=''
