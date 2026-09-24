@@ -298,10 +298,17 @@ func (i *Inspector) dispatch(stmt sqlite.ISql_stmtContext) (func() *core.Inspect
 // inspectStatement is what the handler for stmt reported.
 func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.InspectStatement {
 	inspect, _ := i.dispatch(stmt)
-	if inspect == nil {
+	if inspect != nil {
+		return inspect()
+	}
+	if stmt == nil {
 		return nil
 	}
-	return inspect()
+	// No branch of the dispatcher reads this statement, so it takes manage for
+	// whatever it does. The reads nested in it are still reads: manage is not a
+	// right to read rows, so each of those tables needs its own select.
+	read := core.NestUnderUnknown(i.extractEmbeddedSubqueries(stmt)...)
+	return &read
 }
 
 // inspectSelect analyzes a SELECT statement, including UNION/INTERSECT/EXCEPT compounds.
