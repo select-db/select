@@ -1,0 +1,46 @@
+{
+  "outputStyle": "default",
+  "permissions": {
+    "deny": [
+      "Read(//proc/*/environ)",
+      "Read(//proc/*/cmdline)",
+      "Read(~/.ssh/**)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "strictAllowlist": true
+    },
+    "credentials": {
+      "envVars": [
+        {
+          "name": "GH_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "GITHUB_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "ACTIONS_ID_TOKEN_REQUEST_URL",
+          "mode": "deny"
+        },
+        {
+          "name": "ACTIONS_RUNTIME_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "ACTIONS_RESULTS_URL",
+          "mode": "deny"
+        }
+      ]
+    }
+  }
+}

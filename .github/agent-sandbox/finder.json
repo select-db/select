@@ -1,0 +1,12 @@
+{
+  "sandbox": {
+    "excludedCommands": [
+      ".claude/skills/dialect-finder/scripts/checkpoint.sh",
+      ".claude/skills/dialect-finder/scripts/checkpoint.sh *",
+      ".claude/skills/dialect-finder/scripts/file.sh *"
+    ],
+    "network": {
+      "allowedDomains": []
+    }
+  }
+}

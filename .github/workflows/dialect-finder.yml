@@ -82,13 +82,11 @@ jobs:
       FINDER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       GH_TOKEN: ${{ github.token }}
       SCRIPTS: .claude/skills/dialect-finder/scripts
-      # Anthropic token out of subprocesses, and a PID namespace for their /proc.
-      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/dialect-agent-env
         with:
-          sandbox: true
+          sandbox: finder
 
       - name: Check out the ledger
         run: |
@@ -114,10 +112,10 @@ jobs:
           python3 $SCRIPTS/sync.py
           $SCRIPTS/checkpoint.sh "sync with issues"
 
-      # Commands run in Claude Code's sandbox (.github/agent-sandbox.json), with
+      # Commands run in Claude Code's sandbox (.github/agent-sandbox), with
       # no token and no network; file.sh and checkpoint.sh reach GitHub from outside it.
       - name: Deadline
-        id: tools
+        id: deadline
         run: |
           echo "FINDER_DEADLINE=$(( $(date +%s) + FINDER_MINUTES * 60 ))" >> "$GITHUB_ENV"
           # The agent stops starting batches at the deadline; the hard timeout
@@ -126,12 +124,12 @@ jobs:
 
       - name: Find
         id: find
-        timeout-minutes: ${{ fromJSON(steps.tools.outputs.hard_timeout) }}
+        timeout-minutes: ${{ fromJSON(steps.deadline.outputs.hard_timeout) }}
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
-          settings: .github/agent-sandbox.json
+          settings: ${{ env.AGENT_SETTINGS }}
           # Any value keeps the token out of .git/config, behind a git credential
           # helper; a scheduled run has no actor for it to admit.
           allowed_non_write_users: ${{ env.FINDER_NOTIFY }}
@@ -149,7 +147,6 @@ jobs:
             --model ${{ vars.FINDER_MODEL || 'opus' }}
             --max-turns 150
             --allowedTools "Read,Grep,Glob,Agent,Task,Bash,Edit(/.finder-memory/**),Edit(/.finder-work/**)"
-            --disallowedTools "Read(//proc/*/environ),Read(//proc/*/cmdline),Read(~/.ssh/**)"
 
       - name: Refused tool calls
         if: always() && steps.find.outputs.execution_file != ''
