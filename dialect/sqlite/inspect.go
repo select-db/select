@@ -189,7 +189,8 @@ func (i *Inspector) inspectCompoundRun(
 	// are both malformed SQL. Reporting what is left of the run would report a
 	// write as a read, so the run takes manage instead. The first branch stands
 	// in for a missing source query, which keeps what the branches name.
-	group := compoundGroup{head: sourceSelect(stmts[0]), dedups: dedups}
+	_, head := i.dispatch(stmts[0])
+	group := compoundGroup{head: head, dedups: dedups}
 	unreadable := false
 	for _, stmt := range stmts[1:] {
 		branch := stmt.Select_stmt()
@@ -220,25 +221,6 @@ func (i *Inspector) inspectCompoundRun(
 		read = core.NestUnderUnknown(read)
 	}
 	return &read
-}
-
-// sourceSelect is the query a statement reads its rows from. It mirrors
-// inspectStatement's dispatch: a statement missing here loses the branches a
-// compound operator split off it.
-func sourceSelect(stmt sqlite.ISql_stmtContext) sqlite.ISelect_stmtContext {
-	switch {
-	case stmt == nil:
-		return nil
-	case stmt.Select_stmt() != nil:
-		return stmt.Select_stmt()
-	case stmt.Insert_stmt() != nil:
-		return stmt.Insert_stmt().Select_stmt()
-	case stmt.Create_table_stmt() != nil:
-		return stmt.Create_table_stmt().Select_stmt()
-	case stmt.Create_view_stmt() != nil:
-		return stmt.Create_view_stmt().Select_stmt()
-	}
-	return nil
 }
 
 // takeCompoundBranches are the branches split off selectStmt, and nothing for
@@ -276,38 +258,50 @@ func (i *Inspector) mergeCompoundBranches(
 	return last
 }
 
-// inspectStatement dispatches to the appropriate handler based on statement type
-func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.InspectStatement {
+// dispatch is the handler that inspects a statement and the query that
+// statement reads its rows from, from the same case, so a statement kind cannot
+// gain a handler and silently lose the branches a compound operator split off
+// its source query. Both are nil for a kind that needs no permission check.
+func (i *Inspector) dispatch(stmt sqlite.ISql_stmtContext) (func() *core.InspectStatement, sqlite.ISelect_stmtContext) {
 	if stmt == nil {
-		return nil
+		return nil, nil
 	}
 
 	if selectStmt := stmt.Select_stmt(); selectStmt != nil {
-		return i.inspectSelect(selectStmt)
+		return func() *core.InspectStatement { return i.inspectSelect(selectStmt) }, selectStmt
 	}
 	if insertStmt := stmt.Insert_stmt(); insertStmt != nil {
-		return i.inspectInsert(insertStmt)
+		return func() *core.InspectStatement { return i.inspectInsert(insertStmt) }, insertStmt.Select_stmt()
 	}
 	if updateStmt := stmt.Update_stmt(); updateStmt != nil {
-		return i.inspectUpdate(updateStmt)
+		return func() *core.InspectStatement { return i.inspectUpdate(updateStmt) }, nil
 	}
 	if deleteStmt := stmt.Delete_stmt(); deleteStmt != nil {
-		return i.inspectDelete(deleteStmt)
+		return func() *core.InspectStatement { return i.inspectDelete(deleteStmt) }, nil
 	}
 	if dropStmt := stmt.Drop_stmt(); dropStmt != nil {
-		return i.inspectDrop(dropStmt)
+		return func() *core.InspectStatement { return i.inspectDrop(dropStmt) }, nil
 	}
 	if createStmt := stmt.Create_table_stmt(); createStmt != nil {
-		return i.inspectCreate(createStmt)
+		return func() *core.InspectStatement { return i.inspectCreate(createStmt) }, createStmt.Select_stmt()
 	}
 	if viewStmt := stmt.Create_view_stmt(); viewStmt != nil {
-		return i.inspectCreateView(viewStmt)
+		return func() *core.InspectStatement { return i.inspectCreateView(viewStmt) }, viewStmt.Select_stmt()
 	}
 	if alterStmt := stmt.Alter_table_stmt(); alterStmt != nil {
-		return i.inspectAlterTable(alterStmt)
+		return func() *core.InspectStatement { return i.inspectAlterTable(alterStmt) }, nil
 	}
 
-	return nil
+	return nil, nil
+}
+
+// inspectStatement is what the handler for stmt reported.
+func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.InspectStatement {
+	inspect, _ := i.dispatch(stmt)
+	if inspect == nil {
+		return nil
+	}
+	return inspect()
 }
 
 // inspectSelect analyzes a SELECT statement, including UNION/INTERSECT/EXCEPT compounds.
