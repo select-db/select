@@ -59,6 +59,8 @@ One row per position per dialect.
  "outcome": "mismatch", "oracle": "judgment", "finding": "f-<run>-<n>", "origin": "probe"}
 ```
 
+- `position` is required on every row but an `impossible` one: `{}` for a
+  layer with no grid yet, whose cases then cover nothing.
 - `outcome` is `pass`, `mismatch`, `skipped` or `impossible`.
   - `skipped`: this dialect cannot express the position. `reason` says why.
     It still counts as tried for that dialect.
