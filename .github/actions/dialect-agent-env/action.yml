@@ -29,10 +29,18 @@ runs:
       env:
         AGENT: ${{ inputs.sandbox }}
       run: |
-        # Shared rules, then what only this agent may run outside the sandbox
-        # and reach. The scrub gives commands a PID namespace for their /proc.
+        # Shared rules, then this agent's: the scripts it may run outside the
+        # sandbox, its hosts and paths, anchored at the workspace so a copy
+        # elsewhere does not match. `*` replaces arrays, so none is in both files.
         dir=.github/agent-sandbox
-        jq -s '.[0] * .[1]' "$dir/base.json" "$dir/$AGENT.json" > "$RUNNER_TEMP/agent-settings.json"
+        jq -s --arg ws "$GITHUB_WORKSPACE" '
+          def abs: if startswith("/") or startswith("~") then . else "\($ws)/\(.)" end;
+          .[0] * .[1]
+          | .sandbox.excludedCommands |= map(abs)
+          | .sandbox.filesystem.denyWrite |= (. // [] | map(abs))
+        ' "$dir/base.json" "$dir/$AGENT.json" > "$RUNNER_TEMP/agent-settings.json"
+        # The scrub keeps the Anthropic token from commands and gives them a PID
+        # namespace, so /proc does not show the parent's environment.
         echo "AGENT_SETTINGS=$RUNNER_TEMP/agent-settings.json" >> "$GITHUB_ENV"
         echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1" >> "$GITHUB_ENV"
         apt_install() { sudo apt-get install -y -qq --no-install-recommends bubblewrap socat >/dev/null; }

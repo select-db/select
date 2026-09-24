@@ -39,6 +39,22 @@
         {
           "name": "ACTIONS_RESULTS_URL",
           "mode": "deny"
+        },
+        {
+          "name": "OVERRIDE_GITHUB_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "DEFAULT_WORKFLOW_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "CLAUDE_CODE_OAUTH_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "mode": "deny"
         }
       ]
     }
