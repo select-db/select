@@ -9,11 +9,9 @@ import (
 
 	"backend/db"
 	"backend/internal/authz"
-	"backend/internal/datasource"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
 )
 
 // ----------------------------------------------------------------------
@@ -154,7 +152,7 @@ func toolGetDatabaseSchemas() Tool {
 			if err := json.Unmarshal(raw, &args); err != nil || args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			meta, dialect, err := loadMetadata(ctx, args.DatasourceID, workspaceID)
+			_, _, meta, dialect, err := openDatasource(ctx, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
@@ -215,7 +213,7 @@ func toolGetDatabaseTableDetail() Tool {
 			if args.DatasourceID == "" || args.SchemaID == "" || args.TableName == "" {
 				return nil, errBadArgument("datasource_id, schema_id, and table_name are required")
 			}
-			meta, _, err := loadMetadata(ctx, args.DatasourceID, workspaceID)
+			_, _, meta, _, err := openDatasource(ctx, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
@@ -241,26 +239,6 @@ func toolGetDatabaseTableDetail() Tool {
 // ----------------------------------------------------------------------
 // shared helpers
 // ----------------------------------------------------------------------
-
-func loadMetadata(ctx context.Context, datasourceID, workspaceID string) (*core.Metadata, core.SQLDialect, error) {
-	ds, err := datasource.GetOrLoadDatasource(ctx, datasourceID, workspaceID)
-	if err != nil {
-		return nil, nil, errNotFound("datasource not found")
-	}
-	dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
-	if err != nil {
-		return nil, nil, errUpstream(datasource.SafeConnErr(err, "mcp", workspaceID, datasourceID))
-	}
-	d := engine.GetDialect(ds.DBType)
-	if d == nil {
-		return nil, nil, errExecution("unsupported database type: "+ds.DBType, "")
-	}
-	meta, err := engine.GetOrFetchMetadata(ctx, workspaceID, ds.DSN, dbConn, d, "", false)
-	if err != nil {
-		return nil, nil, errUpstream("could not fetch metadata: " + err.Error())
-	}
-	return meta, d, nil
-}
 
 // findRelation looks up a table or view by name; tables first, then views
 func findRelation(s core.Schema, name string) *core.Table {

@@ -5,6 +5,8 @@ import (
 	"log"
 
 	"backend/internal/utils"
+
+	"github.com/selectDb/dialect/engine"
 )
 
 // toolError is the structured envelope returned inside an MCP tool
@@ -36,17 +38,17 @@ func errExecution(msg string, hint string) *toolError {
 	return &toolError{Code: "execution_failed", Message: msg, Hint: hint}
 }
 
-func errUpstream(msg string) *toolError {
-	return &toolError{Code: "upstream", Message: msg}
-}
-
-// asToolError coerces any error to the wire shape. Wrapped *toolError
-// passes through unchanged. Anything else may carry driver or network detail,
-// so the caller gets a ref and the detail goes to the log.
+// asToolError coerces any error to the wire shape. A *toolError or an engine
+// ConfigError is written for the caller; anything else may carry driver or
+// network detail, so the caller gets a ref and the detail goes to the log.
 func asToolError(err error) *toolError {
 	var te *toolError
 	if errors.As(err, &te) {
 		return te
+	}
+	var cfgErr *engine.ConfigError
+	if errors.As(err, &cfgErr) {
+		return &toolError{Code: "upstream", Message: cfgErr.Msg}
 	}
 	ref := utils.GenerateRequestID()
 	log.Printf("mcp: internal error ref=%s: %v", ref, err)

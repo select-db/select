@@ -5,15 +5,14 @@ import "testing"
 func TestParse(t *testing.T) {
 	cases := []struct {
 		in      string
-		mode    Mode
-		url     string
+		want    Config
 		wantErr bool
 	}{
-		{in: "", mode: Disabled},
-		{in: "  ", mode: Disabled},
-		{in: "local", mode: Local},
-		{in: "https://cellar-1.internal:8081/", mode: Remote, url: "https://cellar-1.internal:8081"},
-		{in: "http://10.0.0.7:8081", mode: Remote, url: "http://10.0.0.7:8081"},
+		{in: "", want: Config{}},
+		{in: "  ", want: Config{}},
+		{in: "local", want: Config{Local: true}},
+		{in: "https://cellar-1.internal:8081/", want: Config{URL: "https://cellar-1.internal:8081"}},
+		{in: "http://10.0.0.7:8081", want: Config{URL: "http://10.0.0.7:8081"}},
 		{in: "Local", wantErr: true},
 		{in: "off", wantErr: true},
 		{in: "ftp://cellar-1", wantErr: true},
@@ -28,12 +27,8 @@ func TestParse(t *testing.T) {
 			}
 			continue
 		}
-		if err != nil {
-			t.Errorf("Parse(%q): %v", c.in, err)
-			continue
-		}
-		if got.Mode != c.mode || got.URL != c.url {
-			t.Errorf("Parse(%q) = %+v, want mode %v url %q", c.in, got, c.mode, c.url)
+		if err != nil || got != c.want {
+			t.Errorf("Parse(%q) = %+v, %v; want %+v", c.in, got, err, c.want)
 		}
 	}
 }

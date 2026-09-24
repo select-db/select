@@ -78,8 +78,7 @@ func main() {
 
 	startPprofServer()
 
-	// Fail fast on a bad CELLAR before serving.
-	_ = cellarConfig()
+	checkCellarConfig()
 
 	auditLogger := startAuditLogger()
 

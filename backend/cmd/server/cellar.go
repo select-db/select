@@ -7,17 +7,12 @@ import (
 	"backend/internal/cellar"
 )
 
-// cellarConfig reads CELLAR. A value that does not parse stops the server: a
-// typo must not quietly turn managed databases off in production.
-func cellarConfig() cellar.Config {
+// checkCellarConfig stops the server on a CELLAR it cannot parse, and logs
+// whether managed databases are on.
+func checkCellarConfig() {
 	cfg, err := cellar.Parse(os.Getenv("CELLAR"))
 	if err != nil {
 		log.Fatalf("cellar: %v", err)
 	}
-	if cfg.Mode == cellar.Remote {
-		log.Printf("cellar: remote at %s", cfg.URL)
-	} else {
-		log.Printf("cellar: %s", cfg.Mode)
-	}
-	return cfg
+	log.Printf("cellar: %+v", cfg)
 }
