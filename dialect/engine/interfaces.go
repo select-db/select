@@ -13,9 +13,10 @@ type Conn struct {
 	DB    *sql.DB
 	Meta  *core.Metadata
 	Perms core.CompiledPermissions
-	// Prepare, when set, runs on the connection taken for each user statement,
-	// before it. For settings a driver keeps per connection; an error aborts.
-	Prepare func(*sql.Conn) error
+	// Prepare, when set, runs with each user statement on the connection taken
+	// for it, before it: for rules a driver keeps per connection, and checks the
+	// permissions do not cover. An error refuses the statement.
+	Prepare func(c *sql.Conn, statement string) error
 }
 
 type querier interface {
@@ -23,9 +24,9 @@ type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// statementConn is where one user statement runs: the pool, or a connection
-// Prepare has set up. Call release once the statement's rows are closed.
-func (c Conn) statementConn(ctx context.Context) (q querier, release func(), err error) {
+// statementConn is where statement runs: the pool, or a connection Prepare has
+// set up. Call release once the statement's rows are closed.
+func (c Conn) statementConn(ctx context.Context, statement string) (q querier, release func(), err error) {
 	if c.Prepare == nil {
 		return c.DB, func() {}, nil
 	}
@@ -33,7 +34,7 @@ func (c Conn) statementConn(ctx context.Context) (q querier, release func(), err
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := c.Prepare(sc); err != nil {
+	if err := c.Prepare(sc, statement); err != nil {
 		_ = sc.Close()
 		return nil, nil, err
 	}

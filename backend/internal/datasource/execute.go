@@ -8,8 +8,6 @@ import (
 	"backend/internal/middlewares"
 	"time"
 
-	"backend/internal/authz"
-
 	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
@@ -36,64 +34,33 @@ func ExecuteHandler() http.HandlerFunc {
 
 		workspaceID := middlewares.MemberWorkspaceID(r)
 
-		ds, err := GetOrLoadDatasource(r.Context(), req.ID, workspaceID)
+		o, err := Open(r, req.ID, workspaceID)
 		if err != nil {
-			http.Error(w, "datasource not found", http.StatusNotFound)
+			OpenError(w, err, "datasource execute", workspaceID, req.ID)
 			return
 		}
 
-		if ds.CellarID != "" {
-			client, inst, err := OnCellar(r, req.ID, workspaceID, ds)
-			if err != nil {
-				cellarError(w, err, "datasource execute", workspaceID, req.ID)
-				return
-			}
-			stream(w, r, req, ds, client, engine.Conn{}, inst)
-			return
+		ctx := r.Context()
+		if req.TimeoutMs > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond+5*time.Second)
+			defer cancel()
 		}
 
-		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
-		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource execute", workspaceID, req.ID), http.StatusBadGateway)
-			return
-		}
+		inner := arrowResponse(w)
+		defer inner.Close()
 
-		dialect := engine.GetDialect(ds.DBType)
-		if dialect == nil {
-			http.Error(w, "unsupported database type", http.StatusBadRequest)
-			return
-		}
-
-		meta, _ := engine.GetOrFetchMetadata(r.Context(), workspaceID, ds.DSN, dbConn, dialect, "", false)
-
-		conn := engine.Conn{
-			DB:    dbConn,
-			Meta:  meta,
-			Perms: authz.CompiledFromRequest(r),
-		}
-		stream(w, r, req, ds, &engine.Client{}, conn, engine.DBInstance{ID: req.ID, DBType: ds.DBType})
+		// Wrap the sink to capture the query's outcome for the audit log.
+		sink := newLoggingSink(inner, newQueryAuditRecord(r, req, o.DS.DBType))
+		o.Stream(ctx, req.SQL, req.options(), sink)
 	}
 }
 
-// stream runs req through client into an audited arrow response.
-func stream(w http.ResponseWriter, r *http.Request, req executeRequest, ds *ResolvedDatasource, client *engine.Client, conn engine.Conn, inst engine.DBInstance) {
-	ctx := r.Context()
-	if req.TimeoutMs > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond+5*time.Second)
-		defer cancel()
-	}
-
-	inner := arrowResponse(w)
-	defer inner.Close()
-
-	// Wrap the sink to capture the query's outcome for the audit log.
-	sink := newLoggingSink(inner, newQueryAuditRecord(r, req, ds.DBType))
-
-	client.StreamTo(ctx, conn, inst, middlewares.MemberWorkspaceID(r), req.SQL, engine.Options{
+func (req executeRequest) options() engine.Options {
+	return engine.Options{
 		MaxBytes: req.MaxBytes,
 		Timeout:  time.Duration(req.TimeoutMs) * time.Millisecond,
-	}, sink)
+	}
 }
 
 // arrowResponse starts a streamed result; the caller closes the sink.

@@ -34,8 +34,8 @@ func (f *Files) Path(id string) string {
 }
 
 // Open returns the database g names, with the caller's permissions, set up so
-// every statement runs under the isolation rules.
-func (f *Files) Open(g auth.CellarGrant, perms []core.PermissionEntry) (engine.Conn, error) {
+// every user statement runs under the isolation rules.
+func (f *Files) Open(g auth.CellarGrant, perms core.CompiledPermissions) (engine.Conn, error) {
 	if g.MaxBytes <= 0 {
 		return engine.Conn{}, fmt.Errorf("grant for db %s has no size cap", g.DB)
 	}
@@ -44,9 +44,14 @@ func (f *Files) Open(g auth.CellarGrant, perms []core.PermissionEntry) (engine.C
 		return engine.Conn{}, err
 	}
 	return engine.Conn{
-		DB:      db,
-		Perms:   core.Compile(perms).WithDenyUnmanaged(),
-		Prepare: func(c *sql.Conn) error { return limit(c, g.MaxBytes) },
+		DB:    db,
+		Perms: perms,
+		Prepare: func(c *sql.Conn, statement string) error {
+			if err := CheckStatement(statement); err != nil {
+				return err
+			}
+			return limit(c, g.MaxBytes)
+		},
 	}, nil
 }
 
@@ -67,8 +72,8 @@ func (f *Files) db(id string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// WAL lets the schema fetch's ANALYZE run beside its reads. The file keeps
-	// it; switching needs the only connection, which this is.
+	// WAL lets readers run beside a writer. The file keeps it, and switching
+	// needs the only connection, which this is.
 	if _, err := db.Exec("PRAGMA journal_mode = WAL"); err != nil {
 		_ = db.Close()
 		return nil, err

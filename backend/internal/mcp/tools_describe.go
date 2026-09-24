@@ -152,7 +152,11 @@ func toolGetDatabaseSchemas() Tool {
 			if err := json.Unmarshal(raw, &args); err != nil || args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			o, err := openDatasource(ctx, r, args.DatasourceID, workspaceID)
+			o, err := openDatasource(r, args.DatasourceID, workspaceID)
+			if err != nil {
+				return nil, err
+			}
+			meta, err := describe(ctx, o)
 			if err != nil {
 				return nil, err
 			}
@@ -163,8 +167,8 @@ func toolGetDatabaseSchemas() Tool {
 				Tables []string `json:"tables"`
 				Views  []string `json:"views,omitempty"`
 			}
-			out := make([]schemaRow, 0, len(o.meta.Schemas))
-			for _, s := range o.meta.Schemas {
+			out := make([]schemaRow, 0, len(meta.Schemas))
+			for _, s := range meta.Schemas {
 				row := schemaRow{ID: s.Name, Name: s.Name}
 				for _, t := range s.Tables {
 					row.Tables = append(row.Tables, t.Name)
@@ -176,7 +180,7 @@ func toolGetDatabaseSchemas() Tool {
 			}
 			return map[string]any{
 				"datasource_id": args.DatasourceID,
-				"dialect":       o.dialect.Name(),
+				"dialect":       o.DS.DBType,
 				"schemas":       out,
 			}, nil
 		},
@@ -213,11 +217,15 @@ func toolGetDatabaseTableDetail() Tool {
 			if args.DatasourceID == "" || args.SchemaID == "" || args.TableName == "" {
 				return nil, errBadArgument("datasource_id, schema_id, and table_name are required")
 			}
-			o, err := openDatasource(ctx, r, args.DatasourceID, workspaceID)
+			o, err := openDatasource(r, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
-			for _, s := range o.meta.Schemas {
+			meta, err := describe(ctx, o)
+			if err != nil {
+				return nil, err
+			}
+			for _, s := range meta.Schemas {
 				if s.Name != args.SchemaID {
 					continue
 				}

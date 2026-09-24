@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"time"
 
+	"backend/internal/auth"
+	"backend/internal/authz"
 	"backend/internal/cellar"
 
+	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -28,18 +30,18 @@ func CellarHandler(files *cellar.Files, pub *rsa.PublicKey, cellarID string) htt
 
 // openFile opens the database the request's grant names, with the caller's
 // permissions and its schema.
-func openFile(r *http.Request, files *cellar.Files, noCache bool) (engine.Conn, error) {
+func openFile(r *http.Request, files *cellar.Files, noCache bool) (engine.Conn, auth.CellarGrant, error) {
 	g := cellar.GrantFrom(r.Context())
-	perms, err := cellar.PermsFrom(r)
+	entries, err := cellar.PermsFrom(r)
 	if err != nil {
-		return engine.Conn{}, err
+		return engine.Conn{}, g, err
 	}
-	conn, err := files.Open(g, perms)
+	conn, err := files.Open(g, authz.Compiled(entries))
 	if err != nil {
-		return engine.Conn{}, err
+		return engine.Conn{}, g, err
 	}
 	conn.Meta, err = engine.GetOrFetchMetadata(r.Context(), g.WS, files.Path(g.DB), conn.DB, engine.GetDialect(managedDBType), "", noCache)
-	return conn, err
+	return conn, g, err
 }
 
 // cellarFail answers a request the cellar could not serve, keeping paths out of
@@ -56,29 +58,20 @@ func cellarExecute(files *cellar.Files) http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		conn, err := openFile(r, files, false)
+		conn, g, err := openFile(r, files, false)
 		if err != nil {
 			cellarFail(w, r, err)
 			return
 		}
-
 		sink := arrowResponse(w)
 		defer sink.Close()
-		if err := cellar.CheckStatement(req.SQL); err != nil {
-			sink.OnError(err)
-			return
-		}
-		inst := engine.DBInstance{ID: r.PathValue("id"), DBType: managedDBType}
-		engine.StreamLocal(r.Context(), conn, inst, req.SQL, engine.Options{
-			MaxBytes: req.MaxBytes,
-			Timeout:  time.Duration(req.TimeoutMs) * time.Millisecond,
-		}, sink)
+		engine.StreamLocal(r.Context(), conn, engine.DBInstance{ID: g.DB, DBType: managedDBType}, req.SQL, req.options(), sink)
 	}
 }
 
 func cellarSchema(files *cellar.Files) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := openFile(r, files, r.URL.Query().Get("no_cache") == "true")
+		conn, _, err := openFile(r, files, r.URL.Query().Get("no_cache") == "true")
 		if err != nil {
 			cellarFail(w, r, err)
 			return
@@ -89,12 +82,11 @@ func cellarSchema(files *cellar.Files) http.HandlerFunc {
 
 func cellarPing(files *cellar.Files) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := files.Open(cellar.GrantFrom(r.Context()), nil)
-		if err != nil {
-			cellarFail(w, r, err)
-			return
+		conn, err := files.Open(cellar.GrantFrom(r.Context()), core.CompiledPermissions{})
+		if err == nil {
+			err = conn.DB.PingContext(r.Context())
 		}
-		if err := conn.DB.PingContext(r.Context()); err != nil {
+		if err != nil {
 			cellarFail(w, r, err)
 			return
 		}
@@ -104,12 +96,11 @@ func cellarPing(files *cellar.Files) http.HandlerFunc {
 
 func cellarDump(files *cellar.Files) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := openFile(r, files, false)
+		conn, g, err := openFile(r, files, false)
 		if err != nil {
 			cellarFail(w, r, err)
 			return
 		}
-		g := cellar.GrantFrom(r.Context())
 		schemaSQL := engine.GetOrGenerateDump(engine.GetDialect(managedDBType), g.WS, files.Path(g.DB), conn.Meta, false)
 		writeZstdJSON(w, map[string]string{"sql": schemaSQL})
 	}

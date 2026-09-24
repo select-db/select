@@ -29,10 +29,10 @@ var cellarClient *cellar.Client
 // UseCellar sends managed databases to c. Call once at startup.
 func UseCellar(c *cellar.Client) { cellarClient = c }
 
-// OnCellar returns the engine client and instance that run the managed
+// onCellar returns the engine client and instance that run the managed
 // database id on its cellar, carrying the caller's permissions on it: the
 // cellar enforces them, the backend does not.
-func OnCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (*engine.Client, engine.DBInstance, error) {
+func onCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (*engine.Client, engine.DBInstance, error) {
 	if cellarClient == nil {
 		return nil, engine.DBInstance{}, ErrCellarOff
 	}

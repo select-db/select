@@ -8,6 +8,7 @@ import (
 	"backend/internal/auth"
 
 	"github.com/google/uuid"
+	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 	"github.com/stretchr/testify/require"
 )
@@ -30,13 +31,13 @@ func statementConn(t *testing.T, conn engine.Conn) *sql.Conn {
 	c, err := conn.DB.Conn(context.Background())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
-	require.NoError(t, conn.Prepare(c))
+	require.NoError(t, conn.Prepare(c, "INSERT INTO blob VALUES (NULL)"))
 	return c
 }
 
 func TestOpenCapsTheSize(t *testing.T) {
 	files, id := newFile(t)
-	conn, err := files.Open(auth.CellarGrant{DB: id, MaxBytes: 256 << 10}, nil)
+	conn, err := files.Open(auth.CellarGrant{DB: id, MaxBytes: 256 << 10}, core.CompiledPermissions{})
 	require.NoError(t, err)
 
 	c := statementConn(t, conn)
@@ -47,17 +48,27 @@ func TestOpenCapsTheSize(t *testing.T) {
 	require.ErrorContains(t, err, "full")
 }
 
+func TestOpenRefusesForbiddenStatements(t *testing.T) {
+	files, id := newFile(t)
+	conn, err := files.Open(auth.CellarGrant{DB: id, MaxBytes: 1 << 20}, core.CompiledPermissions{})
+	require.NoError(t, err)
+	c, err := conn.DB.Conn(context.Background())
+	require.NoError(t, err)
+	defer c.Close()
+	require.ErrorIs(t, conn.Prepare(c, "PRAGMA temp_store_directory = '/tmp'"), ErrForbiddenStatement)
+}
+
 func TestOpenRefuses(t *testing.T) {
 	files, id := newFile(t)
 
-	_, err := files.Open(auth.CellarGrant{DB: id}, nil)
+	_, err := files.Open(auth.CellarGrant{DB: id}, core.CompiledPermissions{})
 	require.Error(t, err, "a grant without a size cap")
 
-	_, err = files.Open(auth.CellarGrant{DB: "../" + id, MaxBytes: 1 << 20}, nil)
+	_, err = files.Open(auth.CellarGrant{DB: "../" + id, MaxBytes: 1 << 20}, core.CompiledPermissions{})
 	require.Error(t, err, "an id that is not a uuid")
 
 	missing := uuid.NewString()
-	_, err = files.Open(auth.CellarGrant{DB: missing, MaxBytes: 1 << 20}, nil)
+	_, err = files.Open(auth.CellarGrant{DB: missing, MaxBytes: 1 << 20}, core.CompiledPermissions{})
 	require.Error(t, err, "a database that does not exist")
 	require.NoFileExists(t, files.Path(missing))
 }

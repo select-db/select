@@ -28,7 +28,7 @@ func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, o
 		defer cancel()
 	}
 
-	q, release, err := conn.statementConn(ctx)
+	q, release, err := conn.statementConn(ctx, sql)
 	if err != nil {
 		result.Errors = []string{err.Error()}
 		return result
@@ -147,7 +147,7 @@ func StreamLocal(
 		defer cancel()
 	}
 
-	q, release, err := conn.statementConn(ctx)
+	q, release, err := conn.statementConn(ctx, sql)
 	if err != nil {
 		sink.OnError(err)
 		return

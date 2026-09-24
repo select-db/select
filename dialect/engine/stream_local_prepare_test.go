@@ -29,7 +29,7 @@ func TestStreamLocalRunsPrepareOnTheStatementConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readOnly := func(c *sql.Conn) error {
+	readOnly := func(c *sql.Conn, _ string) error {
 		_, err := c.ExecContext(context.Background(), "PRAGMA query_only = 1")
 		return err
 	}
@@ -37,7 +37,7 @@ func TestStreamLocalRunsPrepareOnTheStatementConnection(t *testing.T) {
 		t.Fatalf("write ran on a connection Prepare made read-only: %v", got)
 	}
 
-	refuse := func(*sql.Conn) error { return errors.New("refused") }
+	refuse := func(_ *sql.Conn, stmt string) error { return errors.New("refused " + stmt) }
 	if got := outcome(t, Conn{DB: db, Prepare: refuse}, "INSERT INTO t VALUES (1)"); got[len(got)-1] != "error" {
 		t.Fatalf("statement ran after Prepare failed: %v", got)
 	}

@@ -2,42 +2,16 @@ package datasource
 
 import (
 	"context"
-	"errors"
-	"log"
 	"net/http"
-
-	"backend/internal/middlewares"
 	"time"
 
-	"github.com/selectDb/dialect/engine"
+	"backend/internal/middlewares"
 )
 
 // genericConnErr is returned to clients for any datasource connection
 // failure. The detail is logged server-side only: a raw dial error leaks
 // internal network topology and turns this endpoint into an SSRF oracle.
 const genericConnErr = "could not connect to the datasource"
-
-// safeConnErr returns the error message if it is a ConfigError (safe to
-// show), otherwise returns genericConnErr and logs the real error.
-func safeConnErr(err error, logPrefix, workspaceID, dsID string) string {
-	var cfgErr *engine.ConfigError
-	if errors.As(err, &cfgErr) {
-		return cfgErr.Msg
-	}
-	log.Printf("%s: open conn ws=%s id=%s: %v", logPrefix, workspaceID, dsID, err)
-	return genericConnErr
-}
-
-// cellarError answers a managed database request the cellar could not serve.
-// The detail is logged: it can name the cellar's address.
-func cellarError(w http.ResponseWriter, err error, logPrefix, workspaceID, dsID string) {
-	if errors.Is(err, ErrCellarOff) {
-		http.Error(w, err.Error(), http.StatusNotImplemented)
-		return
-	}
-	log.Printf("%s: cellar ws=%s id=%s: %v", logPrefix, workspaceID, dsID, err)
-	http.Error(w, "internal error", http.StatusInternalServerError)
-}
 
 func PingHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -61,41 +35,18 @@ func PingHandler() http.HandlerFunc {
 			}
 		}
 
-		ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
+		o, err := Open(r, id, workspaceID)
+		if err == nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+			err = o.Client.Ping(ctx, o.Conn, o.Inst, workspaceID, noCache)
+		}
 		if err != nil {
-			http.Error(w, "datasource not found", http.StatusNotFound)
-			return
-		}
-
-		if ds.CellarID != "" {
-			client, inst, err := OnCellar(r, id, workspaceID, ds)
-			if err != nil {
-				cellarError(w, err, "datasource ping", workspaceID, id)
-				return
+			status, msg := openFailure(err, "datasource ping", workspaceID, id)
+			if status == http.StatusBadGateway {
+				pingCache.Set(pingKey, msg)
 			}
-			if err := client.Ping(r.Context(), engine.Conn{}, inst, workspaceID, noCache); err != nil {
-				cellarError(w, err, "datasource ping", workspaceID, id)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
-		if err != nil {
-			msg := safeConnErr(err, "datasource ping", workspaceID, id)
-			pingCache.Set(pingKey, msg)
-			http.Error(w, msg, http.StatusBadGateway)
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-		defer cancel()
-
-		if err := dbConn.PingContext(ctx); err != nil {
-			log.Printf("datasource ping: ping ws=%s id=%s: %v", workspaceID, id, err)
-			pingCache.Set(pingKey, genericConnErr)
-			http.Error(w, genericConnErr, http.StatusBadGateway)
+			http.Error(w, msg, status)
 			return
 		}
 

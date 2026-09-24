@@ -82,7 +82,13 @@ func ToDialectPermissions(rows []generated.AppPermission) []core.PermissionEntry
 // makes a database nobody has written a rule for deny-by-default: everything
 // the backend serves runs on our credentials. See core.WithDenyUnmanaged.
 func CompiledForWorkspace(roleIDs []string, workspaceID string) core.CompiledPermissions {
-	return core.Compile(EntriesForWorkspace(roleIDs, workspaceID)).WithDenyUnmanaged()
+	return Compiled(EntriesForWorkspace(roleIDs, workspaceID))
+}
+
+// Compiled compiles entries for a query run on our server, which the cellar
+// does with the entries the backend sends it.
+func Compiled(entries []core.PermissionEntry) core.CompiledPermissions {
+	return core.Compile(entries).WithDenyUnmanaged()
 }
 
 func CompiledFromRequest(r *http.Request) core.CompiledPermissions {
