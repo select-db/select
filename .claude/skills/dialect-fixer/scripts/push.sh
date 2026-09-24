@@ -13,7 +13,7 @@ if [ "$(git rev-parse --abbrev-ref HEAD)" != "$branch" ]; then
 	exit 2
 fi
 for delay in 2 4 8 16; do
-	git push -u origin "HEAD:refs/heads/$branch" && exit 0
+	git push origin "HEAD:refs/heads/$branch" && exit 0
 	sleep "$delay"
 done
 echo "push to $branch failed" >&2
