@@ -65,6 +65,9 @@ Settled; reopen with a reason, not a preference.
 
   Per-db size is `PRAGMA max_page_count`; PITR is Litestream retention.
 - **Names**: unique per workspace, same rules as folders.
+- **Routes**: create is `POST /datasources` for every type, fork and download
+  are explicit routes (`POST .../{id}/fork`, `GET .../{id}/download`), delete is
+  the existing `DELETE /datasources/{id}`. No route is specific to managed dbs.
 - **Errors**: the node classifies at the source into a closed set; the backend
   passes the code through and each surface maps it (REST status and
   `{code, message, ref}`, MCP `toolError`, app message). Unclassified is
@@ -103,7 +106,14 @@ Settled; reopen with a reason, not a preference.
 ### Control plane (backend)
 - [ ] Migration: managed columns on `app.datasource`, `app.node`, `workspace.plan`
 - [ ] Quota check on create and fork (count, total size)
-- [ ] `POST /datasources/managed` create: row, dedicated role, `grant_to`, node pick
+- [ ] `POST /datasources`: create any datasource with a server-generated id,
+      sharing the create path and validation of `PUT /datasources/{id}`.
+      `db_type: sqlite` with no DSN is managed (quota, node pick, file,
+      dedicated role, `grant_to`); sqlite with a DSN stays rejected. Returns
+      the id and the `db.config.json` content. Unique names make a retried
+      create a 409, not a duplicate.
+- [ ] `PUT /datasources/{id}` on a managed row: rename only; no conversion
+      between managed and unmanaged in either direction
 - [ ] `POST /datasources/{id}/fork`: `manage` on source, same create path
 - [ ] `GET /datasources/{id}/download`: `manage`, streams a `VACUUM INTO` copy
 - [ ] Delete: purge file and replica, drop db-only roles, strip rules elsewhere
