@@ -27,7 +27,7 @@ runs:
     - if: inputs.sandbox == 'true'
       shell: bash
       run: |
-        install() { sudo apt-get install -y -qq --no-install-recommends bubblewrap socat >/dev/null; }
-        install || { sudo apt-get update -qq >/dev/null && install; }
+        apt_install() { sudo apt-get install -y -qq --no-install-recommends bubblewrap socat >/dev/null; }
+        apt_install || { sudo apt-get update -qq >/dev/null && apt_install; }
         sudo sysctl -qw kernel.apparmor_restrict_unprivileged_userns=0 || true
         bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc true

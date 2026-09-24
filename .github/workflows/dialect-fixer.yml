@@ -30,22 +30,15 @@ env:
   # The analyzer-backed tests fail rather than skip, as in CI.
   SELECT_REQUIRE_ANALYZER: "1"
   SKILL: .claude/skills/dialect-fixer
-  # The agent runs in Claude Code's sandbox (.github/fixer-settings.json): no
-  # GitHub or Anthropic token in its commands, and no network but the Go and
-  # Python package hosts. So Bash is open, and these rules close what the
-  # sandbox does not: the file tools, which it does not cover. push.sh runs
-  # outside it, and is the only way to write to the remote.
+  # Commands run in Claude Code's sandbox (.github/fixer-settings.json), with
+  # no tokens and no network but the package mirrors, so Bash is open.
   TOOLS: >-
-    Read,Grep,Glob,Agent,Task,Skill,Bash,
-    Edit(dialect/**),Edit(/dialect/**),Edit(/.fixer-work/**),
+    Read,Grep,Glob,Agent,Task,Skill,Bash,Edit(/dialect/**),Edit(/.fixer-work/**),
     mcp__github__create_pull_request,mcp__github__update_pull_request
-  DENIED: >-
-    Edit(dialect/*/parser/**),Edit(/dialect/*/parser/**),
-    Edit(dialect/go.mod),Edit(dialect/go.sum),
-    Edit(dialect/core/tokenanalyzer/python/uv.lock),Edit(dialect/core/tokenanalyzer/python/pyproject.toml),
-    Read(//proc/**),Read(~/.ssh/**),Read(/.git/config)
-  # Strips the Anthropic token from subprocesses, and gives them a PID namespace
-  # of their own, so /proc does not show the parent's environment either.
+  # The file tools run outside the sandbox. The action's token is in Claude's
+  # own environment and in its command line, which carries the MCP config.
+  DENIED: Read(//proc/*/environ),Read(//proc/*/cmdline),Read(~/.ssh/**)
+  # Anthropic token out of subprocesses, and a PID namespace for their /proc.
   CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
 
 jobs:
@@ -105,12 +98,13 @@ jobs:
         id: agent
         if: steps.pick.outputs.issue != ''
         timeout-minutes: ${{ fromJSON(steps.pick.outputs.hard_timeout) }}
-        # git and the pull request tools use the Claude App's token, whose
-        # pushes trigger CI; the workflow does everything else with its own.
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           settings: .github/fixer-settings.json
+          # Any value makes the action keep its token out of .git/config and hand
+          # it to git through a helper; it only admits others with github_token.
+          allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
           prompt: |
             Fix issue #${{ steps.pick.outputs.issue }} in ${{ github.repository }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "fix".
@@ -263,12 +257,13 @@ jobs:
         id: agent
         if: steps.decide.outputs.pr != ''
         timeout-minutes: 45
-        # git and the pull request tools use the Claude App's token, whose
-        # pushes trigger CI; the workflow does everything else with its own.
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           settings: .github/fixer-settings.json
+          # Any value makes the action keep its token out of .git/config and hand
+          # it to git through a helper; it only admits others with github_token.
+          allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
           prompt: |
             CI failed on pull request #${{ steps.decide.outputs.pr }}, the fix for issue
             #${{ steps.decide.outputs.issue }}. The failing run is ${{ github.event.workflow_run.html_url }};
@@ -309,8 +304,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $SKILL/scripts/post-blocked.sh pr "${{ steps.decide.outputs.pr }}"
           gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
+          $SKILL/scripts/post-blocked.sh pr "${{ steps.decide.outputs.pr }}"
 
   # "@claude" from a writer on a fixer pull request: answer or change the code.
   # The writer roles here are also those context.sh keeps comments from.
@@ -373,12 +368,13 @@ jobs:
         id: agent
         if: steps.scope.outputs.ok == 'true'
         timeout-minutes: 45
-        # git and the pull request tools use the Claude App's token, whose
-        # pushes trigger CI; the workflow does everything else with its own.
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           settings: .github/fixer-settings.json
+          # Any value makes the action keep its token out of .git/config and hand
+          # it to git through a helper; it only admits others with github_token.
+          allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
           trigger_phrase: "@claude"
           claude_args: >-
             --model ${{ vars.FIXER_MODEL || 'opus' }}
