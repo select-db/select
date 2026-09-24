@@ -33,7 +33,7 @@ env:
   # What the agent may reach. Everything else is refused, so the rule lives
   # here rather than in the skill.
   TOOLS: >-
-    Read,Grep,Glob,Agent,Task,Skill,Edit(dialect/**),Write(dialect/**),
+    Read,Grep,Glob,Agent,Task,Skill,Edit(dialect/**),Write(dialect/**),Edit(/dialect/**),Write(/dialect/**),
     Bash(go -C dialect:*),Bash(gofmt:*),Bash(dialect/agentprobe:*),
     Bash(uv run --directory dialect/core/tokenanalyzer/python:*),
     Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),
@@ -47,7 +47,7 @@ env:
     mcp__github__create_pull_request,mcp__github__update_pull_request
   # Generated parsers and dependency files stay out of reach even inside dialect/.
   DENIED: >-
-    Edit(dialect/*/parser/**),Write(dialect/*/parser/**),
+    Edit(dialect/*/parser/**),Write(dialect/*/parser/**),Edit(/dialect/*/parser/**),Write(/dialect/*/parser/**),
     Edit(dialect/go.mod),Write(dialect/go.mod),Edit(dialect/go.sum),Write(dialect/go.sum),
     Edit(dialect/core/tokenanalyzer/python/uv.lock),Write(dialect/core/tokenanalyzer/python/uv.lock),
     Edit(dialect/core/tokenanalyzer/python/pyproject.toml),Write(dialect/core/tokenanalyzer/python/pyproject.toml)
@@ -155,6 +155,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           AGENT_OUTCOME: ${{ steps.agent.outcome }}
           PR: ${{ steps.opened.outputs.pr }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
         run: |
           issue=${{ steps.pick.outputs.issue }}
           gh issue edit "$issue" --remove-label fix:in-progress || true
@@ -166,7 +167,10 @@ jobs:
             # Neither a pull request nor a reasoned refusal: the run itself failed.
             # Dropping fix:go keeps the queue from retrying it forever.
             gh issue edit "$issue" --remove-label fix:go
-            gh issue comment "$issue" --body "@$FIXER_NOTIFY the fixer run ended without a pull request or a verdict ($AGENT_OUTCOME): $FIXER_RUN_URL. Add fix:go again to retry."
+            final=$(jq -r '.. | objects | select(.type? == "result") | .result // empty' "${EXECUTION_FILE:-/dev/null}" 2>/dev/null | tail -c 1500 || true)
+            printf '@%s the fixer run ended without a pull request or a verdict (%s): %s. Add fix:go again to retry.\n\nIts last words:\n\n%s\n' \
+              "$FIXER_NOTIFY" "$AGENT_OUTCOME" "$FIXER_RUN_URL" "$(sed 's/^/> /' <<<"${final:-(none)}")" > "$RUNNER_TEMP/comment.md"
+            gh issue comment "$issue" --body-file "$RUNNER_TEMP/comment.md"
           fi
 
       - name: Start the next one
