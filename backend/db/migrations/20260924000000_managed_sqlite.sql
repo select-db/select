@@ -4,37 +4,43 @@
 -- +goose StatementBegin
 ALTER TABLE app.workspace
     ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'solo'
-    CONSTRAINT workspace_plan_check CHECK (plan IN ('solo', 'teams'));
+    CHECK (plan IN ('solo', 'teams'));
 -- +goose StatementEnd
 
 -- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS app.cellar (
-    id         TEXT        PRIMARY KEY CONSTRAINT cellar_id_check CHECK (id ~ '^[a-z0-9][a-z0-9-]*$'),
+    id         TEXT        PRIMARY KEY CHECK (id ~ '^[a-z0-9][a-z0-9-]*$'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- +goose StatementEnd
 
--- A row is managed exactly when it has a cellar, and then it always has a state.
+-- A row is managed exactly when it has a cellar: then it is SQLite with no DSN,
+-- and always has a state.
 -- +goose StatementBegin
 ALTER TABLE app.datasource
     ADD COLUMN IF NOT EXISTS cellar_id    TEXT REFERENCES app.cellar(id),
-    ADD COLUMN IF NOT EXISTS state        TEXT
-        CONSTRAINT datasource_state_check CHECK (state IN ('hot', 'cold', 'moving', 'deleting')),
+    ADD COLUMN IF NOT EXISTS state        TEXT,
     ADD COLUMN IF NOT EXISTS size_bytes   BIGINT,
-    ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ,
-    ADD CONSTRAINT datasource_managed_check CHECK ((cellar_id IS NULL) = (state IS NULL));
+    ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
 -- +goose StatementEnd
-
--- A retried create must hit a conflict, not make a second db.
 -- +goose StatementBegin
-CREATE UNIQUE INDEX IF NOT EXISTS datasource_managed_name_key
-    ON app.datasource (workspace_id, name) WHERE cellar_id IS NOT NULL;
+ALTER TABLE app.datasource DROP CONSTRAINT IF EXISTS datasource_managed_check;
+-- +goose StatementEnd
+-- +goose StatementBegin
+ALTER TABLE app.datasource ADD CONSTRAINT datasource_managed_check CHECK (
+    (cellar_id IS NULL AND state IS NULL)
+    OR (
+        cellar_id IS NOT NULL
+        AND state IS NOT NULL
+        AND state IN ('hot', 'cold', 'moving', 'deleting')
+        AND db_type = 'sqlite'
+        AND encrypted_dsn IS NULL
+        AND COALESCE(size_bytes, 0) >= 0
+    )
+);
 -- +goose StatementEnd
 
 -- +goose Down
--- +goose StatementBegin
-DROP INDEX IF EXISTS app.datasource_managed_name_key;
--- +goose StatementEnd
 -- +goose StatementBegin
 ALTER TABLE app.datasource
     DROP CONSTRAINT IF EXISTS datasource_managed_check,

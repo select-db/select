@@ -152,7 +152,7 @@ func toolGetDatabaseSchemas() Tool {
 			if err := json.Unmarshal(raw, &args); err != nil || args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			_, _, meta, dialect, err := openDatasource(ctx, args.DatasourceID, workspaceID)
+			o, err := openDatasource(ctx, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
@@ -163,8 +163,8 @@ func toolGetDatabaseSchemas() Tool {
 				Tables []string `json:"tables"`
 				Views  []string `json:"views,omitempty"`
 			}
-			out := make([]schemaRow, 0, len(meta.Schemas))
-			for _, s := range meta.Schemas {
+			out := make([]schemaRow, 0, len(o.meta.Schemas))
+			for _, s := range o.meta.Schemas {
 				row := schemaRow{ID: s.Name, Name: s.Name}
 				for _, t := range s.Tables {
 					row.Tables = append(row.Tables, t.Name)
@@ -176,7 +176,7 @@ func toolGetDatabaseSchemas() Tool {
 			}
 			return map[string]any{
 				"datasource_id": args.DatasourceID,
-				"dialect":       dialect.Name(),
+				"dialect":       o.dialect.Name(),
 				"schemas":       out,
 			}, nil
 		},
@@ -213,11 +213,11 @@ func toolGetDatabaseTableDetail() Tool {
 			if args.DatasourceID == "" || args.SchemaID == "" || args.TableName == "" {
 				return nil, errBadArgument("datasource_id, schema_id, and table_name are required")
 			}
-			_, _, meta, _, err := openDatasource(ctx, args.DatasourceID, workspaceID)
+			o, err := openDatasource(ctx, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
-			for _, s := range meta.Schemas {
+			for _, s := range o.meta.Schemas {
 				if s.Name != args.SchemaID {
 					continue
 				}

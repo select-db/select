@@ -80,8 +80,7 @@ Settled. Reopen with a reason, not a preference.
 ### Routes
 - `POST /datasources`: create any datasource type, server-generated id. Same
   validation as `PUT /datasources/{id}`. Returns the id and the
-  `db.config.json` content. Names are unique per workspace, so a retried create
-  gets 409, not a duplicate.
+  `db.config.json` content. Names are free text, as for every datasource.
 - `POST /datasources/{id}/fork`: optional `at` forks from a point in time into
   a new db. The source is never touched. The backend checks `at` is inside the
   plan's window.
@@ -185,8 +184,8 @@ Numbers are order; items inside a milestone can run in parallel.
 - [x] `CELLAR` setting parsed at startup (`internal/cellar`); a bad value stops
       the server.
 - [x] Migration: `workspace.plan`, `app.cellar`, and on `app.datasource`:
-      `cellar_id`, `state`, `size_bytes`, `last_used_at`, plus a unique name
-      per workspace among managed dbs.
+      `cellar_id`, `state`, `size_bytes`, `last_used_at`, and a check that a
+      row with a cellar is SQLite with no DSN and a known state.
 
 ### 1. Cellar runs queries (local files, no bucket)
 Needs 0.
