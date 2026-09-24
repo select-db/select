@@ -15,6 +15,9 @@ required_for() { [ -n "${1:-}" ] && [ "$1" -lt "$small" ] || echo "$required"; }
 # The workflows share this list and this threshold through this mode.
 [ "$mode" = required ] && { required_for "${2:-}"; exit 0; }
 
+# A workflow that runs the reviews as a step of its own turns the hook off.
+[ "${PR_REVIEW_GATE:-}" = off ] && exit 0
+
 input=$(cat)
 
 command -v jq >/dev/null 2>&1 || exit 0

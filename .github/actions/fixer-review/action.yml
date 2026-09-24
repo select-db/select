@@ -1,0 +1,72 @@
+name: fixer-review
+description: Runs the review gate's skills over a fixer pull request as their own agent run, then labels it fix:reviewed or not.
+
+# The review is an agent run of its own, so finishing the fix cannot skip it.
+
+inputs:
+  pr:
+    description: The fixer's pull request.
+    required: true
+  issue:
+    description: The finder issue it fixes.
+    required: true
+  oauth-token:
+    description: CLAUDE_CODE_OAUTH_TOKEN.
+    required: true
+  model:
+    description: The model to review with.
+    required: true
+  tools:
+    description: The allowlist, as the fixing agent has it.
+    required: true
+  denied:
+    description: The denylist, as the fixing agent has it.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: size
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ inputs.pr }}
+      run: |
+        lines=$(gh pr view "$PR" --json additions,deletions --jq '.additions + .deletions')
+        required=$(.claude/hooks/pr-review-gate.sh required "$lines")
+        echo "required=$required" >> "$GITHUB_OUTPUT"
+        echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV"
+
+    - id: agent
+      if: steps.size.outputs.required != ''
+      # gh uses the workflow token; git and the pull request tools use the
+      # Claude App's, whose pushes trigger CI.
+      env:
+        GH_TOKEN: ${{ github.token }}
+      uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+      with:
+        claude_code_oauth_token: ${{ inputs.oauth-token }}
+        settings: '{"outputStyle": "default"}'
+        prompt: |
+          Review pull request #${{ inputs.pr }}, the fix for issue #${{ inputs.issue }} in ${{ github.repository }}.
+          Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "reviews".
+          FIXER_ISSUE=${{ inputs.issue }} FIXER_PR=${{ inputs.pr }} FIXER_DEADLINE=${{ env.FIXER_DEADLINE }}
+          FIXER_NOTIFY=${{ env.FIXER_NOTIFY }}; these are also in the environment.
+        claude_args: >-
+          --model ${{ inputs.model }}
+          --max-turns 150
+          --allowedTools "${{ inputs.tools }}"
+          --disallowedTools "${{ inputs.denied }}"
+
+    - if: always() && steps.agent.outputs.execution_file != ''
+      uses: ./.github/actions/refused-calls
+      with:
+        execution-file: ${{ steps.agent.outputs.execution_file }}
+
+    - if: always()
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ inputs.pr }}
+        EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+      run: .claude/skills/dialect-fixer/scripts/reviewed.sh "$PR" "$EXECUTION_FILE"
