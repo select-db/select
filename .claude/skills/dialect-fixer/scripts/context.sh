@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Writes what the agent reads from GitHub into .fixer-work, because the agent
 # runs with no GitHub token. Issue comments from people without write access
-# are left out: they are the easiest place to plant instructions.
+# are left out: they are the easiest place to plant instructions. The roles
+# match the mention job's in dialect-fixer.yml.
 #   context.sh <issue> [failed run id]
 set -euo pipefail
 
