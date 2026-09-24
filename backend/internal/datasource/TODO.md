@@ -39,7 +39,8 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
 Settled. Reopen with a reason, not a preference.
 
 ### Product
-- A managed db is a datasource row with `db_type: "sqlite"` and no DSN. A
+- A managed db is a datasource row with `db_type: "sqlite"`, no DSN, and a
+  `cellar_id`; `cellar_id` and `state` are set together or not at all. A
   sqlite datasource with a DSN is still rejected: the server never opens a
   path a user gave it.
 - Access goes through the backend only. No direct client endpoint in v1, so
@@ -178,12 +179,13 @@ Each milestone ships behind `CELLAR` unset in prod and leaves `dev` green.
 Numbers are order; items inside a milestone can run in parallel.
 
 ### 0. Groundwork
-- [ ] `mcp.asToolError`: stop returning `err.Error()` for unknown errors; map
-      to `internal` with a `ref`.
-- [ ] `CELLAR` setting and the `disabled` answer on every managed entry point.
-      Test: with `CELLAR` unset, all existing tests pass.
-- [ ] Migration: `workspace.plan`, `app.cellar`, and on `app.datasource`:
-      `managed`, `cellar_id`, `size_bytes`, `state`, `last_used_at`.
+- [x] `mcp.asToolError`: unknown errors become `internal` with a `ref`, and
+      connection errors go through `datasource.SafeConnErr` like REST.
+- [x] `CELLAR` setting parsed at startup (`internal/cellar`); a bad value stops
+      the server.
+- [x] Migration: `workspace.plan`, `app.cellar`, and on `app.datasource`:
+      `cellar_id`, `state`, `size_bytes`, `last_used_at`, plus a unique name
+      per workspace among managed dbs.
 
 ### 1. Cellar runs queries (local files, no bucket)
 Needs 0.
@@ -210,6 +212,7 @@ Needs 1.
       `GET /cellar/inventory`, `DELETE /cellar/dbs/{id}`.
 - [ ] Backend: `POST /datasources`, fork, download, rename-only `PUT`,
       delete marking `deleting`; quota checks; dedicated role and `grant_to`.
+- [ ] `disabled` on each of these entry points when `CELLAR` is unset.
 - [ ] MCP `create_database`, `fork_database`.
 - [ ] Audit: reuse `datasource.lifecycle.*`.
 

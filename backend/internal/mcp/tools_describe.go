@@ -46,7 +46,7 @@ func toolListDatasources() Tool {
 			}
 			rows, err := db.Queries.ListDatasourcesByWorkspace(ctx, parsedWS)
 			if err != nil {
-				return nil, errUpstream("could not list datasources: " + err.Error())
+				return nil, fmt.Errorf("list datasources: %w", err)
 			}
 
 			// Wildcard-DB entries (DbInstanceID "*") apply to every datasource
@@ -249,7 +249,7 @@ func loadMetadata(ctx context.Context, datasourceID, workspaceID string) (*core.
 	}
 	dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 	if err != nil {
-		return nil, nil, errUpstream("could not open datasource connection: " + err.Error())
+		return nil, nil, errUpstream(datasource.SafeConnErr(err, "mcp", workspaceID, datasourceID))
 	}
 	d := engine.GetDialect(ds.DBType)
 	if d == nil {

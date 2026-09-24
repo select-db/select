@@ -78,6 +78,9 @@ func main() {
 
 	startPprofServer()
 
+	// Fail fast on a bad CELLAR before serving.
+	_ = cellarConfig()
+
 	auditLogger := startAuditLogger()
 
 	mux := http.NewServeMux()

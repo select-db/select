@@ -122,7 +122,7 @@ func openConn(ctx context.Context, r *http.Request, datasourceID, workspaceID st
 	}
 	dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 	if err != nil {
-		return engine.Conn{}, nil, nil, errUpstream("could not open datasource connection: " + err.Error())
+		return engine.Conn{}, nil, nil, errUpstream(datasource.SafeConnErr(err, "mcp", workspaceID, datasourceID))
 	}
 	dialect := engine.GetDialect(ds.DBType)
 	if dialect == nil {
