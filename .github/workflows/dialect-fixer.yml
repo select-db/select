@@ -15,6 +15,8 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+    # Every other branch's CI would start a run only to skip it.
+    branches: ["claude/fix-*"]
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -76,6 +78,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # A stored workflow token outranks the App's, and CI then waits for approval.
+          persist-credentials: false
 
       - name: Pick the next issue
         id: pick
@@ -174,7 +178,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       startsWith(github.event.workflow_run.head_branch, 'claude/fix-')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: dialect-fixer-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
@@ -194,6 +198,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Decide
         id: decide
@@ -229,7 +234,7 @@ jobs:
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
           echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
-          echo "FIXER_DEADLINE=$(( $(date +%s) + 15 * 60 ))" >> "$GITHUB_ENV"
+          echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV"
 
       - if: steps.decide.outputs.pr != ''
         uses: ./.github/actions/dialect-agent-env
@@ -237,7 +242,7 @@ jobs:
       - name: Fix CI
         id: agent
         if: steps.decide.outputs.pr != ''
-        timeout-minutes: 25
+        timeout-minutes: 45
         # gh comments and labels as the workflow; git and the pull request tools
         # use the Claude App's token, whose pushes trigger CI.
         env:
@@ -290,7 +295,7 @@ jobs:
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        startsWith(github.event.pull_request.head.ref, 'claude/fix-'))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: dialect-fixer-pr-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: false
@@ -312,7 +317,7 @@ jobs:
           case "$head" in
             claude/fix-*) echo "ok=true" >> "$GITHUB_OUTPUT"
                           echo "FIXER_ISSUE=${head#claude/fix-}" >> "$GITHUB_ENV"
-                          echo "FIXER_DEADLINE=$(( $(date +%s) + 15 * 60 ))" >> "$GITHUB_ENV" ;;
+                          echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV" ;;
             *) echo "#$NUMBER is not a fixer pull request." >> "$GITHUB_STEP_SUMMARY" ;;
           esac
 
@@ -320,6 +325,7 @@ jobs:
         if: steps.scope.outputs.ok == 'true'
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - if: steps.scope.outputs.ok == 'true'
         uses: ./.github/actions/dialect-agent-env
@@ -327,7 +333,7 @@ jobs:
       - name: Answer
         id: agent
         if: steps.scope.outputs.ok == 'true'
-        timeout-minutes: 25
+        timeout-minutes: 45
         # gh comments and labels as the workflow; git and the pull request tools
         # use the Claude App's token, whose pushes trigger CI.
         env:
