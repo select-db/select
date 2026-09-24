@@ -153,7 +153,11 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 	if cr := stmt.CreateStatement(); cr != nil {
 		return i.inspectCreate(cr)
 	}
-	return nil
+	// No branch above reads this statement, so it takes manage for whatever it
+	// does. The reads nested in it are still reads: manage is not a right to
+	// read rows, so each of those tables needs its own select.
+	read := core.NestUnderUnknown(i.extractEmbeddedSubqueries(stmt)...)
+	return &read
 }
 
 // ============================================

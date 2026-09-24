@@ -157,7 +157,11 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 		return i.inspectCopy(copyStmt)
 	}
 
-	return nil
+	// No branch above reads this statement, so it takes manage for whatever it
+	// does. The reads nested in it are still reads: manage is not a right to
+	// read rows, so each of those tables needs its own select.
+	read := core.NestUnderUnknown(i.extractEmbeddedSubqueries(stmt)...)
+	return &read
 }
 
 // inspectSelect analyzes a SELECT statement, including all UNION/INTERSECT/EXCEPT branches.
