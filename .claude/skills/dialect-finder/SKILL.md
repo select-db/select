@@ -49,13 +49,14 @@ through `go run` or from another directory. `scripts/ledger.py` does the
 arithmetic; `references/ledger.md` is the ledger's schema;
 `references/issue.md` is how an issue is written and labelled.
 
-Run everything from the repository root, and call the scripts by the paths
-written here: the workflow allows tools by exact command prefix, so
-`cd scripts && ./checkpoint.sh` is refused where
-`.claude/skills/dialect-finder/scripts/checkpoint.sh` is not. Below,
-`ledger.py` and `checkpoint.sh` are shorthand for
-`python3 .claude/skills/dialect-finder/scripts/ledger.py` and
-`.claude/skills/dialect-finder/scripts/checkpoint.sh`.
+Commands run in Claude Code's sandbox, with no GitHub token and no network, so
+any shell spelling works but nothing inside reaches GitHub. Two scripts run
+outside it, and only when called by exactly these paths from the repository
+root: `.claude/skills/dialect-finder/scripts/checkpoint.sh`, which pushes the
+ledger, and `.claude/skills/dialect-finder/scripts/file.sh`, which files and
+comments (`references/issue.md`). Below, `ledger.py`, `checkpoint.sh` and
+`file.sh` are shorthand for `python3
+.claude/skills/dialect-finder/scripts/ledger.py` and those two paths.
 
 ## A run
 
