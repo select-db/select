@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Commits the ledger and pushes it to the memory branch. The finder's only way
-# to write to the remote, so the branch it can reach is fixed here.
+# Commits the ledger and pushes it to the memory branch, and to no other.
 set -euo pipefail
 
 memory=${FINDER_MEMORY:-.finder-memory}
