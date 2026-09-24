@@ -12,8 +12,17 @@ small=50
 # The skills a pull request changing $1 lines needs; unknown counts as large.
 required_for() { [ -n "${1:-}" ] && [ "$1" -lt "$small" ] || echo "$required"; }
 
-# The workflows share this list and this threshold through this mode.
+# Reads tool calls, one per line ("Skill <name>" or the tool's name), and
+# prints the skills that ran: loading one only reads its instructions, and both
+# fan out to sub-agents, so a skill counts once an Agent or Task call follows.
+fanned_out() {
+	awk '$1 == "Skill" { current = $2; sub(/.*:/, "", current); next }
+		($1 == "Agent" || $1 == "Task") && current != "" { print current }' | sort -u
+}
+
+# The workflows share this list, this threshold and this rule through these modes.
 [ "$mode" = required ] && { required_for "${2:-}"; exit 0; }
+[ "$mode" = fanned-out ] && { fanned_out; exit 0; }
 
 input=$(cat)
 
@@ -44,26 +53,28 @@ pr-opened)
 skill-ran)
 	[ -f "$state/pending" ] || exit 0
 	name=$(json '.tool_input.skill // empty')
-	name=${name##*:}
-	for want in $required; do
-		[ "$name" = "$want" ] && : >"$state/$want"
-	done
+	echo "Skill $name" >>"$state/calls"
+	;;
+agent-ran)
+	[ -f "$state/pending" ] || exit 0
+	echo Agent >>"$state/calls"
 	;;
 stop)
 	[ -f "$state/pending" ] || exit 0
 	[ "$(json '.stop_hook_active // false')" = "true" ] && exit 0
+	ran=$(fanned_out 2>/dev/null <"$state/calls")
 	missing=''
 	for want in $required; do
-		[ -f "$state/$want" ] || missing="$missing $want"
+		grep -qx "$want" <<<"$ran" || missing="$missing $want"
 	done
 	if [ -n "$missing" ]; then
 		jq -n --arg missing "${missing# }" '{
 			decision: "block",
-			reason: ("A pull request was opened in this session and these skills have not run over the diff yet: " + $missing + ". Run each one against the branch base, report the findings, then finish.")
+			reason: ("A pull request was opened in this session and these skills have not run over the diff yet: " + $missing + ". Invoke each one against the branch base and let it launch its agents, report the findings, then finish.")
 		}'
 		exit 0
 	fi
-	rm -f "$state/pending"
+	rm -f "$state/pending" "$state/calls"
 	;;
 esac
 exit 0

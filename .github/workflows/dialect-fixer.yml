@@ -15,6 +15,8 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+    # Every other branch's CI would start a run only to skip it.
+    branches: ["claude/fix-*"]
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -37,7 +39,7 @@ env:
     Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),
     Bash(git add:*),Bash(git commit:*),Bash(git stash:*),Bash(git switch:*),
     Bash(git fetch:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(git rebase:*),
-    Bash(.claude/skills/dialect-fixer/scripts/push.sh),Bash(rm dialect/zz_probe.jsonl),
+    Bash(.claude/skills/dialect-fixer/scripts/push.sh),Bash(rm dialect/zz_probe.jsonl),Bash(rm dialect/core/tokenanalyzer/python/zz_probe.py),
     Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),
     Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh pr diff:*),Bash(gh run view:*),
     Bash(date:*),Bash(jq:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),
@@ -76,6 +78,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # A stored workflow token outranks the App's, and CI then waits for approval.
+          persist-credentials: false
 
       - name: Pick the next issue
         id: pick
@@ -127,22 +131,36 @@ jobs:
         with:
           execution-file: ${{ steps.agent.outputs.execution_file }}
 
+      - name: Find the pull request
+        id: opened
+        if: always() && steps.pick.outputs.issue != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr=$(gh pr list --head "claude/fix-${{ steps.pick.outputs.issue }}" --state open --json number --jq '.[0].number // empty')
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+
+      # The agent reviews its own pull request; this checks from its transcript
+      # that it did, before anything can mark the pull request ready.
+      - name: Reviewed
+        if: always() && steps.opened.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: $SKILL/scripts/reviewed.sh "${{ steps.opened.outputs.pr }}" "$EXECUTION_FILE"
+
       - name: Wrap up
         if: always() && steps.pick.outputs.issue != ''
         env:
           GH_TOKEN: ${{ github.token }}
           AGENT_OUTCOME: ${{ steps.agent.outcome }}
-          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+          PR: ${{ steps.opened.outputs.pr }}
         run: |
           issue=${{ steps.pick.outputs.issue }}
           gh issue edit "$issue" --remove-label fix:in-progress || true
           labels=$(gh issue view "$issue" --json labels --jq '.labels[].name')
-          pr=$(gh pr list --head "claude/fix-$issue" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$pr" ]; then
+          if [ -n "$PR" ]; then
             gh issue edit "$issue" --add-label fix:pr-open
-            # The review gate is a hook the agent can finish past, so readiness
-            # rests on the skills this run's transcript shows.
-            $SKILL/scripts/reviewed.sh "$pr" "$EXECUTION_FILE"
             $SKILL/scripts/ready.sh "$issue"
           elif ! grep -qx fix:blocked <<<"$labels"; then
             # Neither a pull request nor a reasoned refusal: the run itself failed.
@@ -174,7 +192,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       startsWith(github.event.workflow_run.head_branch, 'claude/fix-')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: dialect-fixer-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
@@ -194,6 +212,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Decide
         id: decide
@@ -229,7 +248,7 @@ jobs:
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
           echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
-          echo "FIXER_DEADLINE=$(( $(date +%s) + 15 * 60 ))" >> "$GITHUB_ENV"
+          echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV"
 
       - if: steps.decide.outputs.pr != ''
         uses: ./.github/actions/dialect-agent-env
@@ -237,7 +256,7 @@ jobs:
       - name: Fix CI
         id: agent
         if: steps.decide.outputs.pr != ''
-        timeout-minutes: 25
+        timeout-minutes: 45
         # gh comments and labels as the workflow; git and the pull request tools
         # use the Claude App's token, whose pushes trigger CI.
         env:
@@ -264,19 +283,27 @@ jobs:
         with:
           execution-file: ${{ steps.agent.outputs.execution_file }}
 
+      - name: Pushed
+        id: pushed
+        if: always() && steps.decide.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh pr view "${{ steps.decide.outputs.pr }}" --json headRefOid --jq .headRefOid)
+          [ "$head" = "${{ steps.decide.outputs.head }}" ] || echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Reviewed
+        if: always() && steps.pushed.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: $SKILL/scripts/reviewed.sh "${{ steps.decide.outputs.pr }}" "$EXECUTION_FILE"
+
       - name: Release the issue
         if: always() && steps.decide.outputs.pr != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ steps.decide.outputs.pr }}
-          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
-        run: |
-          # A pushed CI fix is new code, reviewed like the first push.
-          head=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
-          if [ "$head" != "${{ steps.decide.outputs.head }}" ]; then
-            $SKILL/scripts/reviewed.sh "$PR" "$EXECUTION_FILE"
-          fi
-          gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
+        run: gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
 
   # "@claude" from a writer on a fixer pull request: answer or change the code.
   mention:
@@ -290,7 +317,7 @@ jobs:
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        startsWith(github.event.pull_request.head.ref, 'claude/fix-'))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: dialect-fixer-pr-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: false
@@ -311,8 +338,10 @@ jobs:
             --jq 'if .isCrossRepository then "" else .headRefName end')
           case "$head" in
             claude/fix-*) echo "ok=true" >> "$GITHUB_OUTPUT"
+                          echo "pr=$NUMBER" >> "$GITHUB_OUTPUT"
+                          echo "head=$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
                           echo "FIXER_ISSUE=${head#claude/fix-}" >> "$GITHUB_ENV"
-                          echo "FIXER_DEADLINE=$(( $(date +%s) + 15 * 60 ))" >> "$GITHUB_ENV" ;;
+                          echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV" ;;
             *) echo "#$NUMBER is not a fixer pull request." >> "$GITHUB_STEP_SUMMARY" ;;
           esac
 
@@ -320,6 +349,7 @@ jobs:
         if: steps.scope.outputs.ok == 'true'
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - if: steps.scope.outputs.ok == 'true'
         uses: ./.github/actions/dialect-agent-env
@@ -327,7 +357,7 @@ jobs:
       - name: Answer
         id: agent
         if: steps.scope.outputs.ok == 'true'
-        timeout-minutes: 25
+        timeout-minutes: 45
         # gh comments and labels as the workflow; git and the pull request tools
         # use the Claude App's token, whose pushes trigger CI.
         env:
@@ -349,3 +379,19 @@ jobs:
         uses: ./.github/actions/refused-calls
         with:
           execution-file: ${{ steps.agent.outputs.execution_file }}
+
+      - name: Pushed
+        id: pushed
+        if: always() && steps.scope.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh pr view "${{ steps.scope.outputs.pr }}" --json headRefOid --jq .headRefOid)
+          [ "$head" = "${{ steps.scope.outputs.head }}" ] || echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Reviewed
+        if: always() && steps.pushed.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: $SKILL/scripts/reviewed.sh "${{ steps.scope.outputs.pr }}" "$EXECUTION_FILE"

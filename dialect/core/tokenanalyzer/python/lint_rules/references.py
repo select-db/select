@@ -16,6 +16,55 @@ from analysis.schema import span
 # R001, Unknown table
 # ---------------------------------------------------------------------------
 
+def _unknown_table(table: exp.Table, message: str) -> dict:
+    line, col, end_line, end_col = span(table)
+    return {
+        "rule_id":    "unknown-table",
+        "severity":   "warning",
+        "message":    message,
+        "start_line": line, "start_col": col,
+        "end_line":   end_line, "end_col":   end_col,
+    }
+
+
+def joined_tables(target) -> list[exp.Table]:
+    """The tables a DELETE or UPDATE target carries as joins.
+
+    MySQL's multi-table forms hang the rest of the table reference list off the
+    target, both for the comma list and for an explicit JOIN, where PostgreSQL
+    puts its extra sources in a USING or FROM clause.
+    """
+    if not isinstance(target, exp.Expression):
+        return []
+    return [j.this for j in (target.args.get("joins") or []) if isinstance(j.this, exp.Table)]
+
+
+def _delete_target_bindings(stmt: exp.Expression) -> dict[int, set[str]]:
+    """Map each multi-table DELETE target node to the names its FROM list binds.
+
+    MySQL names the targets before FROM, so a target is a reference to an entry
+    of the FROM list and not a catalog lookup: `DELETE a FROM t1 AS a` deletes
+    from t1 and no table named `a` has to exist.
+    """
+    bindings: dict[int, set[str]] = {}
+    for delete in stmt.find_all(exp.Delete):
+        targets = [t for t in (delete.args.get("tables") or []) if isinstance(t, exp.Table)]
+        if not targets:
+            continue
+        source = delete.args.get("this")
+        bound: set[str] = set()
+        for tbl in [source] + joined_tables(source):
+            if not isinstance(tbl, exp.Table):
+                continue
+            # Both spellings, because MySQL accepts the table's own name for an
+            # unaliased entry and a warning on SQL a server accepts is the
+            # failure this rule has to avoid.
+            bound.update(n.lower() for n in (tbl.name, tbl.alias) if n)
+        for target in targets:
+            bindings[id(target)] = bound
+    return bindings
+
+
 def analyze_unknown_tables(
     stmt: exp.Expression,
     schema_dict: dict,
@@ -28,11 +77,20 @@ def analyze_unknown_tables(
 
     results = []
     loaded_schemas = {s.lower() for s in schema_dict}
+    delete_targets = _delete_target_bindings(stmt)
 
     for table in stmt.find_all(exp.Table):
         name = table.name.lower()
         if not name:
             continue
+
+        bound = delete_targets.get(id(table))
+        if bound is not None:
+            if name not in bound:
+                results.append(_unknown_table(
+                    table, f"delete target {table.name!r} is not in the FROM clause"))
+            continue
+
         if name in virtual_names:
             continue
         if table.catalog:  # cross-database reference is unvalidatable
@@ -44,14 +102,7 @@ def analyze_unknown_tables(
 
         known_tables = {t.lower() for t in schema_dict.get(schema_name, {})}
         if name not in known_tables:
-            line, col, end_line, end_col = span(table)
-            results.append({
-                "rule_id":    "unknown-table",
-                "severity":   "warning",
-                "message":    f"unknown table or view {table.name!r}",
-                "start_line": line, "start_col": col,
-                "end_line":   end_line, "end_col":   end_col,
-            })
+            results.append(_unknown_table(table, f"unknown table or view {table.name!r}"))
 
     return results
 
@@ -237,6 +288,13 @@ def analyze_update_columns(
     for key in ([target.alias.lower()] if target.alias else []) + [target.name.lower()]:
         sources[key] = target_cols
 
+    # Every entry of a multi-table UPDATE's reference list is writable, so SET
+    # may assign through any of them, unlike a read-only FROM source.
+    for tbl in joined_tables(target):
+        qualifier = (tbl.alias or tbl.name).lower()
+        sources[qualifier] = _resolve_table_cols(tbl.name, (tbl.db or default_schema).lower(), schema_dict)
+    writable = dict(sources)
+
     from_ = stmt.args.get("from_")
     if from_:
         for tbl in from_.find_all(_exp.Table):
@@ -297,13 +355,12 @@ def analyze_update_columns(
             if col.find_ancestor(_exp.Subquery) is None:
                 yield col
 
-    # SET LHS always belongs to the target table only.
-    target_only = {k: v for k, v in sources.items() if v is target_cols}
+    # SET LHS names a table the statement writes, never a FROM source.
     for assignment in stmt.expressions:
         if not isinstance(assignment, _exp.EQ):
             continue
         if isinstance(assignment.this, _exp.Column):
-            _check(assignment.this, target_only)
+            _check(assignment.this, writable)
         # RHS can read from any source (target or FROM tables).
         if isinstance(assignment.expression, _exp.Column):
             _check(assignment.expression, sources)
@@ -319,12 +376,12 @@ def analyze_update_columns(
         for col_node in _cols_not_in_subquery(where):
             _check(col_node, sources)
 
-    # RETURNING, target table columns only.
+    # RETURNING sees the updated rows, so the written tables and not FROM.
     returning = stmt.args.get("returning")
     if returning:
         for col_node in returning.find_all(_exp.Column):
             if col_node.name and col_node.name != "*":
-                _check(col_node, target_only)
+                _check(col_node, writable)
 
     return results
 
@@ -465,6 +522,12 @@ def analyze_delete_columns(
     sources: dict[str, tuple[set[str], set[str]] | None] = {}
     for key in ([table.alias.lower()] if table.alias else []) + [table.name.lower()]:
         sources[key] = target_cols
+    target_only = dict(sources)
+
+    # A multi-table DELETE joins its other tables onto the target.
+    for tbl in joined_tables(table):
+        qualifier = (tbl.alias or tbl.name).lower()
+        sources[qualifier] = _resolve_table_cols(tbl.name, (tbl.db or default_schema).lower(), schema_dict)
 
     # USING clause: list of Table nodes or a containing node (PostgreSQL extension).
     using_raw = stmt.args.get('using') or []
@@ -534,7 +597,6 @@ def analyze_delete_columns(
             _check(col_node, sources)
 
     # RETURNING, only target table columns visible.
-    target_only = {k: v for k, v in sources.items() if v is target_cols}
     returning = stmt.args.get("returning")
     if returning:
         for col_node in returning.find_all(_exp.Column):
