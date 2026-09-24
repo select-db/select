@@ -64,6 +64,15 @@ Settled; reopen with a reason, not a preference.
   ids with no row older than 24h. Never "delete all but this live set", so an
   empty or failed query purges nothing. Capped at 50 purges per run; hitting
   the cap stops and alerts. The cellar never reads Postgres.
+- **Usage limits**, cellar dbs only, two rules keyed by workspace:
+  - Time: server-side timeout, the workspace setting capped at 30s (Solo) or
+    60s (Teams). Never read from the request body.
+  - Concurrency: at most 2 (Solo) or 8 (Teams) statements in flight per
+    workspace; extra requests wait.
+  The backend reads the plan and puts both in the token (`conc`, `tmo`); the
+  cellar enforces them with one `InFlight` middleware beside `RateLimit`,
+  sharing its key function. Query-seconds per workspace are recorded, not
+  enforced.
 - **Scaling invariants**, cheap now and a migration later:
   - Replicas are keyed by db, never by cellar: `dbs/{db_id}/` in the bucket.
     Moving or recovering a db is then a row update.
@@ -151,7 +160,7 @@ Settled; reopen with a reason, not a preference.
       inventory, per-id decision, signed purge, then drop the row,
       db-only roles and rules elsewhere; 24h orphan age, 50 per run cap + alert
 - [ ] Route managed rows through the engine transport to their cellar
-- [ ] `CellarClaims{db, ws, cel}` (aud `select-cellar`, 60s) signed with the existing signer,
+- [ ] `CellarClaims{db, ws, cel, conc, tmo}` (aud `select-cellar`, 60s) signed with the existing signer,
       cached per db for ~50s
 - [ ] Audit events: reuse `datasource.lifecycle.*`
 - [ ] Request id sent to the cellar; cellar error codes passed through to REST,
@@ -166,6 +175,10 @@ Settled; reopen with a reason, not a preference.
       prefix), behind the same token check
 - [ ] Connection pinning per open db; limits and pragmas applied on open
 - [ ] PRAGMA allowlist before execute
+- [ ] `middlewares`: pluggable key (user or workspace) for `RateLimit`, and an
+      `InFlight(key, limit)` sibling; on the cellar execute route, key `ws`,
+      limit `conc`, deadline `tmo`
+- [ ] Query-seconds per workspace recorded (metrics only)
 - [ ] Embedded Litestream per db, replica at `dbs/{db_id}/`, retention from the workspace plan
 - [ ] LRU eviction on disk pressure: lock, checkpoint, sync, verify replica
       position, delete local file, mark `cold`
