@@ -27,7 +27,7 @@ func DumpHandler() http.HandlerFunc {
 
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
-			http.Error(w, SafeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
+			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 
@@ -39,7 +39,7 @@ func DumpHandler() http.HandlerFunc {
 
 		meta, err := engine.GetOrFetchMetadata(r.Context(), workspaceID, ds.DSN, dbConn, dialect, "", false)
 		if err != nil {
-			http.Error(w, SafeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
+			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 
@@ -47,7 +47,7 @@ func DumpHandler() http.HandlerFunc {
 		// validated endpoint as the driver
 		dumpDSN, err := engine.ResolveDumpDSN(workspaceID, ds.DBType, ds.DSN, ds.SSH)
 		if err != nil {
-			http.Error(w, SafeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
+			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 

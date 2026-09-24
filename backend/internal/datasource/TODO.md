@@ -179,8 +179,9 @@ Each milestone ships behind `CELLAR` unset in prod and leaves `dev` green.
 Numbers are order; items inside a milestone can run in parallel.
 
 ### 0. Groundwork
-- [x] `mcp.asToolError`: unknown errors become `internal` with a `ref`, and
-      connection errors go through `datasource.SafeConnErr` like REST.
+- [x] MCP errors: tool helpers return driver and network errors wrapped, and
+      `asToolError` shows only tool errors and engine `ConfigError`s; anything
+      else becomes `internal` with a `ref`.
 - [x] `CELLAR` setting parsed at startup (`internal/cellar`); a bad value stops
       the server.
 - [x] Migration: `workspace.plan`, `app.cellar`, and on `app.datasource`:
@@ -199,7 +200,9 @@ Needs 0.
       The engine pools connections and the driver has no per-connection hook
       that can set limits, so per statement is the only fail-closed place.
 - [ ] `InFlight` middleware, 60s cap, query-seconds recorded.
-- [ ] Error codes and request id, end to end to REST and MCP.
+- [ ] Error codes and request id, end to end to REST and MCP. The request id
+      lives in the context so `ref` matches the request log; MCP's mid-stream
+      `collectSink` error goes through the same classification.
 - [ ] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
       every non-allowlisted PRAGMA); token rejection (expired, wrong db, wrong
       cellar, unsigned, user token); no error body contains a path, bucket or
