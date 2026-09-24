@@ -30,16 +30,11 @@ env:
   # The analyzer-backed tests fail rather than skip, as in CI.
   SELECT_REQUIRE_ANALYZER: "1"
   SKILL: .claude/skills/dialect-fixer
-  # Commands run in Claude Code's sandbox (.github/fixer-settings.json), with
+  # Commands run in Claude Code's sandbox (.github/agent-sandbox), with
   # no tokens and no network but the package mirrors, so Bash is open.
   TOOLS: >-
     Read,Grep,Glob,Agent,Task,Skill,Bash,Edit(/dialect/**),Edit(/.fixer-work/**),
     mcp__github__create_pull_request,mcp__github__update_pull_request
-  # The file tools run outside the sandbox. The action's token is in Claude's
-  # own environment and in its command line, which carries the MCP config.
-  DENIED: Read(//proc/*/environ),Read(//proc/*/cmdline),Read(~/.ssh/**)
-  # Anthropic token out of subprocesses, and a PID namespace for their /proc.
-  CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
 
 jobs:
   # One fix at a time. A queued run can be replaced by a newer one, so each run
@@ -92,7 +87,7 @@ jobs:
       - if: steps.pick.outputs.issue != ''
         uses: ./.github/actions/dialect-agent-env
         with:
-          sandbox: true
+          sandbox: fixer
 
       - name: Fix
         id: agent
@@ -101,7 +96,7 @@ jobs:
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: .github/fixer-settings.json
+          settings: ${{ env.AGENT_SETTINGS }}
           # Any value makes the action keep its token out of .git/config and hand
           # it to git through a helper; it only admits others with github_token.
           allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
@@ -114,7 +109,6 @@ jobs:
             --model ${{ vars.FIXER_MODEL || 'opus' }}
             --max-turns 250
             --allowedTools "${{ env.TOOLS }}"
-            --disallowedTools "${{ env.DENIED }}"
 
       - name: Refused tool calls
         if: always() && steps.agent.outputs.execution_file != ''
@@ -251,7 +245,7 @@ jobs:
       - if: steps.decide.outputs.pr != ''
         uses: ./.github/actions/dialect-agent-env
         with:
-          sandbox: true
+          sandbox: fixer
 
       - name: Fix CI
         id: agent
@@ -260,7 +254,7 @@ jobs:
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: .github/fixer-settings.json
+          settings: ${{ env.AGENT_SETTINGS }}
           # Any value makes the action keep its token out of .git/config and hand
           # it to git through a helper; it only admits others with github_token.
           allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
@@ -275,7 +269,6 @@ jobs:
             --model ${{ vars.FIXER_MODEL || 'opus' }}
             --max-turns 80
             --allowedTools "${{ env.TOOLS }}"
-            --disallowedTools "${{ env.DENIED }}"
 
       - name: Refused tool calls
         if: always() && steps.agent.outputs.execution_file != ''
@@ -362,7 +355,7 @@ jobs:
       - if: steps.scope.outputs.ok == 'true'
         uses: ./.github/actions/dialect-agent-env
         with:
-          sandbox: true
+          sandbox: fixer
 
       - name: Answer
         id: agent
@@ -371,7 +364,7 @@ jobs:
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: .github/fixer-settings.json
+          settings: ${{ env.AGENT_SETTINGS }}
           # Any value makes the action keep its token out of .git/config and hand
           # it to git through a helper; it only admits others with github_token.
           allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
@@ -380,7 +373,6 @@ jobs:
             --model ${{ vars.FIXER_MODEL || 'opus' }}
             --max-turns 80
             --allowedTools "${{ env.TOOLS }}"
-            --disallowedTools "${{ env.DENIED }}"
             --append-system-prompt "Follow the Unattended runs section of .claude/skills/dialect-fixer/SKILL.md, mode review."
 
       - name: Refused tool calls

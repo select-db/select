@@ -69,11 +69,10 @@ ledger holds for this finding.
 ## Commands
 
 ```sh
-gh issue create --title "..." --body-file body.md \
-  --label agent:finder,bug,area:permission,dialect:postgresql,sev:unchecked-read,oracle:judgment,needs-triage
-gh issue create ... --assignee "$FINDER_NOTIFY"      # sev:bypass only
-gh issue comment <n> --body-file more.md            # growing an open finding
+file.sh issue "<title>" agent:finder,bug,area:permission,dialect:postgresql,sev:unchecked-read,oracle:judgment,needs-triage .finder-work/issue-f-r3-001.md
+file.sh issue "<title>" <labels> .finder-work/<body>.md assign   # sev:bypass only
+file.sh comment <n> .finder-work/<more>.md                       # growing an open finding
 ```
 
-Write the body to a file under `$RUNNER_TEMP` or `.finder-work/` first; a body
-passed inline breaks on the first backtick.
+`file.sh issue` prints the new issue's number. The body is always a file
+under `.finder-work/`; `file.sh` posts nothing else, and nothing in a dry run.

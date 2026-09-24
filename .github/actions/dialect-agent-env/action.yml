@@ -3,8 +3,8 @@ description: Go, the analyzer venv, a prebuilt agentprobe and Claude Code's sand
 
 inputs:
   sandbox:
-    description: Also set up Claude Code's sandbox, which the fixer runs in.
-    default: "false"
+    description: fixer or finder, to set up Claude Code's sandbox for that agent.
+    default: ""
 
 runs:
   using: composite
@@ -24,9 +24,25 @@ runs:
     # Claude Code's sandbox needs bubblewrap and socat, and Ubuntu 24.04's
     # AppArmor policy otherwise refuses bubblewrap the user namespace it needs.
     # The bwrap call fails here, before an agent run is paid for.
-    - if: inputs.sandbox == 'true'
+    - if: inputs.sandbox != ''
       shell: bash
+      env:
+        AGENT: ${{ inputs.sandbox }}
       run: |
+        # Shared rules, then this agent's: the scripts it may run outside the
+        # sandbox, its hosts and paths, anchored at the workspace so a copy
+        # elsewhere does not match. `*` replaces arrays, so none is in both files.
+        dir=.github/agent-sandbox
+        jq -s --arg ws "$GITHUB_WORKSPACE" '
+          def abs: if startswith("/") or startswith("~") then . else "\($ws)/\(.)" end;
+          .[0] * .[1]
+          | .sandbox.excludedCommands |= map(abs)
+          | .sandbox.filesystem.denyWrite |= (. // [] | map(abs))
+        ' "$dir/base.json" "$dir/$AGENT.json" > "$RUNNER_TEMP/agent-settings.json"
+        # The scrub keeps the Anthropic token from commands and gives them a PID
+        # namespace, so /proc does not show the parent's environment.
+        echo "AGENT_SETTINGS=$RUNNER_TEMP/agent-settings.json" >> "$GITHUB_ENV"
+        echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1" >> "$GITHUB_ENV"
         apt_install() { sudo apt-get install -y -qq --no-install-recommends bubblewrap socat >/dev/null; }
         apt_install || { sudo apt-get update -qq >/dev/null && apt_install; }
         sudo sysctl -qw kernel.apparmor_restrict_unprivileged_userns=0 || true

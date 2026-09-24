@@ -15,7 +15,7 @@ branch="claude/fix-$FIXER_ISSUE"
 
 todo=''
 [ "$(git rev-parse HEAD)" = "$(git rev-parse -q --verify "origin/$branch" 2>/dev/null)" ] ||
-	todo="push your commits with .claude/skills/dialect-fixer/scripts/push.sh"
+	todo="push your commits with /home/runner/work/select/select/.claude/skills/dialect-fixer/scripts/push.sh"
 if [ -n "$(.claude/hooks/pr-review-gate.sh required-since origin/dev)" ] && [ ! -s .fixer-work/review.md ]; then
 	todo="${todo:+$todo, then }apply the review findings you judge pertinent, rerun the checks, push, and write .fixer-work/review.md (steps 6 and 7 of mode \"fix\")"
 fi

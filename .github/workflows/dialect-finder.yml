@@ -85,6 +85,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/dialect-agent-env
+        with:
+          sandbox: finder
 
       - name: Check out the ledger
         run: |
@@ -110,36 +112,27 @@ jobs:
           python3 $SCRIPTS/sync.py
           $SCRIPTS/checkpoint.sh "sync with issues"
 
-      # Tools are an allowlist, so what the agent can reach is decided here
-      # rather than in the skill. Filing is absent from a dry run.
-      - name: Tools
-        id: tools
+      # Commands run in Claude Code's sandbox (.github/agent-sandbox), with
+      # no token and no network; file.sh and checkpoint.sh reach GitHub from outside it.
+      - name: Deadline
+        id: deadline
         run: |
-          tools="Read,Grep,Glob,Agent,Task"
-          tools+=",Write(.finder-memory/**),Edit(.finder-memory/**)"
-          tools+=",Write(.finder-work/**),Edit(.finder-work/**)"
-          tools+=",Bash(dialect/agentprobe:*)"
-          tools+=",Bash(python3 $SCRIPTS/ledger.py:*),Bash($SCRIPTS/checkpoint.sh:*)"
-          tools+=",Bash(date:*),Bash(jq:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*)"
-          tools+=",Bash(gh issue view:*),Bash(gh issue list:*)"
-          if [ "$FINDER_DRY_RUN" != 1 ]; then
-            tools+=",Bash(gh issue create:*),Bash(gh issue comment:*)"
-          fi
-          echo "allowed=$tools" >> "$GITHUB_OUTPUT"
+          echo "FINDER_DEADLINE=$(( $(date +%s) + FINDER_MINUTES * 60 ))" >> "$GITHUB_ENV"
           # The agent stops starting batches at the deadline; the hard timeout
           # leaves it 10 minutes past that to file, summarise and checkpoint.
-          echo "FINDER_DEADLINE=$(( $(date +%s) + FINDER_MINUTES * 60 ))" >> "$GITHUB_ENV"
           echo "hard_timeout=$(( FINDER_MINUTES + 10 ))" >> "$GITHUB_OUTPUT"
 
       - name: Find
         id: find
-        timeout-minutes: ${{ fromJSON(steps.tools.outputs.hard_timeout) }}
+        timeout-minutes: ${{ fromJSON(steps.deadline.outputs.hard_timeout) }}
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
-          # The repository's terse output style would leak into issue bodies.
-          settings: '{"outputStyle": "default"}'
+          settings: ${{ env.AGENT_SETTINGS }}
+          # Any value keeps the token out of .git/config, behind a git credential
+          # helper; a scheduled run has no actor for it to admit.
+          allowed_non_write_users: ${{ env.FINDER_NOTIFY }}
           prompt: |
             This is a dialect finder run in ${{ github.repository }}.
             Follow .claude/skills/dialect-finder/SKILL.md from step 1 to step 6.
@@ -153,7 +146,7 @@ jobs:
           claude_args: >-
             --model ${{ vars.FINDER_MODEL || 'opus' }}
             --max-turns 150
-            --allowedTools "${{ steps.tools.outputs.allowed }}"
+            --allowedTools "Read,Grep,Glob,Agent,Task,Bash,Edit(/.finder-memory/**),Edit(/.finder-work/**)"
 
       - name: Refused tool calls
         if: always() && steps.find.outputs.execution_file != ''
