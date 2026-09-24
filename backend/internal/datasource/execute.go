@@ -44,7 +44,7 @@ func ExecuteHandler() http.HandlerFunc {
 
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource execute", workspaceID, req.ID), http.StatusBadGateway)
+			http.Error(w, SafeConnErr(err, "datasource execute", workspaceID, req.ID), http.StatusBadGateway)
 			return
 		}
 

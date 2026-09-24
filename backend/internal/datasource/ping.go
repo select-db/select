@@ -17,9 +17,9 @@ import (
 // internal network topology and turns this endpoint into an SSRF oracle.
 const genericConnErr = "could not connect to the datasource"
 
-// safeConnErr returns the error message if it is a ConfigError (safe to
+// SafeConnErr returns the error message if it is a ConfigError (safe to
 // show), otherwise returns genericConnErr and logs the real error.
-func safeConnErr(err error, logPrefix, workspaceID, dsID string) string {
+func SafeConnErr(err error, logPrefix, workspaceID, dsID string) string {
 	var cfgErr *engine.ConfigError
 	if errors.As(err, &cfgErr) {
 		return cfgErr.Msg
@@ -58,7 +58,7 @@ func PingHandler() http.HandlerFunc {
 
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
-			msg := safeConnErr(err, "datasource ping", workspaceID, id)
+			msg := SafeConnErr(err, "datasource ping", workspaceID, id)
 			pingCache.Set(pingKey, msg)
 			http.Error(w, msg, http.StatusBadGateway)
 			return

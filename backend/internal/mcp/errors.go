@@ -1,6 +1,11 @@
 package mcp
 
-import "errors"
+import (
+	"errors"
+	"log"
+
+	"backend/internal/utils"
+)
 
 // toolError is the structured envelope returned inside an MCP tool
 // response when something went wrong. Stable shape so models learn it.
@@ -8,6 +13,7 @@ type toolError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Hint    string `json:"hint,omitempty"`
+	Ref     string `json:"ref,omitempty"`
 }
 
 // Error implements error so handlers can return *toolError directly.
@@ -35,11 +41,14 @@ func errUpstream(msg string) *toolError {
 }
 
 // asToolError coerces any error to the wire shape. Wrapped *toolError
-// passes through unchanged; everything else is reported as internal.
+// passes through unchanged. Anything else may carry driver or network detail,
+// so the caller gets a ref and the detail goes to the log.
 func asToolError(err error) *toolError {
 	var te *toolError
 	if errors.As(err, &te) {
 		return te
 	}
-	return &toolError{Code: "internal", Message: err.Error()}
+	ref := utils.GenerateRequestID()
+	log.Printf("mcp: internal error ref=%s: %v", ref, err)
+	return &toolError{Code: "internal", Message: "internal error", Ref: ref}
 }

@@ -31,7 +31,7 @@ func SchemaHandler() http.HandlerFunc {
 
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource schema", workspaceID, id), http.StatusBadGateway)
+			http.Error(w, SafeConnErr(err, "datasource schema", workspaceID, id), http.StatusBadGateway)
 			return
 		}
 

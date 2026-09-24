@@ -12,6 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type AppCellar struct {
+	ID        string
+	CreatedAt time.Time
+}
+
 type AppDatasource struct {
 	ID              uuid.UUID
 	WorkspaceID     uuid.UUID
@@ -25,6 +30,10 @@ type AppDatasource struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	Name            string
+	CellarID        db_types.JSONNullString
+	State           db_types.JSONNullString
+	SizeBytes       db_types.JSONNullInt64
+	LastUsedAt      db_types.JSONNullTime
 }
 
 // @app.sync @app.api.list|get @app.api.create|update|delete requires groups.manage
@@ -130,6 +139,7 @@ type AppWorkspace struct {
 	DeletedAt    db_types.JSONNullTime
 	OwnerID      db_types.JSONNullUUID
 	Logo         db_types.JSONNullString
+	Plan         string
 }
 
 // @app.sync @app.api.list|get @app.api.create|update|delete requires roles.manage, users.manage
