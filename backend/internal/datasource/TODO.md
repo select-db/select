@@ -192,7 +192,10 @@ Needs 0.
       in-process.
 - [ ] `CellarClaims` signing with cache in the backend, verification in the
       cellar.
-- [ ] Isolation: connection limits and pragmas on open, PRAGMA allowlist.
+- [ ] Isolation: pragmas in the DSN, PRAGMA allowlist, and
+      `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement.
+      The engine pools connections and the driver has no per-connection hook
+      that can set limits, so per statement is the only fail-closed place.
 - [ ] `InFlight` middleware, 60s cap, query-seconds recorded.
 - [ ] Error codes and request id, end to end to REST and MCP.
 - [ ] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
@@ -211,7 +214,12 @@ Needs 1.
 - [ ] Audit: reuse `datasource.lifecycle.*`.
 
 ### 3. Bucket: replicate, evict, wake
-Needs 1. Can run alongside 2.
+Needs 1. Can run alongside 2. Start with the spikes.
+- [ ] Spike: Litestream v0.5 as a library. Per-db replica with retention,
+      read the replicated position, restore at a timestamp, `file` replica.
+      One page of findings before building on it.
+- [ ] Spike: OVH bucket supports `NoncurrentVersionExpiration`; restore speed
+      from the bucket to a d2-4.
 - [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr`.
 - [ ] Directory replica when no S3, with the startup preflight.
 - [ ] LRU eviction on disk pressure; wake with shared restore and 15s wait.
@@ -237,12 +245,10 @@ Needs 2. Waking UI needs 3.
 ### 6. Ops and rollout
 Needs 3 for staging, all for prod.
 - [ ] Buckets (staging, prod) with versioning and 7-day old-version expiry.
-      Check OVH supports `NoncurrentVersionExpiration`.
 - [ ] Staging cellar unit; prod d2-4 with systemd sandbox on the private
       network; nginx `proxy_read_timeout` above 15s.
 - [ ] Alerts: disk over 85%, replication lag over 1 minute, failed wake,
       reconciler cap hit.
-- [ ] Benchmark bucket to d2-4 restore speed.
 - [ ] Staging, then prod behind the sign-in allowlist, then everyone.
 
 ## Later
