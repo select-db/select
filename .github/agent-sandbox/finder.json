@@ -7,6 +7,11 @@
     ],
     "network": {
       "allowedDomains": []
+    },
+    "filesystem": {
+      "denyWrite": [
+        ".finder-memory/.git"
+      ]
     }
   }
 }
