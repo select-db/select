@@ -199,7 +199,9 @@ Needs 0.
       transport, `StreamLocal` against local files. `CELLAR=local` starts it
       in-process.
 - [x] `CellarClaims` signing with a reuse cache in the backend
-      (`cellar.Tokens`), verification in the cellar (`cellar.Authorize`).
+      (`cellar.Tokens`, on `toolkit/cache`), verification in the cellar
+      (`cellar.Authenticate` middleware, which puts the grant in the context
+      for `InFlight` to key on).
 - [ ] Isolation: pragmas in the DSN, PRAGMA allowlist, and
       `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement.
       The engine pools connections and the driver has no per-connection hook

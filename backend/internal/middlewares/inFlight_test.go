@@ -13,11 +13,10 @@ func keyHeader(r *http.Request) string { return r.Header.Get("K") }
 
 func TestInFlight_WaitsForASlot(t *testing.T) {
 	release := make(chan struct{})
-	var running, peak atomic.Int32
+	var running atomic.Int32
 	h := InFlight(1, keyHeader)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := running.Add(1)
-		if n > peak.Load() {
-			peak.Store(n)
+		if running.Add(1) > 1 {
+			t.Error("two requests ran at once, limit is 1")
 		}
 		<-release
 		running.Add(-1)
@@ -40,9 +39,6 @@ func TestInFlight_WaitsForASlot(t *testing.T) {
 		if code := <-done; code != http.StatusOK {
 			t.Fatalf("status %d, want the waiting request to run, not fail", code)
 		}
-	}
-	if peak.Load() != 1 {
-		t.Fatalf("%d requests ran at once, limit is 1", peak.Load())
 	}
 }
 

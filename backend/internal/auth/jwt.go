@@ -180,13 +180,7 @@ func ValidateJWT(tokenStr string) (*jwt.Token, *CustomClaims, error) {
 	}
 
 	claims := &CustomClaims{}
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-		// Ensure signing method is RSA
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return pubKey, nil
-	}, jwt.WithAudience(Audience), jwt.WithIssuer(Issuer))
+	token, err := parseRS256(tokenStr, claims, pubKey, Audience)
 
 	if err != nil {
 		// When the token is expired, the library still parses and fills claims;
@@ -197,4 +191,15 @@ func ValidateJWT(tokenStr string) (*jwt.Token, *CustomClaims, error) {
 		return nil, nil, err
 	}
 	return token, claims, nil
+}
+
+// parseRS256 verifies tokenStr with pub, pinned to RSA, for our issuer and aud.
+func parseRS256(tokenStr string, claims jwt.Claims, pub *rsa.PublicKey, aud string, opts ...jwt.ParserOption) (*jwt.Token, error) {
+	opts = append(opts, jwt.WithAudience(aud), jwt.WithIssuer(Issuer))
+	return jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return pub, nil
+	}, opts...)
 }
