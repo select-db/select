@@ -230,14 +230,15 @@ no pull request, and stop. The run is killed 10 minutes later.
    origin/dev; the spec is issue #$FIXER_ISSUE, in .fixer-work/issue.md;
    unattended, so do not ask`. There is no issue tracker file; the arguments
    stand in for it. Let each skill launch its agents rather than reviewing in
-   its place.
+   its place. Each ends with a summary: that is input for step 6, not the end
+   of the run.
 6. You know the fix and its constraints, so the findings are input, not
    orders: apply the ones that make the fix better, and reject the ones that
    would widen it, contradict the issue or the settled rules, or are wrong.
    Rerun the checks, commit and push once.
-7. Append a `## Review` section to the pull request body with
-   `mcp__github__update_pull_request`, as your last step: for each skill, the
-   findings you applied, and the ones you rejected with the reason.
+7. Write `.fixer-work/review.md`, starting with the heading `## Review`, as
+   your last step: for each skill, the findings you applied, and the ones you
+   rejected with the reason. The workflow adds it to the pull request body.
 8. Leave labels and readiness to the workflow. It reads this run's tool calls:
    unless both skills launched their agents and the Review section is there,
    the pull request stays a draft. Keep 20 minutes before `$FIXER_DEADLINE`

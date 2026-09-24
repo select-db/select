@@ -15,6 +15,12 @@ required_for_pr() {
 pr=$1
 transcript=${2:-}
 
+# The agent writes its Review section to a file; the body is where people read it.
+if [ -s .fixer-work/review.md ] && ! gh pr view "$pr" --json body --jq .body | grep -q '^## Review'; then
+	{ gh pr view "$pr" --json body --jq .body; echo; cat .fixer-work/review.md; } >"${RUNNER_TEMP:-/tmp}/pr-body.md"
+	gh pr edit "$pr" --body-file "${RUNNER_TEMP:-/tmp}/pr-body.md"
+fi
+
 required=$(required_for_pr "$pr")
 if [ -z "$required" ]; then
 	gh pr edit "$pr" --add-label fix:reviewed
