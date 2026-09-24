@@ -39,6 +39,15 @@ def read_jsonl(name):
         return [json.loads(line) for line in f if line.strip()]
 
 
+def read_latest(name):
+    """The table as it stands: rows are appended, and the last row for an id wins."""
+    rows = {}
+    for row in read_jsonl(name):
+        rows.pop(row.get("id"), None)
+        rows[row.get("id")] = row
+    return list(rows.values())
+
+
 def read_grid():
     path = os.path.join(MEMORY, "grid.json")
     if not os.path.exists(path):
@@ -78,11 +87,13 @@ class Layer:
             if case.get("outcome") == "impossible":
                 self.impossible |= pairs_of(case.get("impossible", {}), dimensions)
                 continue
-            key = position_key(case.get("position", {}), dimensions)
-            if any(value is None for _, value in key):
+            position = case.get("position") or {}
+            key = position_key(position, dimensions)
+            # A layer with no grid yet has no positions to cover.
+            if not key or any(value is None for _, value in key):
                 continue
             dialects_by_position.setdefault(key, set()).add(case.get("dialect"))
-            positions[key] = case["position"]
+            positions[key] = position
         # A position counts once every dialect has a row for it, a skip included.
         self.tried = {
             key: positions[key] for key, dialects in dialects_by_position.items()
@@ -144,7 +155,7 @@ def quiet_streak(runs, layer):
 
 def status():
     grid = read_grid()
-    cases = read_jsonl("cases.jsonl")
+    cases = read_latest("cases.jsonl")
     runs = read_jsonl("runs.jsonl")
     report = {"grid_version": grid.get("version", 0), "phase": grid.get("phase", "layered"),
               "quiet_runs_needed": QUIET_RUNS, "layers": {}}
@@ -180,7 +191,7 @@ def next_positions(layer_name, count, seed):
     dimensions = grid.get("layers", {}).get(layer_name, {}).get("dimensions", {})
     if not dimensions:
         sys.exit(f"no grid for layer {layer_name!r}; define its dimensions in grid.json first")
-    layer = Layer(layer_name, dimensions, read_jsonl("cases.jsonl"))
+    layer = Layer(layer_name, dimensions, read_latest("cases.jsonl"))
     rng = random.Random(seed)
     uncovered = layer.all_pairs() - layer.covered
     tried = set(layer.tried)
@@ -342,6 +353,8 @@ def append(table, path):
                 sys.exit(f"{path}:{number}: missing {sorted(missing)}")
             if table == "cases" and row["outcome"] not in {"pass", "mismatch", "skipped", "impossible"}:
                 sys.exit(f"{path}:{number}: outcome {row['outcome']!r}")
+            if table == "cases" and row["outcome"] != "impossible" and not isinstance(row.get("position"), dict):
+                sys.exit(f"{path}:{number}: position must be an object, {{}} for a layer with no grid yet")
             rows.append(row)
     with open(os.path.join(MEMORY, f"{table}.jsonl"), "a", encoding="utf-8") as f:
         for row in rows:
