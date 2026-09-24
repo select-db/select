@@ -112,8 +112,8 @@ jobs:
           python3 $SCRIPTS/sync.py
           $SCRIPTS/checkpoint.sh "sync with issues"
 
-      # Commands run in Claude Code's sandbox (.github/agent-sandbox), with
-      # no token and no network; file.sh and checkpoint.sh reach GitHub from outside it.
+      # Commands run in Claude Code's sandbox (.github/agent-sandbox), with no
+      # token and no network; the steps after the agent file its issues and push.
       - name: Deadline
         id: deadline
         run: |
@@ -154,7 +154,12 @@ jobs:
         with:
           execution-file: ${{ steps.find.outputs.execution_file }}
 
-      # Whatever the agent appended after its last checkpoint, a timeout included.
+      # The agent has no token: what it wrote to .finder-work/file/ is filed here.
+      - name: File
+        if: always() && env.FINDER_DRY_RUN != '1' && steps.find.outcome != 'skipped'
+        run: $SCRIPTS/file.sh
+
+      # The ledger, pushed once, a timeout included.
       - name: Save the ledger
         if: always() && hashFiles('.finder-memory/**') != ''
         run: $SCRIPTS/checkpoint.sh "end of run ${{ github.run_id }}"

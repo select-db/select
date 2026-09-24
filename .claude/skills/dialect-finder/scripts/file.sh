@@ -1,41 +1,44 @@
 #!/usr/bin/env bash
-# The finder's only way to write to GitHub. It runs outside Claude Code's
-# sandbox, with the token the sandbox withholds, so it posts nothing but a body
-# the agent wrote under .finder-work/, links resolved.
-#   file.sh issue "<title>" <label,label,...> <body file> [assign]
-#   file.sh comment <issue number> <body file>   on an agent:finder issue
+# Files what the finder left in .finder-work/file/, after its run and with the
+# workflow's token; the agent itself never talks to GitHub.
+#   <finding id>.md    a new issue: "title:", "labels:" and optional "assign: yes"
+#                      lines, a blank line, then the body. Its number goes into
+#                      the finding's ledger row.
+#   comment-<n>.md     a comment on issue n, which must be a finder issue.
 set -euo pipefail
 
-[ "${FINDER_DRY_RUN:-0}" = 1 ] && { echo "dry run: filed nothing" >&2; exit 0; }
+dir=.finder-work/file
+memory=${FINDER_MEMORY:-.finder-memory}
+[ -d "$dir" ] || exit 0
 
-body_file() {
-	local path
-	path=$(realpath -e -- "$1") || { echo "no body file: $1" >&2; exit 2; }
-	case "$path" in
-	"$PWD"/.finder-work/*) [ -f "$path" ] && { echo "$path"; return; } ;;
+header() { sed -n "1,/^\$/s/^$1: *//p" "$2" | head -n1; }
+
+for file in "$dir"/*.md; do
+	[ -f "$file" ] || continue
+	name=$(basename "$file" .md)
+	case "$name" in
+	comment-[0-9]*)
+		issue=${name#comment-}
+		if gh issue view "$issue" --json labels --jq '.labels[].name' | grep -qx agent:finder; then
+			gh issue comment "$issue" --body-file "$file"
+		else
+			echo "skipped $file: #$issue is not a finder issue" >&2
+		fi
+		;;
+	*)
+		title=$(header title "$file")
+		labels=$(header labels "$file")
+		[[ $labels =~ ^[a-z0-9:_-]+(,[a-z0-9:_-]+)*$ ]] && [ -n "$title" ] ||
+			{ echo "skipped $file: needs title: and labels: lines" >&2; continue; }
+		args=(--title "$title" --label "$labels" --body "$(sed '1,/^$/d' "$file")")
+		[ "$(header assign "$file")" = yes ] && args+=(--assignee "$FINDER_NOTIFY")
+		number=$(gh issue create "${args[@]}" | grep -oE '[0-9]+$')
+		echo "filed #$number from $file"
+		# The finding's last row, with its issue: the ledger keeps the last row per id.
+		jq -c --arg id "$name" --argjson n "$number" 'select(.id == $id) | .issue = $n | .status = "filed"' \
+			"$memory/findings.jsonl" | tail -n1 >"${RUNNER_TEMP:-/tmp}/filed.jsonl"
+		[ -s "${RUNNER_TEMP:-/tmp}/filed.jsonl" ] &&
+			python3 .claude/skills/dialect-finder/scripts/ledger.py append findings "${RUNNER_TEMP:-/tmp}/filed.jsonl"
+		;;
 	esac
-	echo "the body must be a file under .finder-work/: $1" >&2
-	exit 2
-}
-
-case "${1:-}" in
-issue)
-	[ $# -ge 4 ] || { echo "usage: file.sh issue <title> <labels> <body file> [assign]" >&2; exit 2; }
-	[[ $3 =~ ^[a-z0-9:_-]+(,[a-z0-9:_-]+)*$ ]] || { echo "bad labels: $3" >&2; exit 2; }
-	body=$(body_file "$4")
-	args=(--title "$2" --label "$3" --body-file "$body")
-	[ "${5:-}" = assign ] && args+=(--assignee "$FINDER_NOTIFY")
-	gh issue create "${args[@]}" | grep -oE '[0-9]+$'
-	;;
-comment)
-	[ $# -eq 3 ] && [[ $2 =~ ^[0-9]+$ ]] || { echo "usage: file.sh comment <issue number> <body file>" >&2; exit 2; }
-	body=$(body_file "$3")
-	gh issue view "$2" --json labels --jq '.labels[].name' | grep -qx agent:finder ||
-		{ echo "#$2 is not a finder issue" >&2; exit 2; }
-	gh issue comment "$2" --body-file "$body"
-	;;
-*)
-	echo "usage: file.sh issue|comment ..." >&2
-	exit 2
-	;;
-esac
+done

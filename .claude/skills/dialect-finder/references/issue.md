@@ -66,13 +66,22 @@ a one-line reason: the finder reads both.
 Keep the table to at most ten rows. Past ten, say how many more cases the
 ledger holds for this finding.
 
-## Commands
+## Filing
 
-```sh
-file.sh issue "<title>" agent:finder,bug,area:permission,dialect:postgresql,sev:unchecked-read,oracle:judgment,needs-triage .finder-work/issue-f-r3-001.md
-file.sh issue "<title>" <labels> .finder-work/<body>.md assign   # sev:bypass only
-file.sh comment <n> .finder-work/<more>.md                       # growing an open finding
+You do not file: the workflow does, after the run. Write each new issue to
+`.finder-work/file/<finding id>.md`, and each comment on an open finding to
+`.finder-work/file/comment-<issue number>.md`. An issue file starts with its
+headers, then a blank line, then the body:
+
+```
+title: permission: MERGE floors to an unknown statement (postgresql)
+labels: agent:finder,bug,area:permission,dialect:postgresql,sev:wrong-right,oracle:judgment,needs-triage
+assign: yes
+
+### Finding
+...
 ```
 
-`file.sh issue` prints the new issue's number. The body is always a file
-under `.finder-work/`; `file.sh` posts nothing else, and nothing in a dry run.
+`assign: yes` is for `sev:bypass` only. A comment file is the comment and
+nothing else. The workflow writes each new issue's number into its finding's
+ledger row.

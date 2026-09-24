@@ -9,9 +9,9 @@ Rows are appended, never edited. A status change is a new row with the same
 `id`; the last row for an `id` wins. `grid.json` is the one exception: it is
 rewritten in place, and its `version` goes up by one on every change.
 
-Commit and push only with
-`.claude/skills/dialect-finder/scripts/checkpoint.sh "<message>"`. It pushes to
-the memory branch and nowhere else, and only commits in a dry run.
+The workflow commits and pushes the ledger when a run ends, with
+`scripts/checkpoint.sh`, to the memory branch and nowhere else; a dry run
+commits but does not push.
 
 ## grid.json
 

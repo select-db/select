@@ -30,11 +30,10 @@ env:
   # The analyzer-backed tests fail rather than skip, as in CI.
   SELECT_REQUIRE_ANALYZER: "1"
   SKILL: .claude/skills/dialect-fixer
-  # Commands run in Claude Code's sandbox (.github/agent-sandbox), with
-  # no tokens and no network but the package mirrors, so Bash is open.
+  # Commands run in Claude Code's sandbox (.github/agent-sandbox), with no
+  # token and no network, so Bash is open. publish.sh, a Stop hook, pushes.
   TOOLS: >-
-    Read,Grep,Glob,Agent,Task,Skill,Bash,Edit(/dialect/**),Edit(/.fixer-work/**),
-    mcp__github__create_pull_request,mcp__github__update_pull_request
+    Read,Grep,Glob,Agent,Task,Skill,Bash,Edit(/dialect/**),Edit(/.fixer-work/**)
 
 jobs:
   # One fix at a time. A queued run can be replaced by a newer one, so each run
@@ -238,7 +237,6 @@ jobs:
           gh issue edit "$issue" --add-label fix:in-progress
           $SKILL/scripts/context.sh "$issue" "${{ github.event.workflow_run.id }}"
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
-          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
           echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV"
 
@@ -275,22 +273,6 @@ jobs:
         uses: ./.github/actions/refused-calls
         with:
           execution-file: ${{ steps.agent.outputs.execution_file }}
-
-      - name: Pushed
-        id: pushed
-        if: always() && steps.decide.outputs.pr != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          head=$(gh pr view "${{ steps.decide.outputs.pr }}" --json headRefOid --jq .headRefOid)
-          [ "$head" = "${{ steps.decide.outputs.head }}" ] || echo "pushed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Reviewed
-        if: always() && steps.pushed.outputs.pushed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
-        run: $SKILL/scripts/reviewed.sh "${{ steps.decide.outputs.pr }}" "$EXECUTION_FILE"
 
       - name: Release the issue
         if: always() && steps.decide.outputs.pr != ''
@@ -335,7 +317,6 @@ jobs:
           case "$head" in
             claude/fix-*) echo "ok=true" >> "$GITHUB_OUTPUT"
                           echo "pr=$NUMBER" >> "$GITHUB_OUTPUT"
-                          echo "head=$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
                           echo "FIXER_ISSUE=${head#claude/fix-}" >> "$GITHUB_ENV"
                           echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV" ;;
             *) echo "#$NUMBER is not a fixer pull request." >> "$GITHUB_STEP_SUMMARY" ;;
@@ -380,22 +361,6 @@ jobs:
         uses: ./.github/actions/refused-calls
         with:
           execution-file: ${{ steps.agent.outputs.execution_file }}
-
-      - name: Pushed
-        id: pushed
-        if: always() && steps.scope.outputs.ok == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          head=$(gh pr view "${{ steps.scope.outputs.pr }}" --json headRefOid --jq .headRefOid)
-          [ "$head" = "${{ steps.scope.outputs.head }}" ] || echo "pushed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Reviewed
-        if: always() && steps.pushed.outputs.pushed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
-        run: $SKILL/scripts/reviewed.sh "${{ steps.scope.outputs.pr }}" "$EXECUTION_FILE"
 
       - name: Post a blocked note
         if: always() && steps.scope.outputs.ok == 'true'
