@@ -121,6 +121,7 @@ Settled; reopen with a reason, not a preference.
   | `timeout`             | the existing timeout message           | 408  |
   | `waking`              | database is waking up, `Retry-After: 5` | 503  |
   | `unavailable`         | managed databases unavailable          | 503  |
+  | `disabled`            | not enabled on this server, no retry   | 501  |
   | `internal`            | internal error, with `ref`             | 500  |
 
   Token and routing failures are `internal` to the caller and loud in logs:
@@ -128,13 +129,20 @@ Settled; reopen with a reason, not a preference.
 - **Waking**: a query on a cold db waits for the restore up to 15s
   (configurable, below nginx `proxy_read_timeout`), then returns `waking`
   while the restore continues. Concurrent requests share one restore.
+- **Opt-in**: one `CELLAR` setting. Unset (the default) disables managed dbs:
+  no cellar, no reconciler, no bucket, and the backend works as today. `local`
+  runs the cellar in-process (dev, small on-prem); a URL points at a remote
+  cellar (prod). When disabled, every managed entry point (create, fork,
+  download, query) answers `disabled` before doing anything; MCP does not
+  register `create_database` and `fork_database`. The app shows the create
+  button regardless and displays the error.
 - **Replica target**: S3 when configured, otherwise a local directory through
   Litestream's `file` replica. A supported mode, not a dev hack: one code path,
   chosen at startup and logged by a preflight, as the audit logger does for
   pg_partman. For on-prem, the directory should be a separate disk or backup
   mount; on the data disk it survives nothing. Without S3 there is no 7-day
   version net, a purge is final.
-- **Single process**: with no cellar address configured, the server starts the
+- **Single process**: with `CELLAR=local`, the server starts the
   cellar as a second listener on `localhost:8081` in the same process, still
   through the HTTP transport and a signed token. Dev and a small on-prem
   install use this; prod runs the cellar on its own VM.
@@ -210,7 +218,9 @@ Settled; reopen with a reason, not a preference.
       `waking`
 
 ### Dev and on-prem
-- [ ] In-process cellar listener when no cellar address is configured
+- [ ] `CELLAR` setting: unset disables, `local` in-process, URL remote; dev
+      `.env` sets `local`
+- [ ] `disabled` at every managed entry point; MCP tools not registered
 - [ ] Replica target: S3 if configured, else a `file` replica directory
       (`backend/.dev/` in dev, gitignored); preflight logs the mode, and warns
       when the directory is on the data disk
@@ -232,6 +242,8 @@ Settled; reopen with a reason, not a preference.
       any result
 - [ ] Evict, wake, verify against MinIO and against a `file` replica in CI
 - [ ] Reconciler: failed or empty Postgres query purges nothing; cap stops the run
+- [ ] Backend with `CELLAR` unset: all existing tests pass, managed routes
+      answer `disabled`
 - [ ] Cellar rejects expired, wrong-db, wrong-cellar, unsigned and user (wrong audience) tokens
 - [ ] No response body on any surface contains a cellar path, bucket URL or
       cellar address, for every error code
