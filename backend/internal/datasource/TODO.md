@@ -65,6 +65,28 @@ Settled; reopen with a reason, not a preference.
 
   Per-db size is `PRAGMA max_page_count`; PITR is Litestream retention.
 - **Names**: unique per workspace, same rules as folders.
+- **Errors**: the node classifies at the source into a closed set; the backend
+  passes the code through and each surface maps it (REST status and
+  `{code, message, ref}`, MCP `toolError`, app message). Unclassified is
+  `internal`, so a new failure mode fails closed rather than leaking paths,
+  bucket URLs or node addresses. One request id, minted by the backend, is
+  logged on both sides and shown as `ref`.
+
+  | Code                  | Message to the caller                  | HTTP |
+  | --------------------- | -------------------------------------- | ---- |
+  | `sql_error`           | SQLite's message about their SQL       | 400  |
+  | `forbidden_statement` | not allowed on managed databases       | 400  |
+  | `quota_exceeded`      | which limit was hit                    | 403  |
+  | `timeout`             | the existing timeout message           | 408  |
+  | `waking`              | database is waking up, `Retry-After: 5` | 503  |
+  | `unavailable`         | managed databases unavailable          | 503  |
+  | `internal`            | internal error, with `ref`             | 500  |
+
+  Token and routing failures are `internal` to the caller and loud in logs:
+  they mean a backend bug, never a user mistake.
+- **Waking**: a query on a cold db waits for the restore up to 15s
+  (configurable, below nginx `proxy_read_timeout`), then returns `waking`
+  while the restore continues. Concurrent requests share one restore.
 - **Dev**: `./dev.sh backend start` stays the only command. With no node address
   configured, the server also starts the node as a second listener on
   `localhost:8081` in the same process, still through the HTTP transport and a
@@ -73,6 +95,10 @@ Settled; reopen with a reason, not a preference.
   and managed routes return 503; the rest of dev is unaffected.
 
 ## v1
+
+### Prerequisite
+- [ ] `mcp.asToolError`: an unknown error returns `err.Error()` to the caller.
+      Map it to `internal` with a `ref` and log the detail instead.
 
 ### Control plane (backend)
 - [ ] Migration: managed columns on `app.datasource`, `app.node`, `workspace.plan`
@@ -85,6 +111,8 @@ Settled; reopen with a reason, not a preference.
 - [ ] `NodeClaims` (aud `select-node`, 60s) signed with the existing signer,
       cached per db for ~50s
 - [ ] Audit events: reuse `datasource.lifecycle.*`
+- [ ] Request id sent to the node; node error codes passed through to REST,
+      MCP and the app
 
 ### Node
 - [ ] Node mode in the backend binary: execute, schema, ping, dump routes
@@ -95,7 +123,9 @@ Settled; reopen with a reason, not a preference.
 - [ ] Embedded Litestream per db, retention from the workspace plan
 - [ ] LRU eviction on disk pressure: lock, checkpoint, sync, verify replica
       position, delete local file, mark `cold`
-- [ ] Wake on first query: lock, restore, open, mark `hot`
+- [ ] Wake on first query: lock, restore, open, mark `hot`; single restore
+      shared by concurrent callers, wait capped at 15s then `waking`
+- [ ] Error classification into the closed code set; everything else `internal`
 - [ ] `size_bytes` and `last_used_at` reported to the control plane
 
 ### MCP
@@ -108,6 +138,8 @@ Settled; reopen with a reason, not a preference.
 - [ ] "Add to workspace" modal showing the `db.config.json`
 - [ ] Delete with typed-name confirmation
 - [ ] Download
+- [ ] "Waking database..." after ~1s on a slow first query; auto-retry on
+      `waking`
 
 ### Dev
 - [ ] In-process node listener when no node address is configured
@@ -117,6 +149,7 @@ Settled; reopen with a reason, not a preference.
 
 ### Ops (select-ops)
 - [ ] Prod node: d2-4, vRack, systemd unit with sandbox
+- [ ] nginx `proxy_read_timeout` above the 15s wake cap
 - [ ] Staging node: second unit on the staging box, own data dir
 - [ ] Object Storage buckets (prod, staging) with versioning
 - [ ] Alerts: node disk > 85%, replication lag > 1 min, any failed wake
@@ -127,6 +160,8 @@ Settled; reopen with a reason, not a preference.
       any result
 - [ ] Evict, wake, verify against MinIO in CI
 - [ ] Node rejects expired, wrong-db, unsigned and user (wrong audience) tokens
+- [ ] No response body on any surface contains a node path, bucket URL or
+      node address, for every error code
 - [ ] Benchmark Object Storage to d2-4 restore throughput before launch
 
 ### Docs
