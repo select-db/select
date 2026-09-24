@@ -766,6 +766,127 @@ class TestR005DeleteCTE:
 
 
 # ---------------------------------------------------------------------------
+# MySQL multi-table DELETE and UPDATE
+# ---------------------------------------------------------------------------
+# Both forms carry their extra table references as joins on the target, where
+# PostgreSQL uses USING or FROM, and the multi-table DELETE names its targets
+# before FROM under the names the FROM list binds.
+
+SCHEMA_MYSQL = {
+    "app": {
+        "t1":    ["c1", "c2"],
+        "t2":    ["c1", "c2"],
+        "other": ["c1"],
+    }
+}
+
+
+def _mysql(sql):
+    return analyze(sql, dialect="mysql", schema_dict=SCHEMA_MYSQL, default_schema="app")
+
+
+class TestMySQLMultiTableDeleteTargets:
+    """The pre-FROM target list names bindings, so it resolves against the FROM list."""
+
+    def test_alias_target_no_trigger(self):
+        assert _diags(_mysql("DELETE a FROM t1 AS a JOIN t2 ON a.c1 = t2.c1"), "unknown-table") == []
+
+    def test_two_alias_targets_no_trigger(self):
+        sql = "DELETE a, b FROM t1 AS a JOIN t2 AS b ON a.c1 = b.c1"
+        assert _diags(_mysql(sql), "unknown-table") == []
+
+    def test_unaliased_target_no_trigger(self):
+        assert _diags(_mysql("DELETE t1 FROM t1 JOIN t2 ON t1.c1 = t2.c1"), "unknown-table") == []
+
+    def test_typo_target_triggers(self):
+        diags = _diags(_mysql("DELETE aa FROM t1 AS a JOIN t2 ON a.c1 = t2.c1"), "unknown-table")
+        assert len(diags) == 1
+        assert "aa" in diags[0]["message"]
+
+    def test_target_absent_from_from_list_triggers(self):
+        # 'other' is a real table, so a catalog lookup passes it. Only the FROM
+        # list can say it is not one of the tables this DELETE deletes from.
+        diags = _diags(_mysql("DELETE other FROM t1 AS a JOIN t2 ON a.c1 = t2.c1"), "unknown-table")
+        assert len(diags) == 1
+        assert "other" in diags[0]["message"]
+
+    def test_from_list_still_checked_against_catalog(self):
+        sql = "DELETE a FROM t1 AS a JOIN no_such_table ON a.c1 = no_such_table.c1"
+        diags = _diags(_mysql(sql), "unknown-table")
+        assert len(diags) == 1
+        assert "no_such_table" in diags[0]["message"]
+
+    def test_single_table_delete_alias_no_trigger(self):
+        assert _diags(_mysql("DELETE FROM t1 AS a WHERE a.c1 = 1"), "unknown-table") == []
+
+
+class TestMySQLMultiTableDeleteColumns:
+    """Columns of a joined table are in scope for the WHERE of a multi-table DELETE."""
+
+    def test_joined_alias_column_no_trigger(self):
+        sql = "DELETE a FROM t1 AS a JOIN t2 AS b ON a.c1 = b.c1 WHERE b.c2 = 'x'"
+        assert _diags(_mysql(sql), "unknown-column") == []
+
+    def test_joined_alias_typo_triggers(self):
+        sql = "DELETE a FROM t1 AS a JOIN t2 AS b ON a.c1 = b.c1 WHERE b.typo = 'x'"
+        diags = _diags(_mysql(sql), "unknown-column")
+        assert any("typo" in d["message"] for d in diags)
+
+    def test_target_alias_typo_triggers(self):
+        sql = "DELETE a FROM t1 AS a JOIN t2 AS b ON a.c1 = b.c1 WHERE a.typo = 'x'"
+        diags = _diags(_mysql(sql), "unknown-column")
+        assert any("typo" in d["message"] for d in diags)
+
+    def test_joined_table_not_in_schema_skips_check(self):
+        sql = "DELETE a FROM t1 AS a JOIN no_such_table AS b ON a.c1 = b.c1 WHERE b.typo = 'x'"
+        assert _diags(_mysql(sql), "unknown-column") == []
+
+
+class TestMySQLMultiTableUpdateColumns:
+    """Every table of the reference list is both readable and writable."""
+
+    def test_comma_list_where_no_trigger(self):
+        sql = "UPDATE t1 AS a, t2 AS b SET a.c2 = 'x' WHERE a.c1 = b.c1"
+        assert _diags(_mysql(sql), "unknown-column") == []
+
+    def test_set_through_second_table_no_trigger(self):
+        sql = "UPDATE t1 AS a, t2 AS b SET b.c2 = 'x' WHERE a.c1 = b.c1"
+        assert _diags(_mysql(sql), "unknown-column") == []
+
+    def test_set_reads_second_table_no_trigger(self):
+        sql = "UPDATE t1 AS a, t2 AS b SET a.c2 = b.c2 WHERE a.c1 = b.c1"
+        assert _diags(_mysql(sql), "unknown-column") == []
+
+    def test_where_typo_on_second_table_triggers(self):
+        sql = "UPDATE t1 AS a, t2 AS b SET a.c2 = 'x' WHERE a.c1 = b.typo"
+        diags = _diags(_mysql(sql), "unknown-column")
+        assert any("typo" in d["message"] for d in diags)
+
+    def test_set_typo_on_target_triggers(self):
+        sql = "UPDATE t1 AS a, t2 AS b SET a.typo = 'x' WHERE a.c1 = b.c1"
+        diags = _diags(_mysql(sql), "unknown-column")
+        assert any("typo" in d["message"] for d in diags)
+
+    def test_set_typo_on_second_table_triggers(self):
+        sql = "UPDATE t1 AS a, t2 AS b SET b.typo = 'x' WHERE a.c1 = b.c1"
+        diags = _diags(_mysql(sql), "unknown-column")
+        assert any("typo" in d["message"] for d in diags)
+
+    def test_join_spelling_no_trigger(self):
+        sql = "UPDATE t1 AS a JOIN t2 AS b ON a.c1 = b.c1 SET a.c2 = 'x' WHERE b.c2 = 'y'"
+        assert _diags(_mysql(sql), "unknown-column") == []
+
+    def test_join_spelling_where_typo_triggers(self):
+        sql = "UPDATE t1 AS a JOIN t2 AS b ON a.c1 = b.c1 SET a.c2 = 'x' WHERE b.typo = 'y'"
+        diags = _diags(_mysql(sql), "unknown-column")
+        assert any("typo" in d["message"] for d in diags)
+
+    def test_joined_table_not_in_schema_skips_check(self):
+        sql = "UPDATE t1 AS a, no_such_table AS b SET a.c2 = 'x' WHERE b.typo = 1"
+        assert _diags(_mysql(sql), "unknown-column") == []
+
+
+# ---------------------------------------------------------------------------
 # R005, Dead CTE
 # ---------------------------------------------------------------------------
 # R006, Unknown column in MERGE
