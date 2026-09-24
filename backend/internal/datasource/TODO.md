@@ -183,7 +183,7 @@ Numbers are order; items inside a milestone can run in parallel.
       else becomes `internal` with a `ref`.
 - [x] `CELLAR` setting parsed at startup (`internal/cellar`); a bad value stops
       the server.
-- [x] Migration: `workspace.plan`, `app.cellar`, and on `app.datasource`:
+- [x] Migration: `workspace.plan`, and on `app.datasource`:
       `cellar_id`, `state`, `size_bytes`, `last_used_at`, and a check that a
       row with a cellar is SQLite with no DSN and a known state.
 
@@ -265,7 +265,8 @@ Needs 3 for staging, all for prod.
 - Delete protection or a recovery window as a Teams perk.
 - `delete_database` over MCP for dbs whose role the key holds.
 - `managed_enabled` flag so the app can hide the create button.
-- Second cellar: placement, `move`, dead-cellar runbook.
+- Second cellar: an `app.cellar` table for placement data (with a foreign key
+  from `cellar_id`), `move`, dead-cellar runbook.
 - Keep Teams dbs hot; evict small idle dbs first.
 - Authorizer upstream in modernc, to replace the PRAGMA allowlist.
 - Direct libSQL endpoint; per-region backend and cellar pairs.
