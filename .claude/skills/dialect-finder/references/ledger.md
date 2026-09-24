@@ -132,13 +132,14 @@ One row per run, written last.
 ```json
 {"run": "<run>", "date": "2026-09-24", "phase": "layered", "layer": "permission",
  "grid_version": 3, "positions": 100, "cases": 291, "mismatches": 14,
- "new_findings": 2, "issues": [412, 413], "suspected": ["f-..."],
+ "new_findings": 2, "to_file": ["f-..."], "suspected": ["f-..."],
  "pairs": "412/530", "product": "180/5200", "quiet_streak": 0,
  "precedents_applied": ["p-398"], "grid_added": ["read_site.lateral"]}
 ```
 
-`rotation_proposal` holds the issue number on the run that opened the proposal
-to switch phase, so it is opened once.
+`to_file` names the findings this run left in `.finder-work/file/`.
+`rotation_proposal` is `true` on the run that wrote the proposal to switch
+phase, so it is written once.
 
 `new_findings` counts findings this run created with status `filed` or
 `suspected`. A finding carried over from an earlier run does not count, nor

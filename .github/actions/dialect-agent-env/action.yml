@@ -40,6 +40,14 @@ runs:
         # The scrub keeps the Anthropic token from commands and gives them a PID
         # namespace, so /proc does not show the parent's environment.
         echo "AGENT_SETTINGS=$RUNNER_TEMP/agent-settings.json" >> "$GITHUB_ENV"
+        # The commit the steps after the agent restore .claude and .github from,
+        # and the publish hook's scripts copied where the sandbox cannot write.
+        echo "AGENT_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+        tools="$RUNNER_TEMP/agent-tools"
+        mkdir -p "$tools"
+        cp .claude/skills/dialect-fixer/scripts/publish.sh .claude/hooks/pr-review-gate.sh \
+          .github/actions/refused-calls/tool-calls.jq "$tools/"
+        echo "AGENT_TOOLS=$tools" >> "$GITHUB_ENV"
         echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1" >> "$GITHUB_ENV"
         apt_install() { sudo apt-get install -y -qq --no-install-recommends bubblewrap socat >/dev/null; }
         apt_install || { sudo apt-get update -qq >/dev/null && apt_install; }

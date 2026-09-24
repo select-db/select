@@ -167,8 +167,9 @@ severity they carry. One group is one finding. Then, for each group:
 Rank what survives by severity (method.md), then by oracle, `cross-dialect`
 before `judgment`. File the first `$FINDER_MAX_ISSUES` as `references/issue.md`
 says. The rest stay `suspected` and compete again next run. Append every
-finding's row, whatever its status, with `ledger.py append findings`; a filed
-one has status `filed`, and the workflow adds its issue number when it files it.
+finding's row, whatever its status, with `ledger.py append findings`. One you
+file stays `suspected`: the workflow marks it `filed`, with its number, once
+the issue exists, so a filing that fails competes again next run.
 
 A finding counts as new for the quiet streak whether it was filed or held back.
 

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Stop hook for fixer runs: publishes the agent's work, so the agent itself
-# never talks to GitHub. It runs outside the sandbox, where the action's token
-# is, pushes claude/fix-$FIXER_ISSUE and opens the draft pull request from
-# .fixer-work/pr.md. Asks the agent back once when something is missing.
+# Stop hook: pushes claude/fix-$FIXER_ISSUE and opens the draft from .fixer-work/pr.md,
+# outside the sandbox. Asks the agent back once when something is missing.
 set -uo pipefail
 
 [ -n "${FIXER_ISSUE:-}" ] || exit 0
@@ -17,13 +15,21 @@ ask() {
 	exit 0
 }
 
+tools=${AGENT_TOOLS:-}
+gate=${tools:-.claude/hooks}/pr-review-gate.sh
+calls=${tools:-.github/actions/refused-calls}/tool-calls.jq
+
 branch="claude/fix-$FIXER_ISSUE"
 [ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" = "$branch" ] || exit 0
-[ -z "$(git status --porcelain --untracked-files=no)" ] ||
+[ -z "$(git status --porcelain --untracked-files=no -- dialect)" ] ||
 	ask "commit your changes to $branch, then end the run."
-[ -n "$(git rev-list origin/dev..HEAD 2>/dev/null)" ] || exit 0
 
-outside=$(git diff --name-only origin/dev...HEAD | awk '
+# A fresh dev, since the agent can move its own origin/dev.
+git fetch -q origin dev || ask "git fetch of dev failed; see the log. End the run."
+base=$(git rev-parse FETCH_HEAD)
+[ -n "$(git rev-list "$base..HEAD")" ] || exit 0
+
+outside=$(git diff --name-only "$base...HEAD" | awk '
 	!/^dialect\// || /^dialect\/[^\/]+\/parser\// || /^dialect\/go\.(mod|sum)$/ ||
 	/^dialect\/core\/tokenanalyzer\/python\/(uv\.lock|pyproject\.toml)$/')
 [ -z "$outside" ] ||
@@ -31,13 +37,11 @@ outside=$(git diff --name-only origin/dev...HEAD | awk '
 
 pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
 if [ -z "$pr" ]; then
-	# The same rule reviewed.sh applies afterwards: a skill counts once it
-	# launched its agents, and the Review section is written last.
-	gate=.claude/hooks/pr-review-gate.sh
-	required=$("$gate" required-since origin/dev)
+	# The rule reviewed.sh applies afterwards: a skill counts once it launched its agents.
+	required=$("$gate" required-since "$base")
 	if [ -n "$required" ]; then
 		transcript=$(jq -r '.transcript_path // empty' <<<"$input")
-		ran=$(jq -r -f .github/actions/refused-calls/tool-calls.jq "$transcript" 2>/dev/null | "$gate" fanned-out)
+		ran=$(jq -r -f "$calls" "$transcript" 2>/dev/null | "$gate" fanned-out)
 		missing=''
 		for want in $required; do grep -qx "$want" <<<"$ran" || missing="$missing $want"; done
 		[ -z "$missing" ] ||
@@ -56,8 +60,10 @@ for delay in 2 4 8 0; do
 done
 
 if [ -z "$pr" ]; then
+	body=$(mktemp)
+	tail -n +2 .fixer-work/pr.md | sed '/./,$!d' >"$body"
 	gh pr create --draft --base dev --head "$branch" \
-		--title "$(head -n1 .fixer-work/pr.md)" --body "$(tail -n +2 .fixer-work/pr.md)" >&2 ||
+		--title "$(head -n1 .fixer-work/pr.md)" --body-file "$body" >&2 ||
 		ask "the pull request could not be opened; see the log. End the run."
 fi
 exit 0
