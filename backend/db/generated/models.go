@@ -12,11 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type AppCellar struct {
-	ID        string
-	CreatedAt time.Time
-}
-
 type AppDatasource struct {
 	ID              uuid.UUID
 	WorkspaceID     uuid.UUID
