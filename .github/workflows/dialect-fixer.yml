@@ -30,7 +30,7 @@ env:
   # The analyzer-backed tests fail rather than skip, as in CI.
   SELECT_REQUIRE_ANALYZER: "1"
   SKILL: .claude/skills/dialect-fixer
-  # Commands run in Claude Code's sandbox (.github/fixer-settings.json), with
+  # Commands run in Claude Code's sandbox (.github/agent-sandbox.json), with
   # no tokens and no network but the package mirrors, so Bash is open.
   TOOLS: >-
     Read,Grep,Glob,Agent,Task,Skill,Bash,Edit(/dialect/**),Edit(/.fixer-work/**),
@@ -101,7 +101,7 @@ jobs:
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: .github/fixer-settings.json
+          settings: .github/agent-sandbox.json
           # Any value makes the action keep its token out of .git/config and hand
           # it to git through a helper; it only admits others with github_token.
           allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
@@ -260,7 +260,7 @@ jobs:
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: .github/fixer-settings.json
+          settings: .github/agent-sandbox.json
           # Any value makes the action keep its token out of .git/config and hand
           # it to git through a helper; it only admits others with github_token.
           allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
@@ -371,7 +371,7 @@ jobs:
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: .github/fixer-settings.json
+          settings: .github/agent-sandbox.json
           # Any value makes the action keep its token out of .git/config and hand
           # it to git through a helper; it only admits others with github_token.
           allowed_non_write_users: ${{ env.FIXER_NOTIFY }}

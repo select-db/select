@@ -4,7 +4,11 @@
     "enabled": true,
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
-    "excludedCommands": [".claude/skills/dialect-fixer/scripts/push.sh"],
+    "excludedCommands": [
+      ".claude/skills/dialect-fixer/scripts/push.sh",
+      ".claude/skills/dialect-finder/scripts/checkpoint.sh *",
+      ".claude/skills/dialect-finder/scripts/file.sh *"
+    ],
     "filesystem": {
       "allowWrite": ["~/go", "~/.cache", "/home/runner/work/_temp/setup-uv-cache"]
     },
