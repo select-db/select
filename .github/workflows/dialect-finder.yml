@@ -9,8 +9,11 @@ name: Dialect finder
 # key), and optionally the variable FINDER_MODEL.
 
 on:
+  # GitHub can drop a scheduled run without a trace, so a second slot
+  # retries; the Due job skips it when the first one started.
   schedule:
     - cron: "17 2 * * *"
+    - cron: "47 5 * * *"
   workflow_dispatch:
     inputs:
       minutes:
@@ -37,8 +40,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  due:
+    name: Due
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.due.outputs.run }}
+    steps:
+      - id: due
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=true
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            since=$(date -u -d '-20 hours' +%Y-%m-%dT%H:%M:%SZ)
+            earlier=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow dialect-finder.yml --event schedule \
+              --created ">=$since" --json databaseId --jq "map(select(.databaseId != $GITHUB_RUN_ID)) | length")
+            [ "$earlier" = 0 ] || run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   find:
     name: Find
+    needs: due
+    if: needs.due.outputs.run == 'true'
     runs-on: ubuntu-latest
     # A ceiling only: the Find step's own timeout is what the minutes input sets.
     timeout-minutes: 240
