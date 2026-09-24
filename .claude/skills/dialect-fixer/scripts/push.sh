@@ -12,8 +12,17 @@ if [ "$(git rev-parse --abbrev-ref HEAD)" != "$branch" ]; then
 	echo "on $(git rev-parse --abbrev-ref HEAD), not $branch" >&2
 	exit 2
 fi
+# Bash is open in the sandbox, so this is where the files the fixer may change
+# are enforced: dialect/, less the generated parsers and dependency files.
+outside=$(git diff --name-only origin/dev...HEAD | awk '
+	!/^dialect\// || /^dialect\/[^\/]+\/parser\// || /^dialect\/go\.(mod|sum)$/ ||
+	/^dialect\/core\/tokenanalyzer\/python\/(uv\.lock|pyproject\.toml)$/')
+if [ -n "$outside" ]; then
+	printf 'refusing to push changes to:\n%s\n' "$outside" >&2
+	exit 2
+fi
 for delay in 2 4 8 16; do
-	git push -u origin "HEAD:refs/heads/$branch" && exit 0
+	git push origin "HEAD:refs/heads/$branch" && exit 0
 	sleep "$delay"
 done
 echo "push to $branch failed" >&2
