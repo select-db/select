@@ -20,8 +20,15 @@ fanned_out() {
 		($1 == "Agent" || $1 == "Task") && current != "" { print current }' | sort -u
 }
 
+# The skills HEAD needs as a pull request against $1.
+required_since() {
+	required_for "$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" diff --shortstat "$1...HEAD" 2>/dev/null |
+		awk '{ n = 0; for (i = 1; i < NF; i++) if ($(i + 1) ~ /^(insertion|deletion)/) n += $i; print n }')"
+}
+
 # The workflows share this list, this threshold and this rule through these modes.
 [ "$mode" = required ] && { required_for "${2:-}"; exit 0; }
+[ "$mode" = required-since ] && { required_since "${2:-origin/dev}"; exit 0; }
 [ "$mode" = fanned-out ] && { fanned_out; exit 0; }
 
 input=$(cat)
@@ -38,9 +45,7 @@ state="$gitdir/pr-review-gate/${session:-nosession}"
 case "$mode" in
 pr-opened)
 	base=$(json '.tool_input.base // empty')
-	lines=$(git -C "$root" diff --shortstat "origin/${base:-dev}...HEAD" 2>/dev/null |
-		awk '{ n = 0; for (i = 1; i < NF; i++) if ($(i + 1) ~ /^(insertion|deletion)/) n += $i; print n }')
-	[ -n "$(required_for "$lines")" ] || exit 0
+	[ -n "$(required_since "origin/${base:-dev}")" ] || exit 0
 	mkdir -p "$state" || exit 0
 	: >"$state/pending"
 	jq -n '{

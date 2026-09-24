@@ -1692,6 +1692,34 @@ func permCases() []PermCase {
 			Why:    "the four row rights read t1 but cannot make the view",
 		},
 
+		// --- a statement nobody classified, carrying a read. The floor covers
+		// what the statement does; the read nested in it still takes the select
+		// its table needs, since manage does not stand in for a row right.
+		{
+			On:     []string{"mysql"},
+			Name:   "a session variable set from a query",
+			SQL:    "SET @v = (SELECT c3 FROM t2)",
+			Needs:  []Right{Manage, mainT2(core.ActionSelect).Only("c3")},
+			Denied: rowRights,
+			Why:    "c3 lands in a variable the next statement reads back without naming t2",
+		},
+		{
+			On:     []string{"postgresql", "mysql"},
+			Name:   "a procedure argument holding a query",
+			SQL:    "CALL p((SELECT c1 FROM t1 WHERE c1 IN (SELECT c3 FROM t2)))",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c3")},
+			Denied: rowRights,
+			Why:    "the procedure is handed rows of t1 chosen by reading the c3 of t2",
+		},
+		{
+			On:     []string{"sqlite"},
+			Name:   "a trigger body reading a table",
+			SQL:    "CREATE TRIGGER tr AFTER INSERT ON t1 BEGIN INSERT INTO t2 (c3) SELECT c1 FROM t1; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "making the trigger is administration, and the c1 it copies on every insert is a read",
+		},
+
 		// --- statements the four row rights do not reach. Each asks for manage
 		// alone, and denying the row rights on every table says no mix of them
 		// stands in for it.

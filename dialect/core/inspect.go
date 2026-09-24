@@ -17,13 +17,16 @@ func OrUnknown(stmt *InspectStatement) InspectStatement {
 	return *stmt
 }
 
-// NestUnderUnknown reports read as the nested statement of an unclassified
+// NestUnderUnknown reports reads as the nested statements of an unclassified
 // one. A statement doing something the four row actions do not cover takes
 // manage for that, and still whatever the rows themselves need.
-func NestUnderUnknown(read InspectStatement) InspectStatement {
+//
+// Passing no read is UnknownStatement, which is all a dispatcher that read
+// nothing of the statement has to report.
+func NestUnderUnknown(reads ...InspectStatement) InspectStatement {
 	return InspectStatement{
 		Operation:  InspectOpUnknown,
-		Subqueries: []InspectStatement{read},
+		Subqueries: reads,
 	}
 }
 
