@@ -64,6 +64,15 @@ Settled; reopen with a reason, not a preference.
   ids with no row older than 24h. Never "delete all but this live set", so an
   empty or failed query purges nothing. Capped at 50 purges per run; hitting
   the cap stops and alerts. The cellar never reads Postgres.
+- **Scaling invariants**, cheap now and a migration later:
+  - Replicas are keyed by db, never by cellar: `dbs/{db_id}/` in the bucket.
+    Moving or recovering a db is then a row update.
+  - The token names the cellar: `CellarClaims{db, ws, cel}`; a cellar rejects
+    tokens for another. This fences a stale route after a move, so two cellars
+    never write the same replica.
+  - A move is: mark `moving` (callers get `waking`), evict on the old cellar
+    and confirm, flip `cellar_id`. Never start the new one before the old stops.
+  - Wake dedup lives on the cellar, so any number of backends is safe.
 - **Bucket versioning** with a lifecycle rule expiring noncurrent versions and
   stale delete markers after 7 days: a wrong purge is recoverable for a week,
   then data is gone. User contract: deleted data leaves storage within 7 days.
@@ -138,10 +147,11 @@ Settled; reopen with a reason, not a preference.
 - [ ] `GET /datasources/{id}/download`: `manage`, streams a `VACUUM INTO` copy
 - [ ] Delete: stop serving, mark `deleting`; the reconciler does the rest
 - [ ] Workspace soft delete marks its managed dbs `deleting`
-- [ ] Reconciler: inventory, per-id decision, signed purge, then drop the row,
+- [ ] Reconciler under a Postgres advisory lock (one backend at a time):
+      inventory, per-id decision, signed purge, then drop the row,
       db-only roles and rules elsewhere; 24h orphan age, 50 per run cap + alert
 - [ ] Route managed rows through the engine transport to their cellar
-- [ ] `CellarClaims` (aud `select-cellar`, 60s) signed with the existing signer,
+- [ ] `CellarClaims{db, ws, cel}` (aud `select-cellar`, 60s) signed with the existing signer,
       cached per db for ~50s
 - [ ] Audit events: reuse `datasource.lifecycle.*`
 - [ ] Request id sent to the cellar; cellar error codes passed through to REST,
@@ -150,12 +160,13 @@ Settled; reopen with a reason, not a preference.
 ### Cellar
 - [ ] Cellar mode in the backend binary: execute, schema, ping, dump routes
       served by `StreamLocal` against local files
-- [ ] Token verification with the public key only; path db must match `db`
+- [ ] Token verification with the public key only; path db must match `db`,
+      `cel` must match this cellar
 - [ ] `GET /cellar/inventory` and `DELETE /cellar/dbs/{id}` (file and replica
       prefix), behind the same token check
 - [ ] Connection pinning per open db; limits and pragmas applied on open
 - [ ] PRAGMA allowlist before execute
-- [ ] Embedded Litestream per db, retention from the workspace plan
+- [ ] Embedded Litestream per db, replica at `dbs/{db_id}/`, retention from the workspace plan
 - [ ] LRU eviction on disk pressure: lock, checkpoint, sync, verify replica
       position, delete local file, mark `cold`
 - [ ] Wake on first query: lock, restore, open, mark `hot`; single restore
@@ -197,7 +208,7 @@ Settled; reopen with a reason, not a preference.
       any result
 - [ ] Evict, wake, verify against MinIO in CI
 - [ ] Reconciler: failed or empty Postgres query purges nothing; cap stops the run
-- [ ] Cellar rejects expired, wrong-db, unsigned and user (wrong audience) tokens
+- [ ] Cellar rejects expired, wrong-db, wrong-cellar, unsigned and user (wrong audience) tokens
 - [ ] No response body on any surface contains a cellar path, bucket URL or
       cellar address, for every error code
 - [ ] Benchmark Object Storage to d2-4 restore throughput before launch
@@ -222,3 +233,7 @@ Settled; reopen with a reason, not a preference.
 - In-place restore with an automatic `{name}_old_{ts}` backup fork (Neon-style),
   if changing ids on restore hurts
 - Pin Teams dbs hot so large ones never wait on a wake
+- Second cellar: placement by free disk, `move` (evict, flip `cellar_id`),
+  dead-cellar runbook (reassign, wake from the bucket)
+- Workspace affinity for backends, so each workspace's caches live on one
+  instance and need no cross-instance invalidation
