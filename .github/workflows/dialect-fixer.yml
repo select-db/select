@@ -111,12 +111,11 @@ jobs:
         # use the Claude App's token, whose pushes trigger CI.
         env:
           GH_TOKEN: ${{ github.token }}
-          # The Review step runs the gate's skills; the hook would ask here too.
-          PR_REVIEW_GATE: "off"
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: '{"outputStyle": "default"}'
+          # The Review step runs the review gate's skills, so its hook is off here.
+          settings: '{"outputStyle": "default", "disableAllHooks": true}'
           prompt: |
             Fix issue #${{ steps.pick.outputs.issue }} in ${{ github.repository }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "fix".
@@ -152,8 +151,6 @@ jobs:
           issue: ${{ steps.pick.outputs.issue }}
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           model: ${{ vars.FIXER_MODEL || 'opus' }}
-          tools: ${{ env.TOOLS }}
-          denied: ${{ env.DENIED }}
 
       - name: Wrap up
         if: always() && steps.pick.outputs.issue != ''
@@ -290,7 +287,6 @@ jobs:
         with:
           execution-file: ${{ steps.agent.outputs.execution_file }}
 
-      # A pushed CI fix is new code, reviewed like the first push.
       - name: Pushed
         id: pushed
         if: always() && steps.decide.outputs.pr != ''
@@ -309,8 +305,6 @@ jobs:
           issue: ${{ steps.decide.outputs.issue }}
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           model: ${{ vars.FIXER_MODEL || 'opus' }}
-          tools: ${{ env.TOOLS }}
-          denied: ${{ env.DENIED }}
 
       - name: Release the issue
         if: always() && steps.decide.outputs.pr != ''

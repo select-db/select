@@ -20,10 +20,9 @@ runs:
           | "- `\(.tool_name)`: `\(.tool_input | tostring | .[0:160] | gsub("`"; "'"'"'"))`"' \
           "$EXECUTION_FILE" 2>/dev/null | sort | uniq -c | sort -rn \
           | sed -E 's/^ *([0-9]+) - /- \1x /' || true)
-        # In order, repeats collapsed: Read x4, Skill(simplify), Agent x4, ...
-        calls=$(jq -r '.. | objects | select(.type? == "tool_use")
-          | if .name == "Skill" then "Skill(\(.input.skill // ""))" else .name end' \
-          "$EXECUTION_FILE" 2>/dev/null | uniq -c | awk '{ printf "%s%s", sep, ($1 > 1 ? $2 " x" $1 : $2); sep = ", " }' || true)
+        # In order, repeats collapsed: Read x4, Skill simplify, Agent x4, ...
+        calls=$(jq -r -f "$GITHUB_ACTION_PATH/tool-calls.jq" "$EXECUTION_FILE" 2>/dev/null | uniq -c |
+          awk '{ n = $1; $1 = ""; sub(/^ /, ""); printf "%s%s", sep, (n > 1 ? $0 " x" n : $0); sep = ", " }' || true)
         {
           echo "### Tool calls"
           echo "${calls:-None.}"
