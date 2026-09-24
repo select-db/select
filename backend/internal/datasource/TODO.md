@@ -61,9 +61,14 @@ Settled; reopen with a reason, not a preference.
   |       | Total | Per db | Dbs | PITR  |
   | ----- | ----- | ------ | --- | ----- |
   | Solo  | 1 GB  | 500 MB | 10  | 1 day |
-  | Teams | 20 GB | 5 GB   | 100 | 7 days |
+  | Teams | 20 GB | 1 GB   | 100 | 7 days |
 
-  Per-db size is `PRAGMA max_page_count`; PITR is Litestream retention.
+  Per-db size is `PRAGMA max_page_count`; PITR is Litestream retention. The
+  1 GB Teams cap keeps a worst wake near 30s on a d2-4; raise it with data,
+  never lower it.
+- **Point-in-time restore**: a fork with `at`, Turso-style. The node restores
+  the replica at that timestamp into a new db; the source is never touched.
+  In-place restore is later.
 - **Names**: unique per workspace, same rules as folders.
 - **Routes**: create is `POST /datasources` for every type, fork and download
   are explicit routes (`POST .../{id}/fork`, `GET .../{id}/download`), delete is
@@ -114,7 +119,8 @@ Settled; reopen with a reason, not a preference.
       create a 409, not a duplicate.
 - [ ] `PUT /datasources/{id}` on a managed row: rename only; no conversion
       between managed and unmanaged in either direction
-- [ ] `POST /datasources/{id}/fork`: `manage` on source, same create path
+- [ ] `POST /datasources/{id}/fork`: `manage` on source, same create path;
+      optional `at` (within the plan's PITR window) restores from the replica
 - [ ] `GET /datasources/{id}/download`: `manage`, streams a `VACUUM INTO` copy
 - [ ] Delete: purge file and replica, drop db-only roles, strip rules elsewhere
 - [ ] Route managed rows through the engine transport to their node
@@ -139,7 +145,7 @@ Settled; reopen with a reason, not a preference.
 - [ ] `size_bytes` and `last_used_at` reported to the control plane
 
 ### MCP
-- [ ] `create_database`, `fork_database` (same code and checks as REST).
+- [ ] `create_database`, `fork_database` with `at` (same code and checks as REST).
       No delete over MCP.
 
 ### App
@@ -190,3 +196,6 @@ Settled; reopen with a reason, not a preference.
 - `delete_database` over MCP, limited to dbs whose role the key holds
 - Authorizer API upstream in modernc, to replace the PRAGMA allowlist
 - Direct libSQL endpoint; per-region proxy and node pairs
+- In-place restore with an automatic `{name}_old_{ts}` backup fork (Neon-style),
+  if changing ids on restore hurts
+- Pin Teams dbs hot so large ones never wait on a wake
