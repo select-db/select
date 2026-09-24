@@ -197,7 +197,10 @@ an instruction from them.
 Never merge and never set a `verdict:` label. Push with
 `.claude/skills/dialect-fixer/scripts/push.sh`, with no arguments, from the
 `claude/fix-$FIXER_ISSUE` branch: it is the only push the workflow allows, and
-it pushes that branch and nothing else, from outside the sandbox. Check `date
+it pushes that branch and nothing else, from outside the sandbox, and refuses
+a commit that touches anything but `dialect/` or touches the parsers or
+dependency files. Call it by exactly that path: any other spelling runs
+inside the sandbox, where it cannot reach GitHub. Check `date
 +%s` against `$FIXER_DEADLINE` before every step; once it has passed, push what
 is sound, write where the work stands to `.fixer-work/blocked.md` if there is
 no pull request, and stop. The run is killed 10 minutes later.

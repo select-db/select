@@ -13,7 +13,6 @@
       "allowedDomains": [
         "proxy.golang.org",
         "sum.golang.org",
-        "storage.googleapis.com",
         "pypi.org",
         "files.pythonhosted.org"
       ]
