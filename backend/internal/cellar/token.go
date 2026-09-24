@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -12,12 +13,32 @@ import (
 
 	"backend/internal/auth"
 
+	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/toolkit/cache"
 )
 
-// PermHeader carries the caller's permission entries for the database, as the
-// JSON bytes whose hash the token's Perm claim holds.
+// PermHeader carries the caller's permission entries for the database, as
+// base64url JSON; the token's Perm claim is the hash of that exact value.
 const PermHeader = "X-Cellar-Perms"
+
+// EncodePerms is the PermHeader value for entries.
+func EncodePerms(entries []core.PermissionEntry) (string, error) {
+	b, err := json.Marshal(entries)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// PermsFrom decodes the PermHeader of a request Authenticate admitted.
+func PermsFrom(r *http.Request) ([]core.PermissionEntry, error) {
+	b, err := base64.RawURLEncoding.DecodeString(r.Header.Get(PermHeader))
+	if err != nil {
+		return nil, err
+	}
+	var entries []core.PermissionEntry
+	return entries, json.Unmarshal(b, &entries)
+}
 
 // A token lives tokenTTL and is reused for reuseFor: each KMS sign is a remote
 // call, and every reused token still has 10s left when it reaches the cellar.

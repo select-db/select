@@ -434,7 +434,9 @@ SELECT
   d.max_open_conns,
   d.max_idle_conns,
   d.conn_max_lifetime,
-  d.conn_max_idle_time
+  d.conn_max_idle_time,
+  d.cellar_id,
+  w.plan
 FROM
   app.datasource d
   JOIN app.workspace w ON w.id = d.workspace_id
@@ -458,6 +460,8 @@ type GetDatasourceRow struct {
 	MaxIdleConns    int32
 	ConnMaxLifetime int32
 	ConnMaxIdleTime int32
+	CellarID        db_types.JSONNullString
+	Plan            string
 }
 
 func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (GetDatasourceRow, error) {
@@ -472,6 +476,8 @@ func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (G
 		&i.MaxIdleConns,
 		&i.ConnMaxLifetime,
 		&i.ConnMaxIdleTime,
+		&i.CellarID,
+		&i.Plan,
 	)
 	return i, err
 }

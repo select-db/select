@@ -28,8 +28,15 @@ func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, o
 		defer cancel()
 	}
 
+	q, release, err := conn.statementConn(ctx)
+	if err != nil {
+		result.Errors = []string{err.Error()}
+		return result
+	}
+	defer release()
+
 	start := time.Now()
-	rows, err := conn.DB.QueryContext(ctx, sql)
+	rows, err := q.QueryContext(ctx, sql)
 	result.DurationMs = max1ms(time.Since(start).Milliseconds())
 
 	if err != nil {
@@ -39,7 +46,7 @@ func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, o
 
 		// non-SELECT: try ExecContext
 		start = time.Now()
-		res, execErr := conn.DB.ExecContext(ctx, sql)
+		res, execErr := q.ExecContext(ctx, sql)
 		result.DurationMs = max1ms(time.Since(start).Milliseconds())
 		if execErr != nil {
 			execMsg, execPos := parseQueryError(ctx, execErr)
@@ -140,8 +147,15 @@ func StreamLocal(
 		defer cancel()
 	}
 
+	q, release, err := conn.statementConn(ctx)
+	if err != nil {
+		sink.OnError(err)
+		return
+	}
+	defer release()
+
 	start := time.Now()
-	rows, err := conn.DB.QueryContext(ctx, sql)
+	rows, err := q.QueryContext(ctx, sql)
 	durationMs := max1ms(time.Since(start).Milliseconds())
 
 	if err != nil {
@@ -149,7 +163,7 @@ func StreamLocal(
 		// (INSERT / UPDATE / DELETE / DDL) will fail QueryContext on most
 		// drivers; retry via ExecContext to surface affected-row counts.
 		execStart := time.Now()
-		res, execErr := conn.DB.ExecContext(ctx, sql)
+		res, execErr := q.ExecContext(ctx, sql)
 		execDurationMs := max1ms(time.Since(execStart).Milliseconds())
 		if execErr == nil {
 			_ = sink.OnColumns(nil)

@@ -21,6 +21,9 @@ type ResolvedDatasource struct {
 	DSN    string
 	SSH    *engine.ResolvedSSHConfig
 	Pool   engine.PoolConfig
+	// CellarID is set on a managed database, which runs on that cellar.
+	CellarID string
+	Plan     string
 }
 
 var dsCache = cache.New(cache.Options{
@@ -75,9 +78,11 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	}
 
 	ds := &ResolvedDatasource{
-		DBType: row.DbType,
-		Name:   row.Name,
-		DSN:    dsn,
+		DBType:   row.DbType,
+		Name:     row.Name,
+		DSN:      dsn,
+		CellarID: row.CellarID.ValueOrEmpty(),
+		Plan:     row.Plan,
 		Pool: engine.PoolConfig{
 			MaxOpenConns:    int(row.MaxOpenConns),
 			MaxIdleConns:    int(row.MaxIdleConns),

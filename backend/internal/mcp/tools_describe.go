@@ -145,14 +145,14 @@ func toolGetDatabaseSchemas() Tool {
 			ReadOnlyHint:   boolPtr(true),
 			IdempotentHint: boolPtr(true),
 		},
-		Run: func(ctx context.Context, _ *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
+		Run: func(ctx context.Context, r *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
 			var args struct {
 				DatasourceID string `json:"datasource_id"`
 			}
 			if err := json.Unmarshal(raw, &args); err != nil || args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			o, err := openDatasource(ctx, args.DatasourceID, workspaceID)
+			o, err := openDatasource(ctx, r, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
@@ -201,7 +201,7 @@ func toolGetDatabaseTableDetail() Tool {
 			ReadOnlyHint:   boolPtr(true),
 			IdempotentHint: boolPtr(true),
 		},
-		Run: func(ctx context.Context, _ *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
+		Run: func(ctx context.Context, r *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
 			var args struct {
 				DatasourceID string `json:"datasource_id"`
 				SchemaID     string `json:"schema_id"`
@@ -213,7 +213,7 @@ func toolGetDatabaseTableDetail() Tool {
 			if args.DatasourceID == "" || args.SchemaID == "" || args.TableName == "" {
 				return nil, errBadArgument("datasource_id, schema_id, and table_name are required")
 			}
-			o, err := openDatasource(ctx, args.DatasourceID, workspaceID)
+			o, err := openDatasource(ctx, r, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}

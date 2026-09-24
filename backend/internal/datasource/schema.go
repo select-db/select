@@ -29,6 +29,21 @@ func SchemaHandler() http.HandlerFunc {
 			return
 		}
 
+		if ds.CellarID != "" {
+			client, inst, err := OnCellar(r, id, workspaceID, ds)
+			if err != nil {
+				cellarError(w, err, "datasource schema", workspaceID, id)
+				return
+			}
+			meta, err := client.GetMetadata(r.Context(), engine.Conn{}, inst, workspaceID, "", noCache)
+			if err != nil {
+				cellarError(w, err, "datasource schema", workspaceID, id)
+				return
+			}
+			writeZstdJSON(w, meta)
+			return
+		}
+
 		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 		if err != nil {
 			http.Error(w, safeConnErr(err, "datasource schema", workspaceID, id), http.StatusBadGateway)
@@ -47,15 +62,17 @@ func SchemaHandler() http.HandlerFunc {
 			return
 		}
 
-		jsonBytes, err := json.Marshal(meta)
-		if err != nil {
-			http.Error(w, "failed to encode metadata", http.StatusInternalServerError)
-			return
-		}
-
-		compressed := zstdEncoder.EncodeAll(jsonBytes, nil)
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Encoding", "zstd")
-		_, _ = w.Write(compressed)
+		writeZstdJSON(w, meta)
 	}
+}
+
+func writeZstdJSON(w http.ResponseWriter, v any) {
+	jsonBytes, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Encoding", "zstd")
+	_, _ = w.Write(zstdEncoder.EncodeAll(jsonBytes, nil))
 }

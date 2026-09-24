@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 
+	"backend/internal/datasource"
 	"backend/internal/utils"
 
 	"github.com/selectDb/dialect/engine"
@@ -49,6 +50,9 @@ func asToolError(err error) *toolError {
 	var cfgErr *engine.ConfigError
 	if errors.As(err, &cfgErr) {
 		return &toolError{Code: "upstream", Message: cfgErr.Msg}
+	}
+	if errors.Is(err, datasource.ErrCellarOff) {
+		return &toolError{Code: "disabled", Message: datasource.ErrCellarOff.Error()}
 	}
 	ref := utils.GenerateRequestID()
 	log.Printf("mcp: internal error ref=%s: %v", ref, err)

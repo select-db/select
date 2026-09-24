@@ -1,7 +1,6 @@
 package datasource
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"backend/internal/middlewares"
@@ -22,6 +21,21 @@ func DumpHandler() http.HandlerFunc {
 		ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
 		if err != nil {
 			http.Error(w, "datasource not found", http.StatusNotFound)
+			return
+		}
+
+		if ds.CellarID != "" {
+			client, _, err := OnCellar(r, id, workspaceID, ds)
+			if err != nil {
+				cellarError(w, err, "datasource dump", workspaceID, id)
+				return
+			}
+			schemaSQL, err := client.Transport.DumpSchema(r.Context(), workspaceID, id)
+			if err != nil {
+				cellarError(w, err, "datasource dump", workspaceID, id)
+				return
+			}
+			writeZstdJSON(w, map[string]string{"sql": schemaSQL})
 			return
 		}
 
@@ -53,10 +67,6 @@ func DumpHandler() http.HandlerFunc {
 
 		schemaSQL := engine.GetOrGenerateDump(dialect, workspaceID, dumpDSN, meta, false)
 
-		jsonBytes, _ := json.Marshal(map[string]string{"sql": schemaSQL})
-		compressed := zstdEncoder.EncodeAll(jsonBytes, nil)
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Encoding", "zstd")
-		_, _ = w.Write(compressed)
+		writeZstdJSON(w, map[string]string{"sql": schemaSQL})
 	}
 }

@@ -172,9 +172,10 @@ id, both sides log it, the caller sees it as `ref`.
   route, so two cellars never write one replica.
 
 ### Environments
-- Dev: `./dev.sh backend start` as today, with `CELLAR=local` and a directory
-  replica in `backend/.dev/`. No MinIO. A cellar that fails to start only
-  makes managed routes answer `unavailable`.
+- Dev: `./dev.sh backend start` as today, with `CELLAR=local`: the cellar
+  runs in-process on a loopback port over `CELLAR_DIR` (default `.dev/cellar`),
+  with a directory replica in `backend/.dev/`. No MinIO. A local cellar that
+  cannot start stops the server, as a bad `CELLAR` does.
 - Staging: a second systemd unit on the staging box, own data dir and bucket.
 - Prod: a d2-4 VM on the private network, same region as the backend.
 
@@ -195,23 +196,27 @@ Numbers are order; items inside a milestone can run in parallel.
 
 ### 1. Cellar runs queries (local files, no bucket)
 Needs 0.
-- [ ] Cellar mode: execute, schema, ping, dump over the existing engine
+- [x] Cellar mode: execute, schema, ping, dump over the existing engine
       transport, `StreamLocal` against local files. `CELLAR=local` starts it
-      in-process.
+      in-process. The cellar serves the backend's own datasource routes, and
+      the backend reaches it through `engine.Client` as a proxified instance,
+      so REST and MCP share one path.
 - [x] `CellarClaims` signing with a reuse cache in the backend
       (`cellar.Tokens`, on `toolkit/cache`), verification in the cellar
       (`cellar.Authenticate` middleware, which puts the grant in the context
       for `InFlight` to key on).
-- [ ] Isolation: pragmas in the DSN, PRAGMA allowlist, and
-      `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement.
-      The engine pools connections and the driver has no per-connection hook
-      that can set limits, so per statement is the only fail-closed place.
+- [x] Isolation: pragmas in the DSN, PRAGMA allowlist, and
+      `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement
+      (`engine.Conn.Prepare`). The engine pools connections and the driver has
+      no per-connection hook that can set limits, so per statement is the only
+      fail-closed place. `max_page_count` from the token is set there too.
 - [x] `InFlight` middleware (`middlewares.InFlight`).
-- [ ] 60s cap and query-seconds recorded on the cellar execute route.
+- [x] 60s cap and query-seconds recorded on the cellar execute route
+      (`cellar.Admit`; seconds are logged per workspace for now).
 - [ ] Error codes and request id, end to end to REST and MCP. The request id
       lives in the context so `ref` matches the request log; MCP's mid-stream
       `collectSink` error goes through the same classification.
-- [ ] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
+- [x] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
       every non-allowlisted PRAGMA); token rejection (expired, wrong db, wrong
       cellar, unsigned, user token); no error body contains a path, bucket or
       address.

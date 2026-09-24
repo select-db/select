@@ -28,6 +28,17 @@ func safeConnErr(err error, logPrefix, workspaceID, dsID string) string {
 	return genericConnErr
 }
 
+// cellarError answers a managed database request the cellar could not serve.
+// The detail is logged: it can name the cellar's address.
+func cellarError(w http.ResponseWriter, err error, logPrefix, workspaceID, dsID string) {
+	if errors.Is(err, ErrCellarOff) {
+		http.Error(w, err.Error(), http.StatusNotImplemented)
+		return
+	}
+	log.Printf("%s: cellar ws=%s id=%s: %v", logPrefix, workspaceID, dsID, err)
+	http.Error(w, "internal error", http.StatusInternalServerError)
+}
+
 func PingHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
@@ -53,6 +64,20 @@ func PingHandler() http.HandlerFunc {
 		ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
 		if err != nil {
 			http.Error(w, "datasource not found", http.StatusNotFound)
+			return
+		}
+
+		if ds.CellarID != "" {
+			client, inst, err := OnCellar(r, id, workspaceID, ds)
+			if err != nil {
+				cellarError(w, err, "datasource ping", workspaceID, id)
+				return
+			}
+			if err := client.Ping(r.Context(), engine.Conn{}, inst, workspaceID, noCache); err != nil {
+				cellarError(w, err, "datasource ping", workspaceID, id)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 

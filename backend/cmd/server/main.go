@@ -78,7 +78,7 @@ func main() {
 
 	startPprofServer()
 
-	checkCellarConfig()
+	startCellar()
 
 	auditLogger := startAuditLogger()
 

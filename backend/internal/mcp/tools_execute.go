@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -61,12 +60,12 @@ func toolExecuteQuery() Tool {
 				maxRows = maxRowsCeiling
 			}
 
-			conn, ds, _, err := openConn(ctx, r, args.DatasourceID, workspaceID)
+			o, err := openDatasource(ctx, r, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
-			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
-			return runQuery(ctx, conn, ds, args.Statement, maxRows, &rec), nil
+			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, o.ds.DBType)
+			return runQuery(ctx, o, args.Statement, maxRows, &rec), nil
 		},
 	}
 }
@@ -101,14 +100,14 @@ func toolExecuteStatement() Tool {
 				return nil, errBadArgument("datasource_id and statement are required")
 			}
 
-			conn, ds, _, err := openConn(ctx, r, args.DatasourceID, workspaceID)
+			o, err := openDatasource(ctx, r, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
-			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, ds.DBType)
+			rec := newQueryAuditRecord(r, workspaceID, args.DatasourceID, args.Statement, o.ds.DBType)
 			// Always cap: nothing forces execute_statement to be write-only, so a
 			// SELECT run through it must be bounded like execute_query.
-			return runQuery(ctx, conn, ds, args.Statement, maxRowsCeiling, &rec), nil
+			return runQuery(ctx, o, args.Statement, maxRowsCeiling, &rec), nil
 		},
 	}
 }
@@ -117,55 +116,65 @@ func toolExecuteStatement() Tool {
 // shared
 // ----------------------------------------------------------------------
 
-func openConn(ctx context.Context, r *http.Request, datasourceID, workspaceID string) (engine.Conn, *datasource.ResolvedDatasource, core.SQLDialect, error) {
-	o, err := openDatasource(ctx, datasourceID, workspaceID)
-	if err != nil {
-		return engine.Conn{}, nil, nil, err
-	}
-	return engine.Conn{
-		DB:   o.db,
-		Meta: o.meta,
-		// Default-deny: no explicit allow rules = no access
-		Perms: authz.CompiledFromRequest(r),
-	}, o.ds, o.dialect, nil
-}
-
+// openedDatasource is a datasource ready to describe and query: locally, or on
+// its cellar when managed.
 type openedDatasource struct {
-	ds      *datasource.ResolvedDatasource
-	db      *sql.DB
-	meta    *core.Metadata
-	dialect core.SQLDialect
+	ds          *datasource.ResolvedDatasource
+	workspaceID string
+	meta        *core.Metadata
+	dialect     core.SQLDialect
+	client      *engine.Client
+	conn        engine.Conn
+	inst        engine.DBInstance
 }
 
 // openDatasource resolves, connects to and describes one datasource. Driver and
 // network errors come back wrapped, for asToolError to redact.
-func openDatasource(ctx context.Context, datasourceID, workspaceID string) (openedDatasource, error) {
+func openDatasource(ctx context.Context, r *http.Request, datasourceID, workspaceID string) (openedDatasource, error) {
 	ds, err := datasource.GetOrLoadDatasource(ctx, datasourceID, workspaceID)
 	if err != nil {
 		return openedDatasource{}, errNotFound("datasource not found")
-	}
-	db, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
-	if err != nil {
-		return openedDatasource{}, fmt.Errorf("open datasource %s: %w", datasourceID, err)
 	}
 	dialect := engine.GetDialect(ds.DBType)
 	if dialect == nil {
 		return openedDatasource{}, errExecution("unsupported database type: "+ds.DBType, "")
 	}
-	meta, err := engine.GetOrFetchMetadata(ctx, workspaceID, ds.DSN, db, dialect, "", false)
+	o := openedDatasource{ds: ds, workspaceID: workspaceID, dialect: dialect}
+
+	if ds.CellarID != "" {
+		if o.client, o.inst, err = datasource.OnCellar(r, datasourceID, workspaceID, ds); err != nil {
+			return openedDatasource{}, fmt.Errorf("open datasource %s: %w", datasourceID, err)
+		}
+		if o.meta, err = o.client.GetMetadata(ctx, engine.Conn{}, o.inst, workspaceID, "", false); err != nil {
+			return openedDatasource{}, fmt.Errorf("fetch metadata %s: %w", datasourceID, err)
+		}
+		return o, nil
+	}
+
+	db, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 	if err != nil {
+		return openedDatasource{}, fmt.Errorf("open datasource %s: %w", datasourceID, err)
+	}
+	if o.meta, err = engine.GetOrFetchMetadata(ctx, workspaceID, ds.DSN, db, dialect, "", false); err != nil {
 		return openedDatasource{}, fmt.Errorf("fetch metadata %s: %w", datasourceID, err)
 	}
-	return openedDatasource{ds: ds, db: db, meta: meta, dialect: dialect}, nil
+	o.client = &engine.Client{}
+	o.inst = engine.DBInstance{ID: "mcp", DBType: ds.DBType}
+	o.conn = engine.Conn{
+		DB:   db,
+		Meta: o.meta,
+		// Default-deny: no explicit allow rules = no access
+		Perms: authz.CompiledFromRequest(r),
+	}
+	return o, nil
 }
 
 // runQuery streams sql through the engine and collects the result. rec is the
 // query.executed record to emit on completion; pass nil for internal queries
 // that read no data (e.g. EXPLAIN), which should not appear in the data-plane log.
-func runQuery(ctx context.Context, conn engine.Conn, ds *datasource.ResolvedDatasource, sql string, maxRows int, rec *audit.Record) any {
+func runQuery(ctx context.Context, o openedDatasource, sql string, maxRows int, rec *audit.Record) any {
 	sink := newCollectSink(maxRows, rec)
-	inst := engine.DBInstance{ID: "mcp", DBType: ds.DBType}
-	engine.StreamLocal(ctx, conn, inst, sql, engine.Options{
+	o.client.StreamTo(ctx, o.conn, o.inst, o.workspaceID, sql, engine.Options{
 		// Bound the work even when callers don't supply a timeout.
 		Timeout:  30 * time.Second,
 		MaxRows:  maxRows,
