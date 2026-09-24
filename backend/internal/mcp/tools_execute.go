@@ -118,38 +118,45 @@ func toolExecuteStatement() Tool {
 // ----------------------------------------------------------------------
 
 func openConn(ctx context.Context, r *http.Request, datasourceID, workspaceID string) (engine.Conn, *datasource.ResolvedDatasource, core.SQLDialect, error) {
-	ds, dbConn, meta, dialect, err := openDatasource(ctx, datasourceID, workspaceID)
+	o, err := openDatasource(ctx, datasourceID, workspaceID)
 	if err != nil {
 		return engine.Conn{}, nil, nil, err
 	}
 	return engine.Conn{
-		DB:   dbConn,
-		Meta: meta,
+		DB:   o.db,
+		Meta: o.meta,
 		// Default-deny: no explicit allow rules = no access
 		Perms: authz.CompiledFromRequest(r),
-	}, ds, dialect, nil
+	}, o.ds, o.dialect, nil
+}
+
+type openedDatasource struct {
+	ds      *datasource.ResolvedDatasource
+	db      *sql.DB
+	meta    *core.Metadata
+	dialect core.SQLDialect
 }
 
 // openDatasource resolves, connects to and describes one datasource. Driver and
 // network errors come back wrapped, for asToolError to redact.
-func openDatasource(ctx context.Context, datasourceID, workspaceID string) (*datasource.ResolvedDatasource, *sql.DB, *core.Metadata, core.SQLDialect, error) {
+func openDatasource(ctx context.Context, datasourceID, workspaceID string) (openedDatasource, error) {
 	ds, err := datasource.GetOrLoadDatasource(ctx, datasourceID, workspaceID)
 	if err != nil {
-		return nil, nil, nil, nil, errNotFound("datasource not found")
+		return openedDatasource{}, errNotFound("datasource not found")
 	}
-	dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
+	db, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("open datasource %s: %w", datasourceID, err)
+		return openedDatasource{}, fmt.Errorf("open datasource %s: %w", datasourceID, err)
 	}
 	dialect := engine.GetDialect(ds.DBType)
 	if dialect == nil {
-		return nil, nil, nil, nil, errExecution("unsupported database type: "+ds.DBType, "")
+		return openedDatasource{}, errExecution("unsupported database type: "+ds.DBType, "")
 	}
-	meta, err := engine.GetOrFetchMetadata(ctx, workspaceID, ds.DSN, dbConn, dialect, "", false)
+	meta, err := engine.GetOrFetchMetadata(ctx, workspaceID, ds.DSN, db, dialect, "", false)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("fetch metadata %s: %w", datasourceID, err)
+		return openedDatasource{}, fmt.Errorf("fetch metadata %s: %w", datasourceID, err)
 	}
-	return ds, dbConn, meta, dialect, nil
+	return openedDatasource{ds: ds, db: db, meta: meta, dialect: dialect}, nil
 }
 
 // runQuery streams sql through the engine and collects the result. rec is the

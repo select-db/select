@@ -7,26 +7,20 @@ import (
 	"strings"
 )
 
-// Config is the parsed CELLAR setting. The zero value means managed databases
-// are off.
-type Config struct {
-	Local bool   // the cellar runs in the backend's own process
-	URL   string // a remote cellar; empty unless remote
-}
+// Local is the CELLAR value that runs the cellar in the backend's own process.
+const Local = "local"
 
-// Parse reads a CELLAR value: empty, "local", or an http(s) URL. Anything else
-// is an error, so a typo cannot pass for "off".
-func Parse(v string) (Config, error) {
+// Parse checks a CELLAR value and returns it normalized: "" (managed databases
+// off), Local, or an http(s) URL. Anything else is an error, so a typo cannot
+// pass for "off".
+func Parse(v string) (string, error) {
 	v = strings.TrimSpace(v)
-	switch v {
-	case "":
-		return Config{}, nil
-	case "local":
-		return Config{Local: true}, nil
+	if v == "" || v == Local {
+		return v, nil
 	}
 	u, err := url.Parse(v)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return Config{}, fmt.Errorf(`CELLAR=%q: want empty, "local" or an http(s) URL`, v)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
+		return "", fmt.Errorf(`CELLAR: want empty, %q or an http(s) URL without credentials`, Local)
 	}
-	return Config{URL: strings.TrimRight(v, "/")}, nil
+	return strings.TrimRight(v, "/"), nil
 }
