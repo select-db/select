@@ -8,10 +8,16 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
+	"backend/internal/cellar"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 )
+
+// genericConnErr is returned to clients for any datasource connection
+// failure. The detail is logged server-side only: a raw dial error leaks
+// internal network topology and turns this endpoint into an SSRF oracle.
+const genericConnErr = "could not connect to the datasource"
 
 // ErrNotFound is a datasource the caller's workspace does not have.
 var ErrNotFound = errors.New("datasource not found")
@@ -86,6 +92,8 @@ func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
 		return http.StatusNotFound, err.Error()
 	case errors.Is(err, ErrCellarOff):
 		return http.StatusNotImplemented, err.Error()
+	case errors.Is(err, cellar.ErrUnavailable):
+		return http.StatusServiceUnavailable, err.Error()
 	case errors.As(err, &cfgErr):
 		return http.StatusBadGateway, cfgErr.Msg
 	}

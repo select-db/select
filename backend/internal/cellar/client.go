@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -17,6 +19,10 @@ import (
 )
 
 var zstdDecoder, _ = zstd.NewReader(nil)
+
+// ErrUnavailable is a cellar the backend could not reach. The cause, which
+// names the cellar's address, is only logged.
+var ErrUnavailable = errors.New("managed database temporarily unavailable, retry")
 
 // Client is the backend's side of one cellar.
 type Client struct {
@@ -62,7 +68,11 @@ func (c *Client) Transport(g auth.CellarGrant, entries []core.PermissionEntry) (
 		req.Header.Set(PermHeader, perms)
 		resp, err := c.http.Do(req)
 		if err != nil {
-			return nil, err
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			log.Printf("cellar: %s %s: %v", method, endpoint, err)
+			return nil, ErrUnavailable
 		}
 		if resp.StatusCode >= 400 {
 			defer func() { _ = resp.Body.Close() }()

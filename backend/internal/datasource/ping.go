@@ -8,11 +8,6 @@ import (
 	"backend/internal/middlewares"
 )
 
-// genericConnErr is returned to clients for any datasource connection
-// failure. The detail is logged server-side only: a raw dial error leaks
-// internal network topology and turns this endpoint into an SSRF oracle.
-const genericConnErr = "could not connect to the datasource"
-
 func PingHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")

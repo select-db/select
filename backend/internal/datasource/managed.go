@@ -15,7 +15,7 @@ import (
 var ErrCellarOff = errors.New("managed databases are not enabled on this server")
 
 // plans are what a managed database's workspace plan lets it grow to and
-// restore from; totals and counts are checked on create.
+// restore from. An unknown plan has no size cap, which the cellar refuses.
 var plans = map[string]struct {
 	maxBytes int64
 	pitrDays int

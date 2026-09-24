@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"backend/e2e"
@@ -143,4 +144,20 @@ func TestManagedDatabaseWithoutCellar(t *testing.T) {
 		map[string]any{"workspace_id": m.f.Actor.WorkspaceID, "sql": "SELECT 1"})
 	require.Equal(t, http.StatusNotImplemented, rec.Code)
 	require.Contains(t, rec.Body.String(), "not enabled")
+}
+
+func TestManagedDatabaseWithCellarDown(t *testing.T) {
+	m := newManagedDB(t)
+	down := httptest.NewServer(http.NotFoundHandler())
+	down.Close()
+	datasource.UseCellar(cellar.NewClient(down.URL))
+
+	_, errMsg := m.run(t, "SELECT 1")
+	require.Contains(t, errMsg, "unavailable")
+	require.NotContains(t, errMsg, strings.TrimPrefix(down.URL, "http://"), "errors never name the cellar")
+
+	rec := e2e.Do(t, m.f.H, http.MethodGet, "/datasources/"+m.id+"/schema", m.f.Actor.Token,
+		map[string]any{"workspace_id": m.f.Actor.WorkspaceID})
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	require.NotContains(t, rec.Body.String(), strings.TrimPrefix(down.URL, "http://"))
 }

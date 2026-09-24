@@ -69,8 +69,8 @@ Settled. Reopen with a reason, not a preference.
 - Raise limits with data, never lower them.
 
 ### Limits on every cellar statement
-- Time: the workspace setting, capped at 60s, enforced by the cellar. Never
-  read from the request.
+- Time: capped at 60s, enforced by the cellar. The cap is never read from
+  the request; a caller's own timeout can only shorten it.
 - Concurrency: 10 statements in flight per workspace. More wait for a slot;
   the wait counts against the same 60s.
 - Both are constants on the cellar, enforced by one `InFlight` middleware next
@@ -175,7 +175,9 @@ id, both sides log it, the caller sees it as `ref`.
 - Dev: `./dev.sh backend start` as today, with `CELLAR=local`: the cellar
   runs in-process on a loopback port over `CELLAR_DIR` (default `.dev/cellar`),
   with a directory replica in `backend/.dev/`. No MinIO. A local cellar that
-  cannot start stops the server, as a bad `CELLAR` does.
+  cannot start stops the server, as a bad `CELLAR` does: it is a config error.
+  One that stops later, or a remote one down, makes managed routes answer
+  `unavailable`.
 - Staging: a second systemd unit on the staging box, own data dir and bucket.
 - Prod: a d2-4 VM on the private network, same region as the backend.
 

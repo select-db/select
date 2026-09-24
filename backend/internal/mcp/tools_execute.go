@@ -130,7 +130,6 @@ func openDatasource(r *http.Request, datasourceID, workspaceID string) (datasour
 	return o, nil
 }
 
-// describe returns the datasource's schema.
 func describe(ctx context.Context, o datasource.Opened) (*core.Metadata, error) {
 	meta, err := o.Metadata(ctx, false)
 	if err != nil {

@@ -54,6 +54,7 @@ func serveLocalCellar() (string, error) {
 		Handler:           datasource.CellarHandler(cellar.NewFiles(dir), pub, cellar.Local),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	go func() { log.Fatalf("cellar: %v", srv.Serve(ln)) }()
+	// Managed databases answer unavailable if it stops; the rest keeps serving.
+	go func() { log.Printf("cellar: stopped: %v", srv.Serve(ln)) }()
 	return "http://" + ln.Addr().String(), nil
 }

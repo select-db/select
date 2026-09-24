@@ -118,7 +118,8 @@ func EntriesFromRequest(r *http.Request) []core.PermissionEntry {
 }
 
 // EntriesForDB is EntriesFromRequest without the rules scoped to other
-// databases, which core.Compile would ignore for dbID anyway.
+// databases: core.Compile ignores them for dbID, and they would only grow
+// what the backend sends the cellar with every statement.
 func EntriesForDB(r *http.Request, dbID string) []core.PermissionEntry {
 	var out []core.PermissionEntry
 	for _, e := range EntriesFromRequest(r) {
