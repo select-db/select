@@ -36,26 +36,45 @@ func PermHash(perms []byte) string {
 type Tokens struct {
 	cache *cache.Cache
 	sign  func(auth.CellarGrant, time.Duration) (string, error)
+	now   func() time.Time
 }
 
 func NewTokens() *Tokens {
 	return &Tokens{
 		cache: cache.New(cache.Options{TTL: reuseFor, MaxEntries: 10_000}),
 		sign:  auth.SignCellarToken,
+		now:   time.Now,
 	}
+}
+
+// signedToken carries its own deadline: the cache's TTL restarts on every hit,
+// so on its own it would keep serving a token past its expiry.
+type signedToken struct {
+	token      string
+	reuseUntil time.Time
 }
 
 // Token returns a signed token for g, reusing a recent one for the same grant.
 func (t *Tokens) Token(g auth.CellarGrant) (string, error) {
-	key, err := json.Marshal(g)
+	b, err := json.Marshal(g)
 	if err != nil {
 		return "", err
 	}
-	tok, err := t.cache.GetOrCreate(string(key), func() (any, error) { return t.sign(g, tokenTTL) })
+	key := string(b)
+	create := func() (any, error) {
+		reuseUntil := t.now().Add(reuseFor) // taken before signing, so a slow sign only shortens reuse
+		tok, err := t.sign(g, tokenTTL)
+		return signedToken{token: tok, reuseUntil: reuseUntil}, err
+	}
+	v, err := t.cache.GetOrCreate(key, create)
+	if err == nil && !t.now().Before(v.(signedToken).reuseUntil) {
+		t.cache.Delete(key)
+		v, err = t.cache.GetOrCreate(key, create)
+	}
 	if err != nil {
 		return "", err
 	}
-	return tok.(string), nil
+	return v.(signedToken).token, nil
 }
 
 type grantKey struct{}
@@ -66,10 +85,8 @@ func GrantFrom(ctx context.Context) auth.CellarGrant {
 	return g
 }
 
-// Authenticate admits a request only with a valid token for this cellar and the
-// database in the path, signed over the PermHeader bytes it carries. A refusal
-// means a backend bug or an attack, so the caller learns nothing and the reason
-// goes to the log.
+// Authenticate admits only a valid token for this cellar and the path's db,
+// signed over the PermHeader it carries. Refusals are 500s; the reason is logged.
 func Authenticate(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -81,9 +98,9 @@ func Authenticate(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.H
 				reason = err.Error()
 			case g.DB != db:
 				reason = "token is for db " + g.DB
-			case g.Cel != cellarID:
-				reason = "token is for cellar " + g.Cel
-			case g.Perm != PermHash([]byte(r.Header.Get(PermHeader))):
+			case g.CellarID != cellarID:
+				reason = "token is for cellar " + g.CellarID
+			case g.PermSHA256 != PermHash([]byte(r.Header.Get(PermHeader))):
 				reason = "permissions do not match the token"
 			}
 			if reason != "" {

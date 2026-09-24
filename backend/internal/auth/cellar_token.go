@@ -13,16 +13,15 @@ import (
 // differs from Audience, so neither kind of token passes for the other.
 const CellarAudience = "selectdb-cellar"
 
-// CellarGrant is what a cellar token authorizes: one request on one managed
-// database. The cellar knows no users and reads no Postgres, so everything it
-// enforces is here. Comparable, so a signer can key a cache on it.
+// CellarGrant is what one cellar request may do. The cellar knows no users and
+// reads no Postgres, so everything it enforces is here.
 type CellarGrant struct {
-	DB   string `json:"db"`   // datasource id
-	WS   string `json:"ws"`   // workspace id
-	Cel  string `json:"cel"`  // cellar id; a cellar refuses tokens for another
-	Max  int64  `json:"max"`  // size cap of the database, in bytes
-	PITR int    `json:"pitr"` // point-in-time window, in days
-	Perm string `json:"perm"` // sha256 of the permission entries sent alongside
+	DB         string `json:"db"`
+	WS         string `json:"ws"`
+	CellarID   string `json:"cel"`
+	MaxBytes   int64  `json:"max"`
+	PITRDays   int    `json:"pitr"`
+	PermSHA256 string `json:"perm"` // over the PermHeader bytes sent alongside
 }
 
 type CellarClaims struct {

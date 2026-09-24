@@ -7,10 +7,8 @@ import (
 	"sync"
 )
 
-// InFlight lets at most limit requests per key run at once. Others wait for a
-// slot rather than fail; a wait that outlives the request's deadline gets 408.
-// Keys are kept for the life of the process, so they must be a bounded set,
-// such as workspace ids.
+// InFlight runs at most limit requests per key; the rest wait, and get 408 if
+// their deadline passes first. Keys live as long as the process: keep them bounded.
 func InFlight(limit int, key func(*http.Request) string) func(http.Handler) http.Handler {
 	var mu sync.Mutex
 	slots := map[string]chan struct{}{}

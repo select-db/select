@@ -3,6 +3,7 @@ package cellar
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,9 +19,9 @@ func TestTokens_ReusesUntilTheGrantChanges(t *testing.T) {
 	tk := NewTokens()
 	tk.sign = func(g auth.CellarGrant, _ time.Duration) (string, error) {
 		signed++
-		return g.DB + "/" + g.Perm, nil
+		return g.DB + "/" + g.PermSHA256, nil
 	}
-	g := auth.CellarGrant{DB: "db-1", WS: "ws-1", Cel: "local", Perm: "p1"}
+	g := auth.CellarGrant{DB: "db-1", WS: "ws-1", CellarID: "local", PermSHA256: "p1"}
 	for range 3 {
 		if _, err := tk.Token(g); err != nil {
 			t.Fatal(err)
@@ -29,9 +30,35 @@ func TestTokens_ReusesUntilTheGrantChanges(t *testing.T) {
 	if signed != 1 {
 		t.Fatalf("signed %d times for one grant, want 1", signed)
 	}
-	g.Perm = "p2"
+	g.PermSHA256 = "p2"
 	if tok, _ := tk.Token(g); tok != "db-1/p2" || signed != 2 {
 		t.Fatalf("changed permissions reused a token: %q after %d signs", tok, signed)
+	}
+}
+
+func TestTokens_RenewsBeforeExpiryUnderSteadyUse(t *testing.T) {
+	clock := time.Unix(0, 0)
+	signed := 0
+	tk := NewTokens()
+	tk.now = func() time.Time { return clock }
+	tk.sign = func(auth.CellarGrant, time.Duration) (string, error) {
+		signed++
+		return fmt.Sprint("tok-", signed), nil
+	}
+	g := auth.CellarGrant{DB: "db-1"}
+
+	// A request every 10s never lets the cache go idle.
+	var last string
+	for range 12 {
+		tok, err := tk.Token(g)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last = tok
+		clock = clock.Add(10 * time.Second)
+	}
+	if signed < 2 || last == "tok-1" {
+		t.Fatalf("after 120s of steady use the first token is still served (%d signs)", signed)
 	}
 }
 
@@ -56,9 +83,9 @@ func TestAuthenticate(t *testing.T) {
 		t.Fatal(err)
 	}
 	perms := `[{"Action":"select","Effect":"allow"}]`
-	good := auth.CellarGrant{DB: "db-1", WS: "ws-1", Cel: "local", Perm: PermHash([]byte(perms))}
+	good := auth.CellarGrant{DB: "db-1", WS: "ws-1", CellarID: "local", PermSHA256: PermHash([]byte(perms))}
 	wrongDB, wrongCel := good, good
-	wrongDB.DB, wrongCel.Cel = "db-2", "cellar-2"
+	wrongDB.DB, wrongCel.CellarID = "db-2", "cellar-2"
 
 	var seen auth.CellarGrant
 	mux := http.NewServeMux()

@@ -21,7 +21,7 @@ func testPublicKey(t *testing.T) *rsa.PublicKey {
 }
 
 func TestCellarToken_RoundTrip(t *testing.T) {
-	want := CellarGrant{DB: "db-1", WS: "ws-1", Cel: "local", Max: 250 << 20, PITR: 1, Perm: "abc"}
+	want := CellarGrant{DB: "db-1", WS: "ws-1", CellarID: "local", MaxBytes: 250 << 20, PITRDays: 1, PermSHA256: "abc"}
 	tok, err := SignCellarToken(want, time.Minute)
 	if err != nil {
 		t.Fatal(err)
