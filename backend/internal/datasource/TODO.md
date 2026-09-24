@@ -1,275 +1,261 @@
 # datasource: managed SQLite, TODO
 
-A managed database is a proxified datasource with `db_type: "sqlite"` whose
-file SELECT hosts. Created from the app, the REST API or MCP; queried only
-through the proxy, like any proxified connection. Target cost: one d2-4 cellar
-plus Object Storage at ~$0.01/GB-month.
+A managed database is a SQLite database that SELECT hosts. Users create it
+from the app, the REST API or MCP, and query it through the backend like any
+proxified datasource. Target cost: one small VM plus Object Storage at about
+$0.01 per GB-month.
 
-## Decisions
+## Words
 
-Settled; reopen with a reason, not a preference.
+- **backend**: the existing API server. Owns auth, permissions, plans, quotas
+  and every row in Postgres.
+- **cellar**: the same binary in cellar mode. Owns SQLite files and nothing
+  else. Never reads Postgres, never knows a user.
+- **hot / cold**: a db with a local file on the cellar / a db that lives only
+  in the bucket.
+- **wake**: restore a cold db from the bucket before running a query.
+- **evict**: drop the local file of a hot db whose replica is complete.
+- **reconciler**: the backend job that tells the cellar what to purge.
 
-- **Engine**: plain SQLite files (`modernc.org/sqlite`), not `sqld`. libSQL is
-  in maintenance mode and every access goes through the proxy, so its wire
-  protocol buys nothing.
-- **Access**: proxy only (app, REST, MCP). No direct client endpoint in v1; a
-  libSQL endpoint can be added later without changing storage.
-- **Model**: an `app.datasource` row plus `managed`, `cellar_id`, `size_bytes`,
-  `state` (hot/cold), `last_used_at`. The DSN is assigned by the control plane;
-  `upsert.go` keeps rejecting user-supplied sqlite.
-- **Name**: the database-hosting mode of the backend is the *cellar*, in code
-  (`internal/cellar`, `select-backend cellar`), data (`app.cellar`), ops
-  (`select-cellar.service`) and talk. User docs say "managed database".
-- **Placement**: a separate VM, the backend binary in cellar mode. Prod on
-  a d2-4 in the proxy's region; staging co-located on the staging box. Every
-  row records its `cellar_id` so moving or adding cellars is routing, not migration.
-- **Storage**: Object Storage (Standard class) is the source of truth, the cellar
-  disk is an LRU cache evicted under disk pressure. Wake is `restore`, the same
-  path as disaster recovery. Never File Storage: NFS breaks SQLite locking.
-- **Replication**: Litestream embedded as a pinned Go library, so the code that
-  evicts and the code that replicates share a process and a per-db lock.
-- **Proxy to cellar**: the existing engine HTTP transport
-  (`dialect/engine/transport`), same routes the app uses against the proxy.
-  Cellar listens on the private network only.
-- **Proxy to cellar auth**: the existing JWT machinery (`auth/jwt.go`: KMS signer,
-  RS256), not a new protocol. A separate `CellarClaims{db, ws}` with its own
-  audience (`select-cellar`), so cellar tokens and user tokens never cross.
-  60s expiry; the proxy caches one token per db for ~50s because every KMS
-  `Sign` is a remote call. The cellar holds the public key only: no KMS access,
-  cannot mint tokens. It rejects a request whose path db differs from `db`.
-- **Isolation** (all required, none sufficient alone):
-  - `SQLITE_LIMIT_ATTACHED=0` via `sqlite.Limit` on a pinned `*sql.Conn`: blocks
-    `ATTACH` and `VACUUM INTO` (verified on v1.59.0).
-  - `_defensive=1`, `trusted_schema(0)`; extensions are off in this build.
-  - PRAGMA allowlist on the cellar (read-only introspection only). Needed because
-    `PRAGMA temp_store_directory` is accepted and process-global, and the driver
-    exposes no authorizer.
-  - systemd sandbox: `ProtectSystem=strict`, `ReadWritePaths` on the data dir,
-    `PrivateTmp`, egress to proxy and S3 only.
-  - Cellar maintenance (fork, download, `VACUUM`) runs on a separate trusted conn.
-- **Permissions**: create uses the existing upsert rule (owner, or `manage` on
-  `*`). Each db gets a dedicated role (full access, `manage` included),
-  created with it. `grant_to` is optional: the caller may always grant itself,
-  others need the existing `users.manage` / `api-keys.manage`. Empty means
-  deny-by-default, as for any proxified datasource.
-- **Fork and download** require `manage` on the source: both hand over all the
-  data, whatever the caller's column rules say.
-- **Delete** is an immediate hard delete: the db stops serving at once, then
-  the reconciler purges the local file, the replica, and every role scoped only
-  to that db. Multi-purpose roles lose their rules for it and stay. Deleting a
-  workspace marks all its managed dbs the same way.
-- **Reconciler** (backend, every 10 min): asks the cellar for its inventory
-  (local files and replica prefixes), checks each id in Postgres, and sends an
-  explicit signed purge for rows `deleting`, dbs of deleted workspaces, and
-  ids with no row older than 24h. Never "delete all but this live set", so an
-  empty or failed query purges nothing. Capped at 50 purges per run; hitting
-  the cap stops and alerts. The cellar never reads Postgres.
-- **Usage limits**, cellar dbs only, same for every plan until data says
-  otherwise:
-  - Time: the workspace setting capped at 60s, enforced server-side. Never
-    read from the request body.
-  - Concurrency: at most 10 statements in flight per workspace on a cellar.
-    A busy workspace waits for a slot, it is not rejected; the wait counts
-    against the same 60s and the caller's context.
-  Constants on the cellar, nothing in the token. One `InFlight` middleware
-  beside `RateLimit`, sharing its key function, keyed by the token's `ws`.
-  Query-seconds per workspace are recorded, not enforced.
-- **Scaling invariants**, cheap now and a migration later:
-  - Replicas are keyed by db, never by cellar: `dbs/{db_id}/` in the bucket.
-    Moving or recovering a db is then a row update.
-  - The token names the cellar: `CellarClaims{db, ws, cel}`; a cellar rejects
-    tokens for another. This fences a stale route after a move, so two cellars
-    never write the same replica.
-  - A move is: mark `moving` (callers get `waking`), evict on the old cellar
-    and confirm, flip `cellar_id`. Never start the new one before the old stops.
-  - Wake dedup lives on the cellar, so any number of backends is safe.
-- **Bucket versioning** with a lifecycle rule expiring noncurrent versions and
-  stale delete markers after 7 days: a wrong purge is recoverable for a week,
-  then data is gone. User contract: deleted data leaves storage within 7 days.
-- **Discovery**: the server is the source of truth. Settings lists managed dbs;
-  "Add to workspace" shows the `db.config.json` in a modal to copy. The app
-  never writes it; removing the folder removes a bookmark, not the db.
-- **Quotas**, per workspace, from a new `workspace.plan` set by hand for now:
+## How it works
 
-  |       | Total | Per db | Dbs | PITR  |
-  | ----- | ----- | ------ | --- | ----- |
-  | Solo  | 1 GB  | 500 MB | 10  | 1 day |
-  | Teams | 20 GB | 1 GB   | 100 | 7 days |
+```
+app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucket
+                   auth, permissions,                           SQLite files,
+                   plans, quotas, rows                          Litestream
+```
 
-  Per-db size is `PRAGMA max_page_count`; PITR is Litestream retention. The
-  1 GB Teams cap keeps a worst wake near 30s on a d2-4; raise it with data,
-  never lower it.
-- **Point-in-time restore**: a fork with `at`, Turso-style. The cellar restores
-  the replica at that timestamp into a new db; the source is never touched.
-  In-place restore is later.
-- **Names**: unique per workspace, same rules as folders.
-- **Routes**: create is `POST /datasources` for every type, fork and download
-  are explicit routes (`POST .../{id}/fork`, `GET .../{id}/download`), delete is
-  the existing `DELETE /datasources/{id}`. No route is specific to managed dbs.
-- **Errors**: the cellar classifies at the source into a closed set; the backend
-  passes the code through and each surface maps it (REST status and
-  `{code, message, ref}`, MCP `toolError`, app message). Unclassified is
-  `internal`, so a new failure mode fails closed rather than leaking paths,
-  bucket URLs or cellar addresses. One request id, minted by the backend, is
-  logged on both sides and shown as `ref`.
+1. The backend checks who is calling and what they may do, as for any
+   proxified datasource.
+2. It signs a 60s token for one db and forwards the request over the existing
+   engine HTTP transport.
+3. The cellar checks the token, wakes the db if cold, runs the statement under
+   its limits and streams the result back.
+4. Litestream streams every write to the bucket. The bucket is the truth, the
+   cellar disk is a cache.
 
-  | Code                  | Message to the caller                  | HTTP |
-  | --------------------- | -------------------------------------- | ---- |
-  | `sql_error`           | SQLite's message about their SQL       | 400  |
-  | `forbidden_statement` | not allowed on managed databases       | 400  |
-  | `quota_exceeded`      | which limit was hit                    | 403  |
-  | `timeout`             | the existing timeout message           | 408  |
-  | `waking`              | database is waking up, `Retry-After: 5` | 503  |
-  | `unavailable`         | managed databases unavailable          | 503  |
-  | `disabled`            | not enabled on this server, no retry   | 501  |
-  | `internal`            | internal error, with `ref`             | 500  |
+## Rules
 
-  Token and routing failures are `internal` to the caller and loud in logs:
-  they mean a backend bug, never a user mistake.
-- **Waking**: a query on a cold db waits for the restore up to 15s
-  (configurable, below nginx `proxy_read_timeout`), then returns `waking`
-  while the restore continues. Concurrent requests share one restore.
-- **Opt-in**: one `CELLAR` setting. Unset (the default) disables managed dbs:
-  no cellar, no reconciler, no bucket, and the backend works as today. `local`
-  runs the cellar in-process (dev, small on-prem); a URL points at a remote
-  cellar (prod). When disabled, every managed entry point (create, fork,
-  download, query) answers `disabled` before doing anything. The API surface
-  stays identical either way: every route and MCP tool is always registered,
-  and the app shows the create button and displays the error.
-- **Replica target**: S3 when configured, otherwise a local directory through
-  Litestream's `file` replica. A supported mode, not a dev hack: one code path,
-  chosen at startup and logged by a preflight, as the audit logger does for
-  pg_partman. For on-prem, the directory should be a separate disk or backup
-  mount; on the data disk it survives nothing. Without S3 there is no 7-day
-  version net, a purge is final.
-- **Single process**: with `CELLAR=local`, the server starts the
-  cellar as a second listener on `localhost:8081` in the same process, still
-  through the HTTP transport and a signed token. Dev and a small on-prem
-  install use this; prod runs the cellar on its own VM.
-- **Dev**: `./dev.sh backend start` stays the only command: single process and
-  a `file` replica under `backend/.dev/replica`, so no MinIO. A cellar that
-  fails to start logs a warning and managed routes return 503; the rest of dev
-  is unaffected.
+Settled. Reopen with a reason, not a preference.
 
-## v1
+### Product
+- A managed db is a datasource row with `db_type: "sqlite"` and no DSN. A
+  sqlite datasource with a DSN is still rejected: the server never opens a
+  path a user gave it.
+- Access goes through the backend only. No direct client endpoint in v1, so
+  plain SQLite files (`modernc.org/sqlite`) rather than `sqld`.
+- The server owns the list of managed dbs. The app shows them in Settings and
+  "Add to workspace" shows a `db.config.json` to paste; removing the folder
+  removes a bookmark, not the db.
+- Opt-in: one `CELLAR` setting. Unset (default): managed dbs are off and the
+  backend behaves as today. `local`: cellar in the same process (dev, small
+  on-prem). A URL: remote cellar (prod). Off means every managed operation
+  answers `disabled`; routes and MCP tools stay registered.
 
-### Prerequisite
-- [ ] `mcp.asToolError`: an unknown error returns `err.Error()` to the caller.
-      Map it to `internal` with a `ref` and log the detail instead.
+### Plans
 
-### Control plane (backend)
-- [ ] Migration: managed columns on `app.datasource`, `app.cellar`, `workspace.plan`
-- [ ] Quota check on create and fork (count, total size)
-- [ ] `POST /datasources`: create any datasource with a server-generated id,
-      sharing the create path and validation of `PUT /datasources/{id}`.
-      `db_type: sqlite` with no DSN is managed (quota, cellar pick, file,
-      dedicated role, `grant_to`); sqlite with a DSN stays rejected. Returns
-      the id and the `db.config.json` content. Unique names make a retried
-      create a 409, not a duplicate.
-- [ ] `PUT /datasources/{id}` on a managed row: rename only; no conversion
-      between managed and unmanaged in either direction
-- [ ] `POST /datasources/{id}/fork`: `manage` on source, same create path;
-      optional `at` (within the plan's PITR window) restores from the replica
-- [ ] `GET /datasources/{id}/download`: `manage`, streams a `VACUUM INTO` copy
-- [ ] Delete: stop serving, mark `deleting`; the reconciler does the rest
-- [ ] Workspace soft delete marks its managed dbs `deleting`
-- [ ] Reconciler under a Postgres advisory lock (one backend at a time):
-      inventory, per-id decision, signed purge, then drop the row,
-      db-only roles and rules elsewhere; 24h orphan age, 50 per run cap + alert
-- [ ] Route managed rows through the engine transport to their cellar
-- [ ] `CellarClaims{db, ws, cel}` (aud `select-cellar`, 60s) signed with the existing signer,
-      cached per db for ~50s
-- [ ] Audit events: reuse `datasource.lifecycle.*`
-- [ ] Request id sent to the cellar; cellar error codes passed through to REST,
-      MCP and the app
+|       | Total  | Per db | Dbs | Point-in-time window |
+| ----- | ------ | ------ | --- | -------------------- |
+| Solo  | 1 GB   | 250 MB | 10  | 1 day                |
+| Teams | 20 GB  | 1 GB   | 100 | 7 days               |
 
-### Cellar
-- [ ] Cellar mode in the backend binary: execute, schema, ping, dump routes
-      served by `StreamLocal` against local files
-- [ ] Token verification with the public key only; path db must match `db`,
-      `cel` must match this cellar
-- [ ] `GET /cellar/inventory` and `DELETE /cellar/dbs/{id}` (file and replica
-      prefix), behind the same token check
-- [ ] Connection pinning per open db; limits and pragmas applied on open
-- [ ] PRAGMA allowlist before execute
-- [ ] `middlewares`: pluggable key (user or workspace) for `RateLimit`, and an
-      `InFlight(key, limit)` sibling that waits for a slot; on the cellar
-      execute route, key `ws`, limit 10, deadline 60s
-- [ ] Query-seconds per workspace recorded (metrics only)
-- [ ] Embedded Litestream per db, replica at `dbs/{db_id}/`, retention from the workspace plan
-- [ ] LRU eviction on disk pressure: lock, checkpoint, sync, verify replica
-      position, delete local file, mark `cold`
-- [ ] Wake on first query: lock, restore, open, mark `hot`; single restore
-      shared by concurrent callers, wait capped at 15s then `waking`
-- [ ] Error classification into the closed code set; everything else `internal`
-- [ ] `size_bytes` and `last_used_at` reported to the control plane
+- The plan is a new `workspace.plan`, set by hand until billing exists.
+- The backend checks totals and counts on create and fork.
+- The per-db cap and the window reach the cellar in the token (`max`,
+  `pitr`). The cellar applies `max` as `max_page_count` on open; a db over a
+  lowered cap keeps its data and stops growing. It keeps the last `pitr` seen
+  per db and uses 7 days when it does not know, so history is never cut early.
+- Raise limits with data, never lower them.
 
-### MCP
-- [ ] `create_database`, `fork_database` with `at` (same code and checks as REST).
-      No delete over MCP.
+### Limits on every cellar statement
+- Time: the workspace setting, capped at 60s, enforced by the cellar. Never
+  read from the request.
+- Concurrency: 10 statements in flight per workspace. More wait for a slot;
+  the wait counts against the same 60s.
+- Both are constants on the cellar, enforced by one `InFlight` middleware next
+  to `RateLimit`, keyed by the token's `ws`. Query-seconds per workspace are
+  recorded, not enforced.
 
-### App
-- [ ] Create managed db from Settings
-- [ ] Managed dbs in the Settings connections list, with size and state
-- [ ] "Add to workspace" modal showing the `db.config.json`
-- [ ] Delete with typed-name confirmation
-- [ ] Download
-- [ ] "Waking database..." after ~1s on a slow first query; auto-retry on
-      `waking`
+### Routes
+- `POST /datasources`: create any datasource type, server-generated id. Same
+  validation as `PUT /datasources/{id}`. Returns the id and the
+  `db.config.json` content. Names are unique per workspace, so a retried create
+  gets 409, not a duplicate.
+- `POST /datasources/{id}/fork`: optional `at` forks from a point in time into
+  a new db. The source is never touched. The backend checks `at` is inside the
+  plan's window.
+- `GET /datasources/{id}/download`: the `.db` file.
+- `PUT /datasources/{id}` on a managed db: rename only.
+- `DELETE /datasources/{id}`: stops serving at once; the reconciler purges.
+- MCP: `create_database` and `fork_database`, same code as REST. No delete.
 
-### Dev and on-prem
-- [ ] `CELLAR` setting: unset disables, `local` in-process, URL remote; dev
-      `.env` sets `local`
-- [ ] `disabled` at every managed entry point, REST and MCP alike
-- [ ] Replica target: S3 if configured, else a `file` replica directory
-      (`backend/.dev/` in dev, gitignored); preflight logs the mode, and warns
-      when the directory is on the data disk
-- [ ] Cellar startup failure degrades to 503 on managed routes only
-- [ ] `./dev.sh backend start --s3`: optional MinIO for S3-specific debugging
+### Permissions
+- Create: the existing rule (owner, or `manage` on `*`).
+- Each db gets a dedicated role with full access, created and deleted with it.
+  `grant_to` is optional: the caller can always grant itself, anyone else
+  needs `users.manage` or `api-keys.manage`. Empty means nobody, as for any
+  proxified datasource.
+- Fork and download need `manage` on the source: both hand over all the data.
+- Deleting a db deletes roles scoped only to it and strips its rules from
+  other roles.
 
-### Ops (select-ops)
-- [ ] Prod cellar: d2-4, vRack, systemd unit with sandbox
-- [ ] nginx `proxy_read_timeout` above the 15s wake cap
-- [ ] Staging cellar: second unit on the staging box, own data dir
-- [ ] Object Storage buckets (prod, staging) with versioning and a 7-day
-      noncurrent-version expiry; verify OVH supports `NoncurrentVersionExpiration`
-- [ ] Alerts: cellar disk > 85%, replication lag > 1 min, any failed wake,
-      reconciler cap hit
+### Cellar token
+- `CellarClaims{db, ws, cel, max, pitr}`, audience `select-cellar`, 60s,
+  signed with the existing JWT signer (`auth/jwt.go`). The backend caches one
+  token per db for about 50s because each KMS sign is a remote call.
+- The cellar holds only the public key. It rejects a token whose `db` differs
+  from the path or whose `cel` is not itself. User tokens have another
+  audience and never open a db.
 
-### Tests
-- [ ] Hostile SQL suite in CI: `ATTACH`, `VACUUM INTO`, `load_extension`,
-      every non-allowlisted PRAGMA; fails the build if a driver bump changes
-      any result
-- [ ] Evict, wake, verify against MinIO and against a `file` replica in CI
-- [ ] Reconciler: failed or empty Postgres query purges nothing; cap stops the run
-- [ ] Backend with `CELLAR` unset: all existing tests pass, managed routes
-      answer `disabled`
-- [ ] Cellar rejects expired, wrong-db, wrong-cellar, unsigned and user (wrong audience) tokens
-- [ ] No response body on any surface contains a cellar path, bucket URL or
-      cellar address, for every error code
-- [ ] Benchmark Object Storage to d2-4 restore throughput before launch
+### Storage
+- Replicas live at `dbs/{db_id}/`, never under a cellar, so moving or
+  recovering a db is a row update.
+- Litestream is embedded as a pinned Go library: the code that evicts and the
+  code that replicates share one process and one lock per db.
+- Evict under disk pressure, least recently used first: lock, checkpoint,
+  sync, check the replica is complete, delete the local file.
+- Wake on first query: one restore shared by all waiting callers. Wait up to
+  15s, then answer `waking` while the restore continues.
+- Bucket: S3 with versioning and a 7-day expiry of old versions, so a wrong
+  purge is recoverable for a week. Without S3 (dev, on-prem) Litestream writes
+  to a directory; a startup preflight logs the mode, as for pg_partman, and
+  warns when that directory shares the data disk.
 
-### Docs
-- [ ] `.doc.md` for managed databases: quotas, wake latency, delete is final,
-      data leaves storage within 7 days
+### Isolation
+All required, none sufficient alone. Checked on `modernc.org/sqlite` v1.59.0.
+- `SQLITE_LIMIT_ATTACHED=0` on every user connection: blocks `ATTACH` and
+  `VACUUM INTO`.
+- `_defensive=1`, `trusted_schema(0)`; extensions are off in this build.
+- PRAGMA allowlist, read-only introspection only. Needed because
+  `temp_store_directory` is accepted and process-global, and the driver
+  exposes no authorizer.
+- systemd sandbox: data dir writable, nothing else; network to backend and
+  bucket only; private network listener.
+- Fork, download and maintenance use a separate trusted connection.
+- No upload in v1.
 
-### Rollout
-- [ ] Staging, then prod behind the sign-in allowlist, then everyone
+### Cleanup
+- Deleting a db or a workspace only marks rows `deleting`.
+- The reconciler (backend, every 10 minutes, one backend at a time via a
+  Postgres advisory lock) lists the cellar's dbs, checks each in Postgres, and
+  sends one signed purge per db that is `deleting`, belongs to a deleted
+  workspace, or has had no row for over 24h. It never says "keep these, delete
+  the rest", so a failed query purges nothing. At most 50 purges per run;
+  hitting that stops the run and alerts.
+
+### Errors
+The cellar maps every failure to one code; anything unmapped is `internal`, so
+nothing leaks paths, bucket names or addresses. The backend creates a request
+id, both sides log it, the caller sees it as `ref`.
+
+| Code                  | Caller sees                              | HTTP |
+| --------------------- | ---------------------------------------- | ---- |
+| `sql_error`           | SQLite's message about their SQL         | 400  |
+| `forbidden_statement` | not allowed on managed databases         | 400  |
+| `quota_exceeded`      | which limit was hit                      | 403  |
+| `timeout`             | the existing timeout message             | 408  |
+| `waking`              | waking up, `Retry-After: 5`              | 503  |
+| `unavailable`         | temporarily unavailable, retry           | 503  |
+| `disabled`            | not enabled on this server, do not retry | 501  |
+| `internal`            | internal error, with `ref`               | 500  |
+
+### Scaling
+- Any number of backends: wake dedup and limits live on the cellar.
+- More cellars later: each row has a `cellar_id`; a move is mark `moving`,
+  evict on the old cellar, flip `cellar_id`. The token's `cel` fences a stale
+  route, so two cellars never write one replica.
+
+### Environments
+- Dev: `./dev.sh backend start` as today, with `CELLAR=local` and a directory
+  replica in `backend/.dev/`. No MinIO. A cellar that fails to start only
+  makes managed routes answer `unavailable`.
+- Staging: a second systemd unit on the staging box, own data dir and bucket.
+- Prod: a d2-4 VM on the private network, same region as the backend.
+
+## v1 milestones
+
+Each milestone ships behind `CELLAR` unset in prod and leaves `dev` green.
+Numbers are order; items inside a milestone can run in parallel.
+
+### 0. Groundwork
+- [ ] `mcp.asToolError`: stop returning `err.Error()` for unknown errors; map
+      to `internal` with a `ref`.
+- [ ] `CELLAR` setting and the `disabled` answer on every managed entry point.
+      Test: with `CELLAR` unset, all existing tests pass.
+- [ ] Migration: `workspace.plan`, `app.cellar`, and on `app.datasource`:
+      `managed`, `cellar_id`, `size_bytes`, `state`, `last_used_at`.
+
+### 1. Cellar runs queries (local files, no bucket)
+Needs 0.
+- [ ] Cellar mode: execute, schema, ping, dump over the existing engine
+      transport, `StreamLocal` against local files. `CELLAR=local` starts it
+      in-process.
+- [ ] `CellarClaims` signing with cache in the backend, verification in the
+      cellar.
+- [ ] Isolation: connection limits and pragmas on open, PRAGMA allowlist.
+- [ ] `InFlight` middleware, 60s cap, query-seconds recorded.
+- [ ] Error codes and request id, end to end to REST and MCP.
+- [ ] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
+      every non-allowlisted PRAGMA); token rejection (expired, wrong db, wrong
+      cellar, unsigned, user token); no error body contains a path, bucket or
+      address.
+
+### 2. Create, fork, download, delete
+Needs 1.
+- [ ] Cellar: `PUT /cellar/dbs/{id}` with optional `{from, at}` (create,
+      fork, point-in-time fork), `GET /cellar/dbs/{id}/download`,
+      `GET /cellar/inventory`, `DELETE /cellar/dbs/{id}`.
+- [ ] Backend: `POST /datasources`, fork, download, rename-only `PUT`,
+      delete marking `deleting`; quota checks; dedicated role and `grant_to`.
+- [ ] MCP `create_database`, `fork_database`.
+- [ ] Audit: reuse `datasource.lifecycle.*`.
+
+### 3. Bucket: replicate, evict, wake
+Needs 1. Can run alongside 2.
+- [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr`.
+- [ ] Directory replica when no S3, with the startup preflight.
+- [ ] LRU eviction on disk pressure; wake with shared restore and 15s wait.
+- [ ] `size_bytes`, `state`, `last_used_at` reported back to the row.
+- [ ] Point-in-time fork reads from the replica.
+- [ ] Tests: evict, wake, verify, against MinIO and against a directory.
+
+### 4. Cleanup
+Needs 2 and 3.
+- [ ] Reconciler with advisory lock, 24h orphan age, 50-per-run cap.
+- [ ] Workspace delete marks its managed dbs `deleting`.
+- [ ] Tests: a failed or empty Postgres query purges nothing; the cap stops
+      the run.
+
+### 5. App
+Needs 2. Waking UI needs 3.
+- [ ] Settings: create, list with size and state, delete with typed-name
+      confirmation, download, "Add to workspace" modal with `db.config.json`.
+- [ ] "Waking database..." after about 1s; retry on `waking`.
+- [ ] `.doc.md`: plans, wake latency, delete is final, deleted data leaves
+      storage within 7 days.
+
+### 6. Ops and rollout
+Needs 3 for staging, all for prod.
+- [ ] Buckets (staging, prod) with versioning and 7-day old-version expiry.
+      Check OVH supports `NoncurrentVersionExpiration`.
+- [ ] Staging cellar unit; prod d2-4 with systemd sandbox on the private
+      network; nginx `proxy_read_timeout` above 15s.
+- [ ] Alerts: disk over 85%, replication lag over 1 minute, failed wake,
+      reconciler cap hit.
+- [ ] Benchmark bucket to d2-4 restore speed.
+- [ ] Staging, then prod behind the sign-in allowlist, then everyone.
 
 ## Later
-- Compute budget and billing, globally: cellar time must count once it exists
-- Abandoned db policy (`last_used_at` is recorded from v1)
-- `issue_key` on create: an API key bound to the db role (Turso-style token)
-- Upload of an existing `.db` (needs untrusted-file hardening)
-- Size-aware eviction bias (evict small idle dbs first)
-- Delete protection or a recovery window, as a Teams perk
-- `delete_database` over MCP, limited to dbs whose role the key holds
-- Authorizer API upstream in modernc, to replace the PRAGMA allowlist
-- Direct libSQL endpoint; per-region proxy and cellar pairs
-- In-place restore with an automatic `{name}_old_{ts}` backup fork (Neon-style),
-  if changing ids on restore hurts
-- Pin Teams dbs hot so large ones never wait on a wake
-- Second cellar: placement by free disk, `move` (evict, flip `cellar_id`),
-  dead-cellar runbook (reassign, wake from the bucket)
-- Workspace affinity for backends, so each workspace's caches live on one
-  instance and need no cross-instance invalidation
+- Global compute budget and billing; cellar query-seconds must count.
+- Policy for abandoned dbs (`last_used_at` is recorded from v1).
+- `issue_key` on create: an API key bound to the db role.
+- Upload of an existing `.db`, with untrusted-file hardening.
+- In-place restore with an automatic backup fork, if changing ids hurts.
+- Delete protection or a recovery window as a Teams perk.
+- `delete_database` over MCP for dbs whose role the key holds.
+- `managed_enabled` flag so the app can hide the create button.
+- Second cellar: placement, `move`, dead-cellar runbook.
+- Keep Teams dbs hot; evict small idle dbs first.
+- Authorizer upstream in modernc, to replace the PRAGMA allowlist.
+- Direct libSQL endpoint; per-region backend and cellar pairs.
+- Workspace affinity for backends.
