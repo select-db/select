@@ -128,12 +128,20 @@ Settled; reopen with a reason, not a preference.
 - **Waking**: a query on a cold db waits for the restore up to 15s
   (configurable, below nginx `proxy_read_timeout`), then returns `waking`
   while the restore continues. Concurrent requests share one restore.
-- **Dev**: `./dev.sh backend start` stays the only command. With no cellar address
-  configured, the server also starts the cellar as a second listener on
-  `localhost:8081` in the same process, still through the HTTP transport and a
-  token signed with the dev key. Litestream replicates to `backend/.dev/replica`
-  (its `file` replica), so no MinIO. A cellar that fails to start logs a warning
-  and managed routes return 503; the rest of dev is unaffected.
+- **Replica target**: S3 when configured, otherwise a local directory through
+  Litestream's `file` replica. A supported mode, not a dev hack: one code path,
+  chosen at startup and logged by a preflight, as the audit logger does for
+  pg_partman. For on-prem, the directory should be a separate disk or backup
+  mount; on the data disk it survives nothing. Without S3 there is no 7-day
+  version net, a purge is final.
+- **Single process**: with no cellar address configured, the server starts the
+  cellar as a second listener on `localhost:8081` in the same process, still
+  through the HTTP transport and a signed token. Dev and a small on-prem
+  install use this; prod runs the cellar on its own VM.
+- **Dev**: `./dev.sh backend start` stays the only command: single process and
+  a `file` replica under `backend/.dev/replica`, so no MinIO. A cellar that
+  fails to start logs a warning and managed routes return 503; the rest of dev
+  is unaffected.
 
 ## v1
 
@@ -201,9 +209,11 @@ Settled; reopen with a reason, not a preference.
 - [ ] "Waking database..." after ~1s on a slow first query; auto-retry on
       `waking`
 
-### Dev
+### Dev and on-prem
 - [ ] In-process cellar listener when no cellar address is configured
-- [ ] `file` replica under `backend/.dev/`, gitignored
+- [ ] Replica target: S3 if configured, else a `file` replica directory
+      (`backend/.dev/` in dev, gitignored); preflight logs the mode, and warns
+      when the directory is on the data disk
 - [ ] Cellar startup failure degrades to 503 on managed routes only
 - [ ] `./dev.sh backend start --s3`: optional MinIO for S3-specific debugging
 
@@ -220,7 +230,7 @@ Settled; reopen with a reason, not a preference.
 - [ ] Hostile SQL suite in CI: `ATTACH`, `VACUUM INTO`, `load_extension`,
       every non-allowlisted PRAGMA; fails the build if a driver bump changes
       any result
-- [ ] Evict, wake, verify against MinIO in CI
+- [ ] Evict, wake, verify against MinIO and against a `file` replica in CI
 - [ ] Reconciler: failed or empty Postgres query purges nothing; cap stops the run
 - [ ] Cellar rejects expired, wrong-db, wrong-cellar, unsigned and user (wrong audience) tokens
 - [ ] No response body on any surface contains a cellar path, bucket URL or
