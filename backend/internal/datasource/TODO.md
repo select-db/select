@@ -133,9 +133,9 @@ Settled; reopen with a reason, not a preference.
   no cellar, no reconciler, no bucket, and the backend works as today. `local`
   runs the cellar in-process (dev, small on-prem); a URL points at a remote
   cellar (prod). When disabled, every managed entry point (create, fork,
-  download, query) answers `disabled` before doing anything; MCP does not
-  register `create_database` and `fork_database`. The app shows the create
-  button regardless and displays the error.
+  download, query) answers `disabled` before doing anything. The API surface
+  stays identical either way: every route and MCP tool is always registered,
+  and the app shows the create button and displays the error.
 - **Replica target**: S3 when configured, otherwise a local directory through
   Litestream's `file` replica. A supported mode, not a dev hack: one code path,
   chosen at startup and logged by a preflight, as the audit logger does for
@@ -220,7 +220,7 @@ Settled; reopen with a reason, not a preference.
 ### Dev and on-prem
 - [ ] `CELLAR` setting: unset disables, `local` in-process, URL remote; dev
       `.env` sets `local`
-- [ ] `disabled` at every managed entry point; MCP tools not registered
+- [ ] `disabled` at every managed entry point, REST and MCP alike
 - [ ] Replica target: S3 if configured, else a `file` replica directory
       (`backend/.dev/` in dev, gitignored); preflight logs the mode, and warns
       when the directory is on the data disk
