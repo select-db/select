@@ -27,8 +27,13 @@ Settled; reopen with a reason, not a preference.
   evicts and the code that replicates share a process and a per-db lock.
 - **Proxy to node**: the existing engine HTTP transport
   (`dialect/engine/transport`), same routes the app uses against the proxy.
-  The node trusts a per-request token signed by the proxy with the KMS JWT key,
-  scoped to one db and ~30s. Node listens on the private network only.
+  Node listens on the private network only.
+- **Proxy to node auth**: the existing JWT machinery (`auth/jwt.go`: KMS signer,
+  RS256), not a new protocol. A separate `NodeClaims{db, ws}` with its own
+  audience (`select-node`), so node tokens and user tokens never cross.
+  60s expiry; the proxy caches one token per db for ~50s because every KMS
+  `Sign` is a remote call. The node holds the public key only: no KMS access,
+  cannot mint tokens. It rejects a request whose path db differs from `db`.
 - **Isolation** (all required, none sufficient alone):
   - `SQLITE_LIMIT_ATTACHED=0` via `sqlite.Limit` on a pinned `*sql.Conn`: blocks
     `ATTACH` and `VACUUM INTO` (verified on v1.59.0).
@@ -71,13 +76,14 @@ Settled; reopen with a reason, not a preference.
 - [ ] `GET /datasources/{id}/download`: `manage`, streams a `VACUUM INTO` copy
 - [ ] Delete: purge file and replica, drop db-only roles, strip rules elsewhere
 - [ ] Route managed rows through the engine transport to their node
-- [ ] Per-request node token (KMS signer, db id, workspace, 30s)
+- [ ] `NodeClaims` (aud `select-node`, 60s) signed with the existing signer,
+      cached per db for ~50s
 - [ ] Audit events: reuse `datasource.lifecycle.*`
 
 ### Node
 - [ ] Node mode in the backend binary: execute, schema, ping, dump routes
       served by `StreamLocal` against local files
-- [ ] Token verification, one request one db
+- [ ] Token verification with the public key only; path db must match `db`
 - [ ] Connection pinning per open db; limits and pragmas applied on open
 - [ ] PRAGMA allowlist before execute
 - [ ] Embedded Litestream per db, retention from the workspace plan
@@ -108,7 +114,7 @@ Settled; reopen with a reason, not a preference.
       every non-allowlisted PRAGMA; fails the build if a driver bump changes
       any result
 - [ ] Evict, wake, verify against MinIO in CI
-- [ ] Node rejects expired, wrong-db and unsigned tokens
+- [ ] Node rejects expired, wrong-db, unsigned and user (wrong audience) tokens
 - [ ] Benchmark Object Storage to d2-4 restore throughput before launch
 
 ### Docs
