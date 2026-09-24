@@ -65,6 +65,12 @@ Settled; reopen with a reason, not a preference.
 
   Per-db size is `PRAGMA max_page_count`; PITR is Litestream retention.
 - **Names**: unique per workspace, same rules as folders.
+- **Dev**: `./dev.sh backend start` stays the only command. With no node address
+  configured, the server also starts the node as a second listener on
+  `localhost:8081` in the same process, still through the HTTP transport and a
+  token signed with the dev key. Litestream replicates to `backend/.dev/replica`
+  (its `file` replica), so no MinIO. A node that fails to start logs a warning
+  and managed routes return 503; the rest of dev is unaffected.
 
 ## v1
 
@@ -102,6 +108,12 @@ Settled; reopen with a reason, not a preference.
 - [ ] "Add to workspace" modal showing the `db.config.json`
 - [ ] Delete with typed-name confirmation
 - [ ] Download
+
+### Dev
+- [ ] In-process node listener when no node address is configured
+- [ ] `file` replica under `backend/.dev/`, gitignored
+- [ ] Node startup failure degrades to 503 on managed routes only
+- [ ] `./dev.sh backend start --s3`: optional MinIO for S3-specific debugging
 
 ### Ops (select-ops)
 - [ ] Prod node: d2-4, vRack, systemd unit with sandbox
