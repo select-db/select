@@ -1,5 +1,5 @@
 name: dialect-agent-env
-description: Go, the analyzer venv and a prebuilt agentprobe, for the dialect agents.
+description: Go, the analyzer venv, a prebuilt agentprobe and Claude Code's sandbox, for the dialect agents.
 
 runs:
   using: composite
@@ -16,3 +16,11 @@ runs:
     - shell: bash
       working-directory: dialect
       run: go build -o agentprobe ./cmd/agentprobe
+    # Claude Code's sandbox needs bubblewrap and socat, and Ubuntu 24.04's
+    # AppArmor policy otherwise refuses bubblewrap the user namespace it needs.
+    - shell: bash
+      run: |
+        sudo apt-get update -qq >/dev/null
+        sudo apt-get install -y -qq bubblewrap socat >/dev/null
+        sudo sysctl -qw kernel.apparmor_restrict_unprivileged_userns=0 || true
+        bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc true

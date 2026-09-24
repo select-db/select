@@ -30,27 +30,26 @@ env:
   # The analyzer-backed tests fail rather than skip, as in CI.
   SELECT_REQUIRE_ANALYZER: "1"
   SKILL: .claude/skills/dialect-fixer
-  # What the agent may reach. Everything else is refused, so the rule lives
-  # here rather than in the skill.
+  # The agent runs in Claude Code's sandbox (.github/fixer-settings.json): no
+  # GitHub or Anthropic token in its commands, and no network but the Go and
+  # Python package hosts. So Bash is open, and these rules close what the
+  # sandbox does not: the file tools, which it does not cover, and the
+  # commands that would reach GitHub. push.sh runs outside it, and is the
+  # only way to write to the remote.
   TOOLS: >-
-    Read,Grep,Glob,Agent,Task,Skill,Edit(dialect/**),Write(dialect/**),Edit(/dialect/**),Write(/dialect/**),
-    Bash(go -C dialect:*),Bash(gofmt:*),Bash(dialect/agentprobe:*),
-    Bash(uv run --directory dialect/core/tokenanalyzer/python:*),
-    Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),
-    Bash(git add:*),Bash(git commit:*),Bash(git stash:*),Bash(git switch:*),
-    Bash(git fetch:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(git rebase:*),
-    Bash(.claude/skills/dialect-fixer/scripts/push.sh),Bash(rm dialect/zz_probe.jsonl),Bash(rm dialect/core/tokenanalyzer/python/zz_probe.py),
-    Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),
-    Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh pr diff:*),Bash(gh run view:*),
-    Bash(date:*),Bash(jq:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),
-    Bash(wc:*),Bash(grep:*),Bash(find:*),
+    Read,Grep,Glob,Agent,Task,Skill,Bash,
+    Edit(dialect/**),Edit(/dialect/**),Edit(/.fixer-work/**),
     mcp__github__create_pull_request,mcp__github__update_pull_request
-  # Generated parsers and dependency files stay out of reach even inside dialect/.
   DENIED: >-
-    Edit(dialect/*/parser/**),Write(dialect/*/parser/**),Edit(/dialect/*/parser/**),Write(/dialect/*/parser/**),
-    Edit(dialect/go.mod),Write(dialect/go.mod),Edit(dialect/go.sum),Write(dialect/go.sum),
-    Edit(dialect/core/tokenanalyzer/python/uv.lock),Write(dialect/core/tokenanalyzer/python/uv.lock),
-    Edit(dialect/core/tokenanalyzer/python/pyproject.toml),Write(dialect/core/tokenanalyzer/python/pyproject.toml)
+    Edit(dialect/*/parser/**),Edit(/dialect/*/parser/**),
+    Edit(dialect/go.mod),Edit(dialect/go.sum),
+    Edit(dialect/core/tokenanalyzer/python/uv.lock),Edit(dialect/core/tokenanalyzer/python/pyproject.toml),
+    Read(//proc/**),Read(~/.ssh/**),Read(/.git/config),
+    Bash(gh *),Bash(curl *),Bash(wget *),
+    Bash(git push *),Bash(git remote *),Bash(git config *),Bash(git credential *)
+  # Strips the Anthropic token from subprocesses and gives them their own PID
+  # namespace, so /proc does not show the parent's environment.
+  CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
 
 jobs:
   # One fix at a time. A queued run can be replaced by a newer one, so each run
@@ -95,6 +94,7 @@ jobs:
             exit 0
           fi
           gh issue edit "$issue" --add-label fix:in-progress
+          $SKILL/scripts/context.sh "$issue"
           echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
           echo "FIXER_DEADLINE=$(( $(date +%s) + FIXER_MINUTES * 60 ))" >> "$GITHUB_ENV"
           echo "hard_timeout=$(( FIXER_MINUTES + 10 ))" >> "$GITHUB_OUTPUT"
@@ -106,14 +106,12 @@ jobs:
         id: agent
         if: steps.pick.outputs.issue != ''
         timeout-minutes: ${{ fromJSON(steps.pick.outputs.hard_timeout) }}
-        # gh comments and labels as the workflow; git and the pull request tools
-        # use the Claude App's token, whose pushes trigger CI.
-        env:
-          GH_TOKEN: ${{ github.token }}
+        # git and the pull request tools use the Claude App's token, whose
+        # pushes trigger CI; the workflow does everything else with its own.
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: '{"outputStyle": "default"}'
+          settings: .github/fixer-settings.json
           prompt: |
             Fix issue #${{ steps.pick.outputs.issue }} in ${{ github.repository }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "fix".
@@ -163,6 +161,10 @@ jobs:
           if [ -n "$PR" ]; then
             gh issue edit "$issue" --add-label fix:pr-open
             $SKILL/scripts/ready.sh "$issue"
+          elif [ -s .fixer-work/blocked.md ]; then
+            # The agent has no token, so its reasoned refusal is posted here.
+            gh issue comment "$issue" --body-file .fixer-work/blocked.md
+            gh issue edit "$issue" --add-label fix:blocked --add-assignee "$FIXER_NOTIFY"
           elif ! grep -qx fix:blocked <<<"$labels"; then
             # Neither a pull request nor a reasoned refusal: the run itself failed.
             # Dropping fix:go keeps the queue from retrying it forever.
@@ -249,6 +251,7 @@ jobs:
           printf '%s\n<!-- fixer-ci-attempts: %s -->\n' "$body" "$((attempts + 1))" > "$RUNNER_TEMP/body.md"
           gh pr edit "$pr" --body-file "$RUNNER_TEMP/body.md"
           gh issue edit "$issue" --add-label fix:in-progress
+          $SKILL/scripts/context.sh "$issue" "${{ github.event.workflow_run.id }}"
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
           echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "FIXER_ISSUE=$issue" >> "$GITHUB_ENV"
@@ -261,17 +264,16 @@ jobs:
         id: agent
         if: steps.decide.outputs.pr != ''
         timeout-minutes: 45
-        # gh comments and labels as the workflow; git and the pull request tools
-        # use the Claude App's token, whose pushes trigger CI.
-        env:
-          GH_TOKEN: ${{ github.token }}
+        # git and the pull request tools use the Claude App's token, whose
+        # pushes trigger CI; the workflow does everything else with its own.
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: '{"outputStyle": "default"}'
+          settings: .github/fixer-settings.json
           prompt: |
             CI failed on pull request #${{ steps.decide.outputs.pr }}, the fix for issue
-            #${{ steps.decide.outputs.issue }}. The failing run is ${{ github.event.workflow_run.html_url }}.
+            #${{ steps.decide.outputs.issue }}. The failing run is ${{ github.event.workflow_run.html_url }};
+            its failed jobs' log is in .fixer-work/ci.log.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "ci".
             FIXER_ISSUE=${{ env.FIXER_ISSUE }} FIXER_DEADLINE=${{ env.FIXER_DEADLINE }}
             FIXER_NOTIFY=${{ env.FIXER_NOTIFY }}; these are also in the environment.
@@ -307,7 +309,11 @@ jobs:
         if: always() && steps.decide.outputs.pr != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
+        run: |
+          if [ -s .fixer-work/blocked.md ]; then
+            gh pr comment "${{ steps.decide.outputs.pr }}" --body-file .fixer-work/blocked.md
+          fi
+          gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
 
   # "@claude" from a writer on a fixer pull request: answer or change the code.
   mention:
@@ -356,20 +362,23 @@ jobs:
           persist-credentials: false
 
       - if: steps.scope.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: $SKILL/scripts/context.sh "$FIXER_ISSUE"
+
+      - if: steps.scope.outputs.ok == 'true'
         uses: ./.github/actions/dialect-agent-env
 
       - name: Answer
         id: agent
         if: steps.scope.outputs.ok == 'true'
         timeout-minutes: 45
-        # gh comments and labels as the workflow; git and the pull request tools
-        # use the Claude App's token, whose pushes trigger CI.
-        env:
-          GH_TOKEN: ${{ github.token }}
+        # git and the pull request tools use the Claude App's token, whose
+        # pushes trigger CI; the workflow does everything else with its own.
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: '{"outputStyle": "default"}'
+          settings: .github/fixer-settings.json
           trigger_phrase: "@claude"
           claude_args: >-
             --model ${{ vars.FIXER_MODEL || 'opus' }}

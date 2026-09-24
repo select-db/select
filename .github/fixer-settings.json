@@ -1,0 +1,33 @@
+{
+  "outputStyle": "default",
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": [".claude/skills/dialect-fixer/scripts/push.sh"],
+    "filesystem": {
+      "allowWrite": ["~/go", "~/.cache", "/home/runner/work/_temp/setup-uv-cache"]
+    },
+    "network": {
+      "strictAllowlist": true,
+      "allowedDomains": [
+        "proxy.golang.org",
+        "sum.golang.org",
+        "storage.googleapis.com",
+        "pypi.org",
+        "files.pythonhosted.org"
+      ]
+    },
+    "credentials": {
+      "envVars": [
+        {"name": "GH_TOKEN", "mode": "deny"},
+        {"name": "GITHUB_TOKEN", "mode": "deny"},
+        {"name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny"},
+        {"name": "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "mode": "deny"},
+        {"name": "ACTIONS_ID_TOKEN_REQUEST_URL", "mode": "deny"},
+        {"name": "ACTIONS_RUNTIME_TOKEN", "mode": "deny"},
+        {"name": "ACTIONS_RESULTS_URL", "mode": "deny"}
+      ]
+    }
+  }
+}
