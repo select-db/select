@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The finder's only way to write to GitHub. It runs outside Claude Code's
 # sandbox, with the token the sandbox withholds, so it posts nothing but a body
-# the agent wrote under .finder-work/.
+# the agent wrote under .finder-work/, links resolved.
 #   file.sh issue "<title>" <label,label,...> <body file> [assign]
 #   file.sh comment <issue number> <body file>
 set -euo pipefail
@@ -12,7 +12,7 @@ body_file() {
 	local path
 	path=$(realpath -e -- "$1") || { echo "no body file: $1" >&2; exit 2; }
 	case "$path" in
-	"$PWD"/.finder-work/*) [ -f "$path" ] && [ ! -L "$1" ] && { echo "$path"; return; } ;;
+	"$PWD"/.finder-work/*) [ -f "$path" ] && { echo "$path"; return; } ;;
 	esac
 	echo "the body must be a file under .finder-work/: $1" >&2
 	exit 2
