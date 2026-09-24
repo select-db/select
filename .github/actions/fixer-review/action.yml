@@ -27,6 +27,9 @@ runs:
         PR: ${{ inputs.pr }}
       run: |
         echo "required=$(.claude/skills/dialect-fixer/scripts/reviewed.sh required "$PR")" >> "$GITHUB_OUTPUT"
+        # Dropped first, so a review cut off by the step's timeout leaves no label.
+        gh pr edit "$PR" --remove-label fix:reviewed >/dev/null 2>&1 || true
+        echo "FIXER_PR=$PR" >> "$GITHUB_ENV"
         echo "FIXER_DEADLINE=$(( $(date +%s) + 35 * 60 ))" >> "$GITHUB_ENV"
 
     - id: agent
@@ -41,7 +44,7 @@ runs:
         settings: '{"outputStyle": "default"}'
         prompt: |
           Review pull request #${{ inputs.pr }}, the fix for issue #${{ inputs.issue }} in ${{ github.repository }}.
-          Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "reviews".
+          Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "gate".
           FIXER_ISSUE=${{ inputs.issue }} FIXER_PR=${{ inputs.pr }} FIXER_DEADLINE=${{ env.FIXER_DEADLINE }}
           FIXER_NOTIFY=${{ env.FIXER_NOTIFY }}; these are also in the environment.
         claude_args: >-

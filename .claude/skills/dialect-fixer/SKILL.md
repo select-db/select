@@ -219,7 +219,7 @@ stands, and stop. The run is killed 10 minutes later.
    against the old code, and any other open finder issue you believe shares
    the root cause (named, not fixed).
 5. Stop there. Labels, readiness and the reviews belong to the workflow: it
-   runs mode "reviews" as a separate run once the pull request is open.
+   runs mode "gate" as a separate run once the pull request is open.
 
 ### Mode "ci"
 
@@ -229,25 +229,25 @@ workflow reviews the push afterwards. A failure the pull request did not cause
 (red on `dev` too) is not yours: comment on the pull request naming it, and
 stop.
 
-### Mode "reviews"
+### Mode "gate"
 
 Pull request `#$FIXER_PR` is open for the issue, and reviewing it is this
 run's whole task. Work on `claude/fix-$FIXER_ISSUE` (`git switch` to it).
 
 1. Invoke the `simplify` skill with the Skill tool, arguments `origin/dev`. Let
-   it launch its four agents and apply what they find. Rerun the checks and
+   it launch its agents and apply what they find. Rerun the checks and
    commit.
 2. Invoke the `code-review` skill with the arguments `fixed point origin/dev;
    the spec is issue #$FIXER_ISSUE, read it with gh issue view; unattended, so
    do not ask`. There is no issue tracker file; the arguments stand in for it.
-   Let it launch its two agents. Fix what it finds that is in scope, rerun the
+   Let it launch its agents. Fix what it finds that is in scope, rerun the
    checks, commit, and push once with `push.sh`.
 3. Append a `## Review` section to the pull request body with
-   `mcp__github__update_pull_request`: for each skill, what it found, what you
-   changed and what you skipped, and why.
+   `mcp__github__update_pull_request`, as the last step: for each skill, what
+   it found, what you changed and what you skipped, and why.
 
 The workflow reads this run's tool calls: a skill whose agents never ran does
-not count, and the pull request then stays a draft. Do not open pull requests
+not count, and without the Review section the pull request stays a draft. Do not open pull requests
 or change labels.
 
 ### Mode "review"

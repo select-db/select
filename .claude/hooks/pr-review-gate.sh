@@ -16,7 +16,8 @@ required_for() { [ -n "${1:-}" ] && [ "$1" -lt "$small" ] || echo "$required"; }
 # prints the skills that ran: loading one only reads its instructions, and both
 # fan out to sub-agents, so a skill counts once an Agent or Task call follows.
 fanned_out() {
-	awk '$1 == "Skill" { current = $2; next } ($1 == "Agent" || $1 == "Task") && current != "" { print current }' | sort -u
+	awk '$1 == "Skill" { current = $2; sub(/.*:/, "", current); next }
+		($1 == "Agent" || $1 == "Task") && current != "" { print current }' | sort -u
 }
 
 # The workflows share this list, this threshold and this rule through these modes.
@@ -52,7 +53,7 @@ pr-opened)
 skill-ran)
 	[ -f "$state/pending" ] || exit 0
 	name=$(json '.tool_input.skill // empty')
-	echo "Skill ${name##*:}" >>"$state/calls"
+	echo "Skill $name" >>"$state/calls"
 	;;
 agent-ran)
 	[ -f "$state/pending" ] || exit 0
@@ -61,7 +62,7 @@ agent-ran)
 stop)
 	[ -f "$state/pending" ] || exit 0
 	[ "$(json '.stop_hook_active // false')" = "true" ] && exit 0
-	ran=$(fanned_out <"$state/calls" 2>/dev/null)
+	ran=$(fanned_out 2>/dev/null <"$state/calls")
 	missing=''
 	for want in $required; do
 		grep -qx "$want" <<<"$ran" || missing="$missing $want"
