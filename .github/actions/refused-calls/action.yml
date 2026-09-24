@@ -1,5 +1,5 @@
 name: refused-calls
-description: Lists the tool calls an agent made, and those its allowlist refused, in the job summary.
+description: Puts an agent's final message, its tool calls and the calls its allowlist refused in the job summary.
 
 # claude-code-action hides the agent's own output, so a refused command is
 # otherwise invisible. Only the tool and a slice of its input are printed.
@@ -23,7 +23,11 @@ runs:
         # In order, repeats collapsed: Read x4, Skill simplify, Agent x4, ...
         calls=$(jq -r -f "$GITHUB_ACTION_PATH/tool-calls.jq" "$EXECUTION_FILE" 2>/dev/null | uniq -c |
           awk '{ n = $1; $1 = ""; sub(/^ /, ""); printf "%s%s", sep, (n > 1 ? $0 " x" n : $0); sep = ", " }' || true)
+        # Why the agent stopped, in its own words.
+        final=$(jq -r '.. | objects | select(.type? == "result") | .result // empty' "$EXECUTION_FILE" 2>/dev/null | tail -c 3000 || true)
         {
+          echo "### Final message"
+          echo "${final:-None.}"
           echo "### Tool calls"
           echo "${calls:-None.}"
           echo "### Refused tool calls"
