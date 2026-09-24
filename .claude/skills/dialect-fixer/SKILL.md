@@ -184,8 +184,8 @@ run ./...`, `go -C dialect test ./...` (the workflow sets
 `SELECT_REQUIRE_ANALYZER=1`), `gofmt -l dialect/<files>` and `go -C dialect run
 ./cmd/seesweep`. Probe several statements in one call with
 `dialect/agentprobe -batch <file>`; a Python probe of the analyzer runs with
-`uv run --directory dialect/core/tokenanalyzer/python python <file>`. Keep
-scratch files out of what you stage.
+`uv run --directory dialect/core/tokenanalyzer/python python <file>`. Put probe
+and scratch files in `.fixer-work/`, which git ignores.
 
 A refused or failed command is never a reason to stop: find another way, or
 say what blocked you. Every run ends with a pull request or with

@@ -22,7 +22,6 @@
       "envVars": [
         {"name": "GH_TOKEN", "mode": "deny"},
         {"name": "GITHUB_TOKEN", "mode": "deny"},
-        {"name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny"},
         {"name": "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "mode": "deny"},
         {"name": "ACTIONS_ID_TOKEN_REQUEST_URL", "mode": "deny"},
         {"name": "ACTIONS_RUNTIME_TOKEN", "mode": "deny"},

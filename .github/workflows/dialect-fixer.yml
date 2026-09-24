@@ -33,9 +33,8 @@ env:
   # The agent runs in Claude Code's sandbox (.github/fixer-settings.json): no
   # GitHub or Anthropic token in its commands, and no network but the Go and
   # Python package hosts. So Bash is open, and these rules close what the
-  # sandbox does not: the file tools, which it does not cover, and the
-  # commands that would reach GitHub. push.sh runs outside it, and is the
-  # only way to write to the remote.
+  # sandbox does not: the file tools, which it does not cover. push.sh runs
+  # outside it, and is the only way to write to the remote.
   TOOLS: >-
     Read,Grep,Glob,Agent,Task,Skill,Bash,
     Edit(dialect/**),Edit(/dialect/**),Edit(/.fixer-work/**),
@@ -44,11 +43,9 @@ env:
     Edit(dialect/*/parser/**),Edit(/dialect/*/parser/**),
     Edit(dialect/go.mod),Edit(dialect/go.sum),
     Edit(dialect/core/tokenanalyzer/python/uv.lock),Edit(dialect/core/tokenanalyzer/python/pyproject.toml),
-    Read(//proc/**),Read(~/.ssh/**),Read(/.git/config),
-    Bash(gh *),Bash(curl *),Bash(wget *),
-    Bash(git push *),Bash(git remote *),Bash(git config *),Bash(git credential *)
-  # Strips the Anthropic token from subprocesses and gives them their own PID
-  # namespace, so /proc does not show the parent's environment.
+    Read(//proc/**),Read(~/.ssh/**),Read(/.git/config)
+  # Strips the Anthropic token from subprocesses, and gives them a PID namespace
+  # of their own, so /proc does not show the parent's environment either.
   CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
 
 jobs:
@@ -101,6 +98,8 @@ jobs:
 
       - if: steps.pick.outputs.issue != ''
         uses: ./.github/actions/dialect-agent-env
+        with:
+          sandbox: true
 
       - name: Fix
         id: agent
@@ -162,14 +161,12 @@ jobs:
             gh issue edit "$issue" --add-label fix:pr-open
             $SKILL/scripts/ready.sh "$issue"
           elif [ -s .fixer-work/blocked.md ]; then
-            # The agent has no token, so its reasoned refusal is posted here.
-            gh issue comment "$issue" --body-file .fixer-work/blocked.md
-            gh issue edit "$issue" --add-label fix:blocked --add-assignee "$FIXER_NOTIFY"
+            $SKILL/scripts/post-blocked.sh issue "$issue"
           elif ! grep -qx fix:blocked <<<"$labels"; then
             # Neither a pull request nor a reasoned refusal: the run itself failed.
             # Dropping fix:go keeps the queue from retrying it forever.
             gh issue edit "$issue" --remove-label fix:go
-            final=$(jq -r '.. | objects | select(.type? == "result") | .result // empty' "${EXECUTION_FILE:-/dev/null}" 2>/dev/null | tail -c 1500 || true)
+            final=$(jq -r -f .github/actions/refused-calls/final-message.jq "${EXECUTION_FILE:-/dev/null}" 2>/dev/null | tail -c 1500 || true)
             printf '@%s the fixer run ended without a pull request or a verdict (%s): %s. Add fix:go again to retry.\n\nIts last words:\n\n%s\n' \
               "$FIXER_NOTIFY" "$AGENT_OUTCOME" "$FIXER_RUN_URL" "$(sed 's/^/> /' <<<"${final:-(none)}")" > "$RUNNER_TEMP/comment.md"
             gh issue comment "$issue" --body-file "$RUNNER_TEMP/comment.md"
@@ -259,6 +256,8 @@ jobs:
 
       - if: steps.decide.outputs.pr != ''
         uses: ./.github/actions/dialect-agent-env
+        with:
+          sandbox: true
 
       - name: Fix CI
         id: agent
@@ -310,12 +309,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -s .fixer-work/blocked.md ]; then
-            gh pr comment "${{ steps.decide.outputs.pr }}" --body-file .fixer-work/blocked.md
-          fi
+          $SKILL/scripts/post-blocked.sh pr "${{ steps.decide.outputs.pr }}"
           gh issue edit "${{ steps.decide.outputs.issue }}" --remove-label fix:in-progress
 
   # "@claude" from a writer on a fixer pull request: answer or change the code.
+  # The writer roles here are also those context.sh keeps comments from.
   mention:
     name: Answer review
     if: >-
@@ -368,6 +366,8 @@ jobs:
 
       - if: steps.scope.outputs.ok == 'true'
         uses: ./.github/actions/dialect-agent-env
+        with:
+          sandbox: true
 
       - name: Answer
         id: agent
@@ -408,3 +408,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
         run: $SKILL/scripts/reviewed.sh "${{ steps.scope.outputs.pr }}" "$EXECUTION_FILE"
+
+      - name: Post a blocked note
+        if: always() && steps.scope.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: $SKILL/scripts/post-blocked.sh pr "${{ steps.scope.outputs.pr }}"
