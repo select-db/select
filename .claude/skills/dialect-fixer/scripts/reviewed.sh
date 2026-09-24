@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Labels the fixer's pull request fix:reviewed when a review run's transcript
+# Labels the fixer's pull request fix:reviewed when the fixer run's transcript
 # shows every skill the review gate requires for its size, and removes the
 # label otherwise, so ready.sh never marks unreviewed code ready.
 #   reviewed.sh <pull request> <execution file>
@@ -23,7 +23,7 @@ fi
 
 if [ ! -s "$transcript" ]; then
 	gh pr edit "$pr" --remove-label fix:reviewed >/dev/null 2>&1 || true
-	gh pr comment "$pr" --body "@$FIXER_NOTIFY the review run left no transcript, so its reviews cannot be checked and this stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
+	gh pr comment "$pr" --body "@$FIXER_NOTIFY the fixer run left no transcript, so its reviews cannot be checked and this stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
 	exit 0
 fi
 
@@ -35,10 +35,10 @@ for want in $required; do
 	grep -qx "$want" <<<"$ran" || missing="$missing $want"
 done
 
-# The skills' agents can run and the agent still stop before acting on them;
-# the Review section it writes last is the sign it got through.
+# The skills' agents can run and the agent still stop before weighing their
+# findings; the Review section it writes last is the sign it got through.
 if [ -z "$missing" ] && ! gh pr view "$pr" --json body --jq .body | grep -q '^## Review'; then
-	gh pr comment "$pr" --body "@$FIXER_NOTIFY the review run ended without writing its Review section, so this stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
+	gh pr comment "$pr" --body "@$FIXER_NOTIFY the fixer run ended without writing its Review section, so this stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
 	exit 0
 fi
 
@@ -46,5 +46,5 @@ if [ -z "$missing" ]; then
 	gh pr edit "$pr" --add-label fix:reviewed
 else
 	gh pr edit "$pr" --remove-label fix:reviewed >/dev/null 2>&1 || true
-	gh pr comment "$pr" --body "@$FIXER_NOTIFY these reviews never launched their agents:${missing}. This stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
+	gh pr comment "$pr" --body "@$FIXER_NOTIFY the fixer run did not run these reviews through to their agents:${missing}. This stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
 fi

@@ -218,41 +218,36 @@ stands, and stop. The run is killed 10 minutes later.
    `Closes #$FIXER_ISSUE`, what was wrong, what changed, the failing count
    against the old code, and any other open finder issue you believe shares
    the root cause (named, not fixed).
-5. Stop there. Labels, readiness and the reviews belong to the workflow: it
-   runs mode "gate" as a separate run once the pull request is open.
+5. Review your own pull request with the Skill tool: `simplify` with the
+   arguments `origin/dev`, then `code-review` with the arguments `fixed point
+   origin/dev; the spec is issue #$FIXER_ISSUE, read it with gh issue view;
+   unattended, so do not ask`. There is no issue tracker file; the arguments
+   stand in for it. Let each skill launch its agents rather than reviewing in
+   its place.
+6. You know the fix and its constraints, so the findings are input, not
+   orders: apply the ones that make the fix better, and reject the ones that
+   would widen it, contradict the issue or the settled rules, or are wrong.
+   Rerun the checks, commit and push once.
+7. Append a `## Review` section to the pull request body with
+   `mcp__github__update_pull_request`, as your last step: for each skill, the
+   findings you applied, and the ones you rejected with the reason.
+8. Leave labels and readiness to the workflow. It reads this run's tool calls:
+   unless both skills launched their agents and the Review section is there,
+   the pull request stays a draft. Keep 20 minutes before `$FIXER_DEADLINE`
+   for steps 5 to 7; a pull request below 50 changed lines needs none of them.
 
 ### Mode "ci"
 
 CI failed on the fixer's pull request. Read the failing run with `gh run view
---log-failed`, reproduce it locally, fix it on the same branch and push; the
-workflow reviews the push afterwards. A failure the pull request did not cause
-(red on `dev` too) is not yours: comment on the pull request naming it, and
-stop.
-
-### Mode "gate"
-
-Pull request `#$FIXER_PR` is open for the issue, and reviewing it is this
-run's whole task. Work on `claude/fix-$FIXER_ISSUE` (`git switch` to it).
-
-1. Invoke the `simplify` skill with the Skill tool, arguments `origin/dev`. Let
-   it launch its agents and apply what they find. Rerun the checks and
-   commit.
-2. Invoke the `code-review` skill with the arguments `fixed point origin/dev;
-   the spec is issue #$FIXER_ISSUE, read it with gh issue view; unattended, so
-   do not ask`. There is no issue tracker file; the arguments stand in for it.
-   Let it launch its agents. Fix what it finds that is in scope, rerun the
-   checks, commit, and push once with `push.sh`.
-3. Append a `## Review` section to the pull request body with
-   `mcp__github__update_pull_request`, as the last step: for each skill, what
-   it found, what you changed and what you skipped, and why.
-
-The workflow reads this run's tool calls: a skill whose agents never ran does
-not count, and without the Review section the pull request stays a draft. Do not open pull requests
-or change labels.
+--log-failed`, reproduce it locally, fix it on the same branch, then review it
+as in steps 5 to 7 of mode "fix" before pushing. A failure the pull request did
+not cause (red on `dev` too) is not yours: comment on the pull request naming
+it, and stop.
 
 ### Mode "review"
 
 A maintainer asked `@claude` something on the pull request. Answer the
-question, or make the change asked for on the same branch and push, and say in
-the reply what changed. A request to widen the fix beyond its issue gets a
-reply proposing a separate issue rather than a bigger diff.
+question, or make the change asked for on the same branch, review it as in
+steps 5 to 7 of mode "fix", push, and say in the reply what changed. A request
+to widen the fix beyond its issue gets a reply proposing a separate issue
+rather than a bigger diff.

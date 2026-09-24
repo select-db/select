@@ -61,8 +61,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issues' && github.event.label.name == 'fix:go')
     runs-on: ubuntu-latest
-    # The fix step's 70, the review's 45, and the setup around them.
-    timeout-minutes: 130
+    timeout-minutes: 90
     concurrency:
       group: dialect-fixer
       cancel-in-progress: false
@@ -114,8 +113,7 @@ jobs:
         uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # The Review step runs the review gate's skills, so its hook is off here.
-          settings: '{"outputStyle": "default", "disableAllHooks": true}'
+          settings: '{"outputStyle": "default"}'
           prompt: |
             Fix issue #${{ steps.pick.outputs.issue }} in ${{ github.repository }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md, mode "fix".
@@ -142,15 +140,14 @@ jobs:
           pr=$(gh pr list --head "claude/fix-${{ steps.pick.outputs.issue }}" --state open --json number --jq '.[0].number // empty')
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
 
-      - name: Review
+      # The agent reviews its own pull request; this checks from its transcript
+      # that it did, before anything can mark the pull request ready.
+      - name: Reviewed
         if: always() && steps.opened.outputs.pr != ''
-        timeout-minutes: 45
-        uses: ./.github/actions/fixer-review
-        with:
-          pr: ${{ steps.opened.outputs.pr }}
-          issue: ${{ steps.pick.outputs.issue }}
-          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          model: ${{ vars.FIXER_MODEL || 'opus' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: $SKILL/scripts/reviewed.sh "${{ steps.opened.outputs.pr }}" "$EXECUTION_FILE"
 
       - name: Wrap up
         if: always() && steps.pick.outputs.issue != ''
@@ -195,8 +192,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       startsWith(github.event.workflow_run.head_branch, 'claude/fix-')
     runs-on: ubuntu-latest
-    # The CI fix's 45, the review's 45, and the setup around them.
-    timeout-minutes: 100
+    timeout-minutes: 60
     concurrency:
       group: dialect-fixer-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
@@ -296,15 +292,12 @@ jobs:
           head=$(gh pr view "${{ steps.decide.outputs.pr }}" --json headRefOid --jq .headRefOid)
           [ "$head" = "${{ steps.decide.outputs.head }}" ] || echo "pushed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Review
+      - name: Reviewed
         if: always() && steps.pushed.outputs.pushed == 'true'
-        timeout-minutes: 45
-        uses: ./.github/actions/fixer-review
-        with:
-          pr: ${{ steps.decide.outputs.pr }}
-          issue: ${{ steps.decide.outputs.issue }}
-          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          model: ${{ vars.FIXER_MODEL || 'opus' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: $SKILL/scripts/reviewed.sh "${{ steps.decide.outputs.pr }}" "$EXECUTION_FILE"
 
       - name: Release the issue
         if: always() && steps.decide.outputs.pr != ''
@@ -324,8 +317,7 @@ jobs:
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        startsWith(github.event.pull_request.head.ref, 'claude/fix-'))
     runs-on: ubuntu-latest
-    # 45 for the answer, 45 for the review of any push it made.
-    timeout-minutes: 100
+    timeout-minutes: 60
     concurrency:
       group: dialect-fixer-pr-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: false
@@ -397,12 +389,9 @@ jobs:
           head=$(gh pr view "${{ steps.scope.outputs.pr }}" --json headRefOid --jq .headRefOid)
           [ "$head" = "${{ steps.scope.outputs.head }}" ] || echo "pushed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Review
+      - name: Reviewed
         if: always() && steps.pushed.outputs.pushed == 'true'
-        timeout-minutes: 45
-        uses: ./.github/actions/fixer-review
-        with:
-          pr: ${{ steps.scope.outputs.pr }}
-          issue: ${{ env.FIXER_ISSUE }}
-          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          model: ${{ vars.FIXER_MODEL || 'opus' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: $SKILL/scripts/reviewed.sh "${{ steps.scope.outputs.pr }}" "$EXECUTION_FILE"
