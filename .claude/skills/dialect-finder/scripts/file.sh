@@ -34,11 +34,10 @@ for file in "$dir"/*.md; do
 		[ "$(header assign "$file")" = yes ] && args+=(--assignee "$FINDER_NOTIFY")
 		number=$(gh issue create "${args[@]}" | grep -oE '[0-9]+$')
 		echo "filed #$number from $file"
-		# The finding's last row, with its issue: the ledger keeps the last row per id.
-		jq -c --arg id "$name" --argjson n "$number" 'select(.id == $id) | .issue = $n | .status = "filed"' \
-			"$memory/findings.jsonl" | tail -n1 >"${RUNNER_TEMP:-/tmp}/filed.jsonl"
-		[ -s "${RUNNER_TEMP:-/tmp}/filed.jsonl" ] &&
-			python3 .claude/skills/dialect-finder/scripts/ledger.py append findings "${RUNNER_TEMP:-/tmp}/filed.jsonl"
+		# The finding's latest row again, now with its issue.
+		jq -sc --arg id "$name" --argjson n "$number" \
+			'map(select(.id == $id)) | last // empty | .issue = $n | .status = "filed"' \
+			"$memory/findings.jsonl" | python3 .claude/skills/dialect-finder/scripts/ledger.py append findings /dev/stdin
 		;;
 	esac
 done

@@ -3,19 +3,13 @@
 # shows every skill the review gate requires for its size, and removes the
 # label otherwise, so ready.sh never marks unreviewed code ready.
 #   reviewed.sh <pull request> <execution file>
-#   reviewed.sh required <pull request>   prints the skills it needs
 set -euo pipefail
 
 gate=.claude/hooks/pr-review-gate.sh
-required_for_pr() {
-	"$gate" required "$(gh pr view "$1" --json additions,deletions --jq '.additions + .deletions')"
-}
-[ "$1" = required ] && { required_for_pr "$2"; exit 0; }
-
 pr=$1
 transcript=${2:-}
 
-required=$(required_for_pr "$pr")
+required=$("$gate" required "$(gh pr view "$pr" --json additions,deletions --jq '.additions + .deletions')")
 if [ -z "$required" ]; then
 	gh pr edit "$pr" --add-label fix:reviewed
 	exit 0
@@ -37,6 +31,7 @@ done
 
 # The skills' agents can run and the agent still stop before weighing their
 # findings; the Review section it writes last is the sign it got through.
+# publish.sh asks for the same section before it opens the pull request.
 if [ -z "$missing" ] && ! gh pr view "$pr" --json body --jq .body | grep -q '^## Review'; then
 	gh pr comment "$pr" --body "@$FIXER_NOTIFY the fixer run ended without writing its Review section, so this stays a draft: $FIXER_RUN_URL. Add fix:reviewed to let it go ready once CI is green."
 	exit 0

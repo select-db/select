@@ -220,11 +220,13 @@ skills launched their agents and the Review section is there.
 ### Mode "ci"
 
 CI failed on the pull request; the failed log is in `.fixer-work/ci.log`.
-Reproduce it, fix it on the same branch, commit, and stop. A failure the pull request did not
-cause (red on `dev` too) is not yours: say so in `.fixer-work/blocked.md`.
+Reproduce it, fix it on the same branch, commit, and stop. A failure the pull
+request did not cause (red on `dev` too) is not yours: say so in
+`.fixer-work/blocked.md`.
 
 ### Mode "review"
 
 A maintainer asked `@claude` something on the pull request. Answer it, or make
-the change on the same branch, commit, and say in the reply what changed. A request to widen the fix
-beyond its issue gets a reply proposing a separate issue.
+the change on the same branch, commit, and say in the reply what changed. A
+request to widen the fix beyond its issue gets a reply proposing a separate
+issue.

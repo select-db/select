@@ -31,9 +31,19 @@ outside=$(git diff --name-only origin/dev...HEAD | awk '
 
 pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
 if [ -z "$pr" ]; then
-	if [ -n "$(.claude/hooks/pr-review-gate.sh required-since origin/dev)" ] &&
-		! grep -q '^## Review' .fixer-work/pr.md 2>/dev/null; then
-		ask "run the simplify and code-review skills (step 5 of mode \"fix\"), apply what is pertinent, commit, and write .fixer-work/pr.md with its ## Review section, then end the run."
+	# The same rule reviewed.sh applies afterwards: a skill counts once it
+	# launched its agents, and the Review section is written last.
+	gate=.claude/hooks/pr-review-gate.sh
+	required=$("$gate" required-since origin/dev)
+	if [ -n "$required" ]; then
+		transcript=$(jq -r '.transcript_path // empty' <<<"$input")
+		ran=$(jq -r -f .github/actions/refused-calls/tool-calls.jq "$transcript" 2>/dev/null | "$gate" fanned-out)
+		missing=''
+		for want in $required; do grep -qx "$want" <<<"$ran" || missing="$missing $want"; done
+		[ -z "$missing" ] ||
+			ask "run the review skills that have not launched their agents yet:$missing (step 5 of mode \"fix\"), apply what is pertinent, commit, then end the run."
+		grep -q '^## Review' .fixer-work/pr.md 2>/dev/null ||
+			ask "write .fixer-work/pr.md with its ## Review section (step 6 of mode \"fix\"), then end the run."
 	fi
 	[ -s .fixer-work/pr.md ] ||
 		ask "write .fixer-work/pr.md (step 6 of mode \"fix\"), then end the run."

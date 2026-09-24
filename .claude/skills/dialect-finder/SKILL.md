@@ -75,8 +75,7 @@ working on the layer with the lowest full-product coverage.
 ### 2. Start the layer, and place the existing cases
 
 If the current layer has no grid yet, write its dimensions into `grid.json`
-from the method's axes, as short snake_case values, bump `version`, and
-and go on.
+from the method's axes, as short snake_case values, and bump `version`.
 
 The Go case tables already pin hundreds of statements; the workflow exports
 them to `.finder-work/known.jsonl` each run. `dedupe` never runs one of them
