@@ -43,8 +43,8 @@
 					},
 					{
 						"type": "command",
-						"command": "\"$CLAUDE_PROJECT_DIR\"/.claude/skills/dialect-fixer/scripts/stop-gate.sh",
-						"timeout": 10
+						"command": "\"$CLAUDE_PROJECT_DIR\"/.claude/skills/dialect-fixer/scripts/publish.sh",
+						"timeout": 180
 					}
 				]
 			}

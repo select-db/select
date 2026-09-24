@@ -29,14 +29,12 @@ runs:
       env:
         AGENT: ${{ inputs.sandbox }}
       run: |
-        # Shared rules, then this agent's: the scripts it may run outside the
-        # sandbox, its hosts and paths, anchored at the workspace so a copy
-        # elsewhere does not match. `*` replaces arrays, so none is in both files.
+        # Shared rules, then this agent's paths, anchored at the workspace.
+        # `*` replaces arrays, so none is in both files.
         dir=.github/agent-sandbox
         jq -s --arg ws "$GITHUB_WORKSPACE" '
           def abs: if startswith("/") or startswith("~") then . else "\($ws)/\(.)" end;
           .[0] * .[1]
-          | .sandbox.excludedCommands |= map(abs)
           | .sandbox.filesystem.denyWrite |= (. // [] | map(abs))
         ' "$dir/base.json" "$dir/$AGENT.json" > "$RUNNER_TEMP/agent-settings.json"
         # The scrub keeps the Anthropic token from commands and gives them a PID
