@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/skills/dialect-fixer/scripts/publish.sh",
+            "command": "\"$AGENT_TOOLS/publish.sh\"",
             "timeout": 180
           }
         ]

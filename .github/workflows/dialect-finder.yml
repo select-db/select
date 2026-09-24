@@ -148,6 +148,14 @@ jobs:
             --max-turns 150
             --allowedTools "Read,Grep,Glob,Agent,Task,Bash,Edit(/.finder-memory/**),Edit(/.finder-work/**)"
 
+      # The sandbox may not keep the agent out of .claude and .github, and the
+      # steps below run them with a token: back to the reviewed commit first.
+      - name: Restore trusted files
+        if: always() && steps.find.outcome != 'skipped'
+        run: |
+          git restore --source="$AGENT_BASE" --worktree -- .claude .github
+          git clean -fdq -- .claude .github
+
       - name: Refused tool calls
         if: always() && steps.find.outputs.execution_file != ''
         uses: ./.github/actions/refused-calls

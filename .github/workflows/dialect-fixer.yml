@@ -109,6 +109,14 @@ jobs:
             --max-turns 250
             --allowedTools "${{ env.TOOLS }}"
 
+      # The sandbox may not keep the agent out of .claude and .github, and the
+      # steps below run them with a token: back to the reviewed commit first.
+      - name: Restore trusted files
+        if: always() && steps.agent.outcome != 'skipped'
+        run: |
+          git restore --source="$AGENT_BASE" --worktree -- .claude .github
+          git clean -fdq -- .claude .github
+
       - name: Refused tool calls
         if: always() && steps.agent.outputs.execution_file != ''
         uses: ./.github/actions/refused-calls
@@ -268,6 +276,14 @@ jobs:
             --max-turns 80
             --allowedTools "${{ env.TOOLS }}"
 
+      # The sandbox may not keep the agent out of .claude and .github, and the
+      # steps below run them with a token: back to the reviewed commit first.
+      - name: Restore trusted files
+        if: always() && steps.agent.outcome != 'skipped'
+        run: |
+          git restore --source="$AGENT_BASE" --worktree -- .claude .github
+          git clean -fdq -- .claude .github
+
       - name: Refused tool calls
         if: always() && steps.agent.outputs.execution_file != ''
         uses: ./.github/actions/refused-calls
@@ -355,6 +371,14 @@ jobs:
             --max-turns 80
             --allowedTools "${{ env.TOOLS }}"
             --append-system-prompt "Follow the Unattended runs section of .claude/skills/dialect-fixer/SKILL.md, mode review."
+
+      # The sandbox may not keep the agent out of .claude and .github, and the
+      # steps below run them with a token: back to the reviewed commit first.
+      - name: Restore trusted files
+        if: always() && steps.agent.outcome != 'skipped'
+        run: |
+          git restore --source="$AGENT_BASE" --worktree -- .claude .github
+          git clean -fdq -- .claude .github
 
       - name: Refused tool calls
         if: always() && steps.agent.outputs.execution_file != ''
