@@ -161,11 +161,25 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 		return i.inspectCopy(copyStmt)
 	}
 
+	if txnStmt := stmt.Transactionstmt(); txnStmt != nil && !endsAPreparedTransaction(txnStmt) {
+		read := core.TransactionStatement()
+		return &read
+	}
+
 	// No branch above reads this statement, so it takes manage for whatever it
 	// does. The reads nested in it are still reads: manage is not a right to
 	// read rows, so each of those tables needs its own select.
 	read := core.NestUnderUnknown(i.extractEmbeddedSubqueries(stmt)...)
 	return &read
+}
+
+// endsAPreparedTransaction reports whether a transaction statement is one of
+// the two-phase commit forms. PREPARE TRANSACTION leaves a transaction holding
+// its locks after the session is gone, and COMMIT PREPARED and ROLLBACK
+// PREPARED end one by name, whichever session opened it. That reaches outside
+// the session, so those three keep the floor.
+func endsAPreparedTransaction(stmt pg.ITransactionstmtContext) bool {
+	return stmt.PREPARE() != nil || stmt.PREPARED() != nil
 }
 
 // inspectSelect analyzes a SELECT statement, including all UNION/INTERSECT/EXCEPT branches.

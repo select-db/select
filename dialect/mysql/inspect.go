@@ -68,6 +68,11 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 		simple := q.SimpleStatement()
 		if simple == nil {
+			// BEGIN opens a transaction under its own grammar rule rather than
+			// under simpleStatement, so it is read here or not at all.
+			if q.BeginWork() != nil {
+				results = append(results, core.TransactionStatement())
+			}
 			// The grammar emits a trailing empty query for the ';' we append.
 			continue
 		}
@@ -152,6 +157,16 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 	}
 	if cr := stmt.CreateStatement(); cr != nil {
 		return i.inspectCreate(cr)
+	}
+	// A boundary of this session's own transaction. LOCK TABLES and the XA
+	// forms share the grammar rule and are not that: a lock blocks other
+	// sessions, and an XA transaction can be ended by a session that did not
+	// start it. Both keep the floor.
+	if txn := stmt.TransactionOrLockingStatement(); txn != nil {
+		if txn.TransactionStatement() != nil || txn.SavepointStatement() != nil {
+			read := core.TransactionStatement()
+			return &read
+		}
 	}
 	// No branch above reads this statement, so it takes manage for whatever it
 	// does. The reads nested in it are still reads: manage is not a right to

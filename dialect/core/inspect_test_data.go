@@ -14,7 +14,10 @@ const (
 	InspectOpTruncate InspectOperation = "truncate"
 	InspectOpGrant    InspectOperation = "grant"
 	InspectOpRevoke   InspectOperation = "revoke"
-	InspectOpUnknown  InspectOperation = "unknown"
+	// InspectOpTransaction is a boundary of a transaction the session owns:
+	// BEGIN, COMMIT, ROLLBACK, SAVEPOINT and RELEASE. It needs no right.
+	InspectOpTransaction InspectOperation = "transaction"
+	InspectOpUnknown     InspectOperation = "unknown"
 )
 
 // InspectField represents a resolved field/column reference in a SQL statement
