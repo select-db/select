@@ -53,6 +53,6 @@
     "marked-katex-extension": "^5.1.12",
     "monaco-editor": "^0.56.0",
     "sql-formatter": "^15.8.2",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   }
 }
