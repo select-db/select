@@ -34,10 +34,10 @@ func (a Actor) IsOwner() bool { return isWorkspaceOwner(a.r, a.WorkspaceID) }
 
 // Can reports whether the actor holds a workspace-level permission, e.g.
 // core.ActionWorkspaceApiKeysManage.
-func (a Actor) Can(action string) bool { return CompiledFromRequest(a.r).IsAllowed(action) }
+func (a Actor) Can(action string) bool { return Perms(a.r).IsAllowed(action) }
 
 // CanManage reports whether the actor may manage a specific resource (a
 // datasource id).
 func (a Actor) CanManage(resourceID string) bool {
-	return CompiledFromRequest(a.r).CanManage(resourceID)
+	return Perms(a.r).CanManage(resourceID)
 }

@@ -50,7 +50,7 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	}
 	o.Client = &engine.Client{}
 	o.Inst = engine.DBInstance{ID: id, DBType: ds.DBType}
-	o.Conn = engine.Conn{DB: db, Perms: authz.CompiledFromRequest(r)}
+	o.Conn = engine.Conn{DB: db, Perms: authz.Perms(r)}
 	return o, nil
 }
 

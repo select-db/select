@@ -43,7 +43,7 @@ func onCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (
 		CellarID: ds.CellarID,
 		MaxBytes: plan.maxBytes,
 		PITRDays: plan.pitrDays,
-	}, authz.EntriesForDB(r, id))
+	}, authz.EntriesOn(r, id))
 	if err != nil {
 		return nil, engine.DBInstance{}, err
 	}

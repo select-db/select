@@ -132,7 +132,7 @@ func (idx CompiledPermissions) IsManaged(dbID string) bool {
 // developer opened with their own DSN, since refusing there would only be
 // refusing them access to their own database. It is the wrong default the
 // moment the query runs on our server against our credentials, so everything
-// server-side compiles with this set. See authz.CompiledForWorkspace.
+// server-side compiles with this set. See authz.Compile.
 func (idx CompiledPermissions) WithDenyUnmanaged() CompiledPermissions {
 	idx.denyUnmanaged = true
 	return idx

@@ -48,7 +48,7 @@ func toolListDatasources() Tool {
 			}
 
 			// Wildcard-DB entries (DbInstanceID "*") apply to every datasource
-			entries := authz.EntriesFromRequest(r)
+			entries := authz.Entries(r)
 			scopedByDB, wildcardEntries := indexEntriesByDB(entries)
 
 			type item struct {

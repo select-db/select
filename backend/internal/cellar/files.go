@@ -39,7 +39,7 @@ func (f *Files) Open(g auth.CellarGrant, perms core.CompiledPermissions) (engine
 	if g.MaxBytes <= 0 {
 		return engine.Conn{}, fmt.Errorf("grant for db %s has no size cap", g.DB)
 	}
-	db, err := f.db(g.DB)
+	db, err := f.pool(g.DB)
 	if err != nil {
 		return engine.Conn{}, err
 	}
@@ -55,7 +55,8 @@ func (f *Files) Open(g auth.CellarGrant, perms core.CompiledPermissions) (engine
 	}, nil
 }
 
-func (f *Files) db(id string) (*sql.DB, error) {
+// pool opens the database id once and shares it across requests.
+func (f *Files) pool(id string) (*sql.DB, error) {
 	// The id becomes a file name.
 	if _, err := uuid.Parse(id); err != nil {
 		return nil, fmt.Errorf("db id %q is not a uuid", id)

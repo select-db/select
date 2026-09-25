@@ -36,7 +36,7 @@ func openFile(r *http.Request, files *cellar.Files, noCache bool) (engine.Conn, 
 	if err != nil {
 		return engine.Conn{}, g, err
 	}
-	conn, err := files.Open(g, authz.Compiled(entries))
+	conn, err := files.Open(g, authz.Compile(entries))
 	if err != nil {
 		return engine.Conn{}, g, err
 	}
