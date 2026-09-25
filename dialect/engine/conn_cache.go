@@ -114,7 +114,7 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	if dbType == "sqlite" && ssh != nil {
 		return nil, newConfigError("SSH tunneling is not supported for sqlite")
 	}
-	if onSQLiteServer(dbType, dsn) {
+	if OnSQLiteServer(dbType, dsn) {
 		// Its driver dials only the server the process configured, never a
 		// host from the DSN, so the outbound guard has nothing to check.
 		return openCached(workspaceID, dsn, func() (*sql.DB, error) { return sql.Open(SQLiteServer, dsn) }, pool...)

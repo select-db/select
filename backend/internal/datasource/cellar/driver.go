@@ -45,6 +45,10 @@ var (
 
 type sqlDriver struct{}
 
+// QueryRunsAll: the cellar runs any statement as a query, so a failed one is
+// never resent as an exec.
+func (sqlDriver) QueryRunsAll() {}
+
 func (d sqlDriver) Open(dsn string) (driver.Conn, error) {
 	c, err := d.OpenConnector(dsn)
 	if err != nil {
@@ -86,6 +90,15 @@ func (conn) Driver() driver.Driver                          { return sqlDriver{}
 func (conn) Prepare(string) (driver.Stmt, error)            { return nil, errNoPrepare }
 func (conn) Begin() (driver.Tx, error)                      { return nil, errNoTx }
 func (conn) Close() error                                   { return nil }
+
+// CheckNamedValue keeps arguments to strings, which JSON carries unchanged.
+func (conn) CheckNamedValue(nv *driver.NamedValue) error {
+	switch nv.Value.(type) {
+	case nil, string:
+		return nil
+	}
+	return fmt.Errorf("cellar: argument %d is a %T; only strings are supported", nv.Ordinal, nv.Value)
+}
 
 func (c conn) Ping(ctx context.Context) error {
 	_, err := c.ExecContext(ctx, "SELECT 1", nil)

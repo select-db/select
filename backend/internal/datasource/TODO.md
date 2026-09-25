@@ -102,7 +102,7 @@ Settled. Reopen with a reason, not a preference.
 - Each db gets a dedicated role with full access, created and deleted with it.
   `grant_to` is optional: the caller can always grant itself, anyone else
   needs `users.manage` or `api-keys.manage`. Empty means nobody, as for any
-  proxified datasource.
+  datasource.
 - Fork and download need `manage` on the source: both hand over all the data.
 - Deleting a db deletes roles scoped only to it and strips its rules from
   other roles.

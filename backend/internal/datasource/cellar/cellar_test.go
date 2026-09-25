@@ -95,6 +95,11 @@ func TestManagedDatabaseRunsOnTheCellar(t *testing.T) {
 	_, errMsg = m.run(t, "INSERT INTO note (body) VALUES ('again')")
 	require.Empty(t, errMsg)
 
+	_, errMsg = m.run(t, "INSERT INTO note (body) VALUES ('once'); INSERT INTO note (id, body) VALUES (1, 'taken')")
+	require.NotEmpty(t, errMsg)
+	rows, _ = m.run(t, "SELECT count(*) FROM note WHERE body = 'once'")
+	require.Equal(t, [][]any{{"1"}}, rows, "a failed script is never run twice")
+
 	_, errMsg = m.run(t, "DELETE FROM note")
 	require.Contains(t, errMsg, "permission", "the caller's permissions reach the cellar")
 
@@ -153,7 +158,7 @@ func TestManagedDatabaseWithCellarDown(t *testing.T) {
 	cellar.Use(down.URL)
 
 	_, errMsg := m.run(t, "SELECT 1")
-	require.NotEmpty(t, errMsg)
+	require.Contains(t, errMsg, "unavailable")
 	require.NotContains(t, errMsg, strings.TrimPrefix(down.URL, "http://"), "errors never name the cellar")
 
 	rec := e2e.Do(t, m.f.H, http.MethodGet, "/datasources/"+m.id+"/schema", m.f.Actor.Token,

@@ -74,7 +74,8 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	// A managed database's DSN is built here and never read from the row.
 	if cellarID := row.CellarID.ValueOrEmpty(); cellarID != "" {
 		dsn = cellar.DSN(cellarID, id, workspaceID, row.Plan, int(row.Members))
-	} else if cellar.IsDSN(dsn) {
+	} else if engine.OnSQLiteServer(row.DbType, dsn) {
+		// It would open another workspace's database.
 		return nil, errors.New("datasource DSN uses a reserved scheme")
 	}
 	ssh, err := decryptField(ctx, enc, row.EncryptedSsh, fieldAAD(parsedWorkspaceID, parsedID, "ssh"))

@@ -67,7 +67,8 @@ var EnforceOutboundGuard bool
 // that scheme with that driver; the caller must never pass one a user wrote.
 var SQLiteServer string
 
-func onSQLiteServer(dbType, dsn string) bool {
+// OnSQLiteServer reports whether a datasource opens on the SQLiteServer.
+func OnSQLiteServer(dbType, dsn string) bool {
 	return dbType == "sqlite" && SQLiteServer != "" && strings.HasPrefix(dsn, SQLiteServer+"://")
 }
 

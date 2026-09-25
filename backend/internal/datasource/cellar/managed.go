@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
 // ErrOff answers any use of a managed database while CELLAR is unset.
@@ -33,7 +32,3 @@ func DSN(cellarID, id, workspaceID, plan string, members int) string {
 	}
 	return (&url.URL{Scheme: Scheme, Host: cellarID, Path: "/" + id, RawQuery: q.Encode()}).String()
 }
-
-// IsDSN reports whether dsn opens a managed database. Only DSN may build one:
-// a user who stored one could open another workspace's database.
-func IsDSN(dsn string) bool { return strings.HasPrefix(dsn, Scheme+"://") }

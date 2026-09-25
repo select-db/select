@@ -43,6 +43,9 @@ func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, o
 		msg, pos := parseQueryError(ctx, err)
 		result.Errors = []string{msg}
 		result.ErrorPosition = pos
+		if !conn.execFallback() {
+			return result
+		}
 
 		// non-SELECT: try ExecContext
 		start = time.Now()
@@ -158,7 +161,7 @@ func StreamLocal(
 	rows, err := q.QueryContext(ctx, sql, opts.Args...)
 	durationMs := max1ms(time.Since(start).Milliseconds())
 
-	if err != nil {
+	if err != nil && conn.execFallback() {
 		// Mirror ExecuteLocal's fallback: a statement that doesn't return rows
 		// (INSERT / UPDATE / DELETE / DDL) will fail QueryContext on most
 		// drivers; retry via ExecContext to surface affected-row counts.
@@ -176,6 +179,8 @@ func StreamLocal(
 			}
 			return
 		}
+	}
+	if err != nil {
 		// Surface the original SELECT-style error; it's the more useful
 		// diagnostic for users writing SELECT-shaped statements.
 		msg, _ := parseQueryError(ctx, err)

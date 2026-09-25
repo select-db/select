@@ -62,8 +62,15 @@ func (o *Opened) Metadata(ctx context.Context, noCache bool) (*core.Metadata, er
 // Stream runs sql into sink, checked against the caller's permissions.
 func (o *Opened) Stream(ctx context.Context, sql string, opts engine.Options, sink engine.RowSink) {
 	conn := o.Conn
-	// Without a schema the permission check refuses the statement.
-	conn.Meta, _ = o.Metadata(ctx, false)
+	meta, err := o.Metadata(ctx, false)
+	if err != nil {
+		// Without a schema the permission check would refuse the statement
+		// and hide why; the reason goes through the same filter as OpenError.
+		_, msg := openFailure(err, "datasource stream", o.WorkspaceID, o.ID)
+		sink.OnError(errors.New(msg))
+		return
+	}
+	conn.Meta = meta
 	engine.StreamLocal(ctx, conn, o.Inst, sql, opts, sink)
 }
 

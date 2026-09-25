@@ -15,9 +15,15 @@ import (
 
 func init() {
 	// The engine's sqlite dialect opens "sqlite3", which the desktop app
-	// registers the same way.
-	sql.Register("sqlite3", &sqlite.Driver{})
+	// registers too.
+	sql.Register("sqlite3", sqliteDriver{&sqlite.Driver{}})
 }
+
+// sqliteDriver is modernc's driver, whose Query runs every statement: a failed
+// one must not be rerun as an exec, or a script's earlier writes run twice.
+type sqliteDriver struct{ *sqlite.Driver }
+
+func (sqliteDriver) QueryRunsAll() {}
 
 // Files holds the managed databases of one cellar, one SQLite file each.
 type Files struct {

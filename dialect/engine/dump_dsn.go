@@ -34,7 +34,7 @@ func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (st
 		return core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
 	}
 
-	if !EnforceOutboundGuard || onSQLiteServer(dbType, dsn) {
+	if !EnforceOutboundGuard || OnSQLiteServer(dbType, dsn) {
 		return dsn, nil
 	}
 
