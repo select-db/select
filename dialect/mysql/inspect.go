@@ -544,7 +544,7 @@ func (i *Inspector) inspectTableShorthand(ref mysql.ITableRefContext) *core.Insp
 func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpInsert}
 
-	schema, tableName := i.resolveTableRef(stmt.TableRef())
+	schema, tableName := i.writeTarget(stmt.TableRef())
 	if tableName == "" {
 		return nil
 	}
@@ -621,7 +621,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpInsert}
 
-	schema, tableName := i.resolveTableRef(stmt.TableRef())
+	schema, tableName := i.writeTarget(stmt.TableRef())
 	if tableName == "" {
 		return nil
 	}
@@ -1040,6 +1040,19 @@ func (i *Inspector) resolveTableRef(tr mysql.ITableRefContext) (schema, table st
 		return "", ""
 	}
 	return splitQualifiedName(i.dialect, tr.GetText(), core.GetDefaultSchema(i.meta))
+}
+
+// writeTarget is the relation a write names. It differs from resolveTableRef
+// in one way: an unqualified name the metadata does not know resolves to no
+// schema, which is the answer a read of the same name gets. Defaulting it
+// would check the write against a table in the default schema that may not be
+// the one the server writes.
+func (i *Inspector) writeTarget(tr mysql.ITableRefContext) (schema, table string) {
+	if tr == nil {
+		return "", ""
+	}
+	schema, table, qualified := splitQualifiedNameParts(i.dialect, tr.GetText(), core.GetDefaultSchema(i.meta))
+	return i.resolver.TableSchema(schema, table, qualified), table
 }
 
 // resolveViewName mirrors resolveTableRef for ViewName nodes.

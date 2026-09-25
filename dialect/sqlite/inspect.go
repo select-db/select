@@ -609,31 +609,42 @@ func (i *Inspector) targetAlias(qtname sqlite.IQualified_table_nameContext) stri
 	return i.dialect.NormalizeIdentifier(qtname.Alias().GetText())
 }
 
-// resolveQualifiedTableName extracts schema and table name from a qualified_table_name context.
-func (i *Inspector) resolveQualifiedTableName(qtname sqlite.IQualified_table_nameContext) (schema, table string) {
+// resolveQualifiedTableName extracts schema and table name from a
+// qualified_table_name context, and reports whether the SQL wrote the schema:
+// the caller cannot tell from schema alone, which holds the effective one for
+// a bare name.
+func (i *Inspector) resolveQualifiedTableName(qtname sqlite.IQualified_table_nameContext) (schema, table string, qualified bool) {
 	if qtname == nil {
-		return "", ""
+		return "", "", false
 	}
 	schema = i.effectiveSchema()
 	if qtname.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(qtname.Schema_name().GetText())
+		schema, qualified = i.dialect.NormalizeIdentifier(qtname.Schema_name().GetText()), true
 	}
 	if qtname.Table_name() != nil {
 		table = i.dialect.NormalizeIdentifier(qtname.Table_name().Any_name().GetText())
 	}
-	return schema, table
+	return schema, table, qualified
 }
 
 // resolveInsertTarget extracts schema and table name from an INSERT statement.
-func (i *Inspector) resolveInsertTarget(stmt sqlite.IInsert_stmtContext) (schema, table string) {
+func (i *Inspector) resolveInsertTarget(stmt sqlite.IInsert_stmtContext) (schema, table string, qualified bool) {
 	schema = i.effectiveSchema()
 	if stmt.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
+		schema, qualified = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText()), true
 	}
 	if stmt.Table_name() != nil {
 		table = i.dialect.NormalizeIdentifier(stmt.Table_name().Any_name().GetText())
 	}
-	return schema, table
+	return schema, table, qualified
+}
+
+// writeTarget applies to a resolved write target the rule a read of the same
+// name gets: an unqualified name the metadata does not know resolves to no
+// schema. Defaulting it would check the write against a table in the default
+// schema that may not be the one the server writes.
+func (i *Inspector) writeTarget(schema, table string, qualified bool) (string, string) {
+	return i.resolver.TableSchema(schema, table, qualified), table
 }
 
 // inspectInsert analyzes an INSERT statement.
@@ -643,7 +654,7 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
-	schema, tableName := i.resolveInsertTarget(stmt)
+	schema, tableName := i.writeTarget(i.resolveInsertTarget(stmt))
 	if tableName == "" {
 		return nil
 	}
@@ -731,7 +742,7 @@ func (i *Inspector) upsertSetFields(
 func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpUpdate}
 
-	schema, tableName := i.resolveQualifiedTableName(stmt.Qualified_table_name())
+	schema, tableName := i.writeTarget(i.resolveQualifiedTableName(stmt.Qualified_table_name()))
 	if tableName == "" {
 		return nil
 	}
@@ -876,7 +887,7 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 	ctes, cteBodies := i.inspectWithClause(stmt.With_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
-	schema, tableName := i.resolveQualifiedTableName(stmt.Qualified_table_name())
+	schema, tableName := i.writeTarget(i.resolveQualifiedTableName(stmt.Qualified_table_name()))
 	if tableName == "" {
 		return nil
 	}

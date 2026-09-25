@@ -55,10 +55,7 @@ func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 			continue
 		}
 
-		schema := ref.Schema
-		if !ref.Qualified && !TableExistsInMetadata(r.Meta, schema, ref.Table, r.Dialect) {
-			schema = ""
-		}
+		schema := r.TableSchema(ref.Schema, ref.Table, ref.Qualified)
 
 		key := schema + "." + ref.Table
 		if seen[key] {
@@ -81,6 +78,22 @@ func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 	}
 
 	return tables
+}
+
+// TableSchema is the schema a named relation resolves in. An unqualified name
+// the metadata does not know resolves to no schema: it could be a table in any
+// schema, so a row right on the default one would be a guess. A qualified name
+// keeps the schema it was written with whether or not the metadata has it,
+// since dropping it would be a read nobody checks.
+//
+// A write resolves its target through this too. Defaulting there and refusing
+// here made the answer depend on the verb: the same unknown name ran under a
+// row right on one path and was unrunnable on the other.
+func (r Resolver) TableSchema(schema, table string, qualified bool) string {
+	if qualified || TableExistsInMetadata(r.Meta, schema, table, r.Dialect) {
+		return schema
+	}
+	return ""
 }
 
 // Star returns the fields a bare star selects from the relations in scope. A

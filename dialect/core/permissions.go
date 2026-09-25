@@ -60,6 +60,10 @@ func (e *PermissionDeniedError) Error() string {
 		// A statement we could not resolve names nothing to blame; the
 		// connection is what the manage rule is granted on anyway.
 		target = "this connection"
+	case e.Schema == "":
+		// A name nothing placed is spelled as the SQL wrote it. ".t9" reads as
+		// a schema whose name is empty, which is not a thing to grant on.
+		target = e.Table
 	case e.Column != "":
 		target = fmt.Sprintf("%s.%s.%s", e.Schema, e.Table, e.Column)
 	default:
@@ -282,15 +286,25 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 	}
 	tested := slices.Concat(stmt.Where, reachingOut(stmt, nil))
 	for _, table := range stmt.Tables {
+		// A name that resolved to no schema cannot be looked up: an empty
+		// schema is the wildcard in the grant index, so the lookup would match
+		// the broadest rule the role holds in any schema. It takes manage, the
+		// right a statement nobody could read already takes, rather than a row
+		// right with an empty schema that no grant can carry and no
+		// administrator can hand out.
 		if table.Schema == "" {
-			return &PermissionDeniedError{
-				Action:    action,
-				Schema:    "",
-				Table:     table.Name,
-				StartLine: table.StartLine,
-				StartCol:  table.StartCol,
-				EndCol:    table.EndCol,
+			allowed, role := compiledPermissions.manageAllowed(dbInstanceID)
+			if !allowed {
+				return &PermissionDeniedError{
+					Action:    ActionManage,
+					Table:     table.Name,
+					RoleName:  role,
+					StartLine: table.StartLine,
+					StartCol:  table.StartCol,
+					EndCol:    table.EndCol,
+				}
 			}
+			continue
 		}
 
 		named := false

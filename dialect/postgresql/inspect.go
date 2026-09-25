@@ -539,7 +539,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	if target == nil {
 		return nil
 	}
-	schema, tableName := i.resolveQualifiedName(target.Qualified_name())
+	schema, tableName := i.writeTarget(target.Qualified_name())
 	if tableName == "" {
 		return nil
 	}
@@ -868,6 +868,16 @@ func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, t
 	return schema, table
 }
 
+// writeTarget is the relation a write names. It differs from
+// resolveQualifiedName in one way: an unqualified name the metadata does not
+// know resolves to no schema, which is the answer a read of the same name
+// gets. Defaulting it would check the write against a table in the default
+// schema that may not be the one the server writes.
+func (i *Inspector) writeTarget(q pg.IQualified_nameContext) (schema, table string) {
+	schema, table = i.resolveQualifiedName(q)
+	return i.resolver.TableSchema(schema, table, q != nil && q.Indirection() != nil), table
+}
+
 // inspectUpdate analyzes an UPDATE statement.
 func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpUpdate}
@@ -877,7 +887,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	if relOptAlias == nil {
 		return nil
 	}
-	schema, tableName := i.resolveQualifiedName(relOptAlias.Relation_expr().Qualified_name())
+	schema, tableName := i.writeTarget(relOptAlias.Relation_expr().Qualified_name())
 	if tableName == "" {
 		return nil
 	}
@@ -965,7 +975,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	if relOptAlias == nil {
 		return nil
 	}
-	schema, tableName := i.resolveQualifiedName(relOptAlias.Relation_expr().Qualified_name())
+	schema, tableName := i.writeTarget(relOptAlias.Relation_expr().Qualified_name())
 	if tableName == "" {
 		return nil
 	}
@@ -1012,7 +1022,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 // rights an UPDATE ... FROM of the same shape takes.
 func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStatement {
 	target, source := mergeRelations(stmt)
-	schema, table := i.resolveQualifiedName(target.name)
+	schema, table := i.writeTarget(target.name)
 	if table == "" {
 		return nil
 	}
