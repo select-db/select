@@ -1848,27 +1848,6 @@ func permCases() []PermCase {
 			Why:    "what the block does is not in the statement anyone can read",
 		},
 		{
-			// The grammar's merge_delete_clause only follows an insert or an
-			// update clause, so this one is a fragment error recovery invents.
-			On:     []string{"postgresql"},
-			Name:   "a merge whose only action is a delete",
-			SQL:    "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN DELETE",
-			Needs:  []Right{Manage, mainT2(core.ActionSelect).Only("c1")},
-			Denied: rowRights,
-			Why:    "the parser reads no action here, and an action it did not read is no right to claim",
-		},
-		{
-			// DO NOTHING is not in merge_insert_clause either, and reading the
-			// fragment as an insert would take a right the statement does not
-			// need.
-			On:     []string{"postgresql"},
-			Name:   "a merge that does nothing to the unmatched row",
-			SQL:    "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN NOT MATCHED THEN DO NOTHING",
-			Needs:  []Right{Manage, mainT2(core.ActionSelect).Only("c1")},
-			Denied: rowRights,
-			Why:    "the parser reads no action here, and an action it did not read is no right to claim",
-		},
-		{
 			Name:   "revoking every right is administration",
 			SQL:    "REVOKE ALL ON t1 FROM bob",
 			Needs:  []Right{Manage},

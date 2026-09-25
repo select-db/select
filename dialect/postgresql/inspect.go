@@ -612,11 +612,13 @@ func (i *Inspector) assignedFields(
 	var fields []core.InspectField
 	for _, clause := range list.AllSet_clause() {
 		target := clause.Set_target()
-		if target == nil {
+		if target == nil || target.Colid() == nil {
 			continue
 		}
+		// The column, not the subscript or the field after it: a grant names
+		// c2, and SET c2[1] writes c2.
 		fields = append(fields, core.InspectField{
-			Name:   i.dialect.NormalizeIdentifier(target.GetText()),
+			Name:   i.dialect.NormalizeIdentifier(target.Colid().GetText()),
 			Table:  table,
 			Schema: schema,
 		})
@@ -884,17 +886,8 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// Collect SET columns from set_clause_list.
 	var stored []core.InspectField
 	if setList := stmt.Set_clause_list(); setList != nil {
+		result.Fields = i.assignedFields(setList, schema, tableName)
 		for _, clause := range setList.AllSet_clause() {
-			if target := clause.Set_target(); target != nil {
-				if colId := target.Colid(); colId != nil {
-					name := i.dialect.NormalizeIdentifier(colId.GetText())
-					result.Fields = append(result.Fields, core.InspectField{
-						Name:   name,
-						Table:  tableName,
-						Schema: schema,
-					})
-				}
-			}
 			if expr := clause.A_expr(); expr != nil {
 				stored = core.MergeInspectFields(stored,
 					i.testedFields(expr, whereRefs, core.Scope{CTEs: ctes}))
@@ -1088,16 +1081,16 @@ func mergeClauses(stmt pg.IMergestmtContext) (
 	if node := stmt.Merge_insert_clause(); node != nil && node.Values_clause() != nil {
 		insert = node
 	}
-	if node := stmt.Merge_delete_clause(); node != nil && spelled(node.DELETE_P()) {
+	if node := stmt.Merge_delete_clause(); node != nil && written(node.DELETE_P()) {
 		deletes = true
 	}
 	return update, insert, deletes
 }
 
-// spelled reports whether a token is in the statement somebody wrote. Error
+// written reports whether a token is in the statement somebody wrote. Error
 // recovery invents the token a rule is missing, and an invented one carries no
 // index into the stream.
-func spelled(token antlr.TerminalNode) bool {
+func written(token antlr.TerminalNode) bool {
 	return token != nil && token.GetSymbol().GetTokenIndex() >= 0
 }
 
