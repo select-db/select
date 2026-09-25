@@ -53,9 +53,19 @@ without reading it. `outer` is the construct around the read, `inner` the one
 inside it and `depth` how many there are in all, so pairs compose nesting.
 `statements` is how many statements run and whether a later one reads what an
 earlier one made, and `read_statement` which of them holds the read.
-`requires` rules out the pairs no dialect can express. Policy is not an axis:
-`agentprobe` measures every case under deny-all, the data actions without
-manage, per-table grants and manage alone.
+`requires` rules out the pairs no dialect can express.
+
+Lint is judged, not only checked. Its `defect` axis is the mistake a statement
+carries, whether or not a rule exists for it, and `none` for valid SQL. The
+expectation is what a good linter would say: the rule that should fire and the
+range it should cover, or silence. The implemented rules are listed in
+`dialect/core/tokenanalyzer/lint-rules.doc.md`. A realistic mistake that nothing reports is
+a gap to file, with the rule it needs; a diagnostic on valid SQL, a multi
+statement script or a dialect's own syntax is a false positive. Both are
+`sev:quality`.
+
+Policy is not an axis: `agentprobe` measures every case under deny-all, the
+data actions without manage, per-table grants and manage alone.
 
 ### Settled rules of the permission model
 

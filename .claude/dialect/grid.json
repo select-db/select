@@ -1,7 +1,10 @@
 {
   "shared": {
+    "operation": ["select", "insert", "update", "delete", "create_table", "create_table_as", "create_view", "alter", "drop", "truncate", "grant", "revoke", "copy", "replace", "upsert", "attach", "pragma", "vacuum", "call", "set", "explain", "analyze", "multi_update", "multi_delete", "merge", "create_trigger", "create_function", "create_procedure", "create_index", "create_schema", "select_into", "lock", "rename", "load_data", "detach", "reindex", "comment", "handler", "into_outfile", "do_block"],
     "construct": ["none", "cte", "recursive_cte", "writable_cte", "materialized_cte", "cte_reading_cte", "sibling_ctes", "derived", "lateral", "correlated_subquery", "scalar_subquery", "exists_subquery", "in_subquery", "union_branch", "union_all_branch", "intersect_branch", "except_branch", "values_list", "view_body", "ctas_source", "insert_select_source", "trigger_body", "function_body", "window", "named_window", "filter_clause", "grouping_sets", "function_argument"],
+    "depth": ["0", "1", "2", "3_plus"],
     "statements": ["single", "multi_independent", "multi_dependent", "transaction", "procedural_block", "prepared"],
+    "read_statement": ["only", "first", "middle", "last"],
     "naming": ["bare", "qualified", "aliased", "quoted", "other_case", "shadowing_cte", "shadowed_by_cte"],
     "requires": {
       "outer=none": {"inner": ["none"], "depth": ["0"]},
@@ -14,14 +17,12 @@
       "inner=function_body": {"outer": ["none"]},
       "statements=single": {"read_statement": ["only"]},
       "read_statement=only": {"statements": ["single", "procedural_block", "prepared"]}
-    },
-    "depth": ["0", "1", "2", "3_plus"],
-    "read_statement": ["only", "first", "middle", "last"]
+    }
   },
   "layers": {
     "permission": {
       "axes": {
-        "operation": ["select", "insert", "update", "delete", "create_table", "create_table_as", "create_view", "alter", "drop", "truncate", "grant", "revoke", "copy", "replace", "upsert", "attach", "pragma", "vacuum", "call", "set", "explain", "analyze", "multi_update", "multi_delete", "merge", "create_trigger", "create_function", "create_procedure", "create_index", "create_schema", "select_into", "lock", "rename", "load_data", "detach", "reindex", "comment", "handler", "into_outfile", "do_block"],
+        "operation": "operation",
         "read_site": ["none", "from", "join", "left_join", "full_join", "cross_join", "natural_join", "using_join", "self_join", "select_subquery", "where_subquery", "group_by_subquery", "having_subquery", "order_by_subquery", "limit_subquery", "returning", "upsert_predicate", "set_clause", "values"],
         "outer": "construct",
         "inner": "construct",
@@ -57,14 +58,21 @@
     },
     "lint": {
       "axes": {
-        "rule": ["agg-in-join", "agg-in-where", "ambiguous-column", "coalesce-single-arg", "coalesce-type-mismatch", "contradictory-predicate", "division-by-zero", "duplicate-column", "duplicate-in-value", "empty-in-list", "enum-value-mismatch", "having-without-group-by", "in-list-type-mismatch", "like-leading-wildcard", "like-no-wildcard", "limit-without-order-by", "missing-argument", "null-equality", "null-in-list", "null-in-not-in", "null-inequality", "offset-without-limit", "ordinal-out-of-range", "reversed-between", "subquery-order-by", "tautological-predicate", "trailing-comma", "type-mismatch-argument", "type-mismatch-arithmetic", "type-mismatch-comparison", "unknown-column", "unknown-function", "unknown-table", "unquoted-uppercase", "unused-cte", "window-in-where"],
-        "expect": ["fires", "silent"],
+        "defect": ["none", "unknown_table", "unknown_column", "unknown_function", "ambiguous_column", "type_mismatch", "implicit_cast", "wrong_arity", "null_comparison", "not_in_nullable", "aggregate_misuse", "ungrouped_column", "window_misuse", "contradictory_predicate", "tautological_predicate", "self_comparison", "division_by_zero", "cartesian_join", "unused_cte", "unused_alias", "duplicate_alias", "set_operation_column_mismatch", "insert_column_count_mismatch", "scalar_subquery_many_rows", "write_without_where", "limit_without_order", "reserved_word_identifier", "case_folding", "dialect_unsupported", "syntax_error"],
+        "operation": "operation",
+        "site": ["select_list", "from", "join_on", "where", "group_by", "having", "order_by", "limit", "returning", "set_clause", "values", "cte_body"],
         "outer": "construct",
         "inner": "construct",
         "depth": "depth",
         "statements": "statements",
         "read_statement": "read_statement",
         "naming": "naming"
+      },
+      "requires": {
+        "site=returning": {"operation": ["insert", "update", "delete", "merge", "upsert", "replace"]},
+        "site=set_clause": {"operation": ["update", "multi_update", "upsert", "merge"]},
+        "defect=write_without_where": {"operation": ["update", "delete", "multi_update", "multi_delete"]},
+        "defect=insert_column_count_mismatch": {"operation": ["insert", "replace", "upsert"]}
       }
     },
     "resolution": {
