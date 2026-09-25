@@ -373,6 +373,109 @@ func permCases() []PermCase {
 			Why:   "the body reads t1 and the filter reads t2, and neither read stands in for the other",
 		},
 
+		// --- MERGE, which writes its target with whatever its WHEN clauses
+		// name and reads the source it matches rows against. Only PostgreSQL
+		// has the statement.
+		{
+			On:     []string{"postgresql"},
+			Name:   "a merge that updates the matched row",
+			SQL:    "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN UPDATE SET c2 = t2.c3",
+			Needs:  []Right{mainT1(core.ActionUpdate), mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Denied: []Right{Manage},
+			Op:     core.InspectOpUpdate,
+			Why:    "it rewrites rows of t1 chosen by reading t1 and t2, and manage is no right over rows",
+		},
+		{
+			On:     []string{"postgresql"},
+			Name:   "a merge that inserts the unmatched row",
+			SQL:    "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN NOT MATCHED THEN INSERT (c1, c2) VALUES (t2.c1, t2.c3)",
+			Needs:  []Right{mainT1(core.ActionInsert), mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Denied: []Right{Manage},
+			Op:     core.InspectOpInsert,
+			Why:    "it adds rows to t1 and reads t1 and t2 to find which rows are missing",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a merge that updates and inserts",
+			SQL:  "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN UPDATE SET c2 = t2.c3 WHEN NOT MATCHED THEN INSERT (c1) VALUES (t2.c1)",
+			Needs: []Right{
+				mainT1(core.ActionUpdate),
+				mainT1(core.ActionInsert),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "each WHEN clause is an action of its own, and neither right stands in for the other",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a merge that deletes the matched row",
+			SQL:  "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN UPDATE SET c2 = t2.c3 WHEN MATCHED THEN DELETE",
+			Needs: []Right{
+				mainT1(core.ActionUpdate),
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "the DELETE clause removes rows of t1, which update on t1 is no right to do",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a merge from a subquery source",
+			SQL:   "MERGE INTO t1 USING (SELECT c1, c3 FROM t2) s ON t1.c1 = s.c1 WHEN MATCHED THEN UPDATE SET c2 = s.c3",
+			Needs: []Right{mainT1(core.ActionUpdate), mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Op:    core.InspectOpUpdate,
+			Why:   "the source is a query over t2, and calling it s hides nothing",
+		},
+		{
+			On:     []string{"postgresql"},
+			Name:   "a merge storing a literal",
+			SQL:    "MERGE INTO t1 a USING t2 b ON a.c1 = b.c1 WHEN MATCHED THEN UPDATE SET c2 = 'x'",
+			Needs:  []Right{mainT1(core.ActionUpdate), mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Denied: []Right{Manage},
+			Op:     core.InspectOpUpdate,
+			Why:    "it stores no value of t2, and still reads t2 to find the rows of t1 it rewrites",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a merge through aliases across schemas",
+			SQL:   "MERGE INTO t1 a USING other.t3 b ON a.c1 = b.c1 WHEN MATCHED THEN UPDATE SET c2 = b.c4",
+			Needs: []Right{mainT1(core.ActionUpdate), mainT1(core.ActionSelect), otherT3(core.ActionSelect)},
+			Op:    core.InspectOpUpdate,
+			Why:   "a and b are names for t1 and other.t3, and the merge writes the first and reads the second",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a merge on quoted names",
+			SQL:   `MERGE INTO "t1" USING "t2" ON "t1".c1 = "t2".c1 WHEN MATCHED THEN UPDATE SET c2 = "t2".c3`,
+			Needs: []Right{mainT1(core.ActionUpdate), mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Op:    core.InspectOpUpdate,
+			Why:   "quoting a name does not change which relation it is",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a merge whose source is a CTE",
+			SQL:   "WITH s AS (SELECT c1, c3 FROM t2) MERGE INTO t1 USING s ON t1.c1 = s.c1 WHEN MATCHED THEN UPDATE SET c2 = s.c3",
+			Needs: []Right{mainT1(core.ActionUpdate), mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Op:    core.InspectOpUpdate,
+			Why:   "s is the CTE body, which reads t2, and no relation of its own",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "the columns a merge writes and the columns it reads",
+			SQL:  "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN UPDATE SET c2 = t2.c3",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c3"),
+			},
+			Denied: []Right{mainT1(core.ActionUpdate), mainT2(core.ActionSelect)},
+			Op:     core.InspectOpUpdate,
+			Why:    "it writes c2, matches on c1 of both tables and stores t2.c3, and update on t1 is no right to read t1.c1",
+		},
+
 		// --- column-scoped grants. A right naming a column covers that column
 		// and no other, so each case here is the whole set of columns the
 		// statement reaches. A case that passes holding one column short of
@@ -937,6 +1040,19 @@ func permCases() []PermCase {
 			Needs: []Right{mainV1(core.ActionUpdate).Only("c5")},
 			Op:    core.InspectOpUpdate,
 			Why:   "an updatable view is written through, and the write is on the view",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a merge whose target is a view",
+			SQL:  "MERGE INTO main.v1 AS v USING main.t2 AS s ON v.c1 = s.c1 WHEN MATCHED THEN UPDATE SET c5 = 'x'",
+			Needs: []Right{
+				mainV1(core.ActionUpdate).Only("c5"),
+				mainV1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Denied: []Right{Manage},
+			Op:     core.InspectOpUpdate,
+			Why:    "the same edit spelled as an UPDATE takes the same rights on the view, so the spelling cannot change them",
 		},
 
 		// --- how a relation is named. The rule is one relation, however it is
@@ -1730,15 +1846,6 @@ func permCases() []PermCase {
 			Needs:  []Right{Manage},
 			Denied: rowRights,
 			Why:    "what the block does is not in the statement anyone can read",
-		},
-		{
-			// Nothing reads MERGE yet, so the floor is the answer.
-			On:     []string{"postgresql"},
-			Name:   "a MERGE nothing reads",
-			SQL:    "MERGE INTO t1 a USING t2 b ON a.c1 = b.c1 WHEN MATCHED THEN UPDATE SET c2 = 'x'",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "a statement the inspector cannot read takes the administration right",
 		},
 		{
 			Name:   "revoking every right is administration",
