@@ -11,10 +11,7 @@ import (
 	"net/http"
 	"strings"
 
-	"backend/internal/auth"
-
 	"github.com/klauspost/compress/zstd"
-	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine/transport"
 )
 
@@ -36,15 +33,13 @@ func NewClient(base string) *Client {
 	return &Client{base: base, tokens: NewTokens(), http: &http.Client{}}
 }
 
-// Transport runs engine calls on the cellar under grant g, for a caller whose
-// permission entries on the database are entries.
-func (c *Client) Transport(g auth.CellarGrant, entries []core.PermissionEntry) (*transport.HTTPTransport, error) {
-	perms, err := EncodePerms(entries)
+// Transport runs engine calls on the cellar under grant g.
+func (c *Client) Transport(g Grant) (*transport.HTTPTransport, error) {
+	grant, err := encodeGrant(g)
 	if err != nil {
 		return nil, err
 	}
-	g.PermSHA256 = PermHash([]byte(perms))
-	token, err := c.tokens.Token(g)
+	token, err := c.tokens.Token()
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +60,7 @@ func (c *Client) Transport(g auth.CellarGrant, entries []core.PermissionEntry) (
 			req.Header.Set(k, v)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set(PermHeader, perms)
+		req.Header.Set(GrantHeader, grant)
 		resp, err := c.http.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {

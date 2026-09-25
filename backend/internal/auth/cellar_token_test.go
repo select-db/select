@@ -21,32 +21,27 @@ func testPublicKey(t *testing.T) *rsa.PublicKey {
 }
 
 func TestCellarToken_RoundTrip(t *testing.T) {
-	want := CellarGrant{DB: "db-1", WS: "ws-1", CellarID: "local", MaxBytes: 250 << 20, PITRDays: 1, PermSHA256: "abc"}
-	tok, err := SignCellarToken(want, time.Minute)
+	tok, err := SignCellarToken(time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ValidateCellarToken(tok, testPublicKey(t))
-	if err != nil {
+	if err := ValidateCellarToken(tok, testPublicKey(t)); err != nil {
 		t.Fatal(err)
-	}
-	if got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
 func TestCellarToken_RejectsExpired(t *testing.T) {
-	tok, err := SignCellarToken(CellarGrant{DB: "db-1"}, -time.Second)
+	tok, err := SignCellarToken(-time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ValidateCellarToken(tok, testPublicKey(t)); err == nil {
+	if err := ValidateCellarToken(tok, testPublicKey(t)); err == nil {
 		t.Fatal("expired token accepted")
 	}
 }
 
 func TestCellarToken_RejectsOtherKey(t *testing.T) {
-	tok, err := SignCellarToken(CellarGrant{DB: "db-1"}, time.Minute)
+	tok, err := SignCellarToken(time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +49,7 @@ func TestCellarToken_RejectsOtherKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ValidateCellarToken(tok, &other.PublicKey); err == nil {
+	if err := ValidateCellarToken(tok, &other.PublicKey); err == nil {
 		t.Fatal("token verified with a key that did not sign it")
 	}
 }
@@ -64,10 +59,10 @@ func TestCellarToken_AudiencesDoNotCross(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ValidateCellarToken(userTok, testPublicKey(t)); err == nil {
+	if err := ValidateCellarToken(userTok, testPublicKey(t)); err == nil {
 		t.Fatal("user token accepted as a cellar token")
 	}
-	cellarTok, err := SignCellarToken(CellarGrant{DB: "db-1"}, time.Minute)
+	cellarTok, err := SignCellarToken(time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

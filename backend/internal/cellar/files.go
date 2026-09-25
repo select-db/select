@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"backend/internal/auth"
-
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
@@ -35,7 +33,7 @@ func (f *Files) Path(id string) string {
 
 // Open returns the database g names, with the caller's permissions, set up so
 // every user statement runs under the isolation rules.
-func (f *Files) Open(g auth.CellarGrant, perms core.CompiledPermissions) (engine.Conn, error) {
+func (f *Files) Open(g Grant, perms core.CompiledPermissions) (engine.Conn, error) {
 	if g.MaxBytes <= 0 {
 		return engine.Conn{}, fmt.Errorf("grant for db %s has no size cap", g.DB)
 	}

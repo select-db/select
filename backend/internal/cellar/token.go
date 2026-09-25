@@ -3,42 +3,45 @@ package cellar
 import (
 	"context"
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"backend/internal/auth"
 
 	"github.com/selectDb/dialect/core"
-	"github.com/selectDb/toolkit/cache"
 )
 
-// PermHeader carries the caller's permission entries for the database, as
-// base64url JSON; the token's Perm claim is the hash of that exact value.
-const PermHeader = "X-Cellar-Perms"
-
-// EncodePerms is the PermHeader value for entries.
-func EncodePerms(entries []core.PermissionEntry) (string, error) {
-	b, err := json.Marshal(entries)
-	if err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
+// Grant is what one cellar request may do. The cellar knows no users and reads
+// no Postgres, so the backend sends all of it in GrantHeader.
+type Grant struct {
+	DB       string                 `json:"-"` // the path's id
+	WS       string                 `json:"ws"`
+	CellarID string                 `json:"cel"`
+	MaxBytes int64                  `json:"max"`
+	PITRDays int                    `json:"pitr"`
+	Perms    []core.PermissionEntry `json:"perms"` // the caller's entries for DB
 }
 
-// PermsFrom decodes the PermHeader of a request Authenticate admitted.
-func PermsFrom(r *http.Request) ([]core.PermissionEntry, error) {
-	b, err := base64.RawURLEncoding.DecodeString(r.Header.Get(PermHeader))
-	if err != nil {
-		return nil, err
+// GrantHeader carries a Grant as base64url JSON.
+const GrantHeader = "X-Cellar-Grant"
+
+func encodeGrant(g Grant) (string, error) {
+	b, err := json.Marshal(g)
+	return base64.RawURLEncoding.EncodeToString(b), err
+}
+
+func decodeGrant(v string) (Grant, error) {
+	var g Grant
+	b, err := base64.RawURLEncoding.DecodeString(v)
+	if err == nil {
+		err = json.Unmarshal(b, &g)
 	}
-	var entries []core.PermissionEntry
-	err = json.Unmarshal(b, &entries)
-	return entries, err
+	return g, err
 }
 
 // A token lives tokenTTL and is reused for reuseFor: each KMS sign is a remote
@@ -48,85 +51,61 @@ const (
 	reuseFor = 50 * time.Second
 )
 
-// PermHash is the Perm claim for a permission payload.
-func PermHash(perms []byte) string {
-	sum := sha256.Sum256(perms)
-	return hex.EncodeToString(sum[:])
-}
-
-// Tokens signs cellar tokens for the backend, reusing each for reuseFor.
+// Tokens signs the backend's cellar token, reusing it for reuseFor.
 type Tokens struct {
-	cache *cache.Cache
-	sign  func(auth.CellarGrant, time.Duration) (string, error)
-	now   func() time.Time
+	mu         sync.Mutex
+	token      string
+	reuseUntil time.Time
+	sign       func(time.Duration) (string, error)
+	now        func() time.Time
 }
 
 func NewTokens() *Tokens {
-	return &Tokens{
-		cache: cache.New(cache.Options{TTL: reuseFor, MaxEntries: 10_000}),
-		sign:  auth.SignCellarToken,
-		now:   time.Now,
+	return &Tokens{sign: auth.SignCellarToken, now: time.Now}
+}
+
+// Token returns a signed token. Callers wait on one sign rather than each
+// making their own.
+func (t *Tokens) Token() (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.now().Before(t.reuseUntil) {
+		return t.token, nil
 	}
-}
-
-// signedToken carries its own deadline: the cache's TTL restarts on every hit,
-// so on its own it would keep serving a token past its expiry.
-type signedToken struct {
-	token      string
-	reuseUntil time.Time
-}
-
-// Token returns a signed token for g, reusing a recent one for the same grant.
-func (t *Tokens) Token(g auth.CellarGrant) (string, error) {
-	b, err := json.Marshal(g)
+	reuseUntil := t.now().Add(reuseFor) // taken before signing, so a slow sign only shortens reuse
+	tok, err := t.sign(tokenTTL)
 	if err != nil {
 		return "", err
 	}
-	key := string(b)
-	create := func() (any, error) {
-		reuseUntil := t.now().Add(reuseFor) // taken before signing, so a slow sign only shortens reuse
-		tok, err := t.sign(g, tokenTTL)
-		return signedToken{token: tok, reuseUntil: reuseUntil}, err
-	}
-	v, err := t.cache.GetOrCreate(key, create)
-	if err == nil && !t.now().Before(v.(signedToken).reuseUntil) {
-		t.cache.Delete(key)
-		v, err = t.cache.GetOrCreate(key, create)
-	}
-	if err != nil {
-		return "", err
-	}
-	return v.(signedToken).token, nil
+	t.token, t.reuseUntil = tok, reuseUntil
+	return tok, nil
 }
 
 type grantKey struct{}
 
-// GrantFrom returns the grant Authenticate verified for this request.
-func GrantFrom(ctx context.Context) auth.CellarGrant {
-	g, _ := ctx.Value(grantKey{}).(auth.CellarGrant)
+// GrantFrom returns the grant Authenticate admitted for this request.
+func GrantFrom(ctx context.Context) Grant {
+	g, _ := ctx.Value(grantKey{}).(Grant)
 	return g
 }
 
-// Authenticate admits only a valid token for this cellar and the path's db,
-// signed over the PermHeader it carries. Refusals are 500s; the reason is logged.
+// Authenticate admits only the backend, with a grant for this cellar. Refusals
+// are 500s; the reason is logged.
 func Authenticate(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			db := r.PathValue("id")
-			g, err := auth.ValidateCellarToken(auth.ExtractBearerToken(r.Header.Get("Authorization")), pub)
-			var reason string
-			switch {
-			case err != nil:
-				reason = err.Error()
-			case g.DB != db:
-				reason = "token is for db " + g.DB
-			case g.CellarID != cellarID:
-				reason = "token is for cellar " + g.CellarID
-			case g.PermSHA256 != PermHash([]byte(r.Header.Get(PermHeader))):
-				reason = "permissions do not match the token"
+			var g Grant
+			err := auth.ValidateCellarToken(auth.ExtractBearerToken(r.Header.Get("Authorization")), pub)
+			if err == nil {
+				g, err = decodeGrant(r.Header.Get(GrantHeader))
 			}
-			if reason != "" {
-				log.Printf("cellar: refused request for db %s: %s", db, reason)
+			if err == nil && g.CellarID != cellarID {
+				// The db moved to another cellar: never let two write it.
+				err = errors.New("grant is for cellar " + g.CellarID)
+			}
+			g.DB = r.PathValue("id")
+			if err != nil {
+				log.Printf("cellar: refused request for db %s: %v", g.DB, err)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}

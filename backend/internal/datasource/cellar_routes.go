@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 
-	"backend/internal/auth"
 	"backend/internal/authz"
 	"backend/internal/cellar"
 
@@ -30,13 +29,9 @@ func CellarHandler(files *cellar.Files, pub *rsa.PublicKey, cellarID string) htt
 
 // openFile opens the database the request's grant names, with the caller's
 // permissions and its schema.
-func openFile(r *http.Request, files *cellar.Files, noCache bool) (engine.Conn, auth.CellarGrant, error) {
+func openFile(r *http.Request, files *cellar.Files, noCache bool) (engine.Conn, cellar.Grant, error) {
 	g := cellar.GrantFrom(r.Context())
-	entries, err := cellar.PermsFrom(r)
-	if err != nil {
-		return engine.Conn{}, g, err
-	}
-	conn, err := files.Open(g, authz.Compile(entries))
+	conn, err := files.Open(g, authz.Compile(g.Perms))
 	if err != nil {
 		return engine.Conn{}, g, err
 	}

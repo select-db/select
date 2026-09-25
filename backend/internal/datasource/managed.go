@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"backend/internal/auth"
 	"backend/internal/authz"
 	"backend/internal/cellar"
 
@@ -37,13 +36,13 @@ func onCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (
 		return nil, engine.DBInstance{}, ErrCellarOff
 	}
 	plan := plans[ds.Plan]
-	t, err := cellarClient.Transport(auth.CellarGrant{
-		DB:       id,
+	t, err := cellarClient.Transport(cellar.Grant{
 		WS:       workspaceID,
 		CellarID: ds.CellarID,
 		MaxBytes: plan.maxBytes,
 		PITRDays: plan.pitrDays,
-	}, authz.EntriesOn(r, id))
+		Perms:    authz.EntriesOn(r, id),
+	})
 	if err != nil {
 		return nil, engine.DBInstance{}, err
 	}

@@ -27,8 +27,8 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
 
 1. The backend checks who is calling and what they may do, as for any
    proxified datasource.
-2. It signs a 60s token for one db and forwards the request over the existing
-   engine HTTP transport.
+2. It forwards the request over the existing engine HTTP transport, with a
+   service token and the grant (workspace, limits, permissions) in headers.
 3. The cellar checks the token, wakes the db if cold, runs the statement under
    its limits and streams the result back.
 4. Litestream streams every write to the bucket. The bucket is the truth, the
@@ -62,7 +62,7 @@ Settled. Reopen with a reason, not a preference.
 
 - The plan is a new `workspace.plan`, set by hand until billing exists.
 - The backend checks totals and counts on create and fork.
-- The per-db cap and the window reach the cellar in the token (`max`,
+- The per-db cap and the window reach the cellar in the grant (`max`,
   `pitr`). The cellar applies `max` as `max_page_count` on open; a db over a
   lowered cap keeps its data and stops growing. It keeps the last `pitr` seen
   per db and uses 7 days when it does not know, so history is never cut early.
@@ -74,7 +74,7 @@ Settled. Reopen with a reason, not a preference.
 - Concurrency: 10 statements in flight per workspace. More wait for a slot;
   the wait counts against the same 60s.
 - Both are constants on the cellar, enforced by one `InFlight` middleware next
-  to `RateLimit`, keyed by the token's `ws`. Query-seconds per workspace are
+  to `RateLimit`, keyed by the grant's `ws`. Query-seconds per workspace are
   recorded, not enforced.
 
 ### Routes
@@ -99,19 +99,18 @@ Settled. Reopen with a reason, not a preference.
 - Deleting a db deletes roles scoped only to it and strips its rules from
   other roles.
 
-### Cellar token
-- `CellarClaims{db, ws, cel, max, pitr, perm}`, audience `selectdb-cellar`,
-  60s, signed with the existing JWT signer (`auth/jwt.go`). The backend reuses
-  a token for about 50s while nothing in it changes, because each KMS sign is
-  a remote call.
-- Permissions: the backend sends the caller's permission entries for the db in
-  the `X-Cellar-Perms` header, and `perm` is the sha256 of those exact bytes.
-  The cellar compiles them and runs `StreamLocal` unchanged, so the query
-  check and column masking are the same code as for proxified datasources.
-- The cellar holds only the public key. It rejects a token whose `db` differs
-  from the path, whose `cel` is not itself, or whose `perm` does not match
-  the header. User tokens have another
-  audience and never open a db.
+### Backend to cellar
+- The cellar trusts the backend, on a private network. The backend proves
+  itself with one service JWT: audience `selectdb-cellar`, 60s, signed with
+  the existing JWT signer (`auth/jwt.go`) and reused for 50s, because each KMS
+  sign is a remote call. The cellar holds only the public key. User tokens
+  have another audience and never open a db.
+- Everything else is plain request data. The db is the path's id; the grant
+  `{ws, cel, max, pitr, perms}` is base64url JSON in `X-Cellar-Grant`.
+- `perms` are the caller's permission entries for the db. The cellar compiles
+  them and runs `StreamLocal` unchanged, so the query check and column
+  masking are the same code as for proxified datasources.
+- The cellar refuses a grant whose `cel` is not itself.
 
 ### Storage
 - Replicas live at `dbs/{db_id}/`, never under a cellar, so moving or
@@ -168,7 +167,7 @@ id, both sides log it, the caller sees it as `ref`.
 ### Scaling
 - Any number of backends: wake dedup and limits live on the cellar.
 - More cellars later: each row has a `cellar_id`; a move is mark `moving`,
-  evict on the old cellar, flip `cellar_id`. The token's `cel` fences a stale
+  evict on the old cellar, flip `cellar_id`. The grant's `cel` fences a stale
   route, so two cellars never write one replica.
 
 ### Environments
@@ -203,15 +202,15 @@ Needs 0.
       in-process. The cellar serves the backend's own datasource routes, and
       the backend reaches it through `engine.Client` as a proxified instance,
       so REST and MCP share one path.
-- [x] `CellarClaims` signing with a reuse cache in the backend
-      (`cellar.Tokens`, on `toolkit/cache`), verification in the cellar
-      (`cellar.Authenticate` middleware, which puts the grant in the context
-      for `InFlight` to key on).
+- [x] Service token signed and reused by the backend (`cellar.Tokens`), and
+      checked with the grant header by the cellar (`cellar.Authenticate`
+      middleware, which puts the grant in the context for `InFlight` to key
+      on).
 - [x] Isolation: pragmas in the DSN, PRAGMA allowlist, and
       `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement
       (`engine.Conn.Prepare`). The engine pools connections and the driver has
       no per-connection hook that can set limits, so per statement is the only
-      fail-closed place. `max_page_count` from the token is set there too.
+      fail-closed place. `max_page_count` from the grant is set there too.
 - [x] `InFlight` middleware (`middlewares.InFlight`).
 - [x] 60s cap and query-seconds recorded on the cellar execute route
       (`cellar.Admit`; seconds are logged per workspace for now).
@@ -219,9 +218,9 @@ Needs 0.
       lives in the context so `ref` matches the request log; MCP's mid-stream
       `collectSink` error goes through the same classification.
 - [x] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
-      every non-allowlisted PRAGMA); token rejection (expired, wrong db, wrong
-      cellar, unsigned, user token); no error body contains a path, bucket or
-      address.
+      every non-allowlisted PRAGMA); token rejection (expired, unsigned, other
+      key, user token) and a grant for another cellar; no error body contains
+      a path, bucket or address.
 
 ### 2. Create, fork, download, delete
 Needs 1.
