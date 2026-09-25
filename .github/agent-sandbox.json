@@ -1,0 +1,34 @@
+{
+  "outputStyle": "default",
+  "permissions": {
+    "deny": ["Read(//proc/*/environ)", "Read(//proc/*/cmdline)", "Read(~/.ssh/**)"]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "network": { "strictAllowlist": true },
+    "filesystem": {
+      "allowWrite": ["~/go", "~/.cache", "/home/runner/work/_temp/setup-uv-cache"]
+    },
+    "credentials": {
+      "envVars": [
+        { "name": "GH_TOKEN", "mode": "deny" },
+        { "name": "GITHUB_TOKEN", "mode": "deny" },
+        { "name": "OVERRIDE_GITHUB_TOKEN", "mode": "deny" },
+        { "name": "DEFAULT_WORKFLOW_TOKEN", "mode": "deny" },
+        { "name": "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "mode": "deny" },
+        { "name": "ACTIONS_ID_TOKEN_REQUEST_URL", "mode": "deny" },
+        { "name": "ACTIONS_RUNTIME_TOKEN", "mode": "deny" },
+        { "name": "ACTIONS_RESULTS_URL", "mode": "deny" },
+        { "name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny" },
+        { "name": "ANTHROPIC_API_KEY", "mode": "deny" }
+      ]
+    }
+  },
+  "hooks": {
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "\"$AGENT_TOOLS/publish.sh\"", "timeout": 180 }] }
+    ]
+  }
+}

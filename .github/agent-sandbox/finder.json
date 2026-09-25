@@ -1,9 +1,0 @@
-{
-  "sandbox": {
-    "filesystem": {
-      "denyWrite": [
-        ".finder-memory/.git"
-      ]
-    }
-  }
-}
