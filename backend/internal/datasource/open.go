@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
+	"backend/internal/datasource/cellar"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
@@ -32,7 +33,7 @@ type Opened struct {
 }
 
 // Open resolves the datasource id for the request's caller. Errors go through
-// OpenError or, in MCP, are matched on ErrNotFound and ErrCellarOff.
+// OpenError or, in MCP, are matched on ErrNotFound and cellar.ErrOff.
 func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
 	if err != nil {
@@ -40,7 +41,10 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	}
 	o := Opened{ID: id, WorkspaceID: workspaceID, DS: ds}
 	if ds.CellarID != "" {
-		o.Client, o.Inst, err = onCellar(r, id, workspaceID, ds)
+		o.Client, o.Inst, err = cellar.Engine(r, cellar.Datasource{
+			ID: id, WorkspaceID: workspaceID, DBType: ds.DBType,
+			CellarID: ds.CellarID, Plan: ds.Plan, Members: ds.Members,
+		})
 		return o, err
 	}
 	db, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
@@ -89,9 +93,9 @@ func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return http.StatusNotFound, err.Error()
-	case errors.Is(err, ErrCellarOff):
+	case errors.Is(err, cellar.ErrOff):
 		return http.StatusNotImplemented, err.Error()
-	case errors.Is(err, ErrCellarUnavailable):
+	case errors.Is(err, cellar.ErrUnavailable):
 		return http.StatusServiceUnavailable, err.Error()
 	case errors.As(err, &cfgErr):
 		return http.StatusBadGateway, cfgErr.Msg

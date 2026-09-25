@@ -1,4 +1,4 @@
-package datasource
+package cellar
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"backend/internal/auth"
-	"backend/internal/cellar"
+	server "backend/internal/cellar"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/selectDb/dialect/engine/transport"
@@ -22,24 +22,24 @@ import (
 
 var zstdDecoder, _ = zstd.NewReader(nil)
 
-// ErrCellarUnavailable is a cellar the backend could not reach. The cause,
-// which names the cellar's address, is only logged.
-var ErrCellarUnavailable = errors.New("managed database temporarily unavailable, retry")
+// ErrUnavailable is a cellar the backend could not reach. The cause, which
+// names the cellar's address, is only logged.
+var ErrUnavailable = errors.New("managed database temporarily unavailable, retry")
 
-// CellarClient is the backend's side of one cellar.
-type CellarClient struct {
+// Client is the backend's side of one cellar.
+type Client struct {
 	base   string
-	tokens *cellarTokens
+	tokens *tokens
 	http   *http.Client
 }
 
-// NewCellarClient calls the cellar at base, an http(s) URL.
-func NewCellarClient(base string) *CellarClient {
-	return &CellarClient{base: base, tokens: newCellarTokens(), http: &http.Client{}}
+// NewClient calls the cellar at base, an http(s) URL.
+func NewClient(base string) *Client {
+	return &Client{base: base, tokens: newTokens(), http: &http.Client{}}
 }
 
 // Transport runs engine calls on the cellar under grant.
-func (c *CellarClient) Transport(grant cellar.Grant) (*transport.HTTPTransport, error) {
+func (c *Client) Transport(grant server.Grant) (*transport.HTTPTransport, error) {
 	header, err := grant.Encode()
 	if err != nil {
 		return nil, err
@@ -65,14 +65,14 @@ func (c *CellarClient) Transport(grant cellar.Grant) (*transport.HTTPTransport, 
 			req.Header.Set(k, v)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set(cellar.GrantHeader, header)
+		req.Header.Set(server.GrantHeader, header)
 		resp, err := c.http.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
 			log.Printf("cellar: %s %s: %v", method, endpoint, err)
-			return nil, ErrCellarUnavailable
+			return nil, ErrUnavailable
 		}
 		if resp.StatusCode >= 400 {
 			defer func() { _ = resp.Body.Close() }()
@@ -119,8 +119,8 @@ const (
 	reuseFor = 50 * time.Second
 )
 
-// cellarTokens signs the backend's cellar token, reusing it for reuseFor.
-type cellarTokens struct {
+// tokens signs the backend's cellar token, reusing it for reuseFor.
+type tokens struct {
 	mu         sync.Mutex
 	token      string
 	reuseUntil time.Time
@@ -128,16 +128,16 @@ type cellarTokens struct {
 	now        func() time.Time
 }
 
-func newCellarTokens() *cellarTokens {
-	return &cellarTokens{
-		sign: func(ttl time.Duration) (string, error) { return auth.Sign(auth.CustomClaims{}, cellar.Audience, ttl) },
+func newTokens() *tokens {
+	return &tokens{
+		sign: func(ttl time.Duration) (string, error) { return auth.Sign(auth.CustomClaims{}, server.Audience, ttl) },
 		now:  time.Now,
 	}
 }
 
 // Token returns a signed token. Callers wait on one sign rather than each
 // making their own.
-func (t *cellarTokens) Token() (string, error) {
+func (t *tokens) Token() (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.now().Before(t.reuseUntil) {

@@ -12,7 +12,7 @@ import (
 
 	"backend/internal/auth"
 	"backend/internal/cellar"
-	"backend/internal/datasource"
+	managed "backend/internal/datasource/cellar"
 )
 
 // startCellar stops the server on a CELLAR it cannot parse, and sends managed
@@ -34,7 +34,7 @@ func startCellar() {
 			log.Fatalf("cellar: %v", err)
 		}
 	}
-	datasource.UseCellar(datasource.NewCellarClient(v))
+	managed.Use(managed.NewClient(v))
 }
 
 func serveLocalCellar() (string, error) {

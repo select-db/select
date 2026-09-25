@@ -1,4 +1,4 @@
-package datasource
+package cellar
 
 import (
 	"fmt"
@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-func TestCellarTokens_RenewsBeforeExpiryUnderSteadyUse(t *testing.T) {
+func TestTokens_RenewsBeforeExpiryUnderSteadyUse(t *testing.T) {
 	clock := time.Unix(0, 0)
 	signed := 0
-	tk := newCellarTokens()
+	tk := newTokens()
 	tk.now = func() time.Time { return clock }
 	tk.sign = func(time.Duration) (string, error) {
 		signed++

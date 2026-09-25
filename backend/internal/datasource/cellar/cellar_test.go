@@ -1,4 +1,4 @@
-package datasource_test
+package cellar_test
 
 import (
 	"database/sql"
@@ -11,8 +11,8 @@ import (
 
 	"backend/e2e"
 	"backend/internal/auth"
-	"backend/internal/cellar"
-	"backend/internal/datasource"
+	server "backend/internal/cellar"
+	"backend/internal/datasource/cellar"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine/arrowstream"
@@ -49,10 +49,10 @@ func newManagedDB(t *testing.T) managedDB {
 
 	pub, err := auth.PublicKey()
 	require.NoError(t, err)
-	srv := httptest.NewServer(cellar.Handler(cellar.NewFiles(dir), pub, "local"))
+	srv := httptest.NewServer(server.Handler(server.NewFiles(dir), pub, "local"))
 	t.Cleanup(srv.Close)
-	datasource.UseCellar(datasource.NewCellarClient(srv.URL))
-	t.Cleanup(func() { datasource.UseCellar(nil) })
+	cellar.Use(cellar.NewClient(srv.URL))
+	t.Cleanup(func() { cellar.Use(nil) })
 	return managedDB{f: f, id: id, dir: dir}
 }
 
@@ -139,7 +139,7 @@ func TestManagedDatabaseRefusesHostileSQL(t *testing.T) {
 
 func TestManagedDatabaseWithoutCellar(t *testing.T) {
 	m := newManagedDB(t)
-	datasource.UseCellar(nil)
+	cellar.Use(nil)
 	rec := e2e.Do(t, m.f.H, http.MethodPost, "/datasources/"+m.id+"/execute", m.f.Actor.Token,
 		map[string]any{"workspace_id": m.f.Actor.WorkspaceID, "sql": "SELECT 1"})
 	require.Equal(t, http.StatusNotImplemented, rec.Code)
@@ -150,7 +150,7 @@ func TestManagedDatabaseWithCellarDown(t *testing.T) {
 	m := newManagedDB(t)
 	down := httptest.NewServer(http.NotFoundHandler())
 	down.Close()
-	datasource.UseCellar(datasource.NewCellarClient(down.URL))
+	cellar.Use(cellar.NewClient(down.URL))
 
 	_, errMsg := m.run(t, "SELECT 1")
 	require.Contains(t, errMsg, "unavailable")
