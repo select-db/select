@@ -11,18 +11,16 @@ import (
 )
 
 // Every statement gets at most statementTimeout, including its wait for one of
-// the workspace's inFlightPerWorkspace slots. Neither is read from the request.
-const (
-	statementTimeout     = 60 * time.Second
-	inFlightPerWorkspace = 10
-)
+// the workspace's slots. The cap is never read from the request.
+const statementTimeout = 60 * time.Second
 
 // Admit wraps every cellar route: authenticate, cap the time, take a slot, and
 // log the time spent per workspace.
 func Admit(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.Handler {
 	authenticate := Authenticate(pub, cellarID)
-	slot := middlewares.InFlight(inFlightPerWorkspace, func(r *http.Request) string {
-		return GrantFrom(r.Context()).WS
+	slot := middlewares.InFlight(func(r *http.Request) (string, int) {
+		g := GrantFrom(r.Context())
+		return g.WS, g.Slots
 	})
 	return func(next http.Handler) http.Handler {
 		limited := slot(next)

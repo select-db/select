@@ -21,6 +21,7 @@ type Grant struct {
 	WS       string                 `json:"ws"`
 	CellarID string                 `json:"cel"`
 	MaxBytes int64                  `json:"max"`
+	Slots    int                    `json:"slots"` // statements the workspace may run at once
 	Perms    []core.PermissionEntry `json:"perms"` // the caller's entries for DB
 }
 

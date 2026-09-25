@@ -71,11 +71,11 @@ Settled. Reopen with a reason, not a preference.
 ### Limits on every cellar statement
 - Time: capped at 60s, enforced by the cellar. The cap is never read from
   the request; a caller's own timeout can only shorten it.
-- Concurrency: 10 statements in flight per workspace. More wait for a slot;
-  the wait counts against the same 60s.
-- Both are constants on the cellar, enforced by one `InFlight` middleware next
-  to `RateLimit`, keyed by the grant's `ws`. Query-seconds per workspace are
-  recorded, not enforced.
+- Concurrency: `max(4, 2 x members)` statements in flight per workspace. The
+  backend counts members and sends the result as the grant's `slots`; the
+  cellar enforces it with the `InFlight` middleware, keyed by the grant's `ws`.
+  More wait for a slot; the wait counts against the same 60s.
+- Query-seconds per workspace are recorded, not enforced.
 
 ### Routes
 - `POST /datasources`: create any datasource type, server-generated id. Same

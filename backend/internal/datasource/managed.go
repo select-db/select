@@ -36,6 +36,7 @@ func onCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (
 		WS:       workspaceID,
 		CellarID: ds.CellarID,
 		MaxBytes: maxBytes[ds.Plan],
+		Slots:    max(4, 2*ds.Members),
 		Perms:    authz.EntriesOn(r, id),
 	})
 	if err != nil {

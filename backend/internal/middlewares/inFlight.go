@@ -7,18 +7,25 @@ import (
 	"sync"
 )
 
-// InFlight runs at most limit requests per key; the rest wait, and get 408 if
-// their deadline passes first. Keys live as long as the process: keep them bounded.
-func InFlight(limit int, key func(*http.Request) string) func(http.Handler) http.Handler {
+// InFlight runs at most limit requests per key, both from key(r); the rest
+// wait, and get 408 if their deadline passes first. A key whose limit changes
+// gets new slots while its old ones drain. Keys live as long as the process:
+// keep them bounded.
+func InFlight(key func(*http.Request) (string, int)) func(http.Handler) http.Handler {
+	type slotKey struct {
+		key   string
+		limit int
+	}
 	var mu sync.Mutex
-	slots := map[string]chan struct{}{}
-	slotsFor := func(k string) chan struct{} {
+	slots := map[slotKey]chan struct{}{}
+	slotsFor := func(k string, limit int) chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
-		s, ok := slots[k]
+		sk := slotKey{k, limit}
+		s, ok := slots[sk]
 		if !ok {
 			s = make(chan struct{}, limit)
-			slots[k] = s
+			slots[sk] = s
 		}
 		return s
 	}
