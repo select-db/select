@@ -24,6 +24,9 @@ const (
 	ActionUpdate = "update"
 	ActionDelete = "delete"
 	ActionSee    = "see"
+	// ActionNone is what a statement naming no object and moving no row
+	// requires. No grant carries it, so no policy can be written around it.
+	ActionNone = ""
 )
 
 const MaskedValue = "*****"
@@ -201,9 +204,11 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 	action := operationToAction(stmt.Operation)
 
 	var err error
-	if action == ActionManage {
+	switch action {
+	case ActionNone:
+	case ActionManage:
 		err = checkInstance(stmt, dbInstanceID, compiledPermissions)
-	} else {
+	default:
 		err = checkTables(stmt, action, dbInstanceID, compiledPermissions)
 	}
 	if err != nil {
@@ -612,8 +617,13 @@ func fieldOutputName(f InspectField, driverCol string) bool {
 // Only the four operations we fully resolve down to columns are data actions;
 // everything else, the unknown statement included, needs manage. New operations
 // are refused until someone classifies them, rather than admitted by silence.
+//
+// Transaction control is the one operation that needs nothing: it names no
+// object, so there is nothing for a right on it to protect.
 func operationToAction(op InspectOperation) string {
 	switch op {
+	case InspectOpTransaction:
+		return ActionNone
 	case InspectOpSelect:
 		return ActionSelect
 	case InspectOpInsert:

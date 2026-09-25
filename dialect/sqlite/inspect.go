@@ -291,6 +291,13 @@ func (i *Inspector) dispatch(stmt sqlite.ISql_stmtContext) (func() *core.Inspect
 	if alterStmt := stmt.Alter_table_stmt(); alterStmt != nil {
 		return func() *core.InspectStatement { return i.inspectAlterTable(alterStmt) }, nil
 	}
+	if bounds := stmt.Begin_stmt() != nil || stmt.Commit_stmt() != nil || stmt.Rollback_stmt() != nil ||
+		stmt.Savepoint_stmt() != nil || stmt.Release_stmt() != nil; bounds {
+		return func() *core.InspectStatement {
+			read := core.TransactionStatement()
+			return &read
+		}, nil
+	}
 
 	return nil, nil
 }
