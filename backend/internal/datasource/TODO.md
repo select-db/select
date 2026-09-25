@@ -62,8 +62,8 @@ Settled. Reopen with a reason, not a preference.
 
 - The plan is a new `workspace.plan`, set by hand until billing exists.
 - The backend checks totals and counts on create and fork.
-- The per-db cap and the window reach the cellar in the grant (`max`,
-  `pitr`). The cellar applies `max` as `max_page_count` on open; a db over a
+- The per-db cap reaches the cellar in the grant (`max`), and the window
+  (`pitr`) will with Litestream. The cellar applies `max` as `max_page_count` on open; a db over a
   lowered cap keeps its data and stops growing. It keeps the last `pitr` seen
   per db and uses 7 days when it does not know, so history is never cut early.
 - Raise limits with data, never lower them.
@@ -100,7 +100,8 @@ Settled. Reopen with a reason, not a preference.
   other roles.
 
 ### Backend to cellar
-- The cellar trusts the backend, on a private network. The backend proves
+- The cellar trusts the backend, on a private network. The token names no
+  db, so a leaked one opens any db on the cellar until it expires. The backend proves
   itself with one service JWT: audience `selectdb-cellar`, 60s, signed with
   the existing JWT signer (`auth/jwt.go`) and reused for 50s, because each KMS
   sign is a remote call. The cellar holds only the public key. User tokens

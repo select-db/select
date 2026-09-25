@@ -58,6 +58,7 @@ func TestAuthenticate(t *testing.T) {
 		{"other key", signWith(t, other), goodHeader, false},
 		{"other cellar", signWith(t, priv), elsewhere, false},
 		{"no grant", signWith(t, priv), "", false},
+		{"malformed grant", signWith(t, priv), "not base64!", false},
 	}
 	for _, c := range cases {
 		seen = Grant{}

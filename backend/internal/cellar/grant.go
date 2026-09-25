@@ -68,7 +68,7 @@ func Authenticate(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.H
 				refuse(err)
 				return
 			}
-			if g.CellarID != cellarID {
+			if g.CellarID != cellarID || cellarID == "" {
 				// The db moved to another cellar: never let two write it.
 				refuse(errors.New("grant is for cellar " + g.CellarID))
 				return

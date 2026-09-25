@@ -35,7 +35,7 @@ func NewClient(base string) *Client {
 
 // Transport runs engine calls on the cellar under grant g.
 func (c *Client) Transport(g Grant) (*transport.HTTPTransport, error) {
-	grant, err := encodeGrant(g)
+	header, err := encodeGrant(g)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (c *Client) Transport(g Grant) (*transport.HTTPTransport, error) {
 			req.Header.Set(k, v)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set(GrantHeader, grant)
+		req.Header.Set(GrantHeader, header)
 		resp, err := c.http.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
