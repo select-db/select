@@ -52,8 +52,7 @@ starting work; the run is killed 10 minutes later).
    `other.t3`) that realises every value of the position, with its expectation,
    in `.finder-work/batch-<n>.jsonl`. A position can take several statements, a
    CTE inside a CTE, a lateral join: write what it says, in a dialect's own
-   syntax where needed. `outer` is the construct directly around the read and
-   `inner` the one inside it. Drop SQL already in `known.jsonl`. Where one
+   syntax where needed. The axes are described in the method's "The grid". Drop SQL already in `known.jsonl`. Where one
    dialect cannot express a position, its row is `skipped`. Where none can,
    find the one pair of values that makes it impossible and record that pair
    alone; `next` never offers it again. A rule that holds for a whole value

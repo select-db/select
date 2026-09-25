@@ -23,8 +23,16 @@ LAYERS = {
 
 def rows():
     paths = [os.environ.get("FINDER_CASES", ""), ".finder-work/cases.jsonl"]
-    return [json.loads(line) for p in map(Path, filter(None, paths)) if p.is_file()
-            for line in p.read_text().splitlines() if line.strip()]
+    out = []
+    for p in map(Path, filter(None, paths)):
+        for line in p.read_text().splitlines() if p.is_file() else ():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                out.append(row)
+    return out
 
 
 def pair(a, b):
@@ -37,7 +45,7 @@ def pairs(position):
 
 def valid(layer, position):
     axes = LAYERS.get(layer, {})
-    return bool(position) and all(v in axes.get(k, ()) for k, v in position.items())
+    return isinstance(position, dict) and bool(position) and all(v in axes.get(k, ()) for k, v in position.items())
 
 
 def forbidden(layer, p):
@@ -52,24 +60,23 @@ def forbidden(layer, p):
 def coverage(layer, cases):
     items = [(axis, v) for axis, values in sorted(LAYERS[layer].items()) for v in values]
     possible = {p for p in itertools.combinations(items, 2) if p[0][0] != p[1][0] and not forbidden(layer, p)}
-    tried = set()
+    tried, ruled = set(), 0
     for r in cases:
         if r.get("layer") != layer:
             continue
         if r.get("outcome") == "impossible" and len(r.get("impossible", {})) == 2 and valid(layer, r["impossible"]):
             possible -= pairs(r["impossible"])
+            ruled += 1
         elif r.get("outcome") in ("pass", "mismatch", "skipped") and valid(layer, r.get("position")):
             tried |= pairs(r["position"])
-    return possible, tried
+    return possible, tried, ruled
 
 
 def next_positions(layer, n, cases):
-    possible, tried = coverage(layer, cases)
+    possible, tried, _ = coverage(layer, cases)
     todo = possible - tried
     axes = sorted(LAYERS[layer].items())
-    for _ in range(n):
-        if not todo:
-            return
+    while todo and n:
         # Greedy per axis, so each position covers many untried pairs at once.
         seed = min(todo)
         pos = dict(seed)
@@ -84,14 +91,15 @@ def next_positions(layer, n, cases):
         if len(pos) == len(axes):
             todo -= pairs(pos)
             print(json.dumps(pos))
+            n -= 1
 
 
 if __name__ == "__main__":
     cases = rows()
     if sys.argv[1:2] == ["status"]:
         for layer in LAYERS:
-            possible, tried = coverage(layer, cases)
-            print(f"{layer}: {len(possible & tried)}/{len(possible)} pairs tried")
+            possible, tried, ruled = coverage(layer, cases)
+            print(f"{layer}: {len(possible & tried)}/{len(possible)} pairs tried, {ruled} ruled impossible by the finder")
     elif sys.argv[1:2] == ["next"] and len(sys.argv) == 4 and sys.argv[2] in LAYERS:
         next_positions(sys.argv[2], int(sys.argv[3]), cases)
     else:

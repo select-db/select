@@ -21,9 +21,7 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: write
-  issues: write
+permissions: {}
 
 concurrency:
   group: dialect-finder
@@ -33,6 +31,9 @@ jobs:
     name: Find
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    permissions:
+      contents: read
+      issues: write
     env:
       # Assigned and mentioned on what the finder files.
       FINDER_NOTIFY: Arthur-Mesplede
@@ -56,8 +57,8 @@ jobs:
         run: |
           mkdir -p .finder-work "$RUNNER_TEMP/finder-memory"
           git -C "$RUNNER_TEMP/finder-memory" init -q
-          git -C "$RUNNER_TEMP/finder-memory" fetch -q --depth=1 "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" agent/finder-memory &&
-            git -C "$RUNNER_TEMP/finder-memory" checkout -q FETCH_HEAD
+          git -C "$RUNNER_TEMP/finder-memory" fetch -q --depth=1 "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" agent/finder-memory
+          git -C "$RUNNER_TEMP/finder-memory" checkout -q FETCH_HEAD
           echo "FINDER_CASES=$RUNNER_TEMP/finder-memory/cases.jsonl" >> "$GITHUB_ENV"
           dialect/agentprobe -export-cases > .finder-work/known.jsonl
           gh issue list --label agent:finder --state all --limit 1000 \
@@ -101,16 +102,43 @@ jobs:
         if: always() && env.FINDER_DRY_RUN != '1' && steps.find.outcome != 'skipped'
         run: $SCRIPTS/file.sh
 
-      - name: Save the tried cases
-        if: always() && env.FINDER_DRY_RUN != '1' && hashFiles('.finder-work/cases.jsonl') != ''
-        working-directory: ${{ runner.temp }}/finder-memory
-        run: |
-          # grid.py ignores rows off the grid, so they are kept as they are.
-          cat "$GITHUB_WORKSPACE/.finder-work/cases.jsonl" >> cases.jsonl
-          git add cases.jsonl
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "run $GITHUB_RUN_ID"
-          git push -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" HEAD:refs/heads/agent/finder-memory
-
       - name: Report
         if: always()
         run: cat .finder-work/summary.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "The agent wrote no summary." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && env.FINDER_DRY_RUN != '1'
+        with:
+          name: tried-cases
+          path: .finder-work/cases.jsonl
+          if-no-files-found: ignore
+
+  # Its own job, so the agent's never holds a token that can push.
+  save:
+    name: Save the tried cases
+    needs: find
+    if: always() && needs.find.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/finder-memory
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        id: download
+        continue-on-error: true
+        with:
+          name: tried-cases
+          path: ${{ runner.temp }}/new
+      - if: steps.download.outcome == 'success'
+        run: |
+          # Only JSON objects, so no line the agent wrote can break a later run.
+          jq -cR 'fromjson? | select(type == "object")' "$RUNNER_TEMP/new/cases.jsonl" >> cases.jsonl
+          git add cases.jsonl
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "run $GITHUB_RUN_ID"
+          for delay in 2 4 8 0; do
+            git push -q origin HEAD:agent/finder-memory && break
+            [ "$delay" = 0 ] && exit 1
+            sleep "$delay"
+          done
