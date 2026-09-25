@@ -27,6 +27,10 @@ def rows():
             for line in p.read_text().splitlines() if line.strip()]
 
 
+def pair(a, b):
+    return (a, b) if a < b else (b, a)
+
+
 def pairs(position):
     return set(itertools.combinations(sorted(position.items()), 2))
 
@@ -36,10 +40,9 @@ def valid(layer, position):
     return bool(position) and all(v in axes.get(k, ()) for k, v in position.items())
 
 
-def dead(layer, pair):
-    """A pair a reviewed requires rule in grid.json forbids."""
-    requires = GRID["layers"][layer].get("requires", {})
-    for (a, x), (b, y) in (pair, pair[::-1]):
+def forbidden(layer, p):
+    requires = {**GRID["shared"]["requires"], **GRID["layers"][layer].get("requires", {})}
+    for (a, x), (b, y) in (p, p[::-1]):
         allowed = requires.get(f"{a}={x}", {}).get(b)
         if allowed is not None and y not in allowed:
             return True
@@ -48,7 +51,7 @@ def dead(layer, pair):
 
 def coverage(layer, cases):
     items = [(axis, v) for axis, values in sorted(LAYERS[layer].items()) for v in values]
-    possible = {p for p in itertools.combinations(items, 2) if p[0][0] != p[1][0] and not dead(layer, p)}
+    possible = {p for p in itertools.combinations(items, 2) if p[0][0] != p[1][0] and not forbidden(layer, p)}
     tried = set()
     for r in cases:
         if r.get("layer") != layer:
@@ -67,18 +70,17 @@ def next_positions(layer, n, cases):
     for _ in range(n):
         if not todo:
             return
-        # Seed with one untried pair, then give each other axis the value that
-        # covers the most untried pairs with the values already set.
-        (a, x), (b, y) = min(todo)
-        pos = {a: x, b: y}
+        # Greedy per axis, so each position covers many untried pairs at once.
+        seed = min(todo)
+        pos = dict(seed)
         for axis, values in axes:
             if axis in pos:
                 continue
-            ok = [v for v in values if all(tuple(sorted(p)) in possible for p in (((axis, v), (k, w)) for k, w in pos.items()))]
-            if not ok:
+            allowed = [v for v in values if all(pair((axis, v), kw) in possible for kw in pos.items())]
+            if not allowed:
                 break
-            pos[axis] = max(ok, key=lambda v: sum(tuple(sorted(((axis, v), (k, w)))) in todo for k, w in pos.items()))
-        todo.discard(((a, x), (b, y)))
+            pos[axis] = max(allowed, key=lambda v: sum(pair((axis, v), kw) in todo for kw in pos.items()))
+        todo.discard(seed)
         if len(pos) == len(axes):
             todo -= pairs(pos)
             print(json.dumps(pos))
@@ -90,7 +92,7 @@ if __name__ == "__main__":
         for layer in LAYERS:
             possible, tried = coverage(layer, cases)
             print(f"{layer}: {len(possible & tried)}/{len(possible)} pairs tried")
-    elif sys.argv[1:2] == ["next"]:
+    elif sys.argv[1:2] == ["next"] and len(sys.argv) == 4 and sys.argv[2] in LAYERS:
         next_positions(sys.argv[2], int(sys.argv[3]), cases)
     else:
         sys.exit(__doc__)
