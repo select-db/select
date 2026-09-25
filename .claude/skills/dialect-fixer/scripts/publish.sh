@@ -36,14 +36,17 @@ outside=$(git diff --name-only "$base...HEAD" | awk '
 
 pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
 if [ -z "$pr" ]; then
+	# Everything at once: the agent is asked back only once.
+	todo=()
 	transcript=$(jq -r '.transcript_path // empty' <<<"$input")
 	missing=$(jq -r -f "$AGENT_TOOLS/tool-calls.jq" "$transcript" 2>/dev/null | "$gate" missing-since "$base")
 	[ -z "$missing" ] ||
-		ask "run the review skills that have not launched their agents yet:$missing (step 4 of the unattended run), apply what is pertinent, commit, then end the run."
-	[ -s .fixer-work/pr.md ] ||
-		ask "write .fixer-work/pr.md (step 5 of the unattended run), then end the run."
-	[ -z "$("$gate" required-since "$base")" ] || grep -q '^## Review' .fixer-work/pr.md ||
-		ask "add the ## Review section to .fixer-work/pr.md (step 5 of the unattended run), then end the run."
+		todo+=("run the review skills that have not launched their agents yet (${missing# }), and apply what is pertinent (step 4)")
+	[ -s .fixer-work/pr.md ] || todo+=("write .fixer-work/pr.md (step 5)")
+	[ -z "$("$gate" required-since "$base")" ] ||
+		awk '/^## Review/ { on = 1; next } /^## / { on = 0 } on && NF { found = 1 } END { exit !found }' .fixer-work/pr.md 2>/dev/null ||
+		todo+=("fill the ## Review section of .fixer-work/pr.md with the findings applied and those rejected, with the reason (step 5)")
+	[ ${#todo[@]} -eq 0 ] || ask "$(printf '%s; ' "${todo[@]}")then commit and end the run."
 fi
 
 for delay in 2 4 8 0; do
