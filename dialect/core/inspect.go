@@ -7,6 +7,14 @@ func UnknownStatement() InspectStatement {
 	return InspectStatement{Operation: InspectOpUnknown}
 }
 
+// TransactionStatement is what an inspector returns for a boundary of the
+// transaction its own session runs in. It names no object, reads no row and
+// writes none: what it decides is when the statements around it become
+// visible, and each of those is inspected and priced on its own.
+func TransactionStatement() InspectStatement {
+	return InspectStatement{Operation: InspectOpTransaction}
+}
+
 // OrUnknown returns *stmt, or an unknown statement when stmt is nil. Inspectors
 // call it at the one point where a parsed statement becomes a result, so a
 // dispatcher that falls through cannot drop the statement on the floor.
