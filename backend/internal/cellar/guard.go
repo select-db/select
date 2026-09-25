@@ -23,6 +23,7 @@ var readOnlyPragmas = map[string]bool{
 	"index_info":       true,
 	"index_xinfo":      true,
 	"foreign_key_list": true,
+	"pragma_list":      true,
 }
 
 // CheckStatement refuses sql that names a PRAGMA outside readOnlyPragmas.

@@ -7,7 +7,6 @@ import (
 	"backend/internal/middlewares"
 
 	"github.com/selectDb/dialect/engine"
-	"github.com/selectDb/dialect/engine/transport"
 )
 
 func DumpHandler() http.HandlerFunc {
@@ -24,18 +23,12 @@ func DumpHandler() http.HandlerFunc {
 			OpenError(w, err, "datasource dump", workspaceID, id)
 			return
 		}
-		var schemaSQL string
-		if o.Inst.Proxified {
-			// Not Client.DumpSchema: it hides a transport error behind a local dump.
-			schemaSQL, err = o.Client.Transport.DumpSchema(r.Context(), workspaceID, id)
-		} else {
-			schemaSQL, err = localDump(r.Context(), o)
-		}
+		schemaSQL, err := localDump(r.Context(), o)
 		if err != nil {
 			OpenError(w, err, "datasource dump", workspaceID, id)
 			return
 		}
-		transport.WriteZstdJSON(w, map[string]string{"sql": schemaSQL})
+		writeZstdJSON(w, map[string]string{"sql": schemaSQL})
 	}
 }
 

@@ -62,6 +62,15 @@ func isMetadataIP(ip net.IP) bool {
 // user's own machine, so it stays off (default).
 var EnforceOutboundGuard bool
 
+// SQLiteServer, when set, is the URL scheme and database/sql driver name of a
+// SQLite server this process runs itself. GetOrOpenConn opens a sqlite DSN in
+// that scheme with that driver; the caller must never pass one a user wrote.
+var SQLiteServer string
+
+func onSQLiteServer(dbType, dsn string) bool {
+	return dbType == "sqlite" && SQLiteServer != "" && strings.HasPrefix(dsn, SQLiteServer+"://")
+}
+
 // checkHostBlocked resolves host and rejects it if any IP matches blocked.
 // Fails closed: unparseable/unresolvable host is rejected (the driver may
 // still dial it). Pre-dial only; no DNS-rebinding defence (out of scope).

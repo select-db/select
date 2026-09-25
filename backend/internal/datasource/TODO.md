@@ -2,7 +2,7 @@
 
 A managed database is a SQLite database that SELECT hosts. Users create it
 from the app, the REST API or MCP, and query it through the backend like any
-proxified datasource. Target cost: one small VM plus Object Storage at about
+other datasource. Target cost: one small VM plus Object Storage at about
 $0.01 per GB-month.
 
 ## Words
@@ -25,19 +25,20 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
                    plans, quotas, rows                          Litestream
 ```
 
-1. The backend checks who is calling and what they may do, as for any
-   proxified datasource.
-2. It forwards the request over the existing engine HTTP transport, with a
-   service token and the grant (workspace, limits, permissions) in headers.
+1. A managed datasource is a DSN, `cellar://<cellar id>/<datasource id>`,
+   opened by `engine.GetOrOpenConn` like any other. The backend checks
+   permissions and masks columns as for every datasource.
+2. The `cellar` database/sql driver sends each statement to the cellar with a
+   service token and the grant (workspace, limits) in headers.
 3. The cellar checks the token, wakes the db if cold, runs the statement under
-   its limits and streams the result back.
+   its isolation rules and limits and streams the rows back.
 4. Litestream streams every write to the bucket. The bucket is the truth, the
    cellar disk is a cache.
 
 Code follows the process it runs in. `internal/cellar` is only what runs on
-the cellar, plus the grant it accepts. The backend's side is in
-`internal/datasource/cellar`; startup is in
-`cmd/server/cellar.go`. The wire both share is `dialect/engine/transport`.
+the cellar, plus the grant and query it accepts. The backend's side, the
+driver, is in `internal/datasource/cellar`; startup is in
+`cmd/server/cellar.go`.
 
 ## Rules
 
@@ -107,20 +108,24 @@ Settled. Reopen with a reason, not a preference.
   other roles.
 
 ### Backend to cellar
-- The cellar trusts the backend, on a private network. The token names no
-  db, so a leaked one opens any db on the cellar until it expires. The backend proves
+- The cellar is a SQLite server with one route, `POST
+  /datasources/{id}/query`: a statement and its arguments in, an Arrow
+  stream out. It knows no permissions; the backend checks them before the
+  statement is sent, as for every datasource.
+- The cellar trusts the backend, on a private network. The backend proves
   itself with one service JWT: audience `selectdb-cellar`, 60s, signed with
-  `auth.Sign`, like user tokens, and reused for 50s, because each KMS
-  sign is a remote call. The cellar holds only the public key. User tokens
-  have another audience and never open a db.
-- Everything else is plain request data. The db is the path's id; the grant
-  `{workspace_id, cellar_id, max_bytes, max_in_flight, permissions}` is
-  base64url JSON in `X-Cellar-Grant`; `pitr_days`
-  joins it with Litestream.
-- `permissions` are the caller's permission entries for the db. The cellar compiles
-  them and runs `StreamLocal` unchanged, so the query check and column
-  masking are the same code as for proxified datasources.
-- The cellar refuses a grant whose `cellar_id` is not itself.
+  `auth.Sign` like user tokens, and reused for 50s because each KMS sign is a
+  remote call. The cellar holds only the public key. The token names no db,
+  so a leaked one opens any db on the cellar until it expires.
+- The grant `{workspace_id, cellar_id, max_bytes, max_in_flight}` is
+  base64url JSON in `X-Cellar-Grant`, read from the DSN's query; `pitr_days`
+  joins it with Litestream. The cellar refuses a grant whose `cellar_id` is
+  not itself.
+- Only the backend builds a `cellar://` DSN, when it loads a row with a
+  cellar. A user row with one is refused: it would open another workspace's
+  db.
+- The driver has no transactions or prepared statements: the engine uses
+  neither for a datasource.
 
 ### Storage
 - Replicas live at `dbs/{db_id}/`, never under a cellar, so moving or
@@ -207,11 +212,10 @@ Numbers are order; items inside a milestone can run in parallel.
 
 ### 1. Cellar runs queries (local files, no bucket)
 Needs 0.
-- [x] Cellar mode: execute, schema, ping, dump over the existing engine
-      transport, `StreamLocal` against local files. `CELLAR=local` starts it
-      in-process. The cellar serves the backend's own datasource routes, and
-      the backend reaches it through `engine.Client` as a proxified instance,
-      so REST and MCP share one path.
+- [x] Cellar mode: one query route running `StreamLocal` against local
+      files, reached through the `cellar` database/sql driver, so REST and
+      MCP open a managed datasource like any other. `CELLAR=local` starts it
+      in-process.
 - [x] Service token signed and reused by the backend (`datasource/cellar`),
       and checked with the grant header by the cellar (`cellar.Authenticate`
       middleware, which puts the grant in the context for `InFlight` to key

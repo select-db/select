@@ -85,33 +85,16 @@ func Entries(r *http.Request) []core.PermissionEntry {
 	return workspaceEntries(workspaceRoleIDs(r, ws), ws)
 }
 
-// EntriesOn is Entries without the rules scoped to other databases: they do
-// not apply to dbID and would only grow what the backend sends the cellar.
-func EntriesOn(r *http.Request, dbID string) []core.PermissionEntry {
-	var out []core.PermissionEntry
-	for _, e := range Entries(r) {
-		if e.DbInstanceID == nil || *e.DbInstanceID == "*" || *e.DbInstanceID == dbID {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
 // Perms are the caller's compiled permissions in its workspace.
 func Perms(r *http.Request) core.CompiledPermissions {
 	ws := middlewares.MemberWorkspaceID(r)
 	return WorkspacePerms(workspaceRoleIDs(r, ws), ws)
 }
 
-// WorkspacePerms compiles the rules roleIDs hold in workspaceID.
+// WorkspacePerms compiles the rules roleIDs hold in workspaceID. A database
+// nobody wrote a rule for is denied: the backend dials it with our credentials.
 func WorkspacePerms(roleIDs []string, workspaceID string) core.CompiledPermissions {
-	return Compile(workspaceEntries(roleIDs, workspaceID))
-}
-
-// Compile makes a database nobody wrote a rule for deny-by-default: everything
-// the backend and the cellar serve runs on our credentials.
-func Compile(entries []core.PermissionEntry) core.CompiledPermissions {
-	return core.Compile(entries).WithDenyUnmanaged()
+	return core.Compile(workspaceEntries(roleIDs, workspaceID)).WithDenyUnmanaged()
 }
 
 func workspaceEntries(roleIDs []string, workspaceID string) []core.PermissionEntry {

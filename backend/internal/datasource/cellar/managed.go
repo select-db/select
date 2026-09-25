@@ -2,12 +2,9 @@ package cellar
 
 import (
 	"errors"
-	"net/http"
-
-	"backend/internal/authz"
-	server "backend/internal/cellar"
-
-	"github.com/selectDb/dialect/engine"
+	"net/url"
+	"strconv"
+	"strings"
 )
 
 // ErrOff answers any use of a managed database while CELLAR is unset.
@@ -20,34 +17,23 @@ var maxBytes = map[string]int64{
 	"teams": 1 << 30,
 }
 
-var client *Client
+// base is the URL of the cellar managed databases run on; "" while off.
+var base string
 
-// Use sends managed databases to c. Call once at startup.
-func Use(c *Client) { client = c }
+// Use sends managed databases to the cellar at url. Call once at startup.
+func Use(url string) { base = url }
 
-// Datasource is what the backend knows of one managed datasource.
-type Datasource struct {
-	ID, WorkspaceID, DBType string
-	CellarID, Plan          string
-	Members                 int
+// DSN is the DSN of datasource id, kept on cellar cellarID, with its
+// workspace's limits: the plan's size cap and two statements per member.
+func DSN(cellarID, id, workspaceID, plan string, members int) string {
+	q := url.Values{
+		"workspace_id":  {workspaceID},
+		"max_bytes":     {strconv.FormatInt(maxBytes[plan], 10)},
+		"max_in_flight": {strconv.Itoa(max(4, 2*members))},
+	}
+	return (&url.URL{Scheme: Scheme, Host: cellarID, Path: "/" + id, RawQuery: q.Encode()}).String()
 }
 
-// Engine returns the engine client and instance that run ds on its cellar,
-// carrying the caller's permissions on it: the cellar enforces them, the
-// backend does not.
-func Engine(r *http.Request, ds Datasource) (*engine.Client, engine.DBInstance, error) {
-	if client == nil {
-		return nil, engine.DBInstance{}, ErrOff
-	}
-	t, err := client.Transport(server.Grant{
-		WorkspaceID: ds.WorkspaceID,
-		CellarID:    ds.CellarID,
-		MaxBytes:    maxBytes[ds.Plan],
-		MaxInFlight: max(4, 2*ds.Members),
-		Permissions: authz.EntriesOn(r, ds.ID),
-	})
-	if err != nil {
-		return nil, engine.DBInstance{}, err
-	}
-	return &engine.Client{Transport: t}, engine.DBInstance{ID: ds.ID, DBType: ds.DBType, Proxified: true}, nil
-}
+// IsDSN reports whether dsn opens a managed database. Only DSN may build one:
+// a user who stored one could open another workspace's database.
+func IsDSN(dsn string) bool { return strings.HasPrefix(dsn, Scheme+"://") }

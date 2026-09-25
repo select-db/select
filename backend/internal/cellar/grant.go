@@ -10,19 +10,16 @@ import (
 	"net/http"
 
 	"backend/internal/auth"
-
-	"github.com/selectDb/dialect/core"
 )
 
 // Grant is what one cellar request may do. The cellar knows no users and reads
 // no Postgres, so the backend sends all of it in GrantHeader.
 type Grant struct {
-	DatasourceID string                 `json:"-"` // the path's id
-	WorkspaceID  string                 `json:"workspace_id"`
-	CellarID     string                 `json:"cellar_id"`
-	MaxBytes     int64                  `json:"max_bytes"`
-	MaxInFlight  int                    `json:"max_in_flight"` // statements the workspace may run at once
-	Permissions  []core.PermissionEntry `json:"permissions"`   // the caller's entries for the datasource
+	DatasourceID string `json:"-"` // the path's id
+	WorkspaceID  string `json:"workspace_id"`
+	CellarID     string `json:"cellar_id"`
+	MaxBytes     int64  `json:"max_bytes"`
+	MaxInFlight  int    `json:"max_in_flight"` // statements the workspace may run at once
 }
 
 // GrantHeader carries a Grant as base64url JSON.

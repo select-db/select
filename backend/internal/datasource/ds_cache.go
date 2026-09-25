@@ -3,11 +3,13 @@ package datasource
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
 	"backend/db"
 	"backend/db/generated"
+	"backend/internal/datasource/cellar"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine"
@@ -21,10 +23,6 @@ type ResolvedDatasource struct {
 	DSN    string
 	SSH    *engine.ResolvedSSHConfig
 	Pool   engine.PoolConfig
-	// CellarID is set on a managed database, which runs on that cellar.
-	CellarID string
-	Plan     string
-	Members  int
 }
 
 var dsCache = cache.New(cache.Options{
@@ -73,18 +71,21 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	if err != nil {
 		return nil, err
 	}
+	// A managed database's DSN is built here and never read from the row.
+	if cellarID := row.CellarID.ValueOrEmpty(); cellarID != "" {
+		dsn = cellar.DSN(cellarID, id, workspaceID, row.Plan, int(row.Members))
+	} else if cellar.IsDSN(dsn) {
+		return nil, errors.New("datasource DSN uses a reserved scheme")
+	}
 	ssh, err := decryptField(ctx, enc, row.EncryptedSsh, fieldAAD(parsedWorkspaceID, parsedID, "ssh"))
 	if err != nil {
 		return nil, err
 	}
 
 	ds := &ResolvedDatasource{
-		DBType:   row.DbType,
-		Name:     row.Name,
-		DSN:      dsn,
-		CellarID: row.CellarID.ValueOrEmpty(),
-		Plan:     row.Plan,
-		Members:  int(row.Members),
+		DBType: row.DbType,
+		Name:   row.Name,
+		DSN:    dsn,
 		Pool: engine.PoolConfig{
 			MaxOpenConns:    int(row.MaxOpenConns),
 			MaxIdleConns:    int(row.MaxIdleConns),

@@ -12,7 +12,6 @@ import (
 	"backend/internal/auth"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/selectDb/dialect/core"
 )
 
 // signWith signs a cellar token with priv, standing in for the backend's KMS signer.
@@ -39,7 +38,7 @@ func TestAuthenticate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	good := Grant{WorkspaceID: "ws-1", CellarID: "local", MaxBytes: 1 << 20, Permissions: []core.PermissionEntry{{Action: "select", Effect: "allow"}}}
+	good := Grant{WorkspaceID: "ws-1", CellarID: "local", MaxBytes: 1 << 20}
 	goodHeader, _ := good.Encode()
 	elsewhere, _ := Grant{WorkspaceID: "ws-1", CellarID: "cellar-2"}.Encode()
 

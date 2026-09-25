@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"backend/internal/middlewares"
+
+	"github.com/selectDb/dialect/engine"
 )
 
 func PingHandler() http.HandlerFunc {
@@ -34,7 +36,7 @@ func PingHandler() http.HandlerFunc {
 		if err == nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 			defer cancel()
-			err = o.Client.Ping(ctx, o.Conn, o.Inst, workspaceID, noCache)
+			err = (&engine.Client{}).Ping(ctx, o.Conn, o.Inst, workspaceID, noCache)
 		}
 		if err != nil {
 			status, msg := openFailure(err, "datasource ping", workspaceID, id)

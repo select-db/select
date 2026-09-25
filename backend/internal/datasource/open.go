@@ -22,12 +22,10 @@ const genericConnErr = "could not connect to the datasource"
 // ErrNotFound is a datasource the caller's workspace does not have.
 var ErrNotFound = errors.New("datasource not found")
 
-// Opened is a datasource ready for one request: local to the backend, or on
-// its cellar when managed. Client routes on Inst.Proxified.
+// Opened is a datasource ready for one request, with the caller's permissions.
 type Opened struct {
 	ID, WorkspaceID string
 	DS              *ResolvedDatasource
-	Client          *engine.Client
 	Conn            engine.Conn
 	Inst            engine.DBInstance
 }
@@ -39,29 +37,21 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	if err != nil {
 		return Opened{}, ErrNotFound
 	}
-	o := Opened{ID: id, WorkspaceID: workspaceID, DS: ds}
-	if ds.CellarID != "" {
-		o.Client, o.Inst, err = cellar.Engine(r, cellar.Datasource{
-			ID: id, WorkspaceID: workspaceID, DBType: ds.DBType,
-			CellarID: ds.CellarID, Plan: ds.Plan, Members: ds.Members,
-		})
-		return o, err
-	}
 	db, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 	if err != nil {
 		return Opened{}, err
 	}
-	o.Client = &engine.Client{}
-	o.Inst = engine.DBInstance{ID: id, DBType: ds.DBType}
-	o.Conn = engine.Conn{DB: db, Perms: authz.Perms(r)}
-	return o, nil
+	return Opened{
+		ID:          id,
+		WorkspaceID: workspaceID,
+		DS:          ds,
+		Conn:        engine.Conn{DB: db, Perms: authz.Perms(r)},
+		Inst:        engine.DBInstance{ID: id, DBType: ds.DBType},
+	}, nil
 }
 
-// Metadata is the datasource's schema. Local schemas are cached by DSN.
+// Metadata is the datasource's schema, cached by DSN.
 func (o *Opened) Metadata(ctx context.Context, noCache bool) (*core.Metadata, error) {
-	if o.Inst.Proxified {
-		return o.Client.GetMetadata(ctx, engine.Conn{}, o.Inst, o.WorkspaceID, "", noCache)
-	}
 	dialect := engine.GetDialect(o.DS.DBType)
 	if dialect == nil {
 		return nil, fmt.Errorf("unsupported database type: %s", o.DS.DBType)
@@ -69,15 +59,12 @@ func (o *Opened) Metadata(ctx context.Context, noCache bool) (*core.Metadata, er
 	return engine.GetOrFetchMetadata(ctx, o.WorkspaceID, o.DS.DSN, o.Conn.DB, dialect, "", noCache)
 }
 
-// Stream runs sql into sink. A local statement is checked against the
-// caller's permissions here; a managed one on its cellar.
+// Stream runs sql into sink, checked against the caller's permissions.
 func (o *Opened) Stream(ctx context.Context, sql string, opts engine.Options, sink engine.RowSink) {
 	conn := o.Conn
-	if !o.Inst.Proxified {
-		// Without a schema the permission check refuses the statement.
-		conn.Meta, _ = o.Metadata(ctx, false)
-	}
-	o.Client.StreamTo(ctx, conn, o.Inst, o.WorkspaceID, sql, opts, sink)
+	// Without a schema the permission check refuses the statement.
+	conn.Meta, _ = o.Metadata(ctx, false)
+	engine.StreamLocal(ctx, conn, o.Inst, sql, opts, sink)
 }
 
 // OpenError answers a request whose datasource could not be opened or reached.

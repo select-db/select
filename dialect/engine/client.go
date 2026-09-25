@@ -43,32 +43,23 @@ func (client *Client) Stream(
 
 	go func() {
 		defer unregisterCancel()
-		client.StreamTo(cancelCtx, conn, instance, workspaceID, sql, options, sink)
+
+		if instance.Proxified {
+			stream, err := client.Transport.OpenStream(
+				cancelCtx, workspaceID, instance.ID, instance.DBType, sql, options,
+			)
+			if err != nil {
+				sink.OnError(err)
+				return
+			}
+			drainStreamInto(stream, sink)
+			return
+		}
+
+		StreamLocal(cancelCtx, conn, instance, sql, options, sink)
 	}()
 
 	return result
-}
-
-// StreamTo runs sql into sink, through Transport when proxified, and returns
-// once the sink has seen OnDone or OnError.
-func (client *Client) StreamTo(
-	ctx context.Context,
-	conn Conn,
-	instance DBInstance,
-	workspaceID, sql string,
-	options Options,
-	sink RowSink,
-) {
-	if !instance.Proxified {
-		StreamLocal(ctx, conn, instance, sql, options, sink)
-		return
-	}
-	stream, err := client.Transport.OpenStream(ctx, workspaceID, instance.ID, instance.DBType, sql, options)
-	if err != nil {
-		sink.OnError(err)
-		return
-	}
-	drainStreamInto(stream, sink)
 }
 
 // Execute runs sql synchronously and returns a buffered Result. Used for

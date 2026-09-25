@@ -1,12 +1,15 @@
 package datasource
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"backend/internal/middlewares"
 
-	"github.com/selectDb/dialect/engine/transport"
+	"github.com/klauspost/compress/zstd"
 )
+
+var zstdEncoder, _ = zstd.NewWriter(nil)
 
 func SchemaHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +31,17 @@ func SchemaHandler() http.HandlerFunc {
 			OpenError(w, err, "datasource schema", workspaceID, id)
 			return
 		}
-		transport.WriteZstdJSON(w, meta)
+		writeZstdJSON(w, meta)
 	}
+}
+
+func writeZstdJSON(w http.ResponseWriter, v any) {
+	jsonBytes, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Encoding", "zstd")
+	_, _ = w.Write(zstdEncoder.EncodeAll(jsonBytes, nil))
 }

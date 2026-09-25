@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -34,9 +33,9 @@ func (f *Files) Path(id string) string {
 	return filepath.Join(f.dir, id+".db")
 }
 
-// Open returns the grant's datasource with the caller's permissions, set up so
-// every user statement runs under the isolation rules.
-func (f *Files) Open(grant Grant, perms core.CompiledPermissions) (engine.Conn, error) {
+// Open returns the grant's datasource, set up so every statement runs under
+// the isolation rules.
+func (f *Files) Open(grant Grant) (engine.Conn, error) {
 	if grant.MaxBytes <= 0 {
 		return engine.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)
 	}
@@ -55,8 +54,7 @@ func (f *Files) Open(grant Grant, perms core.CompiledPermissions) (engine.Conn, 
 		return engine.Conn{}, err
 	}
 	return engine.Conn{
-		DB:    db,
-		Perms: perms,
+		DB: db,
 		Prepare: func(c *sql.Conn, statement string) error {
 			if err := CheckStatement(statement); err != nil {
 				return err

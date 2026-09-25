@@ -34,7 +34,7 @@ func startCellar() {
 			log.Fatalf("cellar: %v", err)
 		}
 	}
-	managed.Use(managed.NewClient(v))
+	managed.Use(v)
 }
 
 func serveLocalCellar() (string, error) {

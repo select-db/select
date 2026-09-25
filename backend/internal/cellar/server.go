@@ -6,98 +6,49 @@ import (
 	"log"
 	"net/http"
 
-	"backend/internal/authz"
-
-	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
-	"github.com/selectDb/dialect/engine/transport"
+	"github.com/selectDb/dialect/engine/arrowstream"
 )
 
 // dbType is the engine dialect of every database a cellar holds.
 const dbType = "sqlite"
 
-// Handler serves the databases in files to the backend. The routes are the
-// ones the backend serves the app, so one engine transport reaches both.
+// Query is the body of POST /datasources/{id}/query: one statement and its
+// placeholder values. The answer is the Arrow stream arrowstream.Stream reads.
+type Query struct {
+	SQL  string `json:"sql"`
+	Args []any  `json:"args,omitempty"`
+}
+
+// Handler serves the databases in files as a SQLite server: the backend's
+// driver sends each statement here, and checks permissions itself.
 func Handler(files *Files, pub *rsa.PublicKey, cellarID string) http.Handler {
-	admit := Admit(pub, cellarID)
 	mux := http.NewServeMux()
-	mux.Handle("POST /datasources/{id}/execute", admit(execute(files)))
-	mux.Handle("GET /datasources/{id}/schema", admit(schema(files)))
-	mux.Handle("POST /datasources/{id}/ping", admit(ping(files)))
-	mux.Handle("GET /datasources/{id}/dump", admit(dump(files)))
+	mux.Handle("POST /datasources/{id}/query", Admit(pub, cellarID)(query(files)))
 	return mux
 }
 
-// openFile opens the request's database with the caller's permissions and
-// its schema.
-func openFile(r *http.Request, files *Files, noCache bool) (engine.Conn, Grant, error) {
-	grant := GrantFrom(r.Context())
-	conn, err := files.Open(grant, authz.Compile(grant.Permissions))
-	if err != nil {
-		return engine.Conn{}, grant, err
-	}
-	conn.Meta, err = engine.GetOrFetchMetadata(r.Context(), grant.WorkspaceID, files.Path(grant.DatasourceID), conn.DB, engine.GetDialect(dbType), "", noCache)
-	return conn, grant, err
-}
-
-// fail answers a request the cellar could not serve, keeping paths out of
-// the answer.
-func fail(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("cellar: %s %s: %v", r.Method, r.URL.Path, err)
-	http.Error(w, "internal error", http.StatusInternalServerError)
-}
-
-func execute(files *Files) http.HandlerFunc {
+func query(files *Files) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req transport.ExecuteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var q Query
+		if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		conn, grant, err := openFile(r, files, false)
+		grant := GrantFrom(r.Context())
+		conn, err := files.Open(grant)
 		if err != nil {
-			fail(w, r, err)
+			// The cause names a path, so it is only logged.
+			log.Printf("cellar: %s: %v", r.URL.Path, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		sink := transport.WriteArrow(w)
+		w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+		sink := arrowstream.NewSink(w)
 		defer sink.Close()
-		engine.StreamLocal(r.Context(), conn, engine.DBInstance{ID: grant.DatasourceID, DBType: dbType}, req.SQL, req.Options(), sink)
-	}
-}
-
-func schema(files *Files) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		conn, _, err := openFile(r, files, r.URL.Query().Get("no_cache") == "true")
-		if err != nil {
-			fail(w, r, err)
-			return
+		if f, ok := w.(http.Flusher); ok {
+			sink.SetDownstreamFlusher(f.Flush)
 		}
-		transport.WriteZstdJSON(w, conn.Meta)
-	}
-}
-
-func ping(files *Files) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := files.Open(GrantFrom(r.Context()), core.CompiledPermissions{})
-		if err == nil {
-			err = conn.DB.PingContext(r.Context())
-		}
-		if err != nil {
-			fail(w, r, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-func dump(files *Files) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		conn, grant, err := openFile(r, files, false)
-		if err != nil {
-			fail(w, r, err)
-			return
-		}
-		schemaSQL := engine.GetOrGenerateDump(engine.GetDialect(dbType), grant.WorkspaceID, files.Path(grant.DatasourceID), conn.Meta, false)
-		transport.WriteZstdJSON(w, map[string]string{"sql": schemaSQL})
+		engine.StreamLocal(r.Context(), conn, engine.DBInstance{ID: grant.DatasourceID, DBType: dbType}, q.SQL, engine.Options{Args: q.Args}, sink)
 	}
 }
