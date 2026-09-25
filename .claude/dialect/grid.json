@@ -1,18 +1,33 @@
 {
   "shared": {
-    "construct": ["none", "cte", "recursive_cte", "writable_cte", "derived", "lateral", "correlated_subquery", "scalar_subquery", "set_operation_branch", "view_body", "ctas_source", "insert_select_source", "window", "function_argument"],
+    "construct": ["none", "cte", "recursive_cte", "writable_cte", "materialized_cte", "cte_reading_cte", "sibling_ctes", "derived", "lateral", "correlated_subquery", "scalar_subquery", "exists_subquery", "in_subquery", "union_branch", "union_all_branch", "intersect_branch", "except_branch", "values_list", "view_body", "ctas_source", "insert_select_source", "trigger_body", "function_body", "window", "named_window", "filter_clause", "grouping_sets", "function_argument"],
     "statements": ["single", "multi_independent", "multi_dependent", "transaction", "procedural_block", "prepared"],
     "naming": ["bare", "qualified", "aliased", "quoted", "other_case", "shadowing_cte", "shadowed_by_cte"],
-    "requires": {"outer=none": {"inner": ["none"]}}
+    "requires": {
+      "outer=none": {"inner": ["none"], "depth": ["0"]},
+      "inner=none": {"depth": ["0", "1"]},
+      "depth=0": {"outer": ["none"], "inner": ["none"]},
+      "depth=1": {"inner": ["none"]},
+      "inner=view_body": {"outer": ["function_body", "trigger_body"]},
+      "inner=ctas_source": {"outer": ["function_body", "trigger_body"]},
+      "inner=trigger_body": {"outer": ["none"]},
+      "inner=function_body": {"outer": ["none"]},
+      "statements=single": {"read_statement": ["only"]},
+      "read_statement=only": {"statements": ["single", "procedural_block", "prepared"]}
+    },
+    "depth": ["0", "1", "2", "3_plus"],
+    "read_statement": ["only", "first", "middle", "last"]
   },
   "layers": {
     "permission": {
       "axes": {
-        "operation": ["select", "insert", "update", "delete", "create_table", "create_table_as", "create_view", "alter", "drop", "truncate", "grant", "revoke", "copy", "replace", "upsert", "attach", "pragma", "vacuum", "call", "set", "explain", "analyze", "multi_update", "multi_delete", "merge"],
-        "read_site": ["none", "from", "join", "select_subquery", "where_subquery", "group_by_subquery", "having_subquery", "order_by_subquery", "limit_subquery", "returning", "upsert_predicate"],
+        "operation": ["select", "insert", "update", "delete", "create_table", "create_table_as", "create_view", "alter", "drop", "truncate", "grant", "revoke", "copy", "replace", "upsert", "attach", "pragma", "vacuum", "call", "set", "explain", "analyze", "multi_update", "multi_delete", "merge", "create_trigger", "create_function", "create_procedure", "create_index", "create_schema", "select_into", "lock", "rename", "load_data", "detach", "reindex", "comment", "handler", "into_outfile", "do_block"],
+        "read_site": ["none", "from", "join", "left_join", "full_join", "cross_join", "natural_join", "using_join", "self_join", "select_subquery", "where_subquery", "group_by_subquery", "having_subquery", "order_by_subquery", "limit_subquery", "returning", "upsert_predicate", "set_clause", "values"],
         "outer": "construct",
         "inner": "construct",
+        "depth": "depth",
         "statements": "statements",
+        "read_statement": "read_statement",
         "naming": "naming",
         "use": ["returns", "writes", "tests", "names"],
         "object": ["table", "view", "temp_table", "other_schema", "system_catalog", "table_function"]
@@ -22,16 +37,21 @@
         "read_site=upsert_predicate": {"operation": ["insert", "upsert"]},
         "outer=view_body": {"operation": ["create_view"]},
         "outer=ctas_source": {"operation": ["create_table_as"]},
-        "outer=insert_select_source": {"operation": ["insert", "replace", "upsert"]}
+        "outer=insert_select_source": {"operation": ["insert", "replace", "upsert"]},
+        "read_site=none": {"outer": ["none"], "use": ["names", "writes"]},
+        "object=system_catalog": {"use": ["returns", "tests", "names"]},
+        "outer=trigger_body": {"operation": ["create_trigger"]},
+        "outer=function_body": {"operation": ["create_function", "create_procedure", "do_block"]}
       }
     },
     "completion": {
       "axes": {
-        "caret": ["after_select", "after_from", "after_join", "after_on", "after_dot", "in_where", "in_group_by", "in_order_by", "in_having", "in_function_args", "in_insert_columns", "in_set_clause", "in_returning"],
+        "caret": ["after_select", "after_from", "after_join", "after_on", "after_dot", "in_where", "in_group_by", "in_order_by", "in_having", "in_function_args", "in_insert_columns", "in_set_clause", "in_returning", "in_window_clause", "in_cte_column_list", "in_values"],
         "in_scope": ["tables", "aliases", "ctes", "derived_columns", "lateral_columns", "outer_columns", "other_schema"],
         "typed": ["nothing", "prefix", "mid_identifier", "qualified_prefix", "quoted_prefix", "other_case"],
         "outer": "construct",
         "inner": "construct",
+        "depth": "depth",
         "caret_statement": ["only", "first", "last", "between"]
       }
     },
@@ -41,7 +61,9 @@
         "expect": ["fires", "silent"],
         "outer": "construct",
         "inner": "construct",
+        "depth": "depth",
         "statements": "statements",
+        "read_statement": "read_statement",
         "naming": "naming"
       }
     },
@@ -51,7 +73,9 @@
         "site": ["select_list", "from", "join_on", "where", "group_by", "order_by", "returning", "set_clause", "insert_columns"],
         "outer": "construct",
         "inner": "construct",
+        "depth": "depth",
         "statements": "statements",
+        "read_statement": "read_statement",
         "naming": "naming"
       }
     }

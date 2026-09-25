@@ -49,10 +49,11 @@ case is a gap, and a gap is the thing this work exists to remove.
 The axes and their values are in `.claude/dialect/grid.json`, per layer. For
 permissions, `use` is what the statement does with the table: returns it,
 writes it, tests it without returning it (the see boundary), or names it
-without reading it. `outer` is the construct around the read and `inner` the
-one inside it, so pairs compose nesting; `statements` is how many statements
-run and whether a later one reads what an earlier one made. `requires` rules
-out the pairs no dialect can express. Policy is not an axis: `agentprobe`
+without reading it. `outer` is the construct around the read, `inner` the one
+inside it and `depth` how many there are in all, so pairs compose nesting.
+`statements` is how many statements run and whether a later one reads what an
+earlier one made, and `read_statement` which of them holds the read.
+`requires` rules out the pairs no dialect can express. Policy is not an axis: `agentprobe`
 measures every case under deny-all, the data actions without manage,
 per-table grants and manage alone.
 
