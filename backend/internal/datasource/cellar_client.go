@@ -38,9 +38,9 @@ func NewCellarClient(base string) *CellarClient {
 	return &CellarClient{base: base, tokens: newCellarTokens(), http: &http.Client{}}
 }
 
-// Transport runs engine calls on the cellar under grant g.
-func (c *CellarClient) Transport(g cellar.Grant) (*transport.HTTPTransport, error) {
-	header, err := g.Encode()
+// Transport runs engine calls on the cellar under grant.
+func (c *CellarClient) Transport(grant cellar.Grant) (*transport.HTTPTransport, error) {
+	header, err := grant.Encode()
 	if err != nil {
 		return nil, err
 	}

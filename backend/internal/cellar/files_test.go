@@ -35,7 +35,7 @@ func statementConn(t *testing.T, conn engine.Conn) *sql.Conn {
 
 func TestOpenCapsTheSize(t *testing.T) {
 	files, id := newFile(t)
-	conn, err := files.Open(Grant{DB: id, MaxBytes: 256 << 10}, core.CompiledPermissions{})
+	conn, err := files.Open(Grant{DatasourceID: id, MaxBytes: 256 << 10}, core.CompiledPermissions{})
 	require.NoError(t, err)
 
 	c := statementConn(t, conn)
@@ -48,7 +48,7 @@ func TestOpenCapsTheSize(t *testing.T) {
 
 func TestOpenRefusesForbiddenStatements(t *testing.T) {
 	files, id := newFile(t)
-	conn, err := files.Open(Grant{DB: id, MaxBytes: 1 << 20}, core.CompiledPermissions{})
+	conn, err := files.Open(Grant{DatasourceID: id, MaxBytes: 1 << 20}, core.CompiledPermissions{})
 	require.NoError(t, err)
 	c, err := conn.DB.Conn(context.Background())
 	require.NoError(t, err)
@@ -59,14 +59,14 @@ func TestOpenRefusesForbiddenStatements(t *testing.T) {
 func TestOpenRefuses(t *testing.T) {
 	files, id := newFile(t)
 
-	_, err := files.Open(Grant{DB: id}, core.CompiledPermissions{})
+	_, err := files.Open(Grant{DatasourceID: id}, core.CompiledPermissions{})
 	require.Error(t, err, "a grant without a size cap")
 
-	_, err = files.Open(Grant{DB: "../" + id, MaxBytes: 1 << 20}, core.CompiledPermissions{})
+	_, err = files.Open(Grant{DatasourceID: "../" + id, MaxBytes: 1 << 20}, core.CompiledPermissions{})
 	require.Error(t, err, "an id that is not a uuid")
 
 	missing := uuid.NewString()
-	conn, err := files.Open(Grant{DB: missing, MaxBytes: 1 << 20}, core.CompiledPermissions{})
+	conn, err := files.Open(Grant{DatasourceID: missing, MaxBytes: 1 << 20}, core.CompiledPermissions{})
 	require.NoError(t, err)
 	require.Error(t, conn.DB.Ping(), "a database that does not exist")
 	require.NoFileExists(t, files.Path(missing))

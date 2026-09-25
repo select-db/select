@@ -34,22 +34,22 @@ func (f *Files) Path(id string) string {
 	return filepath.Join(f.dir, id+".db")
 }
 
-// Open returns the database g.DB, with the caller's permissions, set up so
+// Open returns the grant's datasource with the caller's permissions, set up so
 // every user statement runs under the isolation rules.
-func (f *Files) Open(g Grant, perms core.CompiledPermissions) (engine.Conn, error) {
-	if g.MaxBytes <= 0 {
-		return engine.Conn{}, fmt.Errorf("grant for db %s has no size cap", g.DB)
+func (f *Files) Open(grant Grant, perms core.CompiledPermissions) (engine.Conn, error) {
+	if grant.MaxBytes <= 0 {
+		return engine.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)
 	}
 
-	if _, err := uuid.Parse(g.DB); err != nil {
-		return engine.Conn{}, fmt.Errorf("db id %q is not a uuid", g.DB)
+	if _, err := uuid.Parse(grant.DatasourceID); err != nil {
+		return engine.Conn{}, fmt.Errorf("datasource id %q is not a uuid", grant.DatasourceID)
 	}
 
 	// mode=rw: a missing file is an error, never a new empty database. WAL lets
 	// readers run beside a writer.
-	dsn := (&url.URL{Scheme: "file", Path: f.Path(g.DB), RawQuery: "mode=rw&_defensive=1" +
+	dsn := (&url.URL{Scheme: "file", Path: f.Path(grant.DatasourceID), RawQuery: "mode=rw&_defensive=1" +
 		"&_busy_timeout=5000&_foreign_keys=1&_pragma=trusted_schema(0)&_pragma=journal_mode(WAL)"}).String()
-	db, err := engine.GetOrOpenTrusted(g.WS, dbType, dsn)
+	db, err := engine.GetOrOpenTrusted(grant.WorkspaceID, dbType, dsn)
 
 	if err != nil {
 		return engine.Conn{}, err
@@ -61,7 +61,7 @@ func (f *Files) Open(g Grant, perms core.CompiledPermissions) (engine.Conn, erro
 			if err := CheckStatement(statement); err != nil {
 				return err
 			}
-			return limit(c, g.MaxBytes)
+			return limit(c, grant.MaxBytes)
 		},
 	}, nil
 }
@@ -78,7 +78,7 @@ func limit(c *sql.Conn, maxBytes int64) error {
 	if err := c.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
 		return err
 	}
-	
+
 	_, err := c.ExecContext(ctx, fmt.Sprintf("PRAGMA max_page_count = %d", max(maxBytes/pageSize, 1)))
 	return err
 }

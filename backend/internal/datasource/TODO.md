@@ -67,9 +67,10 @@ Settled. Reopen with a reason, not a preference.
 
 - The plan is a new `workspace.plan`, set by hand until billing exists.
 - The backend checks totals and counts on create and fork.
-- The per-db cap reaches the cellar in the grant (`max`), and the window
-  (`pitr`) will with Litestream. The cellar applies `max` as `max_page_count` on open; a db over a
-  lowered cap keeps its data and stops growing. It keeps the last `pitr` seen
+- The per-db cap reaches the cellar in the grant (`max_bytes`), and the
+  window (`pitr_days`) will with Litestream. The cellar applies `max_bytes`
+  as `max_page_count` on open; a db over a lowered cap keeps its data and
+  stops growing. It keeps the last `pitr_days` seen
   per db and uses 7 days when it does not know, so history is never cut early.
 - Raise limits with data, never lower them.
 
@@ -77,8 +78,8 @@ Settled. Reopen with a reason, not a preference.
 - Time: capped at 60s, enforced by the cellar. The cap is never read from
   the request; a caller's own timeout can only shorten it.
 - Concurrency: `max(4, 2 x members)` statements in flight per workspace. The
-  backend counts members and sends the result as the grant's `slots`; the
-  cellar enforces it with the `InFlight` middleware, keyed by the grant's `ws`.
+  backend counts members and sends the result as the grant's `max_in_flight`; the
+  cellar enforces it with the `InFlight` middleware, keyed by the grant's `workspace_id`.
   More wait for a slot; the wait counts against the same 60s.
 - Query-seconds per workspace are recorded, not enforced, as the duration of
   the backend's audit query event.
@@ -113,12 +114,13 @@ Settled. Reopen with a reason, not a preference.
   sign is a remote call. The cellar holds only the public key. User tokens
   have another audience and never open a db.
 - Everything else is plain request data. The db is the path's id; the grant
-  `{ws, cel, max, perms}` is base64url JSON in `X-Cellar-Grant`; `pitr`
+  `{workspace_id, cellar_id, max_bytes, max_in_flight, permissions}` is
+  base64url JSON in `X-Cellar-Grant`; `pitr_days`
   joins it with Litestream.
-- `perms` are the caller's permission entries for the db. The cellar compiles
+- `permissions` are the caller's permission entries for the db. The cellar compiles
   them and runs `StreamLocal` unchanged, so the query check and column
   masking are the same code as for proxified datasources.
-- The cellar refuses a grant whose `cel` is not itself.
+- The cellar refuses a grant whose `cellar_id` is not itself.
 
 ### Storage
 - Replicas live at `dbs/{db_id}/`, never under a cellar, so moving or
@@ -175,7 +177,7 @@ id, both sides log it, the caller sees it as `ref`.
 ### Scaling
 - Any number of backends: wake dedup and limits live on the cellar.
 - More cellars later: each row has a `cellar_id`; a move is mark `moving`,
-  evict on the old cellar, flip `cellar_id`. The grant's `cel` fences a stale
+  evict on the old cellar, flip `cellar_id`. The grant's `cellar_id` fences a stale
   route, so two cellars never write one replica.
 
 ### Environments
@@ -252,7 +254,7 @@ Needs 1. Can run alongside 2. Start with the spikes.
       One page of findings before building on it.
 - [ ] Spike: OVH bucket supports `NoncurrentVersionExpiration`; restore speed
       from the bucket to a d2-4.
-- [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr`.
+- [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr_days`.
 - [ ] Directory replica when no S3, with the startup preflight.
 - [ ] LRU eviction on disk pressure; wake with shared restore and 15s wait.
 - [ ] `size_bytes`, `state`, `last_used_at` reported back to the row.

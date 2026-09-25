@@ -31,13 +31,13 @@ func Handler(files *Files, pub *rsa.PublicKey, cellarID string) http.Handler {
 // openFile opens the request's database with the caller's permissions and
 // its schema.
 func openFile(r *http.Request, files *Files, noCache bool) (engine.Conn, Grant, error) {
-	g := GrantFrom(r.Context())
-	conn, err := files.Open(g, authz.Compile(g.Perms))
+	grant := GrantFrom(r.Context())
+	conn, err := files.Open(grant, authz.Compile(grant.Permissions))
 	if err != nil {
-		return engine.Conn{}, g, err
+		return engine.Conn{}, grant, err
 	}
-	conn.Meta, err = engine.GetOrFetchMetadata(r.Context(), g.WS, files.Path(g.DB), conn.DB, engine.GetDialect(dbType), "", noCache)
-	return conn, g, err
+	conn.Meta, err = engine.GetOrFetchMetadata(r.Context(), grant.WorkspaceID, files.Path(grant.DatasourceID), conn.DB, engine.GetDialect(dbType), "", noCache)
+	return conn, grant, err
 }
 
 // fail answers a request the cellar could not serve, keeping paths out of
@@ -54,14 +54,14 @@ func execute(files *Files) http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		conn, g, err := openFile(r, files, false)
+		conn, grant, err := openFile(r, files, false)
 		if err != nil {
 			fail(w, r, err)
 			return
 		}
 		sink := transport.WriteArrow(w)
 		defer sink.Close()
-		engine.StreamLocal(r.Context(), conn, engine.DBInstance{ID: g.DB, DBType: dbType}, req.SQL, req.Options(), sink)
+		engine.StreamLocal(r.Context(), conn, engine.DBInstance{ID: grant.DatasourceID, DBType: dbType}, req.SQL, req.Options(), sink)
 	}
 }
 
@@ -92,12 +92,12 @@ func ping(files *Files) http.HandlerFunc {
 
 func dump(files *Files) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, g, err := openFile(r, files, false)
+		conn, grant, err := openFile(r, files, false)
 		if err != nil {
 			fail(w, r, err)
 			return
 		}
-		schemaSQL := engine.GetOrGenerateDump(engine.GetDialect(dbType), g.WS, files.Path(g.DB), conn.Meta, false)
+		schemaSQL := engine.GetOrGenerateDump(engine.GetDialect(dbType), grant.WorkspaceID, files.Path(grant.DatasourceID), conn.Meta, false)
 		transport.WriteZstdJSON(w, map[string]string{"sql": schemaSQL})
 	}
 }

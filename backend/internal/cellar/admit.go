@@ -17,8 +17,8 @@ const statementTimeout = 60 * time.Second
 func Admit(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.Handler {
 	authenticate := Authenticate(pub, cellarID)
 	slot := middlewares.InFlight(func(r *http.Request) (string, int) {
-		g := GrantFrom(r.Context())
-		return g.WS, g.Slots
+		grant := GrantFrom(r.Context())
+		return grant.WorkspaceID, grant.MaxInFlight
 	})
 	return func(next http.Handler) http.Handler {
 		limited := slot(next)

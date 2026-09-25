@@ -17,12 +17,12 @@ import (
 // Grant is what one cellar request may do. The cellar knows no users and reads
 // no Postgres, so the backend sends all of it in GrantHeader.
 type Grant struct {
-	DB       string                 `json:"-"` // the path's id
-	WS       string                 `json:"ws"`
-	CellarID string                 `json:"cel"`
-	MaxBytes int64                  `json:"max"`
-	Slots    int                    `json:"slots"` // statements the workspace may run at once
-	Perms    []core.PermissionEntry `json:"perms"` // the caller's entries for DB
+	DatasourceID string                 `json:"-"` // the path's id
+	WorkspaceID  string                 `json:"workspace_id"`
+	CellarID     string                 `json:"cellar_id"`
+	MaxBytes     int64                  `json:"max_bytes"`
+	MaxInFlight  int                    `json:"max_in_flight"` // statements the workspace may run at once
+	Permissions  []core.PermissionEntry `json:"permissions"`   // the caller's entries for the datasource
 }
 
 // GrantHeader carries a Grant as base64url JSON.
@@ -32,27 +32,27 @@ const GrantHeader = "X-Cellar-Grant"
 // token never opens one.
 const Audience = "selectdb-cellar"
 
-// Encode is g as the GrantHeader value.
-func (g Grant) Encode() (string, error) {
-	b, err := json.Marshal(g)
+// Encode is the grant as the GrantHeader value.
+func (grant Grant) Encode() (string, error) {
+	b, err := json.Marshal(grant)
 	return base64.RawURLEncoding.EncodeToString(b), err
 }
 
 func decodeGrant(v string) (Grant, error) {
-	var g Grant
+	var grant Grant
 	b, err := base64.RawURLEncoding.DecodeString(v)
 	if err == nil {
-		err = json.Unmarshal(b, &g)
+		err = json.Unmarshal(b, &grant)
 	}
-	return g, err
+	return grant, err
 }
 
 type grantKey struct{}
 
 // GrantFrom returns the grant Authenticate admitted for this request.
 func GrantFrom(ctx context.Context) Grant {
-	g, _ := ctx.Value(grantKey{}).(Grant)
-	return g
+	grant, _ := ctx.Value(grantKey{}).(Grant)
+	return grant
 }
 
 // Authenticate admits only the backend, with a grant for this cellar. Refusals
@@ -60,27 +60,27 @@ func GrantFrom(ctx context.Context) Grant {
 func Authenticate(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			db := r.PathValue("id")
+			datasourceID := r.PathValue("id")
 			refuse := func(err error) {
-				log.Printf("cellar: refused request for db %s: %v", db, err)
+				log.Printf("cellar: refused request for datasource %s: %v", datasourceID, err)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 			}
 			if _, _, err := auth.Verify(auth.ExtractBearerToken(r.Header.Get("Authorization")), pub, Audience); err != nil {
 				refuse(err)
 				return
 			}
-			g, err := decodeGrant(r.Header.Get(GrantHeader))
+			grant, err := decodeGrant(r.Header.Get(GrantHeader))
 			if err != nil {
 				refuse(err)
 				return
 			}
-			if g.CellarID != cellarID || cellarID == "" {
-				// The db moved to another cellar: never let two write it.
-				refuse(errors.New("grant is for cellar " + g.CellarID))
+			if grant.CellarID != cellarID || cellarID == "" {
+				// The datasource moved to another cellar: never let two write it.
+				refuse(errors.New("grant is for cellar " + grant.CellarID))
 				return
 			}
-			g.DB = db
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), grantKey{}, g)))
+			grant.DatasourceID = datasourceID
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), grantKey{}, grant)))
 		})
 	}
 }

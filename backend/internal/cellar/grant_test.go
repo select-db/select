@@ -39,9 +39,9 @@ func TestAuthenticate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	good := Grant{WS: "ws-1", CellarID: "local", MaxBytes: 1 << 20, Perms: []core.PermissionEntry{{Action: "select", Effect: "allow"}}}
+	good := Grant{WorkspaceID: "ws-1", CellarID: "local", MaxBytes: 1 << 20, Permissions: []core.PermissionEntry{{Action: "select", Effect: "allow"}}}
 	goodHeader, _ := good.Encode()
-	elsewhere, _ := Grant{WS: "ws-1", CellarID: "cellar-2"}.Encode()
+	elsewhere, _ := Grant{WorkspaceID: "ws-1", CellarID: "cellar-2"}.Encode()
 
 	var seen Grant
 	mux := http.NewServeMux()
@@ -71,7 +71,7 @@ func TestAuthenticate(t *testing.T) {
 			t.Errorf("%s: status %d, want ok=%v", c.name, w.Code, c.wantOK)
 		}
 		want := good
-		want.DB = "db-1"
+		want.DatasourceID = "db-1"
 		if c.wantOK && !reflect.DeepEqual(seen, want) {
 			t.Errorf("%s: handler saw grant %+v, want %+v", c.name, seen, want)
 		}

@@ -33,11 +33,11 @@ func onCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (
 		return nil, engine.DBInstance{}, ErrCellarOff
 	}
 	t, err := cellarClient.Transport(cellar.Grant{
-		WS:       workspaceID,
-		CellarID: ds.CellarID,
-		MaxBytes: maxBytes[ds.Plan],
-		Slots:    max(4, 2*ds.Members),
-		Perms:    authz.EntriesOn(r, id),
+		WorkspaceID: workspaceID,
+		CellarID:    ds.CellarID,
+		MaxBytes:    maxBytes[ds.Plan],
+		MaxInFlight: max(4, 2*ds.Members),
+		Permissions: authz.EntriesOn(r, id),
 	})
 	if err != nil {
 		return nil, engine.DBInstance{}, err
