@@ -26,8 +26,7 @@ required_since() {
 		awk '{ n = 0; for (i = 1; i < NF; i++) if ($(i + 1) ~ /^(insertion|deletion)/) n += $i; print n }')"
 }
 
-# The workflows share this list, this threshold and this rule through these modes.
-[ "$mode" = required ] && { required_for "${2:-}"; exit 0; }
+# publish.sh shares this list, this threshold and this rule through these modes.
 [ "$mode" = required-since ] && { required_since "${2:-origin/dev}"; exit 0; }
 [ "$mode" = fanned-out ] && { fanned_out; exit 0; }
 

@@ -37,6 +37,6 @@ web/generate/generate
 # Built by `go build ./internal/cmd/e2eseed`, which drops the binary in app/.
 /app/e2eseed
 
-# The dialect finder's ledger worktree and scratch, made by .github/workflows/dialect-finder.yml.
-/.finder-memory/
+# The dialect agents' scratch, made by their workflows.
 /.finder-work/
+/.fixer-work/
