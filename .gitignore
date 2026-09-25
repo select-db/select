@@ -40,3 +40,6 @@ web/generate/generate
 # The dialect agents' scratch, made by their workflows.
 /.finder-work/
 /.fixer-work/
+
+# Python bytecode caches.
+__pycache__/
