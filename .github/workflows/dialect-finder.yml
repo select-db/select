@@ -105,7 +105,8 @@ jobs:
         if: always() && env.FINDER_DRY_RUN != '1' && hashFiles('.finder-work/cases.jsonl') != ''
         working-directory: ${{ runner.temp }}/finder-memory
         run: |
-          python3 "$GITHUB_WORKSPACE/$SCRIPTS/grid.py" add cases.jsonl "$GITHUB_WORKSPACE/.finder-work/cases.jsonl" "$GITHUB_RUN_ID"
+          # grid.py ignores rows off the grid, so they are kept as they are.
+          cat "$GITHUB_WORKSPACE/.finder-work/cases.jsonl" >> cases.jsonl
           git add cases.jsonl
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "run $GITHUB_RUN_ID"
           git push -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" HEAD:refs/heads/agent/finder-memory

@@ -1,108 +1,96 @@
 #!/usr/bin/env python3
 """Pairwise coverage of .claude/dialect/grid.json by the finder's case rows.
 
-  grid.py status <cases.jsonl>...              pairs tried per layer
-  grid.py next <layer> <n> <cases.jsonl>...     n positions covering the most untried pairs
-  grid.py add <memory> <new rows> <run>         append the rows that fit the grid
+  grid.py status               pairs tried per layer
+  grid.py next <layer> <n>     n positions covering the most untried pairs
 
-A row: {"layer", "position": {axis: value}, "dialect", "sql", "outcome": pass|mismatch|skipped}
+Reads $FINDER_CASES and .finder-work/cases.jsonl. A row:
+{"layer", "position": {axis: value}, "dialect", "sql", "outcome": pass|mismatch|skipped}
 or {"layer", "outcome": "impossible", "impossible": {axis: value, axis: value}, "reason"}.
 """
 import itertools
 import json
-import random
+import os
 import sys
 from pathlib import Path
 
 GRID = json.loads((Path(__file__).resolve().parents[3] / "dialect/grid.json").read_text())
+LAYERS = {
+    name: {axis: GRID["shared"][v] if isinstance(v, str) else v for axis, v in layer["axes"].items()}
+    for name, layer in GRID["layers"].items()
+}
 
 
-def rows(*paths):
-    return [json.loads(line) for p in map(Path, paths) if p.exists() for line in p.read_text().splitlines() if line.strip()]
+def rows():
+    paths = [os.environ.get("FINDER_CASES", ""), ".finder-work/cases.jsonl"]
+    return [json.loads(line) for p in map(Path, filter(None, paths)) if p.is_file()
+            for line in p.read_text().splitlines() if line.strip()]
 
 
 def pairs(position):
-    items = sorted(position.items())
-    return {(a, b) for a, b in itertools.combinations(items, 2)}
+    return set(itertools.combinations(sorted(position.items()), 2))
 
 
 def valid(layer, position):
-    axes = GRID.get(layer)
-    return bool(axes) and bool(position) and all(axes.get(k) and v in axes[k] for k, v in position.items())
+    axes = LAYERS.get(layer, {})
+    return bool(position) and all(v in axes.get(k, ()) for k, v in position.items())
 
 
-def all_pairs(layer):
-    items = [(axis, v) for axis, values in sorted(GRID[layer].items()) for v in values]
-    return {(a, b) for a, b in itertools.combinations(items, 2) if a[0] != b[0]}
+def dead(layer, pair):
+    """A pair a reviewed requires rule in grid.json forbids."""
+    requires = GRID["layers"][layer].get("requires", {})
+    for (a, x), (b, y) in (pair, pair[::-1]):
+        allowed = requires.get(f"{a}={x}", {}).get(b)
+        if allowed is not None and y not in allowed:
+            return True
+    return False
 
 
 def coverage(layer, cases):
-    tried, impossible = set(), set()
+    items = [(axis, v) for axis, values in sorted(LAYERS[layer].items()) for v in values]
+    possible = {p for p in itertools.combinations(items, 2) if p[0][0] != p[1][0] and not dead(layer, p)}
+    tried = set()
     for r in cases:
         if r.get("layer") != layer:
             continue
-        if r.get("outcome") == "impossible" and valid(layer, r.get("impossible", {})) and len(r["impossible"]) == 2:
-            impossible |= pairs(r["impossible"])
-        elif r.get("outcome") in ("pass", "mismatch", "skipped") and valid(layer, r.get("position", {})):
+        if r.get("outcome") == "impossible" and len(r.get("impossible", {})) == 2 and valid(layer, r["impossible"]):
+            possible -= pairs(r["impossible"])
+        elif r.get("outcome") in ("pass", "mismatch", "skipped") and valid(layer, r.get("position")):
             tried |= pairs(r["position"])
-    return all_pairs(layer) - impossible, tried, impossible
+    return possible, tried
 
 
-def status(cases):
-    for layer in GRID:
-        possible, tried, impossible = coverage(layer, cases)
-        print(f"{layer}: {len(possible & tried)}/{len(possible)} pairs tried, {len(impossible)} impossible")
-
-
-def next_positions(cases, layer, n):
-    possible, tried, impossible = coverage(layer, cases)
+def next_positions(layer, n, cases):
+    possible, tried = coverage(layer, cases)
     todo = possible - tried
-    rng = random.Random(len(cases))
-    axes = GRID[layer]
-    chosen = []
+    axes = sorted(LAYERS[layer].items())
     for _ in range(n):
         if not todo:
-            break
-        # Seed each position with one untried pair, then fill the other axes greedily.
+            return
+        # Seed with one untried pair, then give each other axis the value that
+        # covers the most untried pairs with the values already set.
         (a, x), (b, y) = min(todo)
-        best, gain = None, -1
-        for _ in range(200):
-            pos = {k: rng.choice(v) for k, v in axes.items()}
-            pos[a], pos[b] = x, y
-            ps = pairs(pos)
-            if ps & impossible:
+        pos = {a: x, b: y}
+        for axis, values in axes:
+            if axis in pos:
                 continue
-            if len(ps & todo) > gain:
-                best, gain = pos, len(ps & todo)
-        if best is None:
-            todo.discard(((a, x), (b, y)))
-            continue
-        chosen.append(best)
-        todo -= pairs(best)
-    for pos in chosen:
-        print(json.dumps(pos))
-
-
-def add(path, new, run):
-    kept = 0
-    with open(path, "a") as out:
-        for i, r in enumerate(rows(new)):
-            ok = valid(r.get("layer"), r.get("impossible") if r.get("outcome") == "impossible" else r.get("position"))
-            if not ok or r.get("outcome") not in ("pass", "mismatch", "skipped", "impossible"):
-                print(f"rejected row {i + 1}: {json.dumps(r)[:200]}", file=sys.stderr)
-                continue
-            out.write(json.dumps({**r, "run": run}) + "\n")
-            kept += 1
-    print(f"added {kept} rows")
+            ok = [v for v in values if all(tuple(sorted(p)) in possible for p in (((axis, v), (k, w)) for k, w in pos.items()))]
+            if not ok:
+                break
+            pos[axis] = max(ok, key=lambda v: sum(tuple(sorted(((axis, v), (k, w)))) in todo for k, w in pos.items()))
+        todo.discard(((a, x), (b, y)))
+        if len(pos) == len(axes):
+            todo -= pairs(pos)
+            print(json.dumps(pos))
 
 
 if __name__ == "__main__":
-    cmd, args = sys.argv[1], sys.argv[2:]
-    if cmd == "status":
-        status(rows(*args))
-    elif cmd == "next":
-        next_positions(rows(*args[2:]), args[0], int(args[1]))
-    elif cmd == "add":
-        add(args[0], args[1], args[2])
+    cases = rows()
+    if sys.argv[1:2] == ["status"]:
+        for layer in LAYERS:
+            possible, tried = coverage(layer, cases)
+            print(f"{layer}: {len(possible & tried)}/{len(possible)} pairs tried")
+    elif sys.argv[1:2] == ["next"]:
+        next_positions(sys.argv[2], int(sys.argv[3]), cases)
     else:
         sys.exit(__doc__)
