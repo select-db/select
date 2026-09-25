@@ -125,6 +125,10 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 		return i.inspectDelete(deleteStmt)
 	}
 
+	if mergeStmt := stmt.Mergestmt(); mergeStmt != nil {
+		return i.inspectMerge(mergeStmt)
+	}
+
 	if truncateStmt := stmt.Truncatestmt(); truncateStmt != nil {
 		return i.inspectTruncate(truncateStmt)
 	}
@@ -532,22 +536,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 		return result
 	}
 
-	// Collect explicitly listed target columns.
-	if colList := rest.Insert_column_list(); colList != nil {
-		for _, item := range colList.AllInsert_column_item() {
-			if colId := item.Colid(); colId != nil {
-				name := i.dialect.NormalizeIdentifier(colId.GetText())
-				result.Fields = append(result.Fields, core.InspectField{
-					Name:   name,
-					Table:  tableName,
-					Schema: schema,
-				})
-			}
-		}
-	} else {
-		// No explicit column list, expand to all columns from metadata.
-		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
-	}
+	result.Fields = i.insertedColumns(rest.Insert_column_list(), schema, tableName)
 
 	ctes, cteBodies := i.inspectWithClause(stmt.Opt_with_clause())
 	result.Subqueries = append(result.Subqueries, cteBodies...)
@@ -580,7 +569,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	// DO NOTHING leaves it exactly as it was.
 	if conflict != nil && conflict.UPDATE() != nil {
 		core.AlsoPerforms(result, core.InspectOpUpdate,
-			i.conflictSetFields(conflict, schema, tableName))
+			i.assignedFields(conflict.Set_clause_list(), schema, tableName))
 	}
 
 	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
@@ -590,24 +579,46 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	return result
 }
 
-// conflictSetFields are the columns DO UPDATE writes, which is what a role
+// insertedColumns are the columns an insert list names, or every column of the
+// table where it names none, which is what an insert without a list writes.
+func (i *Inspector) insertedColumns(list pg.IInsert_column_listContext, schema, table string) []core.InspectField {
+	if list == nil {
+		return core.TableFields(i.meta, schema, table, i.dialect)
+	}
+	var fields []core.InspectField
+	for _, item := range list.AllInsert_column_item() {
+		colID := item.Colid()
+		if colID == nil {
+			continue
+		}
+		fields = append(fields, core.InspectField{
+			Name:   i.dialect.NormalizeIdentifier(colID.GetText()),
+			Table:  table,
+			Schema: schema,
+		})
+	}
+	return fields
+}
+
+// assignedFields are the columns a SET list writes, which is what a role
 // holding update on some of the table's columns is checked against.
-func (i *Inspector) conflictSetFields(
-	conflict pg.IOpt_on_conflictContext,
+func (i *Inspector) assignedFields(
+	list pg.ISet_clause_listContext,
 	schema, table string,
 ) []core.InspectField {
-	list := conflict.Set_clause_list()
 	if list == nil {
 		return nil
 	}
 	var fields []core.InspectField
 	for _, clause := range list.AllSet_clause() {
 		target := clause.Set_target()
-		if target == nil {
+		if target == nil || target.Colid() == nil {
 			continue
 		}
+		// The column, not the subscript or the field after it: a grant names
+		// c2, and SET c2[1] writes c2.
 		fields = append(fields, core.InspectField{
-			Name:   i.dialect.NormalizeIdentifier(target.GetText()),
+			Name:   i.dialect.NormalizeIdentifier(target.Colid().GetText()),
 			Table:  table,
 			Schema: schema,
 		})
@@ -875,17 +886,8 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// Collect SET columns from set_clause_list.
 	var stored []core.InspectField
 	if setList := stmt.Set_clause_list(); setList != nil {
+		result.Fields = i.assignedFields(setList, schema, tableName)
 		for _, clause := range setList.AllSet_clause() {
-			if target := clause.Set_target(); target != nil {
-				if colId := target.Colid(); colId != nil {
-					name := i.dialect.NormalizeIdentifier(colId.GetText())
-					result.Fields = append(result.Fields, core.InspectField{
-						Name:   name,
-						Table:  tableName,
-						Schema: schema,
-					})
-				}
-			}
 			if expr := clause.A_expr(); expr != nil {
 				stored = core.MergeInspectFields(stored,
 					i.testedFields(expr, whereRefs, core.Scope{CTEs: ctes}))
@@ -925,10 +927,16 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	return result
 }
 
-// targetAlias is the name an UPDATE or DELETE target goes by in the rest of
-// the statement. Without it a column qualified with the alias resolves to no
-// table, and a column that resolves to no table is checked against nothing.
-func (i *Inspector) targetAlias(rel pg.IRelation_expr_opt_aliasContext) string {
+// aliased is a node naming a relation's alias. An UPDATE or DELETE target and
+// a MERGE's target or source spell it as different grammar rules.
+type aliased interface {
+	Colid() pg.IColidContext
+}
+
+// targetAlias is the name a relation goes by in the rest of the statement.
+// Without it a column qualified with the alias resolves to no table, and a
+// column that resolves to no table is checked against nothing.
+func (i *Inspector) targetAlias(rel aliased) string {
 	if rel == nil || rel.Colid() == nil {
 		return ""
 	}
@@ -983,6 +991,134 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
 	return result
+}
+
+// inspectMerge analyzes MERGE, which writes its target with whatever its WHEN
+// clauses name and reads the source it matches rows against, so it takes the
+// rights an UPDATE ... FROM of the same shape takes.
+func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStatement {
+	target, source := mergeRelations(stmt)
+	schema, table := i.resolveQualifiedName(target.name)
+	if table == "" {
+		return nil
+	}
+
+	ctes, cteBodies := i.extractCTEsWithSubqueries(stmt.With_clause())
+	result := &core.InspectStatement{
+		Operation:  core.InspectOpUnknown,
+		Tables:     []core.InspectTable{{Name: table, Schema: schema}},
+		Subqueries: cteBodies,
+	}
+
+	scope := core.Scope{CTEs: ctes}
+	refs := []core.RelationRef{{Table: table, Schema: schema, Alias: i.targetAlias(target.alias)}}
+
+	if query := stmt.Select_with_parens(); query != nil {
+		result.Subqueries = append(result.Subqueries, core.OrUnknown(i.inspectSelectWithParens(query)))
+	} else if sourceSchema, sourceTable := i.resolveQualifiedName(source.name); sourceTable != "" {
+		ref := core.RelationRef{Table: sourceTable, Schema: sourceSchema, Alias: i.targetAlias(source.alias)}
+		refs = append(refs, ref)
+		if tables := i.resolver.Tables([]core.RelationRef{ref}, scope); len(tables) > 0 {
+			result.Subqueries = append(result.Subqueries,
+				core.InspectStatement{Operation: core.InspectOpSelect, Tables: tables})
+		}
+	}
+
+	update, insert, deletes := mergeClauses(stmt)
+
+	// ON chooses the rows, a WHEN guard narrows them, and an assignment stores
+	// what it read. No such column comes back to the caller, so each is a read.
+	for _, clause := range []antlr.ParseTree{
+		core.TreeOrNil(stmt.A_expr()),
+		core.TreeOrNil(update),
+		core.TreeOrNil(insert),
+	} {
+		if clause == nil {
+			continue
+		}
+		result.Where = core.MergeInspectFields(result.Where, i.testedFields(clause, refs, scope))
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(clause)...)
+	}
+
+	// Each WHEN clause acts on the target in its own right, so the rest sit
+	// beside the first: holding update is no right to have a statement delete.
+	perform := func(op core.InspectOperation, fields []core.InspectField) {
+		if result.Operation == core.InspectOpUnknown {
+			result.Operation, result.Fields = op, fields
+			return
+		}
+		core.AlsoPerforms(result, op, fields)
+	}
+	if update != nil {
+		perform(core.InspectOpUpdate, i.assignedFields(update.Set_clause_list(), schema, table))
+	}
+	if insert != nil {
+		perform(core.InspectOpInsert, i.insertedColumns(insert.Insert_column_list(), schema, table))
+	}
+	if deletes {
+		// A row leaves whole, and a grant on one of its columns is no right to
+		// remove it.
+		perform(core.InspectOpDelete, nil)
+	}
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
+
+	return result
+}
+
+// mergeClauses are the WHEN clauses that carry what they need to act. Error
+// recovery leaves a clause node behind for syntax the grammar rejects, such as
+// WHEN NOT MATCHED THEN DO NOTHING or a second WHEN MATCHED, and reading one of
+// those reports an action the statement does not perform.
+func mergeClauses(stmt pg.IMergestmtContext) (
+	update pg.IMerge_update_clauseContext,
+	insert pg.IMerge_insert_clauseContext,
+	deletes bool,
+) {
+	if node := stmt.Merge_update_clause(); node != nil && node.Set_clause_list() != nil {
+		update = node
+	}
+	if node := stmt.Merge_insert_clause(); node != nil && node.Values_clause() != nil {
+		insert = node
+	}
+	if node := stmt.Merge_delete_clause(); node != nil && written(node.DELETE_P()) {
+		deletes = true
+	}
+	return update, insert, deletes
+}
+
+// written reports whether a token is in the statement somebody wrote. Error
+// recovery invents the token a rule is missing, and an invented one carries no
+// index into the stream.
+func written(token antlr.TerminalNode) bool {
+	return token != nil && token.GetSymbol().GetTokenIndex() >= 0
+}
+
+// mergeRelation is a relation a MERGE names, with the alias the rest of the
+// statement calls it by.
+type mergeRelation struct {
+	name  pg.IQualified_nameContext
+	alias pg.IAlias_clauseContext
+}
+
+// mergeRelations splits a MERGE's relations at USING: what comes before is the
+// target it writes, what comes after is the source it reads. Both are the same
+// grammar rule, so their order is the only thing telling them apart.
+func mergeRelations(stmt pg.IMergestmtContext) (target, source mergeRelation) {
+	side := &target
+	for _, child := range stmt.GetChildren() {
+		switch node := child.(type) {
+		case antlr.TerminalNode:
+			if node.GetSymbol().GetTokenType() == pg.PostgreSQLParserUSING {
+				side = &source
+			}
+		case pg.IQualified_nameContext:
+			side.name = node
+		case pg.IAlias_clauseContext:
+			side.alias = node
+		}
+	}
+	return target, source
 }
 
 // extractRelationRefsFromPrimary extracts table references from a simple_select_pramary.
