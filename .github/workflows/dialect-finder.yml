@@ -10,12 +10,13 @@ name: Dialect finder
 on:
   schedule:
     - cron: "17 2 * * *"
+    - cron: "17 14 * * *"
   workflow_dispatch:
     inputs:
       minutes:
         description: Minutes the agent spends finding; it gets 10 more to wrap up
         type: number
-        default: 20
+        default: 60
       dry_run:
         description: File no issues
         type: boolean
@@ -38,7 +39,7 @@ jobs:
       # Assigned and mentioned on what the finder files.
       FINDER_NOTIFY: Arthur-Mesplede
       FINDER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
-      FINDER_MINUTES: ${{ inputs.minutes || 20 }}
+      FINDER_MINUTES: ${{ inputs.minutes || 60 }}
       FINDER_MAX_ISSUES: "5"
       FINDER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       GH_TOKEN: ${{ github.token }}
