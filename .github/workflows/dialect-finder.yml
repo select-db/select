@@ -82,7 +82,7 @@ jobs:
             --max-turns 150
             --allowedTools "Read,Grep,Glob,Agent,Task,Bash,Edit(/.finder-work/**)"
 
-      # The sandbox may not keep the agent out of .claude and .github, and the
+      # Only the sandbox's denyWrite keeps the agent out of .claude, and the
       # step below runs a script from there with a token.
       - name: Restore trusted files
         if: always() && env.AGENT_BASE != ''
