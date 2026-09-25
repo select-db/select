@@ -59,7 +59,7 @@ func Authenticate(pub *rsa.PublicKey, cellarID string) func(http.Handler) http.H
 				log.Printf("cellar: refused request for db %s: %v", db, err)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 			}
-			if err := auth.ValidateCellarToken(auth.ExtractBearerToken(r.Header.Get("Authorization")), pub); err != nil {
+			if _, _, err := auth.Verify(auth.ExtractBearerToken(r.Header.Get("Authorization")), pub, Audience); err != nil {
 				refuse(err)
 				return
 			}

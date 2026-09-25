@@ -103,7 +103,7 @@ Settled. Reopen with a reason, not a preference.
 - The cellar trusts the backend, on a private network. The token names no
   db, so a leaked one opens any db on the cellar until it expires. The backend proves
   itself with one service JWT: audience `selectdb-cellar`, 60s, signed with
-  the existing JWT signer (`auth/jwt.go`) and reused for 50s, because each KMS
+  `auth.Sign`, like user tokens, and reused for 50s, because each KMS
   sign is a remote call. The cellar holds only the public key. User tokens
   have another audience and never open a db.
 - Everything else is plain request data. The db is the path's id; the grant

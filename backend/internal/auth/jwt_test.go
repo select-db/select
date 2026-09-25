@@ -2,8 +2,11 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -51,5 +54,36 @@ func TestJWTRejectsTampered(t *testing.T) {
 	tampered := parts[0] + "." + string(p) + "." + parts[2]
 	if _, _, err := ValidateJWT(tampered); err == nil {
 		t.Fatal("expected verification failure on tampered token")
+	}
+}
+
+func TestVerifyRejects(t *testing.T) {
+	pub, err := PublicKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid, err := Sign(CustomClaims{}, "svc", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expired, err := Sign(CustomClaims{}, "svc", -time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Verify(valid, pub, "svc"); err != nil {
+		t.Fatalf("valid token refused: %v", err)
+	}
+	for name, check := range map[string]func() error{
+		"expired":        func() error { _, _, err := Verify(expired, pub, "svc"); return err },
+		"other key":      func() error { _, _, err := Verify(valid, &other.PublicKey, "svc"); return err },
+		"other audience": func() error { _, _, err := ValidateJWT(valid); return err },
+	} {
+		if check() == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

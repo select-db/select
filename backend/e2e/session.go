@@ -3,16 +3,12 @@ package e2e
 import (
 	"bytes"
 	"context"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -51,27 +47,11 @@ func (d *Device) Refresh(t *testing.T) (*middlewares.TokenResponse, error) {
 	return tokens, err
 }
 
-// MintExpiredJWT signs an access token that expired an hour ago, with the key
-// the harness wrote. CreateJWT cannot produce one, and the middleware's refresh
-// branch runs only for a token in this state.
+// MintExpiredJWT signs an access token that expired an hour ago: the
+// middleware's refresh branch runs only for a token in this state.
 func MintExpiredJWT(t *testing.T, userID string) string {
 	t.Helper()
-	pemBytes, err := os.ReadFile(os.Getenv("PRIVATE_KEY_PATH"))
-	require.NoError(t, err)
-	block, _ := pem.Decode(pemBytes)
-	require.NotNil(t, block, "no PEM block in the harness signing key")
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	require.NoError(t, err)
-
-	signed, err := jwt.NewWithClaims(jwt.SigningMethodRS256, auth.CustomClaims{
-		UserID: userID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    auth.Issuer,
-			Audience:  jwt.ClaimStrings{auth.Audience},
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
-		},
-	}).SignedString(key)
+	signed, err := auth.Sign(auth.CustomClaims{UserID: userID}, auth.Audience, -time.Hour)
 	require.NoError(t, err)
 	return signed
 }

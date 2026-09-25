@@ -66,6 +66,9 @@ func getPublicKey() (*rsa.PublicKey, error) {
 	return publicKey, keyErr
 }
 
+// PublicKey is the key every token Sign issues verifies against.
+func PublicKey() (*rsa.PublicKey, error) { return getPublicKey() }
+
 // rsaSignerMethod adapts a crypto.Signer (local RSA key or remote KMS key) to
 // golang-jwt. It emits standard RS256 signatures, so tokens verify with the
 // stock SigningMethodRS256 against the public key.
@@ -100,11 +103,6 @@ type CustomClaims struct {
 
 // CreateJWT issues a signed access token naming the user.
 func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
-	signer, err := getSigner()
-	if err != nil {
-		return "", fmt.Errorf("unable to sign JWT: %w", err)
-	}
-
 	displayName := ""
 	if db.Queries != nil {
 		if u, err := db.Queries.GetUserNameByID(ctx, userID); err == nil {
@@ -114,19 +112,24 @@ func CreateJWT(ctx context.Context, userID uuid.UUID) (string, error) {
 			}
 		}
 	}
+	return Sign(CustomClaims{UserID: userID.String(), Name: displayName}, Audience, accessTokenTTL)
+}
 
-	claims := CustomClaims{
-		UserID: userID.String(),
-		Name:   displayName,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    Issuer,
-			Audience:  jwt.ClaimStrings{Audience},
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenTTL)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
+// Sign issues every token this service signs: c for audience aud, valid for
+// ttl. Tokens for different audiences never verify for each other.
+func Sign(c CustomClaims, aud string, ttl time.Duration) (string, error) {
+	signer, err := getSigner()
+	if err != nil {
+		return "", fmt.Errorf("unable to sign JWT: %w", err)
 	}
-	token := jwt.NewWithClaims(jwtSigningMethod, claims)
-	return token.SignedString(signer)
+	now := time.Now()
+	c.RegisteredClaims = jwt.RegisteredClaims{
+		Issuer:    Issuer,
+		Audience:  jwt.ClaimStrings{aud},
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+	}
+	return jwt.NewWithClaims(jwtSigningMethod, c).SignedString(signer)
 }
 
 // CreateRefreshToken creates a refresh token, stores the hashed version in DB.
@@ -172,16 +175,13 @@ func CreateRefreshToken(ctx context.Context, userID uuid.UUID, deviceID string, 
 	return &plainToken, nil
 }
 
-// ValidateJWT verifies a JWT and returns its claims if valid
+// ValidateJWT verifies a user access token and returns its claims if valid.
 func ValidateJWT(tokenStr string) (*jwt.Token, *CustomClaims, error) {
 	pubKey, err := getPublicKey()
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to validate JWT: %w", err)
 	}
-
-	claims := &CustomClaims{}
-	token, err := parseRS256(tokenStr, claims, pubKey, Audience)
-
+	token, claims, err := Verify(tokenStr, pubKey, Audience)
 	if err != nil {
 		// When the token is expired, the library still parses and fills claims;
 		// return them so the middleware can refresh using claims.UserID.
@@ -193,13 +193,17 @@ func ValidateJWT(tokenStr string) (*jwt.Token, *CustomClaims, error) {
 	return token, claims, nil
 }
 
-// parseRS256 verifies tokenStr with pub, pinned to RSA, for our issuer and aud.
-func parseRS256(tokenStr string, claims jwt.Claims, pub *rsa.PublicKey, aud string, opts ...jwt.ParserOption) (*jwt.Token, error) {
-	opts = append(opts, jwt.WithAudience(aud), jwt.WithIssuer(Issuer))
-	return jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (any, error) {
+// Verify checks a token Sign issued for aud against pub, pinned to RSA.
+func Verify(tokenStr string, pub *rsa.PublicKey, aud string) (*jwt.Token, *CustomClaims, error) {
+	if pub == nil {
+		return nil, nil, errors.New("verify JWT: no public key")
+	}
+	claims := &CustomClaims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return pub, nil
-	}, opts...)
+	}, jwt.WithAudience(aud), jwt.WithIssuer(Issuer), jwt.WithExpirationRequired())
+	return token, claims, err
 }

@@ -7,6 +7,10 @@ import (
 	"backend/internal/auth"
 )
 
+// Audience is the audience of the backend's tokens for a cellar, so a user
+// token never opens one.
+const Audience = "selectdb-cellar"
+
 // A token lives tokenTTL and is reused for reuseFor: each KMS sign is a remote
 // call, and every reused token still has 10s left when it reaches the cellar.
 const (
@@ -24,7 +28,10 @@ type Tokens struct {
 }
 
 func NewTokens() *Tokens {
-	return &Tokens{sign: auth.SignCellarToken, now: time.Now}
+	return &Tokens{
+		sign: func(ttl time.Duration) (string, error) { return auth.Sign(auth.CustomClaims{}, Audience, ttl) },
+		now:  time.Now,
+	}
 }
 
 // Token returns a signed token. Callers wait on one sign rather than each

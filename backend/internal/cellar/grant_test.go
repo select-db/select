@@ -20,7 +20,7 @@ func signWith(t *testing.T, priv *rsa.PrivateKey) string {
 	t.Helper()
 	c := jwt.RegisteredClaims{
 		Issuer:    auth.Issuer,
-		Audience:  jwt.ClaimStrings{auth.CellarAudience},
+		Audience:  jwt.ClaimStrings{Audience},
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute)),
 	}
 	tok, err := jwt.NewWithClaims(jwt.SigningMethodRS256, c).SignedString(priv)
