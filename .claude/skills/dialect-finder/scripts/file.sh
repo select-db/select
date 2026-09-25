@@ -1,41 +1,29 @@
 #!/usr/bin/env bash
-# The finder's only way to write to GitHub. It runs outside Claude Code's
-# sandbox, with the token the sandbox withholds, so it posts nothing but a body
-# the agent wrote under .finder-work/, links resolved.
-#   file.sh issue "<title>" <label,label,...> <body file> [assign]
-#   file.sh comment <issue number> <body file>   on an agent:finder issue
-set -euo pipefail
+# Files the issues the finder left in .finder-work/file/*.md, at most
+# $FINDER_MAX_ISSUES. Each file: "title:" and "labels:" lines, a blank line,
+# then the body. Only finder labels pass, so no fix:go.
+set -uo pipefail
 
-[ "${FINDER_DRY_RUN:-0}" = 1 ] && { echo "dry run: filed nothing" >&2; exit 0; }
-
-body_file() {
-	local path
-	path=$(realpath -e -- "$1") || { echo "no body file: $1" >&2; exit 2; }
-	case "$path" in
-	"$PWD"/.finder-work/*) [ -f "$path" ] && { echo "$path"; return; } ;;
-	esac
-	echo "the body must be a file under .finder-work/: $1" >&2
-	exit 2
-}
-
-case "${1:-}" in
-issue)
-	[ $# -ge 4 ] || { echo "usage: file.sh issue <title> <labels> <body file> [assign]" >&2; exit 2; }
-	[[ $3 =~ ^[a-z0-9:_-]+(,[a-z0-9:_-]+)*$ ]] || { echo "bad labels: $3" >&2; exit 2; }
-	body=$(body_file "$4")
-	args=(--title "$2" --label "$3" --body-file "$body")
-	[ "${5:-}" = assign ] && args+=(--assignee "$FINDER_NOTIFY")
-	gh issue create "${args[@]}" | grep -oE '[0-9]+$'
-	;;
-comment)
-	[ $# -eq 3 ] && [[ $2 =~ ^[0-9]+$ ]] || { echo "usage: file.sh comment <issue number> <body file>" >&2; exit 2; }
-	body=$(body_file "$3")
-	gh issue view "$2" --json labels --jq '.labels[].name' | grep -qx agent:finder ||
-		{ echo "#$2 is not a finder issue" >&2; exit 2; }
-	gh issue comment "$2" --body-file "$body"
-	;;
-*)
-	echo "usage: file.sh issue|comment ..." >&2
-	exit 2
-	;;
-esac
+label='(agent:finder|bug|needs-triage|(area|dialect|sev|oracle):[a-z-]+)'
+filed=0 failed=0
+for file in .finder-work/file/*.md; do
+	[ -f "$file" ] || continue
+	[ "$filed" -lt "${FINDER_MAX_ISSUES:-5}" ] || { echo "over the cap: $file" >&2; continue; }
+	grep -q '^$' "$file" || { echo "skipped $file: no blank line after the headers" >&2; continue; }
+	headers=$(sed '/^$/q' "$file")
+	title=$(sed -n 's/^title: *//p' <<<"$headers" | sed -n 1p)
+	labels=$(sed -n 's/^labels: *//p' <<<"$headers" | sed -n 1p)
+	[ -n "$title" ] && [[ $labels =~ ^$label(,$label)*$ ]] ||
+		{ echo "skipped $file: needs a title: line and finder labels" >&2; continue; }
+	[[ ,$labels, == *,agent:finder,* ]] || labels="agent:finder,$labels"
+	body=$(mktemp)
+	{
+		printf '@%s\n\n' "$FINDER_NOTIFY"
+		sed '1,/^$/d' "$file"
+		printf '\n---\nFiled by the dialect finder, run %s. Close with one `verdict:` label and a one-line reason: the finder reads both.\n' "$FINDER_RUN_URL"
+	} >"$body"
+	args=(--title "$title" --label "$labels" --body-file "$body")
+	[[ ,$labels, == *,sev:bypass,* ]] && args+=(--assignee "$FINDER_NOTIFY")
+	gh issue create "${args[@]}" && filed=$((filed + 1)) || failed=1
+done
+exit "$failed"

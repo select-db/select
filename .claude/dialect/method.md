@@ -39,27 +39,33 @@ Hold this as a prior, not a conclusion. Confirm it by measurement.
 
 ## Enumerating the statement space
 
-"All possible cases" is only checkable if the enumeration has a shape. Walk the
-axes and take each cell; a cell with no case is a gap, and a gap is the thing
-this work exists to remove.
+"All possible cases" is only checkable if the enumeration has a shape. Every
+cell is too many, and most defects need only two values together, so the aim
+is every pair of values across two axes tried at least once. A pair with no
+case is a gap, and a gap is the thing this work exists to remove.
 
-### Axes for permissions
+### The grid
 
-- **Operation**: select, insert, update, delete, create, alter, drop, truncate,
-  grant, revoke, and what one dialect alone has (COPY, REPLACE, upsert, ATTACH,
-  PRAGMA, VACUUM, CALL, SET, EXPLAIN, ANALYZE, multi-table UPDATE and DELETE).
-- **Where a read hides**: the FROM list, a join, a CTE body, a derived table, a
-  scalar subquery in the select list, a subquery in WHERE, GROUP BY, HAVING,
-  ORDER BY or LIMIT, a RETURNING clause, an upsert predicate, the source of an
-  INSERT ... SELECT or a CREATE TABLE AS, a view body, each branch of a set
-  operation.
-- **How a relation is named**: bare, schema-qualified, aliased, quoted in each
-  way the dialect accepts, in another case, shadowing a CTE, shadowed by one.
-- **What the statement does with the table**: returns it, writes it, tests it
-  without returning it (which is the see boundary), or names it without
-  reading it.
-- **Policy**: deny-all, the four data actions without manage, per-table grants,
-  manage alone.
+The axes and their values are in `.claude/dialect/grid.json`, per layer. For
+permissions, `use` is what the statement does with the table: returns it,
+writes it, tests it without returning it (the see boundary), or names it
+without reading it. `outer` is the construct around the read, `inner` the one
+inside it and `depth` how many there are in all, so pairs compose nesting.
+`statements` is how many statements run and whether a later one reads what an
+earlier one made, and `read_statement` which of them holds the read.
+`requires` rules out the pairs no dialect can express.
+
+Lint is judged, not only checked. Its `defect` axis is the mistake a statement
+carries, whether or not a rule exists for it, and `none` for valid SQL. The
+expectation is what a good linter would say: the rule that should fire and the
+range it should cover, or silence. The implemented rules are listed in
+`dialect/core/tokenanalyzer/lint-rules.doc.md`. A realistic mistake that nothing reports is
+a gap to file, with the rule it needs; a diagnostic on valid SQL, a multi
+statement script or a dialect's own syntax is a false positive. Both are
+`sev:quality`.
+
+Policy is not an axis: `agentprobe` measures every case under deny-all, the
+data actions without manage, per-table grants and manage alone.
 
 ### Settled rules of the permission model
 
@@ -75,15 +81,6 @@ is the copy to read and to change:
   takes manage; revisit only if users ask for it.
 - That manage and the row rights do not stand in for each other: the cases
   named for it in the same table.
-
-### Axes for the later layers
-
-Completion: the position in the statement (after SELECT, after FROM, after a
-dot, inside a function call, in a WHERE, mid-identifier), what is in scope at
-it (tables, CTEs, aliases, columns of each), and what the user has typed so
-far. Linting: one case per rule, times the ways a statement can make the rule
-fire, plus the range the diagnostic must carry. Resolution: one case per
-identifier kind, at each position it can appear.
 
 ## Method
 

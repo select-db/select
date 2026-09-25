@@ -2,9 +2,9 @@ name: dialect-agent-env
 description: Go, the analyzer venv, a prebuilt agentprobe and Claude Code's sandbox, for the dialect agents.
 
 inputs:
-  sandbox:
-    description: fixer or finder, to set up Claude Code's sandbox for that agent.
-    default: ""
+  fixer:
+    description: "true to also prebuild the tests and install the linter the fixer runs"
+    default: "false"
 
 runs:
   using: composite
@@ -17,32 +17,38 @@ runs:
     - shell: bash
       working-directory: dialect/core/tokenanalyzer/python
       run: uv sync
-    # Built once so an agent's batches do not each pay for a compile.
+    # The sandbox has no network: every module, test build and the pinned
+    # linter are fetched now, then Go and uv are told to stay offline.
     - shell: bash
       working-directory: dialect
-      run: go build -o agentprobe ./cmd/agentprobe
-    # Claude Code's sandbox needs bubblewrap and socat, and Ubuntu 24.04's
-    # AppArmor policy otherwise refuses bubblewrap the user namespace it needs.
-    # The bwrap call fails here, before an agent run is paid for.
-    - if: inputs.sandbox != ''
-      shell: bash
       env:
-        AGENT: ${{ inputs.sandbox }}
+        FIXER: ${{ inputs.fixer }}
       run: |
-        # Shared rules, then this agent's: the scripts it may run outside the
-        # sandbox, its hosts and paths, anchored at the workspace so a copy
-        # elsewhere does not match. `*` replaces arrays, so none is in both files.
-        dir=.github/agent-sandbox
-        jq -s --arg ws "$GITHUB_WORKSPACE" '
-          def abs: if startswith("/") or startswith("~") then . else "\($ws)/\(.)" end;
-          .[0] * .[1]
-          | .sandbox.excludedCommands |= map(abs)
-          | .sandbox.filesystem.denyWrite |= (. // [] | map(abs))
-        ' "$dir/base.json" "$dir/$AGENT.json" > "$RUNNER_TEMP/agent-settings.json"
-        # The scrub keeps the Anthropic token from commands and gives them a PID
-        # namespace, so /proc does not show the parent's environment.
-        echo "AGENT_SETTINGS=$RUNNER_TEMP/agent-settings.json" >> "$GITHUB_ENV"
-        echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1" >> "$GITHUB_ENV"
+        go mod download
+        go build -o agentprobe ./cmd/agentprobe
+        if [ "$FIXER" = true ]; then
+          go test -count=1 -run '^$' ./... >/dev/null || true
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+        fi
+        echo "GOPROXY=off" >> "$GITHUB_ENV"
+        echo "UV_OFFLINE=1" >> "$GITHUB_ENV"
+    # The publish hook's scripts go where the sandbox cannot write, and the
+    # commit is recorded so the steps after the agent can restore .claude and .github.
+    - shell: bash
+      run: |
+        tools="$RUNNER_TEMP/agent-tools"
+        mkdir -p "$tools"
+        cp .claude/skills/dialect-fixer/scripts/publish.sh .claude/hooks/{pr-review-gate.sh,tool-calls.jq} "$tools/"
+        {
+          echo "AGENT_TOOLS=$tools"
+          echo "AGENT_BASE=$(git rev-parse HEAD)"
+          # Keeps the Anthropic token from commands, and /proc from showing it.
+          echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1"
+        } >> "$GITHUB_ENV"
+    # Ubuntu 24.04's AppArmor otherwise refuses bubblewrap its user namespace;
+    # the bwrap call fails here, before an agent run is paid for.
+    - shell: bash
+      run: |
         apt_install() { sudo apt-get install -y -qq --no-install-recommends bubblewrap socat >/dev/null; }
         apt_install || { sudo apt-get update -qq >/dev/null && apt_install; }
         sudo sysctl -qw kernel.apparmor_restrict_unprivileged_userns=0 || true
