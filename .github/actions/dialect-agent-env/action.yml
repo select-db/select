@@ -38,7 +38,7 @@ runs:
       run: |
         tools="$RUNNER_TEMP/agent-tools"
         mkdir -p "$tools"
-        cp .claude/skills/dialect-fixer/scripts/{publish.sh,tool-calls.jq} .claude/hooks/pr-review-gate.sh "$tools/"
+        cp .claude/skills/dialect-fixer/scripts/publish.sh .claude/hooks/{pr-review-gate.sh,tool-calls.jq} "$tools/"
         {
           echo "AGENT_TOOLS=$tools"
           echo "AGENT_BASE=$(git rev-parse HEAD)"

@@ -79,14 +79,6 @@ jobs:
             --max-turns 250
             --allowedTools "Read,Grep,Glob,Agent,Task,Skill,Bash,Edit(/dialect/**),Edit(/.fixer-work/**)"
 
-      # The sandbox may not keep the agent out of .claude and .github, and the
-      # step below runs a token: back to the checked-out commit first.
-      - name: Restore trusted files
-        if: always() && env.AGENT_BASE != ''
-        run: |
-          git restore --source="$AGENT_BASE" --worktree -- .claude .github
-          git clean -fdq -- .claude .github
-
       - name: Report
         if: always()
         env:
