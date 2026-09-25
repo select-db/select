@@ -75,7 +75,8 @@ Settled. Reopen with a reason, not a preference.
   backend counts members and sends the result as the grant's `slots`; the
   cellar enforces it with the `InFlight` middleware, keyed by the grant's `ws`.
   More wait for a slot; the wait counts against the same 60s.
-- Query-seconds per workspace are recorded, not enforced.
+- Query-seconds per workspace are recorded, not enforced, as the duration of
+  the backend's audit query event.
 
 ### Routes
 - `POST /datasources`: create any datasource type, server-generated id. Same
@@ -214,8 +215,9 @@ Needs 0.
       no per-connection hook that can set limits, so per statement is the only
       fail-closed place. `max_page_count` from the grant is set there too.
 - [x] `InFlight` middleware (`middlewares.InFlight`).
-- [x] 60s cap and query-seconds recorded on the cellar execute route
-      (`cellar.Admit`; seconds are logged per workspace for now).
+- [x] 60s cap on every cellar route (`cellar.Admit`).
+- [ ] Query-seconds: the audit query event gets its duration back (dropped
+      in `audit_drop_query_metrics`, to return as a dedicated column).
 - [ ] Error codes and request id, end to end to REST and MCP. The request id
       lives in the context so `ref` matches the request log; MCP's mid-stream
       `collectSink` error goes through the same classification.
