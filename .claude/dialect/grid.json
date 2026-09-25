@@ -1,0 +1,32 @@
+{
+  "permission": {
+    "operation": ["select", "insert", "update", "delete", "create_table", "create_table_as", "create_view", "alter", "drop", "truncate", "grant", "revoke", "copy", "replace", "upsert", "attach", "pragma", "vacuum", "call", "set", "explain", "analyze", "multi_update", "multi_delete", "merge"],
+    "read_site": ["none", "from", "join", "cte", "derived", "select_subquery", "where_subquery", "group_by_subquery", "having_subquery", "order_by_subquery", "limit_subquery", "returning", "upsert_predicate", "insert_select_source", "ctas_source", "view_body", "set_operation_branch"],
+    "naming": ["bare", "qualified", "aliased", "quoted", "other_case", "shadowing_cte", "shadowed_by_cte"],
+    "use": ["returns", "writes", "tests", "names"],
+    "nesting": ["flat", "cte", "recursive_cte", "cte_in_cte", "chained_ctes", "writable_cte", "derived_in_derived", "lateral", "correlated", "subquery_depth_3", "set_operation", "nested_set_operation", "window", "function_argument"],
+    "statements": ["single", "multi_independent", "multi_dependent", "transaction", "procedural_block", "prepared"],
+    "object": ["table", "view", "temp_table", "other_schema", "system_catalog", "table_function", "cte_name"]
+  },
+  "completion": {
+    "caret": ["after_select", "after_from", "after_join", "after_on", "after_dot", "in_where", "in_group_by", "in_order_by", "in_having", "in_function_args", "in_insert_columns", "in_set_clause", "in_returning", "in_cte_body", "in_subquery"],
+    "in_scope": ["tables", "aliases", "ctes", "derived_columns", "lateral_columns", "outer_columns", "other_schema"],
+    "typed": ["nothing", "prefix", "mid_identifier", "qualified_prefix", "quoted_prefix", "other_case"],
+    "nesting": ["flat", "cte", "recursive_cte", "cte_in_cte", "derived_in_derived", "lateral", "correlated", "set_operation"],
+    "statements": ["single", "caret_in_first", "caret_in_last", "caret_between"]
+  },
+  "lint": {
+    "rule": ["agg-in-join", "agg-in-where", "ambiguous-column", "coalesce-single-arg", "coalesce-type-mismatch", "contradictory-predicate", "division-by-zero", "duplicate-column", "duplicate-in-value", "empty-in-list", "enum-value-mismatch", "having-without-group-by", "in-list-type-mismatch", "like-leading-wildcard", "like-no-wildcard", "limit-without-order-by", "missing-argument", "null-equality", "null-in-list", "null-in-not-in", "null-inequality", "offset-without-limit", "ordinal-out-of-range", "reversed-between", "subquery-order-by", "tautological-predicate", "trailing-comma", "type-mismatch-argument", "type-mismatch-arithmetic", "type-mismatch-comparison", "unknown-column", "unknown-function", "unknown-table", "unquoted-uppercase", "unused-cte", "window-in-where"],
+    "expect": ["fires", "silent"],
+    "nesting": ["flat", "cte", "recursive_cte", "cte_in_cte", "derived_in_derived", "lateral", "correlated", "set_operation", "window"],
+    "statements": ["single", "multi_independent", "multi_dependent"],
+    "naming": ["bare", "qualified", "aliased", "quoted", "other_case"]
+  },
+  "resolution": {
+    "identifier": ["table", "column", "alias", "cte", "cte_column", "derived_column", "schema", "function", "view"],
+    "site": ["select_list", "from", "join_on", "where", "group_by", "order_by", "returning", "set_clause", "insert_columns", "cte_body"],
+    "nesting": ["flat", "cte", "recursive_cte", "cte_in_cte", "derived_in_derived", "lateral", "correlated", "set_operation"],
+    "statements": ["single", "multi_independent", "multi_dependent"],
+    "naming": ["bare", "qualified", "aliased", "quoted", "other_case", "shadowing"]
+  }
+}
