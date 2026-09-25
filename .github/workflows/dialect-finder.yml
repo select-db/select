@@ -2,7 +2,8 @@ name: Dialect finder
 
 # Wakes the dialect-finder skill: it probes the dialect package and writes the
 # issues it would file to .finder-work/file/, which the File step files. It
-# never changes code. Its memory is the Go case tables and its own issues.
+# never changes code. Its memory: the cases it tried, on the agent/finder-memory
+# branch; the Go case tables; and its own issues.
 #
 # Needs the secret CLAUDE_CODE_OAUTH_TOKEN; reads the variable FINDER_MODEL.
 
@@ -21,7 +22,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 concurrency:
@@ -47,12 +48,17 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/dialect-agent-env
 
-      # What the case tables already pin, and every finder issue with the last
-      # maintainer comment, which on a closed one is the verdict's reason.
+      # The tried cases go outside the workspace, where the sandbox cannot write;
+      # the case tables; every finder issue with the last maintainer comment,
+      # which on a closed one is the verdict's reason.
       - name: Memory
         id: memory
         run: |
-          mkdir -p .finder-work
+          mkdir -p .finder-work "$RUNNER_TEMP/finder-memory"
+          git -C "$RUNNER_TEMP/finder-memory" init -q
+          git -C "$RUNNER_TEMP/finder-memory" fetch -q --depth=1 "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" agent/finder-memory &&
+            git -C "$RUNNER_TEMP/finder-memory" checkout -q FETCH_HEAD
+          echo "FINDER_CASES=$RUNNER_TEMP/finder-memory/cases.jsonl" >> "$GITHUB_ENV"
           dialect/agentprobe -export-cases > .finder-work/known.jsonl
           gh issue list --label agent:finder --state all --limit 1000 \
             --json number,title,state,labels,body,comments --jq 'map({number, title, state,
@@ -77,6 +83,7 @@ jobs:
             This is a dialect finder run in ${{ github.repository }}. Follow .claude/skills/dialect-finder/SKILL.md.
             FINDER_NOTIFY=${{ env.FINDER_NOTIFY }} FINDER_DRY_RUN=${{ env.FINDER_DRY_RUN }}
             FINDER_MAX_ISSUES=${{ env.FINDER_MAX_ISSUES }} FINDER_DEADLINE=${{ env.FINDER_DEADLINE }}
+            FINDER_CASES=${{ env.FINDER_CASES }}
           claude_args: >-
             --model ${{ vars.FINDER_MODEL || 'opus' }}
             --max-turns 150
@@ -93,6 +100,15 @@ jobs:
       - name: File
         if: always() && env.FINDER_DRY_RUN != '1' && steps.find.outcome != 'skipped'
         run: $SCRIPTS/file.sh
+
+      - name: Save the tried cases
+        if: always() && env.FINDER_DRY_RUN != '1' && hashFiles('.finder-work/cases.jsonl') != ''
+        working-directory: ${{ runner.temp }}/finder-memory
+        run: |
+          python3 "$GITHUB_WORKSPACE/$SCRIPTS/grid.py" add cases.jsonl "$GITHUB_WORKSPACE/.finder-work/cases.jsonl" "$GITHUB_RUN_ID"
+          git add cases.jsonl
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "run $GITHUB_RUN_ID"
+          git push -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" HEAD:refs/heads/agent/finder-memory
 
       - name: Report
         if: always()
