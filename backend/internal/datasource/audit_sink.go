@@ -9,6 +9,7 @@ import (
 	"backend/internal/middlewares"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/engine/transport"
 )
 
 // loggingSink captures a query's outcome and emits it. It embeds *arrowstream.Sink
@@ -36,7 +37,7 @@ func (s *loggingSink) OnError(err error) {
 	s.audit.Failure(err)
 }
 
-func newQueryAuditRecord(r *http.Request, req executeRequest, dbType string) audit.Record {
+func newQueryAuditRecord(r *http.Request, req transport.ExecuteRequest, dbType string) audit.Record {
 	// Execute runs behind Membership(), so the member workspace is set.
 	p := authz.RequestPrincipal(r, middlewares.MemberWorkspaceID(r))
 	return audit.Record{

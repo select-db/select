@@ -1,15 +1,15 @@
-package cellar
+package main
 
 import "testing"
 
-func TestParse(t *testing.T) {
+func TestParseCellar(t *testing.T) {
 	cases := []struct {
 		in, want string
 		wantErr  bool
 	}{
 		{in: "", want: ""},
 		{in: "  ", want: ""},
-		{in: "local", want: Local},
+		{in: "local", want: localCellar},
 		{in: "https://cellar-1.internal:8081/", want: "https://cellar-1.internal:8081"},
 		{in: "http://10.0.0.7:8081", want: "http://10.0.0.7:8081"},
 		{in: "Local", wantErr: true},
@@ -20,15 +20,15 @@ func TestParse(t *testing.T) {
 		{in: "https://user:secret@cellar-1", wantErr: true},
 	}
 	for _, c := range cases {
-		got, err := Parse(c.in)
+		got, err := parseCellar(c.in)
 		if c.wantErr {
 			if err == nil {
-				t.Errorf("Parse(%q) = %q, want an error", c.in, got)
+				t.Errorf("parseCellar(%q) = %q, want an error", c.in, got)
 			}
 			continue
 		}
 		if err != nil || got != c.want {
-			t.Errorf("Parse(%q) = %q, %v; want %q", c.in, got, err, c.want)
+			t.Errorf("parseCellar(%q) = %q, %v; want %q", c.in, got, err, c.want)
 		}
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
-	"backend/internal/cellar"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
@@ -92,7 +91,7 @@ func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
 		return http.StatusNotFound, err.Error()
 	case errors.Is(err, ErrCellarOff):
 		return http.StatusNotImplemented, err.Error()
-	case errors.Is(err, cellar.ErrUnavailable):
+	case errors.Is(err, ErrCellarUnavailable):
 		return http.StatusServiceUnavailable, err.Error()
 	case errors.As(err, &cfgErr):
 		return http.StatusBadGateway, cfgErr.Msg

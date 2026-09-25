@@ -49,9 +49,9 @@ func newManagedDB(t *testing.T) managedDB {
 
 	pub, err := auth.PublicKey()
 	require.NoError(t, err)
-	srv := httptest.NewServer(datasource.CellarHandler(cellar.NewFiles(dir), pub, "local"))
+	srv := httptest.NewServer(cellar.Handler(cellar.NewFiles(dir), pub, "local"))
 	t.Cleanup(srv.Close)
-	datasource.UseCellar(cellar.NewClient(srv.URL))
+	datasource.UseCellar(datasource.NewCellarClient(srv.URL))
 	t.Cleanup(func() { datasource.UseCellar(nil) })
 	return managedDB{f: f, id: id, dir: dir}
 }
@@ -150,7 +150,7 @@ func TestManagedDatabaseWithCellarDown(t *testing.T) {
 	m := newManagedDB(t)
 	down := httptest.NewServer(http.NotFoundHandler())
 	down.Close()
-	datasource.UseCellar(cellar.NewClient(down.URL))
+	datasource.UseCellar(datasource.NewCellarClient(down.URL))
 
 	_, errMsg := m.run(t, "SELECT 1")
 	require.Contains(t, errMsg, "unavailable")

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 
-	"backend/internal/cellar"
 	"backend/internal/datasource"
 	"backend/internal/utils"
 
@@ -55,8 +54,8 @@ func asToolError(err error) *toolError {
 	if errors.Is(err, datasource.ErrCellarOff) {
 		return &toolError{Code: "disabled", Message: datasource.ErrCellarOff.Error()}
 	}
-	if errors.Is(err, cellar.ErrUnavailable) {
-		return &toolError{Code: "unavailable", Message: cellar.ErrUnavailable.Error()}
+	if errors.Is(err, datasource.ErrCellarUnavailable) {
+		return &toolError{Code: "unavailable", Message: datasource.ErrCellarUnavailable.Error()}
 	}
 	ref := utils.GenerateRequestID()
 	log.Printf("mcp: internal error ref=%s: %v", ref, err)

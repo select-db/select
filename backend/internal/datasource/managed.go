@@ -20,10 +20,10 @@ var maxBytes = map[string]int64{
 	"teams": 1 << 30,
 }
 
-var cellarClient *cellar.Client
+var cellarClient *CellarClient
 
 // UseCellar sends managed databases to c. Call once at startup.
-func UseCellar(c *cellar.Client) { cellarClient = c }
+func UseCellar(c *CellarClient) { cellarClient = c }
 
 // onCellar returns the engine client and instance that run the managed
 // database id on its cellar, carrying the caller's permissions on it: the

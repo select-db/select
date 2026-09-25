@@ -28,7 +28,12 @@ type Grant struct {
 // GrantHeader carries a Grant as base64url JSON.
 const GrantHeader = "X-Cellar-Grant"
 
-func encodeGrant(g Grant) (string, error) {
+// Audience is the audience of the backend's tokens for a cellar, so a user
+// token never opens one.
+const Audience = "selectdb-cellar"
+
+// Encode is g as the GrantHeader value.
+func (g Grant) Encode() (string, error) {
 	b, err := json.Marshal(g)
 	return base64.RawURLEncoding.EncodeToString(b), err
 }

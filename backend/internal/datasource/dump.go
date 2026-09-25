@@ -7,6 +7,7 @@ import (
 	"backend/internal/middlewares"
 
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/transport"
 )
 
 func DumpHandler() http.HandlerFunc {
@@ -34,7 +35,7 @@ func DumpHandler() http.HandlerFunc {
 			OpenError(w, err, "datasource dump", workspaceID, id)
 			return
 		}
-		writeZstdJSON(w, map[string]string{"sql": schemaSQL})
+		transport.WriteZstdJSON(w, map[string]string{"sql": schemaSQL})
 	}
 }
 

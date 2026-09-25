@@ -34,6 +34,11 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
 4. Litestream streams every write to the bucket. The bucket is the truth, the
    cellar disk is a cache.
 
+Code follows the process it runs in. `internal/cellar` is only what runs on
+the cellar, plus the grant it accepts. The backend's side is in
+`internal/datasource` (`managed.go`, `cellar_client.go`); startup is in
+`cmd/server/cellar.go`. The wire both share is `dialect/engine/transport`.
+
 ## Rules
 
 Settled. Reopen with a reason, not a preference.
@@ -205,8 +210,8 @@ Needs 0.
       in-process. The cellar serves the backend's own datasource routes, and
       the backend reaches it through `engine.Client` as a proxified instance,
       so REST and MCP share one path.
-- [x] Service token signed and reused by the backend (`cellar.Tokens`), and
-      checked with the grant header by the cellar (`cellar.Authenticate`
+- [x] Service token signed and reused by the backend (`cellar_client.go`),
+      and checked with the grant header by the cellar (`cellar.Authenticate`
       middleware, which puts the grant in the context for `InFlight` to key
       on).
 - [x] Isolation: pragmas in the DSN, PRAGMA allowlist, and

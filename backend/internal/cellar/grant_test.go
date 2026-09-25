@@ -40,8 +40,8 @@ func TestAuthenticate(t *testing.T) {
 		t.Fatal(err)
 	}
 	good := Grant{WS: "ws-1", CellarID: "local", MaxBytes: 1 << 20, Perms: []core.PermissionEntry{{Action: "select", Effect: "allow"}}}
-	goodHeader, _ := encodeGrant(good)
-	elsewhere, _ := encodeGrant(Grant{WS: "ws-1", CellarID: "cellar-2"})
+	goodHeader, _ := good.Encode()
+	elsewhere, _ := Grant{WS: "ws-1", CellarID: "cellar-2"}.Encode()
 
 	var seen Grant
 	mux := http.NewServeMux()
