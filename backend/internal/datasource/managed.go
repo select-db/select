@@ -13,14 +13,11 @@ import (
 // ErrCellarOff answers any use of a managed database while CELLAR is unset.
 var ErrCellarOff = errors.New("managed databases are not enabled on this server")
 
-// plans are what a managed database's workspace plan lets it grow to and
-// restore from. An unknown plan has no size cap, which the cellar refuses.
-var plans = map[string]struct {
-	maxBytes int64
-	pitrDays int
-}{
-	"solo":  {maxBytes: 250 << 20, pitrDays: 1},
-	"teams": {maxBytes: 1 << 30, pitrDays: 7},
+// plans are what a managed database's workspace plan lets it grow to. An
+// unknown plan has no size cap, which the cellar refuses.
+var plans = map[string]struct{ maxBytes int64 }{
+	"solo":  {maxBytes: 250 << 20},
+	"teams": {maxBytes: 1 << 30},
 }
 
 var cellarClient *cellar.Client
@@ -40,7 +37,6 @@ func onCellar(r *http.Request, id, workspaceID string, ds *ResolvedDatasource) (
 		WS:       workspaceID,
 		CellarID: ds.CellarID,
 		MaxBytes: plan.maxBytes,
-		PITRDays: plan.pitrDays,
 		Perms:    authz.EntriesOn(r, id),
 	})
 	if err != nil {

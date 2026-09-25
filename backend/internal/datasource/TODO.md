@@ -106,7 +106,8 @@ Settled. Reopen with a reason, not a preference.
   sign is a remote call. The cellar holds only the public key. User tokens
   have another audience and never open a db.
 - Everything else is plain request data. The db is the path's id; the grant
-  `{ws, cel, max, pitr, perms}` is base64url JSON in `X-Cellar-Grant`.
+  `{ws, cel, max, perms}` is base64url JSON in `X-Cellar-Grant`; `pitr`
+  joins it with Litestream.
 - `perms` are the caller's permission entries for the db. The cellar compiles
   them and runs `StreamLocal` unchanged, so the query check and column
   masking are the same code as for proxified datasources.

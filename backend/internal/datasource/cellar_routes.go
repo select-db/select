@@ -27,8 +27,8 @@ func CellarHandler(files *cellar.Files, pub *rsa.PublicKey, cellarID string) htt
 	return mux
 }
 
-// openFile opens the database the request's grant names, with the caller's
-// permissions and its schema.
+// openFile opens the request's database with the caller's permissions and
+// its schema.
 func openFile(r *http.Request, files *cellar.Files, noCache bool) (engine.Conn, cellar.Grant, error) {
 	g := cellar.GrantFrom(r.Context())
 	conn, err := files.Open(g, authz.Compile(g.Perms))

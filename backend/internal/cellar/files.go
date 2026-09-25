@@ -31,7 +31,7 @@ func (f *Files) Path(id string) string {
 	return filepath.Join(f.dir, id+".db")
 }
 
-// Open returns the database g names, with the caller's permissions, set up so
+// Open returns the database g.DB, with the caller's permissions, set up so
 // every user statement runs under the isolation rules.
 func (f *Files) Open(g Grant, perms core.CompiledPermissions) (engine.Conn, error) {
 	if g.MaxBytes <= 0 {
