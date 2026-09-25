@@ -53,9 +53,9 @@ without reading it. `outer` is the construct around the read, `inner` the one
 inside it and `depth` how many there are in all, so pairs compose nesting.
 `statements` is how many statements run and whether a later one reads what an
 earlier one made, and `read_statement` which of them holds the read.
-`requires` rules out the pairs no dialect can express. Policy is not an axis: `agentprobe`
-measures every case under deny-all, the data actions without manage,
-per-table grants and manage alone.
+`requires` rules out the pairs no dialect can express. Policy is not an axis:
+`agentprobe` measures every case under deny-all, the data actions without
+manage, per-table grants and manage alone.
 
 ### Settled rules of the permission model
 

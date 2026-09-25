@@ -52,12 +52,12 @@ starting work; the run is killed 10 minutes later).
    `other.t3`) that realises every value of the position, with its expectation,
    in `.finder-work/batch-<n>.jsonl`. A position can take several statements, a
    CTE inside a CTE, a lateral join: write what it says, in a dialect's own
-   syntax where needed. The axes are described in the method's "The grid". Drop SQL already in `known.jsonl`. Where one
-   dialect cannot express a position, its row is `skipped`. Where none can,
-   find the one pair of values that makes it impossible and record that pair
-   alone; `next` never offers it again. A rule that holds for a whole value
-   ("RETURNING needs a DML") belongs in the grid's `requires`: propose it in
-   the summary.
+   syntax where needed. The axes are described in the method's "The grid". Drop
+   SQL already in `known.jsonl`. Where one dialect cannot express a position,
+   its row is `skipped`. Where none can, find the one pair of values that makes
+   it impossible and record that pair alone; `next` never offers it again. A
+   rule that holds for a whole value ("RETURNING needs a DML") belongs in the
+   grid's `requires`: propose it in the summary.
 3. **Probe** in batches of about 20:
    `dialect/agentprobe -batch .finder-work/batch-1.jsonl -completion-limit 40 > .finder-work/batch-1.out.jsonl`
    (add `-raw` for resolution). A mismatch is **cross-dialect** when the same
