@@ -30,7 +30,6 @@ jobs:
       FIXER_ISSUE: ${{ github.event.issue.number }}
       # Mentioned on blocked notes and failures.
       FIXER_NOTIFY: Arthur-Mesplede
-      FIXER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # The analyzer-backed tests fail rather than skip, as in CI.
       SELECT_REQUIRE_ANALYZER: "1"
       GH_TOKEN: ${{ github.token }}
@@ -57,6 +56,8 @@ jobs:
           echo "FIXER_DEADLINE=$(( $(date +%s) + 60 * 60 ))" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/dialect-agent-env
+        with:
+          fixer: true
 
       - name: Fix
         id: agent
@@ -102,6 +103,6 @@ jobs:
             gh issue edit "$FIXER_ISSUE" --add-label fix:blocked --add-assignee "$FIXER_NOTIFY"
           else
             printf '@%s the fixer run ended without a pull request or a blocked note: %s. Add fix:go again to retry.\n\nIts last words:\n\n%s\n' \
-              "$FIXER_NOTIFY" "$FIXER_RUN_URL" "$(sed 's/^/> /' <<<"${final:-(none)}")" > "$RUNNER_TEMP/comment.md"
+              "$FIXER_NOTIFY" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "$(sed 's/^/> /' <<<"${final:-(none)}")" > "$RUNNER_TEMP/comment.md"
             gh issue comment "$FIXER_ISSUE" --body-file "$RUNNER_TEMP/comment.md"
           fi

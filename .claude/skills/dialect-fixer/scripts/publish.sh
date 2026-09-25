@@ -15,6 +15,7 @@ ask() {
 	exit 0
 }
 
+# A skill counts once it launched its agents; the gate holds that rule.
 gate=$AGENT_TOOLS/pr-review-gate.sh
 
 branch="claude/fix-$FIXER_ISSUE"
@@ -35,20 +36,14 @@ outside=$(git diff --name-only "$base...HEAD" | awk '
 
 pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
 if [ -z "$pr" ]; then
-	# A skill counts once it launched its agents; loading it only reads its instructions.
-	required=$("$gate" required-since "$base")
-	if [ -n "$required" ]; then
-		transcript=$(jq -r '.transcript_path // empty' <<<"$input")
-		ran=$(jq -r -f "$AGENT_TOOLS/tool-calls.jq" "$transcript" 2>/dev/null | "$gate" fanned-out)
-		missing=''
-		for want in $required; do grep -qx "$want" <<<"$ran" || missing="$missing $want"; done
-		[ -z "$missing" ] ||
-			ask "run the review skills that have not launched their agents yet:$missing (step 4 of the unattended run), apply what is pertinent, commit, then end the run."
-		grep -q '^## Review' .fixer-work/pr.md 2>/dev/null ||
-			ask "write .fixer-work/pr.md with its ## Review section (step 5 of the unattended run), then end the run."
-	fi
+	transcript=$(jq -r '.transcript_path // empty' <<<"$input")
+	missing=$(jq -r -f "$AGENT_TOOLS/tool-calls.jq" "$transcript" 2>/dev/null | "$gate" missing-since "$base")
+	[ -z "$missing" ] ||
+		ask "run the review skills that have not launched their agents yet:$missing (step 4 of the unattended run), apply what is pertinent, commit, then end the run."
 	[ -s .fixer-work/pr.md ] ||
 		ask "write .fixer-work/pr.md (step 5 of the unattended run), then end the run."
+	[ -z "$("$gate" required-since "$base")" ] || grep -q '^## Review' .fixer-work/pr.md ||
+		ask "add the ## Review section to .fixer-work/pr.md (step 5 of the unattended run), then end the run."
 fi
 
 for delay in 2 4 8 0; do

@@ -26,7 +26,6 @@ permissions:
 
 concurrency:
   group: dialect-finder
-  cancel-in-progress: false
 
 jobs:
   find:
@@ -78,7 +77,6 @@ jobs:
             This is a dialect finder run in ${{ github.repository }}. Follow .claude/skills/dialect-finder/SKILL.md.
             FINDER_NOTIFY=${{ env.FINDER_NOTIFY }} FINDER_DRY_RUN=${{ env.FINDER_DRY_RUN }}
             FINDER_MAX_ISSUES=${{ env.FINDER_MAX_ISSUES }} FINDER_DEADLINE=${{ env.FINDER_DEADLINE }}
-            FINDER_RUN_URL=${{ env.FINDER_RUN_URL }}
           claude_args: >-
             --model ${{ vars.FINDER_MODEL || 'opus' }}
             --max-turns 150

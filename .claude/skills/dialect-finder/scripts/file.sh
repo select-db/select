@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Files the issues the finder left in .finder-work/file/*.md, at most
-# $FINDER_MAX_ISSUES. Each file: "title:", "labels:", optional "assign: yes",
-# a blank line, then the body. Only finder labels pass, so no fix:go.
+# $FINDER_MAX_ISSUES. Each file: "title:" and "labels:" lines, a blank line,
+# then the body. Only finder labels pass, so no fix:go.
 set -uo pipefail
 
 label='(agent:finder|bug|needs-triage|(area|dialect|sev|oracle):[a-z-]+)'
@@ -17,9 +17,13 @@ for file in .finder-work/file/*.md; do
 		{ echo "skipped $file: needs a title: line and finder labels" >&2; continue; }
 	[[ ,$labels, == *,agent:finder,* ]] || labels="agent:finder,$labels"
 	body=$(mktemp)
-	sed '1,/^$/d' "$file" >"$body"
+	{
+		printf '@%s\n\n' "$FINDER_NOTIFY"
+		sed '1,/^$/d' "$file"
+		printf '\n---\nFiled by the dialect finder, run %s. Close with one `verdict:` label and a one-line reason: the finder reads both.\n' "$FINDER_RUN_URL"
+	} >"$body"
 	args=(--title "$title" --label "$labels" --body-file "$body")
-	grep -qx 'assign: yes' <<<"$headers" && args+=(--assignee "$FINDER_NOTIFY")
+	[[ ,$labels, == *,sev:bypass,* ]] && args+=(--assignee "$FINDER_NOTIFY")
 	gh issue create "${args[@]}" && filed=$((filed + 1)) || failed=1
 done
 exit "$failed"

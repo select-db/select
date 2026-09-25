@@ -20,6 +20,13 @@ fanned_out() {
 		($1 == "Agent" || $1 == "Task") && current != "" { print current }' | sort -u
 }
 
+# The skills in $1 that have not fanned out, given tool calls on stdin.
+missing() {
+	local ran
+	ran=$(fanned_out)
+	for want in $1; do grep -qx "$want" <<<"$ran" || printf ' %s' "$want"; done
+}
+
 # The skills HEAD needs as a pull request against $1.
 required_since() {
 	required_for "$(git -C "${CLAUDE_PROJECT_DIR:-$PWD}" diff --shortstat "$1...HEAD" 2>/dev/null |
@@ -28,7 +35,7 @@ required_since() {
 
 # publish.sh shares this list, this threshold and this rule through these modes.
 [ "$mode" = required-since ] && { required_since "${2:-origin/dev}"; exit 0; }
-[ "$mode" = fanned-out ] && { fanned_out; exit 0; }
+[ "$mode" = missing-since ] && { missing "$(required_since "${2:-origin/dev}")"; exit 0; }
 
 input=$(cat)
 
@@ -66,11 +73,7 @@ agent-ran)
 stop)
 	[ -f "$state/pending" ] || exit 0
 	[ "$(json '.stop_hook_active // false')" = "true" ] && exit 0
-	ran=$(fanned_out 2>/dev/null <"$state/calls")
-	missing=''
-	for want in $required; do
-		grep -qx "$want" <<<"$ran" || missing="$missing $want"
-	done
+	missing=$(missing "$required" <"$state/calls" 2>/dev/null)
 	if [ -n "$missing" ]; then
 		jq -n --arg missing "${missing# }" '{
 			decision: "block",

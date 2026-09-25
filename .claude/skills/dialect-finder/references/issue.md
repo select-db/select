@@ -14,9 +14,6 @@ here always exists. Every finder issue carries:
   position, `judgment` when the finding rests on the expectation alone
 - `needs-triage` whenever the oracle is `judgment`
 
-Assign `$FINDER_NOTIFY` on every `sev:bypass`. Mention `@$FINDER_NOTIFY` in the
-first line of every other body.
-
 ## Title
 
 `<area>: <what goes wrong> (<dialects>)`, stated as the defect, not the case:
@@ -30,8 +27,6 @@ Write full sentences. The reader is a fixer agent or a maintainer who has not
 seen this run.
 
 ````markdown
-@<FINDER_NOTIFY>
-
 **Layer** `permission` · severity `unchecked-read` · oracle `judgment`
 **Shared by every case** `read_site=returning`
 
@@ -57,10 +52,6 @@ why it does not hold.
 
 ### Related
 Earlier findings or precedents on the same axes, if any.
-
----
-Filed by the dialect finder, run <RUN_URL>. Close with one `verdict:` label and
-a one-line reason: the finder reads both.
 ````
 
 Keep the table to at most ten rows. Past ten, say how many more cases there are.
@@ -73,10 +64,10 @@ The workflow files after the run. Write each issue to
 ```
 title: permission: MERGE floors to an unknown statement (postgresql)
 labels: agent:finder,bug,area:permission,dialect:postgresql,sev:wrong-right,oracle:judgment,needs-triage
-assign: yes
 
 ### What goes wrong
 ...
 ```
 
-`assign: yes` is for `sev:bypass` only. Only the labels above are accepted.
+Only the labels above are accepted. The workflow adds the mention, the run
+link and the closing instructions, and assigns every `sev:bypass`.

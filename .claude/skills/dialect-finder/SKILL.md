@@ -21,9 +21,8 @@ expectation, the settled rules and the severity ranking are there.
   never from reading the source.
 
 You never talk to GitHub. Commands run in a sandbox with no token and no
-network, so any shell spelling works. The prompt gives `FINDER_NOTIFY`,
-`FINDER_DRY_RUN`, `FINDER_MAX_ISSUES`, `FINDER_DEADLINE` (Unix time to stop
-starting work; the run is killed 10 minutes later) and `FINDER_RUN_URL`.
+network, so any shell spelling works. The prompt gives `FINDER_DRY_RUN`, `FINDER_MAX_ISSUES`, `FINDER_DEADLINE` (Unix time to stop
+starting work; the run is killed 10 minutes later).
 
 ## Memory
 
