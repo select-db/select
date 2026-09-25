@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/core"
@@ -15,15 +14,19 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
+func init() {
+	// The engine's sqlite dialect opens "sqlite3", which the desktop app
+	// registers the same way.
+	sql.Register("sqlite3", &sqlite.Driver{})
+}
+
 // Files holds the managed databases of one cellar, one SQLite file each.
 type Files struct {
 	dir string
-	mu  sync.Mutex
-	dbs map[string]*sql.DB
 }
 
 func NewFiles(dir string) *Files {
-	return &Files{dir: dir, dbs: map[string]*sql.DB{}}
+	return &Files{dir: dir}
 }
 
 // Path is where the database id lives, and the key its schema is cached under.
@@ -37,7 +40,7 @@ func (f *Files) Open(g Grant, perms core.CompiledPermissions) (engine.Conn, erro
 	if g.MaxBytes <= 0 {
 		return engine.Conn{}, fmt.Errorf("grant for db %s has no size cap", g.DB)
 	}
-	db, err := f.pool(g.DB)
+	db, err := f.pool(g.WS, g.DB)
 	if err != nil {
 		return engine.Conn{}, err
 	}
@@ -53,32 +56,18 @@ func (f *Files) Open(g Grant, perms core.CompiledPermissions) (engine.Conn, erro
 	}, nil
 }
 
-// pool opens the database id once and shares it across requests.
-func (f *Files) pool(id string) (*sql.DB, error) {
+// pool is the engine's shared pool for the database id: the same cache the
+// desktop app opens its SQLite files through, idle pools closed.
+func (f *Files) pool(workspaceID, id string) (*sql.DB, error) {
 	// The id becomes a file name.
 	if _, err := uuid.Parse(id); err != nil {
 		return nil, fmt.Errorf("db id %q is not a uuid", id)
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if db, ok := f.dbs[id]; ok {
-		return db, nil
-	}
-	// mode=rw: a missing file is an error, never a new empty database.
+	// mode=rw: a missing file is an error, never a new empty database. WAL lets
+	// readers run beside a writer.
 	dsn := (&url.URL{Scheme: "file", Path: f.Path(id), RawQuery: "mode=rw&_defensive=1" +
-		"&_busy_timeout=5000&_foreign_keys=1&_pragma=trusted_schema(0)"}).String()
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, err
-	}
-	// WAL lets readers run beside a writer. The file keeps it, and switching
-	// needs the only connection, which this is.
-	if _, err := db.Exec("PRAGMA journal_mode = WAL"); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	f.dbs[id] = db
-	return db, nil
+		"&_busy_timeout=5000&_foreign_keys=1&_pragma=trusted_schema(0)&_pragma=journal_mode(WAL)"}).String()
+	return engine.GetOrOpenTrusted(workspaceID, dbType, dsn)
 }
 
 // limit applies the settings SQLite keeps per connection, before each user

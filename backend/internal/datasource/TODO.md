@@ -219,6 +219,9 @@ Needs 0.
       (`engine.Conn.Prepare`). The engine pools connections and the driver has
       no per-connection hook that can set limits, so per statement is the only
       fail-closed place. `max_page_count` from the grant is set there too.
+- [x] Files open through the engine's pool cache, as on the desktop app
+      (`engine.GetOrOpenTrusted`: no outbound guard, for a DSN the cellar
+      builds), so idle files are closed.
 - [x] `InFlight` middleware (`middlewares.InFlight`).
 - [x] 60s cap on every cellar route (`cellar.Admit`).
 - [ ] Query-seconds: the audit query event gets its duration back (dropped

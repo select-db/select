@@ -66,7 +66,8 @@ func TestOpenRefuses(t *testing.T) {
 	require.Error(t, err, "an id that is not a uuid")
 
 	missing := uuid.NewString()
-	_, err = files.Open(Grant{DB: missing, MaxBytes: 1 << 20}, core.CompiledPermissions{})
-	require.Error(t, err, "a database that does not exist")
+	conn, err := files.Open(Grant{DB: missing, MaxBytes: 1 << 20}, core.CompiledPermissions{})
+	require.NoError(t, err)
+	require.Error(t, conn.DB.Ping(), "a database that does not exist")
 	require.NoFileExists(t, files.Path(missing))
 }

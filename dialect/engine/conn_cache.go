@@ -161,7 +161,16 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	}
 	// Guard off (desktop app): dialing the user's own machine, incl. a local
 	// sqlite file, is the intended use and must not be restricted.
+	return openCached(workspaceID, dbType, dsn, guardedDirect, pool...)
+}
 
+// GetOrOpenTrusted is GetOrOpenConn without the outbound guard, for a DSN the
+// caller built itself and never one a user supplied, such as its own file.
+func GetOrOpenTrusted(workspaceID, dbType, dsn string, pool ...PoolConfig) (*sql.DB, error) {
+	return openCached(workspaceID, dbType, dsn, false, pool...)
+}
+
+func openCached(workspaceID, dbType, dsn string, guardedDirect bool, pool ...PoolConfig) (*sql.DB, error) {
 	var cfg PoolConfig
 	if len(pool) > 0 {
 		cfg = pool[0]
