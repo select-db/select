@@ -42,10 +42,9 @@ starting work; the run is killed 10 minutes later).
 
 ## A run
 
-1. **Choose.** `grid.py status "$FINDER_CASES" .finder-work/cases.jsonl` gives
-   the pairs tried per layer. Work the first layer in the method's order with
-   pairs left, and take positions from
-   `grid.py next <layer> 10 "$FINDER_CASES" .finder-work/cases.jsonl`, a batch
+1. **Choose.** `python3 .claude/skills/dialect-finder/scripts/grid.py status`
+   gives the pairs tried per layer. Work the first layer in the method's order
+   with pairs left, and take positions from `grid.py next <layer> 10`, a batch
    at a time. Do not swap a position for an easier one: the combinations nobody
    would pick are the point.
 2. **Write the cases before probing.** For each position, one statement per
@@ -53,10 +52,13 @@ starting work; the run is killed 10 minutes later).
    `other.t3`) that realises every value of the position, with its expectation,
    in `.finder-work/batch-<n>.jsonl`. A position can take several statements, a
    CTE inside a CTE, a lateral join: write what it says, in a dialect's own
-   syntax where needed. Drop SQL already in `known.jsonl`. Where one dialect
-   cannot express a position, its row is `skipped`. Where none can, find the
-   one pair of values that makes it impossible and record that pair alone;
-   `next` never offers it again.
+   syntax where needed. `outer` is the construct directly around the read and
+   `inner` the one inside it. Drop SQL already in `known.jsonl`. Where one
+   dialect cannot express a position, its row is `skipped`. Where none can,
+   find the one pair of values that makes it impossible and record that pair
+   alone; `next` never offers it again. A rule that holds for a whole value
+   ("RETURNING needs a DML") belongs in the grid's `requires`: propose it in
+   the summary.
 3. **Probe** in batches of about 20:
    `dialect/agentprobe -batch .finder-work/batch-1.jsonl -completion-limit 40 > .finder-work/batch-1.out.jsonl`
    (add `-raw` for resolution). A mismatch is **cross-dialect** when the same
@@ -68,7 +70,7 @@ starting work; the run is killed 10 minutes later).
    Append one row per position per dialect to `.finder-work/cases.jsonl`, in
    the shape `grid.py`'s header gives. The workflow adds them to
    `$FINDER_CASES` after the run; a row whose position is off the grid is
-   dropped.
+   ignored.
 4. **Group** the mismatches by root cause: the axis values they share and the
    severity they carry. One group is one finding. For each:
    1. **Known?** An open issue on the same cause: drop it. A closed
