@@ -80,6 +80,14 @@ jobs:
             --max-turns 250
             --allowedTools "Read,Grep,Glob,Agent,Task,Skill,Bash,Edit(/dialect/**),Edit(/.fixer-work/**)"
 
+      # The agent's tool calls, so a run can be checked against what it reports.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && steps.agent.outputs.execution_file != ''
+        with:
+          name: fixer-transcript
+          path: ${{ steps.agent.outputs.execution_file }}
+          retention-days: 7
+
       - name: Report
         if: always()
         env:
