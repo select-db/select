@@ -525,6 +525,12 @@ export enum InspectOperation {
     InspectOpTruncate = "truncate",
     InspectOpGrant = "grant",
     InspectOpRevoke = "revoke",
+
+    /**
+     * InspectOpTransaction is a boundary of a transaction the session owns:
+     * BEGIN, COMMIT, ROLLBACK, SAVEPOINT and RELEASE. It needs no right.
+     */
+    InspectOpTransaction = "transaction",
     InspectOpUnknown = "unknown",
 };
 
