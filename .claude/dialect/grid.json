@@ -2,7 +2,8 @@
   "shared": {
     "construct": ["none", "cte", "recursive_cte", "writable_cte", "derived", "lateral", "correlated_subquery", "scalar_subquery", "set_operation_branch", "view_body", "ctas_source", "insert_select_source", "window", "function_argument"],
     "statements": ["single", "multi_independent", "multi_dependent", "transaction", "procedural_block", "prepared"],
-    "naming": ["bare", "qualified", "aliased", "quoted", "other_case", "shadowing_cte", "shadowed_by_cte"]
+    "naming": ["bare", "qualified", "aliased", "quoted", "other_case", "shadowing_cte", "shadowed_by_cte"],
+    "requires": {"outer=none": {"inner": ["none"]}}
   },
   "layers": {
     "permission": {
@@ -21,8 +22,7 @@
         "read_site=upsert_predicate": {"operation": ["insert", "upsert"]},
         "outer=view_body": {"operation": ["create_view"]},
         "outer=ctas_source": {"operation": ["create_table_as"]},
-        "outer=insert_select_source": {"operation": ["insert", "replace", "upsert"]},
-        "outer=none": {"inner": ["none"]}
+        "outer=insert_select_source": {"operation": ["insert", "replace", "upsert"]}
       }
     },
     "completion": {
@@ -33,8 +33,7 @@
         "outer": "construct",
         "inner": "construct",
         "caret_statement": ["only", "first", "last", "between"]
-      },
-      "requires": {"outer=none": {"inner": ["none"]}}
+      }
     },
     "lint": {
       "axes": {
@@ -44,8 +43,7 @@
         "inner": "construct",
         "statements": "statements",
         "naming": "naming"
-      },
-      "requires": {"outer=none": {"inner": ["none"]}}
+      }
     },
     "resolution": {
       "axes": {
@@ -55,8 +53,7 @@
         "inner": "construct",
         "statements": "statements",
         "naming": "naming"
-      },
-      "requires": {"outer=none": {"inner": ["none"]}}
+      }
     }
   }
 }
