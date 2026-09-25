@@ -569,7 +569,7 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	// DO NOTHING leaves it exactly as it was.
 	if conflict != nil && conflict.UPDATE() != nil {
 		core.AlsoPerforms(result, core.InspectOpUpdate,
-			i.assignedFields(conflict, schema, tableName))
+			i.assignedFields(conflict.Set_clause_list(), schema, tableName))
 	}
 
 	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
@@ -600,19 +600,12 @@ func (i *Inspector) insertedColumns(list pg.IInsert_column_listContext, schema, 
 	return fields
 }
 
-// setClauses is a node carrying an assignment list. ON CONFLICT DO UPDATE and a
-// MERGE's WHEN MATCHED clause spell it as different grammar rules.
-type setClauses interface {
-	Set_clause_list() pg.ISet_clause_listContext
-}
-
 // assignedFields are the columns a SET list writes, which is what a role
 // holding update on some of the table's columns is checked against.
 func (i *Inspector) assignedFields(
-	clauses setClauses,
+	list pg.ISet_clause_listContext,
 	schema, table string,
 ) []core.InspectField {
-	list := clauses.Set_clause_list()
 	if list == nil {
 		return nil
 	}
@@ -941,10 +934,16 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	return result
 }
 
-// targetAlias is the name an UPDATE or DELETE target goes by in the rest of
-// the statement. Without it a column qualified with the alias resolves to no
-// table, and a column that resolves to no table is checked against nothing.
-func (i *Inspector) targetAlias(rel pg.IRelation_expr_opt_aliasContext) string {
+// aliased is a node naming a relation's alias. An UPDATE or DELETE target and
+// a MERGE's target or source spell it as different grammar rules.
+type aliased interface {
+	Colid() pg.IColidContext
+}
+
+// targetAlias is the name a relation goes by in the rest of the statement.
+// Without it a column qualified with the alias resolves to no table, and a
+// column that resolves to no table is checked against nothing.
+func (i *Inspector) targetAlias(rel aliased) string {
 	if rel == nil || rel.Colid() == nil {
 		return ""
 	}
@@ -1001,10 +1000,9 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	return result
 }
 
-// inspectMerge analyzes MERGE, which rewrites the rows of its target that a
-// source matches. It writes the target with whatever its WHEN clauses name and
-// reads the source to find those rows, so it takes the rights an UPDATE ...
-// FROM of the same shape takes rather than the floor's manage.
+// inspectMerge analyzes MERGE, which writes its target with whatever its WHEN
+// clauses name and reads the source it matches rows against, so it takes the
+// rights an UPDATE ... FROM of the same shape takes.
 func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStatement {
 	target, source := mergeRelations(stmt)
 	schema, table := i.resolveQualifiedName(target.name)
@@ -1020,12 +1018,12 @@ func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStateme
 	}
 
 	scope := core.Scope{CTEs: ctes}
-	refs := []core.RelationRef{{Table: table, Schema: schema, Alias: i.aliasName(target.alias)}}
+	refs := []core.RelationRef{{Table: table, Schema: schema, Alias: i.targetAlias(target.alias)}}
 
 	if query := stmt.Select_with_parens(); query != nil {
 		result.Subqueries = append(result.Subqueries, core.OrUnknown(i.inspectSelectWithParens(query)))
 	} else if sourceSchema, sourceTable := i.resolveQualifiedName(source.name); sourceTable != "" {
-		ref := core.RelationRef{Table: sourceTable, Schema: sourceSchema, Alias: i.aliasName(source.alias)}
+		ref := core.RelationRef{Table: sourceTable, Schema: sourceSchema, Alias: i.targetAlias(source.alias)}
 		refs = append(refs, ref)
 		if tables := i.resolver.Tables([]core.RelationRef{ref}, scope); len(tables) > 0 {
 			result.Subqueries = append(result.Subqueries,
@@ -1033,13 +1031,14 @@ func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStateme
 		}
 	}
 
-	// ON chooses the rows, a WHEN guard narrows them, and an assignment or a
-	// VALUES list stores what it read. None of those columns comes back to the
-	// caller, so each is read rather than returned.
+	update, insert, deletes := mergeClauses(stmt)
+
+	// ON chooses the rows, a WHEN guard narrows them, and an assignment stores
+	// what it read. No such column comes back to the caller, so each is a read.
 	for _, clause := range []antlr.ParseTree{
 		core.TreeOrNil(stmt.A_expr()),
-		core.TreeOrNil(stmt.Merge_update_clause()),
-		core.TreeOrNil(stmt.Merge_insert_clause()),
+		core.TreeOrNil(update),
+		core.TreeOrNil(insert),
 	} {
 		if clause == nil {
 			continue
@@ -1048,19 +1047,58 @@ func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStateme
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(clause)...)
 	}
 
-	// Each WHEN clause acts on the target in its own right, so the first is the
-	// statement's operation and the rest sit beside it: holding update is no
-	// right to have the same statement delete.
-	if actions := i.mergeActions(stmt, schema, table); len(actions) > 0 {
-		result.Operation, result.Fields = actions[0].op, actions[0].fields
-		for _, action := range actions[1:] {
-			core.AlsoPerforms(result, action.op, action.fields)
+	// Each WHEN clause acts on the target in its own right, so the rest sit
+	// beside the first: holding update is no right to have a statement delete.
+	perform := func(op core.InspectOperation, fields []core.InspectField) {
+		if result.Operation == core.InspectOpUnknown {
+			result.Operation, result.Fields = op, fields
+			return
 		}
+		core.AlsoPerforms(result, op, fields)
+	}
+	if update != nil {
+		perform(core.InspectOpUpdate, i.assignedFields(update.Set_clause_list(), schema, table))
+	}
+	if insert != nil {
+		perform(core.InspectOpInsert, i.insertedColumns(insert.Insert_column_list(), schema, table))
+	}
+	if deletes {
+		// A row leaves whole, and a grant on one of its columns is no right to
+		// remove it.
+		perform(core.InspectOpDelete, nil)
 	}
 
 	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
+}
+
+// mergeClauses are the WHEN clauses that carry what they need to act. Error
+// recovery leaves a clause node behind for syntax the grammar rejects, such as
+// WHEN NOT MATCHED THEN DO NOTHING or a second WHEN MATCHED, and reading one of
+// those reports an action the statement does not perform.
+func mergeClauses(stmt pg.IMergestmtContext) (
+	update pg.IMerge_update_clauseContext,
+	insert pg.IMerge_insert_clauseContext,
+	deletes bool,
+) {
+	if node := stmt.Merge_update_clause(); node != nil && node.Set_clause_list() != nil {
+		update = node
+	}
+	if node := stmt.Merge_insert_clause(); node != nil && node.Values_clause() != nil {
+		insert = node
+	}
+	if node := stmt.Merge_delete_clause(); node != nil && spelled(node.DELETE_P()) {
+		deletes = true
+	}
+	return update, insert, deletes
+}
+
+// spelled reports whether a token is in the statement somebody wrote. Error
+// recovery invents the token a rule is missing, and an invented one carries no
+// index into the stream.
+func spelled(token antlr.TerminalNode) bool {
+	return token != nil && token.GetSymbol().GetTokenIndex() >= 0
 }
 
 // mergeRelation is a relation a MERGE names, with the alias the rest of the
@@ -1088,43 +1126,6 @@ func mergeRelations(stmt pg.IMergestmtContext) (target, source mergeRelation) {
 		}
 	}
 	return target, source
-}
-
-// aliasName is the name a MERGE's target or source goes by in the rest of the
-// statement. Without it a column qualified with the alias resolves to no table,
-// and a column that resolves to no table is checked against nothing.
-func (i *Inspector) aliasName(clause pg.IAlias_clauseContext) string {
-	if clause == nil || clause.Colid() == nil {
-		return ""
-	}
-	return i.dialect.NormalizeIdentifier(clause.Colid().GetText())
-}
-
-// mergeAction is one thing a MERGE does to its target, and the columns that
-// action names.
-type mergeAction struct {
-	op     core.InspectOperation
-	fields []core.InspectField
-}
-
-// mergeActions are the actions a MERGE's WHEN clauses perform, in the order the
-// grammar allows them. The delete clause names no column, since a row leaves
-// whole and a grant on one of its columns is no right to remove it.
-func (i *Inspector) mergeActions(stmt pg.IMergestmtContext, schema, table string) []mergeAction {
-	var actions []mergeAction
-	if update := stmt.Merge_update_clause(); update != nil {
-		actions = append(actions, mergeAction{core.InspectOpUpdate, i.assignedFields(update, schema, table)})
-	}
-	if insert := stmt.Merge_insert_clause(); insert != nil {
-		actions = append(actions, mergeAction{
-			core.InspectOpInsert,
-			i.insertedColumns(insert.Insert_column_list(), schema, table),
-		})
-	}
-	if stmt.Merge_delete_clause() != nil {
-		actions = append(actions, mergeAction{op: core.InspectOpDelete})
-	}
-	return actions
 }
 
 // extractRelationRefsFromPrimary extracts table references from a simple_select_pramary.
