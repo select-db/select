@@ -16,10 +16,10 @@ from analysis.schema import span
 # R001, Unknown table
 # ---------------------------------------------------------------------------
 
-def _unknown_table(table: exp.Table, message: str) -> dict:
+def _table_diag(rule_id: str, table: exp.Table, message: str) -> dict:
     line, col, end_line, end_col = span(table)
     return {
-        "rule_id":    "unknown-table",
+        "rule_id":    rule_id,
         "severity":   "warning",
         "message":    message,
         "start_line": line, "start_col": col,
@@ -65,19 +65,64 @@ def _delete_target_bindings(stmt: exp.Expression) -> dict[int, set[str]]:
     return bindings
 
 
+def _definition_sites(stmt: exp.Expression) -> dict[int, exp.Create]:
+    """Map each table node a CREATE defines to the CREATE that defines it.
+
+    A definition site is not a reference, so the catalog lookup is inverted on
+    it: the name is absent because the statement is about to add it.
+    """
+    sites: dict[int, exp.Create] = {}
+    for create in stmt.find_all(exp.Create):
+        target = create.this
+        if isinstance(target, exp.Schema):  # CREATE TABLE t (cols), as against AS SELECT
+            target = target.this
+        if isinstance(target, exp.Table):
+            sites[id(target)] = create
+    return sites
+
+
+def _may_already_exist(create: exp.Create) -> bool:
+    """True when the statement itself says the name may be taken already.
+
+    IF NOT EXISTS and OR REPLACE write it into the SQL, and a temporary table
+    shadows a permanent one of the same name on all three dialects.
+    """
+    if create.args.get("exists") or create.args.get("replace"):
+        return True
+    properties = create.args.get("properties")
+    return properties is not None and any(
+        isinstance(p, exp.TemporaryProperty) for p in properties.expressions)
+
+
+def names_dropped(stmt: exp.Expression, default_schema: str) -> set[str]:
+    """The schema-qualified names this statement drops, lowercased."""
+    dropped = set()
+    for drop in stmt.find_all(exp.Drop):
+        for table in drop.find_all(exp.Table):
+            if table.name:
+                dropped.add(f"{(table.db or default_schema).lower()}.{table.name.lower()}")
+    return dropped
+
+
 def analyze_unknown_tables(
     stmt: exp.Expression,
     schema_dict: dict,
     default_schema: str,
     virtual_names: set[str],
+    dropped_names: set[str],
 ) -> list[dict]:
-    """R001, tables referenced in the query that are not in the schema."""
+    """R001, names that disagree with the schema, in either direction.
+
+    A reference to a name the schema does not carry, and on the target of a
+    CREATE the inverse: a name it already carries, which the server refuses.
+    """
     if not schema_dict:
         return []
 
     results = []
     loaded_schemas = {s.lower() for s in schema_dict}
     delete_targets = _delete_target_bindings(stmt)
+    definitions = _definition_sites(stmt)
 
     for table in stmt.find_all(exp.Table):
         name = table.name.lower()
@@ -87,8 +132,9 @@ def analyze_unknown_tables(
         bound = delete_targets.get(id(table))
         if bound is not None:
             if name not in bound:
-                results.append(_unknown_table(
-                    table, f"delete target {table.name!r} is not in the FROM clause"))
+                results.append(_table_diag(
+                    "unknown-table", table,
+                    f"delete target {table.name!r} is not in the FROM clause"))
             continue
 
         if name in virtual_names:
@@ -101,8 +147,20 @@ def analyze_unknown_tables(
             continue  # schema not loaded, can't validate
 
         known_tables = {t.lower() for t in schema_dict.get(schema_name, {})}
-        if name not in known_tables:
-            results.append(_unknown_table(table, f"unknown table or view {table.name!r}"))
+        create = definitions.get(id(table))
+
+        if create is None:
+            if name not in known_tables:
+                results.append(_table_diag(
+                    "unknown-table", table, f"unknown table or view {table.name!r}"))
+            continue
+
+        if name in known_tables and not _may_already_exist(create) \
+                and f"{schema_name}.{name}" not in dropped_names:
+            kind = (create.args.get("kind") or "table").lower()
+            qualified = f"{schema_name}.{table.name}"
+            results.append(_table_diag(
+                "table-already-exists", table, f"{kind} {qualified!r} already exists"))
 
     return results
 

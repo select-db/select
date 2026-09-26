@@ -32,7 +32,8 @@ These need the schema.
 
 | Rule | Severity | Fires on |
 |------|----------|----------|
-| `unknown-table` | warning | A table or view that is not in the schema. |
+| `unknown-table` | warning | A table or view that is not in the schema. Not the target of a `CREATE`, which is a definition and not a reference. |
+| `table-already-exists` | warning | A `CREATE` of a name the schema already carries, which the database refuses. Quiet under `IF NOT EXISTS`, `OR REPLACE`, `TEMPORARY`, and when an earlier statement in the file drops the name. |
 | `unknown-column` | warning | A column that is not on any table in scope. |
 | `ambiguous-column` | warning | An unqualified column that exists on more than one of the tables read at that point. |
 | `unused-cte` | hint | A CTE that is defined and never referenced. |

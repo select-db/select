@@ -25,6 +25,7 @@ from lint_rules.references import (
     analyze_unknown_columns,
     analyze_unknown_tables,
     analyze_update_columns,
+    names_dropped,
 )
 from analysis.schema import build_schema, collect_virtual_names, sqlglot_dialect_name
 from lint_rules.structure import (
@@ -181,6 +182,10 @@ def analyze(
 
     user_agg_names: set[str] = user_functions
 
+    # Recreating a name an earlier statement of the buffer drops is valid, so
+    # R001 needs the drops that come before the statement it is looking at.
+    dropped_names: set[str] = set()
+
     for stmt in statements:
         if stmt is None:
             continue
@@ -201,7 +206,8 @@ def analyze(
         _add(analyze_aggregation_rules(stmt, user_agg_names))
         _add(analyze_orderby_rules(stmt, sg_dialect))
 
-        _add(analyze_unknown_tables(stmt, schema_dict, default_schema, virtual_names))
+        _add(analyze_unknown_tables(stmt, schema_dict, default_schema, virtual_names, dropped_names))
+        dropped_names |= names_dropped(stmt, default_schema)
         _add(analyze_unknown_columns(scopes, schema_dict, default_schema, sg_dialect))
         _add(analyze_update_columns(stmt, schema_dict, default_schema))
         _add(analyze_insert_columns(stmt, schema_dict, default_schema))

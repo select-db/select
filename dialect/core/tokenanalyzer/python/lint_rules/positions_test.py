@@ -56,6 +56,7 @@ CASES = [
     ("SELECT c1 FROM t1 WHERE COUNT(*) > 1", "agg-in-where", "COUNT"),
     ("SELECT nope FROM t1", "unknown-column", "nope"),
     ("SELECT c1 FROM nosuch", "unknown-table", "nosuch"),
+    ("CREATE TABLE t1 (c1 integer)", "table-already-exists", "t1"),
     ("SELECT nosuchfn(c1) FROM t1", "unknown-function", "nosuchfn"),
     ("SELECT abs() FROM t1", "missing-argument", "abs"),
     ("SELECT c1, c1 FROM t1", "duplicate-column", "c1"),
