@@ -161,6 +161,14 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 		return i.inspectCopy(copyStmt)
 	}
 
+	// PREPARE names a statement the session runs later by name. Naming it is
+	// administration, and the body still reads and writes what it says: manage
+	// is not a right to read rows, so EXECUTE cannot be a way around select.
+	if prepareStmt := stmt.Preparestmt(); prepareStmt != nil {
+		read := core.NestUnderUnknown(i.inspectPreparable(prepareStmt.Preparablestmt()))
+		return &read
+	}
+
 	if txnStmt := stmt.Transactionstmt(); txnStmt != nil && !endsAPreparedTransaction(txnStmt) {
 		read := core.TransactionStatement()
 		return &read
