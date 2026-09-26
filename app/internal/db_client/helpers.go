@@ -85,7 +85,7 @@ func columnEditMetaToGraph(in []engine.ColumnEditMeta) []graph.ColumnMetadata {
 			HasAllPrimaryKeys:  m.HasAllPrimaryKeys,
 			IsPrimaryKey:       m.IsPrimaryKey,
 			IsForeignKey:       m.IsForeignKey,
-			DatabaseID:         m.DatabaseID,
+			DbInstanceID:       m.DbInstanceID,
 			Schema:             m.Schema,
 			Table:              m.Table,
 			OriginalColumnName: m.OriginalColumnName,

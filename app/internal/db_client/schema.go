@@ -14,14 +14,14 @@ import (
 )
 
 type QuerySchemaParams struct {
-	DatabaseInstanceID string
-	NoCache            bool
+	DbInstanceID string
+	NoCache      bool
 }
 
 func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(queryParams.DatabaseInstanceID)
+	dbInstance := dbc.Graph.GetDBInstanceNodeByID(queryParams.DbInstanceID)
 	if dbInstance == nil {
-		return fmt.Errorf("could not find database instance with ID: %s", queryParams.DatabaseInstanceID)
+		return fmt.Errorf("could not find database instance with ID: %s", queryParams.DbInstanceID)
 	}
 
 	// Get cached metadata (or fetch and cache it)
@@ -281,7 +281,7 @@ func columnMetadataFromCore(col core.Column) map[string]any {
 // convertTablesToNodes converts tables to DBInstanceItemNode with additional information
 func convertTablesToNodes(
 	tables []core.Table,
-	dbID string,
+	dbInstanceID string,
 	schemaPath string,
 	stats core.TableStats,
 	indexesByTable map[string][]*graph.DBInstanceItemNode,
@@ -290,7 +290,7 @@ func convertTablesToNodes(
 	var tableNodes []*graph.DBInstanceItemNode
 
 	for _, table := range tables {
-		objectID := fmt.Sprintf("%s:table:%s", dbID, table.Name)
+		objectID := fmt.Sprintf("%s:table:%s", dbInstanceID, table.Name)
 		tablePath := schemaPath + " / " + table.Name
 		stat := ""
 		if stats != nil {
@@ -388,13 +388,13 @@ func convertTablesToNodes(
 // convertViewsToNodes converts views to DBInstanceItemNode with additional information
 func convertViewsToNodes(
 	views []core.Table,
-	dbID string,
+	dbInstanceID string,
 	schemaPath string,
 ) ([]*graph.DBInstanceItemNode, error) {
 	var viewNodes []*graph.DBInstanceItemNode
 
 	for _, view := range views {
-		objectID := fmt.Sprintf("%s:view:%s", dbID, view.Name)
+		objectID := fmt.Sprintf("%s:view:%s", dbInstanceID, view.Name)
 		viewPath := schemaPath + " / " + view.Name
 
 		var columnNodes []*graph.DBInstanceItemNode

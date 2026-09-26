@@ -11,7 +11,7 @@
 	type Props = {
 		isTemp?: boolean;
 		tab: Tab;
-		run: (type: 'run' | 'explain' | 'plan', dbIds?: string[]) => Promise<void>;
+		run: (type: 'run' | 'explain' | 'plan', dbInstanceIds?: string[]) => Promise<void>;
 		cancel: () => Promise<void>;
 		databasePickerOpen?: boolean;
 	};
@@ -20,7 +20,7 @@
 
 	const file = $derived.by(() => tab.file?.node);
 
-	const selectedDbIds = $derived.by(() => file?.databases?.map((d) => d.id) ?? []);
+	const selectedDbInstanceIds = $derived.by(() => file?.databases?.map((d) => d.id) ?? []);
 
 	const onDatabaseChange = async (value: string | string[]) => {
 		if (!file) return;
@@ -32,14 +32,15 @@
 			.filter((db) => ids.includes(db.id))
 			.map((db) => ({ id: db.id, name: db.name }));
 
-		let activeDatabaseId = tab.file?.activeDatabaseId;
-		if (!databases.find(({ id }) => id === activeDatabaseId)) activeDatabaseId = databases[0]?.id;
+		let activeDbInstanceId = tab.file?.activeDbInstanceId;
+		if (!databases.find(({ id }) => id === activeDbInstanceId))
+			activeDbInstanceId = databases[0]?.id;
 
 		updateTab({
 			...tab,
 			file: {
 				...tab.file,
-				activeDatabaseId,
+				activeDbInstanceId,
 				node: {
 					...file,
 					databases
@@ -68,7 +69,7 @@
 		<div class="divider"></div>
 		<DatabasePicker
 			multiple={true}
-			value={selectedDbIds}
+			value={selectedDbInstanceIds}
 			onchange={onDatabaseChange}
 			bind:open={databasePickerOpen}
 		/>

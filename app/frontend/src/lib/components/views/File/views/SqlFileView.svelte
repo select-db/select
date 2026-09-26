@@ -17,7 +17,11 @@
 	import { debounce } from '$lib/utils/debounce';
 	import { cancelQuery } from '$lib/utils/query/useQuery';
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
-	import { getDbIds, runStatement, type RunStatementResult } from '$lib/utils/query/helpers';
+	import {
+		getDbInstanceIds,
+		runStatement,
+		type RunStatementResult
+	} from '$lib/utils/query/helpers';
 	import { registerCommand, unregisterCommand } from '$lib/stores/commandRegistry';
 	import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
@@ -28,7 +32,7 @@
 	import Header from '../Header/Header.svelte';
 	import TableHeader from '../Table/TableHeader/TableHeader.svelte';
 	import {
-		getEffectiveSelectedDbId,
+		getEffectiveSelectedDbInstanceId,
 		getQueryResultForDb,
 		getPlanResultForDb,
 		getExplainResultForDb
@@ -156,15 +160,15 @@
 		}
 	};
 
-	const dbIds = $derived(getDbIds(file ?? null));
+	const dbInstanceIds = $derived(getDbInstanceIds(file ?? null));
 
 	const cancel = async () => {
-		if (!file || dbIds.length === 0) return;
-		for (const dbId of dbIds) {
+		if (!file || dbInstanceIds.length === 0) return;
+		for (const dbInstanceId of dbInstanceIds) {
 			await must(
 				tryCatch(cancelQuery, {
 					FileID: file.id,
-					DbInstanceID: dbId
+					DbInstanceID: dbInstanceId
 				})
 			);
 		}
@@ -228,7 +232,7 @@
 	 * already returned while it was still going. The pane already has a running
 	 * state; it just could not reach it while the old result sat in the slot.
 	 */
-	const clearResultsForRun = (dbIdsToClear: string[], mode: 'run' | 'explain' | 'plan') => {
+	const clearResultsForRun = (dbInstanceIdsToClear: string[], mode: 'run' | 'explain' | 'plan') => {
 		if (!file) return;
 
 		const currentTab = getTabByNodeId(file.id);
@@ -237,7 +241,7 @@
 		const key =
 			mode === 'run' ? 'queryResults' : mode === 'plan' ? 'planResults' : 'explainResults';
 		const cleared = { ...(currentTab.file.node[key] ?? {}) };
-		for (const dbId of dbIdsToClear) delete cleared[dbId];
+		for (const dbInstanceId of dbInstanceIdsToClear) delete cleared[dbInstanceId];
 
 		updateTab({
 			...currentTab,
@@ -248,18 +252,18 @@
 		});
 	};
 
-	const run = async (mode: 'run' | 'explain' | 'plan', dbIdsArg?: string[]) => {
+	const run = async (mode: 'run' | 'explain' | 'plan', dbInstanceIdsArg?: string[]) => {
 		if (!file || !tab.file || !tab.file.node) return;
 
-		const targetDbIds = dbIdsArg ?? dbIds;
-		if (targetDbIds.length === 0) {
+		const targetDbInstanceIds = dbInstanceIdsArg ?? dbInstanceIds;
+		if (targetDbInstanceIds.length === 0) {
 			notifyError('Select a database before running this file');
 			return;
 		}
 
-		const activeDbId = dbIdsArg?.length === 1 ? dbIdsArg[0] : undefined;
+		const activeDbInstanceId = dbInstanceIdsArg?.length === 1 ? dbInstanceIdsArg[0] : undefined;
 
-		if (targetDbIds.some((id) => $loadingStore.includes(toKey(id, file.id)))) {
+		if (targetDbInstanceIds.some((id) => $loadingStore.includes(toKey(id, file.id)))) {
 			await cancel();
 			return;
 		}
@@ -295,20 +299,20 @@
 			}
 		}
 
-		clearResultsForRun(targetDbIds, mode);
+		clearResultsForRun(targetDbInstanceIds, mode);
 
 		const results: Record<string, RunStatementResult> = {};
-		for (const dbId of targetDbIds) {
+		for (const dbInstanceId of targetDbInstanceIds) {
 			const result = await runStatement({
 				statement: content,
-				dbInstanceId: dbId,
+				dbInstanceId: dbInstanceId,
 				fileId: file.id,
 				folderId,
 				explain: mode === 'explain',
 				plan: mode === 'plan',
 				runtimeVars
 			});
-			if (result) results[dbId] = result;
+			if (result) results[dbInstanceId] = result;
 		}
 
 		const currentTab = getTabByNodeId(file.id);
@@ -316,10 +320,15 @@
 
 		let tables = currentTab.file.tables ?? {};
 		if (mode === 'run') {
-			for (const dbId of targetDbIds) {
+			for (const dbInstanceId of targetDbInstanceIds) {
 				tables = {
 					...tables,
-					[dbId]: { ...(tables[dbId] ?? {}), edits: {}, scrollLeft: 0, scrollTop: 0 }
+					[dbInstanceId]: {
+						...(tables[dbInstanceId] ?? {}),
+						edits: {},
+						scrollLeft: 0,
+						scrollTop: 0
+					}
 				};
 			}
 		}
@@ -334,13 +343,13 @@
 			...currentTab.file.node.explainResults
 		};
 
-		for (const [dbId, res] of Object.entries(results)) {
+		for (const [dbInstanceId, res] of Object.entries(results)) {
 			if (res.type === 'query') {
-				queryResults[dbId] = res.result;
+				queryResults[dbInstanceId] = res.result;
 			} else if (mode === 'plan') {
-				planResults[dbId] = res.result;
+				planResults[dbInstanceId] = res.result;
 			} else if (mode === 'explain') {
-				explainResults[dbId] = res.result;
+				explainResults[dbInstanceId] = res.result;
 			}
 		}
 
@@ -356,7 +365,7 @@
 				} as graph.FileNode,
 				viewMode:
 					mode === 'run' ? (currentTab.file.viewMode === 'graph' ? 'graph' : 'results') : mode,
-				...(activeDbId != null && { activeDatabaseId: activeDbId }),
+				...(activeDbInstanceId != null && { activeDbInstanceId: activeDbInstanceId }),
 				tables
 			}
 		});
@@ -379,16 +388,16 @@
 		void run('run');
 	});
 
-	const effectiveDbId = $derived(getEffectiveSelectedDbId(file, tab));
-	const currentQueryResult = $derived(getQueryResultForDb(file, effectiveDbId));
-	const currentPlanResult = $derived(getPlanResultForDb(file, effectiveDbId));
-	const currentExplainResult = $derived(getExplainResultForDb(file, effectiveDbId));
+	const effectiveDbInstanceId = $derived(getEffectiveSelectedDbInstanceId(file, tab));
+	const currentQueryResult = $derived(getQueryResultForDb(file, effectiveDbInstanceId));
+	const currentPlanResult = $derived(getPlanResultForDb(file, effectiveDbInstanceId));
+	const currentExplainResult = $derived(getExplainResultForDb(file, effectiveDbInstanceId));
 
 	$effect(() => {
 		if (!file || !tab.file) return;
 
-		const dbId = effectiveDbId;
-		if (!dbId) return;
+		const dbInstanceId = effectiveDbInstanceId;
+		if (!dbInstanceId) return;
 
 		const hasQueryResult = currentQueryResult?.id;
 		const hasPlanResult = currentPlanResult?.root;
@@ -404,7 +413,7 @@
 					: (currentQueryResult?.id ?? null);
 		if (!currentResultId) return;
 
-		const prevResultId = tab.file.tables?.[dbId]?.lastResultId ?? null;
+		const prevResultId = tab.file.tables?.[dbInstanceId]?.lastResultId ?? null;
 
 		if (currentResultId === prevResultId) return;
 
@@ -418,8 +427,8 @@
 				...(shouldOpen && { tableHeight: 195 }),
 				tables: {
 					...(tab.file.tables ?? {}),
-					[dbId]: {
-						...(tab.file.tables?.[dbId] ?? {}),
+					[dbInstanceId]: {
+						...(tab.file.tables?.[dbInstanceId] ?? {}),
 						lastResultId: currentResultId
 					}
 				}
@@ -482,7 +491,7 @@
 		<Table
 			{tableHeight}
 			{tab}
-			{effectiveDbId}
+			{effectiveDbInstanceId}
 			{currentQueryResult}
 			{currentPlanResult}
 			{currentExplainResult}

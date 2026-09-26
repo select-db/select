@@ -22,11 +22,11 @@
 	let schemaContent = $state('');
 	let schemaLoading = $state(false);
 
-	const databaseId = $derived(tab.schema?.databaseId);
+	const dbInstanceId = $derived(tab.schema?.dbInstanceId);
 	const selectedSchemaTable = $derived(tab.schema?.selectedSchemaTable ?? '');
 
 	const dbInstance = $derived(
-		($workspaceGraphStore?.db_instances ?? []).find((dbi) => dbi.id === databaseId)
+		($workspaceGraphStore?.db_instances ?? []).find((dbi) => dbi.id === dbInstanceId)
 	);
 
 	const schemaFileUri = $derived(
@@ -34,21 +34,21 @@
 	);
 
 	const schemaTableOptionGroups = $derived(
-		databaseId && dbInstance?.children?.length
+		dbInstanceId && dbInstance?.children?.length
 			? [
 					{ label: 'Full schema', options: [{ value: '', label: 'Full schema' }] },
-					...getSchemaTableOptionGroups($workspaceGraphStore, databaseId)
+					...getSchemaTableOptionGroups($workspaceGraphStore, dbInstanceId)
 				]
 			: []
 	);
 
 	const displayContent = $derived(
-		selectedSchemaTable && databaseId
-			? getTableDDL($workspaceGraphStore, databaseId, selectedSchemaTable)
+		selectedSchemaTable && dbInstanceId
+			? getTableDDL($workspaceGraphStore, dbInstanceId, selectedSchemaTable)
 			: null
 	);
 	const effectiveContent = $derived(
-		selectedSchemaTable && databaseId ? (displayContent ?? schemaContent) : schemaContent
+		selectedSchemaTable && dbInstanceId ? (displayContent ?? schemaContent) : schemaContent
 	);
 
 	async function readSchemaFile() {
@@ -62,12 +62,12 @@
 	}
 
 	$effect(() => {
-		if (!databaseId) {
+		if (!dbInstanceId) {
 			const firstDb = $workspaceGraphStore?.db_instances?.[0];
 			if (firstDb) {
 				updateTab({
 					...tab,
-					schema: { ...tab.schema, databaseId: firstDb.id, databaseName: firstDb.name }
+					schema: { ...tab.schema, dbInstanceId: firstDb.id, databaseName: firstDb.name }
 				});
 			}
 			return;
@@ -80,15 +80,15 @@
 	});
 
 	const onDatabaseChange = (value: string | string[]) => {
-		const newDatabaseId = Array.isArray(value) ? (value[0] ?? '') : value;
+		const newDbInstanceId = Array.isArray(value) ? (value[0] ?? '') : value;
 		const newDbInstance = ($workspaceGraphStore?.db_instances ?? []).find(
-			(dbi) => dbi.id === newDatabaseId
+			(dbi) => dbi.id === newDbInstanceId
 		);
 		updateTab({
 			...tab,
 			schema: {
 				...tab.schema,
-				databaseId: newDatabaseId,
+				dbInstanceId: newDbInstanceId,
 				databaseName: newDbInstance?.name,
 				selectedSchemaTable: undefined
 			}
@@ -126,8 +126,8 @@
 				label="Refresh Schema"
 			/>
 			<div class="picker-wrapper">
-				<DatabasePicker value={databaseId} onchange={onDatabaseChange} />
-				{#if databaseId && schemaTableOptionGroups.length > 0}
+				<DatabasePicker value={dbInstanceId} onchange={onDatabaseChange} />
+				{#if dbInstanceId && schemaTableOptionGroups.length > 0}
 					<Icon icon="chevron-right" size={18} />
 					<div style="width: var(--space-md)"></div>
 					<Select
@@ -160,7 +160,7 @@
 	</div>
 
 	<div class="content">
-		{#if !databaseId}
+		{#if !dbInstanceId}
 			<div class="empty-state">
 				<p>Select a database to view its schema</p>
 			</div>

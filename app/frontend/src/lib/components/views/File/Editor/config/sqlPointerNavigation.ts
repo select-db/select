@@ -208,14 +208,14 @@ function attachCmdClickNavigation<T>(
 
 export function attachSqlSchemaPointerNavigation(
 	editor: monaco.editor.IStandaloneCodeEditor,
-	getDbId: () => string | null | undefined,
+	getDbInstanceId: () => string | null | undefined,
 	getFileId: () => string | null | undefined
 ): monaco.IDisposable {
 	return attachCmdClickNavigation<graph.DBInstanceItemNode>(
 		editor,
 		async (pos, model) => {
-			const dbId = getDbId();
-			if (!dbId) return null;
+			const dbInstanceId = getDbInstanceId();
+			if (!dbInstanceId) return null;
 
 			// If the cursor is inside a $variable token, let variable navigation handle it.
 			if (getSqlVariableTokenAtPosition(model, pos)) return null;
@@ -224,7 +224,7 @@ export function attachSqlSchemaPointerNavigation(
 			if (!w?.word?.trim()) return null;
 
 			const [r, err] = await tryCatch(Resolve, {
-				DbInstanceID: dbId,
+				DbInstanceID: dbInstanceId,
 				FileID: getFileId() ?? '',
 				SQL: model.getValue(),
 				Line: pos.lineNumber,
@@ -241,10 +241,10 @@ export function attachSqlSchemaPointerNavigation(
 			};
 		},
 		async (node) => {
-			const dbId = getDbId();
-			if (!dbId) return;
+			const dbInstanceId = getDbInstanceId();
+			if (!dbInstanceId) return;
 
-			await loadDatabase(dbId);
+			await loadDatabase(dbInstanceId);
 			modalStore.set({ content: () => ItemInfoModal, props: { item: node }, width: 600 });
 		}
 	);

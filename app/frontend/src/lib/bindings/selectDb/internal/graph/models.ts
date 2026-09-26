@@ -32,9 +32,9 @@ export class ColumnMetadata {
     "isForeignKey"?: boolean;
 
     /**
-     * Database ID (only if hasAllPrimaryKeys)
+     * Db instance ID (only if hasAllPrimaryKeys)
      */
-    "databaseId"?: string;
+    "dbInstanceId"?: string;
 
     /**
      * Schema name (only if hasAllPrimaryKeys)

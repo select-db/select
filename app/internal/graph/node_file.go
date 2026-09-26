@@ -49,7 +49,7 @@ type ColumnMetadata struct {
 	HasAllPrimaryKeys  bool     `json:"hasAllPrimaryKeys"`            // Whether this column's table has all primary keys present in result (enables editing)
 	IsPrimaryKey       bool     `json:"isPrimaryKey"`                 // Whether this specific column is a primary key for its table
 	IsForeignKey       bool     `json:"isForeignKey,omitempty"`       // Whether this specific column is a foreign key
-	DatabaseID         string   `json:"databaseId,omitempty"`         // Database ID (only if hasAllPrimaryKeys)
+	DbInstanceID       string   `json:"dbInstanceId,omitempty"`       // Db instance ID (only if hasAllPrimaryKeys)
 	Schema             string   `json:"schema,omitempty"`             // Schema name (only if hasAllPrimaryKeys)
 	Table              string   `json:"table,omitempty"`              // Table name (only if hasAllPrimaryKeys)
 	OriginalColumnName string   `json:"originalColumnName,omitempty"` // Original column name (before alias)

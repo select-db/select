@@ -44,12 +44,12 @@
 
 	$effect(() => {
 		const dbs = databases;
-		const dbIds = dbs.map((d) => d.id);
+		const dbInstanceIds = dbs.map((d) => d.id);
 		const schemaIds = dbs.flatMap((db) =>
 			db.children.filter((c) => c.type === 'schema').map((c) => c.id)
 		);
 		untrack(() => {
-			dbOn = syncKeyMap(dbOn, dbIds);
+			dbOn = syncKeyMap(dbOn, dbInstanceIds);
 			schemaOn = syncKeyMap(schemaOn, schemaIds);
 		});
 	});
@@ -71,20 +71,20 @@
 		}
 
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
-		const enabledDbIds = new Set<string>();
+		const enabledDbInstanceIds = new Set<string>();
 		for (const db of dbs) {
-			if (dbOn[db.id] !== false) enabledDbIds.add(db.id);
+			if (dbOn[db.id] !== false) enabledDbInstanceIds.add(db.id);
 		}
 
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const enabledSchemaIds = new Set<string>();
 		for (const sid of knownSchemaIds) {
 			if (schemaOn[sid] === false) continue;
-			const dbId = parseDbInstanceIdFromSchemaId(sid);
-			if (dbId && dbOn[dbId] !== false) enabledSchemaIds.add(sid);
+			const dbInstanceId = parseDbInstanceIdFromSchemaId(sid);
+			if (dbInstanceId && dbOn[dbInstanceId] !== false) enabledSchemaIds.add(sid);
 		}
 
-		return { knownSchemaIds, enabledDbIds, enabledSchemaIds };
+		return { knownSchemaIds, enabledDbInstanceIds, enabledSchemaIds };
 	});
 
 	onMount(() => {

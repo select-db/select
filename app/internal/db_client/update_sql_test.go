@@ -375,7 +375,7 @@ func TestGroupEdits(t *testing.T) {
 
 func TestTableEditInputFields(t *testing.T) {
 	edit := TableEditInput{
-		DatabaseID:       "db-123",
+		DbInstanceID:     "db-123",
 		Schema:           "public",
 		Table:            "users",
 		Column:           "name",
@@ -385,8 +385,8 @@ func TestTableEditInputFields(t *testing.T) {
 		PrimaryKeyValues: map[string]interface{}{"id": 1},
 	}
 
-	if edit.DatabaseID != "db-123" {
-		t.Errorf("DatabaseID = %q, want %q", edit.DatabaseID, "db-123")
+	if edit.DbInstanceID != "db-123" {
+		t.Errorf("DbInstanceID = %q, want %q", edit.DbInstanceID, "db-123")
 	}
 	if edit.Schema != "public" {
 		t.Errorf("Schema = %q, want %q", edit.Schema, "public")
@@ -413,8 +413,8 @@ func TestTableEditInputFields(t *testing.T) {
 
 func TestGenerateUpdateSQLParamsEmpty(t *testing.T) {
 	params := GenerateUpdateSQLParams{
-		DatabaseID: "db-123",
-		Edits:      []TableEditInput{},
+		DbInstanceID: "db-123",
+		Edits:        []TableEditInput{},
 	}
 
 	if len(params.Edits) != 0 {

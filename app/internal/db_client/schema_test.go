@@ -69,7 +69,7 @@ func hasIndexMeta(t *testing.T, node *graph.DBInstanceItemNode) bool {
 // onto "alpha", which then attached the leaked index to any "alpha" column that
 // happened to share a name with an indexed "alphabet" column.
 func TestConvertTablesToNodesGroupsByExactTableName(t *testing.T) {
-	const dbID = "db:schema:s"
+	const dbInstanceID = "db:schema:s"
 	const schemaPath = "db / s"
 
 	tables := []core.Table{
@@ -89,9 +89,9 @@ func TestConvertTablesToNodesGroupsByExactTableName(t *testing.T) {
 		{Name: "alphabet_touch", TableName: "alphabet"},
 	}
 
-	_, indexesByTable := convertIndexesToNodes(indexes, dbID, schemaPath)
-	_, triggersByTable := convertTriggersToNodes(triggers, dbID, schemaPath)
-	tableNodes, err := convertTablesToNodes(tables, dbID, schemaPath, nil, indexesByTable, triggersByTable)
+	_, indexesByTable := convertIndexesToNodes(indexes, dbInstanceID, schemaPath)
+	_, triggersByTable := convertTriggersToNodes(triggers, dbInstanceID, schemaPath)
+	tableNodes, err := convertTablesToNodes(tables, dbInstanceID, schemaPath, nil, indexesByTable, triggersByTable)
 	if err != nil {
 		t.Fatalf("convertTablesToNodes: %v", err)
 	}

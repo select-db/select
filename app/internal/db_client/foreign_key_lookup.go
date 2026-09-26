@@ -14,7 +14,7 @@ import (
 // deliberately structured (no SQL strings on the wire) so the dialect-specific
 // SQL building happens entirely in the corresponding dialect package.
 type LookupForeignKeyParams struct {
-	DatabaseID     string   `json:"databaseId"`
+	DbInstanceID   string   `json:"dbInstanceId"`
 	Schema         string   `json:"schema"`
 	Table          string   `json:"table"`
 	FKColumn       string   `json:"fkColumn"`
@@ -32,7 +32,7 @@ func (dbc *DbClient) LookupForeignKey(params LookupForeignKeyParams) graph.Query
 		result.Id = id
 	}
 
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DatabaseID)
+	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DbInstanceID)
 	if dbInstance == nil {
 		result.Errors = []string{"database not found"}
 		return result
@@ -55,7 +55,7 @@ func (dbc *DbClient) LookupForeignKey(params LookupForeignKeyParams) graph.Query
 	})
 
 	engineResult, _ := dbc.execute(executeParams{
-		DbInstanceID: params.DatabaseID,
+		DbInstanceID: params.DbInstanceID,
 		Statement:    sql,
 		// No file context: the picker query is incidental, not tracked.
 		ForExport: true,

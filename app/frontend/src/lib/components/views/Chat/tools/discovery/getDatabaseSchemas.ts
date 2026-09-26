@@ -3,9 +3,7 @@ import { z } from 'zod';
 import { loadDatabase } from '../helpers';
 
 const inputSchema = z.object({
-	databaseInstanceId: z
-		.string()
-		.describe('Database instance ID from the context block databases[].id')
+	dbInstanceId: z.string().describe('Database instance ID from the context block databases[].id')
 });
 
 export const getDatabaseSchemasDef = toolDefinition({
@@ -13,7 +11,7 @@ export const getDatabaseSchemasDef = toolDefinition({
 	description: `Returns all schemas for a database with table and view names in each. Use this first; then call get_database_table_detail(schemaId, tableName) when you need a table's DDL. If error is returned, surface it to the user and do not proceed.`,
 	inputSchema,
 	outputSchema: z.object({
-		databaseId: z.string(),
+		dbInstanceId: z.string(),
 		databaseName: z.string(),
 		dialect: z
 			.string()
@@ -32,13 +30,13 @@ export const getDatabaseSchemasDef = toolDefinition({
 type ImplArgs = z.infer<typeof inputSchema>;
 
 async function getDatabaseSchemasImpl(args: unknown) {
-	const { databaseInstanceId } = args as ImplArgs;
+	const { dbInstanceId } = args as ImplArgs;
 
-	const { error, db, node } = await loadDatabase(databaseInstanceId);
+	const { error, db, node } = await loadDatabase(dbInstanceId);
 
 	if (error) {
 		return {
-			databaseId: databaseInstanceId,
+			dbInstanceId: dbInstanceId,
 			databaseName: '',
 			dialect: '',
 			schemas: [],
@@ -62,7 +60,7 @@ async function getDatabaseSchemasImpl(args: unknown) {
 		});
 
 	return {
-		databaseId: db!.id,
+		dbInstanceId: db!.id,
 		databaseName: db!.name,
 		dialect: db!.dialect,
 		schemas: schemaList

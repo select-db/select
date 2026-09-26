@@ -37,12 +37,12 @@ export function createSqlCompletionProvider(
 				return { suggestions: [] };
 			}
 
-			const dbId = file.databases?.[0]?.id;
-			if (!dbId) return { suggestions: [] };
+			const dbInstanceId = file.databases?.[0]?.id;
+			if (!dbInstanceId) return { suggestions: [] };
 
 			try {
 				const params: sqllang.PositionParams = {
-					DbInstanceID: dbId,
+					DbInstanceID: dbInstanceId,
 					FileID: file.id,
 					SQL: model.getValue(),
 					Line: position.lineNumber,

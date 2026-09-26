@@ -48,7 +48,7 @@ type ColumnEditMeta struct {
 	HasAllPrimaryKeys  bool
 	IsPrimaryKey       bool
 	IsForeignKey       bool
-	DatabaseID         string
+	DbInstanceID       string
 	Schema             string
 	Table              string
 	OriginalColumnName string
@@ -83,5 +83,5 @@ type Result struct {
 	// 1-based character offset, when the driver reports a syntax position.
 	ErrorPosition *int
 	Page          int
-	PageSize int
+	PageSize      int
 }

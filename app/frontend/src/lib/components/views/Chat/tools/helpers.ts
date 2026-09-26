@@ -18,7 +18,7 @@ export type LoadDatabaseResult =
  * Load database by id from the workspace graph. If schema is not loaded yet, fetches it.
  * Returns the db (and the graph node for e.g. reading .children) or an error.
  */
-export async function loadDatabase(databaseInstanceId: string): Promise<LoadDatabaseResult> {
+export async function loadDatabase(dbInstanceId: string): Promise<LoadDatabaseResult> {
 	const graph = get(workspaceGraphStore);
 
 	if (!graph) {
@@ -27,18 +27,18 @@ export async function loadDatabase(databaseInstanceId: string): Promise<LoadData
 		};
 	}
 
-	let node = graph.db_instances.find((d) => d.id === databaseInstanceId);
+	let node = graph.db_instances.find((d) => d.id === dbInstanceId);
 
 	if (!node) {
 		return {
-			error: `Database not found: ${databaseInstanceId}. Use an id from the context block databases[].id.`
+			error: `Database not found: ${dbInstanceId}. Use an id from the context block databases[].id.`
 		};
 	}
 
 	// Load schema if not yet in graph
 	if (!node.children || node.children.length === 0) {
 		const [, err] = await tryCatch(QuerySchema, {
-			DatabaseInstanceID: databaseInstanceId,
+			DbInstanceID: dbInstanceId,
 			NoCache: false
 		});
 
@@ -46,7 +46,7 @@ export async function loadDatabase(databaseInstanceId: string): Promise<LoadData
 			return { error: toToolError(err) };
 		}
 
-		const [updatedNode, fetchErr] = await tryCatch(GetDBInstanceNodeByID, databaseInstanceId);
+		const [updatedNode, fetchErr] = await tryCatch(GetDBInstanceNodeByID, dbInstanceId);
 		if (fetchErr || !updatedNode) {
 			return {
 				error: fetchErr ? toToolError(fetchErr) : 'Failed to load database node after schema fetch'

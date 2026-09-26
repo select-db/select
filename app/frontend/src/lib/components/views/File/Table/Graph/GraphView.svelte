@@ -19,13 +19,13 @@
 
 	type GraphViewProps = {
 		tab: Tab;
-		effectiveDbId: string | null;
+		effectiveDbInstanceId: string | null;
 		queryResult: graph.QueryResult | null;
 		content: string;
 		onRun: () => void;
 	};
 
-	let { tab, effectiveDbId, queryResult, content, onRun }: GraphViewProps = $props();
+	let { tab, effectiveDbInstanceId, queryResult, content, onRun }: GraphViewProps = $props();
 
 	const PANEL_WIDTH = 260;
 	const PANEL_COLLAPSED_WIDTH = 20;
@@ -34,7 +34,9 @@
 	let containerHeight = $state(0);
 	let graphLoading = $state(false);
 
-	const tableState = $derived(effectiveDbId ? (tab.file?.tables?.[effectiveDbId] ?? null) : null);
+	const tableState = $derived(
+		effectiveDbInstanceId ? (tab.file?.tables?.[effectiveDbInstanceId] ?? null) : null
+	);
 
 	const panelCollapsed = $derived(tableState?.graphPanelCollapsed ?? false);
 
@@ -43,15 +45,15 @@
 	);
 
 	function togglePanel() {
-		if (!tab.file || !effectiveDbId) return;
+		if (!tab.file || !effectiveDbInstanceId) return;
 		updateTab({
 			...tab,
 			file: {
 				...tab.file,
 				tables: {
 					...(tab.file.tables ?? {}),
-					[effectiveDbId]: {
-						...(tab.file.tables?.[effectiveDbId] ?? {}),
+					[effectiveDbInstanceId]: {
+						...(tab.file.tables?.[effectiveDbInstanceId] ?? {}),
 						graphPanelCollapsed: !panelCollapsed
 					}
 				}
@@ -81,15 +83,15 @@
 	});
 
 	function updateConfig(update: Partial<GraphConfig>) {
-		if (!tab.file || !effectiveDbId) return;
+		if (!tab.file || !effectiveDbInstanceId) return;
 		updateTab({
 			...tab,
 			file: {
 				...tab.file,
 				tables: {
 					...(tab.file.tables ?? {}),
-					[effectiveDbId]: {
-						...(tab.file.tables?.[effectiveDbId] ?? {}),
+					[effectiveDbInstanceId]: {
+						...(tab.file.tables?.[effectiveDbInstanceId] ?? {}),
 						graphConfig: { ...config, ...update }
 					}
 				}
@@ -104,7 +106,7 @@
 		const currentResultId = queryResult?.id;
 		if (!currentResultId || !queryResult?.columns?.length) return;
 		if (fetchedForId === currentResultId) return;
-		if (!effectiveDbId || !tab.file?.node || !content) return;
+		if (!effectiveDbInstanceId || !tab.file?.node || !content) return;
 
 		const snapshotFile = tab.file;
 		const snapshotResultId = currentResultId;
@@ -113,7 +115,7 @@
 		Query({
 			FileID: snapshotFile.node.id,
 			Statement: content,
-			DbInstanceID: effectiveDbId,
+			DbInstanceID: effectiveDbInstanceId,
 			FolderID: snapshotFile.node.folder_id ?? '',
 			ForExport: true,
 			RuntimeVars: snapshotFile.runtimeVars ?? {}

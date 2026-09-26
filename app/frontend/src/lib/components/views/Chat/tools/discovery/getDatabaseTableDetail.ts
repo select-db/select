@@ -3,9 +3,11 @@ import { z } from 'zod';
 import { loadDatabase } from '../helpers';
 
 const inputSchema = z.object({
-	databaseInstanceId: z.string().describe('Database instance ID from the context block databases[].id'),
+	dbInstanceId: z.string().describe('Database instance ID from the context block databases[].id'),
 	schemaId: z.string().describe('Schema ID from get_database_schemas(...).schemas[].id'),
-	tableName: z.string().describe('Table or view name from get_database_schemas(...).schemas[].tables[]')
+	tableName: z
+		.string()
+		.describe('Table or view name from get_database_schemas(...).schemas[].tables[]')
 });
 
 export const getDatabaseTableDetailDef = toolDefinition({
@@ -13,7 +15,7 @@ export const getDatabaseTableDetailDef = toolDefinition({
 	description: `Returns the DDL for a single table or view. Call after get_database_schemas when you need the full definition (columns, types, constraints) to write or validate queries. If error is returned, surface it to the user and do not proceed.`,
 	inputSchema,
 	outputSchema: z.object({
-		databaseId: z.string(),
+		dbInstanceId: z.string(),
 		schemaId: z.string(),
 		tableName: z.string(),
 		ddl: z.string().describe('CREATE TABLE/view statement when available'),
@@ -24,13 +26,13 @@ export const getDatabaseTableDetailDef = toolDefinition({
 type ImplArgs = z.infer<typeof inputSchema>;
 
 async function getDatabaseTableDetailImpl(args: unknown) {
-	const { databaseInstanceId, schemaId, tableName } = args as ImplArgs;
+	const { dbInstanceId, schemaId, tableName } = args as ImplArgs;
 
-	const { error, db, node } = await loadDatabase(databaseInstanceId);
+	const { error, db, node } = await loadDatabase(dbInstanceId);
 
 	if (error) {
 		return {
-			databaseId: databaseInstanceId,
+			dbInstanceId: dbInstanceId,
 			schemaId,
 			tableName: '',
 			ddl: '',
@@ -38,13 +40,11 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 		};
 	}
 
-	const schemaNode = node!.children.find(
-		(c) => c.type === 'schema' && c.id === schemaId
-	);
+	const schemaNode = node!.children.find((c) => c.type === 'schema' && c.id === schemaId);
 
 	if (!schemaNode) {
 		return {
-			databaseId: db!.id,
+			dbInstanceId: db!.id,
 			schemaId,
 			tableName: '',
 			ddl: '',
@@ -60,7 +60,7 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 
 	if (!tableNode) {
 		return {
-			databaseId: db!.id,
+			dbInstanceId: db!.id,
 			schemaId,
 			tableName: '',
 			ddl: '',
@@ -77,7 +77,7 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 	const ddl = meta.sql ?? '';
 
 	return {
-		databaseId: db!.id,
+		dbInstanceId: db!.id,
 		schemaId,
 		tableName: tableNode.name ?? '',
 		ddl

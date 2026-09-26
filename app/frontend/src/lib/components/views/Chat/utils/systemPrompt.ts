@@ -22,7 +22,7 @@ CORE PRINCIPLES
    - What is unknown
    - What tool will be called next
    - Why it is required
-11. If a <task> block is present, read it and obey its "instruction", using fields like "databaseId", "action" (e.g. fix-query, fix-plan, analyze-plan, analyze-explain), and "error" (or any other fields) as precise context for what to do.
+11. If a <task> block is present, read it and obey its "instruction", using fields like "dbInstanceId", "action" (e.g. fix-query, fix-plan, analyze-plan, analyze-explain), and "error" (or any other fields) as precise context for what to do.
 12. Always give a final answer to the user. Never end on a tool execution.
 
 ────────────────────────────────────────

@@ -242,13 +242,13 @@ func (s *System) LoadAllDatabaseSchemas(wsGraph *graph.WorkspaceNode) {
 		return
 	}
 	for _, dbInstance := range wsGraph.DBInstances {
-		dbID := dbInstance.ID
+		dbInstanceID := dbInstance.ID
 		go func(id string) {
 			_ = s.DbClient.QuerySchema(db_client.QuerySchemaParams{
-				DatabaseInstanceID: id,
-				NoCache:            false,
+				DbInstanceID: id,
+				NoCache:      false,
 			})
-		}(dbID)
+		}(dbInstanceID)
 	}
 }
 

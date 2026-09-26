@@ -153,18 +153,18 @@ function buildHighlightDecorations(
  */
 export function attachSqlFunctionHighlighter(
 	editor: monaco.editor.IStandaloneCodeEditor,
-	getDbId: () => string | null | undefined
+	getDbInstanceId: () => string | null | undefined
 ): monaco.IDisposable {
 	const decos = editor.createDecorationsCollection([]);
 
 	const refresh = () => {
 		const model = editor.getModel();
-		const dbId = getDbId();
-		if (!model || !dbId || model.isDisposed()) {
+		const dbInstanceId = getDbInstanceId();
+		if (!model || !dbInstanceId || model.isDisposed()) {
 			decos.clear();
 			return;
 		}
-		const names = collectSqlFunctionNamesForDbInstance(get(workspaceGraphStore), dbId);
+		const names = collectSqlFunctionNamesForDbInstance(get(workspaceGraphStore), dbInstanceId);
 		decos.set(buildHighlightDecorations(model, names));
 	};
 

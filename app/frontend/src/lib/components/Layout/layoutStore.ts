@@ -26,7 +26,7 @@ export type ChatContextFile = {
  * TableEdit represents a single cell edit
  */
 export type TableEdit = {
-	databaseId: string;
+	dbInstanceId: string;
 	schema: string;
 	table: string;
 	column: string;
@@ -80,7 +80,7 @@ export type Tab = {
 		editor?: { viewState?: unknown; lintMarkers?: unknown };
 
 		viewMode?: 'results' | 'plan' | 'explain' | 'graph';
-		activeDatabaseId?: string | null;
+		activeDbInstanceId?: string | null;
 		tableHeight?: number;
 		tables?: Record<string, FileDatabaseTableState>;
 		runtimeVars?: Record<string, string>; // user-supplied values for unresolved $variables
@@ -88,7 +88,7 @@ export type Tab = {
 	};
 	database?: { node: graph.DBInstanceNode };
 	schema?: {
-		databaseId?: string;
+		dbInstanceId?: string;
 		databaseName?: string;
 		selectedSchemaTable?: string;
 		editor?: { viewState?: unknown };
@@ -565,7 +565,7 @@ export const addTab = (node: graph.FileNode | graph.DBInstanceNode) => {
 	}
 };
 
-export const addSchemaTab = (databaseId?: string, databaseName?: string) => {
+export const addSchemaTab = (dbInstanceId?: string, databaseName?: string) => {
 	const group = getActiveGroup();
 	if (!group) return;
 
@@ -573,7 +573,7 @@ export const addSchemaTab = (databaseId?: string, databaseName?: string) => {
 	const newTab: Tab = {
 		id: tabId,
 		uri: `selectdb://schema/${tabId}`,
-		schema: { databaseId, databaseName }
+		schema: { dbInstanceId, databaseName }
 	};
 
 	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
@@ -842,17 +842,18 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 	let databases: ChatContextDatabase[] = allDbs;
 	let files: ChatContextFile[] = [];
 
-	const taskDatabaseId = task && typeof task.databaseId === 'string' ? task.databaseId : undefined;
+	const taskDbInstanceId =
+		task && typeof task.dbInstanceId === 'string' ? task.dbInstanceId : undefined;
 
 	if (activeTab?.file?.node) {
 		const file = activeTab.file.node;
-		const fileDbIds = file.databases?.map((d) => d.id).filter(Boolean) ?? [];
-		if (fileDbIds.length > 0) {
-			databases = fileDbIds
+		const fileDbInstanceIds = file.databases?.map((d) => d.id).filter(Boolean) ?? [];
+		if (fileDbInstanceIds.length > 0) {
+			databases = fileDbInstanceIds
 				.map((id) => allDbs.find((d) => d.id === id))
 				.filter((d): d is ChatContextDatabase => d != null);
 		} else {
-			const activeId = activeTab.file?.activeDatabaseId ?? taskDatabaseId ?? undefined;
+			const activeId = activeTab.file?.activeDbInstanceId ?? taskDbInstanceId ?? undefined;
 			const one = activeId ? allDbs.find((d) => d.id === activeId) : undefined;
 			if (one) databases = [one];
 		}
@@ -866,8 +867,8 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 		];
 	} else if (activeTab?.database?.node) {
 		databases = [dbInstanceToContextDb(activeTab.database.node)];
-	} else if (activeTab?.schema?.databaseId) {
-		const one = allDbs.find((d) => d.id === activeTab.schema!.databaseId);
+	} else if (activeTab?.schema?.dbInstanceId) {
+		const one = allDbs.find((d) => d.id === activeTab.schema!.dbInstanceId);
 		if (one) databases = [one];
 	}
 

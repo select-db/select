@@ -41,10 +41,10 @@ export const myPermissions = derived(
 		const permMap: PermissionMap = buildPermissionMap($perms);
 		return {
 			isAllowed: (action: string) => isAppActionAllowed($perms, action, isOwner),
-			canAccessDb: (dbId: string, isProxified?: boolean) =>
+			canAccessDb: (dbInstanceId: string, isProxified?: boolean) =>
 				!isProxified ||
 				isOwner ||
-				permissionActions.some((a) => resolve(permMap, dbId, '*', '*', '*', a) === 'allow'),
+				permissionActions.some((a) => resolve(permMap, dbInstanceId, '*', '*', '*', a) === 'allow'),
 
 			/**
 			 * Whether this person administrates the connection, which is the same
@@ -52,8 +52,8 @@ export const myPermissions = derived(
 			 * (`Actor.IsOwner() || Actor.CanManage(id)`). Asking it here only
 			 * decides what the UI offers: the server refuses either way.
 			 */
-			canManageDb: (dbId: string) =>
-				isOwner || resolve(permMap, dbId, '*', '*', '*', 'manage') === 'allow'
+			canManageDb: (dbInstanceId: string) =>
+				isOwner || resolve(permMap, dbInstanceId, '*', '*', '*', 'manage') === 'allow'
 		};
 	}
 );

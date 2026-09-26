@@ -11,7 +11,7 @@
 	import { formatCellValue } from './helpers/cellText';
 
 	export type ForeignKeyContext = {
-		databaseId: string;
+		dbInstanceId: string;
 		targetSchema: string;
 		targetTable: string;
 		targetColumn: string;
@@ -146,7 +146,7 @@
 				width: 'min(80vw, 860px)',
 				height: 'min(70vh, 620px)',
 				props: {
-					databaseId: foreignKey.databaseId,
+					dbInstanceId: foreignKey.dbInstanceId,
 					currentValue: inputValue,
 					targetSchema: foreignKey.targetSchema,
 					targetTable: foreignKey.targetTable,

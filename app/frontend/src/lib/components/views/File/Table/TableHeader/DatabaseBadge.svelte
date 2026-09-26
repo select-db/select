@@ -5,24 +5,24 @@
 	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
 
 	type Props = {
-		dbId: string;
-		run: (type: 'run' | 'explain' | 'plan', dbIds?: string[]) => Promise<void>;
+		dbInstanceId: string;
+		run: (type: 'run' | 'explain' | 'plan', dbInstanceIds?: string[]) => Promise<void>;
 		active?: boolean;
 		error?: boolean;
 		onclick?: (e: MouseEvent) => void;
 	};
 
-	let { dbId, run, active = false, error = false, onclick }: Props = $props();
+	let { dbInstanceId, run, active = false, error = false, onclick }: Props = $props();
 
-	const dbInstances = $derived(($workspaceGraphStore?.db_instances ?? []));
-	const name = $derived(dbInstances.find((dbi) => dbi.id === dbId)?.name ?? dbId);
+	const dbInstances = $derived($workspaceGraphStore?.db_instances ?? []);
+	const name = $derived(dbInstances.find((dbi) => dbi.id === dbInstanceId)?.name ?? dbInstanceId);
 
 	const options = $derived<ContextMenuOption[]>([
 		{
 			label: 'Run',
 			icon: 'play',
 			action: async (onClose: () => void) => {
-				await run('run', [dbId]);
+				await run('run', [dbInstanceId]);
 				onClose();
 			}
 		},
@@ -30,7 +30,7 @@
 			label: 'Plan (no execution)',
 			icon: 'map',
 			action: async (onClose: () => void) => {
-				await run('plan', [dbId]);
+				await run('plan', [dbInstanceId]);
 				onClose();
 			}
 		},
@@ -38,7 +38,7 @@
 			label: 'Analyse (execute)',
 			icon: 'chart',
 			action: async (onClose: () => void) => {
-				await run('explain', [dbId]);
+				await run('explain', [dbInstanceId]);
 				onClose();
 			}
 		}
@@ -49,7 +49,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="db-badge" class:active {onclick}>
-		<DatabaseIndicator id={dbId} size={17} loaderSize={15} {error} />
+		<DatabaseIndicator id={dbInstanceId} size={17} loaderSize={15} {error} />
 		<p style="margin-top: -1px;">{name}</p>
 	</div>
 </Contextable>

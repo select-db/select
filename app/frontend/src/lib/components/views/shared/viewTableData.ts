@@ -19,7 +19,7 @@ export const isPreviewableDbItem = (item: graph.DBInstanceItemNode): boolean =>
 	PREVIEWABLE_TYPES.has(item.type);
 
 type TableLocation = {
-	databaseId: string;
+	dbInstanceId: string;
 	schema: string;
 	folderId: string;
 };
@@ -34,7 +34,7 @@ type TableLocation = {
 export const findDbItemLocation = (itemId: string): TableLocation | null => {
 	const workspace = get(workspaceGraphStore);
 
-	for (const database of (workspace?.db_instances ?? [])) {
+	for (const database of workspace?.db_instances ?? []) {
 		for (const schema of database.children) {
 			if (schema.type !== 'schema') continue;
 
@@ -42,7 +42,7 @@ export const findDbItemLocation = (itemId: string): TableLocation | null => {
 				if (!group.children.some((child) => child.id === itemId)) continue;
 
 				return {
-					databaseId: database.id,
+					dbInstanceId: database.id,
 					schema: schema.name,
 					folderId: database.folder_id ?? ''
 				};
@@ -65,7 +65,7 @@ export const viewTableData = async (item: graph.DBInstanceItemNode) => {
 	}
 
 	const params = db_client.GenerateSelectSQLParams.createFrom({
-		databaseId: location.databaseId,
+		dbInstanceId: location.dbInstanceId,
 		schema: location.schema,
 		table: item.name,
 		// 0 lets the backend apply its default preview limit.
@@ -83,7 +83,7 @@ export const viewTableData = async (item: graph.DBInstanceItemNode) => {
 		{
 			content: result.sql,
 			name: `[${item.name}].sql`,
-			dbInstanceId: location.databaseId,
+			dbInstanceId: location.dbInstanceId,
 			folderId: location.folderId,
 			runOnOpen: true
 		},

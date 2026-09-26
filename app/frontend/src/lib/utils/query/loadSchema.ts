@@ -24,7 +24,7 @@ export const loadSchema = async ({
 	// Past the cache always: a caller here is either a person asking again or a
 	// database showing nothing, and the cached answer is what both are behind.
 	const [, err] = await tryCatch(QuerySchema, {
-		DatabaseInstanceID: database.id,
+		DbInstanceID: database.id,
 		NoCache: true
 	});
 

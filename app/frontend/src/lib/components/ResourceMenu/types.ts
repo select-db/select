@@ -28,7 +28,7 @@ export type ResourceMenuAction = (option: ResourceMenuOption) => void | Promise<
 /** When set, only enabled DBs/schemas contribute db_instance / db_item hits; files are unaffected. */
 export type ResourceSearchScope = {
 	knownSchemaIds: ReadonlySet<string>;
-	enabledDbIds: ReadonlySet<string>;
+	enabledDbInstanceIds: ReadonlySet<string>;
 	enabledSchemaIds: ReadonlySet<string>;
 };
 

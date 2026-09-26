@@ -89,9 +89,9 @@ export const rootOptions = [
 		action: async (onClose, folder: graph.FolderNode) => {
 			const { uri, id } = folder;
 			const name = findUniqueName(namesInFolder(folder), (n) => `db #${n}`);
-			const { id: dbId, uri: dbUri } = await writeDatabase(uri, name);
+			const { id: dbInstanceId, uri: dbUri } = await writeDatabase(uri, name);
 			navigateToDatabase({
-				id: dbId,
+				id: dbInstanceId,
 				uri: dbUri,
 				type: 'db_instance',
 				name,

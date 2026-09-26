@@ -12,7 +12,7 @@ import (
 
 // TableEditInput is the payload for a single cell edit (mirrors frontend TableEdit).
 type TableEditInput struct {
-	DatabaseID       string                 `json:"databaseId"`
+	DbInstanceID     string                 `json:"dbInstanceId"`
 	Schema           string                 `json:"schema"`
 	Table            string                 `json:"table"`
 	Column           string                 `json:"column"`
@@ -24,8 +24,8 @@ type TableEditInput struct {
 
 // GenerateUpdateSQLParams is the input for GenerateUpdateSQL.
 type GenerateUpdateSQLParams struct {
-	DatabaseID string           `json:"databaseId"`
-	Edits      []TableEditInput `json:"edits"`
+	DbInstanceID string           `json:"dbInstanceId"`
+	Edits        []TableEditInput `json:"edits"`
 }
 
 // GenerateUpdateSQLResult is the output of GenerateUpdateSQL.
@@ -41,7 +41,7 @@ func (dbc *DbClient) GenerateUpdateSQL(params GenerateUpdateSQLParams) (Generate
 		return out, nil
 	}
 
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DatabaseID)
+	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DbInstanceID)
 	if dbInstance == nil {
 		return out, fmt.Errorf("database not found")
 	}

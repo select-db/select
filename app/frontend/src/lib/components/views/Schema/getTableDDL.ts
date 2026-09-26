@@ -14,12 +14,12 @@ function getMetadataSql(node: DBInstanceItemNode): string | undefined {
  * Returns DDL for a single table/view in the given database: table DDL + indexes + triggers
  * (same order as backend buildSchemaSQLFromMetadata for one table).
  * @param graph - Workspace graph (from workspaceGraphStore)
- * @param databaseId - DB instance id
+ * @param dbInstanceId - DB instance id
  * @param schemaTable - "schemaName:tableName"
  */
 export function getTableDDL(
 	graph: graph.WorkspaceNode | undefined,
-	databaseId: string,
+	dbInstanceId: string,
 	schemaTable: string
 ): string | null {
 	if (!graph?.db_instances) return null;
@@ -29,7 +29,7 @@ export function getTableDDL(
 	const tableName = schemaTable.slice(sep + 1);
 	if (!schemaName || !tableName) return null;
 
-	const dbNode = graph.db_instances.find((d) => d.id === databaseId);
+	const dbNode = graph.db_instances.find((d) => d.id === dbInstanceId);
 	if (!dbNode?.children) return null;
 
 	const schemaNode = dbNode.children.find(
@@ -49,13 +49,13 @@ export function getTableDDL(
 	if (tableDdl?.trim()) parts.push(tableDdl.trim());
 
 	const indexesGroup = tableNode.children.find((c) => c.type === 'indexes');
-	for (const idx of (indexesGroup?.children ?? [])) {
+	for (const idx of indexesGroup?.children ?? []) {
 		const ddl = getMetadataSql(idx);
 		if (ddl?.trim()) parts.push(ddl.trim());
 	}
 
 	const triggersGroup = tableNode.children.find((c) => c.type === 'triggers');
-	for (const tr of (triggersGroup?.children ?? [])) {
+	for (const tr of triggersGroup?.children ?? []) {
 		const ddl = getMetadataSql(tr);
 		if (ddl?.trim()) parts.push(ddl.trim());
 	}
@@ -70,10 +70,10 @@ export function getTableDDL(
  */
 export function getSchemaTableOptionGroups(
 	graph: graph.WorkspaceNode | undefined,
-	databaseId: string
+	dbInstanceId: string
 ): SelectOptionGroup[] {
 	if (!graph?.db_instances) return [];
-	const dbNode = graph.db_instances.find((d) => d.id === databaseId);
+	const dbNode = graph.db_instances.find((d) => d.id === dbInstanceId);
 	if (!dbNode?.children) return [];
 
 	const schemaNodes = dbNode.children.filter((c) => c.type === 'schema');

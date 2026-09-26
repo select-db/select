@@ -45,7 +45,7 @@ const REPLIES: ModelReply[] = [
 	{
 		call: {
 			name: 'get_database_schemas',
-			input: { databaseInstanceId: 'sample-warehouse' },
+			input: { dbInstanceId: 'sample-warehouse' },
 			id: 'toolu_e2e_1'
 		}
 	},

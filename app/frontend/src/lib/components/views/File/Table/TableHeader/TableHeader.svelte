@@ -25,7 +25,7 @@
 	import DatabaseBadge from './DatabaseBadge.svelte';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import {
-		getEffectiveSelectedDbId,
+		getEffectiveSelectedDbInstanceId,
 		getExplainResultForDb,
 		getPlanResultForDb,
 		getQueryResultForDb
@@ -33,7 +33,7 @@
 
 	type TableHeaderProps = {
 		tab: Tab;
-		run: (type: 'run' | 'explain' | 'plan', dbIds?: string[]) => Promise<void>;
+		run: (type: 'run' | 'explain' | 'plan', dbInstanceIds?: string[]) => Promise<void>;
 		tableHeight?: number;
 		content?: string;
 	};
@@ -41,13 +41,15 @@
 
 	const file = $derived(tab.file?.node);
 	const exportFilename = $derived(file?.name?.replace(/\.sql$/i, '') ?? 'query_results');
-	const effectiveDbId = $derived(getEffectiveSelectedDbId(file, tab));
-	const queryResult = $derived(getQueryResultForDb(file, effectiveDbId));
-	const planResult = $derived(getPlanResultForDb(file, effectiveDbId));
-	const explainResult = $derived(getExplainResultForDb(file, effectiveDbId));
+	const effectiveDbInstanceId = $derived(getEffectiveSelectedDbInstanceId(file, tab));
+	const queryResult = $derived(getQueryResultForDb(file, effectiveDbInstanceId));
+	const planResult = $derived(getPlanResultForDb(file, effectiveDbInstanceId));
+	const explainResult = $derived(getExplainResultForDb(file, effectiveDbInstanceId));
 	const activeView = $derived(tab.file?.viewMode ?? 'results');
 
-	const tableState = $derived(effectiveDbId ? (tab.file?.tables?.[effectiveDbId] ?? null) : null);
+	const tableState = $derived(
+		effectiveDbInstanceId ? (tab.file?.tables?.[effectiveDbInstanceId] ?? null) : null
+	);
 
 	const edits = $derived(tableState?.edits ?? {});
 	const editedRowCount = $derived.by(() => {
@@ -60,26 +62,28 @@
 		return rows.size;
 	});
 
-	const loading = $derived($loadingStore.includes(toKey(effectiveDbId ?? undefined, file?.id)));
+	const loading = $derived(
+		$loadingStore.includes(toKey(effectiveDbInstanceId ?? undefined, file?.id))
+	);
 
-	const databaseIds = $derived(
+	const dbInstanceIds = $derived(
 		[...(file?.databases ?? [])]
 			.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
 			.map((d) => d.id)
 			.filter((id): id is string => !!id)
 	);
 
-	const hasDbError = (dbId: string): boolean => {
+	const hasDbError = (dbInstanceId: string): boolean => {
 		const result =
 			activeView === 'plan'
-				? getPlanResultForDb(file, dbId)
+				? getPlanResultForDb(file, dbInstanceId)
 				: activeView === 'explain'
-					? getExplainResultForDb(file, dbId)
-					: getQueryResultForDb(file, dbId);
+					? getExplainResultForDb(file, dbInstanceId)
+					: getQueryResultForDb(file, dbInstanceId);
 		return (result?.errors?.length ?? 0) > 0;
 	};
 
-	const setActiveDatabase = (e: MouseEvent, dbId: string) => {
+	const setActiveDatabase = (e: MouseEvent, dbInstanceId: string) => {
 		e.preventDefault();
 		e.stopPropagation();
 
@@ -89,7 +93,7 @@
 			...tab,
 			file: {
 				...tab.file,
-				activeDatabaseId: dbId
+				activeDbInstanceId: dbInstanceId
 			}
 		});
 	};
@@ -125,7 +129,7 @@
 
 	const rollbackEdits = () => {
 		if (!tab.file) return;
-		if (!effectiveDbId) return;
+		if (!effectiveDbInstanceId) return;
 
 		updateTab({
 			...tab,
@@ -133,8 +137,8 @@
 				...tab.file,
 				tables: {
 					...(tab.file.tables ?? {}),
-					[effectiveDbId]: {
-						...(tab.file.tables?.[effectiveDbId] ?? {}),
+					[effectiveDbInstanceId]: {
+						...(tab.file.tables?.[effectiveDbInstanceId] ?? {}),
 						edits: {}
 					}
 				}
@@ -143,10 +147,10 @@
 	};
 
 	const reviewEdits = async () => {
-		if (!effectiveDbId || !file) return;
+		if (!effectiveDbInstanceId || !file) return;
 
 		const params = db_client.GenerateUpdateSQLParams.createFrom({
-			databaseId: effectiveDbId,
+			dbInstanceId: effectiveDbInstanceId,
 			edits: Object.values(edits)
 		});
 
@@ -156,7 +160,7 @@
 			{
 				content: sql,
 				name: `[edits].sql`,
-				dbInstanceId: effectiveDbId,
+				dbInstanceId: effectiveDbInstanceId,
 				folderId: file.folder_id ?? ''
 			},
 			false
@@ -164,7 +168,7 @@
 	};
 
 	const analyzeWithChat = () => {
-		if (!effectiveDbId) return;
+		if (!effectiveDbInstanceId) return;
 
 		const hasErrors =
 			activeView === 'plan'
@@ -172,7 +176,7 @@
 				: (explainResult?.errors?.length ?? 0) > 0;
 
 		addChatTab({
-			databaseId: effectiveDbId,
+			dbInstanceId: effectiveDbInstanceId,
 			action: activeView === 'plan' ? 'analyze-plan' : 'analyze-explain',
 			hasErrors,
 			instruction:
@@ -222,7 +226,7 @@
 				onClose();
 
 				const folderId = file?.folder_id ?? '';
-				const dbInstanceId = effectiveDbId ?? '';
+				const dbInstanceId = effectiveDbInstanceId ?? '';
 
 				const [resolvedVars] = await tryCatch(graphApi.GetUriVariables, file?.uri ?? '');
 				const resolvedNames = new Set((resolvedVars ?? []).map((v) => v.name));
@@ -273,15 +277,15 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="tableHeader" onclick={toggleTable}>
-		{#if databaseIds.length > 1}
+		{#if dbInstanceIds.length > 1}
 			<div class="db-badges">
-				{#each databaseIds as dbId (dbId)}
+				{#each dbInstanceIds as dbInstanceId (dbInstanceId)}
 					<DatabaseBadge
-						{dbId}
+						{dbInstanceId}
 						{run}
-						active={dbId === effectiveDbId}
-						error={hasDbError(dbId)}
-						onclick={(e) => setActiveDatabase(e, dbId)}
+						active={dbInstanceId === effectiveDbInstanceId}
+						error={hasDbError(dbInstanceId)}
+						onclick={(e) => setActiveDatabase(e, dbInstanceId)}
 					/>
 				{/each}
 			</div>

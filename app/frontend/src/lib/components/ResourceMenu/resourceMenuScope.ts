@@ -34,7 +34,7 @@ export function resourceOptionInSearchScope(
 	if (opt.type === 'file' || opt.type === 'temp_file') return true;
 
 	if (opt.type === 'db_instance') {
-		return scope.enabledDbIds.has((opt.node as graph.DBInstanceNode).id);
+		return scope.enabledDbInstanceIds.has((opt.node as graph.DBInstanceNode).id);
 	}
 
 	if (opt.type === 'db_item') {

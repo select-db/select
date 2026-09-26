@@ -7,7 +7,7 @@ export const hasDatabase = (file: graph.FileNode | null): boolean => {
 };
 
 /** All database IDs attached to the file. */
-export const getDbIds = (file: graph.FileNode | null): string[] =>
+export const getDbInstanceIds = (file: graph.FileNode | null): string[] =>
 	file?.databases?.map((d) => d.id).filter((id): id is string => !!id) ?? [];
 
 export type RunStatementParams = {

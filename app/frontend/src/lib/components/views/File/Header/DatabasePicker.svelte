@@ -8,7 +8,7 @@
 	type Props = {
 		value?: string | string[];
 		multiple?: boolean;
-		onchange?: (databaseId: string | string[]) => void;
+		onchange?: (dbInstanceId: string | string[]) => void;
 		open?: boolean;
 	};
 

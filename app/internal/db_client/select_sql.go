@@ -17,9 +17,9 @@ const DefaultSelectPreviewLimit = 100
 // lookup it is deliberately structured (no SQL strings on the wire) so quoting
 // stays dialect-aware and stays out of the frontend.
 type GenerateSelectSQLParams struct {
-	DatabaseID string `json:"databaseId"`
-	Schema     string `json:"schema"`
-	Table      string `json:"table"`
+	DbInstanceID string `json:"dbInstanceId"`
+	Schema       string `json:"schema"`
+	Table        string `json:"table"`
 	// Limit is the row cap of the generated statement. Values <= 0 fall back to
 	// DefaultSelectPreviewLimit.
 	Limit int `json:"limit"`
@@ -35,7 +35,7 @@ type GenerateSelectSQLResult struct {
 func (dbc *DbClient) GenerateSelectSQL(params GenerateSelectSQLParams) (GenerateSelectSQLResult, error) {
 	var out GenerateSelectSQLResult
 
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DatabaseID)
+	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DbInstanceID)
 	if dbInstance == nil {
 		return out, fmt.Errorf("database not found")
 	}

@@ -145,7 +145,7 @@ export class ExportParams {
  * stays dialect-aware and stays out of the frontend.
  */
 export class GenerateSelectSQLParams {
-    "databaseId": string;
+    "dbInstanceId": string;
     "schema": string;
     "table": string;
 
@@ -157,8 +157,8 @@ export class GenerateSelectSQLParams {
 
     /** Creates a new GenerateSelectSQLParams instance. */
     constructor($$source: Partial<GenerateSelectSQLParams> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("dbInstanceId" in $$source)) {
+            this["dbInstanceId"] = "";
         }
         if (!("schema" in $$source)) {
             this["schema"] = "";
@@ -210,13 +210,13 @@ export class GenerateSelectSQLResult {
  * GenerateUpdateSQLParams is the input for GenerateUpdateSQL.
  */
 export class GenerateUpdateSQLParams {
-    "databaseId": string;
+    "dbInstanceId": string;
     "edits": TableEditInput[];
 
     /** Creates a new GenerateUpdateSQLParams instance. */
     constructor($$source: Partial<GenerateUpdateSQLParams> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("dbInstanceId" in $$source)) {
+            this["dbInstanceId"] = "";
         }
         if (!("edits" in $$source)) {
             this["edits"] = [];
@@ -301,7 +301,7 @@ export class GetResultPageParams {
  * SQL building happens entirely in the corresponding dialect package.
  */
 export class LookupForeignKeyParams {
-    "databaseId": string;
+    "dbInstanceId": string;
     "schema": string;
     "table": string;
     "fkColumn": string;
@@ -312,8 +312,8 @@ export class LookupForeignKeyParams {
 
     /** Creates a new LookupForeignKeyParams instance. */
     constructor($$source: Partial<LookupForeignKeyParams> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("dbInstanceId" in $$source)) {
+            this["dbInstanceId"] = "";
         }
         if (!("schema" in $$source)) {
             this["schema"] = "";
@@ -483,13 +483,13 @@ export class QueryParams {
 }
 
 export class QuerySchemaParams {
-    "DatabaseInstanceID": string;
+    "DbInstanceID": string;
     "NoCache": boolean;
 
     /** Creates a new QuerySchemaParams instance. */
     constructor($$source: Partial<QuerySchemaParams> = {}) {
-        if (!("DatabaseInstanceID" in $$source)) {
-            this["DatabaseInstanceID"] = "";
+        if (!("DbInstanceID" in $$source)) {
+            this["DbInstanceID"] = "";
         }
         if (!("NoCache" in $$source)) {
             this["NoCache"] = false;
@@ -595,7 +595,7 @@ export class StartQueryResult {
  * TableEditInput is the payload for a single cell edit (mirrors frontend TableEdit).
  */
 export class TableEditInput {
-    "databaseId": string;
+    "dbInstanceId": string;
     "schema": string;
     "table": string;
     "column": string;
@@ -606,8 +606,8 @@ export class TableEditInput {
 
     /** Creates a new TableEditInput instance. */
     constructor($$source: Partial<TableEditInput> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("dbInstanceId" in $$source)) {
+            this["dbInstanceId"] = "";
         }
         if (!("schema" in $$source)) {
             this["schema"] = "";

@@ -250,67 +250,72 @@
 		requestAnimationFrame(() => updateLayout?.());
 	}, 500);
 
-	async function grantAllDb(dbId: string) {
+	async function grantAllDb(dbInstanceId: string) {
 		for (const a of permissionActions) {
-			if (resolve(permissionMap, dbId, '*', '*', '*', a) === 'allow') continue;
-			await applyChanges(computePermissionChange(permissionMap, dbId, '*', '*', '*', a));
+			if (resolve(permissionMap, dbInstanceId, '*', '*', '*', a) === 'allow') continue;
+			await applyChanges(computePermissionChange(permissionMap, dbInstanceId, '*', '*', '*', a));
 		}
 	}
-	async function revokeAllDb(dbId: string) {
-		await removeMany(permissions.filter((p) => p.db_instance_id === dbId));
+	async function revokeAllDb(dbInstanceId: string) {
+		await removeMany(permissions.filter((p) => p.db_instance_id === dbInstanceId));
 	}
-	async function grantAllSchema(dbId: string, schemaName: string) {
+	async function grantAllSchema(dbInstanceId: string, schemaName: string) {
 		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, '*', '*', a) === 'allow') continue;
-			await applyChanges(computePermissionChange(permissionMap, dbId, schemaName, '*', '*', a));
-		}
-	}
-	async function revokeAllSchema(dbId: string, schemaName: string) {
-		await removeMany(
-			permissions.filter((p) => p.db_instance_id === dbId && p.schema_name === schemaName)
-		);
-		// block any inherited access from DB-level wildcard
-		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, '*', '*', a) !== 'allow') continue;
-			await addPerm(dbId, schemaName, '*', '*', a, 'deny');
-		}
-	}
-	async function grantAllTable(dbId: string, schemaName: string, tableName: string) {
-		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, '*', a) === 'allow') continue;
+			if (resolve(permissionMap, dbInstanceId, schemaName, '*', '*', a) === 'allow') continue;
 			await applyChanges(
-				computePermissionChange(permissionMap, dbId, schemaName, tableName, '*', a)
+				computePermissionChange(permissionMap, dbInstanceId, schemaName, '*', '*', a)
 			);
 		}
 	}
-	async function revokeAllTable(dbId: string, schemaName: string, tableName: string) {
+	async function revokeAllSchema(dbInstanceId: string, schemaName: string) {
+		await removeMany(
+			permissions.filter((p) => p.db_instance_id === dbInstanceId && p.schema_name === schemaName)
+		);
+		// block any inherited access from DB-level wildcard
+		for (const a of dbPermissionActions) {
+			if (resolve(permissionMap, dbInstanceId, schemaName, '*', '*', a) !== 'allow') continue;
+			await addPerm(dbInstanceId, schemaName, '*', '*', a, 'deny');
+		}
+	}
+	async function grantAllTable(dbInstanceId: string, schemaName: string, tableName: string) {
+		for (const a of dbPermissionActions) {
+			if (resolve(permissionMap, dbInstanceId, schemaName, tableName, '*', a) === 'allow') continue;
+			await applyChanges(
+				computePermissionChange(permissionMap, dbInstanceId, schemaName, tableName, '*', a)
+			);
+		}
+	}
+	async function revokeAllTable(dbInstanceId: string, schemaName: string, tableName: string) {
 		await removeMany(
 			permissions.filter(
 				(p) =>
-					p.db_instance_id === dbId && p.schema_name === schemaName && p.table_name === tableName
+					p.db_instance_id === dbInstanceId &&
+					p.schema_name === schemaName &&
+					p.table_name === tableName
 			)
 		);
 		// block any inherited access from schema- or DB-level wildcard
 		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, '*', a) !== 'allow') continue;
-			await addPerm(dbId, schemaName, tableName, '*', a, 'deny');
+			if (resolve(permissionMap, dbInstanceId, schemaName, tableName, '*', a) !== 'allow') continue;
+			await addPerm(dbInstanceId, schemaName, tableName, '*', a, 'deny');
 		}
 	}
 	async function grantAllColumn(
-		dbId: string,
+		dbInstanceId: string,
 		schemaName: string,
 		tableName: string,
 		colName: string
 	) {
 		for (const a of columnPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, colName, a) === 'allow') continue;
+			if (resolve(permissionMap, dbInstanceId, schemaName, tableName, colName, a) === 'allow')
+				continue;
 			await applyChanges(
-				computePermissionChange(permissionMap, dbId, schemaName, tableName, colName, a)
+				computePermissionChange(permissionMap, dbInstanceId, schemaName, tableName, colName, a)
 			);
 		}
 	}
 	async function revokeAllColumn(
-		dbId: string,
+		dbInstanceId: string,
 		schemaName: string,
 		tableName: string,
 		colName: string
@@ -318,7 +323,7 @@
 		await removeMany(
 			permissions.filter(
 				(p) =>
-					p.db_instance_id === dbId &&
+					p.db_instance_id === dbInstanceId &&
 					p.schema_name === schemaName &&
 					p.table_name === tableName &&
 					p.column_name === colName
@@ -326,8 +331,9 @@
 		);
 		// block any inherited access from table- or above wildcard
 		for (const a of columnPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, colName, a) !== 'allow') continue;
-			await addPerm(dbId, schemaName, tableName, colName, a, 'deny');
+			if (resolve(permissionMap, dbInstanceId, schemaName, tableName, colName, a) !== 'allow')
+				continue;
+			await addPerm(dbInstanceId, schemaName, tableName, colName, a, 'deny');
 		}
 	}
 
