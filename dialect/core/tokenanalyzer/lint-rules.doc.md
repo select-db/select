@@ -34,7 +34,7 @@ These need the schema.
 |------|----------|----------|
 | `unknown-table` | warning | A table or view that is not in the schema. |
 | `unknown-column` | warning | A column that is not on any table in scope. |
-| `ambiguous-column` | warning | An unqualified column that exists on more than one table in the query. |
+| `ambiguous-column` | warning | An unqualified column that exists on more than one of the tables read at that point. |
 | `unused-cte` | hint | A CTE that is defined and never referenced. |
 | `unknown-function` | warning | A function the dialect does not define. |
 

@@ -1237,3 +1237,30 @@ class TestR008AmbiguousColumn:
 
     def test_no_join_no_ambiguity(self):
         assert _diags(_r("SELECT id FROM users"), "ambiguous-column") == []
+
+    def test_unread_cte_no_ambiguity(self):
+        # The CTE is unused, which unused-cte reports; it cannot also make the
+        # one table the statement reads ambiguous.
+        r = _r("WITH dead AS (SELECT id FROM orders) SELECT id FROM users")
+        assert _diags(r, "ambiguous-column") == []
+        assert len(_diags(r, "unused-cte")) == 1
+
+    def test_read_cte_still_ambiguous(self):
+        # The name is written in two cases, because an unquoted CTE name folds
+        # and the reference still reads the CTE.
+        sql = "WITH Cte AS (SELECT id FROM orders) SELECT id FROM users JOIN cte ON cte.id = users.id"
+        assert len(_diags(_r(sql), "ambiguous-column")) == 1
+
+    def test_recursive_cte_anchor_no_ambiguity(self):
+        # The recursive relation is in scope in the anchor branch, which does
+        # not select from it.
+        sql = ("WITH RECURSIVE r AS (SELECT id FROM orders UNION ALL SELECT id FROM r) "
+               "SELECT id FROM r")
+        assert _diags(_r(sql), "ambiguous-column") == []
+
+    def test_duplicate_alias_keeps_the_other_rules(self):
+        # A duplicate table alias is what selected_sources raises on, and the
+        # raise reaches the top of analyze(), which loses the statement.
+        sql = ("WITH c AS (SELECT id FROM orders) SELECT c.id FROM users u "
+               "JOIN users u ON 1 = 1 JOIN c ON c.id = u.id WHERE u.name = NULL")
+        assert len(_diags(_r(sql), "null-equality")) == 1

@@ -137,6 +137,19 @@ def _scope_visible_columns(
     return visible if visible else None
 
 
+def _unread_cte_aliases(scope) -> set[str]:
+    """Lowercase aliases of CTEs in scope that this scope does not select from.
+
+    A CTE is in scope everywhere under its WITH, so scope.sources carries the
+    ones the statement never reads. The names come from scope.references and
+    not from selected_sources, which raises on a duplicate table alias.
+    """
+    if not scope.cte_sources:
+        return set()
+    read = {name.lower() for name, _ in scope.references}
+    return {alias.lower() for alias in scope.cte_sources} - read
+
+
 def _scope_output_columns(scope) -> set[str] | None:
     try:
         cols: set[str] = set()
@@ -777,6 +790,10 @@ def analyze_ambiguous_columns(
     for scope in scopes:
         visible = _scope_visible_columns(scope, schema_dict, default_schema)
         if visible is None or len(visible) < 2:
+            continue
+        for alias in _unread_cte_aliases(scope):
+            visible.pop(alias, None)
+        if len(visible) < 2:
             continue
 
         for col in scope.columns:
