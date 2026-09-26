@@ -12,7 +12,7 @@ import (
 
 // TableEditInput is the payload for a single cell edit (mirrors frontend TableEdit).
 type TableEditInput struct {
-	DbInstanceID     string                 `json:"dbInstanceId"`
+	DatasourceID     string                 `json:"datasourceId"`
 	Schema           string                 `json:"schema"`
 	Table            string                 `json:"table"`
 	Column           string                 `json:"column"`
@@ -24,7 +24,7 @@ type TableEditInput struct {
 
 // GenerateUpdateSQLParams is the input for GenerateUpdateSQL.
 type GenerateUpdateSQLParams struct {
-	DbInstanceID string           `json:"dbInstanceId"`
+	DatasourceID string           `json:"datasourceId"`
 	Edits        []TableEditInput `json:"edits"`
 }
 
@@ -41,17 +41,17 @@ func (dbc *DbClient) GenerateUpdateSQL(params GenerateUpdateSQLParams) (Generate
 		return out, nil
 	}
 
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DbInstanceID)
-	if dbInstance == nil {
+	datasource := dbc.Graph.GetDatasourceNodeByID(params.DatasourceID)
+	if datasource == nil {
 		return out, fmt.Errorf("database not found")
 	}
 
-	dialect := engine.GetDialect(dbInstance.DBType)
+	dialect := engine.GetDialect(datasource.DBType)
 	if dialect == nil {
-		return out, fmt.Errorf("unsupported DB type for update SQL: %s", dbInstance.DBType)
+		return out, fmt.Errorf("unsupported DB type for update SQL: %s", datasource.DBType)
 	}
 
-	metadata, err := dbc.getCachedMetadata(dbInstance, false)
+	metadata, err := dbc.getCachedMetadata(datasource, false)
 	if err != nil {
 		return out, fmt.Errorf("failed to get schema metadata: %w", err)
 	}

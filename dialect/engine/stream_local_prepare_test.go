@@ -12,7 +12,7 @@ import (
 func outcome(t *testing.T, conn Conn, stmt string) []string {
 	t.Helper()
 	listener := &recordingListener{}
-	StreamLocal(context.Background(), conn, DBInstance{ID: "x"}, stmt, Options{},
+	StreamLocal(context.Background(), conn, Datasource{ID: "x"}, stmt, Options{},
 		NewStreamingSink(NewStreamingResult("prepare"), listener))
 	listener.mu.Lock()
 	defer listener.mu.Unlock()

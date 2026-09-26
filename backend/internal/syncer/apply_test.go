@@ -170,7 +170,7 @@ func TestApply_Permission_NullableFieldsOmitted(t *testing.T) {
 				"role_id": roleID,
 				"action":  "select",
 				"effect":  "allow",
-				// db_instance_id, schema_name, table_name, column_name intentionally omitted
+				// datasource_id, schema_name, table_name, column_name intentionally omitted
 			},
 		}},
 	})
@@ -185,7 +185,7 @@ func TestApply_Permission_NullableFieldsOmitted(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "select", perm.Action)
 	assert.Equal(t, "allow", perm.Effect)
-	assert.False(t, perm.DbInstanceID.Valid, "db_instance_id must be NULL when omitted")
+	assert.False(t, perm.DatasourceID.Valid, "datasource_id must be NULL when omitted")
 	assert.False(t, perm.SchemaName.Valid, "schema_name must be NULL when omitted")
 	assert.False(t, perm.TableName.Valid, "table_name must be NULL when omitted")
 	assert.False(t, perm.ColumnName.Valid, "column_name must be NULL when omitted")
@@ -209,14 +209,14 @@ func TestApply_Permission_NullableFieldsStored(t *testing.T) {
 			UserID:      ownerID,
 			CreatedAt:   time.Now(),
 			Payload: map[string]any{
-				"id":             permID,
-				"role_id":        roleID,
-				"action":         "select",
-				"effect":         "allow",
-				"db_instance_id": datasourceID,
-				"schema_name":    "public",
-				"table_name":     "users",
-				"column_name":    "email",
+				"id":            permID,
+				"role_id":       roleID,
+				"action":        "select",
+				"effect":        "allow",
+				"datasource_id": datasourceID,
+				"schema_name":   "public",
+				"table_name":    "users",
+				"column_name":   "email",
 			},
 		}},
 	})
@@ -229,7 +229,7 @@ func TestApply_Permission_NullableFieldsStored(t *testing.T) {
 	require.NoError(t, err)
 	perm, err := db.Queries.GetPermissionByID(context.Background(), generated.GetPermissionByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)
-	assert.Equal(t, datasourceID, perm.DbInstanceID.String)
+	assert.Equal(t, datasourceID, perm.DatasourceID.String)
 	assert.Equal(t, "public", perm.SchemaName.String)
 	assert.Equal(t, "users", perm.TableName.String)
 	assert.Equal(t, "email", perm.ColumnName.String)

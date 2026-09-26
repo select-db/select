@@ -45,8 +45,8 @@
 	function dbNameFor(item: history.HistoryEntry): string {
 		const ws = $workspaceGraphStore;
 		if (!ws) return '';
-		const node = findItemById(item.dbInstanceId, [], ws.folders, ws.db_instances);
-		return node && 'db_type' in node ? (node as graph.DBInstanceNode).name : '';
+		const node = findItemById(item.datasourceId, [], ws.folders, ws.datasources);
+		return node && 'db_type' in node ? (node as graph.DatasourceNode).name : '';
 	}
 
 	function hasError(item: history.HistoryEntry): boolean {
@@ -83,7 +83,7 @@
 			height: 'min(70vh, 600px)',
 			props: {
 				sql: item.statement,
-				dbInstanceId: item.dbInstanceId,
+				datasourceId: item.datasourceId,
 				dbName: dbNameFor(item) || 'unknown database',
 				hasError: hasError(item),
 				errors: item.errors ?? [],

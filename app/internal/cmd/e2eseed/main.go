@@ -370,7 +370,7 @@ func seedRoles(ctx context.Context, queries *generated.Queries) error {
 			ID:           r.id,
 			RoleID:       RoleID,
 			WorkspaceID:  WorkspaceID,
-			DbInstanceID: nullable(sample.WarehouseID),
+			DatasourceID: nullable(sample.WarehouseID),
 			SchemaName:   nullable(r.schema),
 			TableName:    nullable(r.table),
 			ColumnName:   nullable(r.column),
@@ -433,7 +433,7 @@ func seedTeam(ctx context.Context, queries *generated.Queries) error {
 			Effect:      r.effect,
 		}
 		if r.datasource != "" {
-			params.DbInstanceID = nullable(r.datasource)
+			params.DatasourceID = nullable(r.datasource)
 			params.SchemaName = nullable("*")
 			params.TableName = nullable("*")
 			params.ColumnName = nullable("*")

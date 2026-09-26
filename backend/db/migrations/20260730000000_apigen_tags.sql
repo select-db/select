@@ -51,7 +51,7 @@ COMMENT ON COLUMN audit.event.client_ip      IS 'IP address of the client.';
 -- A permission is a rule; consistent phrasing: "<scope> the rule applies to".
 COMMENT ON COLUMN app.permission.action         IS 'SQL action the rule applies to. @app.values [select, insert, update, delete, ddl, see, manage]';
 COMMENT ON COLUMN app.permission.effect         IS 'Whether the rule allows or denies the action. @app.values [allow, deny]';
-COMMENT ON COLUMN app.permission.db_instance_id IS 'Database instance the rule applies to; null = any.';
+COMMENT ON COLUMN app.permission.datasource_id IS 'Datasource the rule applies to; null = any.';
 COMMENT ON COLUMN app.permission.schema_name    IS 'Schema the rule applies to; null = any.';
 COMMENT ON COLUMN app.permission.table_name     IS 'Table the rule applies to; null = any.';
 COMMENT ON COLUMN app.permission.column_name    IS 'Column the rule applies to; null = any.';
@@ -96,7 +96,7 @@ COMMENT ON COLUMN audit.event.payload        IS NULL;
 COMMENT ON COLUMN audit.event.client_ip      IS NULL;
 COMMENT ON COLUMN app.permission.action         IS NULL;
 COMMENT ON COLUMN app.permission.effect         IS NULL;
-COMMENT ON COLUMN app.permission.db_instance_id IS NULL;
+COMMENT ON COLUMN app.permission.datasource_id IS NULL;
 COMMENT ON COLUMN app.permission.schema_name    IS NULL;
 COMMENT ON COLUMN app.permission.table_name     IS NULL;
 COMMENT ON COLUMN app.permission.column_name    IS NULL;

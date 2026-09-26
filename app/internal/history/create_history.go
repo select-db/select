@@ -11,7 +11,7 @@ type CreateQueryHistoryParams struct {
 	Uri string
 
 	WorkspaceID  string
-	DbInstanceID string
+	DatasourceID string
 
 	Statement    string
 	AffectedRows *int32
@@ -35,7 +35,7 @@ func (h *History) CreateHistory(params CreateQueryHistoryParams) error {
 		Uri: params.Uri,
 
 		WorkspaceID:  params.WorkspaceID,
-		DbInstanceID: params.DbInstanceID,
+		DatasourceID: params.DatasourceID,
 
 		Statement:    params.Statement,
 		AffectedRows: utils.ToNullInt64(params.AffectedRows),

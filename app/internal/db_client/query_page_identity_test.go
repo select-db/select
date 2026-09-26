@@ -13,8 +13,8 @@ import (
 // second's rows — which the frontend then rendered under the first execution's
 // column headers, putting every value one column out.
 func TestGetResultPageRefusesASupersededExecution(t *testing.T) {
-	const dbInstanceID, fileID = "db-1", "file-1"
-	key := queryKey(dbInstanceID, fileID)
+	const datasourceID, fileID = "db-1", "file-1"
+	key := queryKey(datasourceID, fileID)
 	t.Cleanup(func() { engine.DeleteResult(key) })
 
 	// First run: SELECT * — the columns the frontend is showing.
@@ -34,7 +34,7 @@ func TestGetResultPageRefusesASupersededExecution(t *testing.T) {
 	dbc := &DbClient{}
 
 	stale := dbc.GetResultPage(GetResultPageParams{
-		DbInstanceID: dbInstanceID,
+		DatasourceID: datasourceID,
 		FileID:       fileID,
 		ResultID:     "exec-first",
 		Page:         0,
@@ -49,7 +49,7 @@ func TestGetResultPageRefusesASupersededExecution(t *testing.T) {
 
 	// The execution that owns the slot still reads normally.
 	current := dbc.GetResultPage(GetResultPageParams{
-		DbInstanceID: dbInstanceID,
+		DatasourceID: datasourceID,
 		FileID:       fileID,
 		ResultID:     "exec-second",
 		Page:         0,

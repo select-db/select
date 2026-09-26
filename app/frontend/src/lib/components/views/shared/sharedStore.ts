@@ -4,13 +4,13 @@ import { EventsOn } from '$lib/wails/events';
 import { resolveFolderContents } from '$lib/utils/graph/resolveFolder';
 import { writable } from 'svelte/store';
 import {
-	createDatabase,
+	createDatasource,
 	createFile,
 	createFolder,
-	deleteDatabase,
+	deleteDatasource,
 	deleteFile,
 	deleteFolder,
-	updateDatabase,
+	updateDatasource,
 	updateFile
 } from './assistant/all';
 
@@ -54,9 +54,9 @@ EventsOn('mutation', (commit: generated.MutationCommit) => {
 	createFolder(commit);
 	deleteFolder(commit);
 	// Database
-	createDatabase(commit);
-	updateDatabase(commit);
-	deleteDatabase(commit);
+	createDatasource(commit);
+	updateDatasource(commit);
+	deleteDatasource(commit);
 });
 
 /**

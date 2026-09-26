@@ -91,8 +91,8 @@ const FRAMINGS: (Framing & { chat: boolean })[] = [
 const REPLIES: ModelReply[] = [
 	{
 		call: {
-			name: 'get_database_schemas',
-			input: { dbInstanceId: 'sample-warehouse' },
+			name: 'get_datasource_schemas',
+			input: { datasourceId: 'sample-warehouse' },
 			id: 'toolu_e2e_1'
 		}
 	},
@@ -272,7 +272,7 @@ for (const framing of FRAMINGS) {
 					await testId(page, 'tabs.actions').getByRole('button', { name: 'Open Chat' }).click();
 					await say(page, 'Revenue dipped the week of 2026-02-09. Anything off about this query?');
 
-					// The tool card is the app running get_database_schemas against the
+					// The tool card is the app running get_datasource_schemas against the
 					// seeded warehouse; the answer only arrives on the turn after it.
 					await expect(page.getByText('Read database schemas').first()).toBeVisible({
 						timeout: 20_000

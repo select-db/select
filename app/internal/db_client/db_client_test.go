@@ -25,7 +25,7 @@ func TestOpenConn(t *testing.T) {
 	db1, _ := dbc.GetOrOpenConn(wsID, "sqlite", dsn1, "folder1", nil)
 	db2, _ := dbc.GetOrOpenConn(wsID, "sqlite", dsn1, "folder1", nil)
 	if db1 != db2 {
-		t.Fatal("expected cached DB instance")
+		t.Fatal("expected cached datasource")
 	}
 
 	// Different DSNs return different instances

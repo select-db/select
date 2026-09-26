@@ -1,7 +1,7 @@
 import {
 	GRAPH,
 	call,
-	databasesInGraph,
+	datasourcesInGraph,
 	onDisk,
 	expect,
 	exec,
@@ -159,11 +159,11 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// A file is bound to a database from the picker; the binding is a sidecar
 	// beside the file, and the header names it.
 	await page.keyboard.press('ControlOrMeta+Shift+d');
-	const dbPicker = page.getByPlaceholder('Search db...');
-	await expect(dbPicker).toBeVisible();
+	const datasourcePicker = page.getByPlaceholder('Search db...');
+	await expect(datasourcePicker).toBeVisible();
 	await page.getByText('warehouse', { exact: true }).last().click();
 	await page.keyboard.press('Escape');
-	await expect(dbPicker).toBeHidden();
+	await expect(datasourcePicker).toBeHidden();
 	await expect(page.getByRole('button', { name: 'warehouse' })).toBeVisible();
 
 	// Two more files, keeping the names the app proposes. Each name is unique or
@@ -492,7 +492,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 
 	// --- Databases are folders too ------------------------------------------
 
-	// A database is a directory carrying a db.config.json, so it is made and
+	// A database is a directory carrying a datasource.config.json, so it is made and
 	// removed like a folder while being a different kind of node.
 	await openRootMenu(page);
 	await choose(page, 'New Database...');
@@ -515,7 +515,7 @@ test('creates, renames, moves and deletes files and folders', async ({ page, req
 	// and in the tree the next time it was read. Waited out rather than polled:
 	// what is being watched for is something arriving late.
 	await page.waitForTimeout(1500);
-	expect(await databasesInGraph(request)).toEqual(['warehouse']);
+	expect(await datasourcesInGraph(request)).toEqual(['warehouse']);
 	await expect(treeRow(page, 'db #1')).toHaveCount(0);
 
 	// --- Leaving it as it was found -----------------------------------------

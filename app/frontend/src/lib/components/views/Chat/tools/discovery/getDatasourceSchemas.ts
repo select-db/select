@@ -1,18 +1,18 @@
 import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
-import { loadDatabase } from '../helpers';
+import { loadDatasource } from '../helpers';
 
 const inputSchema = z.object({
-	dbInstanceId: z.string().describe('Database instance ID from the context block databases[].id')
+	datasourceId: z.string().describe('Datasource ID from the context block datasources[].id')
 });
 
-export const getDatabaseSchemasDef = toolDefinition({
-	name: 'get_database_schemas',
-	description: `Returns all schemas for a database with table and view names in each. Use this first; then call get_database_table_detail(schemaId, tableName) when you need a table's DDL. If error is returned, surface it to the user and do not proceed.`,
+export const getDatasourceSchemasDef = toolDefinition({
+	name: 'get_datasource_schemas',
+	description: `Returns all schemas for a database with table and view names in each. Use this first; then call get_datasource_table_detail(schemaId, tableName) when you need a table's DDL. If error is returned, surface it to the user and do not proceed.`,
 	inputSchema,
 	outputSchema: z.object({
-		dbInstanceId: z.string(),
-		databaseName: z.string(),
+		datasourceId: z.string(),
+		datasourceName: z.string(),
 		dialect: z
 			.string()
 			.describe('SQL dialect e.g. postgres, mysql, sqlite. Use when writing queries'),
@@ -29,15 +29,15 @@ export const getDatabaseSchemasDef = toolDefinition({
 
 type ImplArgs = z.infer<typeof inputSchema>;
 
-async function getDatabaseSchemasImpl(args: unknown) {
-	const { dbInstanceId } = args as ImplArgs;
+async function getDatasourceSchemasImpl(args: unknown) {
+	const { datasourceId } = args as ImplArgs;
 
-	const { error, db, node } = await loadDatabase(dbInstanceId);
+	const { error, db, node } = await loadDatasource(datasourceId);
 
 	if (error) {
 		return {
-			dbInstanceId: dbInstanceId,
-			databaseName: '',
+			datasourceId: datasourceId,
+			datasourceName: '',
 			dialect: '',
 			schemas: [],
 			error
@@ -60,12 +60,12 @@ async function getDatabaseSchemasImpl(args: unknown) {
 		});
 
 	return {
-		dbInstanceId: db!.id,
-		databaseName: db!.name,
+		datasourceId: db!.id,
+		datasourceName: db!.name,
 		dialect: db!.dialect,
 		schemas: schemaList
 	};
 }
 
-export const getDatabaseSchemasClient = getDatabaseSchemasDef.client(getDatabaseSchemasImpl);
-export const getDatabaseSchemasExecutor = getDatabaseSchemasImpl;
+export const getDatasourceSchemasClient = getDatasourceSchemasDef.client(getDatasourceSchemasImpl);
+export const getDatasourceSchemasExecutor = getDatasourceSchemasImpl;

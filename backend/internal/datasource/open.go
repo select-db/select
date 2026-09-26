@@ -27,7 +27,7 @@ type Opened struct {
 	ID, WorkspaceID string
 	DS              *ResolvedDatasource
 	Conn            engine.Conn
-	Inst            engine.DBInstance
+	Inst            engine.Datasource
 }
 
 // Open resolves the datasource id for the request's caller. Errors go through
@@ -46,7 +46,7 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 		WorkspaceID: workspaceID,
 		DS:          ds,
 		Conn:        engine.Conn{DB: db, Perms: authz.Perms(r)},
-		Inst:        engine.DBInstance{ID: id, DBType: ds.DBType},
+		Inst:        engine.Datasource{ID: id, DBType: ds.DBType},
 	}, nil
 }
 

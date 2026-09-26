@@ -17,30 +17,30 @@ DSN format depends on dialect:
 ![The connection form for a PostgreSQL database: dialect, name, the proxy checkbox, the DSN and SSH tunnel modes, and a DSN written from $VAR references.](/shots/dbform.local.light.webp)
 
 > [!TIP]
-> DSN fields support **environment variables** (`$VAR_NAME`), resolved from your workspace `.env` at connection time. Write the DSN as `host=$PG_HOST password=$PG_PASS ...` and the password never enters `db.config.json`, which is what makes that file safe to commit.
+> DSN fields support **environment variables** (`$VAR_NAME`), resolved from your workspace `.env` at connection time. Write the DSN as `host=$PG_HOST password=$PG_PASS ...` and the password never enters `datasource.config.json`, which is what makes that file safe to commit.
 
 ## Testing the connection
 
-Hit **Test connection** to check your setup. SELECT attempts to connect and reports any errors inline. There is no save step: the form writes `db.config.json` once the settings are valid.
+Hit **Test connection** to check your setup. SELECT attempts to connect and reports any errors inline. There is no save step: the form writes `datasource.config.json` once the settings are valid.
 
 ## Configuration storage
 
-Each database lives in its own folder inside the workspace, **named after the database**. The folder contains a `db.config.json` with the connection settings:
+Each database lives in its own folder inside the workspace, **named after the database**. The folder contains a `datasource.config.json` with the connection settings:
 
 ```
 workspace/
   analytics/
-    db.config.json
+    datasource.config.json
     queries/
       report.sql
   billing-eu/
-    db.config.json
+    datasource.config.json
 ```
 
 The folder name *is* the name: renaming the database renames the folder, and renaming the folder, in SELECT or in a terminal or in a branch someone else pushed, renames the database. There is nowhere else the name is written down, so a diff shows which database changed rather than an identifier you have to look up.
 
 Rename a database from its row in the filesystem panel, or from the **Name** field in its connection form. A database is named on the same terms as a folder, because it is one: a name another entry in the folder already has is refused, and so is a name your filesystem will not take.
 
-You can organize SQL files and subfolders inside each database folder. The `db.config.json` file is managed by SELECT and written as you change connection settings in the form. It holds the DSN exactly as you typed it, so a DSN built from `$VAR` references contains no secrets and belongs in git with the rest of the workspace.
+You can organize SQL files and subfolders inside each database folder. The `datasource.config.json` file is managed by SELECT and written as you change connection settings in the form. It holds the DSN exactly as you typed it, so a DSN built from `$VAR` references contains no secrets and belongs in git with the rest of the workspace.
 
 For team databases where credentials should not live on individual machines, see [Proxified Connections](/docs/databases/proxified-connections/).

@@ -2,8 +2,8 @@ import type * as graph from '$lib/wails/graph';
 
 export type ResourceType =
 	| 'file'
-	| 'db_instance'
-	| 'db_item'
+	| 'datasource'
+	| 'datasource_item'
 	| 'temp_file'
 	| 'quick_action'
 	| 'settings'
@@ -12,7 +12,7 @@ export type ResourceType =
 	| 'terminal'
 	| 'diff';
 
-export type ResourceNode = graph.FileNode | graph.DBInstanceNode | graph.DBInstanceItemNode;
+export type ResourceNode = graph.FileNode | graph.DatasourceNode | graph.DatasourceItemNode;
 
 export type ResourceMenuOption = {
 	id: string;
@@ -25,10 +25,10 @@ export type ResourceMenuOption = {
 
 export type ResourceMenuAction = (option: ResourceMenuOption) => void | Promise<void>;
 
-/** When set, only enabled DBs/schemas contribute db_instance / db_item hits; files are unaffected. */
+/** When set, only enabled DBs/schemas contribute datasource / datasource_item hits; files are unaffected. */
 export type ResourceSearchScope = {
 	knownSchemaIds: ReadonlySet<string>;
-	enabledDbInstanceIds: ReadonlySet<string>;
+	enabledDatasourceIds: ReadonlySet<string>;
 	enabledSchemaIds: ReadonlySet<string>;
 };
 

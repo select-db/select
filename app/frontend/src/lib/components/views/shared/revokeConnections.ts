@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 
 import { DeleteDatasource } from '$lib/bindings/selectDb/internal/datasource/datasource';
 import type * as graph from '$lib/wails/graph';
-import RevokeConnectionModal from '$lib/components/views/Database/RevokeConnectionModal.svelte';
+import RevokeConnectionModal from '$lib/components/views/Datasource/RevokeConnectionModal.svelte';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
 import { myPermissions } from '$lib/stores/myPermissionsStore';
@@ -27,7 +27,7 @@ import { tryCatch } from '$lib/utils/tryCatch';
  * are the same act here but not the same sentence.
  */
 export const revokeConnections = async (
-	connections: graph.DatabaseRef[],
+	connections: graph.DatasourceRef[],
 	verb: 'Delete' | 'Revoke' = 'Revoke'
 ): Promise<boolean> => {
 	if (connections.length === 0) return true;
@@ -35,8 +35,8 @@ export const revokeConnections = async (
 	// Credentials are administrated, not owned by whoever has the workspace
 	// open. The server refuses this too; refusing here is so the answer arrives
 	// before anything else has happened.
-	const { canManageDb } = get(myPermissions);
-	const refused = connections.filter((db) => !canManageDb(db.id));
+	const { canManageDatasource } = get(myPermissions);
+	const refused = connections.filter((db) => !canManageDatasource(db.id));
 	if (refused.length > 0) {
 		const one = refused.length === 1;
 		notifyError(

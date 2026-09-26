@@ -18,7 +18,7 @@
 	import { cancelQuery } from '$lib/utils/query/useQuery';
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
 	import {
-		getDbInstanceIds,
+		getDatasourceIds,
 		runStatement,
 		type RunStatementResult
 	} from '$lib/utils/query/helpers';
@@ -32,10 +32,10 @@
 	import Header from '../Header/Header.svelte';
 	import TableHeader from '../Table/TableHeader/TableHeader.svelte';
 	import {
-		getEffectiveSelectedDbInstanceId,
-		getQueryResultForDb,
-		getPlanResultForDb,
-		getExplainResultForDb
+		getEffectiveSelectedDatasourceId,
+		getQueryResultForDatasource,
+		getPlanResultForDatasource,
+		getExplainResultForDatasource
 	} from './tableViewState';
 
 	type Props = {
@@ -50,13 +50,13 @@
 	let contentLoaded = $state(false);
 	let tableHeight = $derived(tab.file?.tableHeight ?? 0);
 
-	let databasePickerOpen = $state(false);
-	let wasDatabasePickerOpen = $state(false);
+	let datasourcePickerOpen = $state(false);
+	let wasDatasourcePickerOpen = $state(false);
 
 	$effect(() => {
 		// Focus the editor after closing DB picker
-		const justClosed = !databasePickerOpen && wasDatabasePickerOpen;
-		wasDatabasePickerOpen = databasePickerOpen;
+		const justClosed = !datasourcePickerOpen && wasDatasourcePickerOpen;
+		wasDatasourcePickerOpen = datasourcePickerOpen;
 		if (!justClosed) return;
 
 		queueMicrotask(() => editorRef?.focus());
@@ -160,15 +160,15 @@
 		}
 	};
 
-	const dbInstanceIds = $derived(getDbInstanceIds(file ?? null));
+	const datasourceIds = $derived(getDatasourceIds(file ?? null));
 
 	const cancel = async () => {
-		if (!file || dbInstanceIds.length === 0) return;
-		for (const dbInstanceId of dbInstanceIds) {
+		if (!file || datasourceIds.length === 0) return;
+		for (const datasourceId of datasourceIds) {
 			await must(
 				tryCatch(cancelQuery, {
 					FileID: file.id,
-					DbInstanceID: dbInstanceId
+					DatasourceID: datasourceId
 				})
 			);
 		}
@@ -232,7 +232,7 @@
 	 * already returned while it was still going. The pane already has a running
 	 * state; it just could not reach it while the old result sat in the slot.
 	 */
-	const clearResultsForRun = (dbInstanceIdsToClear: string[], mode: 'run' | 'explain' | 'plan') => {
+	const clearResultsForRun = (datasourceIdsToClear: string[], mode: 'run' | 'explain' | 'plan') => {
 		if (!file) return;
 
 		const currentTab = getTabByNodeId(file.id);
@@ -241,7 +241,7 @@
 		const key =
 			mode === 'run' ? 'queryResults' : mode === 'plan' ? 'planResults' : 'explainResults';
 		const cleared = { ...(currentTab.file.node[key] ?? {}) };
-		for (const dbInstanceId of dbInstanceIdsToClear) delete cleared[dbInstanceId];
+		for (const datasourceId of datasourceIdsToClear) delete cleared[datasourceId];
 
 		updateTab({
 			...currentTab,
@@ -252,18 +252,18 @@
 		});
 	};
 
-	const run = async (mode: 'run' | 'explain' | 'plan', dbInstanceIdsArg?: string[]) => {
+	const run = async (mode: 'run' | 'explain' | 'plan', datasourceIdsArg?: string[]) => {
 		if (!file || !tab.file || !tab.file.node) return;
 
-		const targetDbInstanceIds = dbInstanceIdsArg ?? dbInstanceIds;
-		if (targetDbInstanceIds.length === 0) {
+		const targetDatasourceIds = datasourceIdsArg ?? datasourceIds;
+		if (targetDatasourceIds.length === 0) {
 			notifyError('Select a database before running this file');
 			return;
 		}
 
-		const activeDbInstanceId = dbInstanceIdsArg?.length === 1 ? dbInstanceIdsArg[0] : undefined;
+		const activeDatasourceId = datasourceIdsArg?.length === 1 ? datasourceIdsArg[0] : undefined;
 
-		if (targetDbInstanceIds.some((id) => $loadingStore.includes(toKey(id, file.id)))) {
+		if (targetDatasourceIds.some((id) => $loadingStore.includes(toKey(id, file.id)))) {
 			await cancel();
 			return;
 		}
@@ -299,20 +299,20 @@
 			}
 		}
 
-		clearResultsForRun(targetDbInstanceIds, mode);
+		clearResultsForRun(targetDatasourceIds, mode);
 
 		const results: Record<string, RunStatementResult> = {};
-		for (const dbInstanceId of targetDbInstanceIds) {
+		for (const datasourceId of targetDatasourceIds) {
 			const result = await runStatement({
 				statement: content,
-				dbInstanceId: dbInstanceId,
+				datasourceId: datasourceId,
 				fileId: file.id,
 				folderId,
 				explain: mode === 'explain',
 				plan: mode === 'plan',
 				runtimeVars
 			});
-			if (result) results[dbInstanceId] = result;
+			if (result) results[datasourceId] = result;
 		}
 
 		const currentTab = getTabByNodeId(file.id);
@@ -320,11 +320,11 @@
 
 		let tables = currentTab.file.tables ?? {};
 		if (mode === 'run') {
-			for (const dbInstanceId of targetDbInstanceIds) {
+			for (const datasourceId of targetDatasourceIds) {
 				tables = {
 					...tables,
-					[dbInstanceId]: {
-						...(tables[dbInstanceId] ?? {}),
+					[datasourceId]: {
+						...(tables[datasourceId] ?? {}),
 						edits: {},
 						scrollLeft: 0,
 						scrollTop: 0
@@ -343,13 +343,13 @@
 			...currentTab.file.node.explainResults
 		};
 
-		for (const [dbInstanceId, res] of Object.entries(results)) {
+		for (const [datasourceId, res] of Object.entries(results)) {
 			if (res.type === 'query') {
-				queryResults[dbInstanceId] = res.result;
+				queryResults[datasourceId] = res.result;
 			} else if (mode === 'plan') {
-				planResults[dbInstanceId] = res.result;
+				planResults[datasourceId] = res.result;
 			} else if (mode === 'explain') {
-				explainResults[dbInstanceId] = res.result;
+				explainResults[datasourceId] = res.result;
 			}
 		}
 
@@ -365,7 +365,7 @@
 				} as graph.FileNode,
 				viewMode:
 					mode === 'run' ? (currentTab.file.viewMode === 'graph' ? 'graph' : 'results') : mode,
-				...(activeDbInstanceId != null && { activeDbInstanceId: activeDbInstanceId }),
+				...(activeDatasourceId != null && { activeDatasourceId: activeDatasourceId }),
 				tables
 			}
 		});
@@ -388,16 +388,16 @@
 		void run('run');
 	});
 
-	const effectiveDbInstanceId = $derived(getEffectiveSelectedDbInstanceId(file, tab));
-	const currentQueryResult = $derived(getQueryResultForDb(file, effectiveDbInstanceId));
-	const currentPlanResult = $derived(getPlanResultForDb(file, effectiveDbInstanceId));
-	const currentExplainResult = $derived(getExplainResultForDb(file, effectiveDbInstanceId));
+	const effectiveDatasourceId = $derived(getEffectiveSelectedDatasourceId(file, tab));
+	const currentQueryResult = $derived(getQueryResultForDatasource(file, effectiveDatasourceId));
+	const currentPlanResult = $derived(getPlanResultForDatasource(file, effectiveDatasourceId));
+	const currentExplainResult = $derived(getExplainResultForDatasource(file, effectiveDatasourceId));
 
 	$effect(() => {
 		if (!file || !tab.file) return;
 
-		const dbInstanceId = effectiveDbInstanceId;
-		if (!dbInstanceId) return;
+		const datasourceId = effectiveDatasourceId;
+		if (!datasourceId) return;
 
 		const hasQueryResult = currentQueryResult?.id;
 		const hasPlanResult = currentPlanResult?.root;
@@ -413,7 +413,7 @@
 					: (currentQueryResult?.id ?? null);
 		if (!currentResultId) return;
 
-		const prevResultId = tab.file.tables?.[dbInstanceId]?.lastResultId ?? null;
+		const prevResultId = tab.file.tables?.[datasourceId]?.lastResultId ?? null;
 
 		if (currentResultId === prevResultId) return;
 
@@ -427,8 +427,8 @@
 				...(shouldOpen && { tableHeight: 195 }),
 				tables: {
 					...(tab.file.tables ?? {}),
-					[dbInstanceId]: {
-						...(tab.file.tables?.[dbInstanceId] ?? {}),
+					[datasourceId]: {
+						...(tab.file.tables?.[datasourceId] ?? {}),
 						lastResultId: currentResultId
 					}
 				}
@@ -448,25 +448,25 @@
 			run(viewMode === 'results' || viewMode === 'graph' ? 'run' : viewMode);
 		};
 		const formatHandler = () => editorRef?.format();
-		const dbPickerHandler = () => {
-			databasePickerOpen = !databasePickerOpen;
+		const datasourcePickerHandler = () => {
+			datasourcePickerOpen = !datasourcePickerOpen;
 		};
 
 		registerCommand('editor.runQuery', runHandler);
 		registerCommand('editor.formatDocument', formatHandler);
-		registerCommand('editor.toggleDatabasePicker', dbPickerHandler);
+		registerCommand('editor.toggleDatasourcePicker', datasourcePickerHandler);
 
 		return () => {
 			unregisterCommand('editor.runQuery', runHandler);
 			unregisterCommand('editor.formatDocument', formatHandler);
-			unregisterCommand('editor.toggleDatabasePicker', dbPickerHandler);
+			unregisterCommand('editor.toggleDatasourcePicker', datasourcePickerHandler);
 		};
 	});
 </script>
 
 <div class="sql-view">
 	{#if file}
-		<Header {tab} {isTemp} {run} {cancel} bind:databasePickerOpen />
+		<Header {tab} {isTemp} {run} {cancel} bind:datasourcePickerOpen />
 	{/if}
 
 	<div class="page">
@@ -491,7 +491,7 @@
 		<Table
 			{tableHeight}
 			{tab}
-			{effectiveDbInstanceId}
+			{effectiveDatasourceId}
 			{currentQueryResult}
 			{currentPlanResult}
 			{currentExplainResult}

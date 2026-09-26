@@ -1,12 +1,12 @@
 <script lang="ts">
 	import type * as graph from '$lib/wails/graph';
 	import Button from '$lib/system/Button/Button.svelte';
-	import { getDbInstanceIds } from '$lib/utils/query/helpers';
+	import { getDatasourceIds } from '$lib/utils/query/helpers';
 	import { loadingStore, toKey } from '$lib/utils/query/loadingStore';
 
 	type RunButtonProps = {
 		file: graph.FileNode | null | undefined;
-		run: (type: 'run' | 'explain' | 'plan', dbInstanceIds?: string[]) => Promise<void>;
+		run: (type: 'run' | 'explain' | 'plan', datasourceIds?: string[]) => Promise<void>;
 		cancel: () => Promise<void>;
 		explain?: boolean;
 		plan?: boolean;
@@ -14,9 +14,9 @@
 
 	let { file, run, cancel, explain, plan }: RunButtonProps = $props();
 
-	const dbInstanceIds = $derived(getDbInstanceIds(file ?? null));
+	const datasourceIds = $derived(getDatasourceIds(file ?? null));
 	const isLoading = $derived(
-		dbInstanceIds.some((id) => $loadingStore.includes(toKey(id, file?.id)))
+		datasourceIds.some((id) => $loadingStore.includes(toKey(id, file?.id)))
 	);
 
 	const onclick = async () => {

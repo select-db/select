@@ -41,7 +41,7 @@ type History struct {
 	Dsn          string        `json:"dsn"`
 	CreatedAt    time.Time     `json:"created_at"`
 	WorkspaceID  string        `json:"workspace_id"`
-	DbInstanceID string        `json:"db_instance_id"`
+	DatasourceID string        `json:"datasource_id"`
 }
 
 type MutationCommit struct {
@@ -59,7 +59,7 @@ type Permission struct {
 	ID           string                  `json:"id"`
 	RoleID       string                  `json:"role_id"`
 	WorkspaceID  string                  `json:"workspace_id"`
-	DbInstanceID db_types.JSONNullString `json:"db_instance_id"`
+	DatasourceID db_types.JSONNullString `json:"datasource_id"`
 	SchemaName   db_types.JSONNullString `json:"schema_name"`
 	TableName    db_types.JSONNullString `json:"table_name"`
 	ColumnName   db_types.JSONNullString `json:"column_name"`

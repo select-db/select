@@ -2,17 +2,17 @@ import { runExplain, runPlan, runQuery } from '$lib/utils/query/useQuery';
 import { must, tryCatch } from '$lib/utils/tryCatch';
 import type * as graph from '$lib/wails/graph';
 
-export const hasDatabase = (file: graph.FileNode | null): boolean => {
-	return (file?.databases?.length ?? 0) > 0;
+export const hasDatasource = (file: graph.FileNode | null): boolean => {
+	return (file?.datasources?.length ?? 0) > 0;
 };
 
 /** All database IDs attached to the file. */
-export const getDbInstanceIds = (file: graph.FileNode | null): string[] =>
-	file?.databases?.map((d) => d.id).filter((id): id is string => !!id) ?? [];
+export const getDatasourceIds = (file: graph.FileNode | null): string[] =>
+	file?.datasources?.map((d) => d.id).filter((id): id is string => !!id) ?? [];
 
 export type RunStatementParams = {
 	statement: string;
-	dbInstanceId: string;
+	datasourceId: string;
 	fileId: string;
 	folderId: string;
 	explain?: boolean;
@@ -26,7 +26,7 @@ export type RunStatementResult =
 
 export const runStatement = async ({
 	statement,
-	dbInstanceId,
+	datasourceId,
 	fileId,
 	folderId,
 	explain,
@@ -36,7 +36,7 @@ export const runStatement = async ({
 	const baseParams = {
 		FileID: fileId,
 		Statement: statement,
-		DbInstanceID: dbInstanceId,
+		DatasourceID: datasourceId,
 		FolderID: folderId,
 		RuntimeVars: runtimeVars ?? {}
 	};

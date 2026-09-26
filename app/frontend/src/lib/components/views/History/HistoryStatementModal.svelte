@@ -1,13 +1,13 @@
 <script lang="ts">
 	import Badge from '$lib/system/Badge/Badge.svelte';
 	import Button from '$lib/system/Button/Button.svelte';
-	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
+	import DatasourceIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceIndicator.svelte';
 	import SqlViewer from '$lib/system/SqlViewer/SqlViewer.svelte';
 	import { formatRelativeTime } from '$lib/utils/formatRelativeTime';
 
 	type Props = {
 		sql: string;
-		dbInstanceId: string;
+		datasourceId: string;
 		dbName: string;
 		hasError: boolean;
 		errors: string[];
@@ -21,7 +21,7 @@
 
 	let {
 		sql,
-		dbInstanceId,
+		datasourceId,
 		dbName,
 		hasError,
 		errors,
@@ -35,7 +35,7 @@
 
 <div class="header">
 	<span class="meta">
-		<DatabaseIndicator size={16} id={dbInstanceId} />
+		<DatasourceIndicator size={16} id={datasourceId} />
 		<span class="title">{dbName}</span>
 	</span>
 	<span class="header-right">

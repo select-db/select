@@ -82,7 +82,7 @@ func Apply(ctx context.Context, userID string, c types.Commit, lastPulledAt time
 				ID:           idUUID,
 				WorkspaceID:  workspaceUUID,
 				RoleID:       utils.PatchValue(payload, "role_id", existing.RoleID, roleUUID),
-				DbInstanceID: utils.PatchNullStr(payload, "db_instance_id", existing.DbInstanceID),
+				DatasourceID: utils.PatchNullStr(payload, "datasource_id", existing.DatasourceID),
 				SchemaName:   utils.PatchNullStr(payload, "schema_name", existing.SchemaName),
 				TableName:    utils.PatchNullStr(payload, "table_name", existing.TableName),
 				ColumnName:   utils.PatchNullStr(payload, "column_name", existing.ColumnName),

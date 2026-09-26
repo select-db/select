@@ -2,16 +2,16 @@
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { loadingStore } from '$lib/utils/query/loadingStore';
-	import { databaseAvailabilityStore } from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
+	import { datasourceAvailabilityStore } from '$lib/components/shared/DatasourceIndicator/datasourceIndicatorStore';
 
-	type DatabaseIndicatorProps = {
+	type DatasourceIndicatorProps = {
 		id?: string | null;
 		size?: number;
 		loaderSize?: number;
 		error?: boolean;
 	};
 
-	let { id = null, size = 18, loaderSize = 16, error = false }: DatabaseIndicatorProps = $props();
+	let { id = null, size = 18, loaderSize = 16, error = false }: DatasourceIndicatorProps = $props();
 
 	const dbPrefix = $derived(() => (id ? `db:${id}` : null));
 	const isLoading = $derived(() => {
@@ -34,7 +34,7 @@
 			</div>
 		</div>
 	{:else}
-		{@const reached = $databaseAvailabilityStore.get(id)}
+		{@const reached = $datasourceAvailabilityStore.get(id)}
 		{@const state = reached === undefined ? 'unknown' : reached ? 'online' : 'offline'}
 		<div class="icon-wrapper" style={`--indicator-size: ${size}px`}>
 			<div class="dot-wrapper">

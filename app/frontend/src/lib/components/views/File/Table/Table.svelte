@@ -15,7 +15,7 @@
 	type TableProps = {
 		tableHeight?: number;
 		tab: Tab;
-		effectiveDbInstanceId: string | null;
+		effectiveDatasourceId: string | null;
 		currentQueryResult: graph.QueryResult | null;
 		currentPlanResult: graph.ExplainResult | null;
 		currentExplainResult: graph.ExplainResult | null;
@@ -25,7 +25,7 @@
 	let {
 		tableHeight = 0,
 		tab,
-		effectiveDbInstanceId,
+		effectiveDatasourceId,
 		currentQueryResult,
 		currentPlanResult,
 		currentExplainResult,
@@ -37,7 +37,7 @@
 	const activeView = $derived(tab.file?.viewMode ?? 'results');
 
 	const loading = $derived(
-		$loadingStore.includes(toKey(effectiveDbInstanceId ?? undefined, file?.id))
+		$loadingStore.includes(toKey(effectiveDatasourceId ?? undefined, file?.id))
 	);
 	const queryResult = $derived(currentQueryResult);
 	const planResult = $derived(currentPlanResult);
@@ -45,7 +45,7 @@
 
 	function openFixInChat(error: string) {
 		addChatTab({
-			dbInstanceId: effectiveDbInstanceId,
+			datasourceId: effectiveDatasourceId,
 			action:
 				activeView === 'results' ? 'fix-query' : activeView === 'plan' ? 'fix-plan' : 'fix-explain',
 			error,
@@ -132,7 +132,7 @@
 	{:else if activeView === 'graph'}
 		<GraphView
 			{tab}
-			{effectiveDbInstanceId}
+			{effectiveDatasourceId}
 			queryResult={currentQueryResult}
 			{content}
 			onRun={() => run('run')}

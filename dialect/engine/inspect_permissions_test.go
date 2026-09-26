@@ -7,7 +7,7 @@ import (
 	"github.com/selectDb/dialect/core/testutil"
 )
 
-const permDBID = testutil.TestDBInstanceID
+const permDatasourceID = testutil.TestDatasourceID
 
 // permMeta is the catalog every inspector suite resolves names against, so a
 // table or schema added for one of them reaches this one too. Its default
@@ -54,7 +54,7 @@ func TestInspect_ForeignDialectCannotReturnNothing(t *testing.T) {
 	if len(got) != 1 || got[0].Operation != core.InspectOpUnknown {
 		t.Fatalf("got %+v, want one unknown statement", got)
 	}
-	if err := core.CheckQueryPermissions(got, permDBID, dataActionsOnly()); err == nil {
+	if err := core.CheckQueryPermissions(got, permDatasourceID, dataActionsOnly()); err == nil {
 		t.Error("a dialect that inspects to nothing ran unchecked")
 	}
 }
@@ -116,7 +116,7 @@ func TestPermissions_AWriteNamingNoTableIsRefused(t *testing.T) {
 				if len(inspected) == 0 {
 					t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
 				}
-				if err := core.CheckQueryPermissions(inspected, permDBID, nothing); err == nil {
+				if err := core.CheckQueryPermissions(inspected, permDatasourceID, nothing); err == nil {
 					t.Error("ran on a policy granting nothing")
 				}
 			})
@@ -155,7 +155,7 @@ func TestPermissions_ATruncatedWriteNeverRunsUnchecked(t *testing.T) {
 				if len(inspected) == 0 {
 					t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
 				}
-				if err := core.CheckQueryPermissions(inspected, permDBID, nothing); err == nil {
+				if err := core.CheckQueryPermissions(inspected, permDatasourceID, nothing); err == nil {
 					t.Error("ran on a policy granting nothing")
 				}
 			})
@@ -199,9 +199,9 @@ func TestPermissions_TextNoStatementCoversIsReported(t *testing.T) {
 // and nothing else. Reporting the table's columns too refuses the statement to
 // a role that may read everything the statement actually touches.
 func TestPermissions_ACTEShadowsTheTableItIsNamedAfter(t *testing.T) {
-	schema, table, db := "main", "t1", permDBID
+	schema, table, db := "main", "t1", permDatasourceID
 	onlyT1 := core.Compile([]core.PermissionEntry{{
-		DbInstanceID: &db, SchemaName: &schema, TableName: &table,
+		DatasourceID: &db, SchemaName: &schema, TableName: &table,
 		Action: core.ActionSelect, Effect: "allow", RoleName: "r",
 	}}).WithDenyUnmanaged()
 
@@ -242,7 +242,7 @@ func TestPermissions_ACompoundSelectIsOneStatement(t *testing.T) {
 			t.Errorf("a branch of it reads as %s: %+v", stmt.Operation, inspected)
 		}
 	}
-	if err := core.CheckQueryPermissions(inspected, permDBID, dataActionsOnly()); err == nil {
+	if err := core.CheckQueryPermissions(inspected, permDatasourceID, dataActionsOnly()); err == nil {
 		t.Error("ran on the four row actions")
 	}
 }
@@ -269,7 +269,7 @@ func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
 			if unknown != 1 {
 				t.Errorf("%d statements need manage, want 1: %+v", unknown, inspected)
 			}
-			if err := core.CheckQueryPermissions(inspected, permDBID, dataActions); err == nil {
+			if err := core.CheckQueryPermissions(inspected, permDatasourceID, dataActions); err == nil {
 				t.Error("the calling statement ran on the four row actions")
 			}
 		})
@@ -282,7 +282,7 @@ func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
 // update on exactly the columns the upsert sets.
 func TestPermissions_AColumnScopedRoleStillUpserts(t *testing.T) {
 	column := "c2"
-	perms := compileFor(permDBID,
+	perms := compileFor(permDatasourceID,
 		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("t1"),
 			Action: core.ActionInsert, Effect: "allow", RoleName: "test-role"},
 		core.PermissionEntry{SchemaName: sptr("main"), TableName: sptr("t1"), ColumnName: &column,
@@ -292,11 +292,11 @@ func TestPermissions_AColumnScopedRoleStillUpserts(t *testing.T) {
 	for _, name := range []string{"postgresql", "sqlite"} {
 		t.Run(name, func(t *testing.T) {
 			sql := "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c2 = 'x'"
-			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), sql), permDBID, perms); err != nil {
+			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), sql), permDatasourceID, perms); err != nil {
 				t.Errorf("refused a role holding update on the column it sets: %v", err)
 			}
 			other := "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c1 = 2"
-			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), other), permDBID, perms); err == nil {
+			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), other), permDatasourceID, perms); err == nil {
 				t.Error("ran, and it sets a column the role may not update")
 			}
 		})

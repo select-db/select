@@ -31,7 +31,7 @@
 		attachSqlVariablePointerNavigation
 	} from './config/sqlPointerNavigation';
 	import { attachSqlLintProvider, LINT_SOURCE } from './providers/sqlLintProvider';
-	import { getEffectiveSelectedDbInstanceId } from '../views/tableViewState';
+	import { getEffectiveSelectedDatasourceId } from '../views/tableViewState';
 
 	import Path from '../Header/Path.svelte';
 
@@ -125,7 +125,7 @@
 		onStateChange
 	}: Props = $props();
 
-	const effectiveDbInstanceId = $derived(getEffectiveSelectedDbInstanceId(tab.file?.node, tab));
+	const effectiveDatasourceId = $derived(getEffectiveSelectedDatasourceId(tab.file?.node, tab));
 
 	let container: HTMLElement;
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -491,12 +491,12 @@
 
 	$effect(() => {
 		const ed = editor;
-		if (isDiffMode || !ed || !effectiveDbInstanceId || language !== 'sql-custom') {
+		if (isDiffMode || !ed || !effectiveDatasourceId || language !== 'sql-custom') {
 			return;
 		}
 		const d = attachSqlSchemaPointerNavigation(
 			ed,
-			() => effectiveDbInstanceId,
+			() => effectiveDatasourceId,
 			() => tab.file?.node?.id
 		);
 		return () => d.dispose();
@@ -514,13 +514,13 @@
 	$effect(() => {
 		if (isDiffMode || !editor || language !== 'sql-custom') return;
 		const ed = editor;
-		const dbInstanceId = effectiveDbInstanceId;
-		const d = attachSqlFunctionHighlighter(ed, () => dbInstanceId);
+		const datasourceId = effectiveDatasourceId;
+		const d = attachSqlFunctionHighlighter(ed, () => datasourceId);
 		return () => d.dispose();
 	});
 
 	$effect(() => {
-		if (isDiffMode || !editor || !effectiveDbInstanceId || language !== 'sql-custom') return;
+		if (isDiffMode || !editor || !effectiveDatasourceId || language !== 'sql-custom') return;
 		const d = attachSqlLintProvider(editor, getFile, (markers) => {
 			const currentFile = tab.file;
 			if (!currentFile) return;

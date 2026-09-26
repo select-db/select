@@ -252,8 +252,8 @@
 				<FileItems
 					files={[]}
 					folders={searchResultsFolder}
-					databases={[]}
-					databaseItems={[]}
+					datasources={[]}
+					datasourceItems={[]}
 					depth={0}
 					parentIds={[]}
 					ctx="search"

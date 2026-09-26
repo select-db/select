@@ -14,24 +14,24 @@
 
 	import { getIcon } from '$lib/components/views/shared/getIcon';
 	import FieldIndicators from '$lib/components/views/shared/FieldIndicators.svelte';
-	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
+	import DatasourceIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceIndicator.svelte';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import DatabaseSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
+	import DatasourceSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 
-	type DbItem = {
+	type DatasourceItem = {
 		id?: string;
 		name?: string;
 		type?: string;
 		path?: string;
 		badges?: unknown[];
 		metadata?: Record<string, unknown>;
-		children?: DbItem[];
+		children?: DatasourceItem[];
 	};
 
-	type DatabaseItemProps = {
-		item?: DbItem;
+	type DatasourceItemProps = {
+		item?: DatasourceItem;
 	};
-	let { item }: DatabaseItemProps = $props();
+	let { item }: DatasourceItemProps = $props();
 
 	const availableValues = $derived(() =>
 		Object.entries(item?.metadata ?? {}).filter(
@@ -87,12 +87,12 @@
 
 	const breadcrumbSegments = $derived(breadcrumb());
 
-	const findDbItemByPath = (targetPath: string): DbItem | undefined => {
+	const findDatasourceItemByPath = (targetPath: string): DatasourceItem | undefined => {
 		const workspace = get(workspaceGraphStore);
-		const dbs = (workspace?.db_instances ?? []);
+		const dbs = workspace?.datasources ?? [];
 
 		for (const db of dbs) {
-			const stack: DbItem[] = [...db.children];
+			const stack: DatasourceItem[] = [...db.children];
 			while (stack.length) {
 				const node = stack.pop()!;
 				if (node.path === targetPath) return node;
@@ -106,30 +106,30 @@
 	const openBreadcrumbItem = (segmentPath: string, event: MouseEvent) => {
 		event.stopPropagation();
 		event.preventDefault();
-		const target = findDbItemByPath(segmentPath);
+		const target = findDatasourceItemByPath(segmentPath);
 		if (!target) return;
 
 		modalStore.set({
-			content: () => DatabaseSystemInfo,
+			content: () => DatasourceSystemInfo,
 			props: { item: target },
 			width: 600
 		});
 	};
 
 	const getBreadcrumbNode = (segment: BreadcrumbSegment) => {
-		return findDbItemByPath(segment.path);
+		return findDatasourceItemByPath(segment.path);
 	};
 
-	const getBreadcrumbDatabase = (firstSegment: BreadcrumbSegment) => {
+	const getBreadcrumbDatasource = (firstSegment: BreadcrumbSegment) => {
 		const workspace = get(workspaceGraphStore);
-		const dbs = (workspace?.db_instances ?? []);
+		const dbs = workspace?.datasources ?? [];
 		return dbs.find((db) => db.name === firstSegment.label);
 	};
 
 	const childrenMenuOptions = $derived(() => {
-		const allChildren = (children() ?? []);
+		const allChildren = children() ?? [];
 		return allChildren.map(
-			(child: DbItem): MenuOption => ({
+			(child: DatasourceItem): MenuOption => ({
 				id: child.id ?? child.name ?? '',
 				label: child.name ?? '',
 				icon: getIcon(child.type),
@@ -140,7 +140,7 @@
 					: {}),
 				action: () =>
 					modalStore.set({
-						content: () => DatabaseSystemInfo,
+						content: () => DatasourceSystemInfo,
 						props: { item: child },
 						width: 600
 					})
@@ -181,8 +181,8 @@
 				onclick={(event) => openBreadcrumbItem(segment.path, event)}
 			>
 				{#if i === 0}
-					{@const db = getBreadcrumbDatabase(segment)}
-					<DatabaseIndicator id={db!.id} size={16} loaderSize={14} />
+					{@const db = getBreadcrumbDatasource(segment)}
+					<DatasourceIndicator id={db!.id} size={16} loaderSize={14} />
 				{:else if node}
 					{@const icon = getIcon(node.type)}
 					{#if icon}

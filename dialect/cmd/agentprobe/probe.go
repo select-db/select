@@ -240,7 +240,7 @@ func measurePermissions(statements []core.InspectStatement) Permissions {
 }
 
 func check(statements []core.InspectStatement, rights []testutil.Right) error {
-	return core.CheckQueryPermissions(statements, testutil.TestDBInstanceID, testutil.PermGranting(rights...))
+	return core.CheckQueryPermissions(statements, testutil.TestDatasourceID, testutil.PermGranting(rights...))
 }
 
 func fieldNames(fields []core.InspectField) []string {

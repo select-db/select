@@ -1,29 +1,29 @@
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import type * as graph from '$lib/wails/graph';
 import { navigateToFile } from '$lib/components/views/shared/navigateToFile';
-import { navigateToDatabase } from '$lib/components/views/shared/navigateToDatabase';
+import { navigateToDatasource } from '$lib/components/views/shared/navigateToDatasource';
 import { expandItem, renamingItemIdStore } from '$lib/components/views/shared/sharedStore';
 
 import { ResolveFolder } from '$lib/wails/graph';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
-import { writeDatabase, writeFile, writeFolder } from './helpers';
+import { writeDatasource, writeFile, writeFolder } from './helpers';
 
-type FolderLike = graph.FolderNode | graph.DBInstanceNode;
+type FolderLike = graph.FolderNode | graph.DatasourceNode;
 
 /**
  * Every name the folder is already using, whatever kind of thing is using it.
  *
  * One namespace, because a directory has one: a database is a directory now,
  * so a database named for a folder that is already there does not fail, it
- * writes a db.config.json into that folder and takes it over.
+ * writes a datasource.config.json into that folder and takes it over.
  */
 const namesInFolder = (folder: FolderLike): Set<string> =>
 	new Set(
 		[
 			...('folders' in folder ? folder.folders : []),
 			...('files' in folder ? (folder.files ?? []) : []),
-			...('db_instances' in folder ? folder.db_instances : [])
+			...('datasources' in folder ? folder.datasources : [])
 		].map((entry) => entry.name)
 	);
 
@@ -46,10 +46,10 @@ export const createFolderInFolder = async (folder: FolderLike) => {
 
 export const createFileInFolder = async (folder: FolderLike) => {
 	// Writing truncates, so the name has to miss every file already in there. A
-	// db instance is resolved at build time and carries its own; a folder's are
+	// datasource is resolved at build time and carries its own; a folder's are
 	// read on demand, and a folder that will not resolve is not a folder to
 	// write into.
-	const resolved = folder.type === 'db_instance' ? folder : await ResolveFolder(folder.uri);
+	const resolved = folder.type === 'datasource' ? folder : await ResolveFolder(folder.uri);
 	if (!resolved?.files) {
 		notifyError(`Could not read ${folder.name}`);
 		return;
@@ -89,15 +89,15 @@ export const rootOptions = [
 		action: async (onClose, folder: graph.FolderNode) => {
 			const { uri, id } = folder;
 			const name = findUniqueName(namesInFolder(folder), (n) => `db #${n}`);
-			const { id: dbInstanceId, uri: dbUri } = await writeDatabase(uri, name);
-			navigateToDatabase({
-				id: dbInstanceId,
+			const { id: datasourceId, uri: dbUri } = await writeDatasource(uri, name);
+			navigateToDatasource({
+				id: datasourceId,
 				uri: dbUri,
-				type: 'db_instance',
+				type: 'datasource',
 				name,
 				folder_id: id,
 				children: []
-			} as unknown as graph.DBInstanceNode);
+			} as unknown as graph.DatasourceNode);
 			expandItem(id);
 			onClose();
 		}

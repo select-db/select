@@ -1,9 +1,9 @@
 import type * as graph from '$lib/wails/graph';
 import type { SelectOptionGroup } from '$lib/system/Select/Select.types';
 
-type DBInstanceItemNode = graph.DBInstanceItemNode;
+type DatasourceItemNode = graph.DatasourceItemNode;
 
-function getMetadataSql(node: DBInstanceItemNode): string | undefined {
+function getMetadataSql(node: DatasourceItemNode): string | undefined {
 	const meta = node.metadata;
 	if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return undefined;
 	const m = meta as { sql?: string };
@@ -14,22 +14,22 @@ function getMetadataSql(node: DBInstanceItemNode): string | undefined {
  * Returns DDL for a single table/view in the given database: table DDL + indexes + triggers
  * (same order as backend buildSchemaSQLFromMetadata for one table).
  * @param graph - Workspace graph (from workspaceGraphStore)
- * @param dbInstanceId - DB instance id
+ * @param datasourceId - datasource id
  * @param schemaTable - "schemaName:tableName"
  */
 export function getTableDDL(
 	graph: graph.WorkspaceNode | undefined,
-	dbInstanceId: string,
+	datasourceId: string,
 	schemaTable: string
 ): string | null {
-	if (!graph?.db_instances) return null;
+	if (!graph?.datasources) return null;
 	const sep = schemaTable.indexOf(':');
 	if (sep <= 0) return null;
 	const schemaName = schemaTable.slice(0, sep);
 	const tableName = schemaTable.slice(sep + 1);
 	if (!schemaName || !tableName) return null;
 
-	const dbNode = graph.db_instances.find((d) => d.id === dbInstanceId);
+	const dbNode = graph.datasources.find((d) => d.id === datasourceId);
 	if (!dbNode?.children) return null;
 
 	const schemaNode = dbNode.children.find(
@@ -70,10 +70,10 @@ export function getTableDDL(
  */
 export function getSchemaTableOptionGroups(
 	graph: graph.WorkspaceNode | undefined,
-	dbInstanceId: string
+	datasourceId: string
 ): SelectOptionGroup[] {
-	if (!graph?.db_instances) return [];
-	const dbNode = graph.db_instances.find((d) => d.id === dbInstanceId);
+	if (!graph?.datasources) return [];
+	const dbNode = graph.datasources.find((d) => d.id === datasourceId);
 	if (!dbNode?.children) return [];
 
 	const schemaNodes = dbNode.children.filter((c) => c.type === 'schema');

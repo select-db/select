@@ -59,13 +59,12 @@ export function getToolTitleParts(name: string, argumentsJson?: string): ToolTit
 			if (uri) return { prefix: 'Edit', code: truncateLabel(fileLabel(uri)) };
 			return { prefix: 'Edit file' };
 		}
-		case 'get_database_schemas': {
+		case 'get_datasource_schemas': {
 			return { prefix: 'Read database schemas' };
 		}
-		case 'get_database_table_detail': {
+		case 'get_datasource_table_detail': {
 			const tableName = a.tableName;
-			if (tableName)
-				return { prefix: 'Read', code: truncateLabel(tableName), suffix: 'table' };
+			if (tableName) return { prefix: 'Read', code: truncateLabel(tableName), suffix: 'table' };
 			return { prefix: 'Read table detail' };
 		}
 		case 'execute_query':

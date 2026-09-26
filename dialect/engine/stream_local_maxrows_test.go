@@ -69,7 +69,7 @@ func TestStreamLocal_MaxRowsCapsScan(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	StreamLocal(ctx, Conn{DB: db}, Datasource{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{MaxRows: 10}, sink)
 
@@ -95,7 +95,7 @@ func TestStreamLocal_MaxRowsSkipsWhenUnderCap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	StreamLocal(ctx, Conn{DB: db}, Datasource{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{MaxRows: 50}, sink)
 
@@ -115,7 +115,7 @@ func TestStreamLocal_MaxRowsZeroIsUnbounded(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	StreamLocal(ctx, Conn{DB: db}, Datasource{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{ /* MaxRows: 0 */ }, sink)
 

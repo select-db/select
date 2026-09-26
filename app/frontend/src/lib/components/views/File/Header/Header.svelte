@@ -2,7 +2,7 @@
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import DatabasePicker from './DatabasePicker.svelte';
+	import DatasourcePicker from './DatasourcePicker.svelte';
 	import RunButton from './RunButton.svelte';
 	import VariablePicker from './VariablePicker.svelte';
 	import { updateTab, type Tab } from '$lib/components/Layout/layoutStore';
@@ -11,39 +11,39 @@
 	type Props = {
 		isTemp?: boolean;
 		tab: Tab;
-		run: (type: 'run' | 'explain' | 'plan', dbInstanceIds?: string[]) => Promise<void>;
+		run: (type: 'run' | 'explain' | 'plan', datasourceIds?: string[]) => Promise<void>;
 		cancel: () => Promise<void>;
-		databasePickerOpen?: boolean;
+		datasourcePickerOpen?: boolean;
 	};
 
-	let { isTemp, tab, run, cancel, databasePickerOpen = $bindable(false) }: Props = $props();
+	let { isTemp, tab, run, cancel, datasourcePickerOpen = $bindable(false) }: Props = $props();
 
 	const file = $derived.by(() => tab.file?.node);
 
-	const selectedDbInstanceIds = $derived.by(() => file?.databases?.map((d) => d.id) ?? []);
+	const selectedDatasourceIds = $derived.by(() => file?.datasources?.map((d) => d.id) ?? []);
 
-	const onDatabaseChange = async (value: string | string[]) => {
+	const onDatasourceChange = async (value: string | string[]) => {
 		if (!file) return;
 
 		const ids = Array.isArray(value) ? value : value ? [value] : [];
 
 		const graph = $workspaceGraphStore;
-		const databases = (graph?.db_instances ?? [])
+		const datasources = (graph?.datasources ?? [])
 			.filter((db) => ids.includes(db.id))
 			.map((db) => ({ id: db.id, name: db.name }));
 
-		let activeDbInstanceId = tab.file?.activeDbInstanceId;
-		if (!databases.find(({ id }) => id === activeDbInstanceId))
-			activeDbInstanceId = databases[0]?.id;
+		let activeDatasourceId = tab.file?.activeDatasourceId;
+		if (!datasources.find(({ id }) => id === activeDatasourceId))
+			activeDatasourceId = datasources[0]?.id;
 
 		updateTab({
 			...tab,
 			file: {
 				...tab.file,
-				activeDbInstanceId,
+				activeDatasourceId,
 				node: {
 					...file,
-					databases
+					datasources
 				} as graph.FileNode
 			}
 		});
@@ -53,7 +53,7 @@
 		await must(
 			tryCatch(fs.Write, {
 				uri: `${file.id}.metadata.json`,
-				content: JSON.stringify({ databases }, null, 2)
+				content: JSON.stringify({ datasources }, null, 2)
 			})
 		);
 	};
@@ -67,11 +67,11 @@
 			<RunButton {file} {run} {cancel} explain />
 		</div>
 		<div class="divider"></div>
-		<DatabasePicker
+		<DatasourcePicker
 			multiple={true}
-			value={selectedDbInstanceIds}
-			onchange={onDatabaseChange}
-			bind:open={databasePickerOpen}
+			value={selectedDatasourceIds}
+			onchange={onDatasourceChange}
+			bind:open={datasourcePickerOpen}
 		/>
 	</div>
 

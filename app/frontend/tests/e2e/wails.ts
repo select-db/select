@@ -264,13 +264,13 @@ export async function readFile(
 }
 
 /** The names of the databases the graph is holding, in its own order. */
-export async function databasesInGraph(request: APIRequestContext): Promise<string[]> {
-	const workspace = await call<{ db_instances: { name: string }[] }>(
+export async function datasourcesInGraph(request: APIRequestContext): Promise<string[]> {
+	const workspace = await call<{ datasources: { name: string }[] }>(
 		request,
 		`${GRAPH}.GetWorkspaceGraph`
 	);
 
-	return (workspace.db_instances ?? []).map((db) => db.name);
+	return (workspace.datasources ?? []).map((db) => db.name);
 }
 
 export { expect };

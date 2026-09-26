@@ -8,7 +8,7 @@
 	import Button from '$lib/system/Button/Button.svelte';
 	import Select from '$lib/system/Select/Select.svelte';
 	import type { SelectOption } from '$lib/system/Select/Select.types';
-	import DatabasePicker from '$lib/components/views/File/Header/DatabasePicker.svelte';
+	import DatasourcePicker from '$lib/components/views/File/Header/DatasourcePicker.svelte';
 	import { tryCatch } from '$lib/utils/tryCatch';
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 	import Icon from '$lib/system/Icon/Icon.svelte';
@@ -22,33 +22,33 @@
 	let schemaContent = $state('');
 	let schemaLoading = $state(false);
 
-	const dbInstanceId = $derived(tab.schema?.dbInstanceId);
+	const datasourceId = $derived(tab.schema?.datasourceId);
 	const selectedSchemaTable = $derived(tab.schema?.selectedSchemaTable ?? '');
 
-	const dbInstance = $derived(
-		($workspaceGraphStore?.db_instances ?? []).find((dbi) => dbi.id === dbInstanceId)
+	const datasource = $derived(
+		($workspaceGraphStore?.datasources ?? []).find((dbi) => dbi.id === datasourceId)
 	);
 
 	const schemaFileUri = $derived(
-		dbInstance?.uri ? `${dbInstance.uri.replace(/\/$/, '')}/schema.sql` : null
+		datasource?.uri ? `${datasource.uri.replace(/\/$/, '')}/schema.sql` : null
 	);
 
 	const schemaTableOptionGroups = $derived(
-		dbInstanceId && dbInstance?.children?.length
+		datasourceId && datasource?.children?.length
 			? [
 					{ label: 'Full schema', options: [{ value: '', label: 'Full schema' }] },
-					...getSchemaTableOptionGroups($workspaceGraphStore, dbInstanceId)
+					...getSchemaTableOptionGroups($workspaceGraphStore, datasourceId)
 				]
 			: []
 	);
 
 	const displayContent = $derived(
-		selectedSchemaTable && dbInstanceId
-			? getTableDDL($workspaceGraphStore, dbInstanceId, selectedSchemaTable)
+		selectedSchemaTable && datasourceId
+			? getTableDDL($workspaceGraphStore, datasourceId, selectedSchemaTable)
 			: null
 	);
 	const effectiveContent = $derived(
-		selectedSchemaTable && dbInstanceId ? (displayContent ?? schemaContent) : schemaContent
+		selectedSchemaTable && datasourceId ? (displayContent ?? schemaContent) : schemaContent
 	);
 
 	async function readSchemaFile() {
@@ -62,34 +62,34 @@
 	}
 
 	$effect(() => {
-		if (!dbInstanceId) {
-			const firstDb = $workspaceGraphStore?.db_instances?.[0];
+		if (!datasourceId) {
+			const firstDb = $workspaceGraphStore?.datasources?.[0];
 			if (firstDb) {
 				updateTab({
 					...tab,
-					schema: { ...tab.schema, dbInstanceId: firstDb.id, databaseName: firstDb.name }
+					schema: { ...tab.schema, datasourceId: firstDb.id, datasourceName: firstDb.name }
 				});
 			}
 			return;
 		}
 
-		if (!dbInstance) return;
+		if (!datasource) return;
 		// loadSchemaIfEmpty returns at once when the schema is already there, so
 		// the file is read either way and only this knows when.
-		void loadSchemaIfEmpty(dbInstance).then(() => readSchemaFile());
+		void loadSchemaIfEmpty(datasource).then(() => readSchemaFile());
 	});
 
-	const onDatabaseChange = (value: string | string[]) => {
-		const newDbInstanceId = Array.isArray(value) ? (value[0] ?? '') : value;
-		const newDbInstance = ($workspaceGraphStore?.db_instances ?? []).find(
-			(dbi) => dbi.id === newDbInstanceId
+	const onDatasourceChange = (value: string | string[]) => {
+		const newDatasourceId = Array.isArray(value) ? (value[0] ?? '') : value;
+		const newDatasource = ($workspaceGraphStore?.datasources ?? []).find(
+			(dbi) => dbi.id === newDatasourceId
 		);
 		updateTab({
 			...tab,
 			schema: {
 				...tab.schema,
-				dbInstanceId: newDbInstanceId,
-				databaseName: newDbInstance?.name,
+				datasourceId: newDatasourceId,
+				datasourceName: newDatasource?.name,
 				selectedSchemaTable: undefined
 			}
 		});
@@ -107,8 +107,8 @@
 	};
 
 	const onRefresh = async () => {
-		if (!dbInstance) return;
-		await loadSchema({ database: dbInstance });
+		if (!datasource) return;
+		await loadSchema({ datasource: datasource });
 		await readSchemaFile();
 	};
 </script>
@@ -122,12 +122,12 @@
 				emphasis="low"
 				iconSize={18}
 				onclick={onRefresh}
-				disabled={!dbInstance}
+				disabled={!datasource}
 				label="Refresh Schema"
 			/>
 			<div class="picker-wrapper">
-				<DatabasePicker value={dbInstanceId} onchange={onDatabaseChange} />
-				{#if dbInstanceId && schemaTableOptionGroups.length > 0}
+				<DatasourcePicker value={datasourceId} onchange={onDatasourceChange} />
+				{#if datasourceId && schemaTableOptionGroups.length > 0}
 					<Icon icon="chevron-right" size={18} />
 					<div style="width: var(--space-md)"></div>
 					<Select
@@ -160,7 +160,7 @@
 	</div>
 
 	<div class="content">
-		{#if !dbInstanceId}
+		{#if !datasourceId}
 			<div class="empty-state">
 				<p>Select a database to view its schema</p>
 			</div>

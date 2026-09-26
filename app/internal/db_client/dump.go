@@ -11,23 +11,23 @@ import (
 // effectiveDSN resolves variables and rewrites host:port to the SSH tunnel
 // local listener when enabled, so CLI tools (pg_dump, mysqldump) connect
 // the same way as the in-process sql.DB.
-func (dbc *DbClient) effectiveDSN(dbInstance *graph.DBInstanceNode) string {
-	dsn, err := sqllang.SubstituteVariables(dbc.Graph, dbInstance.DSN, dbInstance.FolderID)
+func (dbc *DbClient) effectiveDSN(datasource *graph.DatasourceNode) string {
+	dsn, err := sqllang.SubstituteVariables(dbc.Graph, datasource.DSN, datasource.FolderID)
 	if err != nil {
-		return dbInstance.DSN
+		return datasource.DSN
 	}
-	if dbInstance.SSH == nil || !dbInstance.SSH.Enabled {
+	if datasource.SSH == nil || !datasource.SSH.Enabled {
 		return dsn
 	}
-	resolvedSSH, err := dbc.resolveSSHConfig(dbInstance.SSH, dbInstance.FolderID)
+	resolvedSSH, err := dbc.resolveSSHConfig(datasource.SSH, datasource.FolderID)
 	if err != nil || resolvedSSH == nil {
 		return dsn
 	}
-	remoteHost, remotePort, err := core.ParseDSNRemote(dbInstance.DBType, dsn)
+	remoteHost, remotePort, err := core.ParseDSNRemote(datasource.DBType, dsn)
 	if err != nil {
 		return dsn
 	}
-	tunnel, err := engine.GetOrCreateTunnel(dbInstance.WorkspaceID, *resolvedSSH, remoteHost, remotePort)
+	tunnel, err := engine.GetOrCreateTunnel(datasource.WorkspaceID, *resolvedSSH, remoteHost, remotePort)
 	if err != nil || tunnel == nil {
 		return dsn
 	}
@@ -35,7 +35,7 @@ func (dbc *DbClient) effectiveDSN(dbInstance *graph.DBInstanceNode) string {
 	if err != nil {
 		return dsn
 	}
-	rewritten, err := core.RewriteDSNForLocal(dbInstance.DBType, dsn, "127.0.0.1", localPort)
+	rewritten, err := core.RewriteDSNForLocal(datasource.DBType, dsn, "127.0.0.1", localPort)
 	if err != nil {
 		return dsn
 	}

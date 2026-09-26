@@ -86,16 +86,16 @@ func (s *SqlLang) Hover(p PositionParams) HoverResult {
 		}
 	}
 
-	dbInstance := s.graph.GetDBInstanceNodeByID(p.DbInstanceID)
-	if dbInstance == nil {
+	datasource := s.graph.GetDatasourceNodeByID(p.DatasourceID)
+	if datasource == nil {
 		return HoverResult{}
 	}
-	meta, err := s.getMeta(dbInstance, false)
+	meta, err := s.getMeta(datasource, false)
 	if err != nil {
 		return HoverResult{}
 	}
 	sql, line, col := s.resolveEditorPosition(p)
-	d := engine.GetDialect(dbInstance.DBType)
+	d := engine.GetDialect(datasource.DBType)
 
 	qual := identChainAt(sql, line, col)
 	if pos := cursorChainPos(sql, line, col); pos >= 0 && pos < len(qual)-1 {

@@ -20,7 +20,7 @@ import * as graph$0 from "../graph/models.js";
 import * as $models from "./models.js";
 
 /**
- * CancelQuery aborts the in-flight query for the given DB instance and file.
+ * CancelQuery aborts the in-flight query for the given datasource and file.
  */
 export function CancelQuery(params: $models.CancelQueryParams): $CancellablePromise<void> {
     return $Call.ByID(2953678029, params);
@@ -48,7 +48,7 @@ export function Export(params: $models.ExportParams): $CancellablePromise<void> 
 
 /**
  * GenerateSelectSQL builds a preview SELECT for a single relation, using the
- * database instance's dialect for identifier quoting.
+ * datasource's dialect for identifier quoting.
  */
 export function GenerateSelectSQL(params: $models.GenerateSelectSQLParams): $CancellablePromise<$models.GenerateSelectSQLResult> {
     return $Call.ByID(2222436010, params).then(($result: any) => {
@@ -69,13 +69,13 @@ export function GenerateUpdateSQL(params: $models.GenerateUpdateSQLParams): $Can
 /**
  * GetMeta satisfies sqllang.MetadataFunc.
  */
-export function GetMeta(node: graph$0.DBInstanceNode | null, noCache: boolean): $CancellablePromise<core$0.Metadata | null> {
+export function GetMeta(node: graph$0.DatasourceNode | null, noCache: boolean): $CancellablePromise<core$0.Metadata | null> {
     return $Call.ByID(1766662838, node, noCache).then(($result: any) => {
         return $$createType4($result);
     });
 }
 
-export function GetOrOpenConn(workspaceID: string, dbType: string, dsn: string, folderID: string, sshConfig: graph$0.DBInstanceSSHConfig | null): $CancellablePromise<sql$0.DB | null> {
+export function GetOrOpenConn(workspaceID: string, dbType: string, dsn: string, folderID: string, sshConfig: graph$0.DatasourceSSHConfig | null): $CancellablePromise<sql$0.DB | null> {
     return $Call.ByID(4218675072, workspaceID, dbType, dsn, folderID, sshConfig).then(($result: any) => {
         return $$createType6($result);
     });
@@ -97,8 +97,8 @@ export function GetResultPage(params: $models.GetResultPageParams): $Cancellable
  * InspectStatement satisfies sqllang.InspectFunc.
  * TODO: move to dialect/ when metadata cache is shared with remote backend.
  */
-export function InspectStatement(statement: string, dbInstance: graph$0.DBInstanceNode | null): $CancellablePromise<core$0.InspectStatement[]> {
-    return $Call.ByID(3779236896, statement, dbInstance).then(($result: any) => {
+export function InspectStatement(statement: string, datasource: graph$0.DatasourceNode | null): $CancellablePromise<core$0.InspectStatement[]> {
+    return $Call.ByID(3779236896, statement, datasource).then(($result: any) => {
         return $$createType9($result);
     });
 }
@@ -114,7 +114,7 @@ export function LookupForeignKey(params: $models.LookupForeignKeyParams): $Cance
 }
 
 /**
- * Ping checks if the database instance is reachable, and reports what it found.
+ * Ping checks if the datasource is reachable, and reports what it found.
  * 
  * A ping has no other purpose, so the report is deferred rather than left to
  * the caller: no return path can be added that forgets to say what it learned.

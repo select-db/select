@@ -73,7 +73,7 @@ func (dbc *DbClient) SetContext(ctx context.Context) {
 	dbc.ctx = ctx
 }
 
-func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, sshConfig *graph.DBInstanceSSHConfig) (*sql.DB, error) {
+func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, sshConfig *graph.DatasourceSSHConfig) (*sql.DB, error) {
 	var err error
 	dsn, err = sqllang.SubstituteVariables(dbc.Graph, dsn, folderID)
 	if err != nil {
@@ -89,7 +89,7 @@ func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, ss
 }
 
 // getEngineConn returns Conn with DB for local, empty Conn{} for proxified.
-func (dbc *DbClient) getEngineConn(node *graph.DBInstanceNode) (engine.Conn, error) {
+func (dbc *DbClient) getEngineConn(node *graph.DatasourceNode) (engine.Conn, error) {
 	if node.Proxified {
 		// Return empty conn, remote will GetOrOpenConn conn
 		return engine.Conn{}, nil
@@ -126,13 +126,13 @@ func (dbc *DbClient) getMaxResultSizeBytes() int64 {
 	return int64(maxSizeMB) * 1024 * 1024
 }
 
-func (dbc *DbClient) getCachedMetadata(node *graph.DBInstanceNode, noCache bool) (*core.Metadata, error) {
+func (dbc *DbClient) getCachedMetadata(node *graph.DatasourceNode, noCache bool) (*core.Metadata, error) {
 	conn, err := dbc.getEngineConn(node)
 	if err != nil {
 		return nil, err
 	}
 
-	inst := engine.DBInstance{
+	inst := engine.Datasource{
 		ID:        node.ID,
 		DBType:    node.DBType,
 		Proxified: node.Proxified,
@@ -145,6 +145,6 @@ func (dbc *DbClient) getCachedMetadata(node *graph.DBInstanceNode, noCache bool)
 }
 
 // GetMeta satisfies sqllang.MetadataFunc.
-func (dbc *DbClient) GetMeta(node *graph.DBInstanceNode, noCache bool) (*core.Metadata, error) {
+func (dbc *DbClient) GetMeta(node *graph.DatasourceNode, noCache bool) (*core.Metadata, error) {
 	return dbc.getCachedMetadata(node, noCache)
 }

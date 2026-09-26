@@ -49,15 +49,15 @@ func setupUsersDB(t *testing.T) (*sql.DB, *core.Metadata) {
 
 func sptr(s string) *string { return &s }
 
-func compileFor(dbID string, entries ...core.PermissionEntry) core.CompiledPermissions {
+func compileFor(datasourceID string, entries ...core.PermissionEntry) core.CompiledPermissions {
 	for i := range entries {
-		entries[i].DbInstanceID = sptr(dbID)
+		entries[i].DatasourceID = sptr(datasourceID)
 	}
 	return core.Compile(entries)
 }
 
 func runQuery(ctx context.Context, conn Conn, sql string) *Result {
-	return ExecuteLocal(ctx, conn, DBInstance{ID: "db1", DBType: "sqlite"}, sql, Options{})
+	return ExecuteLocal(ctx, conn, Datasource{ID: "db1", DBType: "sqlite"}, sql, Options{})
 }
 
 func TestExecuteLocalMasksSeeDeniedColumn(t *testing.T) {

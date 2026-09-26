@@ -63,17 +63,17 @@ func RunPermCases(t *testing.T, inspect func(sql string) []core.InspectStatement
 
 			for idx, withheld := range testCase.Needs {
 				rest := slices.Delete(slices.Clone(testCase.Needs), idx, idx+1)
-				if err := core.CheckQueryPermissions(statements, TestDBInstanceID, PermGranting(rest...)); err == nil {
+				if err := core.CheckQueryPermissions(statements, TestDatasourceID, PermGranting(rest...)); err == nil {
 					t.Errorf("ran without %s, and %s:\n  %s", withheld, testCase.Why, testCase.SQL)
 				}
 			}
 
-			if err := core.CheckQueryPermissions(statements, TestDBInstanceID, PermGranting(testCase.Needs...)); err != nil {
+			if err := core.CheckQueryPermissions(statements, TestDatasourceID, PermGranting(testCase.Needs...)); err != nil {
 				t.Errorf("holding %v still refused it: %v\n  %s", testCase.Needs, err, testCase.SQL)
 			}
 
 			if len(testCase.Denied) > 0 {
-				if err := core.CheckQueryPermissions(statements, TestDBInstanceID, PermGranting(testCase.Denied...)); err == nil {
+				if err := core.CheckQueryPermissions(statements, TestDatasourceID, PermGranting(testCase.Denied...)); err == nil {
 					t.Errorf("ran holding only %v, and %s:\n  %s", testCase.Denied, testCase.Why, testCase.SQL)
 				}
 			}
@@ -103,11 +103,11 @@ func assertResolved(t *testing.T, statements []core.InspectStatement, testCase P
 
 // PermGranting is a policy granting exactly these rights and nothing else.
 func PermGranting(rights ...Right) core.CompiledPermissions {
-	id := TestDBInstanceID
+	id := TestDatasourceID
 	entries := make([]core.PermissionEntry, 0, len(rights))
 	for _, right := range rights {
 		entry := core.PermissionEntry{
-			DbInstanceID: &id,
+			DatasourceID: &id,
 			Action:       right.Action,
 			Effect:       "allow",
 			RoleName:     "test-role",

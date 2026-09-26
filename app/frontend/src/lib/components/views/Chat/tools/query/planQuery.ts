@@ -6,7 +6,7 @@ import { toToolError } from '../context';
 import { explainPlanResultSchema } from './types';
 
 const queryInputSchema = z.object({
-	dbInstanceId: z.string().describe('Database instance ID (required)'),
+	datasourceId: z.string().describe('Datasource ID (required)'),
 	statement: z.string().describe('SQL statement to plan (required)'),
 	folderId: z
 		.string()
@@ -32,7 +32,7 @@ export const planQueryDef = toolDefinition({
 (equivalent to EXPLAIN without ANALYZE). No data is read or modified.
 
 Use this when you want to check query structure, estimated costs, and index usage 
-without touching the database; for example on large tables where even a read 
+without touching the datasource; for example on large tables where even a read 
 could be expensive, or before the data exists.
 
 For real performance analysis with actual execution stats, use explain_query instead.
@@ -42,7 +42,7 @@ Analyze the plan for: sequential scans on large tables, missing indexes, nested
 loop joins on unindexed columns, high estimated row counts. Surface any concerns 
 to the user with a concrete suggestion.
 
-Before calling: verify tables with get_database_schemas; use get_database_table_detail(schemaId, tableName) when you need a table's DDL.
+Before calling: verify tables with get_datasource_schemas; use get_datasource_table_detail(schemaId, tableName) when you need a table's DDL.
 If error is returned, surface it to the user and do not proceed.`,
 	needsApproval: false,
 	inputSchema: queryInputSchema,
@@ -52,10 +52,10 @@ If error is returned, surface it to the user and do not proceed.`,
 type ImplArgs = z.infer<typeof queryInputSchema> & { __fileId?: string };
 
 async function planQueryImpl(args: unknown) {
-	const { dbInstanceId, folderId, statement, __fileId } = args as ImplArgs;
+	const { datasourceId, folderId, statement, __fileId } = args as ImplArgs;
 	const fileId = __fileId ?? '';
 	const [r, err] = await tryCatch(Plan, {
-		DbInstanceID: dbInstanceId,
+		DatasourceID: datasourceId,
 		FileID: fileId,
 		FolderID: folderId ?? '',
 		Statement: statement,

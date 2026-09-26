@@ -13,12 +13,12 @@ func TestEnsureArraysFillsEveryChildSlice(t *testing.T) {
 	// A schema whose functions section came back empty — the shape that made
 	// the editor throw on `for (const leaf of folder.children)`.
 	workspace := &WorkspaceNode{
-		DBInstances: []*DBInstanceNode{{
+		Datasources: []*DatasourceNode{{
 			Name: "local",
-			Children: []*DBInstanceItemNode{{
+			Children: []*DatasourceItemNode{{
 				Type: "schema",
 				Name: "public",
-				Children: []*DBInstanceItemNode{{
+				Children: []*DatasourceItemNode{{
 					Type: "functions",
 					Name: "Functions",
 				}},
@@ -36,7 +36,7 @@ func TestEnsureArraysFillsEveryChildSlice(t *testing.T) {
 		t.Fatalf("a child slice still marshalled as null: %s", encoded)
 	}
 
-	functions := workspace.DBInstances[0].Children[0].Children[0]
+	functions := workspace.Datasources[0].Children[0].Children[0]
 	if functions.Children == nil {
 		t.Error("the empty functions section should carry an empty slice, not nil")
 	}

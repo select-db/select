@@ -58,7 +58,7 @@ const NEW_DB = 'db #1';
  * failed before its own teardown leaves a database behind, and the next pass
  * would otherwise photograph a workspace with two of them in it.
  */
-async function removeDatabases(page: Page, name: string) {
+async function removeDatasources(page: Page, name: string) {
 	const nodes = testId(page, 'tree.node', name);
 	const confirm = page.getByRole('button', { name: 'Delete and revoke' });
 
@@ -144,14 +144,14 @@ for (const theme of THEMES) {
 
 			// Count what is in the tree before, so the cleanup at the end has
 			// something to prove itself against.
-			const databases = testId(page, 'tree.node', SAMPLE_DB);
-			await expect(databases).toHaveCount(1);
+			const datasources = testId(page, 'tree.node', SAMPLE_DB);
+			await expect(datasources).toHaveCount(1);
 
 			// The light pass runs first and removes what it made, but a pass that
 			// failed part-way through did not. Start from the workspace this spec
 			// expects rather than from whatever the last run left in it.
-			await removeDatabases(page, CREATED);
-			await removeDatabases(page, NEW_DB);
+			await removeDatasources(page, CREATED);
+			await removeDatasources(page, NEW_DB);
 
 			// A database of our own, through the same action a person uses. The
 			// root menu hangs off the file panel itself, so the right-click has to
@@ -162,9 +162,9 @@ for (const theme of THEMES) {
 			if (!area) throw new Error('no file panel to right-click');
 			await page.mouse.click(60, area.y + area.height - 10, { button: 'right' });
 			await page.getByText('New Database...', { exact: true }).click();
-			await expect(testId(page, 'database.form')).toBeVisible();
+			await expect(testId(page, 'datasource.form')).toBeVisible();
 
-			const dsn = testId(page, 'database.dsn').locator('input');
+			const dsn = testId(page, 'datasource.dsn').locator('input');
 
 			// A name worth photographing. The app numbers a new database `db #1`,
 			// which tells a reader nothing about what they are looking at.
@@ -231,8 +231,8 @@ for (const theme of THEMES) {
 
 			// Put the workspace back. Every capture drives this one workspace, so
 			// a database left behind is a database in every screenshot after it.
-			await removeDatabases(page, CREATED);
-			await expect(databases).toHaveCount(1);
+			await removeDatasources(page, CREATED);
+			await expect(datasources).toHaveCount(1);
 		});
 	});
 }

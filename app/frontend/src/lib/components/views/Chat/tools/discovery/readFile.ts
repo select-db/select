@@ -28,7 +28,7 @@ editing a file you haven't read yet; never edit blind.
 Use files[].uri from get_chat_context() as the uri parameter. Do not hardcode 
 or guess file paths.
 
-If the file contains SQL, validate table and column names against the database 
+If the file contains SQL, validate table and column names against the datasource 
 schema before executing. If content is truncated, use execute_command() with 
 head/tail/grep to extract the specific section you need rather than working 
 with incomplete content.

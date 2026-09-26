@@ -16,7 +16,7 @@ export const batchDeleteOptions: ContextMenuOption[] = [
 
 			const items: Entry[] = [];
 			for (const id of selected) {
-				const item = findItemById(id, [], graph.folders, graph.db_instances);
+				const item = findItemById(id, [], graph.folders, graph.datasources);
 				if (item) items.push(item);
 			}
 

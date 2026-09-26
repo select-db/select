@@ -32,17 +32,17 @@
 		parentIds?: string[];
 		draggable?: boolean;
 		onDragStart?(
-			item: graph.FileNode | graph.FolderNode | graph.DBInstanceNode,
+			item: graph.FileNode | graph.FolderNode | graph.DatasourceNode,
 			event: DragEvent
 		): void;
-		onDragOver?(item: graph.FolderNode | graph.DBInstanceNode, event: DragEvent): void;
-		onDrop?(item: graph.FolderNode | graph.DBInstanceNode, event: DragEvent): void;
+		onDragOver?(item: graph.FolderNode | graph.DatasourceNode, event: DragEvent): void;
+		onDrop?(item: graph.FolderNode | graph.DatasourceNode, event: DragEvent): void;
 		onDragEnd?: () => void;
 	};
 
 	type AnyItem =
-		| graph.DBInstanceNode
-		| graph.DBInstanceItemNode
+		| graph.DatasourceNode
+		| graph.DatasourceItemNode
 		| graph.FolderNode
 		| graph.FileNode;
 
@@ -71,7 +71,7 @@
 			// holding no files means "unknown", not "empty".
 			if (!folder.resolved) return false;
 			return (
-				folder.files.length === 0 && folder.db_instances.length === 0 && folder.folders.length === 0
+				folder.files.length === 0 && folder.datasources.length === 0 && folder.folders.length === 0
 			);
 		}
 
@@ -101,7 +101,7 @@
 	// Direct children for the visibility filter badge. Only databases and
 	// schemas surface the badge; other items (tables, columns, type folders)
 	// have noisy or trivial children and are excluded.
-	const FILTERABLE_TYPES = new Set(['db_instance', 'schema']);
+	const FILTERABLE_TYPES = new Set(['datasource', 'schema']);
 	const filterableChildren = $derived.by<{ id: string; name: string }[]>(() => {
 		if (!FILTERABLE_TYPES.has(item.type)) return [];
 		if (!('children' in item)) return [];
@@ -126,7 +126,7 @@
 			data-test-selected={isSelected}
 			class:selected={isSelected}
 			class:folder={item.type === 'folder'}
-			class:database={item.type === 'db_instance'}
+			class:datasource={item.type === 'datasource'}
 			class:hovered-target={isHoveredDropTarget}
 			class:has-border-top={depth > 0}
 			onclick={(e) => {
@@ -143,18 +143,18 @@
 			data-parent-ids={parentIds.join(',')}
 			{draggable}
 			ondragstart={(e) => {
-				if (item.type === 'file' || item.type === 'folder' || item.type === 'db_instance') {
-					onDragStart?.(item as graph.FileNode | graph.FolderNode | graph.DBInstanceNode, e);
+				if (item.type === 'file' || item.type === 'folder' || item.type === 'datasource') {
+					onDragStart?.(item as graph.FileNode | graph.FolderNode | graph.DatasourceNode, e);
 				}
 			}}
 			ondragover={(e) => {
-				if (item.type === 'folder' || item.type === 'db_instance') {
-					onDragOver?.(item as graph.FolderNode | graph.DBInstanceNode, e);
+				if (item.type === 'folder' || item.type === 'datasource') {
+					onDragOver?.(item as graph.FolderNode | graph.DatasourceNode, e);
 				}
 			}}
 			ondrop={(e) => {
-				if (item.type === 'folder' || item.type === 'db_instance') {
-					onDrop?.(item as graph.FolderNode | graph.DBInstanceNode, e);
+				if (item.type === 'folder' || item.type === 'datasource') {
+					onDrop?.(item as graph.FolderNode | graph.DatasourceNode, e);
 				}
 			}}
 			ondragend={() => onDragEnd?.()}
@@ -170,13 +170,7 @@
 				</div>
 				<ItemIcon {item} muted={muted()} />
 				<div class="item-name-wrapper">
-					<ItemName
-						id={item.id}
-						uri={item.uri}
-						name={item.name}
-						muted={muted()}
-						type={item.type}
-					/>
+					<ItemName id={item.id} uri={item.uri} name={item.name} muted={muted()} type={item.type} />
 					{#if filterableChildren.length > 0}
 						<ChildVisibilityBadge parentId={item.id} items={filterableChildren} />
 					{/if}
@@ -266,17 +260,17 @@
 	:global(.item.folder.selected svg),
 	:global(.item.folder:hover svg),
 	:global(.item.folder.hovered-target svg),
-	:global(.item.database.selected svg),
-	:global(.item.database:hover svg),
-	:global(.item.database.hovered-target svg) {
+	:global(.item.datasource.selected svg),
+	:global(.item.datasource:hover svg),
+	:global(.item.datasource.hovered-target svg) {
 		stroke: var(--gray-800) !important;
 	}
 	:global(.item.folder.selected .icon-folder-open svg),
 	:global(.item.folder:hover .icon-folder-open svg),
 	:global(.item.folder.hovered-target .icon-folder-open svg),
-	:global(.item.database.selected .icon-folder-open svg),
-	:global(.item.database:hover .icon-folder-open svg),
-	:global(.item.database.hovered-target .icon-folder-open svg) {
+	:global(.item.datasource.selected .icon-folder-open svg),
+	:global(.item.datasource:hover .icon-folder-open svg),
+	:global(.item.datasource.hovered-target .icon-folder-open svg) {
 		fill: var(--gray-700) !important;
 	}
 

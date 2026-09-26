@@ -30,20 +30,20 @@ func (s *SqlLang) Complete(p PositionParams) CompleteResult {
 		return CompleteResult{Errors: []string{"failed to generate result id"}}
 	}
 
-	dbInstance := s.graph.GetDBInstanceNodeByID(p.DbInstanceID)
-	if dbInstance == nil {
-		return CompleteResult{ID: id, Errors: []string{fmt.Sprintf("DB instance not found: %s", p.DbInstanceID)}}
+	datasource := s.graph.GetDatasourceNodeByID(p.DatasourceID)
+	if datasource == nil {
+		return CompleteResult{ID: id, Errors: []string{fmt.Sprintf("Datasource not found: %s", p.DatasourceID)}}
 	}
-	meta, err := s.getMeta(dbInstance, false)
+	meta, err := s.getMeta(datasource, false)
 	if err != nil {
 		return CompleteResult{ID: id, Errors: []string{fmt.Sprintf("failed to get metadata: %v", err)}}
 	}
 
 	sql, line, col := s.resolveEditorPosition(p)
 
-	d := engine.GetDialect(dbInstance.DBType)
+	d := engine.GetDialect(datasource.DBType)
 	if d == nil {
-		return CompleteResult{ID: id, Errors: []string{fmt.Sprintf("unsupported DB type for completion: %s", dbInstance.DBType)}}
+		return CompleteResult{ID: id, Errors: []string{fmt.Sprintf("unsupported DB type for completion: %s", datasource.DBType)}}
 	}
 
 	if s.lintRunner != nil && s.lintRunner.Analyzer != nil {

@@ -24,7 +24,7 @@ func Restore(ctx context.Context, queries *generated.Queries, payload map[string
 		ID:           id,
 		RoleID:       roleID,
 		WorkspaceID:  workspaceID,
-		DbInstanceID: db_types.NewJSONNullStringFromPtr(utils.MapGetStringPtr(payload, "db_instance_id")),
+		DatasourceID: db_types.NewJSONNullStringFromPtr(utils.MapGetStringPtr(payload, "datasource_id")),
 		SchemaName:   db_types.NewJSONNullStringFromPtr(utils.MapGetStringPtr(payload, "schema_name")),
 		TableName:    db_types.NewJSONNullStringFromPtr(utils.MapGetStringPtr(payload, "table_name")),
 		ColumnName:   db_types.NewJSONNullStringFromPtr(utils.MapGetStringPtr(payload, "column_name")),

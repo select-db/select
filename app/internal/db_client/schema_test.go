@@ -11,7 +11,7 @@ import (
 // childNamesOfType returns the names of the nodes under the table's child
 // section of the given type ("indexes", "triggers", "columns") — i.e. what the
 // sidebar renders and what the badge counts.
-func childNamesOfType(t *testing.T, table *graph.DBInstanceItemNode, sectionType string) []string {
+func childNamesOfType(t *testing.T, table *graph.DatasourceItemNode, sectionType string) []string {
 	t.Helper()
 	for _, section := range table.Children {
 		if section.Type != sectionType {
@@ -27,7 +27,7 @@ func childNamesOfType(t *testing.T, table *graph.DBInstanceItemNode, sectionType
 	return nil
 }
 
-func columnNode(t *testing.T, table *graph.DBInstanceItemNode, name string) *graph.DBInstanceItemNode {
+func columnNode(t *testing.T, table *graph.DatasourceItemNode, name string) *graph.DatasourceItemNode {
 	t.Helper()
 	for _, section := range table.Children {
 		if section.Type != "columns" {
@@ -43,7 +43,7 @@ func columnNode(t *testing.T, table *graph.DBInstanceItemNode, name string) *gra
 	return nil
 }
 
-func tableNode(t *testing.T, tables []*graph.DBInstanceItemNode, name string) *graph.DBInstanceItemNode {
+func tableNode(t *testing.T, tables []*graph.DatasourceItemNode, name string) *graph.DatasourceItemNode {
 	t.Helper()
 	for _, table := range tables {
 		if table.Name == name {
@@ -54,7 +54,7 @@ func tableNode(t *testing.T, tables []*graph.DBInstanceItemNode, name string) *g
 	return nil
 }
 
-func hasIndexMeta(t *testing.T, node *graph.DBInstanceItemNode) bool {
+func hasIndexMeta(t *testing.T, node *graph.DatasourceItemNode) bool {
 	t.Helper()
 	meta, ok := node.Metadata.(map[string]any)
 	if !ok {
@@ -69,7 +69,7 @@ func hasIndexMeta(t *testing.T, node *graph.DBInstanceItemNode) bool {
 // onto "alpha", which then attached the leaked index to any "alpha" column that
 // happened to share a name with an indexed "alphabet" column.
 func TestConvertTablesToNodesGroupsByExactTableName(t *testing.T) {
-	const dbInstanceID = "db:schema:s"
+	const datasourceID = "db:schema:s"
 	const schemaPath = "db / s"
 
 	tables := []core.Table{
@@ -89,9 +89,9 @@ func TestConvertTablesToNodesGroupsByExactTableName(t *testing.T) {
 		{Name: "alphabet_touch", TableName: "alphabet"},
 	}
 
-	_, indexesByTable := convertIndexesToNodes(indexes, dbInstanceID, schemaPath)
-	_, triggersByTable := convertTriggersToNodes(triggers, dbInstanceID, schemaPath)
-	tableNodes, err := convertTablesToNodes(tables, dbInstanceID, schemaPath, nil, indexesByTable, triggersByTable)
+	_, indexesByTable := convertIndexesToNodes(indexes, datasourceID, schemaPath)
+	_, triggersByTable := convertTriggersToNodes(triggers, datasourceID, schemaPath)
+	tableNodes, err := convertTablesToNodes(tables, datasourceID, schemaPath, nil, indexesByTable, triggersByTable)
 	if err != nil {
 		t.Fatalf("convertTablesToNodes: %v", err)
 	}

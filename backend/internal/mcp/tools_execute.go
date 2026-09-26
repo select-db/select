@@ -31,8 +31,8 @@ func toolExecuteQuery() Tool {
 		Name: "execute_query",
 		Description: "Executes a read-only SQL statement against a datasource and returns up to max_rows rows " +
 			"(default 50, cap 250). Use this for SELECTs and other read-only queries. " +
-			"For writes, use execute_statement. Before calling, verify tables with get_database_schemas " +
-			"and get_database_table_detail.",
+			"For writes, use execute_statement. Before calling, verify tables with get_datasource_schemas " +
+			"and get_datasource_table_detail.",
 		InputSchema: jsonObjectSchema(map[string]any{
 			"datasource_id": stringProp("Datasource ID (required)."),
 			"statement":     stringProp("SQL SELECT statement to execute (required)."),

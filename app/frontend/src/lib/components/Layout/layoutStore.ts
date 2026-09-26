@@ -8,7 +8,7 @@ import { settingsSectionLabels } from '$lib/components/views/Settings/sections';
 
 /** Chat context DB item
  * same shape as get_chat_context databases. */
-export type ChatContextDatabase = {
+export type ChatContextDatasource = {
 	id: string;
 	name: string;
 	uri: string;
@@ -26,7 +26,7 @@ export type ChatContextFile = {
  * TableEdit represents a single cell edit
  */
 export type TableEdit = {
-	dbInstanceId: string;
+	datasourceId: string;
 	schema: string;
 	table: string;
 	column: string;
@@ -45,7 +45,7 @@ export type GraphConfig = {
 	seriesColumn?: string | null; // when set, distinct values of this column become series
 };
 
-export type FileDatabaseTableState = {
+export type FileDatasourceTableState = {
 	scrollTop?: number;
 	scrollLeft?: number;
 	pinnedColumns?: Set<number>;
@@ -80,16 +80,16 @@ export type Tab = {
 		editor?: { viewState?: unknown; lintMarkers?: unknown };
 
 		viewMode?: 'results' | 'plan' | 'explain' | 'graph';
-		activeDbInstanceId?: string | null;
+		activeDatasourceId?: string | null;
 		tableHeight?: number;
-		tables?: Record<string, FileDatabaseTableState>;
+		tables?: Record<string, FileDatasourceTableState>;
 		runtimeVars?: Record<string, string>; // user-supplied values for unresolved $variables
 		runtimeVarTypes?: Record<string, string>; // input types per variable (ui only)
 	};
-	database?: { node: graph.DBInstanceNode };
+	datasource?: { node: graph.DatasourceNode };
 	schema?: {
-		dbInstanceId?: string;
-		databaseName?: string;
+		datasourceId?: string;
+		datasourceName?: string;
 		selectedSchemaTable?: string;
 		editor?: { viewState?: unknown };
 	};
@@ -121,7 +121,7 @@ export type Tab = {
 			role: string;
 			parts?: unknown[];
 		}>;
-		databases?: ChatContextDatabase[];
+		datasources?: ChatContextDatasource[];
 		files?: ChatContextFile[];
 		scrollTop?: number;
 		/** When set, task context (e.g. JSON in <task>) is injected into
@@ -252,7 +252,7 @@ export const findTabInGroup = (uri: string, groupId: string): Tab | null =>
 export const getTabByNodeId = (nodeId: string): Tab | null =>
 	getAllGroups()
 		.flatMap((g) => g.tabs)
-		.find((t) => t.file?.node.id === nodeId || t.database?.node.id === nodeId) ?? null;
+		.find((t) => t.file?.node.id === nodeId || t.datasource?.node.id === nodeId) ?? null;
 
 // Helper: Map over tree nodes
 const mapTree = <T extends TabGroup | SplitContainer>(
@@ -388,7 +388,7 @@ export const setActiveTab = (groupId: string, tabId: string) => {
 
 function syncSelectionAndRecentForActiveTab() {
 	const tab = getActiveTab();
-	const nodeId = tab?.file?.node?.id ?? tab?.database?.node?.id;
+	const nodeId = tab?.file?.node?.id ?? tab?.datasource?.node?.id;
 	// Tabs with no file-system item behind them (settings, terminal, chat, ...)
 	// clear the selection: leaving the previous file highlighted points at
 	// something the workbench is no longer showing.
@@ -403,12 +403,12 @@ function syncSelectionAndRecentForActiveTab() {
 			name: node.name,
 			folderId: node.folder_id
 		});
-	} else if (tab?.database?.node) {
-		const node = tab.database.node;
+	} else if (tab?.datasource?.node) {
+		const node = tab.datasource.node;
 		recentItemsStore.addItem({
 			id: node.id,
 			uri: node.uri,
-			type: 'db_instance',
+			type: 'datasource',
 			name: node.name
 		});
 	} else if (tab) {
@@ -495,9 +495,9 @@ export function navigateToNextTab(groupId: string): void {
 // focusTab activates an existing tab by URI across all groups. Returns true if found.
 export function getTabLabel(tab: Tab): string {
 	if (tab.file) return tab.file.node.name;
-	if (tab.database) return tab.database.node.name;
+	if (tab.datasource) return tab.datasource.node.name;
 	if (tab.schema) {
-		const name = tab.schema.databaseName ?? 'Schema';
+		const name = tab.schema.datasourceName ?? 'Schema';
 		const table = tab.schema.selectedSchemaTable?.replace(':', '.') ?? '';
 		return table ? `${name} · ${table}` : name;
 	}
@@ -525,7 +525,7 @@ export const focusTab = (uri: string): boolean => {
 	return false;
 };
 
-export const addTab = (node: graph.FileNode | graph.DBInstanceNode) => {
+export const addTab = (node: graph.FileNode | graph.DatasourceNode) => {
 	const group = getActiveGroup();
 	if (!group) return;
 
@@ -540,8 +540,8 @@ export const addTab = (node: graph.FileNode | graph.DBInstanceNode) => {
 		uri: node.uri,
 		...(node.type === 'file'
 			? { file: { node: node as graph.FileNode } }
-			: node.type === 'db_instance'
-				? { database: { node: node as graph.DBInstanceNode } }
+			: node.type === 'datasource'
+				? { datasource: { node: node as graph.DatasourceNode } }
 				: {})
 	};
 
@@ -555,17 +555,17 @@ export const addTab = (node: graph.FileNode | graph.DBInstanceNode) => {
 			name: node.name,
 			folderId: (node as graph.FileNode).folder_id
 		});
-	} else if (node.type === 'db_instance') {
+	} else if (node.type === 'datasource') {
 		recentItemsStore.addItem({
 			id: node.id,
 			uri: node.uri,
-			type: 'db_instance',
+			type: 'datasource',
 			name: node.name
 		});
 	}
 };
 
-export const addSchemaTab = (dbInstanceId?: string, databaseName?: string) => {
+export const addSchemaTab = (datasourceId?: string, datasourceName?: string) => {
 	const group = getActiveGroup();
 	if (!group) return;
 
@@ -573,7 +573,7 @@ export const addSchemaTab = (dbInstanceId?: string, databaseName?: string) => {
 	const newTab: Tab = {
 		id: tabId,
 		uri: `selectdb://schema/${tabId}`,
-		schema: { dbInstanceId, databaseName }
+		schema: { datasourceId, datasourceName }
 	};
 
 	layoutStore.update((layout) => openTabInGroup(layout, group.id, newTab));
@@ -624,7 +624,7 @@ export const addTempFileTab = (
 	params: {
 		content: string;
 		name: string;
-		dbInstanceId?: string;
+		datasourceId?: string;
 		folderId: string;
 		/** Execute the content against the attached database as soon as the tab mounts. */
 		runOnOpen?: boolean;
@@ -643,7 +643,7 @@ export const addTempFileTab = (
 		type: 'file',
 		name: params.name,
 		folder_id: params.folderId,
-		databases: params.dbInstanceId ? [{ id: params.dbInstanceId, name: '' }] : [],
+		datasources: params.datasourceId ? [{ id: params.datasourceId, name: '' }] : [],
 		badges: []
 	} as unknown as graph.FileNode;
 
@@ -823,7 +823,7 @@ export const addTerminalTab = (shell: string = '') => {
 	syncSelectionAndRecentForActiveTab();
 };
 
-export const dbInstanceToContextDb = (db: graph.DBInstanceNode): ChatContextDatabase => ({
+export const datasourceToContext = (db: graph.DatasourceNode): ChatContextDatasource => ({
 	id: db.id ?? '',
 	name: db.name ?? '',
 	uri: db.uri ?? '',
@@ -837,25 +837,25 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 	if (!group || !ws) return;
 
 	const activeTab = getActiveTab();
-	const allDbs = ws.db_instances.map(dbInstanceToContextDb);
+	const allDbs = ws.datasources.map(datasourceToContext);
 
-	let databases: ChatContextDatabase[] = allDbs;
+	let datasources: ChatContextDatasource[] = allDbs;
 	let files: ChatContextFile[] = [];
 
-	const taskDbInstanceId =
-		task && typeof task.dbInstanceId === 'string' ? task.dbInstanceId : undefined;
+	const taskDatasourceId =
+		task && typeof task.datasourceId === 'string' ? task.datasourceId : undefined;
 
 	if (activeTab?.file?.node) {
 		const file = activeTab.file.node;
-		const fileDbInstanceIds = file.databases?.map((d) => d.id).filter(Boolean) ?? [];
-		if (fileDbInstanceIds.length > 0) {
-			databases = fileDbInstanceIds
+		const fileDatasourceIds = file.datasources?.map((d) => d.id).filter(Boolean) ?? [];
+		if (fileDatasourceIds.length > 0) {
+			datasources = fileDatasourceIds
 				.map((id) => allDbs.find((d) => d.id === id))
-				.filter((d): d is ChatContextDatabase => d != null);
+				.filter((d): d is ChatContextDatasource => d != null);
 		} else {
-			const activeId = activeTab.file?.activeDbInstanceId ?? taskDbInstanceId ?? undefined;
+			const activeId = activeTab.file?.activeDatasourceId ?? taskDatasourceId ?? undefined;
 			const one = activeId ? allDbs.find((d) => d.id === activeId) : undefined;
-			if (one) databases = [one];
+			if (one) datasources = [one];
 		}
 		// Temp tabs: ResourceMenu / getOpenTabOptions use Tab.id; virtual FileNode.id is temp://…
 		files = [
@@ -865,11 +865,11 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 				folderId: file.folder_id
 			}
 		];
-	} else if (activeTab?.database?.node) {
-		databases = [dbInstanceToContextDb(activeTab.database.node)];
-	} else if (activeTab?.schema?.dbInstanceId) {
-		const one = allDbs.find((d) => d.id === activeTab.schema!.dbInstanceId);
-		if (one) databases = [one];
+	} else if (activeTab?.datasource?.node) {
+		datasources = [datasourceToContext(activeTab.datasource.node)];
+	} else if (activeTab?.schema?.datasourceId) {
+		const one = allDbs.find((d) => d.id === activeTab.schema!.datasourceId);
+		if (one) datasources = [one];
 	}
 
 	const taskBlock =
@@ -883,7 +883,7 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 		uri: `selectdb://chat/${tabId}`,
 		chat: {
 			sessionId: tabId,
-			databases: databases.length > 0 ? databases : undefined,
+			datasources: datasources.length > 0 ? datasources : undefined,
 			files: files.length > 0 ? files : undefined,
 			...(taskBlock && { task: taskBlock })
 		}

@@ -40,6 +40,6 @@ func QueryHandler(dir string) http.HandlerFunc {
 		if f, ok := w.(http.Flusher); ok {
 			sink.SetDownstreamFlusher(f.Flush)
 		}
-		engine.StreamLocal(r.Context(), conn, engine.DBInstance{ID: grant.DatasourceID, DBType: dbType}, q.SQL, engine.Options{Args: q.Args}, sink)
+		engine.StreamLocal(r.Context(), conn, engine.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, engine.Options{Args: q.Args}, sink)
 	}
 }

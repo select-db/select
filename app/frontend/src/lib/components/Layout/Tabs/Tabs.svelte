@@ -281,8 +281,8 @@
 						>
 							{#if tab.file}
 								<ItemIcon item={tab.file.node} noDepth />
-							{:else if tab.database}
-								<ItemIcon item={tab.database.node} noDepth />
+							{:else if tab.datasource}
+								<ItemIcon item={tab.datasource.node} noDepth />
 							{:else if tab.schema}
 								<Icon icon="schema" size={18} />
 							{:else if tab.diff}

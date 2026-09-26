@@ -5,7 +5,7 @@ import type * as graph from '$lib/wails/graph';
 import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
 
 import { must, tryCatch } from '$lib/utils/tryCatch';
-import { getDbInstanceIds, runStatement } from '$lib/utils/query/helpers';
+import { getDatasourceIds, runStatement } from '$lib/utils/query/helpers';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
@@ -28,8 +28,8 @@ export const getFileActions = (file: graph.FileNode, ctx: 'fs' | 'git' | 'search
 						{
 							icon: 'play' as Icons,
 							onClick: async (file: graph.FileNode) => {
-								const dbInstanceIds = getDbInstanceIds(file);
-								if (dbInstanceIds.length === 0) {
+								const datasourceIds = getDatasourceIds(file);
+								if (datasourceIds.length === 0) {
 									notifyError('Select a database before running this file');
 									return;
 								}
@@ -40,10 +40,10 @@ export const getFileActions = (file: graph.FileNode, ctx: 'fs' | 'git' | 'search
 								const folderId = file.folder_id ?? '';
 
 								notify({ type: AlertType.Default, message: `running ${file.name}` });
-								for (const dbInstanceId of dbInstanceIds) {
+								for (const datasourceId of datasourceIds) {
 									await runStatement({
 										statement: content,
-										dbInstanceId: dbInstanceId,
+										datasourceId: datasourceId,
 										fileId: file.id,
 										folderId
 									});

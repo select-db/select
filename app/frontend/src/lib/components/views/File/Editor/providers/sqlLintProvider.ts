@@ -27,14 +27,14 @@ export function attachSqlLintProvider(
 		if (!m || m.isDisposed()) return;
 
 		const file = getFile();
-		const dbInstanceId = file?.databases?.[0]?.id;
-		if (!file || !dbInstanceId) {
+		const datasourceId = file?.datasources?.[0]?.id;
+		if (!file || !datasourceId) {
 			monaco.editor.setModelMarkers(m, LINT_SOURCE, []);
 			return;
 		}
 
 		const params: sqllang.PositionParams = {
-			DbInstanceID: dbInstanceId,
+			DatasourceID: datasourceId,
 			FileID: file.id,
 			SQL: m.getValue(),
 			Line: 0,

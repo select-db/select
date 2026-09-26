@@ -1,6 +1,6 @@
 package graph
 
-// SharedDatabasesUnder returns the shared -- proxified -- databases at or under
+// SharedDatasourcesUnder returns the shared -- proxified -- databases at or under
 // the given nodes, naming each one by id and name. Passing no ids asks about
 // the whole workspace.
 //
@@ -18,7 +18,7 @@ package graph
 // Ids the graph does not know are skipped, and a database reached twice is
 // returned once, so callers can pass a whole selection without deduplicating it
 // first.
-func (g *Graph) SharedDatabasesUnder(ids []string) []DatabaseRef {
+func (g *Graph) SharedDatasourcesUnder(ids []string) []DatasourceRef {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
@@ -34,18 +34,18 @@ func (g *Graph) SharedDatabasesUnder(ids []string) []DatabaseRef {
 	// workspace's flat list, and from any overlapping id the caller passed --
 	// and each one must be revoked once.
 	seen := make(map[string]bool)
-	found := make([]DatabaseRef, 0)
+	found := make([]DatasourceRef, 0)
 
 	for _, root := range roots {
 		walkSubtree(root, func(n Node) {
 			// Note this does not stop at a database: one can hold folders of its
 			// own, and a database inside those still needs revoking.
-			db, ok := n.(*DBInstanceNode)
+			db, ok := n.(*DatasourceNode)
 			if !ok || !db.Proxified || seen[db.ID] {
 				return
 			}
 			seen[db.ID] = true
-			found = append(found, DatabaseRef{ID: db.ID, Name: db.Name})
+			found = append(found, DatasourceRef{ID: db.ID, Name: db.Name})
 		})
 	}
 

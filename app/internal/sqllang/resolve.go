@@ -13,7 +13,7 @@ import (
 
 // ResolveResult is returned by Resolve for ItemInfoModal navigation.
 type ResolveResult struct {
-	Node  *graph.DBInstanceItemNode `json:"node,omitempty"`
+	Node  *graph.DatasourceItemNode `json:"node,omitempty"`
 	Found bool                      `json:"found"`
 	Kind  string                    `json:"kind"`
 }
@@ -30,25 +30,25 @@ type resolvedObject struct {
 
 // Resolve returns the graph node ID for the identifier at the cursor.
 func (s *SqlLang) Resolve(p PositionParams) ResolveResult {
-	dbInstance := s.graph.GetDBInstanceNodeByID(p.DbInstanceID)
-	if dbInstance == nil {
+	datasource := s.graph.GetDatasourceNodeByID(p.DatasourceID)
+	if datasource == nil {
 		return ResolveResult{}
 	}
 
-	meta, err := s.getMeta(dbInstance, false)
+	meta, err := s.getMeta(datasource, false)
 	if err != nil {
 		return ResolveResult{}
 	}
 
-	d := engine.GetDialect(dbInstance.DBType)
+	d := engine.GetDialect(datasource.DBType)
 	sql, line, col := s.resolveEditorPosition(p)
 	obj := resolveCore(meta, d, sql, line, col)
 	if obj == nil {
 		return ResolveResult{}
 	}
 
-	nodeID := buildNodeID(dbInstance.ID, meta, obj)
-	node := s.graph.FindDbItemNodeById(dbInstance.ID, nodeID)
+	nodeID := buildNodeID(datasource.ID, meta, obj)
+	node := s.graph.FindDatasourceItemNodeById(datasource.ID, nodeID)
 	if node == nil {
 		return ResolveResult{}
 	}
@@ -195,8 +195,8 @@ func resolveCore(meta *core.Metadata, d core.SQLDialect, sql string, line, col i
 }
 
 // buildNodeID constructs the graph node ID matching the format used by db_client/schema.go.
-func buildNodeID(dbInstanceID string, meta *core.Metadata, obj *resolvedObject) string {
-	prefix := nodeSchemaPrefix(dbInstanceID, meta, obj.Schema)
+func buildNodeID(datasourceID string, meta *core.Metadata, obj *resolvedObject) string {
+	prefix := nodeSchemaPrefix(datasourceID, meta, obj.Schema)
 	switch obj.Kind {
 	case "table":
 		return fmt.Sprintf("%s:table:%s", prefix, obj.Rel)
@@ -217,14 +217,14 @@ func buildNodeID(dbInstanceID string, meta *core.Metadata, obj *resolvedObject) 
 }
 
 // nodeSchemaPrefix returns the graph id prefix for objects under a schema (…:schema:<name>).
-func nodeSchemaPrefix(dbInstanceID string, meta *core.Metadata, schema string) string {
+func nodeSchemaPrefix(datasourceID string, meta *core.Metadata, schema string) string {
 	for _, s := range meta.Schemas {
 		if strings.EqualFold(s.Name, schema) {
-			return fmt.Sprintf("%s:schema:%s", dbInstanceID, s.Name)
+			return fmt.Sprintf("%s:schema:%s", datasourceID, s.Name)
 		}
 	}
 	def := core.GetDefaultSchema(*meta)
-	return fmt.Sprintf("%s:schema:%s", dbInstanceID, def)
+	return fmt.Sprintf("%s:schema:%s", datasourceID, def)
 }
 
 func findRelationWithSchema(meta *core.Metadata, schema, relation string) (schemaName string, tab *core.Table, isView bool) {

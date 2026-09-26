@@ -10,7 +10,7 @@ import { addTab } from '$lib/components/Layout/layoutStore';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { tryCatch } from '$lib/utils/tryCatch';
 import * as graphApi from '$lib/bindings/selectDb/internal/graph/graph';
-import { loadDatabase } from '$lib/components/views/Chat/tools/helpers';
+import { loadDatasource } from '$lib/components/views/Chat/tools/helpers';
 import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 import * as graph from '$lib/wails/graph';
 import { Resolve } from '$lib/wails/graph';
@@ -208,14 +208,14 @@ function attachCmdClickNavigation<T>(
 
 export function attachSqlSchemaPointerNavigation(
 	editor: monaco.editor.IStandaloneCodeEditor,
-	getDbInstanceId: () => string | null | undefined,
+	getDatasourceId: () => string | null | undefined,
 	getFileId: () => string | null | undefined
 ): monaco.IDisposable {
-	return attachCmdClickNavigation<graph.DBInstanceItemNode>(
+	return attachCmdClickNavigation<graph.DatasourceItemNode>(
 		editor,
 		async (pos, model) => {
-			const dbInstanceId = getDbInstanceId();
-			if (!dbInstanceId) return null;
+			const datasourceId = getDatasourceId();
+			if (!datasourceId) return null;
 
 			// If the cursor is inside a $variable token, let variable navigation handle it.
 			if (getSqlVariableTokenAtPosition(model, pos)) return null;
@@ -224,7 +224,7 @@ export function attachSqlSchemaPointerNavigation(
 			if (!w?.word?.trim()) return null;
 
 			const [r, err] = await tryCatch(Resolve, {
-				DbInstanceID: dbInstanceId,
+				DatasourceID: datasourceId,
 				FileID: getFileId() ?? '',
 				SQL: model.getValue(),
 				Line: pos.lineNumber,
@@ -241,10 +241,10 @@ export function attachSqlSchemaPointerNavigation(
 			};
 		},
 		async (node) => {
-			const dbInstanceId = getDbInstanceId();
-			if (!dbInstanceId) return;
+			const datasourceId = getDatasourceId();
+			if (!datasourceId) return;
 
-			await loadDatabase(dbInstanceId);
+			await loadDatasource(datasourceId);
 			modalStore.set({ content: () => ItemInfoModal, props: { item: node }, width: 600 });
 		}
 	);

@@ -47,7 +47,7 @@ func TestStreamLocalEmitsStartedThenExecuted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"}, "SELECT id FROM t ORDER BY id", Options{}, sink)
+	StreamLocal(ctx, Conn{DB: db}, Datasource{ID: "x"}, "SELECT id FROM t ORDER BY id", Options{}, sink)
 
 	listener.mu.Lock()
 	defer listener.mu.Unlock()

@@ -23,7 +23,7 @@ func TestMCPAppliesDatasourceScopedRules(t *testing.T) {
 	datasourceID := uuid.NewString()
 	// Before any request, which would cache the role's rules without these.
 	for _, action := range []string{"select", "see"} {
-		_, err := f.Conn.Exec(`INSERT INTO app.permission (role_id, workspace_id, db_instance_id, action, effect)
+		_, err := f.Conn.Exec(`INSERT INTO app.permission (role_id, workspace_id, datasource_id, action, effect)
 			VALUES ($1::uuid, $2::uuid, $3, $4, 'allow')`, f.Actor.RoleID, f.Actor.WorkspaceID, datasourceID, action)
 		require.NoError(t, err)
 	}

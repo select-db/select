@@ -143,20 +143,20 @@ func TestResolveCore(t *testing.T) {
 }
 
 func TestBuildNodeID_compositeTableAndView(t *testing.T) {
-	const dbInstanceID = "db-instance-id"
+	const datasourceID = "datasource-id"
 	meta := metaWith(
 		"public",
 		mkSchema("public", []core.Table{mkTable("orders")}, []core.Table{mkTable("v_orders")}),
 	)
 
-	tabID := buildNodeID(dbInstanceID, meta, &resolvedObject{Schema: "public", Rel: "orders", Kind: "table"})
-	wantTab := dbInstanceID + ":schema:public:table:orders"
+	tabID := buildNodeID(datasourceID, meta, &resolvedObject{Schema: "public", Rel: "orders", Kind: "table"})
+	wantTab := datasourceID + ":schema:public:table:orders"
 	if tabID != wantTab {
 		t.Fatalf("table id: got %q want %q", tabID, wantTab)
 	}
 
-	viewID := buildNodeID(dbInstanceID, meta, &resolvedObject{Schema: "public", Rel: "v_orders", Kind: "view"})
-	wantView := dbInstanceID + ":schema:public:view:v_orders"
+	viewID := buildNodeID(datasourceID, meta, &resolvedObject{Schema: "public", Rel: "v_orders", Kind: "view"})
+	wantView := datasourceID + ":schema:public:view:v_orders"
 	if viewID != wantView {
 		t.Fatalf("view id: got %q want %q", viewID, wantView)
 	}

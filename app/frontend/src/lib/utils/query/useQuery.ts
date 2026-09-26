@@ -22,17 +22,17 @@ const runOperation = async <T extends RunOperationParams, R>(
 	failureMessage: string,
 	retried = false
 ): Promise<R | null> => {
-	const { DbInstanceID, FileID } = params;
+	const { DatasourceID, FileID } = params;
 
-	pushToLoadingStore(DbInstanceID, FileID);
+	pushToLoadingStore(DatasourceID, FileID);
 
 	const [result, err] = await tryCatch(executor, params);
 
-	removeFromLoadingStore(DbInstanceID, FileID);
+	removeFromLoadingStore(DatasourceID, FileID);
 
 	if (err) {
 		// Encrypted SSH key: prompt once for the passphrase, then retry.
-		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, err.message))) {
+		if (!retried && (await ensureSSHPassphraseForInstance(DatasourceID, err.message))) {
 			return runOperation(params, executor, failureMessage, true);
 		}
 		notifyError(failureMessage);
@@ -72,20 +72,20 @@ export const runQuery = async (
 		return runOperation(params, (p) => Query(p), 'Failed to run query');
 	}
 
-	const { DbInstanceID, FileID } = params;
+	const { DatasourceID, FileID } = params;
 
-	pushToLoadingStore(DbInstanceID, FileID);
+	pushToLoadingStore(DatasourceID, FileID);
 
 	const [start, startErr] = await tryCatch(StartQuery, {
 		FileID: params.FileID,
 		Statement: params.Statement,
-		DbInstanceID: params.DbInstanceID,
+		DatasourceID: params.DatasourceID,
 		FolderID: params.FolderID,
 		RuntimeVars: params.RuntimeVars
 	});
 
 	if (startErr || !start) {
-		removeFromLoadingStore(DbInstanceID, FileID);
+		removeFromLoadingStore(DatasourceID, FileID);
 		notifyError('Failed to run query');
 		return null;
 	}
@@ -93,15 +93,15 @@ export const runQuery = async (
 	// Pair this execution with its statement so the terminal done/error event
 	// can record it to local history (interactive runs only — exports use the
 	// synchronous Query() path above and are never registered).
-	registerPendingHistory(start.executionId, params.Statement, params.DbInstanceID);
+	registerPendingHistory(start.executionId, params.Statement, params.DatasourceID);
 
 	if (start.errors && start.errors.length > 0) {
 		// The backend also emits 'query:error' on prepare failure, but events
 		// are async; remove from the loading store here so the UI doesn't
 		// briefly show a stuck spinner.
-		removeFromLoadingStore(DbInstanceID, FileID);
+		removeFromLoadingStore(DatasourceID, FileID);
 		// Encrypted SSH key: prompt once for the passphrase, then retry.
-		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, start.errors[0]))) {
+		if (!retried && (await ensureSSHPassphraseForInstance(DatasourceID, start.errors[0]))) {
 			return runQuery(params, true);
 		}
 		// Return an error result (not null) so the failure surfaces in the
@@ -113,8 +113,8 @@ export const runQuery = async (
 	if (waitErr || !exec) {
 		const msg = waitErr?.message ?? 'Failed to run query';
 		// Encrypted SSH key: prompt once for the passphrase, then retry.
-		if (!retried && (await ensureSSHPassphraseForInstance(DbInstanceID, msg))) {
-			removeFromLoadingStore(DbInstanceID, FileID);
+		if (!retried && (await ensureSSHPassphraseForInstance(DatasourceID, msg))) {
+			removeFromLoadingStore(DatasourceID, FileID);
 			return runQuery(params, true);
 		}
 		// loading-store removal handled by the 'query:error' event listener.
@@ -145,10 +145,10 @@ export const runPlan = async (params: RunPlanParams) =>
 	runOperation(params, (p) => Plan(p), 'Failed to run plan');
 
 export const cancelQuery = async (params: db_client.CancelQueryParams) => {
-	const { DbInstanceID, FileID } = params;
+	const { DatasourceID, FileID } = params;
 
 	const [, err] = await tryCatch(CancelQuery, {
-		DbInstanceID,
+		DatasourceID,
 		FileID
 	});
 
@@ -161,17 +161,17 @@ export const cancelQuery = async (params: db_client.CancelQueryParams) => {
 	// engine error flows through 'query:error', which already cleans up the
 	// loading store. Mark cancellation locally so the UI can distinguish it
 	// from genuine errors before the event arrives.
-	const executionId = activeExecutionId(DbInstanceID, FileID);
+	const executionId = activeExecutionId(DatasourceID, FileID);
 	if (executionId) markCancelled(executionId);
-	else removeFromLoadingStore(DbInstanceID, FileID);
+	else removeFromLoadingStore(DatasourceID, FileID);
 
 	notifyError('Query cancelled');
 };
 
-function activeExecutionId(dbInstanceId: string, fileId: string): string | null {
+function activeExecutionId(datasourceId: string, fileId: string): string | null {
 	for (const id of Object.keys(executions)) {
 		const e = executions[id];
-		if (e.dbInstanceId === dbInstanceId && e.fileId === fileId && e.status === 'streaming') {
+		if (e.datasourceId === datasourceId && e.fileId === fileId && e.status === 'streaming') {
 			return id;
 		}
 	}

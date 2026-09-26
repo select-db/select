@@ -240,7 +240,7 @@ func TestAPIKeyRolesRemoved_ReachesTheKeyInHand(t *testing.T) {
 	roleID := uuid.NewString()
 	e2e.SeedRole(t, f.Conn, roleID, f.Actor.WorkspaceID, "Datasource Manager")
 	_, err := f.Conn.Exec(
-		`INSERT INTO app.permission (id, role_id, workspace_id, db_instance_id, action, effect)
+		`INSERT INTO app.permission (id, role_id, workspace_id, datasource_id, action, effect)
 		 VALUES ($1::uuid,$2::uuid,$3::uuid,$4,'manage','allow')`,
 		uuid.NewString(), roleID, f.Actor.WorkspaceID, datasourceID)
 	require.NoError(t, err)

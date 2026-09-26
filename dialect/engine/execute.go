@@ -13,7 +13,7 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options) *Result {
+func ExecuteLocal(ctx context.Context, conn Conn, inst Datasource, sql string, opts Options) *Result {
 	result := &Result{}
 
 	inspected, err := checkPermissions(conn, inst, sql)
@@ -133,7 +133,7 @@ func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, o
 func StreamLocal(
 	ctx context.Context,
 	conn Conn,
-	inst DBInstance,
+	inst Datasource,
 	sql string,
 	opts Options,
 	sink RowSink,
@@ -289,7 +289,7 @@ func effectiveMaxBytes(opts Options) int64 {
 // (select/insert/update/delete, manage for the rest). The see check needs the driver's
 // rows.Columns() output to map result positions, so it runs later from
 // evaluateSeeForResult.
-func checkPermissions(conn Conn, inst DBInstance, sql string) ([]core.InspectStatement, error) {
+func checkPermissions(conn Conn, inst Datasource, sql string) ([]core.InspectStatement, error) {
 	if !conn.Perms.IsManaged(inst.ID) {
 		return nil, nil
 	}
@@ -319,7 +319,7 @@ func checkPermissions(conn Conn, inst DBInstance, sql string) ([]core.InspectSta
 // evaluateSeeForResult runs the see-permission check against the driver's
 // actual result columns. Returns mask positions for the scan loop, or an
 // error to be surfaced before any row is emitted.
-func evaluateSeeForResult(conn Conn, inst DBInstance, inspected []core.InspectStatement, driverCols []string) ([]int, error) {
+func evaluateSeeForResult(conn Conn, inst Datasource, inspected []core.InspectStatement, driverCols []string) ([]int, error) {
 	if !conn.Perms.IsManaged(inst.ID) {
 		return nil, nil
 	}

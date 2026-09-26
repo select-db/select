@@ -2,10 +2,10 @@
 	import type * as graph from '$lib/wails/graph';
 	import type { Tab } from '$lib/components/Layout/layoutStore';
 	import { getTabByNodeId, updateTab } from '$lib/components/Layout/layoutStore';
-	import DatabaseForm, {
-		type AvailableDatabases,
-		type SavedDatabaseData
-	} from './DatabaseForm.svelte';
+	import DatasourceForm, {
+		type AvailableDatasources,
+		type SavedDatasourceData
+	} from './DatasourceForm.svelte';
 	import { myPermissions } from '$lib/stores/myPermissionsStore';
 	import Alert from '$lib/system/Alert/Alert.svelte';
 	import { AlertType } from '$lib/system/Alert/types';
@@ -16,9 +16,9 @@
 
 	let { tab }: Props = $props();
 
-	const database = $derived(tab.database?.node);
+	const datasource = $derived(tab.datasource?.node);
 	const sshConfig = $derived.by(() => {
-		const ssh = database?.ssh;
+		const ssh = datasource?.ssh;
 		if (!ssh) return undefined;
 		const authMethod: 'password' | 'private_key' | 'agent' | 'key_file' =
 			ssh.auth_method === 'private_key' ||
@@ -44,22 +44,22 @@
 	// the one this form belongs to. Switching tabs mid-save would therefore graft
 	// this database onto the tab switched to (a Settings tab, say, would render
 	// as a clone of this one). Re-resolve the database's own tab instead.
-	function onSuccess(saved: SavedDatabaseData) {
+	function onSuccess(saved: SavedDatasourceData) {
 		const savedTab = getTabByNodeId(saved.id);
-		if (!savedTab?.database) return;
+		if (!savedTab?.datasource) return;
 		updateTab({
 			...savedTab,
-			database: {
-				...savedTab.database,
-				node: { ...savedTab.database.node, ...saved } as graph.DBInstanceNode
+			datasource: {
+				...savedTab.datasource,
+				node: { ...savedTab.datasource.node, ...saved } as graph.DatasourceNode
 			}
 		});
 	}
 </script>
 
-{#if !database}
+{#if !datasource}
 	<Alert type={AlertType.Error} message="No database selected" noPulse />
-{:else if !$myPermissions.canAccessDb(database.id, database.proxified)}
+{:else if !$myPermissions.canAccessDatasource(datasource.id, datasource.proxified)}
 	<div class="alert-wrapper">
 		<Alert
 			type={AlertType.Error}
@@ -68,16 +68,16 @@
 		/>
 	</div>
 {:else}
-	{#key database.id}
-		<div class="wrapper scrollable" data-test="database.form">
-			<DatabaseForm
-				id={database.id}
-				uri={database.uri}
-				db_type={(database.db_type as AvailableDatabases) || 'postgresql'}
-				dsn={database.dsn}
+	{#key datasource.id}
+		<div class="wrapper scrollable" data-test="datasource.form">
+			<DatasourceForm
+				id={datasource.id}
+				uri={datasource.uri}
+				db_type={(datasource.db_type as AvailableDatasources) || 'postgresql'}
+				dsn={datasource.dsn}
 				ssh={sshConfig}
-				proxified={!!database.proxified}
-				folder_id={database.folder_id}
+				proxified={!!datasource.proxified}
+				folder_id={datasource.folder_id}
 				{onSuccess}
 			/>
 		</div>

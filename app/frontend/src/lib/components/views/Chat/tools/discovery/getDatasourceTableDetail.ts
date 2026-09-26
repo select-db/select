@@ -1,21 +1,21 @@
 import { toolDefinition } from '$lib/components/views/Chat/core/chat/tool-definition';
 import { z } from 'zod';
-import { loadDatabase } from '../helpers';
+import { loadDatasource } from '../helpers';
 
 const inputSchema = z.object({
-	dbInstanceId: z.string().describe('Database instance ID from the context block databases[].id'),
-	schemaId: z.string().describe('Schema ID from get_database_schemas(...).schemas[].id'),
+	datasourceId: z.string().describe('Datasource ID from the context block datasources[].id'),
+	schemaId: z.string().describe('Schema ID from get_datasource_schemas(...).schemas[].id'),
 	tableName: z
 		.string()
-		.describe('Table or view name from get_database_schemas(...).schemas[].tables[]')
+		.describe('Table or view name from get_datasource_schemas(...).schemas[].tables[]')
 });
 
-export const getDatabaseTableDetailDef = toolDefinition({
-	name: 'get_database_table_detail',
-	description: `Returns the DDL for a single table or view. Call after get_database_schemas when you need the full definition (columns, types, constraints) to write or validate queries. If error is returned, surface it to the user and do not proceed.`,
+export const getDatasourceTableDetailDef = toolDefinition({
+	name: 'get_datasource_table_detail',
+	description: `Returns the DDL for a single table or view. Call after get_datasource_schemas when you need the full definition (columns, types, constraints) to write or validate queries. If error is returned, surface it to the user and do not proceed.`,
 	inputSchema,
 	outputSchema: z.object({
-		dbInstanceId: z.string(),
+		datasourceId: z.string(),
 		schemaId: z.string(),
 		tableName: z.string(),
 		ddl: z.string().describe('CREATE TABLE/view statement when available'),
@@ -25,14 +25,14 @@ export const getDatabaseTableDetailDef = toolDefinition({
 
 type ImplArgs = z.infer<typeof inputSchema>;
 
-async function getDatabaseTableDetailImpl(args: unknown) {
-	const { dbInstanceId, schemaId, tableName } = args as ImplArgs;
+async function getDatasourceTableDetailImpl(args: unknown) {
+	const { datasourceId, schemaId, tableName } = args as ImplArgs;
 
-	const { error, db, node } = await loadDatabase(dbInstanceId);
+	const { error, db, node } = await loadDatasource(datasourceId);
 
 	if (error) {
 		return {
-			dbInstanceId: dbInstanceId,
+			datasourceId: datasourceId,
 			schemaId,
 			tableName: '',
 			ddl: '',
@@ -44,11 +44,11 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 
 	if (!schemaNode) {
 		return {
-			dbInstanceId: db!.id,
+			datasourceId: db!.id,
 			schemaId,
 			tableName: '',
 			ddl: '',
-			error: `Schema not found: ${schemaId}. Use an id from get_database_schemas(...).schemas[].id.`
+			error: `Schema not found: ${schemaId}. Use an id from get_datasource_schemas(...).schemas[].id.`
 		};
 	}
 
@@ -60,11 +60,11 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 
 	if (!tableNode) {
 		return {
-			dbInstanceId: db!.id,
+			datasourceId: db!.id,
 			schemaId,
 			tableName: '',
 			ddl: '',
-			error: `Table or view not found: ${tableName}. Use a name from get_database_schemas(...).schemas[].tables[].`
+			error: `Table or view not found: ${tableName}. Use a name from get_datasource_schemas(...).schemas[].tables[].`
 		};
 	}
 
@@ -77,14 +77,14 @@ async function getDatabaseTableDetailImpl(args: unknown) {
 	const ddl = meta.sql ?? '';
 
 	return {
-		dbInstanceId: db!.id,
+		datasourceId: db!.id,
 		schemaId,
 		tableName: tableNode.name ?? '',
 		ddl
 	};
 }
 
-export const getDatabaseTableDetailClient = getDatabaseTableDetailDef.client(
-	getDatabaseTableDetailImpl
+export const getDatasourceTableDetailClient = getDatasourceTableDetailDef.client(
+	getDatasourceTableDetailImpl
 );
-export const getDatabaseTableDetailExecutor = getDatabaseTableDetailImpl;
+export const getDatasourceTableDetailExecutor = getDatasourceTableDetailImpl;

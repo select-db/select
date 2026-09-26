@@ -28,7 +28,7 @@ func (client *Client) Stream(
 	key string,
 	resultID string,
 	conn Conn,
-	instance DBInstance,
+	instance Datasource,
 	workspaceID, sql string,
 	options Options,
 	listener StreamListener,
@@ -68,7 +68,7 @@ func (client *Client) Stream(
 func (client *Client) Execute(
 	ctx context.Context,
 	conn Conn,
-	instance DBInstance,
+	instance Datasource,
 	workspaceID, sql string,
 	options Options,
 ) *Result {
@@ -103,7 +103,7 @@ func (client *Client) Page(key string, page, pageSize int) (*PageData, PageStatu
 }
 
 // Ping checks DB connectivity. Routes through Transport when proxified.
-func (client *Client) Ping(ctx context.Context, conn Conn, instance DBInstance, workspaceID string, noCache bool) error {
+func (client *Client) Ping(ctx context.Context, conn Conn, instance Datasource, workspaceID string, noCache bool) error {
 	if !instance.Proxified {
 		return conn.DB.PingContext(ctx)
 	}
@@ -114,7 +114,7 @@ func (client *Client) Ping(ctx context.Context, conn Conn, instance DBInstance, 
 }
 
 // GetMetadata fetches schema. Routes through Transport when proxified.
-func (client *Client) GetMetadata(ctx context.Context, conn Conn, instance DBInstance, workspaceID, dbName string, noCache bool) (*core.Metadata, error) {
+func (client *Client) GetMetadata(ctx context.Context, conn Conn, instance Datasource, workspaceID, dbName string, noCache bool) (*core.Metadata, error) {
 	if !instance.Proxified {
 		dialect := GetDialect(instance.DBType)
 		if dialect == nil {
@@ -138,7 +138,7 @@ func (client *Client) GetMetadata(ctx context.Context, conn Conn, instance DBIns
 }
 
 // DumpSchema returns DDL. For proxified, runs on remote (pg_dump / metadata fallback).
-func (client *Client) DumpSchema(ctx context.Context, instance DBInstance, workspaceID, dsn string, metadata *core.Metadata, noCache bool) string {
+func (client *Client) DumpSchema(ctx context.Context, instance Datasource, workspaceID, dsn string, metadata *core.Metadata, noCache bool) string {
 	if instance.Proxified && client.Transport != nil {
 		if sql, err := client.Transport.DumpSchema(ctx, workspaceID, instance.ID); err == nil {
 			return sql

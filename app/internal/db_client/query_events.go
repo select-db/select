@@ -14,7 +14,7 @@ import (
 // any rows arrive.
 type queryStartedEvent struct {
 	ExecutionID    string                 `json:"executionId"`
-	DbInstanceID   string                 `json:"dbInstanceId"`
+	DatasourceID   string                 `json:"datasourceId"`
 	FileID         string                 `json:"fileId"`
 	Columns        []string               `json:"columns"`
 	ColumnMetadata []graph.ColumnMetadata `json:"columnMetadata"`
@@ -24,7 +24,7 @@ type queryStartedEvent struct {
 // row watermark (rows safe to fetch from the cache, indices [0, available)).
 type queryProgressEvent struct {
 	ExecutionID  string `json:"executionId"`
-	DbInstanceID string `json:"dbInstanceId"`
+	DatasourceID string `json:"datasourceId"`
 	FileID       string `json:"fileId"`
 	Available    int64  `json:"available"`
 }
@@ -34,7 +34,7 @@ type queryProgressEvent struct {
 // elapsed-time counter as soon as the actual SQL is done.
 type queryExecutedEvent struct {
 	ExecutionID  string `json:"executionId"`
-	DbInstanceID string `json:"dbInstanceId"`
+	DatasourceID string `json:"datasourceId"`
 	FileID       string `json:"fileId"`
 	DurationMs   int64  `json:"durationMs"`
 }
@@ -42,7 +42,7 @@ type queryExecutedEvent struct {
 // queryDoneEvent is the payload of "query:done".
 type queryDoneEvent struct {
 	ExecutionID  string `json:"executionId"`
-	DbInstanceID string `json:"dbInstanceId"`
+	DatasourceID string `json:"datasourceId"`
 	FileID       string `json:"fileId"`
 	RowCount     int64  `json:"rowCount"`
 	AffectedRows int64  `json:"affectedRows"`
@@ -52,7 +52,7 @@ type queryDoneEvent struct {
 // queryErrorEvent is the payload of "query:error".
 type queryErrorEvent struct {
 	ExecutionID   string `json:"executionId"`
-	DbInstanceID  string `json:"dbInstanceId"`
+	DatasourceID  string `json:"datasourceId"`
 	FileID        string `json:"fileId"`
 	Message       string `json:"message"`
 	ErrorPosition *int   `json:"errorPosition,omitempty"`
@@ -64,9 +64,9 @@ type queryErrorEvent struct {
 type queryEventListener struct {
 	ctx          context.Context
 	executionID  string
-	dbInstanceID string
+	datasourceID string
 	fileID       string
-	dbInstance   *graph.DBInstanceNode
+	datasource   *graph.DatasourceNode
 	statement    string
 	dbc          *DbClient
 	cancelTimer  context.CancelFunc
@@ -76,22 +76,22 @@ func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.C
 	// Columns came back, so the database answered. Reported here and not where
 	// the stream is kicked off: Stream returns before any I/O happens, and a
 	// query against an unreachable database would have claimed it was up.
-	emitAvailability(l.dbInstanceID, "")
+	emitAvailability(l.datasourceID, "")
 
 	// Compute column edit metadata if the engine didn't already populate it.
 	// Done lazily here so the streaming cache exposes it on the very first
 	// Page() call and the started event carries it to the frontend.
 	if len(columnEditMeta) == 0 && len(columns) > 0 {
-		columnEditMeta = l.dbc.computeColumnEditMeta(l.dbInstance, l.statement)
+		columnEditMeta = l.dbc.computeColumnEditMeta(l.datasource, l.statement)
 		if len(columnEditMeta) > 0 {
-			if sr, ok := engine.GetStreamingResult(queryKey(l.dbInstanceID, l.fileID)); ok {
+			if sr, ok := engine.GetStreamingResult(queryKey(l.datasourceID, l.fileID)); ok {
 				sr.SetColumnEditMeta(columnEditMeta)
 			}
 		}
 	}
 	desktop.Emit("query:started", queryStartedEvent{
 		ExecutionID:    l.executionID,
-		DbInstanceID:   l.dbInstanceID,
+		DatasourceID:   l.datasourceID,
 		FileID:         l.fileID,
 		Columns:        columns,
 		ColumnMetadata: columnEditMetaToGraph(columnEditMeta),
@@ -101,7 +101,7 @@ func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.C
 func (l *queryEventListener) OnExecuted(durationMs int64) {
 	desktop.Emit("query:executed", queryExecutedEvent{
 		ExecutionID:  l.executionID,
-		DbInstanceID: l.dbInstanceID,
+		DatasourceID: l.datasourceID,
 		FileID:       l.fileID,
 		DurationMs:   durationMs,
 	})
@@ -110,7 +110,7 @@ func (l *queryEventListener) OnExecuted(durationMs int64) {
 func (l *queryEventListener) OnProgress(available int64) {
 	desktop.Emit("query:progress", queryProgressEvent{
 		ExecutionID:  l.executionID,
-		DbInstanceID: l.dbInstanceID,
+		DatasourceID: l.datasourceID,
 		FileID:       l.fileID,
 		Available:    available,
 	})
@@ -122,7 +122,7 @@ func (l *queryEventListener) OnDone(rowCount, affected, durationMs int64) {
 	}
 	desktop.Emit("query:done", queryDoneEvent{
 		ExecutionID:  l.executionID,
-		DbInstanceID: l.dbInstanceID,
+		DatasourceID: l.datasourceID,
 		FileID:       l.fileID,
 		RowCount:     rowCount,
 		AffectedRows: affected,
@@ -136,7 +136,7 @@ func (l *queryEventListener) OnError(message string, errorPosition *int) {
 	}
 	desktop.Emit("query:error", queryErrorEvent{
 		ExecutionID:   l.executionID,
-		DbInstanceID:  l.dbInstanceID,
+		DatasourceID:  l.datasourceID,
 		FileID:        l.fileID,
 		Message:       message,
 		ErrorPosition: errorPosition,

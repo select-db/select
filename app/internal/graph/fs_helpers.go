@@ -94,29 +94,29 @@ func (c *WorkspaceFS) ParentURI(rel string) string {
 	return c.URI(parentRel)
 }
 
-// DBConfigFileName is the file that makes a directory a database.
-const DBConfigFileName = "db.config.json"
+// DatasourceConfigFileName is the file that makes a directory a database.
+const DatasourceConfigFileName = "datasource.config.json"
 
-// FSDBConfig mirrors the on-disk db.config.json structure used for
-// filesystem-backed database instances managed by the workspace graph. It is a
-// lightweight version of the fsDBConfig type in node_db_instance.go, kept here
+// FSDatasourceConfig mirrors the on-disk datasource.config.json structure used for
+// filesystem-backed datasources managed by the workspace graph. It is a
+// lightweight version of the fsDatasourceConfig type in node_datasource.go, kept here
 // to avoid import cycles.
 //
 // The name is deliberately absent: a database is named by the directory it
 // sits in, and a second copy here would be one nothing reads and every rename
 // would leave behind.
-type FSDBConfig struct {
-	ID        string         `json:"id"`
-	DbType    string         `json:"db_type"`
-	DSN       string         `json:"dsn"`
-	SSH       *FSDBSSHConfig `json:"ssh,omitempty"`
-	Proxified bool           `json:"proxified,omitempty"`
+type FSDatasourceConfig struct {
+	ID        string                 `json:"id"`
+	DbType    string                 `json:"db_type"`
+	DSN       string                 `json:"dsn"`
+	SSH       *FSDatasourceSSHConfig `json:"ssh,omitempty"`
+	Proxified bool                   `json:"proxified,omitempty"`
 }
 
-// FSDBSSHConfig is a minimal SSH configuration used in db.config.json for a DB
+// FSDatasourceSSHConfig is a minimal SSH configuration used in datasource.config.json for a DB
 // instance. All sensitive values are expected to be provided via .env
 // variables and referenced here using $VAR tokens.
-type FSDBSSHConfig struct {
+type FSDatasourceSSHConfig struct {
 	Enabled    bool   `json:"enabled"`
 	Host       string `json:"host"`
 	Port       int    `json:"port"`
@@ -132,11 +132,11 @@ type FSDBSSHConfig struct {
 // Single source of truth for both the full graph build and the incremental file
 // watcher, so neither can silently drop a field (e.g. key_path / host_key).
 // Returns nil when fs is nil.
-func SSHConfigFromFS(fs *FSDBSSHConfig) *DBInstanceSSHConfig {
+func SSHConfigFromFS(fs *FSDatasourceSSHConfig) *DatasourceSSHConfig {
 	if fs == nil {
 		return nil
 	}
-	ssh := &DBInstanceSSHConfig{
+	ssh := &DatasourceSSHConfig{
 		Enabled:    fs.Enabled,
 		Host:       fs.Host,
 		Port:       fs.Port,
@@ -153,21 +153,21 @@ func SSHConfigFromFS(fs *FSDBSSHConfig) *DBInstanceSSHConfig {
 	return ssh
 }
 
-// ReadFSDBConfig reads and unmarshals an FSDBConfig from the given path.
-func ReadFSDBConfig(path string) (*FSDBConfig, error) {
+// ReadFSDatasourceConfig reads and unmarshals an FSDatasourceConfig from the given path.
+func ReadFSDatasourceConfig(path string) (*FSDatasourceConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var cfg FSDBConfig
+	var cfg FSDatasourceConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
 }
 
-// DatabaseRef is a single database reference in file metadata.
-type DatabaseRef struct {
+// DatasourceRef is a single database reference in file metadata.
+type DatasourceRef struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
 }
@@ -175,7 +175,7 @@ type DatabaseRef struct {
 // FileMetadata represents the sidecar metadata stored for files
 // ("*.metadata.json").
 type FileMetadata struct {
-	Databases []DatabaseRef `json:"databases"`
+	Datasources []DatasourceRef `json:"datasources"`
 }
 
 // ReadFileMetadata reads and unmarshals FileMetadata from the given path.
@@ -203,7 +203,7 @@ func IsInternalWorkspaceFile(name string) bool {
 
 	// Sidecars SELECT writes for its own use and nobody edits by hand.
 	//
-	// The two config files are not among them. db.config.json and
+	// The two config files are not among them. datasource.config.json and
 	// select.config.json are read, edited and committed by people -- one
 	// carries the dialect and the $VAR a DSN resolves from, the other is what
 	// a teammate clones to land in the same workspace -- so both are rows.
@@ -244,10 +244,10 @@ func IsInternalWorkspacePath(rel string) bool {
 	return false
 }
 
-// CheckIsDBInstance checks if a directory contains a db.config.json file,
-// indicating it's a database instance directory.
-func CheckIsDBInstance(dirPath string) bool {
-	dbConfigPath := filepath.Join(dirPath, DBConfigFileName)
-	_, err := os.Stat(dbConfigPath)
+// CheckIsDatasource checks if a directory contains a datasource.config.json file,
+// indicating it's a datasource directory.
+func CheckIsDatasource(dirPath string) bool {
+	datasourceConfigPath := filepath.Join(dirPath, DatasourceConfigFileName)
+	_, err := os.Stat(datasourceConfigPath)
 	return err == nil
 }

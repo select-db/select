@@ -26,7 +26,7 @@ export const renameBox = (page: Page) =>
  * Its `data-test-state` is what the app currently believes: "online", "offline",
  * or "unknown" for one nothing has reached yet.
  */
-export const dbStatus = (page: Page, id: string) => testId(page, 'db.status', id);
+export const datasourceStatus = (page: Page, id: string) => testId(page, 'db.status', id);
 
 /** The tree rows currently selected, in whichever trees are on screen. */
 export const selectedRows = (page: Page) =>

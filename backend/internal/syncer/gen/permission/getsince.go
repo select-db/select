@@ -39,7 +39,7 @@ func appPermissionToTypesRow(row generated.AppPermission) types.PermissionRow {
 		ID:           row.ID.String(),
 		RoleID:       row.RoleID.String(),
 		WorkspaceID:  row.WorkspaceID.String(),
-		DbInstanceID: row.DbInstanceID.ValueOrEmpty(),
+		DatasourceID: row.DatasourceID.ValueOrEmpty(),
 		SchemaName:   row.SchemaName.ValueOrEmpty(),
 		TableName:    row.TableName.ValueOrEmpty(),
 		ColumnName:   row.ColumnName.ValueOrEmpty(),

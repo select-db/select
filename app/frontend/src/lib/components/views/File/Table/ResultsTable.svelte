@@ -41,7 +41,10 @@
 	} from './helpers/dataLoading';
 	import { debounce } from '$lib/utils/debounce';
 	import { throttle } from '$lib/utils/throttle';
-	import { getEffectiveSelectedDbInstanceId, getQueryResultForDb } from '../views/tableViewState';
+	import {
+		getEffectiveSelectedDatasourceId,
+		getQueryResultForDatasource
+	} from '../views/tableViewState';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 	import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
@@ -52,12 +55,12 @@
 
 	function findTableNode(
 		ws: graph.WorkspaceNode | undefined,
-		dbInstanceId: string,
+		datasourceId: string,
 		schema: string,
 		table: string
-	): graph.DBInstanceItemNode | null {
+	): graph.DatasourceItemNode | null {
 		if (!ws) return null;
-		const db = ws.db_instances.find((d) => d.id === dbInstanceId);
+		const db = ws.datasources.find((d) => d.id === datasourceId);
 		if (!db) return null;
 		const schemaNode = db.children.find((c) => c.type === 'schema' && c.name === schema);
 		if (!schemaNode) return null;
@@ -73,25 +76,25 @@
 	function findColumnNode(
 		ws: graph.WorkspaceNode | undefined,
 		meta: graph.ColumnMetadata
-	): graph.DBInstanceItemNode | null {
-		if (!ws || !meta.dbInstanceId || !meta.schema || !meta.table || !meta.originalColumnName) {
+	): graph.DatasourceItemNode | null {
+		if (!ws || !meta.datasourceId || !meta.schema || !meta.table || !meta.originalColumnName) {
 			return null;
 		}
-		const tableNode = findTableNode(ws, meta.dbInstanceId, meta.schema, meta.table);
+		const tableNode = findTableNode(ws, meta.datasourceId, meta.schema, meta.table);
 		if (!tableNode) return null;
 		const columnsGroup = tableNode.children.find((c) => c.type === 'columns');
 		return (columnsGroup?.children ?? []).find((c) => c.name === meta.originalColumnName) ?? null;
 	}
 
 	type FkRef = { schemaName: string; tableName: string; columnName: string };
-	function readForeignKey(node: graph.DBInstanceItemNode | null): FkRef | null {
+	function readForeignKey(node: graph.DatasourceItemNode | null): FkRef | null {
 		const meta = (node?.metadata ?? null) as { foreignKey?: FkRef } | null;
 		const fk = meta?.foreignKey;
 		if (!fk || !fk.schemaName || !fk.tableName || !fk.columnName) return null;
 		return fk;
 	}
 
-	function tableColumnNames(node: graph.DBInstanceItemNode | null): string[] {
+	function tableColumnNames(node: graph.DatasourceItemNode | null): string[] {
 		const columnsGroup = (node?.children ?? []).find((c) => c.type === 'columns');
 		return (columnsGroup?.children ?? []).map((c) => c.name ?? '').filter(Boolean);
 	}
@@ -121,13 +124,13 @@
 	let { tab }: Props = $props();
 
 	const file = $derived(tab.file?.node);
-	const effectiveDbInstanceId = $derived(getEffectiveSelectedDbInstanceId(file, tab));
-	const queryResult = $derived(getQueryResultForDb(file, effectiveDbInstanceId));
+	const effectiveDatasourceId = $derived(getEffectiveSelectedDatasourceId(file, tab));
+	const queryResult = $derived(getQueryResultForDatasource(file, effectiveDatasourceId));
 
 	const tableState = $derived.by(() => {
 		if (!tab.file) return null;
-		if (!effectiveDbInstanceId) return null;
-		return tab.file.tables?.[effectiveDbInstanceId] ?? null;
+		if (!effectiveDatasourceId) return null;
+		return tab.file.tables?.[effectiveDatasourceId] ?? null;
 	});
 
 	const edits = $derived(tableState?.edits ?? {});
@@ -179,14 +182,14 @@
 	// we couldn't resolve the target table from the workspace graph.
 	const foreignKeyContexts = $derived.by(() => {
 		const ws = $workspaceGraphStore;
-		const dbInstanceId = effectiveDbInstanceId;
+		const datasourceId = effectiveDatasourceId;
 		const persisted = tableState?.foreignKeyDisplayColumns ?? {};
 
 		return columnMetadataArray.map((meta, i) => {
-			if (!meta?.isForeignKey || !dbInstanceId) return null;
+			if (!meta?.isForeignKey || !datasourceId) return null;
 			const fk = readForeignKey(columnNodes[i]);
 			if (!fk) return null;
-			const targetTable = findTableNode(ws, dbInstanceId, fk.schemaName, fk.tableName);
+			const targetTable = findTableNode(ws, datasourceId, fk.schemaName, fk.tableName);
 			const available = tableColumnNames(targetTable);
 			if (available.length === 0) return null;
 
@@ -203,7 +206,7 @@
 			}
 
 			return {
-				dbInstanceId: dbInstanceId,
+				datasourceId: datasourceId,
 				targetSchema: fk.schemaName,
 				targetTable: fk.tableName,
 				targetColumn: fk.columnName,
@@ -215,8 +218,8 @@
 	});
 
 	function updateForeignKeyDisplayColumns(sourceColumn: string, cols: string[]) {
-		if (!tab.file || !effectiveDbInstanceId) return;
-		const prevTableState = tab.file.tables?.[effectiveDbInstanceId] ?? {};
+		if (!tab.file || !effectiveDatasourceId) return;
+		const prevTableState = tab.file.tables?.[effectiveDatasourceId] ?? {};
 		const prevMap = prevTableState.foreignKeyDisplayColumns ?? {};
 		updateTab({
 			...tab,
@@ -224,7 +227,7 @@
 				...tab.file,
 				tables: {
 					...(tab.file.tables ?? {}),
-					[effectiveDbInstanceId]: {
+					[effectiveDatasourceId]: {
 						...prevTableState,
 						foreignKeyDisplayColumns: { ...prevMap, [sourceColumn]: cols }
 					}
@@ -281,7 +284,7 @@
 	// Data loading state
 	let dataState = $state<DataLoadingState>(createEmptyLoadingState());
 
-	// Composite key (dbInstanceId:resultId) that our dataState was built for (null = no data or cleared)
+	// Composite key (datasourceId:resultId) that our dataState was built for (null = no data or cleared)
 	let dataStateKey = $state<string | null>(null);
 
 	// Derived: width for column i from state, with fallback
@@ -348,7 +351,7 @@
 		document.removeEventListener('mousemove', throttledResize);
 		document.removeEventListener('mouseup', stopResize);
 
-		if (!tab.file || !effectiveDbInstanceId) return;
+		if (!tab.file || !effectiveDatasourceId) return;
 		if (columnState.columnWidths.length === 0) return;
 
 		updateTab({
@@ -357,8 +360,8 @@
 				...tab.file,
 				tables: {
 					...(tab.file.tables ?? {}),
-					[effectiveDbInstanceId]: {
-						...(tab.file.tables?.[effectiveDbInstanceId] ?? {}),
+					[effectiveDatasourceId]: {
+						...(tab.file.tables?.[effectiveDatasourceId] ?? {}),
 						columnWidths: columnState.columnWidths.slice()
 					}
 				}
@@ -463,7 +466,7 @@
 		const pageResult = await loadMissingPagesForVisibleRange(
 			newRange,
 			queryResult,
-			effectiveDbInstanceId,
+			effectiveDatasourceId,
 			file.id,
 			dataState,
 			(loadingPages: Set<number>) => {
@@ -502,15 +505,15 @@
 	};
 
 	// Track and save scroll position with debouncing
-	// Depends on effectiveDbInstanceId so we re-run and get a fresh closure when switching db
+	// Depends on effectiveDatasourceId so we re-run and get a fresh closure when switching db
 	$effect(() => {
 		const container = virtualScrollState.scrollContainer;
-		const dbInstanceId = effectiveDbInstanceId;
+		const datasourceId = effectiveDatasourceId;
 
-		if (!container || !dbInstanceId) return;
+		if (!container || !datasourceId) return;
 
 		const saveState = debounce(() => {
-			if (!tab.file || !dbInstanceId) return;
+			if (!tab.file || !datasourceId) return;
 
 			updateTab({
 				...tab,
@@ -518,8 +521,8 @@
 					...tab.file,
 					tables: {
 						...(tab.file.tables ?? {}),
-						[dbInstanceId]: {
-							...(tab.file.tables?.[dbInstanceId] ?? {}),
+						[datasourceId]: {
+							...(tab.file.tables?.[datasourceId] ?? {}),
 							scrollTop: container.scrollTop,
 							scrollLeft: container.scrollLeft,
 							pinnedColumns: new Set(columnState.pinnedColumnIdx),
@@ -559,9 +562,9 @@
 			return;
 		}
 
-		const dbInstanceId = effectiveDbInstanceId;
+		const datasourceId = effectiveDatasourceId;
 		const currentKey =
-			dbInstanceId != null && newResult.id != null ? `${dbInstanceId}:${newResult.id}` : null;
+			datasourceId != null && newResult.id != null ? `${datasourceId}:${newResult.id}` : null;
 		const hasResultData = dataState.allRows.length > 0;
 		const shouldInitialize = currentKey !== dataStateKey || !hasResultData;
 
@@ -579,7 +582,7 @@
 		// CASE 2: Initialization
 		// new query, switched db, or navigating back to file
 		dataStateKey = currentKey;
-		const cachedState = dbInstanceId ? tab.file?.tables?.[dbInstanceId] : undefined;
+		const cachedState = datasourceId ? tab.file?.tables?.[datasourceId] : undefined;
 
 		// Initialize data structures with first page (if any) and the live
 		// row total, execution.available while streaming, rowCount once done.
@@ -610,7 +613,7 @@
 				end: Math.floor((targetScrollTop + viewportHeight) / rowHeight)
 			},
 			newResult,
-			effectiveDbInstanceId,
+			effectiveDatasourceId,
 			fileId,
 			dataState,
 			(loadingPages: Set<number>) => {
@@ -672,7 +675,7 @@
 			const pageResult = await loadMissingPagesForVisibleRange(
 				range,
 				qr,
-				effectiveDbInstanceId,
+				effectiveDatasourceId,
 				fid,
 				dataState,
 				(loadingPages: Set<number>) => {
@@ -737,7 +740,7 @@
 
 		// Create edit
 		const edit: TableEdit = {
-			dbInstanceId: columnMeta.dbInstanceId || '',
+			datasourceId: columnMeta.datasourceId || '',
 			schema: columnMeta.schema || '',
 			table: columnMeta.table || '',
 			column: columnMeta.originalColumnName || columnName,
@@ -760,7 +763,7 @@
 			newEdits[editKey] = edit;
 		}
 
-		if (!effectiveDbInstanceId) return;
+		if (!effectiveDatasourceId) return;
 
 		updateTab({
 			...tab,
@@ -768,8 +771,8 @@
 				...fileState,
 				tables: {
 					...(fileState.tables ?? {}),
-					[effectiveDbInstanceId]: {
-						...(fileState.tables?.[effectiveDbInstanceId] ?? {}),
+					[effectiveDatasourceId]: {
+						...(fileState.tables?.[effectiveDatasourceId] ?? {}),
 						edits: newEdits
 					}
 				}
@@ -796,7 +799,7 @@
 				width: 'min(80vw, 860px)',
 				height: 'min(70vh, 620px)',
 				props: {
-					dbInstanceId: fkCtx.dbInstanceId,
+					datasourceId: fkCtx.datasourceId,
 					currentValue: edited ?? formatCellValue(cell),
 					targetSchema: fkCtx.targetSchema,
 					targetTable: fkCtx.targetTable,
@@ -829,7 +832,7 @@
 		const newEdits = { ...edits };
 		delete newEdits[editKey];
 
-		if (!tab.file || !effectiveDbInstanceId) return;
+		if (!tab.file || !effectiveDatasourceId) return;
 
 		updateTab({
 			...tab,
@@ -837,8 +840,8 @@
 				...tab.file,
 				tables: {
 					...(tab.file.tables ?? {}),
-					[effectiveDbInstanceId]: {
-						...(tab.file.tables?.[effectiveDbInstanceId] ?? {}),
+					[effectiveDatasourceId]: {
+						...(tab.file.tables?.[effectiveDatasourceId] ?? {}),
 						edits: newEdits
 					}
 				}
@@ -909,7 +912,7 @@
 				missingPrimaryKeys={missingPrimaryKeysPerColumn[colIndex] ?? []}
 				foreignKey={fkCtx
 					? ({
-							dbInstanceId: fkCtx.dbInstanceId,
+							datasourceId: fkCtx.datasourceId,
 							targetSchema: fkCtx.targetSchema,
 							targetTable: fkCtx.targetTable,
 							targetColumn: fkCtx.targetColumn,

@@ -1,24 +1,24 @@
 import { get } from 'svelte/store';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-import { GetDBInstanceNodeByID } from '$lib/wails/graph';
+import { GetDatasourceNodeByID } from '$lib/wails/graph';
 import { QuerySchema } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 import { tryCatch } from '$lib/utils/tryCatch';
 import { toToolError } from './context';
 import type * as graph from '$lib/wails/graph';
 import {
-	dbInstanceToContextDb,
-	type ChatContextDatabase
+	datasourceToContext,
+	type ChatContextDatasource
 } from '$lib/components/Layout/layoutStore';
 
-export type LoadDatabaseResult =
-	| { db: ChatContextDatabase; node: graph.DBInstanceNode; error?: undefined }
+export type LoadDatasourceResult =
+	| { db: ChatContextDatasource; node: graph.DatasourceNode; error?: undefined }
 	| { db?: undefined; node?: undefined; error: string };
 
 /**
  * Load database by id from the workspace graph. If schema is not loaded yet, fetches it.
  * Returns the db (and the graph node for e.g. reading .children) or an error.
  */
-export async function loadDatabase(dbInstanceId: string): Promise<LoadDatabaseResult> {
+export async function loadDatasource(datasourceId: string): Promise<LoadDatasourceResult> {
 	const graph = get(workspaceGraphStore);
 
 	if (!graph) {
@@ -27,18 +27,18 @@ export async function loadDatabase(dbInstanceId: string): Promise<LoadDatabaseRe
 		};
 	}
 
-	let node = graph.db_instances.find((d) => d.id === dbInstanceId);
+	let node = graph.datasources.find((d) => d.id === datasourceId);
 
 	if (!node) {
 		return {
-			error: `Database not found: ${dbInstanceId}. Use an id from the context block databases[].id.`
+			error: `Datasource not found: ${datasourceId}. Use an id from the context block datasources[].id.`
 		};
 	}
 
 	// Load schema if not yet in graph
 	if (!node.children || node.children.length === 0) {
 		const [, err] = await tryCatch(QuerySchema, {
-			DbInstanceID: dbInstanceId,
+			DatasourceID: datasourceId,
 			NoCache: false
 		});
 
@@ -46,7 +46,7 @@ export async function loadDatabase(dbInstanceId: string): Promise<LoadDatabaseRe
 			return { error: toToolError(err) };
 		}
 
-		const [updatedNode, fetchErr] = await tryCatch(GetDBInstanceNodeByID, dbInstanceId);
+		const [updatedNode, fetchErr] = await tryCatch(GetDatasourceNodeByID, datasourceId);
 		if (fetchErr || !updatedNode) {
 			return {
 				error: fetchErr ? toToolError(fetchErr) : 'Failed to load database node after schema fetch'
@@ -56,5 +56,5 @@ export async function loadDatabase(dbInstanceId: string): Promise<LoadDatabaseRe
 		node = updatedNode;
 	}
 
-	return { db: dbInstanceToContextDb(node), node };
+	return { db: datasourceToContext(node), node };
 }

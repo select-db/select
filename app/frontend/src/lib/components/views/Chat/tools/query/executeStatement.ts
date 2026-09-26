@@ -23,7 +23,7 @@ const executeStatementOutputSchema = z.union([
 ]);
 
 const queryInputSchema = z.object({
-	dbInstanceId: z.string().describe('Database instance ID (required)'),
+	datasourceId: z.string().describe('Datasource ID (required)'),
 	statement: z.string().describe('SQL statement to execute (INSERT, UPDATE, DELETE, DDL, etc.)'),
 	folderId: z
 		.string()
@@ -38,7 +38,7 @@ export const executeStatementDef = toolDefinition({
 	description: `Executes a write or DDL SQL statement (INSERT, UPDATE, DELETE, MERGE, CREATE, ALTER, DROP, TRUNCATE, etc.) against a registered database. Requires user approval before executing.
 
 Before calling:
-1. Verify tables with get_database_schemas; use get_database_table_detail(schemaId, tableName) when you need a table's DDL. Never guess schema. Table names may be case-sensitive and require quoting (e.g. "Collaborator").
+1. Verify tables with get_datasource_schemas; use get_datasource_table_detail(schemaId, tableName) when you need a table's DDL. Never guess schema. Table names may be case-sensitive and require quoting (e.g. "Collaborator").
 2. Explain to the user what the statement will do and estimate its impact: how many rows will be affected, what data will change, and whether the operation is reversible.
 3. For DROP, TRUNCATE, or DELETE without a WHERE clause, explicitly warn the user that the operation is irreversible and wait for confirmation before proceeding.
 
@@ -52,10 +52,10 @@ If error is returned, surface the message to the user and do not proceed.`,
 type ImplArgs = z.infer<typeof queryInputSchema> & { __fileId?: string };
 
 async function executeStatementImpl(args: unknown) {
-	const { dbInstanceId, folderId, statement, __fileId } = args as ImplArgs;
+	const { datasourceId, folderId, statement, __fileId } = args as ImplArgs;
 	const fileId = __fileId ?? '';
 	const [result, err] = await tryCatch(Query, {
-		DbInstanceID: dbInstanceId,
+		DatasourceID: datasourceId,
 		FileID: fileId,
 		FolderID: folderId ?? '',
 		Statement: statement,

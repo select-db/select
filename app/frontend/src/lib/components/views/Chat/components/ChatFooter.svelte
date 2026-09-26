@@ -4,16 +4,12 @@
 	import Button from '$lib/system/Button/Button.svelte';
 	import InputMultiline from '$lib/system/InputMultiline/InputMultiline.svelte';
 	import Select from '$lib/system/Select/Select.svelte';
-	import DatabasePicker from '$lib/components/views/File/Header/DatabasePicker.svelte';
+	import DatasourcePicker from '$lib/components/views/File/Header/DatasourcePicker.svelte';
 	import FileBadge from './FileBadge.svelte';
 	import FilePicker from './FilePicker.svelte';
 	import { AI_MODEL_OPTION_GROUPS } from '$lib/components/views/Chat/core/aiConnections';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import {
-		updateTab,
-		dbInstanceToContextDb,
-		getAllGroups
-	} from '$lib/components/Layout/layoutStore';
+	import { updateTab, datasourceToContext, getAllGroups } from '$lib/components/Layout/layoutStore';
 	import { findItemById } from '$lib/components/views/FileSystem/Files/helpers/dragHelpers';
 	import type { Tab, ChatContextFile } from '$lib/components/Layout/layoutStore';
 	import type { ResourceMenuOption } from '$lib/components/ResourceMenu/types';
@@ -41,7 +37,7 @@
 	let inputActive = $state(false);
 	let inputRef: { focus: () => void } | undefined;
 
-	const contextFiles = $derived((tab.chat?.files ?? []));
+	const contextFiles = $derived(tab.chat?.files ?? []);
 	const selectedFileIds = $derived(contextFiles.map((f) => f.id));
 
 	function focusInputOnFooterClick(e: MouseEvent) {
@@ -51,7 +47,7 @@
 	}
 
 	function toggleContextFile(option: ResourceMenuOption) {
-		const existingFiles = (tab.chat?.files ?? []);
+		const existingFiles = tab.chat?.files ?? [];
 		const existingIndex = existingFiles.findIndex((f) => f.id === option.id);
 
 		let files: ChatContextFile[];
@@ -74,7 +70,7 @@
 	function getFileNode(file: ChatContextFile): graph.FileNode | null {
 		const ws = get(workspaceGraphStore);
 		if (ws) {
-			const found = findItemById(file.id, [], ws.folders, ws.db_instances);
+			const found = findItemById(file.id, [], ws.folders, ws.datasources);
 			if (found && found.type === 'file') return found as graph.FileNode;
 		}
 		// Temp files are not in the workspace graph, find the node from the open tab.
@@ -90,21 +86,21 @@
 		return null;
 	}
 
-	function handleDatabaseChange(v: string | string[]) {
+	function handleDatasourceChange(v: string | string[]) {
 		const ids = Array.isArray(v) ? v : v ? [v] : [];
 		const ws = get(workspaceGraphStore);
-		const dbInstances = (ws?.db_instances ?? []);
-		const databases = ids
-			.map((id) => dbInstances.find((d) => d.id === id))
+		const all = ws?.datasources ?? [];
+		const datasources = ids
+			.map((id) => all.find((d) => d.id === id))
 			.filter(Boolean)
-			.map((d) => dbInstanceToContextDb(d!));
+			.map((d) => datasourceToContext(d!));
 
 		updateTab({
 			...tab,
 			chat: {
 				sessionId: tab.chat!.sessionId,
 				...tab.chat,
-				databases
+				datasources
 			}
 		});
 	}
@@ -165,10 +161,10 @@
 	{/if}
 
 	<div class="model-row">
-		<DatabasePicker
+		<DatasourcePicker
 			multiple={true}
-			value={tab.chat?.databases?.map((d) => d.id) ?? []}
-			onchange={handleDatabaseChange}
+			value={tab.chat?.datasources?.map((d) => d.id) ?? []}
+			onchange={handleDatasourceChange}
 		/>
 		<div class="left-wrapper">
 			<Select

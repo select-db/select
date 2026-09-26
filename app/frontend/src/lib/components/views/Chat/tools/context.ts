@@ -1,5 +1,9 @@
 import { get } from 'svelte/store';
-import type { Tab, ChatContextDatabase, ChatContextFile } from '$lib/components/Layout/layoutStore';
+import type {
+	Tab,
+	ChatContextDatasource,
+	ChatContextFile
+} from '$lib/components/Layout/layoutStore';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import type { CurrentFile } from '$lib/components/views/Chat/utils/currentFile';
 import { currentFileStore } from '$lib/components/views/Chat/utils/currentFile';
@@ -20,7 +24,7 @@ export function toToolError(err: unknown): string {
 /** Chat context: workspace, context DBs, files, and live current file from the active editor. */
 export type ChatContext = {
 	workspace?: { id: string; uri: string };
-	databases?: ChatContextDatabase[];
+	datasources?: ChatContextDatasource[];
 	files?: ChatContextFile[];
 	/** Live current file (uri, id, folderId, cursorPosition, textSelection) from currentFileStore. */
 	currentFile?: CurrentFile | null;
@@ -35,7 +39,7 @@ export function createDefaultGetContext(): () => ChatContext {
 		const currentFile = get(currentFileStore);
 		return {
 			workspace: workspaceId ? { id: workspaceId, uri: workspaceUri } : undefined,
-			databases: undefined,
+			datasources: undefined,
 			files: undefined,
 			currentFile
 		};
@@ -47,12 +51,12 @@ export function getContextForChatTab(tab: Tab): ChatContext {
 	const wsGraph = get(workspaceGraphStore);
 	const workspaceId = wsGraph?.id ?? '';
 	const workspaceUri = workspaceId ? `selectdb://workspaces/${workspaceId}` : '';
-	const databases = tab.chat?.databases ?? [];
-	const files = (tab.chat?.files ?? []);
+	const datasources = tab.chat?.datasources ?? [];
+	const files = tab.chat?.files ?? [];
 	const currentFile = get(currentFileStore);
 	return {
 		workspace: workspaceId ? { id: workspaceId, uri: workspaceUri } : undefined,
-		databases,
+		datasources,
 		files,
 		currentFile
 	};

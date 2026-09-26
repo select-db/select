@@ -2,7 +2,7 @@
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { loadingStore } from '$lib/utils/query/loadingStore';
-	import { databaseAvailabilityStore } from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
+	import { datasourceAvailabilityStore } from '$lib/components/shared/DatasourceIndicator/datasourceIndicatorStore';
 
 	type Props = {
 		ids: string[];
@@ -17,7 +17,7 @@
 	);
 
 	const allConnected = $derived(
-		ids.length > 0 && ids.every((id) => $databaseAvailabilityStore.get(id) === true)
+		ids.length > 0 && ids.every((id) => $datasourceAvailabilityStore.get(id) === true)
 	);
 </script>
 

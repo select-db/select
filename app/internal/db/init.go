@@ -80,7 +80,7 @@ func SwitchToServer(domain string) error {
 	return initForDomain(domain)
 }
 
-// GetDB returns the global DB instance. May be nil if no server is selected.
+// GetDB returns the global datasource. May be nil if no server is selected.
 func GetDB() *sql.DB {
 	mu.RLock()
 	defer mu.RUnlock()

@@ -31,10 +31,10 @@ func TestIndex_LookupCoversTheTree(t *testing.T) {
 	}
 }
 
-func TestIndex_DbInstanceAnswersToIDAndURI(t *testing.T) {
+func TestIndex_DatasourceAnswersToIDAndURI(t *testing.T) {
 	g := indexedGraph()
 
-	db := &DBInstanceNode{
+	db := &DatasourceNode{
 		ID:          "db-1",
 		URI:         "selectdb://workspaces/ws-1/db1",
 		FolderID:    "root",
@@ -43,26 +43,26 @@ func TestIndex_DbInstanceAnswersToIDAndURI(t *testing.T) {
 	g.attach(db)
 
 	if g.lookup("db-1") != Node(db) {
-		t.Errorf("db instance not found by ID")
+		t.Errorf("datasource not found by ID")
 	}
 	if g.lookup("selectdb://workspaces/ws-1/db1") != Node(db) {
-		t.Errorf("db instance not found by URI")
+		t.Errorf("datasource not found by URI")
 	}
 
-	// A db instance hangs from both its folder and the workspace's flat list,
+	// A datasource hangs from both its folder and the workspace's flat list,
 	// and detaching has to clear both.
 	root, _ := g.lookup("root").(*FolderNode)
-	if len(root.DBInstances) != 1 || len(g.WorkspaceGraph.DBInstances) != 1 {
+	if len(root.Datasources) != 1 || len(g.WorkspaceGraph.Datasources) != 1 {
 		t.Fatalf("expected the instance under both parents, got folder=%d workspace=%d",
-			len(root.DBInstances), len(g.WorkspaceGraph.DBInstances))
+			len(root.Datasources), len(g.WorkspaceGraph.Datasources))
 	}
 
 	if !g.detachByIDs([]string{"db-1"}) {
 		t.Fatalf("expected detach to report a removal")
 	}
-	if len(root.DBInstances) != 0 || len(g.WorkspaceGraph.DBInstances) != 0 {
+	if len(root.Datasources) != 0 || len(g.WorkspaceGraph.Datasources) != 0 {
 		t.Errorf("instance left behind: folder=%d workspace=%d",
-			len(root.DBInstances), len(g.WorkspaceGraph.DBInstances))
+			len(root.Datasources), len(g.WorkspaceGraph.Datasources))
 	}
 	if g.lookup("db-1") != nil || g.lookup("selectdb://workspaces/ws-1/db1") != nil {
 		t.Errorf("detached instance still in the index")
@@ -93,8 +93,8 @@ func TestIndex_DetachDropsTheWholeSubtree(t *testing.T) {
 func TestIndex_SchemaItemsAreNotIndexed(t *testing.T) {
 	g := indexedGraph()
 
-	db := &DBInstanceNode{ID: "db-1", URI: "db-1-uri", FolderID: "root", WorkspaceID: "ws-1"}
-	db.AddChild(&DBInstanceItemNode{ID: "public", ParentID: "db-1"})
+	db := &DatasourceNode{ID: "db-1", URI: "db-1-uri", FolderID: "root", WorkspaceID: "ws-1"}
+	db.AddChild(&DatasourceItemNode{ID: "public", ParentID: "db-1"})
 	g.attach(db)
 
 	// Schema items are replaced wholesale by a schema load without going
@@ -102,7 +102,7 @@ func TestIndex_SchemaItemsAreNotIndexed(t *testing.T) {
 	if g.lookup("public") != nil {
 		t.Errorf("schema item should not be in the index")
 	}
-	if g.FindDbItemNodeById("db-1", "public") == nil {
-		t.Errorf("schema item should still be reachable through FindDbItemNodeById")
+	if g.FindDatasourceItemNodeById("db-1", "public") == nil {
+		t.Errorf("schema item should still be reachable through FindDatasourceItemNodeById")
 	}
 }

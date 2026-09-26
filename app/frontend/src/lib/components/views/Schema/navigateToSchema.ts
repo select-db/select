@@ -3,15 +3,15 @@ import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 import { get } from 'svelte/store';
 
-export const navigateToSchema = async (dbInstanceId?: string) => {
+export const navigateToSchema = async (datasourceId?: string) => {
 	const workspace = get(workspaceGraphStore);
-	const database = dbInstanceId
-		? (workspace?.db_instances ?? []).find(({ id }) => id === dbInstanceId)
+	const datasource = datasourceId
+		? (workspace?.datasources ?? []).find(({ id }) => id === datasourceId)
 		: undefined;
 
-	addSchemaTab(dbInstanceId, database?.name);
+	addSchemaTab(datasourceId, datasource?.name);
 
-	if (!database) return;
+	if (!datasource) return;
 
-	void loadSchemaIfEmpty(database);
+	void loadSchemaIfEmpty(datasource);
 };

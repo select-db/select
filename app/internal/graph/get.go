@@ -1,13 +1,13 @@
 package graph
 
-// FindDbItemNodeById walks the schema item tree of a DB instance and returns the
+// FindDatasourceItemNodeById walks the schema item tree of a datasource and returns the
 // node with the given ID, or nil if not found.
-func (g *Graph) FindDbItemNodeById(dbInstanceID, nodeID string) *DBInstanceItemNode {
-	dbNode := g.GetDBInstanceNodeByID(dbInstanceID)
+func (g *Graph) FindDatasourceItemNodeById(datasourceID, nodeID string) *DatasourceItemNode {
+	dbNode := g.GetDatasourceNodeByID(datasourceID)
 	if dbNode == nil {
 		return nil
 	}
-	stack := make([]*DBInstanceItemNode, len(dbNode.Children))
+	stack := make([]*DatasourceItemNode, len(dbNode.Children))
 	copy(stack, dbNode.Children)
 	for len(stack) > 0 {
 		node := stack[len(stack)-1]

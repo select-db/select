@@ -11,7 +11,7 @@ func setupGraph() *Graph {
 		Type:        "workspace",
 		Name:        "workspace",
 		Folders:     []*FolderNode{},
-		DBInstances: []*DBInstanceNode{},
+		Datasources: []*DatasourceNode{},
 	}
 	g.WorkspaceGraph.AddChild(&FolderNode{
 		ID:   "root",

@@ -7,7 +7,7 @@ import (
 	"github.com/selectDb/toolkit"
 )
 
-type DBInstanceDTO struct {
+type DatasourceDTO struct {
 	ID  *string `json:"id,omitempty"`
 	URI *string `json:"uri,omitempty"`
 
@@ -16,16 +16,16 @@ type DBInstanceDTO struct {
 	DSN       *string `json:"dsn,omitempty"`
 	Proxified *bool   `json:"proxified,omitempty"`
 
-	SSH *DBInstanceSSHConfig `json:"ssh,omitempty"`
+	SSH *DatasourceSSHConfig `json:"ssh,omitempty"`
 
 	FolderID    *string               `json:"folder_id,omitempty"`
 	WorkspaceID *string               `json:"workspace_id,omitempty"`
-	Children    []*DBInstanceItemNode `json:"children"`
+	Children    []*DatasourceItemNode `json:"children"`
 	Files       []*FileNode           `json:"files,omitempty"`
 	Folders     []*FolderNode         `json:"folders,omitempty"`
 }
 
-type DBInstanceNode struct {
+type DatasourceNode struct {
 	ID   string `json:"id"`
 	URI  string `json:"uri"`
 	Type string `json:"type"`
@@ -35,20 +35,20 @@ type DBInstanceNode struct {
 	DSN       string `json:"dsn"`
 	Proxified bool   `json:"proxified,omitempty"`
 
-	SSH *DBInstanceSSHConfig `json:"ssh,omitempty"`
+	SSH *DatasourceSSHConfig `json:"ssh,omitempty"`
 
 	FolderID    string `json:"folder_id"`
 	WorkspaceID string `json:"workspace_id"`
 
-	Children []*DBInstanceItemNode `json:"children"`
+	Children []*DatasourceItemNode `json:"children"`
 	Files    []*FileNode           `json:"files"`
 	Folders  []*FolderNode         `json:"folders"`
 }
 
-// DBInstanceSSHConfig describes SSH tunneling configuration for a DB instance.
+// DatasourceSSHConfig describes SSH tunneling configuration for a datasource.
 // All sensitive values are expected to be provided via .env variables and
 // referenced using $VAR tokens.
-type DBInstanceSSHConfig struct {
+type DatasourceSSHConfig struct {
 	Enabled    bool   `json:"enabled"`
 	Host       string `json:"host"`
 	Port       int    `json:"port"`
@@ -60,7 +60,7 @@ type DBInstanceSSHConfig struct {
 	HostKey    string `json:"host_key"` // pinned bastion public key
 }
 
-func BuildDBInstanceNode(dbi DBInstanceDTO) *DBInstanceNode {
+func BuildDatasourceNode(dbi DatasourceDTO) *DatasourceNode {
 	folderID := dbi.FolderID
 	if *folderID == "" {
 		folderID = utils.Ptr("root")
@@ -73,7 +73,7 @@ func BuildDBInstanceNode(dbi DBInstanceDTO) *DBInstanceNode {
 
 	children := dbi.Children
 	if children == nil {
-		children = []*DBInstanceItemNode{}
+		children = []*DatasourceItemNode{}
 	}
 	files := dbi.Files
 	if files == nil {
@@ -84,7 +84,7 @@ func BuildDBInstanceNode(dbi DBInstanceDTO) *DBInstanceNode {
 		folders = []*FolderNode{}
 	}
 
-	var sshConfig *DBInstanceSSHConfig
+	var sshConfig *DatasourceSSHConfig
 	if dbi.SSH != nil {
 		ssh := *dbi.SSH
 		// Default port to 22 if not set and SSH is enabled.
@@ -99,10 +99,10 @@ func BuildDBInstanceNode(dbi DBInstanceDTO) *DBInstanceNode {
 		proxified = *dbi.Proxified
 	}
 
-	return &DBInstanceNode{
+	return &DatasourceNode{
 		ID:   *dbi.ID,
 		URI:  *dbi.URI,
-		Type: "db_instance",
+		Type: "datasource",
 
 		Name:      *utils.DefaultIfNil(dbi.Name, ""),
 		DBType:    *utils.DefaultIfNil(dbi.DBType, "postgresql"),
@@ -120,15 +120,15 @@ func BuildDBInstanceNode(dbi DBInstanceDTO) *DBInstanceNode {
 	}
 }
 
-func (dbi *DBInstanceNode) GetIDs() []string {
+func (dbi *DatasourceNode) GetIDs() []string {
 	return []string{dbi.ID, dbi.URI}
 }
 
-func (dbi *DBInstanceNode) GetParentIDs() []string {
+func (dbi *DatasourceNode) GetParentIDs() []string {
 	return []string{dbi.FolderID, dbi.WorkspaceID}
 }
 
-func (dbi *DBInstanceNode) RemoveChildByIDs(IDs []string) bool {
+func (dbi *DatasourceNode) RemoveChildByIDs(IDs []string) bool {
 	for i, child := range dbi.Children {
 		if toolkit.Intersects(child.GetIDs(), IDs) {
 			dbi.Children = slices.Delete(dbi.Children, i, i+1)
@@ -150,7 +150,7 @@ func (dbi *DBInstanceNode) RemoveChildByIDs(IDs []string) bool {
 	return false
 }
 
-func (dbi *DBInstanceNode) GetChildren() []Node {
+func (dbi *DatasourceNode) GetChildren() []Node {
 	nodes := make([]Node, 0, len(dbi.Children)+len(dbi.Files)+len(dbi.Folders))
 	for _, c := range dbi.Children {
 		nodes = append(nodes, c)
@@ -164,9 +164,9 @@ func (dbi *DBInstanceNode) GetChildren() []Node {
 	return nodes
 }
 
-func (dbi *DBInstanceNode) AddChild(n Node) bool {
+func (dbi *DatasourceNode) AddChild(n Node) bool {
 	switch node := n.(type) {
-	case *DBInstanceItemNode:
+	case *DatasourceItemNode:
 		dbi.Children = append(dbi.Children, node)
 	case *FileNode:
 		dbi.Files = append(dbi.Files, node)
