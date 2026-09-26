@@ -117,8 +117,12 @@ func IsCellarDSN(dsn string) bool {
 }
 
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
-// ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
-// Concurrent first queries for one datasource share a single open.
+// Concurrent first queries for one datasource share a single open. Each datasource takes one path:
+//   - SSH: tunnel to the target (sqlite refused), then the dialect's driver on the local port.
+//   - Cellar DSN: the cellar driver, unguarded, since it dials only the configured cellar.
+//   - Server (EnforceOutboundGuard), postgresql or mysql: host checked, then the guarded dialer.
+//   - Server, anything else (a sqlite file, an unparseable DSN): refused.
+//   - Desktop app: the dialect's driver, unguarded.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
 	if dbType == "sqlite" && ssh != nil {
 		return nil, newConfigError("SSH tunneling is not supported for sqlite")
@@ -151,8 +155,6 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		}
 	}
 
-	// The cellar driver dials only the cellar the backend configured, never a
-	// host from the DSN, so the guard has nothing to check.
 	guarded := ssh == nil && EnforceOutboundGuard && !IsCellarDSN(dsn)
 	if guarded {
 		// Proxy: only validated networked dialects may be dialed. Anything we
@@ -169,12 +171,10 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		// Authoritative check is the per-dial IP guard in open (re-runs on the
 		// real resolved IP), so rebinding is caught
 	}
-	// Guard off: the desktop app dialing the user's own machine, incl. a local
-	// sqlite file, or a cellar DSN, which open hands to the cellar driver.
 	return getOrOpen(workspaceID, dbType, dsn, guarded, pool...)
 }
 
-// GetOrOpenTrusted is GetOrOpenConn without the outbound guard, for a DSN the
+// GetOrOpenTrusted opens with the dialect's driver, unguarded, for a DSN the
 // caller built itself and never one a user supplied: a cellar's own files.
 func GetOrOpenTrusted(workspaceID, dbType, dsn string, pool ...PoolConfig) (*sql.DB, error) {
 	return getOrOpen(workspaceID, dbType, dsn, false, pool...)
