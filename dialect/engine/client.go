@@ -83,7 +83,7 @@ func (client *Client) Execute(
 			return &Result{Errors: []string{err.Error()}}
 		}
 		result := &Result{}
-		drainStreamFull(stream, result)
+		drainStreamInto(stream, resultSink{result})
 		return result
 	}
 
@@ -156,37 +156,4 @@ func (client *Client) DumpSchema(ctx context.Context, instance DBInstance, works
 // Cancel aborts in-flight query under key. No-op if absent.
 func (client *Client) Cancel(key string) {
 	Cancel(key)
-}
-
-// drainStreamFull reads all rows into result. Used by Execute (non-streaming callers).
-func drainStreamFull(stream RowStream, result *Result) {
-	defer func() { _ = stream.Close() }()
-
-	columns, err := stream.Columns()
-	if err != nil {
-		result.Errors = []string{err.Error()}
-		return
-	}
-
-	result.Columns = columns
-
-	for {
-		values, ok, err := stream.Next()
-		if err != nil {
-			result.Errors = append(result.Errors, err.Error())
-			break
-		}
-		if !ok {
-			break
-		}
-		result.Rows = append(result.Rows, values)
-	}
-
-	rowCount, affected, durationMs, err := stream.Summary()
-	if err != nil {
-		result.Errors = append(result.Errors, err.Error())
-	}
-	result.RowCount = int(rowCount)
-	result.AffectedRows = affected
-	result.DurationMs = durationMs
 }

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
@@ -107,9 +108,14 @@ func (s *streamingSink) OnError(err error) {
 	if err == nil {
 		return
 	}
-	s.result.Fail(err.Error(), nil)
+	var position *int
+	var qe *QueryError
+	if errors.As(err, &qe) {
+		position = qe.Position
+	}
+	s.result.Fail(err.Error(), position)
 	if s.listener != nil {
-		s.listener.OnError(err.Error(), nil)
+		s.listener.OnError(err.Error(), position)
 	}
 }
 
@@ -133,7 +139,7 @@ func drainStreamInto(stream RowStream, sink RowSink) {
 	// implement nothing.
 	if e, ok := stream.(interface{ Executed() int64 }); ok {
 		if executed := e.Executed(); executed > 0 {
-			if n, ok := sink.(interface{ OnExecuted(int64) }); ok {
+			if n, ok := sink.(executedSink); ok {
 				n.OnExecuted(executed)
 			}
 		}
