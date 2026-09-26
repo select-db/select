@@ -283,11 +283,11 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 	tested := slices.Concat(stmt.Where, reachingOut(stmt, nil))
 	// A derived table or a CTE reports its tables up onto the read above it
 	// without the columns that scope them, so a table no scoping field names
-	// may still be named one hop down. A write's nested read is not merged in
-	// that way, and its own tables are the ones it writes.
-	var nested []InspectField
+	// may still be named one hop down. A write's tables are the ones it writes,
+	// which no nested read scopes.
+	var nestedScoping []InspectField
 	if action == ActionSelect {
-		nested = nestedFields(stmt, nil)
+		nestedScoping = nestedFields(stmt, nil)
 	}
 	for _, table := range stmt.Tables {
 		if table.Schema == "" {
@@ -315,7 +315,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 		if !named {
 			// Asking for the whole table where a nested read named a column of
 			// it refuses a column grant that answers that read itself.
-			for _, field := range nested {
+			for _, field := range nestedScoping {
 				if !fieldOf(field, table) {
 					continue
 				}
@@ -360,10 +360,14 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 
 // nestedFields are every column a statement's nested reads name, at any depth.
 // Each is one the nested read is checked for on its own, so scoping a table of
-// the statement above by them demands nothing the statement did not need.
+// the statement above by them demands nothing the statement did not need. Only
+// a select contributes its projection: the fields of a write are the columns it
+// writes, and a column written is no column read.
 func nestedFields(stmt InspectStatement, into []InspectField) []InspectField {
 	for _, nested := range slices.Concat(stmt.Subqueries, stmt.Also) {
-		into = append(into, nested.Fields...)
+		if nested.Operation == InspectOpSelect {
+			into = append(into, nested.Fields...)
+		}
 		into = append(into, nested.Where...)
 		into = nestedFields(nested, into)
 	}
