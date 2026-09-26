@@ -70,29 +70,34 @@ def _qualified(table: exp.Table, default_schema: str) -> tuple[str, str]:
     return (table.db or default_schema).lower(), table.name.lower()
 
 
-def _may_already_exist(create: exp.Create) -> bool:
-    """True when the statement itself says the name may be taken already.
+def _create_target(stmt: exp.Expression) -> exp.Table | None:
+    """The table a CREATE defines, or None for any other statement.
 
-    IF NOT EXISTS and OR REPLACE write it into the SQL, and a temporary table
-    shadows a permanent one of the same name on all three dialects.
+    A definition site is not a reference, so the catalog lookup is inverted on
+    it: absent is the correct case, present is the mistake.
     """
-    return bool(create.args.get("exists") or create.args.get("replace")
-                or create.find(exp.TemporaryProperty))
+    if not isinstance(stmt, exp.Create):
+        return None
+    target = stmt.this
+    if isinstance(target, exp.Schema):  # CREATE TABLE t (cols), as against AS SELECT
+        target = target.this
+    return target if isinstance(target, exp.Table) else None
 
 
-def names_freed(stmt: exp.Expression, default_schema: str) -> set[tuple[str, str]]:
-    """The names this statement leaves free for a later CREATE of the same name.
+def names_changed(stmt: exp.Expression, default_schema: str) -> dict[tuple[str, str], bool]:
+    """Which names this statement adds to the catalog, and which it takes out.
 
-    A DROP releases the names it drops and a rename releases the one it renames
-    away from. Both are statement roots, so nothing here walks a whole tree.
+    A CREATE of a name an earlier statement freed is valid, and a CREATE of one
+    an earlier statement took is the mistake R001 reports.
     """
+    changed: list[tuple[exp.Expression, bool]] = []
     if isinstance(stmt, exp.Drop):
-        freed = stmt.find_all(exp.Table)  # one DROP may name several tables
-    elif isinstance(stmt, exp.Alter) and stmt.find(exp.AlterRename):
-        freed = [stmt.this]
-    else:
-        return set()
-    return {_qualified(t, default_schema) for t in freed
+        changed = [(t, False) for t in stmt.find_all(exp.Table)]  # a DROP may name several
+    elif isinstance(stmt, exp.Alter) and (rename := stmt.find(exp.AlterRename)):
+        changed = [(stmt.this, False), (rename.this, True)]
+    elif (target := _create_target(stmt)) is not None:
+        changed = [(target, True)]
+    return {_qualified(t, default_schema): exists for t, exists in changed
             if isinstance(t, exp.Table) and t.name and not t.catalog}
 
 
@@ -101,7 +106,7 @@ def analyze_unknown_tables(
     schema_dict: dict,
     default_schema: str,
     virtual_names: set[str],
-    freed_names: set[tuple[str, str]],
+    buffer_names: dict[tuple[str, str], bool],
 ) -> list[dict]:
     """R001, names that disagree with the schema, in either direction.
 
@@ -114,6 +119,7 @@ def analyze_unknown_tables(
     results = []
     known = {s.lower(): {t.lower() for t in tables} for s, tables in schema_dict.items()}
     delete_targets = _delete_target_bindings(stmt)
+    create_target = _create_target(stmt)
 
     for table in stmt.find_all(exp.Table):
         schema_name, name = _qualified(table, default_schema)
@@ -137,21 +143,22 @@ def analyze_unknown_tables(
         if known_tables is None:
             continue  # schema not loaded, can't validate
 
-        # The target of a CREATE is a definition, not a reference, so the
-        # lookup is inverted on it: absent is correct, present is the mistake.
-        create = table.parent
-        if isinstance(create, exp.Schema):  # CREATE TABLE t (cols), as against AS SELECT
-            create = create.parent
-
-        if not isinstance(create, exp.Create):
+        if table is not create_target:
+            # A reference resolves against the catalog alone: whether an earlier
+            # CREATE in the buffer ever ran is not knowable from here.
             if name not in known_tables:
                 results.append(_table_diag(
                     "unknown-table", table, f"unknown table or view {table.name!r}"))
             continue
 
-        if name in known_tables and not _may_already_exist(create) \
-                and (schema_name, name) not in freed_names:
-            kind = (create.args.get("kind") or "table").lower()
+        # IF NOT EXISTS and OR REPLACE write into the SQL that the name may be
+        # taken, and a temporary table shadows a permanent one of the same name.
+        properties = stmt.args.get("properties")
+        redefinable = (stmt.args.get("exists") or stmt.args.get("replace")
+                       or (properties is not None and properties.find(exp.TemporaryProperty)))
+
+        if buffer_names.get((schema_name, name), name in known_tables) and not redefinable:
+            kind = (stmt.args.get("kind") or "table").lower()
             qualified = f"{schema_name}.{table.name}"
             results.append(_table_diag(
                 "table-already-exists", table, f"{kind} {qualified!r} already exists"))

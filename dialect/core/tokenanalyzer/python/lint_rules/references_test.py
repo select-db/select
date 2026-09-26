@@ -1337,6 +1337,17 @@ class TestTableAlreadyExists:
         sql = "DROP TABLE t1; CREATE TABLE t1 (c1 integer)"
         assert _diags(_ddl(sql), "table-already-exists") == []
 
+    def test_second_create_of_the_same_new_name_flagged(self):
+        # t9 is not in the catalog, so only the buffer can say the name is taken.
+        sql = "CREATE TABLE t9 (c1 integer); CREATE TABLE t9 (c1 integer)"
+        diags = _diags(_ddl(sql), "table-already-exists")
+        assert len(diags) == 1
+        assert diags[0]["start_col"] == 43
+
+    def test_create_of_a_renamed_to_name_flagged(self):
+        sql = "ALTER TABLE t1 RENAME TO t9; CREATE TABLE t9 (c1 integer)"
+        assert len(_diags(_ddl(sql), "table-already-exists")) == 1
+
     def test_renamed_away_earlier_in_the_buffer_not_flagged(self):
         sql = "ALTER TABLE t1 RENAME TO t9; CREATE TABLE t1 (c1 integer)"
         assert _diags(_ddl(sql), "table-already-exists") == []

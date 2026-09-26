@@ -25,7 +25,7 @@ from lint_rules.references import (
     analyze_unknown_columns,
     analyze_unknown_tables,
     analyze_update_columns,
-    names_freed,
+    names_changed,
 )
 from analysis.schema import build_schema, collect_virtual_names, sqlglot_dialect_name
 from lint_rules.structure import (
@@ -182,9 +182,9 @@ def analyze(
 
     user_agg_names: set[str] = user_functions
 
-    # Recreating a name an earlier statement of the buffer frees is valid, so
-    # R001 needs what the statements before this one freed.
-    freed_names: set[tuple[str, str]] = set()
+    # A CREATE is read against what the statements before it left behind, so
+    # R001 needs the names they added and removed.
+    buffer_names: dict[tuple[str, str], bool] = {}
 
     for stmt in statements:
         if stmt is None:
@@ -206,8 +206,8 @@ def analyze(
         _add(analyze_aggregation_rules(stmt, user_agg_names))
         _add(analyze_orderby_rules(stmt, sg_dialect))
 
-        _add(analyze_unknown_tables(stmt, schema_dict, default_schema, virtual_names, freed_names))
-        freed_names |= names_freed(stmt, default_schema)
+        _add(analyze_unknown_tables(stmt, schema_dict, default_schema, virtual_names, buffer_names))
+        buffer_names.update(names_changed(stmt, default_schema))
         _add(analyze_unknown_columns(scopes, schema_dict, default_schema, sg_dialect))
         _add(analyze_update_columns(stmt, schema_dict, default_schema))
         _add(analyze_insert_columns(stmt, schema_dict, default_schema))
