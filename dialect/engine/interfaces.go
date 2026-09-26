@@ -8,7 +8,7 @@ import (
 )
 
 // Conn is an open database and the rules a statement on it is checked against.
-// Empty Conn{} for proxified queries (remote handles everything).
+// A proxied datasource passes an empty Conn: the remote server holds all of it.
 type Conn struct {
 	DB    *sql.DB
 	Meta  *core.Metadata

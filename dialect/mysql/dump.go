@@ -13,7 +13,7 @@ func (d *Dialect) DumpSchema(dsn string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	user, pass, host, port, dbname, ok := connParams(dsn)
+	user, pass, host, port, dbname, ok := d.connParams(dsn)
 	if !ok {
 		return "", false
 	}

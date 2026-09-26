@@ -1,23 +1,26 @@
 package mysql
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 )
 
-// A go-sql-driver DSN: [user[:password]@][net[(addr)]]/db[?params].
+// A go-sql-driver DSN is [user[:password]@][net[(addr)]]/db[?params].
+
+var errNoTCPAddr = errors.New("mysql dsn missing @tcp(...) segment")
 
 // DSNHost returns the host and port in the DSN's @tcp(...) address.
 func (d *Dialect) DSNHost(dsn string) (string, int, error) {
-	s, e, ok := addrBounds(dsn)
+	start, end, ok := addrBounds(dsn)
 	if !ok {
-		return "", 0, fmt.Errorf("mysql dsn missing @tcp(...) segment")
+		return "", 0, errNoTCPAddr
 	}
-	host, portStr, err := net.SplitHostPort(dsn[s:e])
+	host, portStr, err := net.SplitHostPort(dsn[start:end])
 	if err != nil {
-		host = dsn[s:e]
+		host = dsn[start:end]
 		portStr = "3306"
 	}
 	port, err := net.LookupPort("tcp", portStr)
@@ -29,11 +32,11 @@ func (d *Dialect) DSNHost(dsn string) (string, int, error) {
 
 // DSNWithHost returns dsn pointed at host:port.
 func (d *Dialect) DSNWithHost(dsn, host string, port int) (string, error) {
-	s, e, ok := addrBounds(dsn)
+	start, end, ok := addrBounds(dsn)
 	if !ok {
-		return "", fmt.Errorf("mysql dsn missing @tcp(...) segment")
+		return "", errNoTCPAddr
 	}
-	return dsn[:s] + net.JoinHostPort(host, strconv.Itoa(port)) + dsn[e:], nil
+	return dsn[:start] + net.JoinHostPort(host, strconv.Itoa(port)) + dsn[end:], nil
 }
 
 // DSNPassword returns the password in dsn, or "" when it holds none.
@@ -77,33 +80,27 @@ func addrBounds(dsn string) (start, end int, ok bool) {
 	if m < 0 {
 		return 0, 0, false
 	}
-	s := m + len(addrMarker)
-	e := strings.IndexByte(dsn[s:], ')')
-	if e < 0 {
+	start = m + len(addrMarker)
+	n := strings.IndexByte(dsn[start:], ')')
+	if n < 0 {
 		return 0, 0, false
 	}
-	return s, s + e, true
+	return start, start + n, true
 }
 
-// connParams extracts user/pass/host/port/dbname from a go-sql-driver
-// DSN: user:pass@tcp(host:port)/dbname[?params].
-func connParams(dsn string) (user, pass, host, port, dbname string, ok bool) {
-	user, pass, _, _ = splitCreds(dsn)
-	s, e, found := addrBounds(dsn)
-	if !found {
+// connParams returns the parts of dsn mysqldump takes as arguments. ok is
+// false without a user, a host or a dbname.
+func (d *Dialect) connParams(dsn string) (user, pass, host, port, dbname string, ok bool) {
+	h, p, err := d.DSNHost(dsn)
+	if err != nil {
 		return "", "", "", "", "", false
 	}
-	addr := dsn[s:e]
-	if c := strings.LastIndexByte(addr, ':'); c >= 0 {
-		host, port = addr[:c], addr[c+1:]
-	} else {
-		host, port = addr, "3306"
+	host, port = h, strconv.Itoa(p)
+	user, pass, _, _ = splitCreds(dsn)
+	_, end, _ := addrBounds(dsn)
+	dbname = strings.TrimPrefix(dsn[end+1:], "/")
+	if q := strings.IndexByte(dbname, '?'); q >= 0 {
+		dbname = dbname[:q]
 	}
-	after := strings.TrimPrefix(dsn[e+1:], "/")
-	if q := strings.IndexByte(after, '?'); q >= 0 {
-		after = after[:q]
-	}
-	dbname = after
-	ok = user != "" && host != "" && dbname != ""
-	return
+	return user, pass, host, port, dbname, user != "" && host != "" && dbname != ""
 }

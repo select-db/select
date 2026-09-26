@@ -62,7 +62,7 @@ func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, op
 			}
 		}
 		// The query's error, the more useful one for a SELECT-shaped statement.
-		sink.OnError(newQueryError(ctx, err))
+		sink.OnError(toQueryError(ctx, err))
 		return
 	}
 	defer func() { _ = rows.Close() }()
@@ -95,7 +95,7 @@ func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, op
 	var rowCount, bytesScanned int64
 	for rows.Next() {
 		if ctx.Err() != nil {
-			sink.OnError(newQueryError(ctx, ctx.Err()))
+			sink.OnError(toQueryError(ctx, ctx.Err()))
 			return
 		}
 		if opts.MaxRows > 0 && rowCount >= int64(opts.MaxRows) {
@@ -134,7 +134,7 @@ func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, op
 		rowCount++
 	}
 	if err := rows.Err(); err != nil {
-		sink.OnError(newQueryError(ctx, err))
+		sink.OnError(toQueryError(ctx, err))
 		return
 	}
 	if err := sink.OnDone(rowCount, 0, durationMs); err != nil {
@@ -166,10 +166,7 @@ func (s resultSink) OnDone(rowCount, affected, durationMs int64) error {
 func (s resultSink) OnError(err error) {
 	s.result.Rows, s.result.RowCount = nil, 0
 	s.result.Errors = []string{err.Error()}
-	var qe *QueryError
-	if errors.As(err, &qe) {
-		s.result.ErrorPosition = qe.Position
-	}
+	s.result.ErrorPosition = errorPosition(err)
 }
 
 func effectiveMaxBytes(opts Options) int64 {
@@ -233,34 +230,43 @@ func applyMask(values []any, maskPositions []int) {
 	}
 }
 
-// QueryError is a statement the database refused, with the 1-based character
+// queryError is a statement the database refused, with the 1-based character
 // offset it reported, when it did.
-type QueryError struct {
-	Message  string
-	Position *int
+type queryError struct {
+	message  string
+	position *int
 }
 
-func (e *QueryError) Error() string {
-	return e.Message
+func (e *queryError) Error() string {
+	return e.message
 }
 
-// newQueryError words err for the user. ctx.Err() takes precedence: drivers
+// errorPosition returns where in the statement err occurred, or nil.
+func errorPosition(err error) *int {
+	var qe *queryError
+	if errors.As(err, &qe) {
+		return qe.position
+	}
+	return nil
+}
+
+// toQueryError words err for the user. ctx.Err() takes precedence: drivers
 // often wrap it in their own type.
-func newQueryError(ctx context.Context, err error) *QueryError {
+func toQueryError(ctx context.Context, err error) *queryError {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		err = ctxErr
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return &QueryError{Message: "query timed out, raise the statement timeout in the workspace settings"}
+		return &queryError{message: "query timed out, raise the statement timeout in the workspace settings"}
 	}
 	if errors.Is(err, context.Canceled) {
-		return &QueryError{Message: "query was cancelled"}
+		return &queryError{message: "query was cancelled"}
 	}
-	qe := &QueryError{Message: err.Error()}
+	qe := &queryError{message: err.Error()}
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) && pqErr.Position != "" {
 		if pos, parseErr := strconv.Atoi(pqErr.Position); parseErr == nil && pos > 0 {
-			qe.Position = &pos
+			qe.position = &pos
 		}
 	}
 	return qe
