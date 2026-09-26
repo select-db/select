@@ -1,4 +1,4 @@
-package engine
+package query
 
 import (
 	"context"
@@ -57,10 +57,10 @@ func compileFor(dbID string, entries ...core.PermissionEntry) core.CompiledPermi
 }
 
 func runQuery(ctx context.Context, conn Conn, sql string) *Result {
-	return ExecuteLocal(ctx, conn, DBInstance{ID: "db1", DBType: "sqlite"}, sql, Options{})
+	return Execute(ctx, conn, DBInstance{ID: "db1", DBType: "sqlite"}, sql, Options{})
 }
 
-func TestExecuteLocalMasksSeeDeniedColumn(t *testing.T) {
+func TestExecuteMasksSeeDeniedColumn(t *testing.T) {
 	db, meta := setupUsersDB(t)
 	conn := Conn{
 		DB:   db,
@@ -95,7 +95,7 @@ func TestExecuteLocalMasksSeeDeniedColumn(t *testing.T) {
 	}
 }
 
-func TestExecuteLocalMasksNullInSeeDeniedColumn(t *testing.T) {
+func TestExecuteMasksNullInSeeDeniedColumn(t *testing.T) {
 	db, meta := setupUsersDB(t)
 	// a see-denied cell that is NULL must still mask, or its emptiness leaks
 	if _, err := db.Exec(`INSERT INTO users VALUES (3,'carol@example.com',NULL)`); err != nil {
@@ -124,7 +124,7 @@ func TestExecuteLocalMasksNullInSeeDeniedColumn(t *testing.T) {
 	}
 }
 
-func TestExecuteLocalSchemaDriftFailsClosed(t *testing.T) {
+func TestExecuteSchemaDriftFailsClosed(t *testing.T) {
 	db, meta := setupUsersDB(t)
 	// Lie about the schema: rename email to "secret" in metadata. The
 	// inspector will produce Output[1].Column = "secret", but the driver
@@ -149,7 +149,7 @@ func TestExecuteLocalSchemaDriftFailsClosed(t *testing.T) {
 	}
 }
 
-func TestExecuteLocalNoSeeRulesNoMasking(t *testing.T) {
+func TestExecuteNoSeeRulesNoMasking(t *testing.T) {
 	db, meta := setupUsersDB(t)
 	conn := Conn{
 		DB:   db,

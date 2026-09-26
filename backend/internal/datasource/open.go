@@ -14,6 +14,7 @@ import (
 	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // genericConnErr is returned to clients for any datasource connection
@@ -28,8 +29,8 @@ var ErrNotFound = errors.New("datasource not found")
 type Opened struct {
 	ID, WorkspaceID string
 	DS              *ResolvedDatasource
-	Conn            engine.Conn
-	Inst            engine.DBInstance
+	Conn            query.Conn
+	Inst            query.DBInstance
 }
 
 // Open resolves the datasource id for the request's caller. Errors go through
@@ -47,8 +48,8 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 		ID:          id,
 		WorkspaceID: workspaceID,
 		DS:          ds,
-		Conn:        engine.Conn{DB: db, Perms: authz.Perms(r)},
-		Inst:        engine.DBInstance{ID: id, DBType: ds.DBType},
+		Conn:        query.Conn{DB: db, Perms: authz.Perms(r)},
+		Inst:        query.DBInstance{ID: id, DBType: ds.DBType},
 	}, nil
 }
 
@@ -62,7 +63,7 @@ func (o *Opened) Metadata(ctx context.Context, noCache bool) (*core.Metadata, er
 }
 
 // Stream runs sql into sink, checked against the caller's permissions.
-func (o *Opened) Stream(ctx context.Context, sql string, opts engine.Options, sink engine.RowSink) {
+func (o *Opened) Stream(ctx context.Context, sql string, opts query.Options, sink query.RowSink) {
 	conn := o.Conn
 	meta, err := o.Metadata(ctx, false)
 	if err != nil {
@@ -73,7 +74,7 @@ func (o *Opened) Stream(ctx context.Context, sql string, opts engine.Options, si
 		return
 	}
 	conn.Meta = meta
-	engine.StreamLocal(ctx, conn, o.Inst, sql, opts, sink)
+	query.Stream(ctx, conn, o.Inst, sql, opts, sink)
 }
 
 // OpenError answers a request whose datasource could not be opened or reached.

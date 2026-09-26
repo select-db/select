@@ -1,4 +1,4 @@
-package engine
+package query
 
 import "time"
 
@@ -83,5 +83,5 @@ type Result struct {
 	// 1-based character offset, when the driver reports a syntax position.
 	ErrorPosition *int
 	Page          int
-	PageSize int
+	PageSize      int
 }

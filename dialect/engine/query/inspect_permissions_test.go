@@ -1,4 +1,4 @@
-package engine
+package query
 
 import (
 	"testing"
@@ -45,7 +45,7 @@ func TestInspect_BlankSQLStaysEmpty(t *testing.T) {
 }
 
 // A dialect registered from outside this module is not one this package can
-// audit, so engine.Inspect puts a floor under an empty result rather than
+// audit, so query.Inspect puts a floor under an empty result rather than
 // trusting every implementation to have read the contract.
 func TestInspect_ForeignDialectCannotReturnNothing(t *testing.T) {
 	dialects.Register("silent-test-dialect", silentDialect{})

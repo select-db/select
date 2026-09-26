@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 type QuerySchemaParams struct {
@@ -148,7 +148,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 	// The graph is already updated and the schema tree is visible at this point.
 	noCache := queryParams.NoCache
 	go func() {
-		inst := engine.DBInstance{
+		inst := query.DBInstance{
 			ID:        dbInstance.ID,
 			DBType:    dbInstance.DBType,
 			Proxified: dbInstance.Proxified,

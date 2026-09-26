@@ -15,6 +15,7 @@ import (
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/engine/query"
 	"github.com/selectDb/dialect/engine/transport"
 )
 
@@ -90,10 +91,10 @@ func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, ss
 }
 
 // getEngineConn returns Conn with DB for local, empty Conn{} for proxified.
-func (dbc *DbClient) getEngineConn(node *graph.DBInstanceNode) (engine.Conn, error) {
+func (dbc *DbClient) getEngineConn(node *graph.DBInstanceNode) (query.Conn, error) {
 	if node.Proxified {
 		// Return empty conn, remote will GetOrOpenConn conn
-		return engine.Conn{}, nil
+		return query.Conn{}, nil
 	}
 
 	db, err := dbc.GetOrOpenConn(
@@ -104,9 +105,9 @@ func (dbc *DbClient) getEngineConn(node *graph.DBInstanceNode) (engine.Conn, err
 		node.SSH,
 	)
 	if err != nil {
-		return engine.Conn{}, err
+		return query.Conn{}, err
 	}
-	return engine.Conn{DB: db}, nil
+	return query.Conn{DB: db}, nil
 }
 
 // getStatementTimeout returns the workspace statement_timeout_ms. Falls back to 30s.
@@ -133,7 +134,7 @@ func (dbc *DbClient) getCachedMetadata(node *graph.DBInstanceNode, noCache bool)
 		return nil, err
 	}
 
-	inst := engine.DBInstance{
+	inst := query.DBInstance{
 		ID:        node.ID,
 		DBType:    node.DBType,
 		Proxified: node.Proxified,

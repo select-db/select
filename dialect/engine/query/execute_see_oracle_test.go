@@ -1,4 +1,4 @@
-package engine
+package query
 
 import (
 	"context"
@@ -159,7 +159,7 @@ var oracleShapes = []string{
 // necessarily as a value, since a row count, a row order or which rows came
 // back says as much, one answer at a time. Masking cannot catch those, which
 // is why the check refuses rather than masks.
-func TestExecuteLocalAnswersNothingAboutAHiddenColumn(t *testing.T) {
+func TestExecuteAnswersNothingAboutAHiddenColumn(t *testing.T) {
 	perms := testutil.GetSeeTestPermissions()
 	observe := func(sql, first, second string) testutil.SeeAnswer {
 		db, meta, err := testutil.SeeOracleDB(first, second)

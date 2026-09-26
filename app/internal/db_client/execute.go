@@ -11,7 +11,7 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 type executeParams struct {
@@ -24,8 +24,8 @@ type executeParams struct {
 }
 
 type prepared struct {
-	conn       engine.Conn
-	instance   engine.DBInstance
+	conn       query.Conn
+	instance   query.DBInstance
 	dbInstance *graph.DBInstanceNode
 	statement  string
 	timeout    time.Duration
@@ -40,7 +40,7 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 		return nil, fmt.Errorf("failed to get DB instance with id: %s", params.DbInstanceID)
 	}
 
-	instance := engine.DBInstance{
+	instance := query.DBInstance{
 		ID:        dbInstance.ID,
 		DBType:    dbInstance.DBType,
 		Proxified: dbInstance.Proxified,
@@ -84,10 +84,10 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 
 // execute runs the statement to completion and returns a buffered Result.
 // Used by callers that need the full row set up front (Export, Explain, Plan).
-func (dbc *DbClient) execute(params executeParams) (*engine.Result, *graph.DBInstanceNode) {
+func (dbc *DbClient) execute(params executeParams) (*query.Result, *graph.DBInstanceNode) {
 	p, err := dbc.prepare(params)
 	if err != nil {
-		return &engine.Result{Errors: []string{err.Error()}}, nil
+		return &query.Result{Errors: []string{err.Error()}}, nil
 	}
 
 	// HTTP context gets +10s margin so the backend's DB timeout fires first.
@@ -100,7 +100,7 @@ func (dbc *DbClient) execute(params executeParams) (*engine.Result, *graph.DBIns
 		p.instance,
 		p.dbInstance.WorkspaceID,
 		p.statement,
-		engine.Options{
+		query.Options{
 			ForExport: params.ForExport,
 			MaxBytes:  p.maxBytes,
 			Timeout:   p.timeout,
@@ -117,7 +117,7 @@ func (dbc *DbClient) execute(params executeParams) (*engine.Result, *graph.DBIns
 // computeColumnEditMeta returns per-column editability metadata for the
 // resolved statement. Returns nil when metadata is missing or the statement
 // is not a SELECT.
-func (dbc *DbClient) computeColumnEditMeta(dbInstance *graph.DBInstanceNode, statement string) []engine.ColumnEditMeta {
+func (dbc *DbClient) computeColumnEditMeta(dbInstance *graph.DBInstanceNode, statement string) []query.ColumnEditMeta {
 	meta, _ := dbc.getCachedMetadata(dbInstance, false)
 	if meta == nil {
 		return nil
@@ -126,10 +126,10 @@ func (dbc *DbClient) computeColumnEditMeta(dbInstance *graph.DBInstanceNode, sta
 	if dialect == nil {
 		return nil
 	}
-	inspected := engine.Inspect(dialect, meta, statement)
-	stmt, ok := engine.FirstSelectStatement(inspected)
+	inspected := query.Inspect(dialect, meta, statement)
+	stmt, ok := query.FirstSelectStatement(inspected)
 	if !ok {
 		return nil
 	}
-	return engine.AnalyzeEditableColumns(meta, stmt, dbInstance.ID)
+	return query.AnalyzeEditableColumns(meta, stmt, dbInstance.ID)
 }

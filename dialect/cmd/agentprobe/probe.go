@@ -11,7 +11,7 @@ import (
 	"github.com/selectDb/dialect/core/testutil"
 	"github.com/selectDb/dialect/core/tokenanalyzer"
 	"github.com/selectDb/dialect/dialects"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // Case is one input line of a batch. ID is echoed back so a caller can join
@@ -70,7 +70,7 @@ type Statement struct {
 	Also       []Statement `json:"also,omitempty"`
 }
 
-// Permissions is what the checker decided, measured through engine.Inspect so
+// Permissions is what the checker decided, measured through query.Inspect so
 // the unknown-statement floor applies as it does in production.
 //
 // Needs is built by starting from a policy granting nothing and adding each
@@ -138,7 +138,7 @@ func (p prober) probe(probeCase Case) Result {
 			result.Completion = result.Completion[:p.completionLimit]
 		}
 	}
-	statements := engine.Inspect(dialect, &p.meta, sqlText)
+	statements := query.Inspect(dialect, &p.meta, sqlText)
 	result.Inspect = convertStatements(statements)
 	result.Permissions = measurePermissions(statements)
 	if p.raw {

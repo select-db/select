@@ -5,8 +5,10 @@ import (
 
 	"selectDb/internal/graph"
 
-	"github.com/selectDb/dialect/engine"
 	"selectDb/internal/desktop"
+
+	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // queryStartedEvent is the payload of "query:started". The frontend uses it
@@ -72,7 +74,7 @@ type queryEventListener struct {
 	cancelTimer  context.CancelFunc
 }
 
-func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.ColumnEditMeta) {
+func (l *queryEventListener) OnStart(columns []string, columnEditMeta []query.ColumnEditMeta) {
 	// Columns came back, so the database answered. Reported here and not where
 	// the stream is kicked off: Stream returns before any I/O happens, and a
 	// query against an unreachable database would have claimed it was up.
