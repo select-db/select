@@ -26,7 +26,7 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
 ```
 
 1. A managed datasource is a DSN, `cellar://<cellar id>/<datasource id>`,
-   opened by `engine.GetOrOpenConn` like any other. The backend checks
+   opened by `connect.GetOrOpen` like any other. The backend checks
    permissions and masks columns as for every datasource.
 2. The `cellar` database/sql driver sends each statement to the cellar with a
    service token and the grant (workspace, limits) in headers.

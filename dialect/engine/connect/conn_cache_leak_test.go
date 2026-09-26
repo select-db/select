@@ -1,4 +1,4 @@
-package engine
+package connect
 
 import (
 	"database/sql"
@@ -11,8 +11,13 @@ import (
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
-	_ "modernc.org/sqlite"
+	sqlitedriver "modernc.org/sqlite"
 )
+
+// The sqlite dialect opens the "sqlite3" driver, which the host program registers.
+func init() {
+	sql.Register("sqlite3", &sqlitedriver.Driver{})
+}
 
 // countingDialect wraps a real dialect and counts opens, so a test can assert
 // how many pools were actually dialed rather than how many survived.
@@ -40,12 +45,12 @@ func openTestPool(t *testing.T, name string) *sql.DB {
 	return db
 }
 
-// getConn and setConn reach the connection cache the way GetOrOpenConn does,
+// getConn and setConn reach the connection cache the way GetOrOpen does,
 // without opening anything. Production goes through connCache.GetOrCreate, so
 // these live here rather than in the package: the tests need to place a pool
 // under a key and read it back to exercise the deletion paths.
 func getConn(workspaceID, dsn string) (*sql.DB, bool) {
-	value, ok := connCache.Get(workspaceCacheKey(workspaceID, dsn))
+	value, ok := connCache.Get(WorkspaceCacheKey(workspaceID, dsn))
 	if !ok {
 		return nil, false
 	}
@@ -55,7 +60,7 @@ func getConn(workspaceID, dsn string) (*sql.DB, bool) {
 // setConn writes the index after the cache, because replacing an entry fires
 // closeDeletedPool for the old value and that clears the index for this hash.
 func setConn(workspaceID, dsn string, db *sql.DB) {
-	hash := workspaceCacheKey(workspaceID, dsn)
+	hash := WorkspaceCacheKey(workspaceID, dsn)
 	connCache.Set(hash, db)
 	indexConn(hash, dsn)
 }
@@ -82,7 +87,7 @@ func TestDeletedPoolIsClosed(t *testing.T) {
 		t.Fatal("pool closed while still cached")
 	}
 
-	connCache.Delete(workspaceCacheKey("ws1", "dsn-deleted"))
+	connCache.Delete(WorkspaceCacheKey("ws1", "dsn-deleted"))
 
 	deadline := time.Now().Add(2 * time.Second)
 	for !poolIsClosed(db) {
@@ -103,7 +108,7 @@ func TestDeletionClearsDSNIndex(t *testing.T) {
 
 	db := openTestPool(t, "indexed")
 	setConn("ws1", "dsn-indexed", db)
-	hash := workspaceCacheKey("ws1", "dsn-indexed")
+	hash := WorkspaceCacheKey("ws1", "dsn-indexed")
 
 	connHashToDSNMu.Lock()
 	_, present := connHashToDSN[hash]
@@ -123,7 +128,7 @@ func TestDeletionClearsDSNIndex(t *testing.T) {
 }
 
 // TestReplacingAPoolClosesTheOldOne: storing a second pool under a live key
-// must close the one it displaces rather than drop the reference. GetOrOpenConn
+// must close the one it displaces rather than drop the reference. GetOrOpen
 // no longer produces that case itself — see TestConcurrentFirstQueriesOpenOnePool
 // — but Set is public and a redial after a tunnel drop lands here.
 func TestReplacingAPoolClosesTheOldOne(t *testing.T) {
@@ -162,7 +167,7 @@ func TestGracePeriodProtectsAnInFlightCaller(t *testing.T) {
 	setConn("ws1", "dsn-inflight", db)
 
 	handed, _ := getConn("ws1", "dsn-inflight")
-	connCache.Delete(workspaceCacheKey("ws1", "dsn-inflight"))
+	connCache.Delete(WorkspaceCacheKey("ws1", "dsn-inflight"))
 
 	// The caller starts its query after the deletion, inside the grace window.
 	time.Sleep(100 * time.Millisecond)
@@ -188,7 +193,7 @@ func TestNoGoroutineLeakAcrossDeletions(t *testing.T) {
 		db := openTestPool(t, fmt.Sprintf("churn%d", i))
 		key := fmt.Sprintf("dsn-churn%d", i)
 		setConn("ws1", key, db)
-		connCache.Delete(workspaceCacheKey("ws1", key))
+		connCache.Delete(WorkspaceCacheKey("ws1", key))
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
@@ -223,7 +228,7 @@ func TestConcurrentDeletionIsSafe(t *testing.T) {
 				db := openTestPool(t, fmt.Sprintf("conc%d_%d", i, j))
 				setConn("ws1", key, db)
 				getConn("ws1", key)
-				connCache.Delete(workspaceCacheKey("ws1", key))
+				connCache.Delete(WorkspaceCacheKey("ws1", key))
 			}
 		}(i)
 	}
@@ -250,7 +255,7 @@ func TestConcurrentFirstQueriesOpenOnePool(t *testing.T) {
 	if base == nil {
 		t.Fatal("sqlite dialect not available")
 	}
-	// Slow enough that every goroutine is inside GetOrOpenConn before the first
+	// Slow enough that every goroutine is inside GetOrOpen before the first
 	// open finishes; without singleflight they all dial.
 	counting := &countingDialect{SQLDialect: base, delay: 50 * time.Millisecond}
 	dialects.Register("sqlite-counting", counting)
@@ -267,7 +272,7 @@ func TestConcurrentFirstQueriesOpenOnePool(t *testing.T) {
 		go func() {
 			defer done.Done()
 			start.Wait()
-			pools[i], errs[i] = GetOrOpenConn("ws1", "sqlite-counting", dsn, nil)
+			pools[i], errs[i] = GetOrOpen("ws1", "sqlite-counting", dsn, nil)
 		}()
 	}
 	start.Done()
@@ -292,7 +297,7 @@ func TestConcurrentFirstQueriesOpenOnePool(t *testing.T) {
 		t.Fatal("the shared pool is not the one left in the cache")
 	}
 	connHashToDSNMu.Lock()
-	_, indexed := connHashToDSN[workspaceCacheKey("ws1", dsn)]
+	_, indexed := connHashToDSN[WorkspaceCacheKey("ws1", dsn)]
 	connHashToDSNMu.Unlock()
 	if !indexed {
 		t.Fatal("the opened pool was not added to the hash → DSN index")
@@ -307,7 +312,7 @@ func TestFailedOpenIsNotCached(t *testing.T) {
 	defer func() { EnforceOutboundGuard = restoreGuard; ClearConnCache() }()
 	ClearConnCache()
 
-	if _, err := GetOrOpenConn("ws1", "no-such-dialect", "dsn-unopenable", nil); err == nil {
+	if _, err := GetOrOpen("ws1", "no-such-dialect", "dsn-unopenable", nil); err == nil {
 		t.Fatal("expected an error for an unsupported database type")
 	}
 	if _, ok := getConn("ws1", "dsn-unopenable"); ok {

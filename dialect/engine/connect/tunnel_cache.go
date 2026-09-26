@@ -1,4 +1,4 @@
-package engine
+package connect
 
 import (
 	"crypto/sha256"
@@ -106,7 +106,7 @@ func GetOrCreateTunnel(workspaceID string, config ResolvedSSHConfig, remoteHost 
 		strconv.Itoa(remotePort),
 		authFingerprint(config),
 	}, "\x00")
-	key := workspaceCacheKey(workspaceID, addrStr)
+	key := WorkspaceCacheKey(workspaceID, addrStr)
 
 	tunnelCacheMu.Lock()
 	if existing, ok := getTunnel(key); ok && existing.IsAlive() {
@@ -148,7 +148,7 @@ func DeleteTunnel(key string) {
 // workspace is deleted: a tunnel that outlives it is a live socket into the
 // customer's network.
 func CloseWorkspaceTunnels(workspaceID string) {
-	prefix := workspaceKeyPrefix(workspaceID)
+	prefix := WorkspaceKeyPrefix(workspaceID)
 
 	tunnelCacheMu.Lock()
 	tunnelCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })

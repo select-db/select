@@ -1,4 +1,4 @@
-package engine
+package connect
 
 import (
 	"fmt"
@@ -23,10 +23,10 @@ func TestATunnelLeavingTheCacheIsClosed(t *testing.T) {
 	defer ClearTunnelCache()
 
 	tunnel := &stubTunnel{}
-	tunnelCache.Set(workspaceCacheKey("ws-1", "tunnel"), tunnel)
+	tunnelCache.Set(WorkspaceCacheKey("ws-1", "tunnel"), tunnel)
 
 	// What expiry and eviction do, without waiting twenty minutes for it.
-	tunnelCache.Delete(workspaceCacheKey("ws-1", "tunnel"))
+	tunnelCache.Delete(WorkspaceCacheKey("ws-1", "tunnel"))
 
 	if !tunnel.closed {
 		t.Error("a tunnel dropped from the cache was left open")
@@ -38,8 +38,8 @@ func TestCloseWorkspaceTunnelsClosesOnlyThatWorkspace(t *testing.T) {
 	defer ClearTunnelCache()
 
 	deleted, kept := &stubTunnel{}, &stubTunnel{}
-	deletedKey := workspaceCacheKey("ws-deleted", "tunnel")
-	keptKey := workspaceCacheKey("ws-kept", "tunnel")
+	deletedKey := WorkspaceCacheKey("ws-deleted", "tunnel")
+	keptKey := WorkspaceCacheKey("ws-kept", "tunnel")
 	tunnelCache.Set(deletedKey, deleted)
 	tunnelCache.Set(keptKey, kept)
 
@@ -72,7 +72,7 @@ func TestTunnelCacheTakesConcurrentWritesAndSweeps(t *testing.T) {
 		go func() {
 			defer writers.Done()
 			for i := range 200 {
-				key := workspaceCacheKey("ws-1", fmt.Sprintf("tunnel-%d-%d", worker, i))
+				key := WorkspaceCacheKey("ws-1", fmt.Sprintf("tunnel-%d-%d", worker, i))
 				tunnelCacheMu.Lock()
 				tunnelCache.Set(key, &stubTunnel{})
 				tunnelCacheMu.Unlock()
@@ -84,7 +84,7 @@ func TestTunnelCacheTakesConcurrentWritesAndSweeps(t *testing.T) {
 	}
 	writers.Wait()
 
-	if _, ok := getTunnel(workspaceCacheKey("ws-1", "tunnel-0-0")); ok {
+	if _, ok := getTunnel(WorkspaceCacheKey("ws-1", "tunnel-0-0")); ok {
 		t.Error("the cache kept a key it was told to drop")
 	}
 }

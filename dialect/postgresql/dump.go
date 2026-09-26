@@ -55,7 +55,7 @@ func (d *Dialect) DumpSchema(dsn string) (string, bool) {
 	}
 	// Discrete args, not -d <dsn>: a libpq connstring honours sslkey=/sslcert=/
 	// passfile=/service=/options= (arbitrary file read). Host is already pinned
-	// by engine.ResolveDumpDSN so pg_dump can't re-resolve.
+	// by connect.ResolveDumpDSN so pg_dump can't re-resolve.
 	user, pass, host, port, dbname, ok := d.connParams(dsn)
 	if !ok {
 		return "", false

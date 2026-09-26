@@ -13,6 +13,7 @@ import (
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 )
 
 // genericConnErr is returned to clients for any datasource connection
@@ -38,7 +39,7 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	if err != nil {
 		return Opened{}, ErrNotFound
 	}
-	db, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
+	db, err := connect.GetOrOpen(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
 	if err != nil {
 		return Opened{}, err
 	}
@@ -84,7 +85,7 @@ func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, dsID st
 // openFailure shows only config errors: a raw dial error maps the internal
 // network, and a cellar's names its address. The rest is logged.
 func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
-	var cfgErr *engine.ConfigError
+	var cfgErr *connect.ConfigError
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return http.StatusNotFound, err.Error()

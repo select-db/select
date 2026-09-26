@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 	"modernc.org/sqlite"
 )
 
@@ -41,7 +42,7 @@ func Open(dir string, grant Grant) (engine.Conn, error) {
 	// readers run beside a writer.
 	dsn := (&url.URL{Scheme: "file", Path: filepath.Join(dir, grant.DatasourceID+".db"), RawQuery: "mode=rw&_defensive=1" +
 		"&_busy_timeout=5000&_foreign_keys=1&_pragma=trusted_schema(0)&_pragma=journal_mode(WAL)"}).String()
-	db, err := engine.GetOrOpenTrusted(grant.WorkspaceID, dbType, dsn)
+	db, err := connect.GetOrOpenTrusted(grant.WorkspaceID, dbType, dsn)
 
 	if err != nil {
 		return engine.Conn{}, err

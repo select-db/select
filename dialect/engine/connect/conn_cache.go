@@ -1,8 +1,10 @@
-package engine
+package connect
 
 import (
 	"database/sql"
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -105,8 +107,24 @@ func DeleteConnsByAddr(addr string) {
 // datasources are gone, and a pool that outlives them is an open connection to
 // a database nobody may reach any more.
 func CloseWorkspaceConns(workspaceID string) {
-	prefix := workspaceKeyPrefix(workspaceID)
+	prefix := WorkspaceKeyPrefix(workspaceID)
 	connCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
+}
+
+// WorkspaceCacheKey is the key every engine cache uses: the workspace id, kept
+// readable so a deleted workspace's entries drop by prefix, then an FNV-1a hash
+// of (workspaceID, dsn), so no DSN lives in a key.
+func WorkspaceCacheKey(workspaceID, dsn string) string {
+	h := fnv.New64a()
+	h.Write([]byte(workspaceID))
+	h.Write([]byte{0})
+	h.Write([]byte(dsn))
+	return WorkspaceKeyPrefix(workspaceID) + strconv.FormatUint(h.Sum64(), 16)
+}
+
+// WorkspaceKeyPrefix is what every cache key of one workspace begins with.
+func WorkspaceKeyPrefix(workspaceID string) string {
+	return workspaceID + ":"
 }
 
 // dialectFor is dialects.Get for a datasource, failing with a config error the
@@ -118,10 +136,10 @@ func dialectFor(dbType string) (core.SQLDialect, error) {
 	return nil, newConfigErrorf("unsupported database type: %s", dbType)
 }
 
-// GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
+// GetOrOpen returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
 // Concurrent first queries for one datasource share a single open.
-func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
+func GetOrOpen(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
 	dialect, err := dialectFor(dbType)
 	if err != nil {
 		return nil, err
@@ -176,7 +194,7 @@ func getOrOpen(workspaceID string, dialect core.SQLDialect, dsn string, guarded 
 	if len(pool) > 0 {
 		cfg = pool[0]
 	}
-	hash := workspaceCacheKey(workspaceID, dsn)
+	hash := WorkspaceCacheKey(workspaceID, dsn)
 
 	// GetOrCreate opens at most once per key: concurrent first queries for one
 	// datasource share the open rather than each dialing. A failure is not cached.

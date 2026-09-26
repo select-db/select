@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
@@ -22,8 +23,8 @@ type ResolvedDatasource struct {
 	DBType string
 	Name   string
 	DSN    string
-	SSH    *engine.ResolvedSSHConfig
-	Pool   engine.PoolConfig
+	SSH    *connect.ResolvedSSHConfig
+	Pool   connect.PoolConfig
 }
 
 var dsCache = cache.New(cache.Options{
@@ -92,7 +93,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 		DBType: row.DbType,
 		Name:   row.Name,
 		DSN:    dsn,
-		Pool: engine.PoolConfig{
+		Pool: connect.PoolConfig{
 			MaxOpenConns:    int(row.MaxOpenConns),
 			MaxIdleConns:    int(row.MaxIdleConns),
 			ConnMaxLifetime: time.Duration(row.ConnMaxLifetime) * time.Second,
@@ -112,7 +113,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 			HostKey    string `json:"host_key"`
 		}
 		if err := json.Unmarshal([]byte(ssh), &sshCfg); err == nil && sshCfg.Enabled {
-			ds.SSH = &engine.ResolvedSSHConfig{
+			ds.SSH = &connect.ResolvedSSHConfig{
 				Host:       sshCfg.Host,
 				Port:       sshCfg.Port,
 				User:       sshCfg.User,
@@ -136,7 +137,7 @@ func InvalidateWorkspaceCache(workspaceID string) {
 	prefix := cacheKey(workspaceID, "")
 	dsCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 
-	engine.CloseWorkspaceTunnels(workspaceID)
-	engine.CloseWorkspaceConns(workspaceID)
+	connect.CloseWorkspaceTunnels(workspaceID)
+	connect.CloseWorkspaceConns(workspaceID)
 	engine.InvalidateWorkspaceMetadata(workspaceID)
 }
