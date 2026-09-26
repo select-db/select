@@ -1038,17 +1038,23 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 	// A routine, a trigger and an event body carry plain statements as parse
 	// nodes. Creating one is administration, and each statement in the body
 	// still needs the rights for the rows it names, whenever it runs.
-	result.Subqueries = append(result.Subqueries, i.bodyStatements(stmt)...)
+	for _, body := range []antlr.ParseTree{
+		core.TreeOrNil(stmt.CreateProcedure()),
+		core.TreeOrNil(stmt.CreateFunction()),
+		core.TreeOrNil(stmt.CreateTrigger()),
+		core.TreeOrNil(stmt.CreateEvent()),
+	} {
+		if body != nil {
+			result.Subqueries = append(result.Subqueries, i.bodyStatements(body)...)
+		}
+	}
 	return result
 }
 
-// bodyStatements is what the statements carried inside stmt require. Only the
+// bodyStatements is what the statements carried inside node require. Only the
 // outermost of them is inspected: a statement nested deeper is part of one
 // already read, which reports it itself.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
-	if node == nil {
-		return nil
-	}
 	listener := &bodyStatementListener{
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
 		inspector:               i,
