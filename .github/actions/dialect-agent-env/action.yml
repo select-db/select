@@ -44,6 +44,9 @@ runs:
           echo "AGENT_BASE=$(git rev-parse HEAD)"
           # Keeps the Anthropic token from commands, and /proc from showing it.
           echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1"
+          # A run ends with the agent's turn, so nothing may be left running
+          # in the background: review agents would be killed mid-review.
+          echo "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1"
         } >> "$GITHUB_ENV"
     # Ubuntu 24.04's AppArmor otherwise refuses bubblewrap its user namespace;
     # the bwrap call fails here, before an agent run is paid for.

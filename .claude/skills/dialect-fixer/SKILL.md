@@ -198,12 +198,14 @@ it rather than estimate.
    runs (`go -C dialect build -o agentprobe ./cmd/agentprobe`).
 4. From 50 changed lines, run the `simplify` skill (arguments `origin/dev`),
    then `code-review` (arguments `fixed point origin/dev; the spec is issue
-   #$FIXER_ISSUE, in .fixer-work/issue.md; unattended, so do not ask`), with the
-   Skill tool, and let each launch its agents. Apply the findings that make the
-   fix better, reject the ones that widen it or are wrong, rerun the checks and
-   commit. The reviews are part of the fix: start them with at least 20 minutes
-   left. With less, write where the work stands to `.fixer-work/blocked.md`
-   instead of publishing it unreviewed.
+   #$FIXER_ISSUE, in .fixer-work/issue.md; unattended, so do not ask`), with
+   the Skill tool, and let each launch its agents in the foreground
+   (`run_in_background: false`): the run ends with your turn, so never end it
+   to wait for an agent. Apply the findings that make the fix better, reject
+   the ones that widen it or are wrong, rerun the checks and commit. The
+   reviews are part of the fix: start them with at least 20 minutes left. With
+   less, write where the work stands to `.fixer-work/blocked.md` instead of
+   publishing it unreviewed.
 5. Write `.fixer-work/pr.md`: the title on the first line, then the body:
    `Closes #$FIXER_ISSUE`, what was wrong, what changed, the failing count
    against the old code, how each maintainer decision was followed, and, after
