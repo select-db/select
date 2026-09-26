@@ -31,7 +31,7 @@ func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []SeeCase) {
 
 			statements := dialect.Inspect(meta, testCase.SQL)
 			if len(statements) == 0 {
-				// The floor engine.Inspect puts under a dialect that read
+				// The floor query.Inspect puts under a dialect that read
 				// nothing.
 				statements = []core.InspectStatement{core.UnknownStatement()}
 			}

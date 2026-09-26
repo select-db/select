@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/selectDb/dialect/engine/query"
 	_ "modernc.org/sqlite"
 )
 
@@ -21,11 +22,11 @@ func (r *recordingListener) record(s string) {
 	r.mu.Unlock()
 }
 
-func (r *recordingListener) OnStart(_ []string, _ []ColumnEditMeta) { r.record("started") }
-func (r *recordingListener) OnExecuted(_ int64)                      { r.record("executed") }
-func (r *recordingListener) OnProgress(_ int64)                      { r.record("progress") }
-func (r *recordingListener) OnDone(_, _, _ int64)                    { r.record("done") }
-func (r *recordingListener) OnError(_ string, _ *int)                { r.record("error") }
+func (r *recordingListener) OnStart(_ []string, _ []query.ColumnEditMeta) { r.record("started") }
+func (r *recordingListener) OnExecuted(_ int64)                           { r.record("executed") }
+func (r *recordingListener) OnProgress(_ int64)                           { r.record("progress") }
+func (r *recordingListener) OnDone(_, _, _ int64)                         { r.record("done") }
+func (r *recordingListener) OnError(_ string, _ *int)                     { r.record("error") }
 
 func TestStreamLocalEmitsStartedThenExecuted(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
@@ -47,7 +48,7 @@ func TestStreamLocalEmitsStartedThenExecuted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"}, "SELECT id FROM t ORDER BY id", Options{}, sink)
+	query.Stream(ctx, query.Conn{DB: db}, query.DBInstance{ID: "x"}, "SELECT id FROM t ORDER BY id", query.Options{}, sink)
 
 	listener.mu.Lock()
 	defer listener.mu.Unlock()

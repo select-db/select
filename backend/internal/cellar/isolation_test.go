@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +55,7 @@ func TestCheckStatementRefusesEveryOtherPragma(t *testing.T) {
 
 // statementConn is a connection set up the way the engine sets one up for a
 // user statement.
-func statementConn(t *testing.T, conn engine.Conn) *sql.Conn {
+func statementConn(t *testing.T, conn query.Conn) *sql.Conn {
 	t.Helper()
 	c, err := conn.DB.Conn(context.Background())
 	require.NoError(t, err)

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/engine/query"
 	"modernc.org/sqlite"
 )
 
@@ -29,13 +29,13 @@ const dbType = "sqlite"
 
 // Open returns the grant's datasource, the file named after its id in dir, set
 // up so every statement runs under the isolation rules.
-func Open(dir string, grant Grant) (engine.Conn, error) {
+func Open(dir string, grant Grant) (query.Conn, error) {
 	if grant.MaxBytes <= 0 {
-		return engine.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)
+		return query.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)
 	}
 
 	if _, err := uuid.Parse(grant.DatasourceID); err != nil {
-		return engine.Conn{}, fmt.Errorf("datasource id %q is not a uuid", grant.DatasourceID)
+		return query.Conn{}, fmt.Errorf("datasource id %q is not a uuid", grant.DatasourceID)
 	}
 
 	// mode=rw: a missing file is an error, never a new empty database. WAL lets
@@ -45,9 +45,9 @@ func Open(dir string, grant Grant) (engine.Conn, error) {
 	db, err := connect.GetOrOpenTrusted(grant.WorkspaceID, dbType, dsn)
 
 	if err != nil {
-		return engine.Conn{}, err
+		return query.Conn{}, err
 	}
-	return engine.Conn{
+	return query.Conn{
 		DB: db,
 		Prepare: func(c *sql.Conn, statement string) error {
 			return isolate(c, statement, grant.MaxBytes)

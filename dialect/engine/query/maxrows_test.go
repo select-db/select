@@ -1,4 +1,4 @@
-package engine
+package query
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 )
 
 // countingSink records row count and whether OnTruncated fired. Used to
-// verify StreamLocal honors Options.MaxRows.
+// verify Stream honors Options.MaxRows.
 type countingSink struct {
 	mu        sync.Mutex
 	rows      int
@@ -61,7 +61,7 @@ func newDBWithRows(t *testing.T, n int) *sql.DB {
 	return db
 }
 
-func TestStreamLocal_MaxRowsCapsScan(t *testing.T) {
+func TestStream_MaxRowsCapsScan(t *testing.T) {
 	db := newDBWithRows(t, 100)
 	defer db.Close()
 
@@ -69,7 +69,7 @@ func TestStreamLocal_MaxRowsCapsScan(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	Stream(ctx, Conn{DB: db}, DBInstance{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{MaxRows: 10}, sink)
 
@@ -87,7 +87,7 @@ func TestStreamLocal_MaxRowsCapsScan(t *testing.T) {
 	}
 }
 
-func TestStreamLocal_MaxRowsSkipsWhenUnderCap(t *testing.T) {
+func TestStream_MaxRowsSkipsWhenUnderCap(t *testing.T) {
 	db := newDBWithRows(t, 5)
 	defer db.Close()
 
@@ -95,7 +95,7 @@ func TestStreamLocal_MaxRowsSkipsWhenUnderCap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	Stream(ctx, Conn{DB: db}, DBInstance{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{MaxRows: 50}, sink)
 
@@ -107,7 +107,7 @@ func TestStreamLocal_MaxRowsSkipsWhenUnderCap(t *testing.T) {
 	}
 }
 
-func TestStreamLocal_MaxRowsZeroIsUnbounded(t *testing.T) {
+func TestStream_MaxRowsZeroIsUnbounded(t *testing.T) {
 	db := newDBWithRows(t, 30)
 	defer db.Close()
 
@@ -115,7 +115,7 @@ func TestStreamLocal_MaxRowsZeroIsUnbounded(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	StreamLocal(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	Stream(ctx, Conn{DB: db}, DBInstance{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{ /* MaxRows: 0 */ }, sink)
 
@@ -129,10 +129,10 @@ func TestStreamLocal_MaxRowsZeroIsUnbounded(t *testing.T) {
 
 // A buffered result that fails part way keeps its error and none of the rows
 // read before it: a truncated result is worse than none.
-func TestExecuteLocalDropsRowsOnFailure(t *testing.T) {
+func TestExecuteDropsRowsOnFailure(t *testing.T) {
 	db := newDBWithRows(t, 3)
 	defer db.Close()
-	result := ExecuteLocal(context.Background(), Conn{DB: db}, DBInstance{ID: "x"},
+	result := Execute(context.Background(), Conn{DB: db}, DBInstance{ID: "x"},
 		"SELECT id FROM t ORDER BY id", Options{MaxBytes: 1})
 	if len(result.Errors) == 0 || result.Rows != nil || result.RowCount != 0 {
 		t.Fatalf("errors %v, rows %v, count %d; want an error and no rows", result.Errors, result.Rows, result.RowCount)

@@ -1,4 +1,4 @@
-package engine
+package query
 
 import (
 	"context"
@@ -14,16 +14,16 @@ import (
 	"github.com/selectDb/dialect/dialects"
 )
 
-// ExecuteLocal runs sql like StreamLocal and returns the whole result at once.
-func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options) *Result {
+// Execute runs sql like Stream and returns the whole result at once.
+func Execute(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options) *Result {
 	result := &Result{}
-	StreamLocal(ctx, conn, inst, sql, opts, resultSink{result})
+	Stream(ctx, conn, inst, sql, opts, ResultSink{result})
 	return result
 }
 
-// StreamLocal runs sql on conn and streams the result into sink: the columns,
+// Stream runs sql on conn and streams the result into sink: the columns,
 // each row, then OnDone. Any failure ends the stream with one OnError.
-func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options, sink RowSink) {
+func Stream(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options, sink RowSink) {
 	inspected, err := checkPermissions(conn, inst, sql)
 	if err != nil {
 		sink.OnError(err)
@@ -83,11 +83,11 @@ func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, op
 		return
 	}
 	// After OnColumns, so the start event on the wire precedes this one.
-	if s, ok := sink.(executedSink); ok {
+	if s, ok := sink.(ExecutedSink); ok {
 		s.OnExecuted(durationMs)
 	}
 	colTypes, _ := rows.ColumnTypes()
-	if s, ok := sink.(columnTypesSink); ok {
+	if s, ok := sink.(ColumnTypesSink); ok {
 		s.SetColumnTypes(colTypes)
 	}
 	hasTZ := makeHasTZ(colTypes)
@@ -100,7 +100,7 @@ func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, op
 			return
 		}
 		if opts.MaxRows > 0 && rowCount >= int64(opts.MaxRows) {
-			if s, ok := sink.(truncatedSink); ok {
+			if s, ok := sink.(TruncatedSink); ok {
 				s.OnTruncated()
 			}
 			break
@@ -143,31 +143,31 @@ func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, op
 	}
 }
 
-// resultSink collects a stream into a Result. A failed stream leaves its error
+// ResultSink collects a stream into a Result. A failed stream leaves its error
 // and no rows: a truncated result is worse than none.
-type resultSink struct{ result *Result }
+type ResultSink struct{ Result *Result }
 
-func (s resultSink) OnColumns(cols []string) error {
-	s.result.Columns = cols
+func (s ResultSink) OnColumns(cols []string) error {
+	s.Result.Columns = cols
 	return nil
 }
 
-func (s resultSink) OnRow(values []any) error {
-	s.result.Rows = append(s.result.Rows, values)
+func (s ResultSink) OnRow(values []any) error {
+	s.Result.Rows = append(s.Result.Rows, values)
 	return nil
 }
 
-func (s resultSink) OnDone(rowCount, affected, durationMs int64) error {
-	s.result.RowCount = int(rowCount)
-	s.result.AffectedRows = affected
-	s.result.DurationMs = durationMs
+func (s ResultSink) OnDone(rowCount, affected, durationMs int64) error {
+	s.Result.RowCount = int(rowCount)
+	s.Result.AffectedRows = affected
+	s.Result.DurationMs = durationMs
 	return nil
 }
 
-func (s resultSink) OnError(err error) {
-	s.result.Rows, s.result.RowCount = nil, 0
-	s.result.Errors = []string{err.Error()}
-	s.result.ErrorPosition = errorPosition(err)
+func (s ResultSink) OnError(err error) {
+	s.Result.Rows, s.Result.RowCount = nil, 0
+	s.Result.Errors = []string{err.Error()}
+	s.Result.ErrorPosition = ErrorPosition(err)
 }
 
 func effectiveMaxBytes(opts Options) int64 {
@@ -242,8 +242,8 @@ func (e *queryError) Error() string {
 	return e.message
 }
 
-// errorPosition returns where in the statement err occurred, or nil.
-func errorPosition(err error) *int {
+// ErrorPosition returns where in the statement err occurred, or nil.
+func ErrorPosition(err error) *int {
 	var qe *queryError
 	if errors.As(err, &qe) {
 		return qe.position

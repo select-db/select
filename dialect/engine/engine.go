@@ -6,10 +6,11 @@ import (
 	"context"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // Transport routes proxified operations to the remote backend.
-// Cancel is handled via context propagation (HTTP disconnect → server ctx cancelled).
+// query.Cancel is handled via context propagation (HTTP disconnect → server ctx cancelled).
 type Transport interface {
 	OpenStream(
 		ctx context.Context,
@@ -17,8 +18,8 @@ type Transport interface {
 		instanceID,
 		dbType,
 		sql string,
-		opts Options,
-	) (RowStream, error)
+		opts query.Options,
+	) (query.RowStream, error)
 
 	GetMetadata(
 		ctx context.Context,

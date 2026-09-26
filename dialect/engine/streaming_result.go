@@ -1,6 +1,10 @@
 package engine
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/selectDb/dialect/engine/query"
+)
 
 // PageStatus indicates the completeness of a page returned by StreamingResult.Page.
 type PageStatus int
@@ -27,7 +31,7 @@ type StreamingResult struct {
 	// slot to still hold what they asked for.
 	id             string
 	columns        []string
-	columnEditMeta []ColumnEditMeta
+	columnEditMeta []query.ColumnEditMeta
 	rows           [][]any
 	available      int64
 	done           bool
@@ -64,7 +68,7 @@ func (s *StreamingResult) SetColumns(cols []string) {
 
 // SetColumnEditMeta attaches per-column editability metadata. Called once after
 // the schema is known, before any consumer is likely to edit.
-func (s *StreamingResult) SetColumnEditMeta(meta []ColumnEditMeta) {
+func (s *StreamingResult) SetColumnEditMeta(meta []query.ColumnEditMeta) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.columnEditMeta = meta
@@ -126,7 +130,7 @@ func (s *StreamingResult) Done() bool {
 }
 
 // Header returns the columns and edit metadata. Safe to call once SetColumns has fired.
-func (s *StreamingResult) Header() (cols []string, meta []ColumnEditMeta) {
+func (s *StreamingResult) Header() (cols []string, meta []query.ColumnEditMeta) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.columns, s.columnEditMeta
@@ -147,7 +151,7 @@ type PageData struct {
 	ID             string
 	Columns        []string
 	Rows           [][]any
-	ColumnEditMeta []ColumnEditMeta
+	ColumnEditMeta []query.ColumnEditMeta
 	RowCount       int64
 	AffectedRows   int64
 	DurationMs     int64

@@ -60,7 +60,7 @@ func (q *QueryRecorder) finish(set func()) {
 }
 
 // statusForQueryError maps the engine's error to a status: the permission engine
-// rejects a blocked query before it runs (engine.StreamLocal) with a typed
+// rejects a blocked query before it runs (query.Stream) with a typed
 // PermissionDeniedError; everything else is a genuine fault.
 func statusForQueryError(err error) string {
 	var denied *core.PermissionDeniedError

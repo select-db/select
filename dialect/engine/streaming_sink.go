@@ -3,6 +3,8 @@ package engine
 import (
 	"sync"
 	"time"
+
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // StreamListener observes lifecycle events on a streaming query.
@@ -11,7 +13,7 @@ import (
 // in the sense that callbacks are serialised by the sink itself.
 type StreamListener interface {
 	// OnStart fires once, before any OnProgress, when columns are known.
-	OnStart(columns []string, columnEditMeta []ColumnEditMeta)
+	OnStart(columns []string, columnEditMeta []query.ColumnEditMeta)
 	// OnExecuted fires once when the engine has finished SQL execution and is
 	// about to start streaming rows. Only the local path emits this; for
 	// proxified queries the durationMs is only known via the final summary.
@@ -24,7 +26,7 @@ type StreamListener interface {
 	OnError(message string, errorPosition *int)
 }
 
-// streamingSink is a RowSink that writes rows into a StreamingResult and
+// streamingSink is a query.RowSink that writes rows into a StreamingResult and
 // notifies a StreamListener on a fixed cadence.
 type streamingSink struct {
 	result   *StreamingResult
@@ -44,9 +46,9 @@ const (
 	defaultProgressBatch    = 200
 )
 
-// NewStreamingSink wires a RowSink to a StreamingResult + listener.
+// NewStreamingSink wires a query.RowSink to a StreamingResult + listener.
 // Pass nil for listener if no notification is needed (the result still fills).
-func NewStreamingSink(result *StreamingResult, listener StreamListener) RowSink {
+func NewStreamingSink(result *StreamingResult, listener StreamListener) query.RowSink {
 	return &streamingSink{
 		result:        result,
 		listener:      listener,
@@ -107,16 +109,16 @@ func (s *streamingSink) OnError(err error) {
 	if err == nil {
 		return
 	}
-	position := errorPosition(err)
+	position := query.ErrorPosition(err)
 	s.result.Fail(err.Error(), position)
 	if s.listener != nil {
 		s.listener.OnError(err.Error(), position)
 	}
 }
 
-// drainStreamInto pulls rows from a remote RowStream into a StreamingResult
+// drainStreamInto pulls rows from a remote query.RowStream into a StreamingResult
 // via the supplied listener. Used by the proxified path.
-func drainStreamInto(stream RowStream, sink RowSink) {
+func drainStreamInto(stream query.RowStream, sink query.RowSink) {
 	defer func() { _ = stream.Close() }()
 
 	cols, err := stream.Columns()
@@ -134,7 +136,7 @@ func drainStreamInto(stream RowStream, sink RowSink) {
 	// implement nothing.
 	if e, ok := stream.(interface{ Executed() int64 }); ok {
 		if executed := e.Executed(); executed > 0 {
-			if n, ok := sink.(executedSink); ok {
+			if n, ok := sink.(query.ExecutedSink); ok {
 				n.OnExecuted(executed)
 			}
 		}

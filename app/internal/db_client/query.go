@@ -7,8 +7,10 @@ import (
 	"selectDb/internal/graph"
 	"selectDb/internal/utils"
 
-	"github.com/selectDb/dialect/engine"
 	"selectDb/internal/desktop"
+
+	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 type QueryParams struct {
@@ -132,7 +134,7 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		p.instance,
 		p.dbInstance.WorkspaceID,
 		p.statement,
-		engine.Options{
+		query.Options{
 			MaxBytes: p.maxBytes,
 			Timeout:  p.timeout,
 		},

@@ -7,7 +7,7 @@ import (
 
 	"selectDb/internal/graph"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 type PingParams struct {
@@ -51,7 +51,7 @@ func (dbc *DbClient) Ping(params PingParams) (result string) {
 		return fmt.Sprintf("Unable to establish a connection with the database.\nError: %v", err)
 	}
 
-	inst := engine.DBInstance{
+	inst := query.DBInstance{
 		ID:        node.ID,
 		DBType:    node.DBType,
 		Proxified: node.Proxified,

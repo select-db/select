@@ -11,8 +11,8 @@ import (
 // remote backend never caches; it streams rows.
 //
 // Entries are *StreamingResult so readers can observe progress while
-// the writer goroutine still appends. Buffered Result returns from
-// Execute are not cached; only Stream() populates this cache.
+// the writer goroutine still appends. Buffered query.Result returns from
+// query.Execute are not cached; only query.Stream() populates this cache.
 var resultCache = cache.New(cache.Options{TTL: 20 * time.Minute, MaxEntries: 10})
 
 // GetStreamingResult looks up a *StreamingResult for key.

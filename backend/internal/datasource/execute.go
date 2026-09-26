@@ -8,8 +8,8 @@ import (
 	"backend/internal/middlewares"
 	"time"
 
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 type executeRequest struct {
@@ -56,8 +56,8 @@ func ExecuteHandler() http.HandlerFunc {
 	}
 }
 
-func (req executeRequest) options() engine.Options {
-	return engine.Options{
+func (req executeRequest) options() query.Options {
+	return query.Options{
 		MaxBytes: req.MaxBytes,
 		Timeout:  time.Duration(req.TimeoutMs) * time.Millisecond,
 	}
