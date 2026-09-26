@@ -227,9 +227,6 @@ func permCases() []PermCase {
 			Why:   "the alias is not a table, and what it reads is t2",
 		},
 		{
-			// A VALUES list carrying an alias binds that name exactly as a
-			// derived select does, and the rows are literals in the query
-			// text, so there is no relation for a right to be held on.
 			On:    []string{"postgresql"},
 			Name:  "a VALUES list aliased as a derived table",
 			SQL:   "SELECT v.n FROM (VALUES (1), (2)) AS v(n)",
@@ -238,8 +235,11 @@ func permCases() []PermCase {
 			Why:   "v is a name the statement binds, and no grant can answer for it",
 		},
 		{
+			// A VALUES list returns no column the statement wrote, so an alias
+			// on it is only proved bound where the walker says so. SQLite takes
+			// no column list, and names the columns itself.
 			On:    []string{"sqlite"},
-			Name:  "a VALUES list aliased as a derived table",
+			Name:  "a VALUES list aliased as a derived table, SQLite's spelling",
 			SQL:   "SELECT v.column1 FROM (VALUES (1), (2)) AS v",
 			Needs: nil,
 			Op:    core.InspectOpSelect,
@@ -247,8 +247,8 @@ func permCases() []PermCase {
 		},
 		{
 			On:    []string{"mysql"},
-			Name:  "a VALUES list aliased as a derived table",
-			SQL:   "SELECT v.n FROM (VALUES ROW(1), ROW(2)) AS v(n)",
+			Name:  "a VALUES list aliased as a derived table, MySQL's ROW spelling",
+			SQL:   "SELECT v.column_0 FROM (VALUES ROW(1), ROW(2)) AS v",
 			Needs: nil,
 			Op:    core.InspectOpSelect,
 			Why:   "v is a name the statement binds, and no grant can answer for it",
@@ -263,15 +263,15 @@ func permCases() []PermCase {
 		},
 		{
 			On:    []string{"sqlite"},
-			Name:  "a table joined to a VALUES list",
-			SQL:   "SELECT * FROM t1 JOIN (VALUES (1, 'a')) AS v ON t1.c1 = v.column1",
+			Name:  "a table joined to a VALUES list, SQLite's spelling",
+			SQL:   "SELECT * FROM t1 JOIN (VALUES (1, 'a'), (2, 'b')) AS v ON t1.c1 = v.column1",
 			Needs: []Right{mainT1(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "the batch of ids is literal, so the only relation read is t1",
 		},
 		{
 			On:    []string{"mysql"},
-			Name:  "a table joined to a VALUES list",
+			Name:  "a table joined to a VALUES list, MySQL's ROW spelling",
 			SQL:   "SELECT * FROM t1 JOIN (VALUES ROW(1), ROW(2)) AS v(n) ON t1.c1 = v.n",
 			Needs: []Right{mainT1(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
