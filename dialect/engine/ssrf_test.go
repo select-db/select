@@ -2,6 +2,8 @@ package engine
 
 import (
 	"testing"
+
+	"github.com/selectDb/dialect/dialects"
 )
 
 func TestValidateOutboundHostDisabledByDefault(t *testing.T) {
@@ -54,7 +56,7 @@ func TestSSRFParserDifferentialClosed(t *testing.T) {
 	defer func() { EnforceOutboundGuard = false }()
 
 	dsn := "host='169.254.169.254' port=80 sslmode=disable dbname=x user=x"
-	host, port, err := GetDialect("postgresql").DSNHost(dsn)
+	host, port, err := dialects.Get("postgresql").DSNHost(dsn)
 	if err != nil {
 		t.Fatalf("DSNHost error: %v", err)
 	}

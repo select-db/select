@@ -5,6 +5,7 @@ import (
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/core/testutil"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // TestPermissionCases checks every dialect against the shared table of rights.
@@ -13,7 +14,7 @@ import (
 func TestPermissionCases(t *testing.T) {
 	meta := core.GetInspectTestMetadata()
 	for _, name := range []string{"postgresql", "mysql", "sqlite"} {
-		dialect := GetDialect(name)
+		dialect := dialects.Get(name)
 		if dialect == nil {
 			t.Fatalf("no dialect named %q", name)
 		}

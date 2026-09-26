@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // Client routes queries local vs proxified, manages cancel + result cache.
@@ -116,7 +117,7 @@ func (client *Client) Ping(ctx context.Context, conn Conn, instance DBInstance, 
 // GetMetadata fetches schema. Routes through Transport when proxified.
 func (client *Client) GetMetadata(ctx context.Context, conn Conn, instance DBInstance, workspaceID, dbName string, noCache bool) (*core.Metadata, error) {
 	if !instance.Proxified {
-		dialect := GetDialect(instance.DBType)
+		dialect := dialects.Get(instance.DBType)
 		if dialect == nil {
 			return nil, fmt.Errorf("unsupported database type: %s", instance.DBType)
 		}
@@ -145,7 +146,7 @@ func (client *Client) DumpSchema(ctx context.Context, instance DBInstance, works
 		}
 	}
 
-	dialect := GetDialect(instance.DBType)
+	dialect := dialects.Get(instance.DBType)
 	if dialect == nil {
 		return ""
 	}

@@ -10,6 +10,7 @@ import (
 	"selectDb/internal/sqllang"
 
 	core "github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -121,7 +122,7 @@ func (dbc *DbClient) computeColumnEditMeta(dbInstance *graph.DBInstanceNode, sta
 	if meta == nil {
 		return nil
 	}
-	dialect := engine.GetDialect(dbInstance.DBType)
+	dialect := dialects.Get(dbInstance.DBType)
 	if dialect == nil {
 		return nil
 	}

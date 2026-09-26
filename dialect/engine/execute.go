@@ -11,6 +11,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // ExecuteLocal runs sql like StreamLocal and returns the whole result at once.
@@ -185,7 +186,7 @@ func checkPermissions(conn Conn, inst DBInstance, sql string) ([]core.InspectSta
 		return nil, nil
 	}
 
-	dialect := GetDialect(inst.DBType)
+	dialect := dialects.Get(inst.DBType)
 	if dialect == nil {
 		return nil, fmt.Errorf("permission check failed: unsupported database type %q", inst.DBType)
 	}

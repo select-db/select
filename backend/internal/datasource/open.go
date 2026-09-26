@@ -11,6 +11,7 @@ import (
 	"backend/internal/datasource/cellar"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -52,7 +53,7 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 
 // Metadata is the datasource's schema, cached by DSN.
 func (o *Opened) Metadata(ctx context.Context, noCache bool) (*core.Metadata, error) {
-	dialect := engine.GetDialect(o.DS.DBType)
+	dialect := dialects.Get(o.DS.DBType)
 	if dialect == nil {
 		return nil, fmt.Errorf("unsupported database type: %s", o.DS.DBType)
 	}

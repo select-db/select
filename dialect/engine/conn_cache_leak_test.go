@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 	_ "modernc.org/sqlite"
 )
 
@@ -245,14 +246,14 @@ func TestConcurrentFirstQueriesOpenOnePool(t *testing.T) {
 	}()
 	ClearConnCache()
 
-	base := GetDialect("sqlite")
+	base := dialects.Get("sqlite")
 	if base == nil {
 		t.Fatal("sqlite dialect not available")
 	}
 	// Slow enough that every goroutine is inside GetOrOpenConn before the first
 	// open finishes; without singleflight they all dial.
 	counting := &countingDialect{SQLDialect: base, delay: 50 * time.Millisecond}
-	RegisterDialect("sqlite-counting", counting)
+	dialects.Register("sqlite-counting", counting)
 
 	const n = 32
 	dsn := "file:concurrent-open?mode=memory&cache=shared"

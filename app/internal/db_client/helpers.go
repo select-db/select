@@ -8,6 +8,7 @@ import (
 	"selectDb/internal/sqllang"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -20,7 +21,7 @@ func (dbc *DbClient) inspectStatement(
 		return nil, nil, false
 	}
 
-	dialect := engine.GetDialect(dbInstance.DBType)
+	dialect := dialects.Get(dbInstance.DBType)
 	inspectStatements := engine.Inspect(dialect, metadata, statement)
 	if len(inspectStatements) == 0 {
 		return nil, nil, false

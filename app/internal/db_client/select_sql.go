@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // DefaultSelectPreviewLimit caps the row count of the SELECT generated for the
@@ -40,7 +40,7 @@ func (dbc *DbClient) GenerateSelectSQL(params GenerateSelectSQLParams) (Generate
 		return out, fmt.Errorf("database not found")
 	}
 
-	dialect := engine.GetDialect(dbInstance.DBType)
+	dialect := dialects.Get(dbInstance.DBType)
 	if dialect == nil {
 		return out, fmt.Errorf("unsupported DB type for select SQL: %s", dbInstance.DBType)
 	}
