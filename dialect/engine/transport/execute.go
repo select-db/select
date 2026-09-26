@@ -3,8 +3,8 @@ package transport
 import (
 	"context"
 
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 type executeRequest struct {
@@ -21,8 +21,8 @@ func (t *HTTPTransport) OpenStream(
 	instanceID,
 	dbType,
 	sql string,
-	opts engine.Options,
-) (engine.RowStream, error) {
+	opts query.Options,
+) (query.RowStream, error) {
 	body, err := t.FetchStream(ctx, "POST", "datasources/"+instanceID+"/execute", executeRequest{
 		ID:          instanceID,
 		WorkspaceID: workspaceID,

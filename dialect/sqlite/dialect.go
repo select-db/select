@@ -175,6 +175,28 @@ func (d *Dialect) OpenGuardedDB(string, core.DialFunc) (*sql.DB, error) {
 	return nil, errors.New("connection target is not permitted")
 }
 
+// A sqlite DSN is a file path: no host, no password.
+
+func (d *Dialect) DSNHost(string) (string, int, error) {
+	return "", 0, errors.New("a sqlite database has no host")
+}
+
+func (d *Dialect) DSNWithHost(string, string, int) (string, error) {
+	return "", errors.New("a sqlite database has no host")
+}
+
+func (d *Dialect) DSNPassword(string) string {
+	return ""
+}
+
+func (d *Dialect) DSNWithPassword(dsn, _ string) string {
+	return dsn
+}
+
+func (d *Dialect) DSNWithoutPassword(dsn string) string {
+	return dsn
+}
+
 // GetTables, GetViews, GetIndexes, GetTriggers, and GetStats are implemented in schema.go
 
 // CreateLexer creates a new SQLite lexer

@@ -7,7 +7,7 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	coreRefs "github.com/selectDb/dialect/core/references"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // HoverResult contains markdown for the hovered identifier.
@@ -95,7 +95,7 @@ func (s *SqlLang) Hover(p PositionParams) HoverResult {
 		return HoverResult{}
 	}
 	sql, line, col := s.resolveEditorPosition(p)
-	d := engine.GetDialect(datasource.DBType)
+	d := dialects.Get(datasource.DBType)
 
 	qual := identChainAt(sql, line, col)
 	if pos := cursorChainPos(sql, line, col); pos >= 0 && pos < len(qual)-1 {

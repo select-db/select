@@ -7,7 +7,7 @@ import (
 	"selectDb/internal/utils"
 
 	core "github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // CompleteResult is the completion response returned to the caller.
@@ -41,7 +41,7 @@ func (s *SqlLang) Complete(p PositionParams) CompleteResult {
 
 	sql, line, col := s.resolveEditorPosition(p)
 
-	d := engine.GetDialect(datasource.DBType)
+	d := dialects.Get(datasource.DBType)
 	if d == nil {
 		return CompleteResult{ID: id, Errors: []string{fmt.Sprintf("unsupported DB type for completion: %s", datasource.DBType)}}
 	}

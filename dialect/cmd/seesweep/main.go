@@ -16,7 +16,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/selectDb/dialect/core/testutil"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // hidden is the column GetSeeTestPermissions denies see on, named here only
@@ -222,8 +222,8 @@ func observe(statement, first, second string) (answer testutil.SeeAnswer, err er
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	result := engine.ExecuteLocal(ctx,
-		engine.Conn{DB: db, Meta: meta, Perms: testutil.GetSeeTestPermissions()},
-		engine.Datasource{ID: testutil.TestDatasourceID, DBType: "sqlite"}, statement, engine.Options{})
+	result := query.Execute(ctx,
+		query.Conn{DB: db, Meta: meta, Perms: testutil.GetSeeTestPermissions()},
+		query.Datasource{ID: testutil.TestDatasourceID, DBType: "sqlite"}, statement, query.Options{})
 	return testutil.ReadSeeAnswer(result.RowCount, result.Rows, result.Errors), nil
 }

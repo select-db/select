@@ -6,7 +6,7 @@ import (
 
 	"selectDb/internal/graph"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 func TestBuildSelectSQL(t *testing.T) {
@@ -118,7 +118,7 @@ func TestBuildSelectSQL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dialect := engine.GetDialect(tt.dbType)
+			dialect := dialects.Get(tt.dbType)
 			if dialect == nil {
 				t.Fatalf("no dialect registered for %q", tt.dbType)
 			}
@@ -135,7 +135,7 @@ func TestBuildSelectSQL(t *testing.T) {
 }
 
 func TestBuildSelectSQLRequiresTable(t *testing.T) {
-	dialect := engine.GetDialect("postgresql")
+	dialect := dialects.Get("postgresql")
 
 	for _, table := range []string{"", "   "} {
 		if _, err := buildSelectSQL("public", table, 100, dialect); err == nil {
@@ -147,7 +147,7 @@ func TestBuildSelectSQLRequiresTable(t *testing.T) {
 // The generated statement must stay a single terminated statement: the frontend
 // runs it as-is when the preview tab opens.
 func TestBuildSelectSQLIsSingleStatement(t *testing.T) {
-	dialect := engine.GetDialect("postgresql")
+	dialect := dialects.Get("postgresql")
 
 	sql, err := buildSelectSQL("public", "users", 100, dialect)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestBuildSelectSQLIsSingleStatement(t *testing.T) {
 // A quote embedded in an identifier must be escaped, never able to close the
 // quoted identifier and leak into the statement.
 func TestBuildSelectSQLEscapesQuotesInIdentifiers(t *testing.T) {
-	dialect := engine.GetDialect("postgresql")
+	dialect := dialects.Get("postgresql")
 
 	sql, err := buildSelectSQL("public", `we"ird`, 100, dialect)
 	if err != nil {

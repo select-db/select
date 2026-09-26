@@ -7,7 +7,7 @@ import (
 	"unicode"
 
 	"github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // TableEditInput is the payload for a single cell edit (mirrors frontend TableEdit).
@@ -46,7 +46,7 @@ func (dbc *DbClient) GenerateUpdateSQL(params GenerateUpdateSQLParams) (Generate
 		return out, fmt.Errorf("database not found")
 	}
 
-	dialect := engine.GetDialect(datasource.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
 		return out, fmt.Errorf("unsupported DB type for update SQL: %s", datasource.DBType)
 	}

@@ -7,7 +7,7 @@ import (
 	"selectDb/internal/utils"
 
 	"github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // LookupForeignKeyParams is the payload from the frontend's FK picker. It is
@@ -38,7 +38,7 @@ func (dbc *DbClient) LookupForeignKey(params LookupForeignKeyParams) graph.Query
 		return result
 	}
 
-	dialect := engine.GetDialect(datasource.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
 		result.Errors = []string{fmt.Sprintf("unsupported DB type for FK lookup: %s", datasource.DBType)}
 		return result

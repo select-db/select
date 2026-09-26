@@ -13,9 +13,8 @@ import (
 	"selectDb/internal/graph"
 	"selectDb/internal/utils"
 
-	"github.com/selectDb/dialect/engine"
-
 	"github.com/fsnotify/fsnotify"
+	"github.com/selectDb/dialect/engine/schema"
 )
 
 // Maps an fsnotify op to ("insert"|"delete", true), or ("", false) to ignore.
@@ -286,7 +285,7 @@ func (s *System) handleDatasourceConfigEvent(event fsnotify.Event, userID string
 	}
 
 	// Invalidate cached metadata so the next schema load uses the new config.
-	engine.InvalidateMetadata(ctx.WorkspaceID, cfg.DSN)
+	schema.Invalidate(ctx.WorkspaceID, cfg.DSN)
 
 	sshConfig := graph.SSHConfigFromFS(cfg.SSH)
 

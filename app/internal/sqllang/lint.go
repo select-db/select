@@ -9,7 +9,7 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	ta "github.com/selectDb/dialect/core/tokenanalyzer"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // LintResult is the lint response returned to the frontend.
@@ -48,7 +48,7 @@ func (s *SqlLang) Lint(p PositionParams) LintResult {
 
 	sql, _, _ := s.resolveEditorPosition(p)
 
-	dialect := engine.GetDialect(datasource.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
 		return LintResult{ID: id, Errors: []string{fmt.Sprintf("unsupported DB type: %s", datasource.DBType)}}
 	}

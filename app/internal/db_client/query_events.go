@@ -5,8 +5,10 @@ import (
 
 	"selectDb/internal/graph"
 
-	"github.com/selectDb/dialect/engine"
 	"selectDb/internal/desktop"
+
+	"github.com/selectDb/dialect/engine/query"
+	"github.com/selectDb/dialect/engine/results"
 )
 
 // queryStartedEvent is the payload of "query:started". The frontend uses it
@@ -58,7 +60,7 @@ type queryErrorEvent struct {
 	ErrorPosition *int   `json:"errorPosition,omitempty"`
 }
 
-// queryEventListener implements engine.StreamListener and emits Wails events.
+// queryEventListener implements results.StreamListener and emits Wails events.
 // Also responsible for computing column edit metadata once columns are known
 // and stashing it on the StreamingResult so subsequent Page() calls expose it.
 type queryEventListener struct {
@@ -72,7 +74,7 @@ type queryEventListener struct {
 	cancelTimer  context.CancelFunc
 }
 
-func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.ColumnEditMeta) {
+func (l *queryEventListener) OnStart(columns []string, columnEditMeta []query.ColumnEditMeta) {
 	// Columns came back, so the database answered. Reported here and not where
 	// the stream is kicked off: Stream returns before any I/O happens, and a
 	// query against an unreachable database would have claimed it was up.
@@ -84,7 +86,7 @@ func (l *queryEventListener) OnStart(columns []string, columnEditMeta []engine.C
 	if len(columnEditMeta) == 0 && len(columns) > 0 {
 		columnEditMeta = l.dbc.computeColumnEditMeta(l.datasource, l.statement)
 		if len(columnEditMeta) > 0 {
-			if sr, ok := engine.GetStreamingResult(queryKey(l.datasourceID, l.fileID)); ok {
+			if sr, ok := results.Get(queryKey(l.datasourceID, l.fileID)); ok {
 				sr.SetColumnEditMeta(columnEditMeta)
 			}
 		}

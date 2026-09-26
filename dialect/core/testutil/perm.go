@@ -39,7 +39,7 @@ func (r Right) String() string {
 }
 
 // RunPermCases checks a dialect against a table of permission cases. inspect is
-// the seam the caller measures through: engine.Inspect, which floors a
+// the seam the caller measures through: query.Inspect, which floors a
 // statement nobody read to manage, rather than a dialect's Inspect, which
 // reports nothing for one.
 //

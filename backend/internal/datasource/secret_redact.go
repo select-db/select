@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -88,24 +88,32 @@ func pemType(s string) (string, bool) {
 
 // maskDSN replaces the DSN password with its preview; rest stays editable.
 func maskDSN(dbType, dsn string) string {
-	pw := core.DSNPassword(dbType, dsn)
+	dialect := dialects.Get(dbType)
+	if dialect == nil {
+		return dsn
+	}
+	pw := dialect.DSNPassword(dsn)
 	if pw == "" {
 		return dsn
 	}
-	return core.DSNSetPassword(dbType, dsn, previewPassword(pw))
+	return dialect.DSNWithPassword(dsn, previewPassword(pw))
 }
 
 // mergeDSN: incoming password == preview(stored) means untouched -> restore
 // stored password onto the (possibly edited) host/db; else store verbatim.
 func mergeDSN(dbType, newDSN, oldDSN string) string {
-	old := core.DSNPassword(dbType, oldDSN)
-	if core.DSNPassword(dbType, newDSN) != previewPassword(old) {
+	dialect := dialects.Get(dbType)
+	if dialect == nil {
+		return newDSN
+	}
+	old := dialect.DSNPassword(oldDSN)
+	if dialect.DSNPassword(newDSN) != previewPassword(old) {
 		return newDSN // user typed a complete value (new password, or none)
 	}
 	if old == "" {
-		return core.DSNStripPassword(dbType, newDSN)
+		return dialect.DSNWithoutPassword(newDSN)
 	}
-	return core.DSNSetPassword(dbType, newDSN, old)
+	return dialect.DSNWithPassword(newDSN, old)
 }
 
 func sshStr(v any) string {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/results"
 )
 
 // Regression: the result cache is keyed by (db, file), and GetResultPage used
@@ -15,21 +15,21 @@ import (
 func TestGetResultPageRefusesASupersededExecution(t *testing.T) {
 	const datasourceID, fileID = "db-1", "file-1"
 	key := queryKey(datasourceID, fileID)
-	t.Cleanup(func() { engine.DeleteResult(key) })
+	t.Cleanup(func() { results.Delete(key) })
 
 	// First run: SELECT * — the columns the frontend is showing.
-	first := engine.NewStreamingResult("exec-first")
+	first := results.NewStreamingResult("exec-first")
 	first.SetColumns([]string{"id", "workspace_id", "occurred_at", "recorded_at"})
 	first.AppendRow([]any{"id-1", "ws-1", "t0", "t1"})
 	first.Finalize(1, 0, 1)
-	engine.SetStreamingResult(key, first)
+	results.Set(key, first)
 
 	// Second run of the same file, one column narrower, takes over the slot.
-	second := engine.NewStreamingResult("exec-second")
+	second := results.NewStreamingResult("exec-second")
 	second.SetColumns([]string{"workspace_id", "occurred_at", "recorded_at"})
 	second.AppendRow([]any{"ws-1", "t0", "t1"})
 	second.Finalize(1, 0, 1)
-	engine.SetStreamingResult(key, second)
+	results.Set(key, second)
 
 	dbc := &DbClient{}
 

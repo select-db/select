@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 	"github.com/stretchr/testify/require"
 
 	"backend/internal/api"
@@ -18,7 +18,7 @@ import (
 func init() {
 	// The e2e process dials loopback (embedded Postgres as a target datasource);
 	// the production SSRF guard would reject private addresses.
-	engine.EnforceOutboundGuard = false
+	connect.EnforceOutboundGuard = false
 }
 
 // NewHandler builds the real application handler graph (same routes + middleware

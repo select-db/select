@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // Query is the body of POST /datasources/{id}/query: one statement and its
@@ -40,6 +40,6 @@ func QueryHandler(dir string) http.HandlerFunc {
 		if f, ok := w.(http.Flusher); ok {
 			sink.SetDownstreamFlusher(f.Flush)
 		}
-		engine.StreamLocal(r.Context(), conn, engine.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, engine.Options{Args: q.Args}, sink)
+		query.Stream(r.Context(), conn, query.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, query.Options{Args: q.Args}, sink)
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/selectDb/dialect/core"
 )
 
 // DumpSchema runs mysqldump --no-data against the given MySQL DSN.
@@ -15,7 +13,7 @@ func (d *Dialect) DumpSchema(dsn string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	user, pass, host, port, dbname, ok := core.MySQLConnParams(dsn)
+	user, pass, host, port, dbname, ok := d.connParams(dsn)
 	if !ok {
 		return "", false
 	}

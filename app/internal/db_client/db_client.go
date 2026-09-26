@@ -14,6 +14,8 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/engine/query"
 	"github.com/selectDb/dialect/engine/transport"
 )
 
@@ -22,7 +24,7 @@ import (
 // concurrent queries could open dozens of connections and trip the remote's
 // "too many clients already". MetadataConcurrency=1 (below) keeps a schema load
 // to a single connection; the rest of this budget is for user queries.
-var appPoolConfig = engine.PoolConfig{
+var appPoolConfig = connect.PoolConfig{
 	MaxOpenConns:    4,
 	MaxIdleConns:    2,
 	ConnMaxLifetime: 30 * time.Minute,
@@ -85,14 +87,14 @@ func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, ss
 		return nil, fmt.Errorf("SSH config: %w", err)
 	}
 
-	return engine.GetOrOpenConn(workspaceID, dbType, dsn, resolvedSSH, appPoolConfig)
+	return connect.GetOrOpen(workspaceID, dbType, dsn, resolvedSSH, appPoolConfig)
 }
 
 // getEngineConn returns Conn with DB for local, empty Conn{} for proxified.
-func (dbc *DbClient) getEngineConn(node *graph.DatasourceNode) (engine.Conn, error) {
+func (dbc *DbClient) getEngineConn(node *graph.DatasourceNode) (query.Conn, error) {
 	if node.Proxified {
 		// Return empty conn, remote will GetOrOpenConn conn
-		return engine.Conn{}, nil
+		return query.Conn{}, nil
 	}
 
 	db, err := dbc.GetOrOpenConn(
@@ -103,9 +105,9 @@ func (dbc *DbClient) getEngineConn(node *graph.DatasourceNode) (engine.Conn, err
 		node.SSH,
 	)
 	if err != nil {
-		return engine.Conn{}, err
+		return query.Conn{}, err
 	}
-	return engine.Conn{DB: db}, nil
+	return query.Conn{DB: db}, nil
 }
 
 // getStatementTimeout returns the workspace statement_timeout_ms. Falls back to 30s.
@@ -132,7 +134,7 @@ func (dbc *DbClient) getCachedMetadata(node *graph.DatasourceNode, noCache bool)
 		return nil, err
 	}
 
-	inst := engine.Datasource{
+	inst := query.Datasource{
 		ID:        node.ID,
 		DBType:    node.DBType,
 		Proxified: node.Proxified,

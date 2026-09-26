@@ -8,7 +8,7 @@ test` at the repository root does not find it.
 ## One statement, every layer: agentprobe
 
 `dialect/cmd/agentprobe` runs one statement, or a batch of them, through lint,
-completion, `engine.Inspect` and the permission check, and reports each result.
+completion, `query.Inspect` and the permission check, and reports each result.
 Reach for it before writing anything.
 
 `-meta` is optional. Without it the catalog is `core.GetInspectTestMetadata()`:
@@ -62,18 +62,19 @@ Comparing the two is the finding.
 ## Permissions in a Go probe
 
 When agentprobe's policies are not the question, for a per-table grant or a
-deny rule, write a Go probe: `dialect/engine/zz_probe_test.go`. Name it `zz_` so it sorts last and is
+deny rule, write a Go probe: `dialect/engine/query/zz_probe_test.go`. Name it `zz_` so it sorts last and is
 obvious, and delete it before staging. The `compileFor` helper already exists
-in `engine/execute_see_test.go`.
+in `engine/query/execute_see_test.go`.
 
 ```go
-package engine
+package query
 
 import (
 	"fmt"
 	"testing"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 )
 
 func TestZZProbe(t *testing.T) {
@@ -96,7 +97,7 @@ func TestZZProbe(t *testing.T) {
 		{"postgresql", "WITH x AS (DELETE FROM t1 RETURNING c1) SELECT c1 FROM x"},
 		{"postgresql", "SELECT c1 FROM t1"},
 	} {
-		stmts := Inspect(GetDialect(p.dialect), &meta, p.sql)
+		stmts := Inspect(dialects.Get(p.dialect), &meta, p.sql)
 		shape := ""
 		for _, s := range stmts {
 			shape += fmt.Sprintf("op=%s tables=%d subs=%d", s.Operation, len(s.Tables), len(s.Subqueries))
@@ -118,7 +119,7 @@ Run it with `-v` to see the log lines. `none=ALLOWED` is a total bypass.
 is unchecked. `tables=0` next to either is usually the cause: a check over no
 table has nothing to refuse.
 
-`engine.Inspect` floors an unrecognised top-level statement to one unknown
+`query.Inspect` floors an unrecognised top-level statement to one unknown
 statement, so a probe through it never reports none. Zero statements is a
 `dialect.Inspect` shape, and a hole only for a dialect registered from outside
 this module.

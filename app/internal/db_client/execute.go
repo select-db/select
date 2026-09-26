@@ -10,7 +10,8 @@ import (
 	"selectDb/internal/sqllang"
 
 	core "github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 type executeParams struct {
@@ -23,8 +24,8 @@ type executeParams struct {
 }
 
 type prepared struct {
-	conn       engine.Conn
-	instance   engine.Datasource
+	conn       query.Conn
+	instance   query.Datasource
 	datasource *graph.DatasourceNode
 	statement  string
 	timeout    time.Duration
@@ -39,7 +40,7 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 		return nil, fmt.Errorf("failed to get datasource with id: %s", params.DatasourceID)
 	}
 
-	instance := engine.Datasource{
+	instance := query.Datasource{
 		ID:        datasource.ID,
 		DBType:    datasource.DBType,
 		Proxified: datasource.Proxified,
@@ -83,10 +84,10 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 
 // execute runs the statement to completion and returns a buffered Result.
 // Used by callers that need the full row set up front (Export, Explain, Plan).
-func (dbc *DbClient) execute(params executeParams) (*engine.Result, *graph.DatasourceNode) {
+func (dbc *DbClient) execute(params executeParams) (*query.Result, *graph.DatasourceNode) {
 	p, err := dbc.prepare(params)
 	if err != nil {
-		return &engine.Result{Errors: []string{err.Error()}}, nil
+		return &query.Result{Errors: []string{err.Error()}}, nil
 	}
 
 	// HTTP context gets +10s margin so the backend's DB timeout fires first.
@@ -99,7 +100,7 @@ func (dbc *DbClient) execute(params executeParams) (*engine.Result, *graph.Datas
 		p.instance,
 		p.datasource.WorkspaceID,
 		p.statement,
-		engine.Options{
+		query.Options{
 			ForExport: params.ForExport,
 			MaxBytes:  p.maxBytes,
 			Timeout:   p.timeout,
@@ -116,19 +117,19 @@ func (dbc *DbClient) execute(params executeParams) (*engine.Result, *graph.Datas
 // computeColumnEditMeta returns per-column editability metadata for the
 // resolved statement. Returns nil when metadata is missing or the statement
 // is not a SELECT.
-func (dbc *DbClient) computeColumnEditMeta(datasource *graph.DatasourceNode, statement string) []engine.ColumnEditMeta {
+func (dbc *DbClient) computeColumnEditMeta(datasource *graph.DatasourceNode, statement string) []query.ColumnEditMeta {
 	meta, _ := dbc.getCachedMetadata(datasource, false)
 	if meta == nil {
 		return nil
 	}
-	dialect := engine.GetDialect(datasource.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
 		return nil
 	}
-	inspected := engine.Inspect(dialect, meta, statement)
-	stmt, ok := engine.FirstSelectStatement(inspected)
+	inspected := query.Inspect(dialect, meta, statement)
+	stmt, ok := query.FirstSelectStatement(inspected)
 	if !ok {
 		return nil
 	}
-	return engine.AnalyzeEditableColumns(meta, stmt, datasource.ID)
+	return query.AnalyzeEditableColumns(meta, stmt, datasource.ID)
 }

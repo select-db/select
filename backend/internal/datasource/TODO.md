@@ -26,7 +26,7 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
 ```
 
 1. A managed datasource is a DSN, `cellar://<cellar id>/<datasource id>`,
-   opened by `engine.GetOrOpenConn` like any other. The backend checks
+   opened by `connect.GetOrOpen` like any other. The backend checks
    permissions and masks columns as for every datasource.
 2. The `cellar` database/sql driver sends each statement to the cellar with a
    service token and the grant (workspace, limits) in headers.
@@ -212,7 +212,7 @@ Numbers are order; items inside a milestone can run in parallel.
 
 ### 1. Cellar runs queries (local files, no bucket)
 Needs 0.
-- [x] Cellar mode: one query route running `StreamLocal` against local
+- [x] Cellar mode: one query route running `query.Stream` against local
       files, reached through the `cellar` database/sql driver, so REST and
       MCP open a managed datasource like any other. `CELLAR=local` starts it
       in-process.

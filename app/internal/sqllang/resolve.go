@@ -8,7 +8,7 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	coreRefs "github.com/selectDb/dialect/core/references"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 )
 
 // ResolveResult is returned by Resolve for ItemInfoModal navigation.
@@ -40,7 +40,7 @@ func (s *SqlLang) Resolve(p PositionParams) ResolveResult {
 		return ResolveResult{}
 	}
 
-	d := engine.GetDialect(datasource.DBType)
+	d := dialects.Get(datasource.DBType)
 	sql, line, col := s.resolveEditorPosition(p)
 	obj := resolveCore(meta, d, sql, line, col)
 	if obj == nil {

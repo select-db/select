@@ -7,8 +7,10 @@ import (
 	"selectDb/internal/graph"
 	"selectDb/internal/utils"
 
-	"github.com/selectDb/dialect/engine"
 	"selectDb/internal/desktop"
+
+	"github.com/selectDb/dialect/engine/query"
+	"github.com/selectDb/dialect/engine/results"
 )
 
 type QueryParams struct {
@@ -132,7 +134,7 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		p.instance,
 		p.datasource.WorkspaceID,
 		p.statement,
-		engine.Options{
+		query.Options{
 			MaxBytes: p.maxBytes,
 			Timeout:  p.timeout,
 		},
@@ -197,7 +199,7 @@ func (dbc *DbClient) GetResultPage(params GetResultPageParams) graph.QueryResult
 	return queryResult
 }
 
-// PageStatusKind mirrors engine.PageStatus on the wire.
+// PageStatusKind mirrors results.PageStatus on the wire.
 type PageStatusKind int
 
 const (
@@ -217,11 +219,11 @@ func pageStatusString(k PageStatusKind) string {
 	}
 }
 
-func toPageStatusKind(s engine.PageStatus) PageStatusKind {
+func toPageStatusKind(s results.PageStatus) PageStatusKind {
 	switch s {
-	case engine.PagePartial:
+	case results.PagePartial:
 		return PageStatusPartial
-	case engine.PagePending:
+	case results.PagePending:
 		return PageStatusPending
 	default:
 		return PageStatusReady

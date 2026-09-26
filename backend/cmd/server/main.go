@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 
 	"backend/db"
 	"backend/internal/api"
@@ -56,7 +56,7 @@ func main() {
 
 	// This process dials user-supplied datasources on behalf of other users,
 	// so enforce the SSRF guard. The desktop app must never set this.
-	engine.EnforceOutboundGuard = true
+	connect.EnforceOutboundGuard = true
 
 	if err := db.Init(); err != nil {
 		log.Fatalf("DB init failed: %v", err)

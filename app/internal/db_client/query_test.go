@@ -3,7 +3,7 @@ package db_client
 import (
 	"testing"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 // TestCancelQueryCallsAndCleansUp verifies that CancelQuery calls the stored
@@ -17,7 +17,7 @@ func TestCancelQueryCallsAndCleansUp(t *testing.T) {
 	key := queryKey("test-db", params.FileID)
 
 	called := false
-	engine.RegisterCancel(key, func() {
+	query.RegisterCancel(key, func() {
 		called = true
 	})
 
@@ -31,5 +31,5 @@ func TestCancelQueryCallsAndCleansUp(t *testing.T) {
 	}
 
 	// Re-registering a no-op and immediately cancelling should not call the old func again.
-	engine.RegisterCancel(key, func() {})()
+	query.RegisterCancel(key, func() {})()
 }

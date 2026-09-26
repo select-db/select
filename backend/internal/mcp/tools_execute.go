@@ -14,7 +14,7 @@ import (
 	"backend/internal/datasource"
 
 	"github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 const (
@@ -143,7 +143,7 @@ func describe(ctx context.Context, o datasource.Opened) (*core.Metadata, error) 
 // that read no data (e.g. EXPLAIN), which should not appear in the data-plane log.
 func runQuery(ctx context.Context, o datasource.Opened, sql string, maxRows int, rec *audit.Record) any {
 	sink := newCollectSink(maxRows, rec)
-	o.Stream(ctx, sql, engine.Options{
+	o.Stream(ctx, sql, query.Options{
 		// Bound the work even when callers don't supply a timeout.
 		Timeout:  30 * time.Second,
 		MaxRows:  maxRows,
@@ -193,7 +193,7 @@ func (c *collectSink) OnColumns(cols []string) error {
 }
 
 func (c *collectSink) OnRow(values []any) error {
-	// StreamLocal reuses backing slices
+	// query.Stream reuses backing slices
 	row := make([]any, len(values))
 	copy(row, values)
 	c.rows = append(c.rows, row)

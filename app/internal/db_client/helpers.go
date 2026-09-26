@@ -8,7 +8,8 @@ import (
 	"selectDb/internal/sqllang"
 
 	"github.com/selectDb/dialect/core"
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
+	"github.com/selectDb/dialect/engine/query"
 )
 
 func (dbc *DbClient) inspectStatement(
@@ -20,8 +21,8 @@ func (dbc *DbClient) inspectStatement(
 		return nil, nil, false
 	}
 
-	dialect := engine.GetDialect(datasource.DBType)
-	inspectStatements := engine.Inspect(dialect, metadata, statement)
+	dialect := dialects.Get(datasource.DBType)
+	inspectStatements := query.Inspect(dialect, metadata, statement)
 	if len(inspectStatements) == 0 {
 		return nil, nil, false
 	}
@@ -76,9 +77,9 @@ func findTable(
 	return nil
 }
 
-// columnEditMetaToGraph maps engine.ColumnEditMeta to the frontend wire shape.
+// columnEditMetaToGraph maps query.ColumnEditMeta to the frontend wire shape.
 // Conversion stays in the app so dialect/ never imports graph types.
-func columnEditMetaToGraph(in []engine.ColumnEditMeta) []graph.ColumnMetadata {
+func columnEditMetaToGraph(in []query.ColumnEditMeta) []graph.ColumnMetadata {
 	out := make([]graph.ColumnMetadata, len(in))
 	for i, m := range in {
 		out[i] = graph.ColumnMetadata{

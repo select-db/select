@@ -7,7 +7,7 @@ import (
 	"backend/internal/datasource/cellar"
 	"backend/internal/utils"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 )
 
 // toolError is the structured envelope returned inside an MCP tool
@@ -47,7 +47,7 @@ func asToolError(err error) *toolError {
 	if errors.As(err, &te) {
 		return te
 	}
-	var cfgErr *engine.ConfigError
+	var cfgErr *connect.ConfigError
 	if errors.As(err, &cfgErr) {
 		return &toolError{Code: "upstream", Message: cfgErr.Msg}
 	}

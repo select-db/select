@@ -1,0 +1,446 @@
+package schema
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/sqlite"
+	sqlitedriver "modernc.org/sqlite"
+)
+
+func init() {
+	// Register the pure-Go SQLite driver under the name our dialect expects.
+	sql.Register("sqlite3", &sqlitedriver.Driver{})
+}
+
+func TestGetOrFetchMetadata_HitAndMiss(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	dialect := sqlite.NewDialect()
+	db, err := dialect.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if _, err := db.Exec("CREATE TABLE t1 (id INTEGER PRIMARY KEY)"); err != nil {
+		t.Fatalf("CREATE: %v", err)
+	}
+
+	ctx := context.Background()
+	const ws = "ws-1"
+	const dsn = "dsn-1"
+
+	m1, err := GetOrFetch(ctx, ws, dsn, db, dialect, "test_db", false)
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	m2, err := GetOrFetch(ctx, ws, dsn, db, dialect, "test_db", false)
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if m1 != m2 {
+		t.Fatal("expected same cached *Metadata pointer on hit")
+	}
+
+	// Different DSN, same workspace → different entry.
+	m3, err := GetOrFetch(ctx, ws, "dsn-2", db, dialect, "test_db", false)
+	if err != nil {
+		t.Fatalf("third call: %v", err)
+	}
+	if m1 == m3 {
+		t.Fatal("expected separate entries for different DSNs")
+	}
+
+	// Same DSN, different workspace → different entry. This is the
+	// multi-tenant isolation guarantee: two users in two workspaces
+	// pointing at the same DB never share a cache row.
+	m4, err := GetOrFetch(ctx, "ws-2", dsn, db, dialect, "test_db", false)
+	if err != nil {
+		t.Fatalf("fourth call: %v", err)
+	}
+	if m1 == m4 {
+		t.Fatal("expected separate entries when workspace differs")
+	}
+}
+
+func TestGetOrFetchMetadata_RefreshForcesFresh(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	dialect := sqlite.NewDialect()
+	db, err := dialect.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+
+	m1, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "test_db", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "test_db", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m1 == m2 {
+		t.Fatal("expected refresh=true to bypass cache")
+	}
+	// And the new entry replaced the old one.
+	m3, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "test_db", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m3 != m2 {
+		t.Fatal("expected the refreshed entry to be cached")
+	}
+}
+
+func TestInvalidateMetadata(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	dialect := sqlite.NewDialect()
+	db, err := dialect.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+
+	m1a, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2a, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
+
+	Invalidate("ws", "dsn-A")
+
+	m1b, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2b, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
+	if m1a == m1b {
+		t.Fatal("dsn-A should have been refetched after Invalidate")
+	}
+	if m2a != m2b {
+		t.Fatal("dsn-B should still be cached")
+	}
+}
+
+func TestClearMetadataCache(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	dialect := sqlite.NewDialect()
+	db, err := dialect.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+
+	m1a, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2a, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
+
+	ClearCache()
+
+	m1b, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2b, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
+	if m1a == m1b || m2a == m2b {
+		t.Fatal("expected fresh metadata after Clear")
+	}
+}
+
+func TestGetOrFetchMetadata_Concurrent(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	dialect := sqlite.NewDialect()
+	db, err := dialect.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+
+	const n = 10
+	var wg sync.WaitGroup
+	results := make([]*core.Metadata, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			m, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
+			if err != nil {
+				t.Errorf("goroutine %d: %v", idx, err)
+				return
+			}
+			results[idx] = m
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 1; i < n; i++ {
+		if results[i] != results[0] {
+			t.Fatalf("goroutine %d got a different *Metadata than goroutine 0", i)
+		}
+	}
+}
+
+func TestGetOrFetchMetadata_InvalidateForcesFresh(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	dialect := sqlite.NewDialect()
+	db, err := dialect.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+
+	m1, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m1 != m2 {
+		t.Fatal("expected cache hit before invalidation")
+	}
+
+	Invalidate("ws", "dsn")
+
+	m3, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m3 == m1 {
+		t.Fatal("expected fresh metadata after invalidation")
+	}
+}
+
+func TestHashWorkspaceDSN_StableAndScoped(t *testing.T) {
+	if connect.WorkspaceCacheKey("ws-1", "dsn-1") != connect.WorkspaceCacheKey("ws-1", "dsn-1") {
+		t.Fatal("key must be stable for the same inputs")
+	}
+	if connect.WorkspaceCacheKey("ws-1", "dsn-1") == connect.WorkspaceCacheKey("ws-2", "dsn-1") {
+		t.Fatal("workspace must be part of the key")
+	}
+	if connect.WorkspaceCacheKey("ws-1", "dsn-1") == connect.WorkspaceCacheKey("ws-1", "dsn-2") {
+		t.Fatal("dsn must be part of the key")
+	}
+	// Defence-in-depth: the literal DSN must not appear in the key.
+	const sneakyDSN = "postgres://user:secret@host/db"
+	k := connect.WorkspaceCacheKey("ws", sneakyDSN)
+	if k == sneakyDSN {
+		t.Fatal("DSN leaked verbatim into cache key")
+	}
+}
+
+// gatedDialect holds every fetch in GetSchemas until release is closed, and
+// counts the fetches that reach it.
+type gatedDialect struct {
+	core.SQLDialect
+	started chan struct{}
+	release chan struct{}
+	fetches atomic.Int32
+}
+
+func newGatedDialect() *gatedDialect {
+	return &gatedDialect{
+		SQLDialect: sqlite.NewDialect(),
+		started:    make(chan struct{}, 8),
+		release:    make(chan struct{}),
+	}
+}
+
+func (d *gatedDialect) GetSchemas(ctx context.Context, db *sql.DB) ([]string, error) {
+	d.fetches.Add(1)
+	d.started <- struct{}{}
+	<-d.release
+	return d.SQLDialect.GetSchemas(ctx, db)
+}
+
+func openMemoryDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sqlite.NewDialect().OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+func TestGetOrFetchMetadata_RefreshJoinsTheFetchInProgress(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	db := openMemoryDB(t)
+	dialect := newGatedDialect()
+	ctx := context.Background()
+
+	results := make(chan *core.Metadata, 2)
+	go func() {
+		m, _ := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
+		results <- m
+	}()
+	<-dialect.started
+
+	go func() {
+		m, _ := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", true)
+		results <- m
+	}()
+	// No hook says the second caller is waiting; give it time to arrive.
+	time.Sleep(50 * time.Millisecond)
+	close(dialect.release)
+
+	first, second := <-results, <-results
+	if first == nil || first != second {
+		t.Fatalf("callers got %p and %p, want one shared result", first, second)
+	}
+	if n := dialect.fetches.Load(); n != 1 {
+		t.Fatalf("fetched %d times, want 1", n)
+	}
+}
+
+func TestGetOrFetchMetadata_OtherDatabasesDoNotWait(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	db := openMemoryDB(t)
+	slow := newGatedDialect()
+	ctx := context.Background()
+
+	cached, err := GetOrFetch(ctx, "ws", "dsn-cached", db, sqlite.NewDialect(), "db", false)
+	if err != nil {
+		t.Fatalf("prime cache: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = GetOrFetch(ctx, "ws", "dsn-slow", db, slow, "db", false)
+		close(done)
+	}()
+	<-slow.started
+	defer func() {
+		close(slow.release)
+		<-done
+	}()
+
+	answered := make(chan error, 2)
+	go func() {
+		_, err := GetOrFetch(ctx, "ws", "dsn-other", db, sqlite.NewDialect(), "db", false)
+		answered <- err
+	}()
+	go func() {
+		m, err := GetOrFetch(ctx, "ws", "dsn-cached", db, sqlite.NewDialect(), "db", false)
+		if err == nil && m != cached {
+			err = errors.New("cache hit returned a different result")
+		}
+		answered <- err
+	}()
+
+	for range 2 {
+		select {
+		case err := <-answered:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("a call for another database waited on the slow fetch")
+		}
+	}
+}
+
+// gatedDumpDialect holds every native dump until release is closed, and counts
+// the dumps that reach it.
+type gatedDumpDialect struct {
+	core.SQLDialect
+	started chan struct{}
+	release chan struct{}
+	dumps   atomic.Int32
+}
+
+func newGatedDumpDialect() *gatedDumpDialect {
+	return &gatedDumpDialect{
+		SQLDialect: sqlite.NewDialect(),
+		started:    make(chan struct{}, 8),
+		release:    make(chan struct{}),
+	}
+}
+
+func (d *gatedDumpDialect) DumpSchema(string) (string, bool) {
+	d.dumps.Add(1)
+	d.started <- struct{}{}
+	<-d.release
+	return "CREATE TABLE t (id INTEGER);", true
+}
+
+func TestGetOrGenerateDump_RefreshJoinsTheDumpInProgress(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	dialect := newGatedDumpDialect()
+	meta := &core.Metadata{}
+
+	results := make(chan string, 2)
+	go func() { results <- GetOrGenerateDump(dialect, "ws", "dsn", meta, false) }()
+	<-dialect.started
+
+	go func() { results <- GetOrGenerateDump(dialect, "ws", "dsn", meta, true) }()
+	// No hook says the second caller is waiting; give it time to arrive.
+	time.Sleep(50 * time.Millisecond)
+	close(dialect.release)
+
+	first, second := <-results, <-results
+	if first != "CREATE TABLE t (id INTEGER);" || first != second {
+		t.Fatalf("callers got %q and %q, want one shared dump", first, second)
+	}
+	if n := dialect.dumps.Load(); n != 1 {
+		t.Fatalf("dumped %d times, want 1", n)
+	}
+}
+
+func TestGetOrGenerateDump_OtherDatabasesDoNotWait(t *testing.T) {
+	t.Cleanup(ClearCache)
+	ClearCache()
+
+	slow := newGatedDumpDialect()
+	meta := &core.Metadata{}
+
+	done := make(chan struct{})
+	go func() {
+		GetOrGenerateDump(slow, "ws", "dsn-slow", meta, false)
+		close(done)
+	}()
+	<-slow.started
+	defer func() {
+		close(slow.release)
+		<-done
+	}()
+
+	answered := make(chan struct{})
+	go func() {
+		GetOrGenerateDump(sqlite.NewDialect(), "ws", "dsn-other", meta, false)
+		close(answered)
+	}()
+
+	select {
+	case <-answered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a dump of another database waited on the slow one")
+	}
+}
