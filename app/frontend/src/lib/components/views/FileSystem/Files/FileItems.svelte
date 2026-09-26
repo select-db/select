@@ -11,7 +11,7 @@
 	import { getActions } from './actions/getActions';
 	import { createDragAndDropHandlers } from './helpers/dragAndDropHandlers';
 	import {
-		clickDatabase,
+		clickDatasource,
 		createClickHandlers,
 		createClickGestureHandlers
 	} from './helpers/clickHandlers';
@@ -27,21 +27,21 @@
 	let {
 		files,
 		folders,
-		databases,
-		databaseItems,
+		datasources,
+		datasourceItems,
 		depth = 0,
 		parentIds = [],
 		ctx = 'fs',
-		insideDatabase = false
+		insideDatasource = false
 	}: {
 		files: graph.FileNode[];
 		folders: graph.FolderNode[];
-		databases: graph.DBInstanceNode[];
-		databaseItems: graph.DBInstanceItemNode[];
+		datasources: graph.DatasourceNode[];
+		datasourceItems: graph.DatasourceItemNode[];
 		depth?: number;
 		parentIds?: string[];
 		ctx?: 'fs' | 'git' | 'search';
-		insideDatabase?: boolean;
+		insideDatasource?: boolean;
 	} = $props();
 
 	// Track last clicked item for shift+click range selection (using object ref for factory functions)
@@ -55,14 +55,14 @@
 	);
 
 	// Create click and selection handlers (used when not inside database)
-	const { handleFolderClick, handleFileClick, handleDatabaseClick } = untrack(() =>
+	const { handleFolderClick, handleFileClick, handleDatasourceClick } = untrack(() =>
 		createClickHandlers(ctx, lastClickedId)
 	);
 
 	type AnyItem =
 		| graph.FolderNode
-		| graph.DBInstanceNode
-		| graph.DBInstanceItemNode
+		| graph.DatasourceNode
+		| graph.DatasourceItemNode
 		| graph.FileNode;
 
 	// Simple click handler for items inside database (no selection support)
@@ -72,9 +72,9 @@
 			// Special handling for schema.sql files inside database folders
 			if (file.name === 'schema.sql' && file.folder_id) {
 				const workspace = get(workspaceGraphStore);
-				const database = (workspace?.db_instances ?? []).find((db) => db.uri === file.folder_id);
-				if (database) {
-					void navigateToSchema(database.id);
+				const datasource = (workspace?.datasources ?? []).find((db) => db.uri === file.folder_id);
+				if (datasource) {
+					void navigateToSchema(datasource.id);
 					return;
 				}
 			}
@@ -91,11 +91,11 @@
 			return;
 		}
 
-		// Through clickDatabase, so a database inside another folder answers a
+		// Through clickDatasource, so a database inside another folder answers a
 		// click the way one at the root does: opening while it is empty, and
 		// reading the schema that makes it not be.
-		if (item.type === 'db_instance') {
-			clickDatabase(item as graph.DBInstanceNode);
+		if (item.type === 'datasource') {
+			clickDatasource(item as graph.DatasourceNode);
 			return;
 		}
 
@@ -104,10 +104,10 @@
 
 	// Route a click to the handler that item kind would have got on its own.
 	const clickItem = (item: AnyItem, event?: MouseEvent) => {
-		if (insideDatabase) return handleSimpleClick(item);
+		if (insideDatasource) return handleSimpleClick(item);
 		if (item.type === 'folder') return handleFolderClick(item as graph.FolderNode, event);
 		if (item.type === 'file') return handleFileClick(item as graph.FileNode, event);
-		return handleDatabaseClick(item as graph.DBInstanceNode, event);
+		return handleDatasourceClick(item as graph.DatasourceNode, event);
 	};
 
 	// Clicking and double-clicking run the options that declare the gesture, so
@@ -146,57 +146,57 @@
 </script>
 
 <div data-depth={depth}>
-	{#each databases as database (database.id)}
+	{#each datasources as datasource (datasource.id)}
 		<ItemDisplay
 			{depth}
 			{parentIds}
 			{draggable}
 			{handleClick}
 			{handleDoubleClick}
-			item={database}
-			options={() => getOptions(database)}
-			actions={getActions({ item: database })}
+			item={datasource}
+			options={() => getOptions(datasource)}
+			actions={getActions({ item: datasource })}
 			onDragStart={handleDragStart}
 			onDragOver={(item, event) => {
-				if (isEventFromExtendedContent(database.id, event)) return;
+				if (isEventFromExtendedContent(datasource.id, event)) return;
 				handleDragOver(item, event);
 			}}
 			onDrop={async (item, event) => {
-				if (isEventFromExtendedContent(database.id, event)) return;
+				if (isEventFromExtendedContent(datasource.id, event)) return;
 				await handleDrop(item, event);
 			}}
 			onDragEnd={handleDragEnd}
 		/>
 
-		{#if isExpanded(database.id)}
+		{#if isExpanded(datasource.id)}
 			<div
 				class="folder-content-drop-zone"
-				class:drop-zone-hovered={$dragStateStore.hoveredTargetId === database.id}
-				data-drop-zone={database.id}
-				ondragover={(e) => handleDragOver(database, e)}
-				ondrop={async (e) => await handleDrop(database, e)}
+				class:drop-zone-hovered={$dragStateStore.hoveredTargetId === datasource.id}
+				data-drop-zone={datasource.id}
+				ondragover={(e) => handleDragOver(datasource, e)}
+				ondrop={async (e) => await handleDrop(datasource, e)}
 				role="region"
-				aria-label={`${database.name} content drop zone`}
+				aria-label={`${datasource.name} content drop zone`}
 			>
 				<FileItems
 					depth={depth + 1}
-					folders={database.folders}
-					databases={[]}
-					databaseItems={filterVisibleChildren(
-						database.id,
-						database.children,
+					folders={datasource.folders}
+					datasources={[]}
+					datasourceItems={filterVisibleChildren(
+						datasource.id,
+						datasource.children,
 						$hiddenChildrenStore
 					)}
-					files={database.files}
-					parentIds={[...parentIds, database.id]}
+					files={datasource.files}
+					parentIds={[...parentIds, datasource.id]}
 					{ctx}
-					insideDatabase={true}
+					insideDatasource={true}
 				/>
 			</div>
 		{/if}
 	{/each}
 
-	{#each databaseItems as item (item.id)}
+	{#each datasourceItems as item (item.id)}
 		<ItemDisplay
 			{depth}
 			{item}
@@ -209,13 +209,13 @@
 		{#if isExpanded(item.id)}
 			<FileItems
 				folders={[]}
-				databases={[]}
+				datasources={[]}
 				files={[]}
-				databaseItems={filterVisibleChildren(item.id, item.children, $hiddenChildrenStore)}
+				datasourceItems={filterVisibleChildren(item.id, item.children, $hiddenChildrenStore)}
 				depth={depth + 1}
 				parentIds={[...parentIds, item.id]}
 				{ctx}
-				insideDatabase={true}
+				insideDatasource={true}
 			/>
 		{/if}
 	{/each}
@@ -255,12 +255,12 @@
 				<FileItems
 					files={folder.files}
 					folders={folder.folders}
-					databases={folder.db_instances}
-					databaseItems={[]}
+					datasources={folder.datasources}
+					datasourceItems={[]}
 					depth={depth + 1}
 					parentIds={[...parentIds, folder.id]}
 					{ctx}
-					{insideDatabase}
+					{insideDatasource}
 				/>
 			</div>
 		{/if}
@@ -298,11 +298,11 @@
 	}
 
 	:global(.drop-zone-hovered .item.folder svg),
-	:global(.drop-zone-hovered .item.database svg) {
+	:global(.drop-zone-hovered .item.datasource svg) {
 		stroke: var(--gray-800) !important;
 	}
 	:global(.drop-zone-hovered .item.folder .icon-folder-open svg),
-	:global(.drop-zone-hovered .item.database .icon-folder-open svg) {
+	:global(.drop-zone-hovered .item.datasource .icon-folder-open svg) {
 		fill: var(--gray-700) !important;
 	}
 </style>

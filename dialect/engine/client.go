@@ -32,7 +32,7 @@ func (client *Client) Stream(
 	key string,
 	resultID string,
 	conn query.Conn,
-	instance query.DBInstance,
+	instance query.Datasource,
 	workspaceID, sql string,
 	options query.Options,
 	listener results.StreamListener,
@@ -72,7 +72,7 @@ func (client *Client) Stream(
 func (client *Client) Execute(
 	ctx context.Context,
 	conn query.Conn,
-	instance query.DBInstance,
+	instance query.Datasource,
 	workspaceID, sql string,
 	options query.Options,
 ) *query.Result {
@@ -107,7 +107,7 @@ func (client *Client) Page(key string, page, pageSize int) (*results.PageData, r
 }
 
 // Ping checks DB connectivity. Routes through Transport when proxified.
-func (client *Client) Ping(ctx context.Context, conn query.Conn, instance query.DBInstance, workspaceID string, noCache bool) error {
+func (client *Client) Ping(ctx context.Context, conn query.Conn, instance query.Datasource, workspaceID string, noCache bool) error {
 	if !instance.Proxified {
 		return conn.DB.PingContext(ctx)
 	}
@@ -118,7 +118,7 @@ func (client *Client) Ping(ctx context.Context, conn query.Conn, instance query.
 }
 
 // GetMetadata fetches schema. Routes through Transport when proxified.
-func (client *Client) GetMetadata(ctx context.Context, conn query.Conn, instance query.DBInstance, workspaceID, dbName string, noCache bool) (*core.Metadata, error) {
+func (client *Client) GetMetadata(ctx context.Context, conn query.Conn, instance query.Datasource, workspaceID, dbName string, noCache bool) (*core.Metadata, error) {
 	if !instance.Proxified {
 		dialect := dialects.Get(instance.DBType)
 		if dialect == nil {
@@ -142,7 +142,7 @@ func (client *Client) GetMetadata(ctx context.Context, conn query.Conn, instance
 }
 
 // DumpSchema returns DDL. For proxified, runs on remote (pg_dump / metadata fallback).
-func (client *Client) DumpSchema(ctx context.Context, instance query.DBInstance, workspaceID, dsn string, metadata *core.Metadata, noCache bool) string {
+func (client *Client) DumpSchema(ctx context.Context, instance query.Datasource, workspaceID, dsn string, metadata *core.Metadata, noCache bool) string {
 	if instance.Proxified && client.Transport != nil {
 		if sql, err := client.Transport.DumpSchema(ctx, workspaceID, instance.ID); err == nil {
 			return sql

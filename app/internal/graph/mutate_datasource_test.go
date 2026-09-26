@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-func TestMutate_InsertDbInstance(t *testing.T) {
+func TestMutate_InsertDatasource(t *testing.T) {
 	ctx := context.Background()
 	g := setupGraph()
 
 	mut := generated.MutationCommit{
-		TableName: "db_instance",
+		TableName: "datasource",
 		Operation: "insert",
 		ObjectID:  "db-1",
 		Payload: `{
@@ -34,17 +34,17 @@ func TestMutate_InsertDbInstance(t *testing.T) {
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
-	if _, ok := nodes[0].(*DBInstanceNode); !ok {
-		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
+	if _, ok := nodes[0].(*DatasourceNode); !ok {
+		t.Errorf("expected DatasourceNode, got %T", nodes[0])
 	}
 }
 
-func TestMutate_InsertDbInstanceWithoutDSN(t *testing.T) {
+func TestMutate_InsertDatasourceWithoutDSN(t *testing.T) {
 	ctx := context.Background()
 	g := setupGraph()
 
 	mut := generated.MutationCommit{
-		TableName: "db_instance",
+		TableName: "datasource",
 		Operation: "insert",
 		ObjectID:  "db-1",
 		Payload: `{
@@ -65,17 +65,17 @@ func TestMutate_InsertDbInstanceWithoutDSN(t *testing.T) {
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
-	if _, ok := nodes[0].(*DBInstanceNode); !ok {
-		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
+	if _, ok := nodes[0].(*DatasourceNode); !ok {
+		t.Errorf("expected DatasourceNode, got %T", nodes[0])
 	}
 }
 
-func TestMutate_InsertDbInstanceWithoutFolderId(t *testing.T) {
+func TestMutate_InsertDatasourceWithoutFolderId(t *testing.T) {
 	ctx := context.Background()
 	g := setupGraph()
 
 	mut := generated.MutationCommit{
-		TableName: "db_instance",
+		TableName: "datasource",
 		Operation: "insert",
 		ObjectID:  "db-1",
 		Payload: `{
@@ -97,12 +97,12 @@ func TestMutate_InsertDbInstanceWithoutFolderId(t *testing.T) {
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
-	if _, ok := nodes[0].(*DBInstanceNode); !ok {
-		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
+	if _, ok := nodes[0].(*DatasourceNode); !ok {
+		t.Errorf("expected DatasourceNode, got %T", nodes[0])
 	}
 }
 
-func TestMutate_InsertFolderDbInstance(t *testing.T) {
+func TestMutate_InsertFolderDatasource(t *testing.T) {
 	ctx := context.Background()
 	g := setupGraph()
 
@@ -125,7 +125,7 @@ func TestMutate_InsertFolderDbInstance(t *testing.T) {
 	raw := map[string]interface{}{
 		"ID":         "1",
 		"operation":  "insert",
-		"table_name": "db_instance",
+		"table_name": "datasource",
 		"object_id":  "db-1",
 		"payload": `{
 			"id":"db-1",
@@ -149,9 +149,9 @@ func TestMutate_InsertFolderDbInstance(t *testing.T) {
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node, got %d", len(nodes))
 	}
-	db, ok := nodes[0].(*DBInstanceNode)
+	db, ok := nodes[0].(*DatasourceNode)
 	if !ok {
-		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
+		t.Errorf("expected DatasourceNode, got %T", nodes[0])
 	}
 	nodes = g.lookupAll([]string{db.FolderID})
 	if len(nodes) != 1 {
@@ -159,19 +159,19 @@ func TestMutate_InsertFolderDbInstance(t *testing.T) {
 	}
 	parentFolder, ok := nodes[0].(*FolderNode)
 	if !ok {
-		t.Errorf("expected DBInstanceNode, got %T", nodes[0])
+		t.Errorf("expected DatasourceNode, got %T", nodes[0])
 	}
-	if len(parentFolder.DBInstances) != 1 {
-		t.Fatalf("expected 1 db instance in parent folder, got %d", len(parentFolder.DBInstances))
+	if len(parentFolder.Datasources) != 1 {
+		t.Fatalf("expected 1 datasource in parent folder, got %d", len(parentFolder.Datasources))
 	}
 }
 
-func TestMutate_UpdateDbInstanceName(t *testing.T) {
+func TestMutate_UpdateDatasourceName(t *testing.T) {
 	ctx := context.Background()
 	g := setupGraph()
 
 	if err := g.Mutate(ctx, generated.MutationCommit{
-		TableName: "db_instance",
+		TableName: "datasource",
 		Operation: "insert",
 		ObjectID:  "db-1",
 		Payload: `{
@@ -188,7 +188,7 @@ func TestMutate_UpdateDbInstanceName(t *testing.T) {
 	}
 
 	mut := generated.MutationCommit{
-		TableName: "db_instance",
+		TableName: "datasource",
 		Operation: "update",
 		ObjectID:  "db-1",
 		Payload: `{
@@ -201,18 +201,18 @@ func TestMutate_UpdateDbInstanceName(t *testing.T) {
 	}
 
 	nodes := g.lookupAll([]string{"db-1"})
-	db := nodes[0].(*DBInstanceNode)
+	db := nodes[0].(*DatasourceNode)
 	if db.Name != "NewDB" {
 		t.Errorf("expected Name=NewDB, got %s", db.Name)
 	}
 }
 
-func TestMutate_DeleteDbInstance(t *testing.T) {
+func TestMutate_DeleteDatasource(t *testing.T) {
 	ctx := context.Background()
 	g := setupGraph()
 
 	if err := g.Mutate(ctx, generated.MutationCommit{
-		TableName: "db_instance",
+		TableName: "datasource",
 		Operation: "insert",
 		ObjectID:  "db-1",
 		Payload: `{
@@ -229,7 +229,7 @@ func TestMutate_DeleteDbInstance(t *testing.T) {
 	}
 
 	if err := g.Mutate(ctx, generated.MutationCommit{
-		TableName: "db_instance",
+		TableName: "datasource",
 		Operation: "delete",
 		ObjectID:  "db-1",
 		Payload: `{

@@ -1,4 +1,4 @@
-export type DatabaseFieldKey =
+export type DatasourceFieldKey =
 	| 'connection_mode'
 	| 'proxy_connection'
 	| 'dsn'
@@ -15,7 +15,7 @@ export type HelpTable = {
 	rows: [string, string][];
 };
 
-export type DatabaseFieldHelp = {
+export type DatasourceFieldHelp = {
 	title: string;
 	what: string;
 	where: string;
@@ -23,7 +23,7 @@ export type DatabaseFieldHelp = {
 	table?: HelpTable;
 };
 
-export const databaseFieldHelpContent: Record<DatabaseFieldKey, DatabaseFieldHelp> = {
+export const datasourceFieldHelpContent: Record<DatasourceFieldKey, DatasourceFieldHelp> = {
 	proxy_connection: {
 		title: 'Proxy connection',
 		what: 'Credentials are stored encrypted on the server and never sent to your local machine. All queries route through a shared server-side connection pool.',
@@ -32,7 +32,7 @@ export const databaseFieldHelpContent: Record<DatabaseFieldKey, DatabaseFieldHel
 		table: {
 			headers: ['Mode', 'Credentials stored'],
 			rows: [
-				['Local', 'In db.config.json on your machine.'],
+				['Local', 'In datasource.config.json on your machine.'],
 				['Proxified', 'Encrypted on the remote server. Local config holds no DSN or SSH data.']
 			]
 		}

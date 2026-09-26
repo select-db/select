@@ -28,8 +28,8 @@ export { stripNullItems };
 export type WorkspaceNode = NonNullItems<models.WorkspaceNode>;
 export type FolderNode = NonNullItems<models.FolderNode>;
 export type FileNode = NonNullItems<models.FileNode>;
-export type DBInstanceNode = NonNullItems<models.DBInstanceNode>;
-export type DBInstanceItemNode = NonNullItems<models.DBInstanceItemNode>;
+export type DatasourceNode = NonNullItems<models.DatasourceNode>;
+export type DatasourceItemNode = NonNullItems<models.DatasourceItemNode>;
 export type QueryResult = NonNullItems<models.QueryResult>;
 export type ExplainResult = NonNullItems<models.ExplainResult>;
 export type ColumnMetadata = NonNullItems<models.ColumnMetadata>;
@@ -37,21 +37,21 @@ export type ExplainNode = NonNullItems<coreModels.ExplainNode>;
 export type ResolveResult = NonNullItems<sqlLangModels.ResolveResult>;
 export type SearchResultWithNodes = NonNullItems<searchModels.SearchResultWithNodes>;
 export type FileQuery = models.FileQuery;
-export type DatabaseRef = models.DatabaseRef;
+export type DatasourceRef = models.DatasourceRef;
 
 export const GetWorkspaceGraph = async (): Promise<WorkspaceNode | null> =>
 	stripNullItems(await graphService.GetWorkspaceGraph());
 
-export const GetDBInstanceNodeByID = async (dbInstanceID: string): Promise<DBInstanceNode | null> =>
-	stripNullItems(await graphService.GetDBInstanceNodeByID(dbInstanceID));
+export const GetDatasourceNodeByID = async (datasourceID: string): Promise<DatasourceNode | null> =>
+	stripNullItems(await graphService.GetDatasourceNodeByID(datasourceID));
 
 /**
  * The shared connections at or under these entries, id and name, which is what
  * deleting the entries would revoke. Passing no ids asks about the whole
- * workspace. Containment is answered in Go; see Graph.SharedDatabasesUnder.
+ * workspace. Containment is answered in Go; see Graph.SharedDatasourcesUnder.
  */
-export const SharedDatabasesUnder = async (ids: string[]): Promise<DatabaseRef[]> =>
-	stripNullItems(await graphService.SharedDatabasesUnder(ids));
+export const SharedDatasourcesUnder = async (ids: string[]): Promise<DatasourceRef[]> =>
+	stripNullItems(await graphService.SharedDatasourcesUnder(ids));
 
 export const SearchWithNodes = async (
 	params: searchModels.SearchParams
@@ -76,11 +76,11 @@ export const ResolveFolder = async (folderURI: string): Promise<FolderNode | nul
 export const FindFiles = (query: Partial<FileQuery>) =>
 	graphService.FindFiles(new models.FileQuery(query)).then(stripNullItems);
 
-export const FindDbItemNodeById = async (
-	dbInstanceID: string,
+export const FindDatasourceItemNodeById = async (
+	datasourceID: string,
 	nodeID: string
-): Promise<DBInstanceItemNode | null> =>
-	stripNullItems(await graphService.FindDbItemNodeById(dbInstanceID, nodeID));
+): Promise<DatasourceItemNode | null> =>
+	stripNullItems(await graphService.FindDatasourceItemNodeById(datasourceID, nodeID));
 
 // Query results are graph data too: they carry the explain plan, whose nodes
 // have a nullable child slice.

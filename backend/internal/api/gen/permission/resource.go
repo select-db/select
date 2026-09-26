@@ -12,7 +12,7 @@ var resource = query.Resource{
 	Fields: []query.Field{
 		{Name: "id", Column: "id", Kind: query.KindUUID, Ops: []query.Op{"eq", "ne", "in", "not in"}},
 		{Name: "role_id", Column: "role_id", Kind: query.KindUUID, Ops: []query.Op{"eq", "ne", "in", "not in"}},
-		{Name: "db_instance_id", Column: "db_instance_id", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
+		{Name: "datasource_id", Column: "datasource_id", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
 		{Name: "schema_name", Column: "schema_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
 		{Name: "table_name", Column: "table_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},
 		{Name: "column_name", Column: "column_name", Kind: query.KindText, Ops: []query.Op{"eq", "ne", "in", "not in", "contains", "startswith", "endswith"}},

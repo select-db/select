@@ -117,7 +117,7 @@ func NewApp() *App {
 
 	System := system.New(Queries, Graph, DbClient, FSProvider)
 	Graph.AfterWorkspaceGraphBuild = func(ws *graph.WorkspaceNode) {
-		System.LoadAllDatabaseSchemas(ws)
+		System.LoadAllDatasourceSchemas(ws)
 	}
 
 	Git := git.New(Queries, FSProvider, Graph)

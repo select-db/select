@@ -40,9 +40,9 @@ Use this for:
 
 Prefer purpose-built tools over this when available:
 - Use read_file for reading a known file
-- Use get_database_schemas and get_database_table_detail for schema inspection  
-- Use execute_query for database reads
-- Never use for database operations; use execute_query or execute_statement instead
+- Use get_datasource_schemas and get_datasource_table_detail for schema inspection  
+- Use execute_query for datasource reads
+- Never use for datasource operations; use execute_query or execute_statement instead
 
 Commands are sandboxed to the workspace directory. Do not use absolute paths 
 outside the workspace or attempt to access system directories.

@@ -109,10 +109,10 @@ export function GetZoom(): $CancellablePromise<number> {
 }
 
 /**
- * LoadAllDatabaseSchemas runs QuerySchema for each workspace DB instance (same as after other graph rebuilds).
+ * LoadAllDatasourceSchemas runs QuerySchema for each workspace datasource (same as after other graph rebuilds).
  */
-export function LoadAllDatabaseSchemas(wsGraph: graph$0.WorkspaceNode | null): $CancellablePromise<void> {
-    return $Call.ByID(463064022, wsGraph);
+export function LoadAllDatasourceSchemas(wsGraph: graph$0.WorkspaceNode | null): $CancellablePromise<void> {
+    return $Call.ByID(1025284126, wsGraph);
 }
 
 export function Logout(): $CancellablePromise<void> {
@@ -174,8 +174,8 @@ export function SetZoom(factor: number): $CancellablePromise<number> {
  * so the dot moves the moment anything learns something rather than at the top
  * of the next sweep.
  */
-export function StartDatabaseWatcher(): $CancellablePromise<void> {
-    return $Call.ByID(2903622711);
+export function StartDatasourceWatcher(): $CancellablePromise<void> {
+    return $Call.ByID(2943789383);
 }
 
 /**

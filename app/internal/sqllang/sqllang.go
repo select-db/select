@@ -8,8 +8,8 @@ import (
 	ta "github.com/selectDb/dialect/core/tokenanalyzer"
 )
 
-type GetMetadataFunc func(instance *graph.DBInstanceNode, noCache bool) (*core.Metadata, error)
-type InspectFunc func(statement string, dbInstance *graph.DBInstanceNode) []core.InspectStatement
+type GetMetadataFunc func(instance *graph.DatasourceNode, noCache bool) (*core.Metadata, error)
+type InspectFunc func(statement string, datasource *graph.DatasourceNode) []core.InspectStatement
 
 type SqlLang struct {
 	graph      *graph.Graph

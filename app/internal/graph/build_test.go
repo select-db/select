@@ -43,7 +43,7 @@ func openTestWorkspace(t *testing.T, workspaceID string) string {
 }
 
 // TestBuildWorkspaceGraphFromFS_SimpleTree verifies that the filesystem-based
-// graph builder correctly discovers folders, files and db instances under the
+// graph builder correctly discovers folders, files and datasources under the
 // workspace root.
 func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 	withTempAppDataDir(t)
@@ -57,7 +57,7 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 	//   workspaces/ws-1/
 	//     file-root.sql
 	//     folder-file-1/file-child.sql
-	//     folder-db-1/db1/db.config.json
+	//     folder-db-1/db1/datasource.config.json
 	if err := os.MkdirAll(filepath.Join(workspaceRoot, "folder-file-1"), 0o700); err != nil {
 		t.Fatalf("mkdir folder-file-1: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		t.Fatalf("write file-child.sql: %v", err)
 	}
 
-	dbConfig := `{
+	datasourceConfig := `{
   "version": 1,
   "id": "db-1",
   "name": "DB1",
@@ -80,10 +80,10 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
   "dsn": "file:db1.sqlite",
   "workspace_id": "ws-1"
 }`
-	if err := os.WriteFile(filepath.Join(workspaceRoot, "folder-db-1", "db1", "db.config.json"), []byte(dbConfig), 0o600); err != nil {
-		t.Fatalf("write db.config.json: %v", err)
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "folder-db-1", "db1", "datasource.config.json"), []byte(datasourceConfig), 0o600); err != nil {
+		t.Fatalf("write datasource.config.json: %v", err)
 	}
-	// Files inside the DB instance folder must appear in db.Files.
+	// Files inside the datasource folder must appear in db.Files.
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "folder-db-1", "db1", "schema.sql"), []byte("-- schema"), 0o600); err != nil {
 		t.Fatalf("write schema.sql in db folder: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 			Name:        "MyWorkspace",
 			User:        &UserNode{ID: "user-1", Type: "user", Name: "Alice"},
 			Folders:     []*FolderNode{},
-			DBInstances: []*DBInstanceNode{},
+			Datasources: []*DatasourceNode{},
 		},
 	}
 
@@ -175,36 +175,36 @@ func TestBuildWorkspaceGraphFromFS_SimpleTree(t *testing.T) {
 		t.Errorf("missing folder %q under root", folderDbURI)
 	}
 
-	// DB instances discovered from db.config.json should be attached to the
+	// Datasources discovered from datasource.config.json should be attached to the
 	// parent folder and also listed at workspace level.
-	if len(ws.DBInstances) != 1 {
-		t.Fatalf("expected 1 db instance at workspace level, got %d", len(ws.DBInstances))
+	if len(ws.Datasources) != 1 {
+		t.Fatalf("expected 1 datasource at workspace level, got %d", len(ws.Datasources))
 	}
-	db := ws.DBInstances[0]
+	db := ws.Datasources[0]
 
 	expectedDbURI := rootURI + "/folder-db-1/db1"
-	// The ID comes from db.config.json. The name is the directory's, and the
+	// The ID comes from datasource.config.json. The name is the directory's, and the
 	// "DB1" the config still carries does not get a say.
 	if db.URI != expectedDbURI || db.Name != "db1" || db.ID != "db-1" || db.DBType != "sqlite" {
-		t.Errorf("db instance mismatch: %+v", db)
+		t.Errorf("datasource mismatch: %+v", db)
 	}
 
 	if db.FolderID != folderDbURI {
-		t.Errorf("db instance folderID mismatch: got %q want %q", db.FolderID, folderDbURI)
+		t.Errorf("datasource folderID mismatch: got %q want %q", db.FolderID, folderDbURI)
 	}
 
-	// Files inside the DB instance folder must be attached to the DB node, the
+	// Files inside the datasource folder must be attached to the DB node, the
 	// config that makes it a database included: it is a file people read and
 	// commit, so it is a row like the queries beside it.
 	if len(db.Files) != 3 {
-		t.Errorf("expected 3 files in db instance (schema.sql, init.sql, db.config.json), got %d: %+v", len(db.Files), db.Files)
+		t.Errorf("expected 3 files in datasource (schema.sql, init.sql, datasource.config.json), got %d: %+v", len(db.Files), db.Files)
 	} else {
 		names := map[string]bool{}
 		for _, f := range db.Files {
 			names[f.Name] = true
 		}
-		if !names["schema.sql"] || !names["init.sql"] || !names["db.config.json"] {
-			t.Errorf("db instance files missing schema.sql, init.sql or db.config.json: %+v", db.Files)
+		if !names["schema.sql"] || !names["init.sql"] || !names["datasource.config.json"] {
+			t.Errorf("datasource files missing schema.sql, init.sql or datasource.config.json: %+v", db.Files)
 		}
 	}
 }

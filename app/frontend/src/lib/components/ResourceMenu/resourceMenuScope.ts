@@ -1,17 +1,17 @@
 import type * as graph from '$lib/wails/graph';
 import type { ResourceMenuOption, ResourceSearchScope } from './types';
 
-/** Infix between DB instance id and schema name in graph node ids (see backend schema.go). */
+/** Infix between datasource id and schema name in graph node ids (see backend schema.go). */
 const SCHEMA_ID_INFIX = ':schema:';
 
-export function parseDbInstanceIdFromSchemaId(schemaId: string): string | null {
+export function parseDatasourceIdFromSchemaId(schemaId: string): string | null {
 	const i = schemaId.indexOf(SCHEMA_ID_INFIX);
 	if (i === -1) return null;
 	return schemaId.slice(0, i);
 }
 
 /**
- * Maps a db_item id to its schema root id using the known schema ids from the workspace.
+ * Maps a datasource_item id to its schema root id using the known schema ids from the workspace.
  * Uses the longest matching schema id prefix so schema names may contain ':'.
  */
 function schemaIdForCatalogItem(
@@ -33,16 +33,16 @@ export function resourceOptionInSearchScope(
 ): boolean {
 	if (opt.type === 'file' || opt.type === 'temp_file') return true;
 
-	if (opt.type === 'db_instance') {
-		return scope.enabledDbIds.has((opt.node as graph.DBInstanceNode).id);
+	if (opt.type === 'datasource') {
+		return scope.enabledDatasourceIds.has((opt.node as graph.DatasourceNode).id);
 	}
 
-	if (opt.type === 'db_item') {
+	if (opt.type === 'datasource_item') {
 		if (opt.node.type === 'table' && opt.node.id === 'AppAccount') {
 			console.log(opt);
 		}
 		const schemaId = schemaIdForCatalogItem(
-			(opt.node as graph.DBInstanceItemNode).id,
+			(opt.node as graph.DatasourceItemNode).id,
 			scope.knownSchemaIds
 		);
 		return schemaId != null && scope.enabledSchemaIds.has(schemaId);

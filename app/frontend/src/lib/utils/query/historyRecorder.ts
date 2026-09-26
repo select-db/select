@@ -9,7 +9,7 @@ import { bumpHistoryRefresh } from '$lib/components/views/History/historyStore';
 // record local history. Keyed by executionId.
 interface PendingStatement {
 	statement: string;
-	dbInstanceId: string;
+	datasourceId: string;
 }
 
 const pending = new Map<string, PendingStatement>();
@@ -17,9 +17,9 @@ const pending = new Map<string, PendingStatement>();
 export function registerPendingHistory(
 	executionId: string,
 	statement: string,
-	dbInstanceId: string
+	datasourceId: string
 ): void {
-	pending.set(executionId, { statement, dbInstanceId });
+	pending.set(executionId, { statement, datasourceId });
 }
 
 export interface HistoryOutcome {
@@ -33,7 +33,7 @@ export interface HistoryOutcome {
  * Records a finished statement against local history. Status is derived from
  * the presence of errors. Best-effort: failures are swallowed so history never
  * disrupts query execution. The database name/type are resolved on read from
- * the workspace graph, so only DbInstanceID is persisted here.
+ * the workspace graph, so only DatasourceID is persisted here.
  */
 export function recordHistory(executionId: string, outcome: HistoryOutcome): void {
 	const entry = pending.get(executionId);
@@ -46,7 +46,7 @@ export function recordHistory(executionId: string, outcome: HistoryOutcome): voi
 		Dsn: '',
 		Uri: '',
 		WorkspaceID: workspaceId,
-		DbInstanceID: entry.dbInstanceId,
+		DatasourceID: entry.datasourceId,
 		Statement: entry.statement,
 		AffectedRows: outcome.affectedRows ?? null,
 		RowCount: outcome.rowCount ?? null,

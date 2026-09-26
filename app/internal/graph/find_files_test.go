@@ -148,10 +148,10 @@ func TestFindFiles_FiltersByExtensionAndSkipsInternalFiles(t *testing.T) {
 	}
 }
 
-func TestFindFiles_CarriesTheDatabasesAFileIsBoundTo(t *testing.T) {
+func TestFindFiles_CarriesTheDatasourcesAFileIsBoundTo(t *testing.T) {
 	g, fsCtx := queryWorkspace(t, "ws-meta", "unopened/query.sql")
 	sidecar := filepath.Join(fsCtx.WorkspaceRoot, "unopened", "query.sql.metadata.json")
-	if err := os.WriteFile(sidecar, []byte(`{"databases":[{"id":"db-1","name":"DB1"}]}`), 0o600); err != nil {
+	if err := os.WriteFile(sidecar, []byte(`{"datasources":[{"id":"db-1","name":"DB1"}]}`), 0o600); err != nil {
 		t.Fatalf("write sidecar: %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestFindFiles_CarriesTheDatabasesAFileIsBoundTo(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(files))
 	}
-	if len(files[0].Databases) != 1 || files[0].Databases[0].ID != "db-1" {
+	if len(files[0].Datasources) != 1 || files[0].Datasources[0].ID != "db-1" {
 		t.Errorf("opening a result from a picker must bind its databases: %+v", files[0])
 	}
 	if files[0].FolderID != fsCtx.URI("unopened") {

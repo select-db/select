@@ -35,14 +35,14 @@ export function isPageRefetchable(loadingState: DataLoadingState, pageNumber: nu
 export async function requestPageFromBackend(
 	pageNumber: number,
 	queryResult: graph.QueryResult | null,
-	dbInstanceId: string | null | undefined,
+	datasourceId: string | null | undefined,
 	fileId: string | undefined,
 	currentLoadingState: DataLoadingState,
 	onLoadingPagesChange: (loadingPages: Set<number>) => void
 ): Promise<graph.QueryResult | null> {
 	if (
 		!queryResult?.id ||
-		!dbInstanceId ||
+		!datasourceId ||
 		!fileId ||
 		pageNumber < 0 ||
 		currentLoadingState.loadedPages.has(pageNumber) ||
@@ -56,7 +56,7 @@ export async function requestPageFromBackend(
 
 	const result = await must(
 		tryCatch(GetResultPage, {
-			DbInstanceID: dbInstanceId,
+			DatasourceID: datasourceId,
 			FileID: fileId,
 			ResultID: queryResult.id,
 			Page: pageNumber
@@ -76,7 +76,7 @@ export async function requestPageFromBackend(
 export async function loadMissingPagesForVisibleRange(
 	visibleRange: VisibleRange,
 	queryResult: graph.QueryResult | null,
-	dbInstanceId: string | null | undefined,
+	datasourceId: string | null | undefined,
 	fileId: string | undefined,
 	currentLoadingState: DataLoadingState,
 	onLoadingPagesChange: (loadingPages: Set<number>) => void,
@@ -110,7 +110,7 @@ export async function loadMissingPagesForVisibleRange(
 	return await requestPageFromBackend(
 		candidatePages[0],
 		queryResult,
-		dbInstanceId,
+		datasourceId,
 		fileId,
 		currentLoadingState,
 		onLoadingPagesChange

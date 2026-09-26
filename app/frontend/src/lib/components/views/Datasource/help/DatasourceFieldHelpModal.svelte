@@ -2,15 +2,15 @@
 	import ModalBody from '$lib/system/Modal/ModalBody.svelte';
 	import ModalHeader from '$lib/system/Modal/ModalHeader.svelte';
 
-	import { databaseFieldHelpContent, type DatabaseFieldKey } from './fieldHelpContent';
+	import { datasourceFieldHelpContent, type DatasourceFieldKey } from './fieldHelpContent';
 
-	type DatabaseFieldHelpModalProps = {
-		field: DatabaseFieldKey;
+	type DatasourceFieldHelpModalProps = {
+		field: DatasourceFieldKey;
 	};
 
-	let { field }: DatabaseFieldHelpModalProps = $props();
+	let { field }: DatasourceFieldHelpModalProps = $props();
 
-	const help = $derived(databaseFieldHelpContent[field]);
+	const help = $derived(datasourceFieldHelpContent[field]);
 </script>
 
 <ModalHeader icon="info" title={help.title} />

@@ -28,8 +28,8 @@ The agent has access to a fixed set of tools. It cannot bypass your permissions.
 
 | Tool                     | Description                                      |
 | ------------------------ | ------------------------------------------------ |
-| `getDatabaseSchemas`     | List schemas, tables, and views for a datasource |
-| `getDatabaseTableDetail` | Get the DDL of a specific table                  |
+| `getDatasourceSchemas`     | List schemas, tables, and views for a datasource |
+| `getDatasourceTableDetail` | Get the DDL of a specific table                  |
 | `readFile`               | Read a file from the workspace                   |
 
 ### Query

@@ -3,9 +3,9 @@ import { setItemSelection } from '$lib/components/views/shared/sharedStore';
 import { loadSchemaIfEmpty } from '$lib/utils/query/loadSchema';
 import type * as graph from '$lib/wails/graph';
 
-export const navigateToDatabase = async (database: graph.DBInstanceNode) => {
-	setItemSelection([database.id]);
-	addTab(database);
+export const navigateToDatasource = async (datasource: graph.DatasourceNode) => {
+	setItemSelection([datasource.id]);
+	addTab(datasource);
 
-	void loadSchemaIfEmpty(database);
+	void loadSchemaIfEmpty(datasource);
 };

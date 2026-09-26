@@ -14,7 +14,7 @@ export interface IconConfig {
  * Column prefix types and the primary-key override are handled separately below.
  */
 const EXACT_ICON_MAP = new Map<string, IconConfig>([
-	['db_instance', { icon: 'db', spacer: false }],
+	['datasource', { icon: 'db', spacer: false }],
 	['schema', { icon: 'schema', spacer: false }],
 	['table', { icon: 'table', spacer: false }],
 	['view', { icon: 'table', spacer: false }],
@@ -82,11 +82,11 @@ const SPECIAL_FILENAMES: Record<string, FileIconDef> = {
 	'package.json': { icon: 'npm', size: 19, color: 'var(--red)' },
 	'package-lock.json': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
 	'Cargo.toml': { icon: 'package', size: 19, color: 'var(--orange)' },
-	'Gemfile': { icon: 'lang-ruby', size: 19, color: 'var(--red)' },
+	Gemfile: { icon: 'lang-ruby', size: 19, color: 'var(--red)' },
 	'Gemfile.lock': { icon: 'lock', size: 19, color: 'var(--gray-800)' },
 	'requirements.txt': { icon: 'lang-python', size: 19, color: 'var(--yellow)' },
 	'pyproject.toml': { icon: 'lang-python', size: 19, color: 'var(--yellow)' },
-	'Pipfile': { icon: 'lang-python', size: 19, color: 'var(--yellow)' },
+	Pipfile: { icon: 'lang-python', size: 19, color: 'var(--yellow)' },
 	'pom.xml': { icon: 'lang-java', size: 19, color: 'var(--red)' },
 	'build.gradle': { icon: 'lang-groovy', size: 19, color: 'var(--blue)' },
 	'Dockerfile.dev': { icon: 'docker', size: 19, color: 'var(--blue)' },
@@ -312,7 +312,7 @@ export function getFileIcon(fileName: string): Icons {
 /** Content-only slot (no expand icon). */
 export type ItemIconContentSlot =
 	| { kind: 'file'; icon: Icons; size: number; color: string }
-	| { kind: 'database-indicator'; id: string }
+	| { kind: 'datasource-indicator'; id: string }
 	| { kind: 'icon'; icon: Icons; spacer: boolean; size?: number };
 
 /** Container types that show only a folder icon (no content icon) in the tree. */
@@ -352,7 +352,7 @@ export interface ItemIconSlotOptions {
 	muted: boolean;
 }
 
-/** Compute the content slot (icon / database-indicator / file) without expand icon logic. */
+/** Compute the content slot (icon / datasource-indicator / file) without expand icon logic. */
 function getItemIconContentSlot(
 	item: ItemIconSlotInput,
 	noDepth: boolean
@@ -362,8 +362,8 @@ function getItemIconContentSlot(
 		return { kind: 'file', icon: fileConfig.icon, size: fileConfig.size, color: fileConfig.color };
 	}
 
-	if (item.type === 'db_instance' && item.id != null) {
-		return { kind: 'database-indicator', id: item.id };
+	if (item.type === 'datasource' && item.id != null) {
+		return { kind: 'datasource-indicator', id: item.id };
 	}
 
 	const config = getIconConfig(item.type);

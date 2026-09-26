@@ -25,7 +25,7 @@ import (
 	"selectDb/internal/utils"
 )
 
-// WarehouseID is the sample database's id, shared by its db.config.json, the
+// WarehouseID is the sample database's id, shared by its datasource.config.json, the
 // metadata sidecar that associates a query file with it, and any permission
 // granted on it.
 const WarehouseID = "sample-warehouse"
@@ -74,7 +74,7 @@ func Write(workspaceID string) error {
 	if err := writeQueries(root); err != nil {
 		return err
 	}
-	return writeDatabase(root)
+	return writeDatasource(root)
 }
 
 // writeQueries puts the example queries in the workspace root.
@@ -156,15 +156,15 @@ LIMIT
   20;
 `
 
-// writeDatabase builds the SQLite database the queries read, and wires it into
-// the workspace as a database instance. Without it the workspace has files to
+// writeDatasource builds the SQLite database the queries read, and wires it into
+// the workspace as a datasource. Without it the workspace has files to
 // open and nothing to run them against.
 //
 // The database file lives in the app's data directory rather than in the
 // workspace, so it never shows up in the file tree and a first `git add` never
-// sweeps up a binary. The workspace holds only the db.config.json pointing at
+// sweeps up a binary. The workspace holds only the datasource.config.json pointing at
 // it, and the .env resolving the path.
-func writeDatabase(root string) error {
+func writeDatasource(root string) error {
 	dataDir, err := utils.GetAppDataDir()
 	if err != nil {
 		return err
@@ -179,14 +179,14 @@ func writeDatabase(root string) error {
 		}
 	}
 
-	// A directory containing a db.config.json is how the workspace graph
-	// recognises a database instance (see graph.CheckIsDBInstance).
+	// A directory containing a datasource.config.json is how the workspace graph
+	// recognises a datasource (see graph.CheckIsDatasource).
 	dbDir := filepath.Join(root, WarehouseName)
 	if err := os.MkdirAll(dbDir, 0o700); err != nil {
 		return err
 	}
 	// Written as the literal bytes the app itself writes, not marshalled from
-	// graph.FSDBConfig.
+	// graph.FSDatasourceConfig.
 	//
 	// The struct's zero value produces a shorter file: `proxified` is
 	// `omitempty` so false disappears, and `ssh` is a nil pointer so the block
@@ -215,14 +215,14 @@ func writeDatabase(root string) error {
   },
   "proxified": false
 }`
-	if err := writeIfMissing(filepath.Join(dbDir, "db.config.json"), []byte(config)); err != nil {
+	if err := writeIfMissing(filepath.Join(dbDir, graph.DatasourceConfigFileName), []byte(config)); err != nil {
 		return err
 	}
 
-	// Secrets live in the workspace .env, never in db.config.json. The sample
+	// Secrets live in the workspace .env, never in datasource.config.json. The sample
 	// writes only the DSN; anything else that belongs in here -- an AI provider
 	// key, the e2e fixture's placeholder -- is appended by whoever owns it.
-	env := "# Connection secrets. Referenced as $VAR from db.config.json.\n" +
+	env := "# Connection secrets. Referenced as $VAR from datasource.config.json.\n" +
 		"WAREHOUSE_DSN=file:" + dbPath + "\n"
 	if err := writeIfMissing(filepath.Join(root, ".env"), []byte(env)); err != nil {
 		return err
@@ -231,7 +231,7 @@ func writeDatabase(root string) error {
 	// The sidecar is what associates a .sql file with a database, the same file
 	// the app writes when you pick one from the database picker.
 	meta, err := json.MarshalIndent(graph.FileMetadata{
-		Databases: []graph.DatabaseRef{{Name: WarehouseName, ID: WarehouseID}},
+		Datasources: []graph.DatasourceRef{{Name: WarehouseName, ID: WarehouseID}},
 	}, "", "  ")
 	if err != nil {
 		return err

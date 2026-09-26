@@ -1,10 +1,10 @@
 package graph
 
 // nodeIndex maps every ID a node answers to onto the node, so a lookup is a map
-// hit rather than a walk from the root. It holds folders, files, db instances
+// hit rather than a walk from the root. It holds folders, files, datasources
 // and the workspace, but not schema items: a schema load replaces a db
 // instance's children without going through this package, so an entry for one
-// could outlive its node. FindDbItemNodeById walks a single instance instead.
+// could outlive its node. FindDatasourceItemNodeById walks a single instance instead.
 //
 // Guarded by Graph.mu, like the graph it indexes: every helper here assumes the
 // caller holds it.
@@ -15,16 +15,16 @@ func newNodeIndex() nodeIndex {
 }
 
 func isSchemaItem(n Node) bool {
-	_, is := n.(*DBInstanceItemNode)
+	_, is := n.(*DatasourceItemNode)
 	return is
 }
 
 // walkSubtree visits n and everything below it, skipping schema items and what
-// hangs off them: a schema load replaces a db instance's children without going
+// hangs off them: a schema load replaces a datasource's children without going
 // through this package, and a loaded one is large.
 //
 // The three walkers over the tree share it so that rule is stated once. It does
-// not deduplicate -- a db instance hangs from both its folder and the
+// not deduplicate -- a datasource hangs from both its folder and the
 // workspace's flat list, so a walk from the root reaches one twice, and a
 // caller that cares says so itself.
 func walkSubtree(n Node, visit func(Node)) {
@@ -37,7 +37,7 @@ func walkSubtree(n Node, visit func(Node)) {
 	}
 }
 
-// add registers a node under every ID it answers to — a db instance answers to
+// add registers a node under every ID it answers to. A datasource answers to
 // both its config ID and its URI.
 func (ix nodeIndex) add(n Node) {
 	if n == nil {
@@ -93,7 +93,7 @@ func (g *Graph) lookupAll(ids []string) []Node {
 	return nodes
 }
 
-// parentsOf returns the nodes a node hangs from. A db instance has two, its
+// parentsOf returns the nodes a node hangs from. A datasource has two, its
 // folder and the workspace's flat list, and both move together.
 func (g *Graph) parentsOf(n Node) []Node {
 	return g.lookupAll(n.GetParentIDs())
@@ -132,8 +132,8 @@ func (g *Graph) GetFolderNodeByID(id string) *FolderNode {
 	return folder
 }
 
-// NodeKind returns what the graph holds under an ID — "file", "folder" or
-// "db_instance" — and "" when it holds nothing.
+// NodeKind returns what the graph holds under an ID: "file", "folder" or
+// "datasource", and "" when it holds nothing.
 func (g *Graph) NodeKind(id string) string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -143,8 +143,8 @@ func (g *Graph) NodeKind(id string) string {
 		return "file"
 	case *FolderNode:
 		return "folder"
-	case *DBInstanceNode:
-		return "db_instance"
+	case *DatasourceNode:
+		return "datasource"
 	default:
 		return ""
 	}

@@ -787,7 +787,7 @@ export enum NodeType {
  * PermissionEntry is a single rule. nil pointer fields mean wildcard.
  */
 export class PermissionEntry {
-    "DbInstanceID": string | null;
+    "DatasourceID": string | null;
     "SchemaName": string | null;
     "TableName": string | null;
     "ColumnName": string | null;
@@ -805,8 +805,8 @@ export class PermissionEntry {
 
     /** Creates a new PermissionEntry instance. */
     constructor($$source: Partial<PermissionEntry> = {}) {
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = null;
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = null;
         }
         if (!("SchemaName" in $$source)) {
             this["SchemaName"] = null;

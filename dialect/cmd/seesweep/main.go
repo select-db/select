@@ -224,6 +224,6 @@ func observe(statement, first, second string) (answer testutil.SeeAnswer, err er
 
 	result := query.Execute(ctx,
 		query.Conn{DB: db, Meta: meta, Perms: testutil.GetSeeTestPermissions()},
-		query.DBInstance{ID: testutil.TestDBInstanceID, DBType: "sqlite"}, statement, query.Options{})
+		query.Datasource{ID: testutil.TestDatasourceID, DBType: "sqlite"}, statement, query.Options{})
 	return testutil.ReadSeeAnswer(result.RowCount, result.Rows, result.Errors), nil
 }

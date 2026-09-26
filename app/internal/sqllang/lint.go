@@ -37,20 +37,20 @@ func (s *SqlLang) Lint(p PositionParams) LintResult {
 		return LintResult{Errors: []string{"failed to generate result id"}}
 	}
 
-	dbInstance := s.graph.GetDBInstanceNodeByID(p.DbInstanceID)
-	if dbInstance == nil {
-		return LintResult{ID: id, Errors: []string{fmt.Sprintf("DB instance not found: %s", p.DbInstanceID)}}
+	datasource := s.graph.GetDatasourceNodeByID(p.DatasourceID)
+	if datasource == nil {
+		return LintResult{ID: id, Errors: []string{fmt.Sprintf("Datasource not found: %s", p.DatasourceID)}}
 	}
-	meta, err := s.getMeta(dbInstance, false)
+	meta, err := s.getMeta(datasource, false)
 	if err != nil {
 		return LintResult{ID: id, Errors: []string{fmt.Sprintf("failed to get metadata: %v", err)}}
 	}
 
 	sql, _, _ := s.resolveEditorPosition(p)
 
-	dialect := dialects.Get(dbInstance.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
-		return LintResult{ID: id, Errors: []string{fmt.Sprintf("unsupported DB type: %s", dbInstance.DBType)}}
+		return LintResult{ID: id, Errors: []string{fmt.Sprintf("unsupported DB type: %s", datasource.DBType)}}
 	}
 
 	var filePath string
@@ -84,9 +84,9 @@ func (s *SqlLang) Lint(p PositionParams) LintResult {
 	}
 
 	compiledPermissions := core.Compile(permissions)
-	inspectStatements := s.inspect(sql, dbInstance)
+	inspectStatements := s.inspect(sql, datasource)
 
-	permissionError, ok := core.CheckQueryPermissions(inspectStatements, p.DbInstanceID, compiledPermissions).(*core.PermissionDeniedError)
+	permissionError, ok := core.CheckQueryPermissions(inspectStatements, p.DatasourceID, compiledPermissions).(*core.PermissionDeniedError)
 	if !ok {
 		return out
 	}

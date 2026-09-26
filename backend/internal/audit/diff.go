@@ -43,7 +43,7 @@ func toMap(v any) map[string]any {
 	return out
 }
 
-// toSnake: DbInstanceID -> db_instance_id (underscore at lower→upper and
+// toSnake: DatasourceID -> datasource_id (underscore at lower→upper and
 // acronym boundaries).
 func toSnake(s string) string {
 	rs := []rune(s)

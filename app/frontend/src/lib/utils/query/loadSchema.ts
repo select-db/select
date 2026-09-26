@@ -12,23 +12,23 @@ import { tryCatch } from '../tryCatch';
  * nothing with the reason in the log.
  */
 export const loadSchema = async ({
-	database,
+	datasource,
 	announce = true
 }: {
-	database: graph.DBInstanceNode;
+	datasource: graph.DatasourceNode;
 	/** Says "schema loaded" when it worked. Off for a read nobody asked for. */
 	announce?: boolean;
 }) => {
-	pushToLoadingStore(database.id);
+	pushToLoadingStore(datasource.id);
 
 	// Past the cache always: a caller here is either a person asking again or a
 	// database showing nothing, and the cached answer is what both are behind.
 	const [, err] = await tryCatch(QuerySchema, {
-		DatabaseInstanceID: database.id,
+		DatasourceID: datasource.id,
 		NoCache: true
 	});
 
-	removeFromLoadingStore(database.id);
+	removeFromLoadingStore(datasource.id);
 
 	// Reports and stops: announcing "schema loaded" straight after an error is
 	// what made this read as a silent failure.
@@ -40,7 +40,7 @@ export const loadSchema = async ({
 	if (announce)
 		notify({
 			type: AlertType.Success,
-			message: `${database.name} schema loaded`
+			message: `${datasource.name} schema loaded`
 		});
 };
 
@@ -52,7 +52,7 @@ export const loadSchema = async ({
  * Callers asking at once share one read: the backend joins loads of the same
  * database, and each call resolves when that read does.
  */
-export const loadSchemaIfEmpty = async (database: graph.DBInstanceNode) => {
-	if (database.children?.length) return;
-	await loadSchema({ database, announce: false });
+export const loadSchemaIfEmpty = async (datasource: graph.DatasourceNode) => {
+	if (datasource.children?.length) return;
+	await loadSchema({ datasource, announce: false });
 };

@@ -1,5 +1,5 @@
 -- name: ListHistory :many
-SELECT id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, db_instance_id
+SELECT id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, datasource_id
 FROM history
 WHERE workspace_id = :workspace_id
   AND created_at >= datetime('now', '-7 days')

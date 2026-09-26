@@ -22,18 +22,18 @@
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
 	import TableTimer from './TableTimer.svelte';
 	import Resizer from './Resizer.svelte';
-	import DatabaseBadge from './DatabaseBadge.svelte';
+	import DatasourceBadge from './DatasourceBadge.svelte';
 	import { must, tryCatch } from '$lib/utils/tryCatch';
 	import {
-		getEffectiveSelectedDbId,
-		getExplainResultForDb,
-		getPlanResultForDb,
-		getQueryResultForDb
+		getEffectiveSelectedDatasourceId,
+		getExplainResultForDatasource,
+		getPlanResultForDatasource,
+		getQueryResultForDatasource
 	} from '../../views/tableViewState';
 
 	type TableHeaderProps = {
 		tab: Tab;
-		run: (type: 'run' | 'explain' | 'plan', dbIds?: string[]) => Promise<void>;
+		run: (type: 'run' | 'explain' | 'plan', datasourceIds?: string[]) => Promise<void>;
 		tableHeight?: number;
 		content?: string;
 	};
@@ -41,13 +41,15 @@
 
 	const file = $derived(tab.file?.node);
 	const exportFilename = $derived(file?.name?.replace(/\.sql$/i, '') ?? 'query_results');
-	const effectiveDbId = $derived(getEffectiveSelectedDbId(file, tab));
-	const queryResult = $derived(getQueryResultForDb(file, effectiveDbId));
-	const planResult = $derived(getPlanResultForDb(file, effectiveDbId));
-	const explainResult = $derived(getExplainResultForDb(file, effectiveDbId));
+	const effectiveDatasourceId = $derived(getEffectiveSelectedDatasourceId(file, tab));
+	const queryResult = $derived(getQueryResultForDatasource(file, effectiveDatasourceId));
+	const planResult = $derived(getPlanResultForDatasource(file, effectiveDatasourceId));
+	const explainResult = $derived(getExplainResultForDatasource(file, effectiveDatasourceId));
 	const activeView = $derived(tab.file?.viewMode ?? 'results');
 
-	const tableState = $derived(effectiveDbId ? (tab.file?.tables?.[effectiveDbId] ?? null) : null);
+	const tableState = $derived(
+		effectiveDatasourceId ? (tab.file?.tables?.[effectiveDatasourceId] ?? null) : null
+	);
 
 	const edits = $derived(tableState?.edits ?? {});
 	const editedRowCount = $derived.by(() => {
@@ -60,26 +62,28 @@
 		return rows.size;
 	});
 
-	const loading = $derived($loadingStore.includes(toKey(effectiveDbId ?? undefined, file?.id)));
+	const loading = $derived(
+		$loadingStore.includes(toKey(effectiveDatasourceId ?? undefined, file?.id))
+	);
 
-	const databaseIds = $derived(
-		[...(file?.databases ?? [])]
+	const datasourceIds = $derived(
+		[...(file?.datasources ?? [])]
 			.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
 			.map((d) => d.id)
 			.filter((id): id is string => !!id)
 	);
 
-	const hasDbError = (dbId: string): boolean => {
+	const hasDatasourceError = (datasourceId: string): boolean => {
 		const result =
 			activeView === 'plan'
-				? getPlanResultForDb(file, dbId)
+				? getPlanResultForDatasource(file, datasourceId)
 				: activeView === 'explain'
-					? getExplainResultForDb(file, dbId)
-					: getQueryResultForDb(file, dbId);
+					? getExplainResultForDatasource(file, datasourceId)
+					: getQueryResultForDatasource(file, datasourceId);
 		return (result?.errors?.length ?? 0) > 0;
 	};
 
-	const setActiveDatabase = (e: MouseEvent, dbId: string) => {
+	const setActiveDatasource = (e: MouseEvent, datasourceId: string) => {
 		e.preventDefault();
 		e.stopPropagation();
 
@@ -89,7 +93,7 @@
 			...tab,
 			file: {
 				...tab.file,
-				activeDatabaseId: dbId
+				activeDatasourceId: datasourceId
 			}
 		});
 	};
@@ -125,7 +129,7 @@
 
 	const rollbackEdits = () => {
 		if (!tab.file) return;
-		if (!effectiveDbId) return;
+		if (!effectiveDatasourceId) return;
 
 		updateTab({
 			...tab,
@@ -133,8 +137,8 @@
 				...tab.file,
 				tables: {
 					...(tab.file.tables ?? {}),
-					[effectiveDbId]: {
-						...(tab.file.tables?.[effectiveDbId] ?? {}),
+					[effectiveDatasourceId]: {
+						...(tab.file.tables?.[effectiveDatasourceId] ?? {}),
 						edits: {}
 					}
 				}
@@ -143,10 +147,10 @@
 	};
 
 	const reviewEdits = async () => {
-		if (!effectiveDbId || !file) return;
+		if (!effectiveDatasourceId || !file) return;
 
 		const params = db_client.GenerateUpdateSQLParams.createFrom({
-			databaseId: effectiveDbId,
+			datasourceId: effectiveDatasourceId,
 			edits: Object.values(edits)
 		});
 
@@ -156,7 +160,7 @@
 			{
 				content: sql,
 				name: `[edits].sql`,
-				dbInstanceId: effectiveDbId,
+				datasourceId: effectiveDatasourceId,
 				folderId: file.folder_id ?? ''
 			},
 			false
@@ -164,7 +168,7 @@
 	};
 
 	const analyzeWithChat = () => {
-		if (!effectiveDbId) return;
+		if (!effectiveDatasourceId) return;
 
 		const hasErrors =
 			activeView === 'plan'
@@ -172,7 +176,7 @@
 				: (explainResult?.errors?.length ?? 0) > 0;
 
 		addChatTab({
-			databaseId: effectiveDbId,
+			datasourceId: effectiveDatasourceId,
 			action: activeView === 'plan' ? 'analyze-plan' : 'analyze-explain',
 			hasErrors,
 			instruction:
@@ -222,7 +226,7 @@
 				onClose();
 
 				const folderId = file?.folder_id ?? '';
-				const dbInstanceId = effectiveDbId ?? '';
+				const datasourceId = effectiveDatasourceId ?? '';
 
 				const [resolvedVars] = await tryCatch(graphApi.GetUriVariables, file?.uri ?? '');
 				const resolvedNames = new Set((resolvedVars ?? []).map((v) => v.name));
@@ -255,7 +259,7 @@
 					tryCatch(dbc.Export, {
 						FileID: file?.id ?? '',
 						Statement: content,
-						DbInstanceID: dbInstanceId,
+						DatasourceID: datasourceId,
 						FolderID: folderId,
 						Format: format,
 						Filename: exportFilename + ext,
@@ -273,15 +277,15 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="tableHeader" onclick={toggleTable}>
-		{#if databaseIds.length > 1}
+		{#if datasourceIds.length > 1}
 			<div class="db-badges">
-				{#each databaseIds as dbId (dbId)}
-					<DatabaseBadge
-						{dbId}
+				{#each datasourceIds as datasourceId (datasourceId)}
+					<DatasourceBadge
+						{datasourceId}
 						{run}
-						active={dbId === effectiveDbId}
-						error={hasDbError(dbId)}
-						onclick={(e) => setActiveDatabase(e, dbId)}
+						active={datasourceId === effectiveDatasourceId}
+						error={hasDatasourceError(datasourceId)}
+						onclick={(e) => setActiveDatasource(e, datasourceId)}
 					/>
 				{/each}
 			</div>

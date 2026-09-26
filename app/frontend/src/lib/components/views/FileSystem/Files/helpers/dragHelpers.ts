@@ -16,8 +16,8 @@ export const findItemById = (
 	id: string,
 	files: graph.FileNode[],
 	folders: graph.FolderNode[],
-	databases: graph.DBInstanceNode[]
-): graph.FileNode | graph.FolderNode | graph.DBInstanceNode | null => {
+	datasources: graph.DatasourceNode[]
+): graph.FileNode | graph.FolderNode | graph.DatasourceNode | null => {
 	// Check files
 	for (const file of files) {
 		if (file.id === id) return file;
@@ -26,17 +26,12 @@ export const findItemById = (
 	// Check folders
 	for (const folder of folders) {
 		if (folder.id === id) return folder;
-		const found = findItemById(
-			id,
-			folder.files,
-			folder.folders,
-			folder.db_instances
-		);
+		const found = findItemById(id, folder.files, folder.folders, folder.datasources);
 		if (found) return found;
 	}
 
 	// Check databases and their contents
-	for (const db of databases) {
+	for (const db of datasources) {
 		if (db.id === id) return db;
 		// Search inside database files and folders
 		const found = findItemById(id, db.files, db.folders, []);

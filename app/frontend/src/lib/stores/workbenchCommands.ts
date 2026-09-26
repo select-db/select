@@ -57,9 +57,9 @@ export function registerWorkbenchCommands(): void {
 	registerCommand('workbench.newSqlFile', () => {
 		const folderId = get(workspaceGraphStore)?.folders?.[0]?.id ?? '';
 		const activeTab = getActiveTab();
-		const dbInstanceId =
-			activeTab?.database?.node.id ?? activeTab?.file?.node.databases?.[0]?.id ?? undefined;
-		addTempFileTab({ content: '', name: '[temp].sql', folderId, dbInstanceId }, false);
+		const datasourceId =
+			activeTab?.datasource?.node.id ?? activeTab?.file?.node.datasources?.[0]?.id ?? undefined;
+		addTempFileTab({ content: '', name: '[temp].sql', folderId, datasourceId }, false);
 	});
 
 	registerCommand('workbench.closeActiveTab', () => {

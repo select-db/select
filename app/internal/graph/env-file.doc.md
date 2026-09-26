@@ -31,7 +31,7 @@ Reference variables with `$VAR_NAME` in your database connection string. Multipl
 host=$PG_HOST port=$PG_PORT user=$PG_USER password=$PG_PASS dbname=$PG_DB
 ```
 
-SELECT resolves all `$VAR` references at connection time. This keeps credentials out of `db.config.json`.
+SELECT resolves all `$VAR` references at connection time. This keeps credentials out of `datasource.config.json`.
 
 ## Usage in SQL
 

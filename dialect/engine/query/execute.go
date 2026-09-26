@@ -17,7 +17,7 @@ import (
 )
 
 // Execute runs sql like Stream and returns the whole result at once.
-func Execute(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options) *Result {
+func Execute(ctx context.Context, conn Conn, inst Datasource, sql string, opts Options) *Result {
 	result := &Result{}
 	Stream(ctx, conn, inst, sql, opts, ResultSink{result})
 	return result
@@ -25,7 +25,7 @@ func Execute(ctx context.Context, conn Conn, inst DBInstance, sql string, opts O
 
 // Stream runs sql on conn and streams the result into sink: the columns,
 // each row, then OnDone. Any failure ends the stream with one OnError.
-func Stream(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options, sink RowSink) {
+func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Options, sink RowSink) {
 	inspected, err := checkPermissions(conn, inst, sql)
 	if err != nil {
 		sink.OnError(err)
@@ -183,7 +183,7 @@ func effectiveMaxBytes(opts Options) int64 {
 // (select/insert/update/delete, manage for the rest). The see check needs the driver's
 // rows.Columns() output to map result positions, so it runs later from
 // evaluateSeeForResult.
-func checkPermissions(conn Conn, inst DBInstance, sql string) ([]core.InspectStatement, error) {
+func checkPermissions(conn Conn, inst Datasource, sql string) ([]core.InspectStatement, error) {
 	if !conn.Perms.IsManaged(inst.ID) {
 		return nil, nil
 	}
@@ -213,7 +213,7 @@ func checkPermissions(conn Conn, inst DBInstance, sql string) ([]core.InspectSta
 // evaluateSeeForResult runs the see-permission check against the driver's
 // actual result columns. Returns mask positions for the scan loop, or an
 // error to be surfaced before any row is emitted.
-func evaluateSeeForResult(conn Conn, inst DBInstance, inspected []core.InspectStatement, driverCols []string) ([]int, error) {
+func evaluateSeeForResult(conn Conn, inst Datasource, inspected []core.InspectStatement, driverCols []string) ([]int, error) {
 	if !conn.Perms.IsManaged(inst.ID) {
 		return nil, nil
 	}

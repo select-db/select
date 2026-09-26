@@ -37,7 +37,7 @@ func newManagedDB(t *testing.T) managedDB {
 		VALUES ($1::uuid, $2::uuid, 'notes', 'sqlite', 'local', 'hot')`, id, f.Actor.WorkspaceID)
 	require.NoError(t, err)
 	for _, action := range []string{"see", "select", "insert", "manage"} {
-		_, err := f.Conn.Exec(`INSERT INTO app.permission (role_id, workspace_id, db_instance_id, action, effect)
+		_, err := f.Conn.Exec(`INSERT INTO app.permission (role_id, workspace_id, datasource_id, action, effect)
 			VALUES ($1::uuid, $2::uuid, $3, $4, 'allow')`, f.Actor.RoleID, f.Actor.WorkspaceID, id, action)
 		require.NoError(t, err)
 	}
@@ -89,7 +89,7 @@ func (m managedDB) run(t *testing.T, stmt string) ([][]any, string) {
 	return rows, ""
 }
 
-func TestManagedDatabaseRunsOnTheCellar(t *testing.T) {
+func TestManagedDatasourceRunsOnTheCellar(t *testing.T) {
 	m := newManagedDB(t)
 
 	rows, errMsg := m.run(t, "SELECT body FROM note")
@@ -118,7 +118,7 @@ func TestManagedDatabaseRunsOnTheCellar(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
 
-func TestManagedDatabaseRefusesHostileSQL(t *testing.T) {
+func TestManagedDatasourceRefusesHostileSQL(t *testing.T) {
 	m := newManagedDB(t)
 	outside := filepath.Join(t.TempDir(), "out.db")
 
@@ -146,7 +146,7 @@ func TestManagedDatabaseRefusesHostileSQL(t *testing.T) {
 	require.Empty(t, errMsg, "introspection PRAGMAs are allowed")
 }
 
-func TestManagedDatabaseWithoutCellar(t *testing.T) {
+func TestManagedDatasourceWithoutCellar(t *testing.T) {
 	m := newManagedDB(t)
 	cellar.URL = ""
 	rec := e2e.Do(t, m.f.H, http.MethodPost, "/datasources/"+m.id+"/execute", m.f.Actor.Token,
@@ -155,7 +155,7 @@ func TestManagedDatabaseWithoutCellar(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "not enabled")
 }
 
-func TestManagedDatabaseWithCellarDown(t *testing.T) {
+func TestManagedDatasourceWithCellarDown(t *testing.T) {
 	m := newManagedDB(t)
 	down := httptest.NewServer(http.NotFoundHandler())
 	down.Close()

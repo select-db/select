@@ -10,13 +10,13 @@ import { Create as $Create } from "@wailsio/runtime";
 import * as graph$0 from "../graph/models.js";
 
 export class CancelQueryParams {
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "FileID": string;
 
     /** Creates a new CancelQueryParams instance. */
     constructor($$source: Partial<CancelQueryParams> = {}) {
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FileID" in $$source)) {
             this["FileID"] = "";
@@ -37,7 +37,7 @@ export class CancelQueryParams {
 export class ExplainParams {
     "FileID": string;
     "Statement": string;
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "FolderID": string;
     "RuntimeVars": { [_ in string]?: string };
 
@@ -49,8 +49,8 @@ export class ExplainParams {
         if (!("Statement" in $$source)) {
             this["Statement"] = "";
         }
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FolderID" in $$source)) {
             this["FolderID"] = "";
@@ -85,7 +85,7 @@ export class ExportParams {
      * SQL content to execute
      */
     "Statement": string;
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "FolderID": string;
 
     /**
@@ -107,8 +107,8 @@ export class ExportParams {
         if (!("Statement" in $$source)) {
             this["Statement"] = "";
         }
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FolderID" in $$source)) {
             this["FolderID"] = "";
@@ -145,7 +145,7 @@ export class ExportParams {
  * stays dialect-aware and stays out of the frontend.
  */
 export class GenerateSelectSQLParams {
-    "databaseId": string;
+    "datasourceId": string;
     "schema": string;
     "table": string;
 
@@ -157,8 +157,8 @@ export class GenerateSelectSQLParams {
 
     /** Creates a new GenerateSelectSQLParams instance. */
     constructor($$source: Partial<GenerateSelectSQLParams> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("datasourceId" in $$source)) {
+            this["datasourceId"] = "";
         }
         if (!("schema" in $$source)) {
             this["schema"] = "";
@@ -210,13 +210,13 @@ export class GenerateSelectSQLResult {
  * GenerateUpdateSQLParams is the input for GenerateUpdateSQL.
  */
 export class GenerateUpdateSQLParams {
-    "databaseId": string;
+    "datasourceId": string;
     "edits": TableEditInput[];
 
     /** Creates a new GenerateUpdateSQLParams instance. */
     constructor($$source: Partial<GenerateUpdateSQLParams> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("datasourceId" in $$source)) {
+            this["datasourceId"] = "";
         }
         if (!("edits" in $$source)) {
             this["edits"] = [];
@@ -263,15 +263,15 @@ export class GenerateUpdateSQLResult {
 }
 
 export class GetResultPageParams {
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "FileID": string;
     "ResultID": string;
     "Page": number;
 
     /** Creates a new GetResultPageParams instance. */
     constructor($$source: Partial<GetResultPageParams> = {}) {
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FileID" in $$source)) {
             this["FileID"] = "";
@@ -301,7 +301,7 @@ export class GetResultPageParams {
  * SQL building happens entirely in the corresponding dialect package.
  */
 export class LookupForeignKeyParams {
-    "databaseId": string;
+    "datasourceId": string;
     "schema": string;
     "table": string;
     "fkColumn": string;
@@ -312,8 +312,8 @@ export class LookupForeignKeyParams {
 
     /** Creates a new LookupForeignKeyParams instance. */
     constructor($$source: Partial<LookupForeignKeyParams> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("datasourceId" in $$source)) {
+            this["datasourceId"] = "";
         }
         if (!("schema" in $$source)) {
             this["schema"] = "";
@@ -354,18 +354,18 @@ export class LookupForeignKeyParams {
 }
 
 export class PingParams {
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "db_type": string;
     "dsn": string;
     "folder_id": string;
-    "ssh"?: graph$0.DBInstanceSSHConfig | null;
+    "ssh"?: graph$0.DatasourceSSHConfig | null;
     "proxified": boolean;
     "no_cache"?: boolean;
 
     /** Creates a new PingParams instance. */
     constructor($$source: Partial<PingParams> = {}) {
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("db_type" in $$source)) {
             this["db_type"] = "";
@@ -399,7 +399,7 @@ export class PingParams {
 export class PlanParams {
     "FileID": string;
     "Statement": string;
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "FolderID": string;
     "RuntimeVars": { [_ in string]?: string };
 
@@ -411,8 +411,8 @@ export class PlanParams {
         if (!("Statement" in $$source)) {
             this["Statement"] = "";
         }
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FolderID" in $$source)) {
             this["FolderID"] = "";
@@ -440,7 +440,7 @@ export class PlanParams {
 export class QueryParams {
     "FileID": string;
     "Statement": string;
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "FolderID": string;
     "ForExport": boolean;
     "RuntimeVars": { [_ in string]?: string };
@@ -453,8 +453,8 @@ export class QueryParams {
         if (!("Statement" in $$source)) {
             this["Statement"] = "";
         }
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FolderID" in $$source)) {
             this["FolderID"] = "";
@@ -483,13 +483,13 @@ export class QueryParams {
 }
 
 export class QuerySchemaParams {
-    "DatabaseInstanceID": string;
+    "DatasourceID": string;
     "NoCache": boolean;
 
     /** Creates a new QuerySchemaParams instance. */
     constructor($$source: Partial<QuerySchemaParams> = {}) {
-        if (!("DatabaseInstanceID" in $$source)) {
-            this["DatabaseInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("NoCache" in $$source)) {
             this["NoCache"] = false;
@@ -515,7 +515,7 @@ export class QuerySchemaParams {
 export class StartQueryParams {
     "FileID": string;
     "Statement": string;
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "FolderID": string;
     "RuntimeVars": { [_ in string]?: string };
 
@@ -527,8 +527,8 @@ export class StartQueryParams {
         if (!("Statement" in $$source)) {
             this["Statement"] = "";
         }
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FolderID" in $$source)) {
             this["FolderID"] = "";
@@ -559,7 +559,7 @@ export class StartQueryParams {
  */
 export class StartQueryResult {
     "executionId": string;
-    "dbInstanceId": string;
+    "datasourceId": string;
     "fileId": string;
     "errors"?: string[];
 
@@ -568,8 +568,8 @@ export class StartQueryResult {
         if (!("executionId" in $$source)) {
             this["executionId"] = "";
         }
-        if (!("dbInstanceId" in $$source)) {
-            this["dbInstanceId"] = "";
+        if (!("datasourceId" in $$source)) {
+            this["datasourceId"] = "";
         }
         if (!("fileId" in $$source)) {
             this["fileId"] = "";
@@ -595,7 +595,7 @@ export class StartQueryResult {
  * TableEditInput is the payload for a single cell edit (mirrors frontend TableEdit).
  */
 export class TableEditInput {
-    "databaseId": string;
+    "datasourceId": string;
     "schema": string;
     "table": string;
     "column": string;
@@ -606,8 +606,8 @@ export class TableEditInput {
 
     /** Creates a new TableEditInput instance. */
     constructor($$source: Partial<TableEditInput> = {}) {
-        if (!("databaseId" in $$source)) {
-            this["databaseId"] = "";
+        if (!("datasourceId" in $$source)) {
+            this["datasourceId"] = "";
         }
         if (!("schema" in $$source)) {
             this["schema"] = "";
@@ -652,6 +652,6 @@ const $$createType0 = $Create.Map($Create.Any, $Create.Any);
 const $$createType1 = TableEditInput.createFrom;
 const $$createType2 = $Create.Array($$createType1);
 const $$createType3 = $Create.Array($Create.Any);
-const $$createType4 = graph$0.DBInstanceSSHConfig.createFrom;
+const $$createType4 = graph$0.DatasourceSSHConfig.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
 const $$createType6 = $Create.Map($Create.Any, $Create.Any);

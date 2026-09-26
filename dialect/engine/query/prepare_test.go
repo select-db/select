@@ -10,7 +10,7 @@ import (
 
 // failed runs one statement and reports whether it failed.
 func failed(conn Conn, stmt string) bool {
-	return len(Execute(context.Background(), conn, DBInstance{ID: "x"}, stmt, Options{}).Errors) > 0
+	return len(Execute(context.Background(), conn, Datasource{ID: "x"}, stmt, Options{}).Errors) > 0
 }
 
 func TestStreamRunsPrepareOnTheStatementConnection(t *testing.T) {

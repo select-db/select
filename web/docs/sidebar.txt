@@ -15,7 +15,7 @@ Workspace
   MCP Server                 : backend/internal/mcp/mcp-server.doc.md
   AI Chat                    : app/frontend/src/lib/components/views/Chat/ai-chat.doc.md
 Databases
-  Connecting                 : app/frontend/src/lib/components/views/Database/connecting.doc.md
+  Connecting                 : app/frontend/src/lib/components/views/Datasource/connecting.doc.md
   SSH Tunnels                : dialect/engine/connect/ssh-tunnels.doc.md
   Proxified Connections      : app/internal/datasource/proxified.doc.md
   Schema Introspection       : dialect/engine/schema/schema-introspection.doc.md

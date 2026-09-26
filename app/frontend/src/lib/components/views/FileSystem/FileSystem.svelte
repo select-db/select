@@ -237,15 +237,7 @@
 
 		const expandedIds = $expandedItemIdsStore;
 		const hidden = $hiddenChildrenStore;
-		buildVisibilityIndex(
-			'fs',
-			root.folders,
-			root.files,
-			root.db_instances,
-			[],
-			expandedIds,
-			hidden
-		);
+		buildVisibilityIndex('fs', root.folders, root.files, root.datasources, [], expandedIds, hidden);
 
 		// Update scroll window immediately after building index
 		updateScrollWindow('fs', scrollContainer.scrollTop, scrollContainer.clientHeight);
@@ -288,8 +280,8 @@
 			<FileItems
 				folders={root.folders}
 				files={root.files}
-				databases={root.db_instances}
-				databaseItems={[]}
+				datasources={root.datasources}
+				datasourceItems={[]}
 			/>
 		{/if}
 	</div>

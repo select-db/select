@@ -6,7 +6,7 @@ export type Effect = 'allow' | 'deny' | 'none';
 export type Permission = {
 	id: string;
 	role_id: string;
-	db_instance_id: string | null;
+	datasource_id: string | null;
 	schema_name: string | null;
 	table_name: string | null;
 	column_name: string | null;
@@ -36,10 +36,10 @@ export function buildPermissionMap(permissions: Permission[]): PermissionMap {
 		// NULL rather than '*' has to resolve alike or the app would refuse what
 		// the server allows. App-level rows keep '' -- there the empty db is the
 		// scope, not a wildcard.
-		const dbScoped = p.db_instance_id !== null && p.db_instance_id !== '';
+		const dbScoped = p.datasource_id !== null && p.datasource_id !== '';
 		const anyScope = dbScoped ? '*' : '';
 		const key = permissionKey(
-			p.db_instance_id ?? '',
+			p.datasource_id ?? '',
 			p.schema_name ?? anyScope,
 			p.table_name ?? anyScope,
 			p.column_name ?? anyScope,
@@ -89,7 +89,7 @@ export function isAppActionAllowed(
 ): boolean {
 	if (isOwner) return true;
 	for (const p of permissions) {
-		if (p.db_instance_id !== null) continue; // db-scoped rule, skip
+		if (p.datasource_id !== null) continue; // db-scoped rule, skip
 		if (p.action === action && p.effect === 'allow') return true;
 	}
 	return false;

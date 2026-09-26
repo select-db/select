@@ -62,7 +62,7 @@ func (g *Graph) BuildWorkspaceGraph() error {
 
 		User:        BuildUserNode(user),
 		Folders:     []*FolderNode{},
-		DBInstances: []*DBInstanceNode{},
+		Datasources: []*DatasourceNode{},
 	}
 
 	fsCtx, err := NewWorkspaceFS(ws.ID)
@@ -89,13 +89,13 @@ func (g *Graph) BuildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	return g.buildWorkspaceGraphFromFS(fsCtx)
 }
 
-// buildWorkspaceGraphFromFS builds the folder and db instance skeleton by
+// buildWorkspaceGraphFromFS builds the folder and datasource skeleton by
 // walking the workspace root. Files are not part of it: the root folder and the
-// db instance directories are resolved here, every other folder when it is
+// datasource directories are resolved here, every other folder when it is
 // first opened (see resolve.go).
 func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
-	// Reset DB instances for this workspace graph.
-	g.WorkspaceGraph.DBInstances = []*DBInstanceNode{}
+	// Reset datasources for this workspace graph.
+	g.WorkspaceGraph.Datasources = []*DatasourceNode{}
 
 	workspaceRoot := fsCtx.WorkspaceRoot
 	rootID := fsCtx.RootURI
@@ -111,15 +111,15 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 		FolderID:    "",
 		Files:       []*FileNode{},
 		Folders:     []*FolderNode{},
-		DBInstances: []*DBInstanceNode{},
+		Datasources: []*DatasourceNode{},
 		Variables:   make(map[string]string),
 	}
 
 	foldersByID := map[string]*FolderNode{
 		rootID: rootFolder,
 	}
-	dbInstancesByURI := map[string]*DBInstanceNode{}
-	dbInstancePaths := map[string]*DBInstanceNode{}
+	datasourcesByURI := map[string]*DatasourceNode{}
+	datasourcePaths := map[string]*DatasourceNode{}
 
 	// If the workspace root does not exist yet, we still expose an empty root.
 	if _, err := os.Stat(workspaceRoot); err != nil {
@@ -145,11 +145,11 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 			parentURI := fsCtx.ParentURI(entry.Rel) // parent of this directory
 			parentFolder := g.getOrCreateParentFolder(foldersByID, parentURI, fsCtx)
 
-			// Check if this directory represents a db instance (contains a
-			// db.config.json). In that case, we build a DBInstanceNode and
+			// Check if this directory represents a datasource (contains a
+			// datasource.config.json). In that case, we build a DatasourceNode and
 			// continue walking to populate its files/folders.
-			if CheckIsDBInstance(entry.Path) {
-				cfg, readErr := ReadFSDBConfig(filepath.Join(entry.Path, DBConfigFileName))
+			if CheckIsDatasource(entry.Path) {
+				cfg, readErr := ReadFSDatasourceConfig(filepath.Join(entry.Path, DatasourceConfigFileName))
 				if readErr != nil {
 					return fs.SkipDir
 				}
@@ -158,10 +158,10 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 
 				sshConfig := SSHConfigFromFS(cfg.SSH)
 
-				node := &DBInstanceNode{
+				node := &DatasourceNode{
 					ID:   cfg.ID,
 					URI:  dbURI,
-					Type: "db_instance",
+					Type: "datasource",
 
 					// The directory's name is the database's. There is nowhere
 					// else it is written down.
@@ -175,15 +175,15 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 					WorkspaceID: g.WorkspaceGraph.ID,
 					FolderID:    parentURI,
 
-					Children: []*DBInstanceItemNode{},
+					Children: []*DatasourceItemNode{},
 					Files:    []*FileNode{},
 					Folders:  []*FolderNode{},
 				}
 
-				dbInstancesByURI[normalizeDirURI(dbURI)] = node
-				dbInstancePaths[entry.Path] = node
-				parentFolder.DBInstances = append(parentFolder.DBInstances, node)
-				g.WorkspaceGraph.DBInstances = append(g.WorkspaceGraph.DBInstances, node)
+				datasourcesByURI[normalizeDirURI(dbURI)] = node
+				datasourcePaths[entry.Path] = node
+				parentFolder.Datasources = append(parentFolder.Datasources, node)
+				g.WorkspaceGraph.Datasources = append(g.WorkspaceGraph.Datasources, node)
 
 				// Continue walking into the database folder
 				return nil
@@ -205,14 +205,14 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 				FolderID:    parentURI,
 				Files:       []*FileNode{},
 				Folders:     []*FolderNode{},
-				DBInstances: []*DBInstanceNode{},
+				Datasources: []*DatasourceNode{},
 				Variables:   make(map[string]string),
 			}
 
 			foldersByID[folderURI] = folder
 
-			// Attach to parent database instance or folder
-			if parentDB, ok := dbInstancesByURI[normalizeDirURI(parentURI)]; ok {
+			// Attach to parent datasource or folder
+			if parentDB, ok := datasourcesByURI[normalizeDirURI(parentURI)]; ok {
 				parentDB.Folders = append(parentDB.Folders, folder)
 			} else if parentFolder != nil {
 				parentFolder.Folders = append(parentFolder.Folders, folder)
@@ -234,16 +234,16 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 
 	g.WorkspaceGraph.Folders = []*FolderNode{rootFolder}
 
-	sortDBInstancesByName(rootFolder)
+	sortDatasourcesByName(rootFolder)
 	ensureArrays(g.WorkspaceGraph)
 	g.ensureIndex()
 
-	// The root and the db instances are on screen from the start, so they are
+	// The root and the datasources are on screen from the start, so they are
 	// resolved with the build rather than waiting to be opened.
 	if _, err := g.resolveFolder(rootFolder, fsCtx); err != nil {
 		return err
 	}
-	for path, node := range dbInstancePaths {
+	for path, node := range datasourcePaths {
 		if err := g.materializeFiles(node, path, fsCtx); err != nil {
 			return err
 		}
@@ -252,12 +252,12 @@ func (g *Graph) buildWorkspaceGraphFromFS(fsCtx *WorkspaceFS) error {
 	return nil
 }
 
-func sortDBInstancesByName(folder *FolderNode) {
-	slices.SortFunc(folder.DBInstances, func(a, b *DBInstanceNode) int {
+func sortDatasourcesByName(folder *FolderNode) {
+	slices.SortFunc(folder.Datasources, func(a, b *DatasourceNode) int {
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
 	for _, sub := range folder.Folders {
-		sortDBInstancesByName(sub)
+		sortDatasourcesByName(sub)
 	}
 }
 
@@ -280,7 +280,7 @@ func (g *Graph) getOrCreateParentFolder(foldersByID map[string]*FolderNode, pare
 		FolderID:    "",
 		Files:       []*FileNode{},
 		Folders:     []*FolderNode{},
-		DBInstances: []*DBInstanceNode{},
+		Datasources: []*DatasourceNode{},
 		Variables:   make(map[string]string),
 	}
 	foldersByID[parentURI] = folder

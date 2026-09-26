@@ -67,7 +67,7 @@ func toEntries(rows []generated.AppPermission) []core.PermissionEntry {
 			continue
 		}
 		out = append(out, core.PermissionEntry{
-			DbInstanceID: p.DbInstanceID.Ptr(),
+			DatasourceID: p.DatasourceID.Ptr(),
 			SchemaName:   p.SchemaName.Ptr(),
 			TableName:    p.TableName.Ptr(),
 			ColumnName:   p.ColumnName.Ptr(),

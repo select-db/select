@@ -32,9 +32,9 @@ export class ColumnMetadata {
     "isForeignKey"?: boolean;
 
     /**
-     * Database ID (only if hasAllPrimaryKeys)
+     * Datasource ID (only if hasAllPrimaryKeys)
      */
-    "databaseId"?: string;
+    "datasourceId"?: string;
 
     /**
      * Schema name (only if hasAllPrimaryKeys)
@@ -154,7 +154,7 @@ export class ConfigResponse {
     }
 }
 
-export class DBInstanceItemNode {
+export class DatasourceItemNode {
     "id": string;
     "uri": string;
     "type": string;
@@ -163,10 +163,10 @@ export class DBInstanceItemNode {
     "badges": string[];
     "metadata": any;
     "parent_id": string;
-    "children": (DBInstanceItemNode | null)[];
+    "children": (DatasourceItemNode | null)[];
 
-    /** Creates a new DBInstanceItemNode instance. */
-    constructor($$source: Partial<DBInstanceItemNode> = {}) {
+    /** Creates a new DatasourceItemNode instance. */
+    constructor($$source: Partial<DatasourceItemNode> = {}) {
         if (!("id" in $$source)) {
             this["id"] = "";
         }
@@ -199,9 +199,9 @@ export class DBInstanceItemNode {
     }
 
     /**
-     * Creates a new DBInstanceItemNode instance from a string or object.
+     * Creates a new DatasourceItemNode instance from a string or object.
      */
-    static createFrom($$source: any = {}): DBInstanceItemNode {
+    static createFrom($$source: any = {}): DatasourceItemNode {
         const $$createField5_0 = $$createType0;
         const $$createField8_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
@@ -211,11 +211,11 @@ export class DBInstanceItemNode {
         if ("children" in $$parsedSource) {
             $$parsedSource["children"] = $$createField8_0($$parsedSource["children"]);
         }
-        return new DBInstanceItemNode($$parsedSource as Partial<DBInstanceItemNode>);
+        return new DatasourceItemNode($$parsedSource as Partial<DatasourceItemNode>);
     }
 }
 
-export class DBInstanceNode {
+export class DatasourceNode {
     "id": string;
     "uri": string;
     "type": string;
@@ -223,15 +223,15 @@ export class DBInstanceNode {
     "db_type": string;
     "dsn": string;
     "proxified"?: boolean;
-    "ssh"?: DBInstanceSSHConfig | null;
+    "ssh"?: DatasourceSSHConfig | null;
     "folder_id": string;
     "workspace_id": string;
-    "children": (DBInstanceItemNode | null)[];
+    "children": (DatasourceItemNode | null)[];
     "files": (FileNode | null)[];
     "folders": (FolderNode | null)[];
 
-    /** Creates a new DBInstanceNode instance. */
-    constructor($$source: Partial<DBInstanceNode> = {}) {
+    /** Creates a new DatasourceNode instance. */
+    constructor($$source: Partial<DatasourceNode> = {}) {
         if (!("id" in $$source)) {
             this["id"] = "";
         }
@@ -270,9 +270,9 @@ export class DBInstanceNode {
     }
 
     /**
-     * Creates a new DBInstanceNode instance from a string or object.
+     * Creates a new DatasourceNode instance from a string or object.
      */
-    static createFrom($$source: any = {}): DBInstanceNode {
+    static createFrom($$source: any = {}): DatasourceNode {
         const $$createField7_0 = $$createType12;
         const $$createField10_0 = $$createType10;
         const $$createField11_0 = $$createType15;
@@ -290,16 +290,44 @@ export class DBInstanceNode {
         if ("folders" in $$parsedSource) {
             $$parsedSource["folders"] = $$createField12_0($$parsedSource["folders"]);
         }
-        return new DBInstanceNode($$parsedSource as Partial<DBInstanceNode>);
+        return new DatasourceNode($$parsedSource as Partial<DatasourceNode>);
     }
 }
 
 /**
- * DBInstanceSSHConfig describes SSH tunneling configuration for a DB instance.
+ * DatasourceRef is a single database reference in file metadata.
+ */
+export class DatasourceRef {
+    "name": string;
+    "id": string;
+
+    /** Creates a new DatasourceRef instance. */
+    constructor($$source: Partial<DatasourceRef> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DatasourceRef instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DatasourceRef {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DatasourceRef($$parsedSource as Partial<DatasourceRef>);
+    }
+}
+
+/**
+ * DatasourceSSHConfig describes SSH tunneling configuration for a datasource.
  * All sensitive values are expected to be provided via .env variables and
  * referenced using $VAR tokens.
  */
-export class DBInstanceSSHConfig {
+export class DatasourceSSHConfig {
     "enabled": boolean;
     "host": string;
     "port": number;
@@ -322,8 +350,8 @@ export class DBInstanceSSHConfig {
      */
     "host_key": string;
 
-    /** Creates a new DBInstanceSSHConfig instance. */
-    constructor($$source: Partial<DBInstanceSSHConfig> = {}) {
+    /** Creates a new DatasourceSSHConfig instance. */
+    constructor($$source: Partial<DatasourceSSHConfig> = {}) {
         if (!("enabled" in $$source)) {
             this["enabled"] = false;
         }
@@ -356,39 +384,11 @@ export class DBInstanceSSHConfig {
     }
 
     /**
-     * Creates a new DBInstanceSSHConfig instance from a string or object.
+     * Creates a new DatasourceSSHConfig instance from a string or object.
      */
-    static createFrom($$source: any = {}): DBInstanceSSHConfig {
+    static createFrom($$source: any = {}): DatasourceSSHConfig {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new DBInstanceSSHConfig($$parsedSource as Partial<DBInstanceSSHConfig>);
-    }
-}
-
-/**
- * DatabaseRef is a single database reference in file metadata.
- */
-export class DatabaseRef {
-    "name": string;
-    "id": string;
-
-    /** Creates a new DatabaseRef instance. */
-    constructor($$source: Partial<DatabaseRef> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new DatabaseRef instance from a string or object.
-     */
-    static createFrom($$source: any = {}): DatabaseRef {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new DatabaseRef($$parsedSource as Partial<DatabaseRef>);
+        return new DatasourceSSHConfig($$parsedSource as Partial<DatasourceSSHConfig>);
     }
 }
 
@@ -460,7 +460,7 @@ export class FileNode {
     "type": string;
     "name": string;
     "folder_id": string;
-    "databases"?: DatabaseRef[];
+    "datasources"?: DatasourceRef[];
     "queryResults"?: { [_ in string]?: QueryResult | null };
     "planResults"?: { [_ in string]?: ExplainResult | null };
     "explainResults"?: { [_ in string]?: ExplainResult | null };
@@ -500,8 +500,8 @@ export class FileNode {
         const $$createField8_0 = $$createType28;
         const $$createField9_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("databases" in $$parsedSource) {
-            $$parsedSource["databases"] = $$createField5_0($$parsedSource["databases"]);
+        if ("datasources" in $$parsedSource) {
+            $$parsedSource["datasources"] = $$createField5_0($$parsedSource["datasources"]);
         }
         if ("queryResults" in $$parsedSource) {
             $$parsedSource["queryResults"] = $$createField6_0($$parsedSource["queryResults"]);
@@ -593,7 +593,7 @@ export class FolderNode {
     "folder_id": string;
     "files": (FileNode | null)[];
     "folders": (FolderNode | null)[];
-    "db_instances": (DBInstanceNode | null)[];
+    "datasources": (DatasourceNode | null)[];
 
     /**
      * Resolved reports whether this folder's files have been read from disk. A
@@ -628,8 +628,8 @@ export class FolderNode {
         if (!("folders" in $$source)) {
             this["folders"] = [];
         }
-        if (!("db_instances" in $$source)) {
-            this["db_instances"] = [];
+        if (!("datasources" in $$source)) {
+            this["datasources"] = [];
         }
         if (!("resolved" in $$source)) {
             this["resolved"] = false;
@@ -657,8 +657,8 @@ export class FolderNode {
         if ("folders" in $$parsedSource) {
             $$parsedSource["folders"] = $$createField6_0($$parsedSource["folders"]);
         }
-        if ("db_instances" in $$parsedSource) {
-            $$parsedSource["db_instances"] = $$createField7_0($$parsedSource["db_instances"]);
+        if ("datasources" in $$parsedSource) {
+            $$parsedSource["datasources"] = $$createField7_0($$parsedSource["datasources"]);
         }
         if ("variables" in $$parsedSource) {
             $$parsedSource["variables"] = $$createField9_0($$parsedSource["variables"]);
@@ -963,7 +963,7 @@ export class WorkspaceNode {
     "max_result_size_mb": number;
     "user": UserNode | null;
     "folders": (FolderNode | null)[];
-    "db_instances": (DBInstanceNode | null)[];
+    "datasources": (DatasourceNode | null)[];
 
     /** Creates a new WorkspaceNode instance. */
     constructor($$source: Partial<WorkspaceNode> = {}) {
@@ -994,8 +994,8 @@ export class WorkspaceNode {
         if (!("folders" in $$source)) {
             this["folders"] = [];
         }
-        if (!("db_instances" in $$source)) {
-            this["db_instances"] = [];
+        if (!("datasources" in $$source)) {
+            this["datasources"] = [];
         }
 
         Object.assign(this, $$source);
@@ -1015,8 +1015,8 @@ export class WorkspaceNode {
         if ("folders" in $$parsedSource) {
             $$parsedSource["folders"] = $$createField8_0($$parsedSource["folders"]);
         }
-        if ("db_instances" in $$parsedSource) {
-            $$parsedSource["db_instances"] = $$createField9_0($$parsedSource["db_instances"]);
+        if ("datasources" in $$parsedSource) {
+            $$parsedSource["datasources"] = $$createField9_0($$parsedSource["datasources"]);
         }
         return new WorkspaceNode($$parsedSource as Partial<WorkspaceNode>);
     }
@@ -1031,10 +1031,10 @@ const $$createType4 = EditorSnippet.createFrom;
 const $$createType5 = $Create.Array($$createType4);
 const $$createType6 = keymap$0.Problem.createFrom;
 const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = DBInstanceItemNode.createFrom;
+const $$createType8 = DatasourceItemNode.createFrom;
 const $$createType9 = $Create.Nullable($$createType8);
 const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = DBInstanceSSHConfig.createFrom;
+const $$createType11 = DatasourceSSHConfig.createFrom;
 const $$createType12 = $Create.Nullable($$createType11);
 const $$createType13 = FileNode.createFrom;
 const $$createType14 = $Create.Nullable($$createType13);
@@ -1044,7 +1044,7 @@ const $$createType17 = $Create.Nullable($$createType16);
 const $$createType18 = $Create.Array($$createType17);
 const $$createType19 = core$0.ExplainNode.createFrom;
 const $$createType20 = $Create.Nullable($$createType19);
-const $$createType21 = DatabaseRef.createFrom;
+const $$createType21 = DatasourceRef.createFrom;
 const $$createType22 = $Create.Array($$createType21);
 const $$createType23 = QueryResult.createFrom;
 const $$createType24 = $Create.Nullable($$createType23);
@@ -1052,7 +1052,7 @@ const $$createType25 = $Create.Map($Create.Any, $$createType24);
 const $$createType26 = ExplainResult.createFrom;
 const $$createType27 = $Create.Nullable($$createType26);
 const $$createType28 = $Create.Map($Create.Any, $$createType27);
-const $$createType29 = DBInstanceNode.createFrom;
+const $$createType29 = DatasourceNode.createFrom;
 const $$createType30 = $Create.Nullable($$createType29);
 const $$createType31 = $Create.Array($$createType30);
 const $$createType32 = $Create.Map($Create.Any, $Create.Any);

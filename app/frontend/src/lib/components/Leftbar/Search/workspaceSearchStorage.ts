@@ -2,11 +2,11 @@ const STORAGE_KEY = 'selectdb.workspaceSearch.v1';
 
 export type WorkspaceSearchPersisted = {
 	query: string;
-	dbOn: Record<string, boolean>;
+	datasourceOn: Record<string, boolean>;
 	schemaOn: Record<string, boolean>;
 };
 
-const EMPTY: WorkspaceSearchPersisted = { query: '', dbOn: {}, schemaOn: {} };
+const EMPTY: WorkspaceSearchPersisted = { query: '', datasourceOn: {}, schemaOn: {} };
 
 export function readWorkspaceSearch(): WorkspaceSearchPersisted {
 	try {
@@ -15,7 +15,7 @@ export function readWorkspaceSearch(): WorkspaceSearchPersisted {
 		const p = JSON.parse(raw);
 		return {
 			query: typeof p.query === 'string' ? p.query : '',
-			dbOn: p.dbOn && typeof p.dbOn === 'object' ? p.dbOn : {},
+			datasourceOn: p.datasourceOn && typeof p.datasourceOn === 'object' ? p.datasourceOn : {},
 			schemaOn: p.schemaOn && typeof p.schemaOn === 'object' ? p.schemaOn : {}
 		};
 	} catch {

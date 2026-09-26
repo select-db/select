@@ -7,7 +7,7 @@ export type QueryExecutionStatus = 'streaming' | 'done' | 'error' | 'cancelled';
 
 export interface QueryExecution {
 	id: string;
-	dbInstanceId: string;
+	datasourceId: string;
 	fileId: string;
 	columns: string[];
 	columnMetadata: graph.ColumnMetadata[];
@@ -22,26 +22,26 @@ export interface QueryExecution {
 
 interface StartedPayload {
 	executionId: string;
-	dbInstanceId: string;
+	datasourceId: string;
 	fileId: string;
 	columns: string[];
 	columnMetadata?: graph.ColumnMetadata[];
 }
 interface ExecutedPayload {
 	executionId: string;
-	dbInstanceId: string;
+	datasourceId: string;
 	fileId: string;
 	durationMs: number;
 }
 interface ProgressPayload {
 	executionId: string;
-	dbInstanceId: string;
+	datasourceId: string;
 	fileId: string;
 	available: number;
 }
 interface DonePayload {
 	executionId: string;
-	dbInstanceId: string;
+	datasourceId: string;
 	fileId: string;
 	rowCount: number;
 	affectedRows: number;
@@ -49,7 +49,7 @@ interface DonePayload {
 }
 interface ErrorPayload {
 	executionId: string;
-	dbInstanceId: string;
+	datasourceId: string;
 	fileId: string;
 	message: string;
 	errorPosition?: number;
@@ -69,7 +69,7 @@ EventsOn('query:started', (e: StartedPayload) => {
 	const previous = executions[e.executionId];
 	const exec: QueryExecution = {
 		id: e.executionId,
-		dbInstanceId: e.dbInstanceId,
+		datasourceId: e.datasourceId,
 		fileId: e.fileId,
 		columns: e.columns ?? [],
 		columnMetadata: e.columnMetadata ?? [],
@@ -96,7 +96,7 @@ EventsOn('query:executed', (e: ExecutedPayload) => {
 		// Buffer the duration via a placeholder; query:started will preserve it.
 		exec = {
 			id: e.executionId,
-			dbInstanceId: e.dbInstanceId,
+			datasourceId: e.datasourceId,
 			fileId: e.fileId,
 			columns: [],
 			columnMetadata: [],
@@ -124,7 +124,7 @@ EventsOn('query:progress', (e: ProgressPayload) => {
 EventsOn('query:done', (e: DonePayload) => {
 	const exec = executions[e.executionId];
 	if (!exec) {
-		removeFromLoadingStore(e.dbInstanceId, e.fileId);
+		removeFromLoadingStore(e.datasourceId, e.fileId);
 		return;
 	}
 	exec.available = Math.max(exec.available, e.rowCount);
@@ -136,7 +136,7 @@ EventsOn('query:done', (e: DonePayload) => {
 		exec.durationMs = e.durationMs;
 	}
 	exec.status = 'done';
-	removeFromLoadingStore(exec.dbInstanceId, exec.fileId);
+	removeFromLoadingStore(exec.datasourceId, exec.fileId);
 
 	recordHistory(e.executionId, {
 		affectedRows: e.affectedRows,
@@ -155,7 +155,7 @@ EventsOn('query:error', (e: ErrorPayload) => {
 	} else {
 		executions[e.executionId] = {
 			id: e.executionId,
-			dbInstanceId: e.dbInstanceId,
+			datasourceId: e.datasourceId,
 			fileId: e.fileId,
 			columns: [],
 			columnMetadata: [],
@@ -173,7 +173,7 @@ EventsOn('query:error', (e: ErrorPayload) => {
 		waiter.reject(new Error(e.message));
 	}
 
-	removeFromLoadingStore(e.dbInstanceId, e.fileId);
+	removeFromLoadingStore(e.datasourceId, e.fileId);
 
 	recordHistory(e.executionId, { errors: [e.message] });
 });
@@ -201,7 +201,7 @@ export function markCancelled(id: string) {
 	const exec = executions[id];
 	if (!exec) return;
 	exec.status = 'cancelled';
-	removeFromLoadingStore(exec.dbInstanceId, exec.fileId);
+	removeFromLoadingStore(exec.datasourceId, exec.fileId);
 }
 
 // dropExecution removes an execution from the registry.

@@ -32,17 +32,17 @@ func newTestWorkspaceFS(t *testing.T) (*graph.WorkspaceFS, string) {
 	return graph.NewWorkspaceFSFromRoot(workspaceID, workspaceRoot), workspaceRoot
 }
 
-func TestHandleDBConfigEvent_Insert(t *testing.T) {
+func TestHandleDatasourceConfigEvent_Insert(t *testing.T) {
 	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
 
-	// Create a db instance folder with db.config.json.
+	// Create a datasource folder with datasource.config.json.
 	dbDir := filepath.Join(workspaceRoot, "folder-db-1", "db1")
 	if err := os.MkdirAll(dbDir, 0o700); err != nil {
 		t.Fatalf("mkdir db dir: %v", err)
 	}
 
-	dbConfigPath := filepath.Join(dbDir, "db.config.json")
-	dbConfig := `{
+	datasourceConfigPath := filepath.Join(dbDir, "datasource.config.json")
+	datasourceConfig := `{
   "version": 1,
   "id": "db-1",
   "name": "DB1",
@@ -50,8 +50,8 @@ func TestHandleDBConfigEvent_Insert(t *testing.T) {
   "dsn": "file:test.db",
   "workspace_id": "ws-1"
 }`
-	if err := os.WriteFile(dbConfigPath, []byte(dbConfig), 0o600); err != nil {
-		t.Fatalf("write db.config.json: %v", err)
+	if err := os.WriteFile(datasourceConfigPath, []byte(datasourceConfig), 0o600); err != nil {
+		t.Fatalf("write datasource.config.json: %v", err)
 	}
 
 	var commits []generated.MutationCommit
@@ -62,37 +62,37 @@ func TestHandleDBConfigEvent_Insert(t *testing.T) {
 	}
 
 	ev := fsnotify.Event{
-		Name: dbConfigPath,
+		Name: datasourceConfigPath,
 		Op:   fsnotify.Create,
 	}
 
-	s.handleDBConfigEvent(ev, "user-1", fsCtx)
+	s.handleDatasourceConfigEvent(ev, "user-1", fsCtx)
 
-	// The folder scan that follows the db_instance sends the config itself as a
+	// The folder scan that follows the datasource sends the config itself as a
 	// file, which is the row the tree draws for it.
 	var c generated.MutationCommit
 	sawConfigFile := false
 	for _, commit := range commits {
-		if commit.TableName == "db_instance" {
+		if commit.TableName == "datasource" {
 			c = commit
 		}
-		if commit.TableName == "file" && strings.HasSuffix(commit.ObjectID, "/db.config.json") {
+		if commit.TableName == "file" && strings.HasSuffix(commit.ObjectID, "/datasource.config.json") {
 			sawConfigFile = true
 		}
 	}
 
-	if c.TableName != "db_instance" || c.Operation != "insert" {
-		t.Fatalf("no db_instance insert in %+v", commits)
+	if c.TableName != "datasource" || c.Operation != "insert" {
+		t.Fatalf("no datasource insert in %+v", commits)
 	}
 	if !sawConfigFile {
-		t.Errorf("db.config.json did not arrive as a file: %+v", commits)
+		t.Errorf("datasource.config.json did not arrive as a file: %+v", commits)
 	}
 
 	if c.ObjectID != "db-1" {
 		t.Errorf("ObjectID mismatch: got %q want 'db-1'", c.ObjectID)
 	}
 
-	payload, ok := c.Payload.(graph.DBInstanceDTO)
+	payload, ok := c.Payload.(graph.DatasourceDTO)
 	if !ok {
 		t.Fatalf("payload type mismatch: %T", c.Payload)
 	}
@@ -109,15 +109,15 @@ func TestHandleDBConfigEvent_Insert(t *testing.T) {
 	}
 }
 
-func TestHandleDBConfigEvent_Delete(t *testing.T) {
+func TestHandleDatasourceConfigEvent_Delete(t *testing.T) {
 	fsCtx, workspaceRoot := newTestWorkspaceFS(t)
 
-	// Path where db.config.json used to live.
+	// Path where datasource.config.json used to live.
 	dbDir := filepath.Join(workspaceRoot, "folder-db-1", "db1")
 	if err := os.MkdirAll(dbDir, 0o700); err != nil {
 		t.Fatalf("mkdir db dir: %v", err)
 	}
-	dbConfigPath := filepath.Join(dbDir, "db.config.json")
+	datasourceConfigPath := filepath.Join(dbDir, "datasource.config.json")
 
 	var commits []generated.MutationCommit
 	s := &System{
@@ -127,18 +127,18 @@ func TestHandleDBConfigEvent_Delete(t *testing.T) {
 	}
 
 	ev := fsnotify.Event{
-		Name: dbConfigPath,
+		Name: datasourceConfigPath,
 		Op:   fsnotify.Remove,
 	}
 
-	s.handleDBConfigEvent(ev, "user-1", fsCtx)
+	s.handleDatasourceConfigEvent(ev, "user-1", fsCtx)
 
 	if len(commits) != 1 {
 		t.Fatalf("expected 1 commit, got %d", len(commits))
 	}
 
 	c := commits[0]
-	if c.TableName != "db_instance" || c.Operation != "delete" {
+	if c.TableName != "datasource" || c.Operation != "delete" {
 		t.Fatalf("unexpected commit: %+v", c)
 	}
 
@@ -157,7 +157,7 @@ func TestHandleMetadataEvent_Update(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 	metaPath := filePath + ".metadata.json"
-	meta := `{"databases":[{"name":"db-1","id":"db-1"}]}`
+	meta := `{"datasources":[{"name":"db-1","id":"db-1"}]}`
 	if err := os.WriteFile(metaPath, []byte(meta), 0o600); err != nil {
 		t.Fatalf("write metadata: %v", err)
 	}
@@ -194,8 +194,8 @@ func TestHandleMetadataEvent_Update(t *testing.T) {
 	if !ok {
 		t.Fatalf("payload type mismatch: %T", c.Payload)
 	}
-	if payload.Databases == nil || len(*payload.Databases) != 1 || (*payload.Databases)[0].ID != "db-1" {
-		t.Errorf("payload.databases mismatch: got %v want [{name:\"db-1\",id:\"db-1\"}]", payload.Databases)
+	if payload.Datasources == nil || len(*payload.Datasources) != 1 || (*payload.Datasources)[0].ID != "db-1" {
+		t.Errorf("payload.databases mismatch: got %v want [{name:\"db-1\",id:\"db-1\"}]", payload.Datasources)
 	}
 }
 
@@ -469,7 +469,7 @@ func TestDropStaleWatches(t *testing.T) {
 	}
 }
 
-// A db.config.json and a sidecar are routed to their own handlers and go no
+// A datasource.config.json and a sidecar are routed to their own handlers and go no
 // further, which is how they stopped reaching the git panel: the file is
 // tracked by git like any other, and a change to it belongs in the list of
 // changes.
@@ -481,14 +481,14 @@ func TestHandleWatchEvent_RefreshesGitStatusForEveryTrackedFile(t *testing.T) {
 		t.Fatalf("mkdir db dir: %v", err)
 	}
 
-	dbConfig := `{"version":1,"id":"db-1","db_type":"sqlite","dsn":"file:test.db","workspace_id":"ws-1"}`
-	dbConfigPath := filepath.Join(dbDir, "db.config.json")
-	if err := os.WriteFile(dbConfigPath, []byte(dbConfig), 0o600); err != nil {
-		t.Fatalf("write db.config.json: %v", err)
+	datasourceConfig := `{"version":1,"id":"db-1","db_type":"sqlite","dsn":"file:test.db","workspace_id":"ws-1"}`
+	datasourceConfigPath := filepath.Join(dbDir, "datasource.config.json")
+	if err := os.WriteFile(datasourceConfigPath, []byte(datasourceConfig), 0o600); err != nil {
+		t.Fatalf("write datasource.config.json: %v", err)
 	}
 
 	sidecarPath := filepath.Join(dbDir, "query.sql.metadata.json")
-	if err := os.WriteFile(sidecarPath, []byte(`{"databases":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(sidecarPath, []byte(`{"datasources":[]}`), 0o600); err != nil {
 		t.Fatalf("write sidecar: %v", err)
 	}
 
@@ -498,7 +498,7 @@ func TestHandleWatchEvent_RefreshesGitStatusForEveryTrackedFile(t *testing.T) {
 	}
 	defer func() { _ = watcher.Close() }()
 
-	for _, path := range []string{dbConfigPath, sidecarPath} {
+	for _, path := range []string{datasourceConfigPath, sidecarPath} {
 		refreshes := 0
 		s := &System{
 			emitHook:      func(generated.MutationCommit) {},

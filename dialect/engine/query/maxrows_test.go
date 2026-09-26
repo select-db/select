@@ -69,7 +69,7 @@ func TestStream_MaxRowsCapsScan(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	Stream(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	Stream(ctx, Conn{DB: db}, Datasource{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{MaxRows: 10}, sink)
 
@@ -95,7 +95,7 @@ func TestStream_MaxRowsSkipsWhenUnderCap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	Stream(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	Stream(ctx, Conn{DB: db}, Datasource{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{MaxRows: 50}, sink)
 
@@ -115,7 +115,7 @@ func TestStream_MaxRowsZeroIsUnbounded(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	Stream(ctx, Conn{DB: db}, DBInstance{ID: "x"},
+	Stream(ctx, Conn{DB: db}, Datasource{ID: "x"},
 		"SELECT id FROM t ORDER BY id",
 		Options{ /* MaxRows: 0 */ }, sink)
 
@@ -132,7 +132,7 @@ func TestStream_MaxRowsZeroIsUnbounded(t *testing.T) {
 func TestExecuteDropsRowsOnFailure(t *testing.T) {
 	db := newDBWithRows(t, 3)
 	defer db.Close()
-	result := Execute(context.Background(), Conn{DB: db}, DBInstance{ID: "x"},
+	result := Execute(context.Background(), Conn{DB: db}, Datasource{ID: "x"},
 		"SELECT id FROM t ORDER BY id", Options{MaxBytes: 1})
 	if len(result.Errors) == 0 || result.Rows != nil || result.RowCount != 0 {
 		t.Fatalf("errors %v, rows %v, count %d; want an error and no rows", result.Errors, result.Rows, result.RowCount)

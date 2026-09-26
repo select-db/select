@@ -146,7 +146,7 @@ func (s *System) watchWorkspace(ctx context.Context, workspaceID string) {
 // handleWatchEvent routes one filesystem event to whatever reads that kind of
 // file, and tells the git panel the working tree moved.
 func (s *System) handleWatchEvent(event fsnotify.Event, userID string, watcher *fsnotify.Watcher, fsCtx *graph.WorkspaceFS) {
-	// First, because a db.config.json, a sidecar and a rename each leave this
+	// First, because a datasource.config.json, a sidecar and a rename each leave this
 	// function early, and the git panel lists paths: a file it tracks changed
 	// whatever kind of node the app reads it as.
 	//
@@ -159,8 +159,8 @@ func (s *System) handleWatchEvent(event fsnotify.Event, userID string, watcher *
 		return
 	}
 
-	if strings.HasSuffix(event.Name, graph.DBConfigFileName) {
-		s.handleDBConfigEvent(event, userID, fsCtx)
+	if strings.HasSuffix(event.Name, graph.DatasourceConfigFileName) {
+		s.handleDatasourceConfigEvent(event, userID, fsCtx)
 		return
 	}
 
@@ -235,24 +235,24 @@ func (s *System) rebuildGraphAndEmit() {
 	graph.EmitWorkspaceGraphUpdated(s.Graph)
 }
 
-// LoadAllDatabaseSchemas runs QuerySchema for each workspace DB instance (same as after other graph rebuilds).
-func (s *System) LoadAllDatabaseSchemas(wsGraph *graph.WorkspaceNode) {
+// LoadAllDatasourceSchemas runs QuerySchema for each workspace datasource (same as after other graph rebuilds).
+func (s *System) LoadAllDatasourceSchemas(wsGraph *graph.WorkspaceNode) {
 	if s.DbClient == nil || wsGraph == nil {
 		return
 	}
-	for _, dbInstance := range wsGraph.DBInstances {
-		dbID := dbInstance.ID
+	for _, datasource := range wsGraph.Datasources {
+		datasourceID := datasource.ID
 		go func(id string) {
 			_ = s.DbClient.QuerySchema(db_client.QuerySchemaParams{
-				DatabaseInstanceID: id,
-				NoCache:            false,
+				DatasourceID: id,
+				NoCache:      false,
 			})
-		}(dbID)
+		}(datasourceID)
 	}
 }
 
-// Emits a db_instance mutation when db.config.json changes.
-func (s *System) handleDBConfigEvent(event fsnotify.Event, userID string, ctx *graph.WorkspaceFS) {
+// Emits a datasource mutation when datasource.config.json changes.
+func (s *System) handleDatasourceConfigEvent(event fsnotify.Event, userID string, ctx *graph.WorkspaceFS) {
 	if _, ok := ctx.Rel(event.Name); !ok {
 		return
 	}
@@ -275,11 +275,11 @@ func (s *System) handleDBConfigEvent(event fsnotify.Event, userID string, ctx *g
 	dbURI := ctx.URI(dirRel)
 
 	if op == "delete" {
-		s.emitMutation("db_instance", op, dbURI, nil, ctx.WorkspaceID, userID)
+		s.emitMutation("datasource", op, dbURI, nil, ctx.WorkspaceID, userID)
 		return
 	}
 
-	cfg, err := graph.ReadFSDBConfig(event.Name)
+	cfg, err := graph.ReadFSDatasourceConfig(event.Name)
 	if err != nil {
 		return
 	}
@@ -289,7 +289,7 @@ func (s *System) handleDBConfigEvent(event fsnotify.Event, userID string, ctx *g
 
 	sshConfig := graph.SSHConfigFromFS(cfg.SSH)
 
-	payload := graph.DBInstanceDTO{
+	payload := graph.DatasourceDTO{
 		ID:          &cfg.ID,
 		URI:         &dbURI,
 		Name:        utils.Ptr(filepath.Base(dirPath)),
@@ -301,15 +301,15 @@ func (s *System) handleDBConfigEvent(event fsnotify.Event, userID string, ctx *g
 		WorkspaceID: utils.Ptr(ctx.WorkspaceID),
 	}
 
-	// If the db instance already exists in the graph, use "update" to
+	// If the datasource already exists in the graph, use "update" to
 	// preserve cached schema children instead of replacing the node.
-	if op == "insert" && s.Graph != nil && s.Graph.GetDBInstanceNodeByID(cfg.ID) != nil {
+	if op == "insert" && s.Graph != nil && s.Graph.GetDatasourceNodeByID(cfg.ID) != nil {
 		op = "update"
 	}
 
-	s.emitMutation("db_instance", op, cfg.ID, payload, ctx.WorkspaceID, userID)
+	s.emitMutation("datasource", op, cfg.ID, payload, ctx.WorkspaceID, userID)
 
-	// Introspect the db instance folder so files/folders appear in the UI (same as
+	// Introspect the datasource folder so files/folders appear in the UI (same as
 	// processDirectoryEntry + scanFolderContents for other folders).
 	s.scanFolderContents(dirPath, dbURI, userID, ctx)
 }
@@ -406,19 +406,19 @@ func (s *System) handleMetadataEvent(event fsnotify.Event, userID string, ctx *g
 
 	fileURI := ctx.URI(fileRel)
 
-	var databases []graph.DatabaseRef
+	var datasources []graph.DatasourceRef
 	if event.Op&(fsnotify.Remove) == 0 {
 		meta, err := graph.ReadFileMetadata(event.Name)
 		if err != nil {
 			return
 		}
-		databases = meta.Databases
+		datasources = meta.Datasources
 	}
 
 	payload := graph.FileDTO{
-		ID:        &fileURI,
-		URI:       &fileURI,
-		Databases: &databases,
+		ID:          &fileURI,
+		URI:         &fileURI,
+		Datasources: &datasources,
 	}
 
 	s.emitMutation("file", "update", fileURI, payload, ctx.WorkspaceID, userID)
@@ -499,7 +499,7 @@ func (s *System) processFileEntry(filePath, fileURI, parentURI string, userID st
 }
 
 // Reports whether a file event's parent is a container the graph tracks files
-// for: a db instance directory, or a resolved folder. A parent the graph does
+// for: a datasource directory, or a resolved folder. A parent the graph does
 // not know -- a folder whose own insert is still in flight -- is accepted, so its
 // files are not lost.
 func (s *System) parentAcceptsFiles(parentURI string) bool {
@@ -514,18 +514,18 @@ func (s *System) parentAcceptsFiles(parentURI string) bool {
 	return parent.Resolved
 }
 
-// Handles the directory if it contains db.config.json.
-func (s *System) checkAndHandleDBInstance(dirPath string, userID string, ctx *graph.WorkspaceFS) bool {
-	if !graph.CheckIsDBInstance(dirPath) {
+// Handles the directory if it contains datasource.config.json.
+func (s *System) checkAndHandleDatasource(dirPath string, userID string, ctx *graph.WorkspaceFS) bool {
+	if !graph.CheckIsDatasource(dirPath) {
 		return false
 	}
-	s.handleDBConfigEvent(fsnotify.Event{Name: filepath.Join(dirPath, graph.DBConfigFileName), Op: fsnotify.Create}, userID, ctx)
+	s.handleDatasourceConfigEvent(fsnotify.Event{Name: filepath.Join(dirPath, graph.DatasourceConfigFileName), Op: fsnotify.Create}, userID, ctx)
 	return true
 }
 
 // Emits a folder mutation and optionally scans its contents recursively.
 func (s *System) processDirectoryEntry(dirPath, dirURI, parentURI string, userID string, ctx *graph.WorkspaceFS, scanContents bool) {
-	if s.checkAndHandleDBInstance(dirPath, userID, ctx) {
+	if s.checkAndHandleDatasource(dirPath, userID, ctx) {
 		return
 	}
 

@@ -14,30 +14,30 @@ import (
 )
 
 type QuerySchemaParams struct {
-	DatabaseInstanceID string
-	NoCache            bool
+	DatasourceID string
+	NoCache      bool
 }
 
 func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(queryParams.DatabaseInstanceID)
-	if dbInstance == nil {
-		return fmt.Errorf("could not find database instance with ID: %s", queryParams.DatabaseInstanceID)
+	datasource := dbc.Graph.GetDatasourceNodeByID(queryParams.DatasourceID)
+	if datasource == nil {
+		return fmt.Errorf("could not find datasource with ID: %s", queryParams.DatasourceID)
 	}
 
 	// Get cached metadata (or fetch and cache it)
 	// If NoCache is true, bypass cache and fetch fresh metadata.
-	// Use the DB instance's SSH config (if any) so schema loading respects SSH tunneling and its timeouts.
-	metadata, err := dbc.getCachedMetadata(dbInstance, queryParams.NoCache)
+	// Use the datasource's SSH config (if any) so schema loading respects SSH tunneling and its timeouts.
+	metadata, err := dbc.getCachedMetadata(datasource, queryParams.NoCache)
 	if err != nil {
-		emitAvailability(dbInstance.ID, err.Error())
+		emitAvailability(datasource.ID, err.Error())
 		return err
 	}
 
 	// Build schema nodes hierarchy: DB → Schemas → Schema → Tables, Views, Indexes, Triggers, Types, Functions (all direct children).
-	var schemaNodes []*graph.DBInstanceItemNode
-	dbName := dbInstance.Name
+	var schemaNodes []*graph.DatasourceItemNode
+	dbName := datasource.Name
 	for _, schema := range metadata.Schemas {
-		schemaID := fmt.Sprintf("%s:schema:%s", dbInstance.ID, schema.Name)
+		schemaID := fmt.Sprintf("%s:schema:%s", datasource.ID, schema.Name)
 		schemaPath := dbName + " / " + schema.Name
 
 		// Convert all data to graph nodes for this schema
@@ -55,10 +55,10 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 
 		typeNodes := convertTypesToNodes(schema.Types, schemaID, schemaPath)
 		funcNodes := convertFunctionsToNodes(schema.Functions, schemaID, schemaPath)
-		settingsLabel := settingsSectionLabel(dbInstance.DBType)
+		settingsLabel := settingsSectionLabel(datasource.DBType)
 		settingNodes := convertSettingsToNodes(schema.Settings, schemaID, schemaPath, settingsLabel)
 
-		schemaExtraChildren := []*graph.DBInstanceItemNode{
+		schemaExtraChildren := []*graph.DatasourceItemNode{
 			{
 				ID:       fmt.Sprintf("%s:indexes", schemaID),
 				Name:     "Indexes",
@@ -101,7 +101,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 			},
 		}
 
-		schemaChildren := []*graph.DBInstanceItemNode{
+		schemaChildren := []*graph.DatasourceItemNode{
 			{
 				ID:       fmt.Sprintf("%s:tables", schemaID),
 				Name:     "Tables",
@@ -121,7 +121,7 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 		}
 		schemaChildren = append(schemaChildren, schemaExtraChildren...)
 
-		schemaNode := &graph.DBInstanceItemNode{
+		schemaNode := &graph.DatasourceItemNode{
 			ID:       schemaID,
 			Name:     schema.Name,
 			Type:     "schema",
@@ -131,43 +131,43 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 		schemaNodes = append(schemaNodes, schemaNode)
 	}
 
-	// Mutate the graph structure by updating the schema of the database instance
+	// Mutate the graph structure by updating the schema of the datasource
 	_ = dbc.Graph.Mutate(dbc.ctx, generated.MutationCommit{
 		Operation: "update",
-		TableName: "db_instance",
-		ObjectID:  dbInstance.ID,
+		TableName: "datasource",
+		ObjectID:  datasource.ID,
 		Payload: map[string]interface{}{
-			"ID":       dbInstance.ID,
+			"ID":       datasource.ID,
 			"Children": schemaNodes,
 		},
 	})
 
-	emitAvailability(dbInstance.ID, "")
+	emitAvailability(datasource.ID, "")
 
 	// Write schema.sql in the background so it doesn't block the UI.
 	// The graph is already updated and the schema tree is visible at this point.
 	noCache := queryParams.NoCache
 	go func() {
-		inst := query.DBInstance{
-			ID:        dbInstance.ID,
-			DBType:    dbInstance.DBType,
-			Proxified: dbInstance.Proxified,
+		inst := query.Datasource{
+			ID:        datasource.ID,
+			DBType:    datasource.DBType,
+			Proxified: datasource.Proxified,
 		}
 
 		dsn := ""
-		if !dbInstance.Proxified {
-			dsn = dbc.effectiveDSN(dbInstance)
+		if !datasource.Proxified {
+			dsn = dbc.effectiveDSN(datasource)
 		}
 
 		schemaSQL := engineClient.DumpSchema(
 			context.Background(),
 			inst,
-			dbInstance.WorkspaceID,
+			datasource.WorkspaceID,
 			dsn,
 			metadata,
 			noCache,
 		)
-		schemaFileURI := strings.TrimSuffix(dbInstance.URI, "/") + "/schema.sql"
+		schemaFileURI := strings.TrimSuffix(datasource.URI, "/") + "/schema.sql"
 		_ = dbc.FSProvider.Write(fs_provider.WriteParams{URI: schemaFileURI, Content: schemaSQL})
 	}()
 
@@ -178,18 +178,18 @@ func (dbc *DbClient) QuerySchema(queryParams QuerySchemaParams) error {
 // flat list (used for the schema-level Indexes section) and the same nodes
 // grouped by owning table name, so callers never have to recover the table from
 // the node ID.
-func convertIndexesToNodes(indexes []core.IndexInfo, dbInstanceID string, schemaPath string) ([]*graph.DBInstanceItemNode, map[string][]*graph.DBInstanceItemNode) {
-	var indexNodes []*graph.DBInstanceItemNode
-	byTable := make(map[string][]*graph.DBInstanceItemNode)
+func convertIndexesToNodes(indexes []core.IndexInfo, datasourceID string, schemaPath string) ([]*graph.DatasourceItemNode, map[string][]*graph.DatasourceItemNode) {
+	var indexNodes []*graph.DatasourceItemNode
+	byTable := make(map[string][]*graph.DatasourceItemNode)
 
 	for _, idx := range indexes {
 		indexPath := schemaPath + " / " + idx.TableName + " / " + idx.Name
 
 		// Convert index columns to graph nodes
-		var columnNodes []*graph.DBInstanceItemNode
+		var columnNodes []*graph.DatasourceItemNode
 		for _, col := range idx.Columns {
-			columnNodes = append(columnNodes, &graph.DBInstanceItemNode{
-				ID:   fmt.Sprintf("%s:table:%s:index:%s:column:%s", dbInstanceID, idx.TableName, idx.Name, col.Name),
+			columnNodes = append(columnNodes, &graph.DatasourceItemNode{
+				ID:   fmt.Sprintf("%s:table:%s:index:%s:column:%s", datasourceID, idx.TableName, idx.Name, col.Name),
 				Name: col.Name,
 				Type: "index:column",
 				Path: indexPath + " / " + col.Name,
@@ -202,8 +202,8 @@ func convertIndexesToNodes(indexes []core.IndexInfo, dbInstanceID string, schema
 			})
 		}
 
-		indexNode := &graph.DBInstanceItemNode{
-			ID:   fmt.Sprintf("%s:table:%s:index:%s", dbInstanceID, idx.TableName, idx.Name),
+		indexNode := &graph.DatasourceItemNode{
+			ID:   fmt.Sprintf("%s:table:%s:index:%s", datasourceID, idx.TableName, idx.Name),
 			Name: idx.Name,
 			Type: "index",
 			Path: indexPath,
@@ -225,14 +225,14 @@ func convertIndexesToNodes(indexes []core.IndexInfo, dbInstanceID string, schema
 // convertTriggersToNodes converts core.TriggerInfo to graph nodes. Like
 // convertIndexesToNodes it returns both the flat list and a grouping by owning
 // table name.
-func convertTriggersToNodes(triggers []core.TriggerInfo, dbInstanceID string, schemaPath string) ([]*graph.DBInstanceItemNode, map[string][]*graph.DBInstanceItemNode) {
-	var triggerNodes []*graph.DBInstanceItemNode
-	byTable := make(map[string][]*graph.DBInstanceItemNode)
+func convertTriggersToNodes(triggers []core.TriggerInfo, datasourceID string, schemaPath string) ([]*graph.DatasourceItemNode, map[string][]*graph.DatasourceItemNode) {
+	var triggerNodes []*graph.DatasourceItemNode
+	byTable := make(map[string][]*graph.DatasourceItemNode)
 
 	for _, trigger := range triggers {
-		triggerID := fmt.Sprintf("%s:table:%s:trigger:%s", dbInstanceID, trigger.TableName, trigger.Name)
+		triggerID := fmt.Sprintf("%s:table:%s:trigger:%s", datasourceID, trigger.TableName, trigger.Name)
 
-		triggerNode := &graph.DBInstanceItemNode{
+		triggerNode := &graph.DatasourceItemNode{
 			ID:   triggerID,
 			Name: trigger.Name,
 			Type: "trigger",
@@ -278,19 +278,19 @@ func columnMetadataFromCore(col core.Column) map[string]any {
 	return meta
 }
 
-// convertTablesToNodes converts tables to DBInstanceItemNode with additional information
+// convertTablesToNodes converts tables to DatasourceItemNode with additional information
 func convertTablesToNodes(
 	tables []core.Table,
-	dbID string,
+	datasourceID string,
 	schemaPath string,
 	stats core.TableStats,
-	indexesByTable map[string][]*graph.DBInstanceItemNode,
-	triggersByTable map[string][]*graph.DBInstanceItemNode,
-) ([]*graph.DBInstanceItemNode, error) {
-	var tableNodes []*graph.DBInstanceItemNode
+	indexesByTable map[string][]*graph.DatasourceItemNode,
+	triggersByTable map[string][]*graph.DatasourceItemNode,
+) ([]*graph.DatasourceItemNode, error) {
+	var tableNodes []*graph.DatasourceItemNode
 
 	for _, table := range tables {
-		objectID := fmt.Sprintf("%s:table:%s", dbID, table.Name)
+		objectID := fmt.Sprintf("%s:table:%s", datasourceID, table.Name)
 		tablePath := schemaPath + " / " + table.Name
 		stat := ""
 		if stats != nil {
@@ -300,7 +300,7 @@ func convertTablesToNodes(
 		// Look up this table's indexes and build per-column index metadata
 		indexGroup := indexesByTable[table.Name]
 		indexedColumns := make(map[string]bool)
-		indexesByColumn := make(map[string][]*graph.DBInstanceItemNode)
+		indexesByColumn := make(map[string][]*graph.DatasourceItemNode)
 		for _, idx := range indexGroup {
 			for _, child := range idx.Children {
 				if child.Type != "index:column" {
@@ -313,7 +313,7 @@ func convertTablesToNodes(
 		}
 
 		// Convert columns to graph nodes with full metadata (matches frontend column schema)
-		var columnNodes []*graph.DBInstanceItemNode
+		var columnNodes []*graph.DatasourceItemNode
 		for _, col := range table.Columns {
 			meta := columnMetadataFromCore(col)
 
@@ -324,7 +324,7 @@ func convertTablesToNodes(
 			// Attach index nodes as children of the column in the graph
 			children := indexesByColumn[col.Name]
 
-			columnNodes = append(columnNodes, &graph.DBInstanceItemNode{
+			columnNodes = append(columnNodes, &graph.DatasourceItemNode{
 				ID:       fmt.Sprintf("%s:column:%s", objectID, col.Name),
 				Name:     col.Name,
 				Type:     fmt.Sprintf("column:%s", strings.ToLower(col.Type)),
@@ -334,7 +334,7 @@ func convertTablesToNodes(
 			})
 		}
 
-		columnsNode := &graph.DBInstanceItemNode{
+		columnsNode := &graph.DatasourceItemNode{
 			ID:       fmt.Sprintf("%s:columns", objectID),
 			Name:     "Columns",
 			Type:     "columns",
@@ -346,7 +346,7 @@ func convertTablesToNodes(
 		// Look up this table's triggers (indexGroup already computed above)
 		triggersGroup := triggersByTable[table.Name]
 
-		indexesNode := &graph.DBInstanceItemNode{
+		indexesNode := &graph.DatasourceItemNode{
 			ID:       fmt.Sprintf("%s:indexes", objectID),
 			Name:     "Indexes",
 			Type:     "indexes",
@@ -355,7 +355,7 @@ func convertTablesToNodes(
 			Children: indexGroup,
 		}
 
-		triggersNode := &graph.DBInstanceItemNode{
+		triggersNode := &graph.DatasourceItemNode{
 			ID:       fmt.Sprintf("%s:triggers", objectID),
 			Name:     "Triggers",
 			Type:     "triggers",
@@ -364,7 +364,7 @@ func convertTablesToNodes(
 			Children: triggersGroup,
 		}
 
-		tableNode := &graph.DBInstanceItemNode{
+		tableNode := &graph.DatasourceItemNode{
 			ID:   objectID,
 			Name: table.Name,
 			Type: "table",
@@ -374,7 +374,7 @@ func convertTablesToNodes(
 				"sql":  table.DDL,
 				"stat": stat,
 			},
-			Children: []*graph.DBInstanceItemNode{
+			Children: []*graph.DatasourceItemNode{
 				columnsNode, indexesNode, triggersNode,
 			},
 		}
@@ -385,21 +385,21 @@ func convertTablesToNodes(
 	return tableNodes, nil
 }
 
-// convertViewsToNodes converts views to DBInstanceItemNode with additional information
+// convertViewsToNodes converts views to DatasourceItemNode with additional information
 func convertViewsToNodes(
 	views []core.Table,
-	dbID string,
+	datasourceID string,
 	schemaPath string,
-) ([]*graph.DBInstanceItemNode, error) {
-	var viewNodes []*graph.DBInstanceItemNode
+) ([]*graph.DatasourceItemNode, error) {
+	var viewNodes []*graph.DatasourceItemNode
 
 	for _, view := range views {
-		objectID := fmt.Sprintf("%s:view:%s", dbID, view.Name)
+		objectID := fmt.Sprintf("%s:view:%s", datasourceID, view.Name)
 		viewPath := schemaPath + " / " + view.Name
 
-		var columnNodes []*graph.DBInstanceItemNode
+		var columnNodes []*graph.DatasourceItemNode
 		for _, col := range view.Columns {
-			columnNodes = append(columnNodes, &graph.DBInstanceItemNode{
+			columnNodes = append(columnNodes, &graph.DatasourceItemNode{
 				ID:       fmt.Sprintf("%s:column:%s", objectID, col.Name),
 				Name:     col.Name,
 				Type:     fmt.Sprintf("column:%s", strings.ToLower(col.Type)),
@@ -408,7 +408,7 @@ func convertViewsToNodes(
 			})
 		}
 
-		columnsNode := &graph.DBInstanceItemNode{
+		columnsNode := &graph.DatasourceItemNode{
 			ID:       fmt.Sprintf("%s:columns", objectID),
 			Name:     fmt.Sprintf("Columns (%d)", len(columnNodes)),
 			Type:     "columns",
@@ -416,7 +416,7 @@ func convertViewsToNodes(
 			Children: columnNodes,
 		}
 
-		viewNode := &graph.DBInstanceItemNode{
+		viewNode := &graph.DatasourceItemNode{
 			ID:   objectID,
 			Name: view.Name,
 			Type: "view",
@@ -425,7 +425,7 @@ func convertViewsToNodes(
 				"name": view.Name,
 				"sql":  view.DDL,
 			},
-			Children: []*graph.DBInstanceItemNode{
+			Children: []*graph.DatasourceItemNode{
 				columnsNode,
 			},
 		}
@@ -436,14 +436,14 @@ func convertViewsToNodes(
 	return viewNodes, nil
 }
 
-func convertTypesToNodes(types []core.Type, schemaID, schemaPath string) []*graph.DBInstanceItemNode {
-	var nodes []*graph.DBInstanceItemNode
+func convertTypesToNodes(types []core.Type, schemaID, schemaPath string) []*graph.DatasourceItemNode {
+	var nodes []*graph.DatasourceItemNode
 	for _, t := range types {
 		disp := t.Display
 		if disp == "" {
 			disp = t.Name
 		}
-		nodes = append(nodes, &graph.DBInstanceItemNode{
+		nodes = append(nodes, &graph.DatasourceItemNode{
 			ID:   fmt.Sprintf("%s:type:%s", schemaID, t.Name),
 			Name: disp,
 			Type: "type",
@@ -475,10 +475,10 @@ func settingsSectionLabel(dbType string) string {
 	}
 }
 
-func convertSettingsToNodes(settings []core.Setting, schemaID, schemaPath, sectionLabel string) []*graph.DBInstanceItemNode {
-	var nodes []*graph.DBInstanceItemNode
+func convertSettingsToNodes(settings []core.Setting, schemaID, schemaPath, sectionLabel string) []*graph.DatasourceItemNode {
+	var nodes []*graph.DatasourceItemNode
 	for _, s := range settings {
-		nodes = append(nodes, &graph.DBInstanceItemNode{
+		nodes = append(nodes, &graph.DatasourceItemNode{
 			ID:   fmt.Sprintf("%s:db_setting:%s", schemaID, s.Name),
 			Name: s.Name,
 			Type: "db_setting",
@@ -493,8 +493,8 @@ func convertSettingsToNodes(settings []core.Setting, schemaID, schemaPath, secti
 	return nodes
 }
 
-func convertFunctionsToNodes(funcs []core.Function, schemaID, schemaPath string) []*graph.DBInstanceItemNode {
-	var nodes []*graph.DBInstanceItemNode
+func convertFunctionsToNodes(funcs []core.Function, schemaID, schemaPath string) []*graph.DatasourceItemNode {
+	var nodes []*graph.DatasourceItemNode
 	for _, f := range funcs {
 		label := sqlFunctionDisplayLabel(f)
 		var funcID string
@@ -503,7 +503,7 @@ func convertFunctionsToNodes(funcs []core.Function, schemaID, schemaPath string)
 		} else {
 			funcID = fmt.Sprintf("%s:function:%s(%s)", schemaID, f.Name, f.Args)
 		}
-		nodes = append(nodes, &graph.DBInstanceItemNode{
+		nodes = append(nodes, &graph.DatasourceItemNode{
 			ID:   funcID,
 			Name: label,
 			Type: "function",

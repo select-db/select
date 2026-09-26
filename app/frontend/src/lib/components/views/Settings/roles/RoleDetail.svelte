@@ -12,7 +12,7 @@
 		RemovePermission
 	} from '$lib/bindings/selectDb/internal/role/role';
 	import { EventsOn, EventsOff } from '$lib/wails/events';
-	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
+	import DatasourceIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceIndicator.svelte';
 	import type { Component } from 'svelte';
 	import type * as graph from '$lib/wails/graph';
 	import { debounce } from '$lib/utils/debounce';
@@ -35,7 +35,7 @@
 	};
 	let { roleId, savedState, onStateChange }: Props = $props();
 
-	const dbPermissionActions = permissionActions.slice(1); // no manage for schema/table/column
+	const datasourcePermissionActions = permissionActions.slice(1); // no manage for schema/table/column
 	const columnPermissionActions = new Set<PermissionActions>(['select', 'see', 'update']);
 
 	const APP_ROWS: { label: string; action: string; description: string }[] = [
@@ -79,17 +79,17 @@
 	// Seeded once from the persisted state; this component owns it afterwards.
 	let expanded = new SvelteSet<string>(untrack(() => savedState?.expandedKeys ?? []));
 
-	function dbSchemas(db: graph.DBInstanceNode) {
+	function datasourceSchemas(db: graph.DatasourceNode) {
 		return db.children.filter((n) => n.type === 'schema');
 	}
 
-	function schemaTables(schema: graph.DBInstanceItemNode) {
+	function schemaTables(schema: graph.DatasourceItemNode) {
 		return schema.children
 			.filter((n) => n.type === 'tables' || n.type === 'views')
 			.flatMap((g) => g.children);
 	}
 
-	function tableColumns(table: graph.DBInstanceItemNode) {
+	function tableColumns(table: graph.DatasourceItemNode) {
 		const direct = table.children;
 		// columns may be direct children (type==='column') or nested under a 'columns' group node
 		const group = direct.find((n) => n.type === 'columns');
@@ -99,13 +99,13 @@
 	let indeterminateMap = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive accumulator built and returned inside a derivation
 		const m = new Map<string, boolean>();
-		for (const db of allDbInstances) {
+		for (const db of allDatasources) {
 			for (const action of permissionActions) {
 				const dbAllowed = resolve(permissionMap, db.id, '*', '*', '*', action) === 'allow';
 				m.set(
 					`${db.id}|${action}`,
 					!dbAllowed &&
-						dbSchemas(db).some(
+						datasourceSchemas(db).some(
 							(s) =>
 								resolve(permissionMap, db.id, s.name, '*', '*', action) === 'allow' ||
 								schemaTables(s).some(
@@ -119,8 +119,8 @@
 						)
 				);
 			}
-			for (const schema of dbSchemas(db)) {
-				for (const a of dbPermissionActions) {
+			for (const schema of datasourceSchemas(db)) {
+				for (const a of datasourcePermissionActions) {
 					const schemaAllowed = resolve(permissionMap, db.id, schema.name, '*', '*', a) === 'allow';
 					m.set(
 						`${db.id}|${schema.name}|${a}`,
@@ -135,7 +135,7 @@
 					);
 				}
 				for (const table of schemaTables(schema)) {
-					for (const action of dbPermissionActions) {
+					for (const action of datasourcePermissionActions) {
 						const tableAllowed =
 							resolve(permissionMap, db.id, schema.name, table.name, '*', action) === 'allow';
 						m.set(
@@ -172,7 +172,7 @@
 		const row = await must(
 			tryCatch(AddPermission, {
 				role_id: roleId,
-				db_instance_id: db || null,
+				datasource_id: db || null,
 				schema_name: schema || null,
 				table_name: table || null,
 				column_name: col || null,
@@ -227,9 +227,9 @@
 		}
 		const ids = new SvelteSet<string>();
 		// auto-expand parents of matches, preserving any existing expansions
-		for (const db of allDbInstances) {
+		for (const db of allDatasources) {
 			if (db.name.toLowerCase().includes(q)) ids.add(db.id);
-			for (const schema of dbSchemas(db)) {
+			for (const schema of datasourceSchemas(db)) {
 				if (schema.name.toLowerCase().includes(q)) {
 					ids.add(db.id);
 					ids.add(schema.id);
@@ -250,67 +250,72 @@
 		requestAnimationFrame(() => updateLayout?.());
 	}, 500);
 
-	async function grantAllDb(dbId: string) {
+	async function grantAllDatasource(datasourceId: string) {
 		for (const a of permissionActions) {
-			if (resolve(permissionMap, dbId, '*', '*', '*', a) === 'allow') continue;
-			await applyChanges(computePermissionChange(permissionMap, dbId, '*', '*', '*', a));
+			if (resolve(permissionMap, datasourceId, '*', '*', '*', a) === 'allow') continue;
+			await applyChanges(computePermissionChange(permissionMap, datasourceId, '*', '*', '*', a));
 		}
 	}
-	async function revokeAllDb(dbId: string) {
-		await removeMany(permissions.filter((p) => p.db_instance_id === dbId));
+	async function revokeAllDatasource(datasourceId: string) {
+		await removeMany(permissions.filter((p) => p.datasource_id === datasourceId));
 	}
-	async function grantAllSchema(dbId: string, schemaName: string) {
-		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, '*', '*', a) === 'allow') continue;
-			await applyChanges(computePermissionChange(permissionMap, dbId, schemaName, '*', '*', a));
-		}
-	}
-	async function revokeAllSchema(dbId: string, schemaName: string) {
-		await removeMany(
-			permissions.filter((p) => p.db_instance_id === dbId && p.schema_name === schemaName)
-		);
-		// block any inherited access from DB-level wildcard
-		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, '*', '*', a) !== 'allow') continue;
-			await addPerm(dbId, schemaName, '*', '*', a, 'deny');
-		}
-	}
-	async function grantAllTable(dbId: string, schemaName: string, tableName: string) {
-		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, '*', a) === 'allow') continue;
+	async function grantAllSchema(datasourceId: string, schemaName: string) {
+		for (const a of datasourcePermissionActions) {
+			if (resolve(permissionMap, datasourceId, schemaName, '*', '*', a) === 'allow') continue;
 			await applyChanges(
-				computePermissionChange(permissionMap, dbId, schemaName, tableName, '*', a)
+				computePermissionChange(permissionMap, datasourceId, schemaName, '*', '*', a)
 			);
 		}
 	}
-	async function revokeAllTable(dbId: string, schemaName: string, tableName: string) {
+	async function revokeAllSchema(datasourceId: string, schemaName: string) {
+		await removeMany(
+			permissions.filter((p) => p.datasource_id === datasourceId && p.schema_name === schemaName)
+		);
+		// block any inherited access from DB-level wildcard
+		for (const a of datasourcePermissionActions) {
+			if (resolve(permissionMap, datasourceId, schemaName, '*', '*', a) !== 'allow') continue;
+			await addPerm(datasourceId, schemaName, '*', '*', a, 'deny');
+		}
+	}
+	async function grantAllTable(datasourceId: string, schemaName: string, tableName: string) {
+		for (const a of datasourcePermissionActions) {
+			if (resolve(permissionMap, datasourceId, schemaName, tableName, '*', a) === 'allow') continue;
+			await applyChanges(
+				computePermissionChange(permissionMap, datasourceId, schemaName, tableName, '*', a)
+			);
+		}
+	}
+	async function revokeAllTable(datasourceId: string, schemaName: string, tableName: string) {
 		await removeMany(
 			permissions.filter(
 				(p) =>
-					p.db_instance_id === dbId && p.schema_name === schemaName && p.table_name === tableName
+					p.datasource_id === datasourceId &&
+					p.schema_name === schemaName &&
+					p.table_name === tableName
 			)
 		);
 		// block any inherited access from schema- or DB-level wildcard
-		for (const a of dbPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, '*', a) !== 'allow') continue;
-			await addPerm(dbId, schemaName, tableName, '*', a, 'deny');
+		for (const a of datasourcePermissionActions) {
+			if (resolve(permissionMap, datasourceId, schemaName, tableName, '*', a) !== 'allow') continue;
+			await addPerm(datasourceId, schemaName, tableName, '*', a, 'deny');
 		}
 	}
 	async function grantAllColumn(
-		dbId: string,
+		datasourceId: string,
 		schemaName: string,
 		tableName: string,
 		colName: string
 	) {
 		for (const a of columnPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, colName, a) === 'allow') continue;
+			if (resolve(permissionMap, datasourceId, schemaName, tableName, colName, a) === 'allow')
+				continue;
 			await applyChanges(
-				computePermissionChange(permissionMap, dbId, schemaName, tableName, colName, a)
+				computePermissionChange(permissionMap, datasourceId, schemaName, tableName, colName, a)
 			);
 		}
 	}
 	async function revokeAllColumn(
-		dbId: string,
+		datasourceId: string,
 		schemaName: string,
 		tableName: string,
 		colName: string
@@ -318,7 +323,7 @@
 		await removeMany(
 			permissions.filter(
 				(p) =>
-					p.db_instance_id === dbId &&
+					p.datasource_id === datasourceId &&
 					p.schema_name === schemaName &&
 					p.table_name === tableName &&
 					p.column_name === colName
@@ -326,49 +331,52 @@
 		);
 		// block any inherited access from table- or above wildcard
 		for (const a of columnPermissionActions) {
-			if (resolve(permissionMap, dbId, schemaName, tableName, colName, a) !== 'allow') continue;
-			await addPerm(dbId, schemaName, tableName, colName, a, 'deny');
+			if (resolve(permissionMap, datasourceId, schemaName, tableName, colName, a) !== 'allow')
+				continue;
+			await addPerm(datasourceId, schemaName, tableName, colName, a, 'deny');
 		}
 	}
 
-	let allDbInstances = $derived($workspaceGraphStore?.db_instances ?? []);
-	let dbInstances = $derived(
-		!visibleIds ? allDbInstances : allDbInstances.filter((db) => visibleIds!.has(db.id))
+	let allDatasources = $derived($workspaceGraphStore?.datasources ?? []);
+	let datasources = $derived(
+		!visibleIds ? allDatasources : allDatasources.filter((db) => visibleIds!.has(db.id))
 	);
 
-	type DbRow = { type: 'db'; key: string; db: graph.DBInstanceNode; expanded: boolean };
+	type DatasourceRow = { type: 'db'; key: string; db: graph.DatasourceNode; expanded: boolean };
 	type SchemaRow = {
 		type: 'schema';
 		key: string;
-		db: graph.DBInstanceNode;
-		schema: graph.DBInstanceItemNode;
+		db: graph.DatasourceNode;
+		schema: graph.DatasourceItemNode;
 		expanded: boolean;
 	};
 	type TableRow = {
 		type: 'table';
 		key: string;
-		db: graph.DBInstanceNode;
-		schema: graph.DBInstanceItemNode;
-		table: graph.DBInstanceItemNode;
+		db: graph.DatasourceNode;
+		schema: graph.DatasourceItemNode;
+		table: graph.DatasourceItemNode;
 		expanded: boolean;
 	};
 	type ColRow = {
 		type: 'col';
 		key: string;
-		db: graph.DBInstanceNode;
-		schema: graph.DBInstanceItemNode;
-		table: graph.DBInstanceItemNode;
-		col: graph.DBInstanceItemNode;
+		db: graph.DatasourceNode;
+		schema: graph.DatasourceItemNode;
+		table: graph.DatasourceItemNode;
+		col: graph.DatasourceItemNode;
 	};
-	type Row = DbRow | SchemaRow | TableRow | ColRow;
+	type Row = DatasourceRow | SchemaRow | TableRow | ColRow;
 
 	let visibleRows = $derived.by(() => {
 		const rows: Row[] = [];
-		for (const db of dbInstances) {
+		for (const db of datasources) {
 			const dbExpanded = expanded.has(db.id);
 			rows.push({ type: 'db', key: db.id, db, expanded: dbExpanded });
 			if (!dbExpanded) continue;
-			for (const schema of dbSchemas(db).filter((s) => !visibleIds || visibleIds.has(s.id))) {
+			for (const schema of datasourceSchemas(db).filter(
+				(s) => !visibleIds || visibleIds.has(s.id)
+			)) {
 				const schemaKey = `${db.id}|${schema.name}`;
 				const schemaExpanded = expanded.has(schemaKey);
 				rows.push({ type: 'schema', key: schemaKey, db, schema, expanded: schemaExpanded });
@@ -489,7 +497,7 @@
 											)}
 									/>{/key}
 							</td>
-							{#each dbPermissionActions as _ (_)}
+							{#each datasourcePermissionActions as _ (_)}
 								<td class="col-action col-na"></td>
 							{/each}
 							<td class="col-spacer"></td>
@@ -506,13 +514,16 @@
 								<div class="row-content">
 									<button class="expand-btn" onclick={() => toggleExpand(db.id)}>
 										<Icon icon={dbExpanded ? 'chevron-down' : 'chevron-right'} size={14} />
-										<DatabaseIndicator id={db.id} size={14} />
+										<DatasourceIndicator id={db.id} size={14} />
 										<span class="label">{db.name}</span>
 									</button>
 									<div class="row-actions">
-										<button class="action-btn" onclick={() => grantAllDb(db.id)}>grant all</button>
-										<button class="action-btn action-btn-revoke" onclick={() => revokeAllDb(db.id)}
-											>revoke all</button
+										<button class="action-btn" onclick={() => grantAllDatasource(db.id)}
+											>grant all</button
+										>
+										<button
+											class="action-btn action-btn-revoke"
+											onclick={() => revokeAllDatasource(db.id)}>revoke all</button
 										>
 									</div>
 								</div>
@@ -565,7 +576,7 @@
 							</td>
 							<!-- no manage for schema -->
 							<td class="col-action col-na"></td>
-							{#each dbPermissionActions as action (action)}
+							{#each datasourcePermissionActions as action (action)}
 								{@const explicit = permissionMap.get(
 									permissionKey(db.id, schema.name, '*', '*', action)
 								)?.effect}
@@ -624,7 +635,7 @@
 								</div>
 							</td>
 							<td class="col-action col-na"></td>
-							{#each dbPermissionActions as action (action)}
+							{#each datasourcePermissionActions as action (action)}
 								{@const explicit = permissionMap.get(
 									permissionKey(db.id, schema.name, table.name, '*', action)
 								)?.effect}
@@ -693,7 +704,7 @@
 								</div>
 							</td>
 							<td class="col-action col-na"></td>
-							{#each dbPermissionActions as action (action)}
+							{#each datasourcePermissionActions as action (action)}
 								{#if columnPermissionActions.has(action)}
 									{@const explicit = permissionMap.get(
 										permissionKey(db.id, schema.name, table.name, col.name, action)

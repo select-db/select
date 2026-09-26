@@ -11,7 +11,7 @@ import (
 // A fence can name the file it comes from by putting the name after the
 // language:
 //
-//	```json db.config.json
+//	```json datasource.config.json
 //
 // which renders the name as a label strip on top of the block. Knowing which
 // file a snippet belongs in is most of what a reader needs from a config

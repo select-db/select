@@ -29,22 +29,22 @@ export function BuildWorkspaceGraphFromFS(fsCtx: $models.WorkspaceFS | null): $C
 }
 
 /**
- * FileDatabases returns the databases a file is bound to: from the node when
+ * FileDatasources returns the databases a file is bound to: from the node when
  * the file's folder has been resolved, from the file's sidecar when it has not,
  * which answers without resolving the folder.
  */
-export function FileDatabases(fileURI: string): $CancellablePromise<$models.DatabaseRef[]> {
-    return $Call.ByID(2279693242, fileURI).then(($result: any) => {
+export function FileDatasources(fileURI: string): $CancellablePromise<$models.DatasourceRef[]> {
+    return $Call.ByID(1482670218, fileURI).then(($result: any) => {
         return $$createType1($result);
     });
 }
 
 /**
- * FindDbItemNodeById walks the schema item tree of a DB instance and returns the
+ * FindDatasourceItemNodeById walks the schema item tree of a datasource and returns the
  * node with the given ID, or nil if not found.
  */
-export function FindDbItemNodeById(dbInstanceID: string, nodeID: string): $CancellablePromise<$models.DBInstanceItemNode | null> {
-    return $Call.ByID(1698115212, dbInstanceID, nodeID).then(($result: any) => {
+export function FindDatasourceItemNodeById(datasourceID: string, nodeID: string): $CancellablePromise<$models.DatasourceItemNode | null> {
+    return $Call.ByID(3347124659, datasourceID, nodeID).then(($result: any) => {
         return $$createType3($result);
     });
 }
@@ -62,12 +62,12 @@ export function FindFiles(q: $models.FileQuery): $CancellablePromise<($models.Fi
 }
 
 /**
- * GetDBInstanceNodeByID returns the DBInstanceNode with the given ID from the
- * current WorkspaceGraph, or nil if no such node exists. A db instance answers
+ * GetDatasourceNodeByID returns the DatasourceNode with the given ID from the
+ * current WorkspaceGraph, or nil if no such node exists. A datasource answers
  * to both its config ID and its URI.
  */
-export function GetDBInstanceNodeByID(ID: string): $CancellablePromise<$models.DBInstanceNode | null> {
-    return $Call.ByID(1444826651, ID).then(($result: any) => {
+export function GetDatasourceNodeByID(ID: string): $CancellablePromise<$models.DatasourceNode | null> {
+    return $Call.ByID(4121831111, ID).then(($result: any) => {
         return $$createType8($result);
     });
 }
@@ -207,8 +207,8 @@ export function Mutate(commit: generated$0.MutationCommit): $CancellablePromise<
 }
 
 /**
- * NodeKind returns what the graph holds under an ID — "file", "folder" or
- * "db_instance" — and "" when it holds nothing.
+ * NodeKind returns what the graph holds under an ID: "file", "folder" or
+ * "datasource", and "" when it holds nothing.
  */
 export function NodeKind(id: string): $CancellablePromise<string> {
     return $Call.ByID(3877926180, id);
@@ -254,7 +254,7 @@ export function ResolveVariable(varName: string, folderID: string): $Cancellable
 }
 
 /**
- * SharedDatabasesUnder returns the shared -- proxified -- databases at or under
+ * SharedDatasourcesUnder returns the shared -- proxified -- databases at or under
  * the given nodes, naming each one by id and name. Passing no ids asks about
  * the whole workspace.
  * 
@@ -273,8 +273,8 @@ export function ResolveVariable(varName: string, folderID: string): $Cancellable
  * returned once, so callers can pass a whole selection without deduplicating it
  * first.
  */
-export function SharedDatabasesUnder(ids: string[]): $CancellablePromise<$models.DatabaseRef[]> {
-    return $Call.ByID(2630370595, ids).then(($result: any) => {
+export function SharedDatasourcesUnder(ids: string[]): $CancellablePromise<$models.DatasourceRef[]> {
+    return $Call.ByID(2547806811, ids).then(($result: any) => {
         return $$createType1($result);
     });
 }
@@ -298,14 +298,14 @@ export function WorkspaceExecutionLimits(): $CancellablePromise<[number, number]
 }
 
 // Private type creation functions
-const $$createType0 = $models.DatabaseRef.createFrom;
+const $$createType0 = $models.DatasourceRef.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.DBInstanceItemNode.createFrom;
+const $$createType2 = $models.DatasourceItemNode.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
 const $$createType4 = $models.FileNode.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
 const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $models.DBInstanceNode.createFrom;
+const $$createType7 = $models.DatasourceNode.createFrom;
 const $$createType8 = $Create.Nullable($$createType7);
 const $$createType9 = $models.FolderNode.createFrom;
 const $$createType10 = $Create.Nullable($$createType9);

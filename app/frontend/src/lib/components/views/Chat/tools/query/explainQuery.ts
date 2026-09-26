@@ -6,7 +6,7 @@ import { toToolError } from '../context';
 import { explainPlanResultSchema } from './types';
 
 const queryInputSchema = z.object({
-	dbInstanceId: z.string().describe('Database instance ID (required)'),
+	datasourceId: z.string().describe('Datasource ID (required)'),
 	statement: z.string().describe('SQL statement to explain (required)'),
 	folderId: z
 		.string()
@@ -29,7 +29,7 @@ const explainQueryOutputSchema = z.union([
 export const explainQueryDef = toolDefinition({
 	name: 'explain_query',
 	description:
-		'Explain a SQL query (execute and show execution plan). Only dbInstanceId and statement are required. folderId is optional for variable substitution. Verify tables with get_database_schemas and get_database_table_detail before running queries. Table names may be case-sensitive and require quotes.',
+		'Explain a SQL query (execute and show execution plan). Only datasourceId and statement are required. folderId is optional for variable substitution. Verify tables with get_datasource_schemas and get_datasource_table_detail before running queries. Table names may be case-sensitive and require quotes.',
 	needsApproval: true,
 	inputSchema: queryInputSchema,
 	outputSchema: explainQueryOutputSchema
@@ -38,10 +38,10 @@ export const explainQueryDef = toolDefinition({
 type ImplArgs = z.infer<typeof queryInputSchema> & { __fileId?: string };
 
 async function explainQueryImpl(args: unknown) {
-	const { dbInstanceId, folderId, statement, __fileId } = args as ImplArgs;
+	const { datasourceId, folderId, statement, __fileId } = args as ImplArgs;
 	const fileId = __fileId ?? '';
 	const [r, err] = await tryCatch(Explain, {
-		DbInstanceID: dbInstanceId,
+		DatasourceID: datasourceId,
 		FileID: fileId,
 		FolderID: folderId ?? '',
 		Statement: statement,

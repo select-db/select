@@ -124,7 +124,7 @@
 			folder_id: '',
 			files,
 			folders: [],
-			db_instances: [],
+			datasources: [],
 			badges: [String(files.length)]
 		});
 	};
@@ -246,8 +246,8 @@
 					<FileItems
 						files={[]}
 						folders={stagedFolder}
-						databases={[]}
-						databaseItems={[]}
+						datasources={[]}
+						datasourceItems={[]}
 						depth={0}
 						parentIds={[]}
 						ctx="git"
@@ -257,8 +257,8 @@
 					<FileItems
 						files={[]}
 						folders={unstagedFolder}
-						databases={[]}
-						databaseItems={[]}
+						datasources={[]}
+						datasourceItems={[]}
 						depth={0}
 						parentIds={[]}
 						ctx="git"

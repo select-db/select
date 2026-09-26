@@ -96,7 +96,7 @@ func (g *Git) GetGitFileStatus() (*GitFileStatus, error) {
 	// Leading spaces are significant, do not trim the output.
 	// --untracked-files=all, because the default collapses an untracked
 	// directory into one entry for the directory. A new database is a new
-	// directory, so its db.config.json and everything beside it were reported
+	// directory, so its datasource.config.json and everything beside it were reported
 	// as "mydb/" and then dropped by the trailing-slash skip below.
 	output, err := runGitWithOutput(ctx, root, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {

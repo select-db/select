@@ -17,9 +17,9 @@ const DefaultSelectPreviewLimit = 100
 // lookup it is deliberately structured (no SQL strings on the wire) so quoting
 // stays dialect-aware and stays out of the frontend.
 type GenerateSelectSQLParams struct {
-	DatabaseID string `json:"databaseId"`
-	Schema     string `json:"schema"`
-	Table      string `json:"table"`
+	DatasourceID string `json:"datasourceId"`
+	Schema       string `json:"schema"`
+	Table        string `json:"table"`
 	// Limit is the row cap of the generated statement. Values <= 0 fall back to
 	// DefaultSelectPreviewLimit.
 	Limit int `json:"limit"`
@@ -31,18 +31,18 @@ type GenerateSelectSQLResult struct {
 }
 
 // GenerateSelectSQL builds a preview SELECT for a single relation, using the
-// database instance's dialect for identifier quoting.
+// datasource's dialect for identifier quoting.
 func (dbc *DbClient) GenerateSelectSQL(params GenerateSelectSQLParams) (GenerateSelectSQLResult, error) {
 	var out GenerateSelectSQLResult
 
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DatabaseID)
-	if dbInstance == nil {
+	datasource := dbc.Graph.GetDatasourceNodeByID(params.DatasourceID)
+	if datasource == nil {
 		return out, fmt.Errorf("database not found")
 	}
 
-	dialect := dialects.Get(dbInstance.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
-		return out, fmt.Errorf("unsupported DB type for select SQL: %s", dbInstance.DBType)
+		return out, fmt.Errorf("unsupported DB type for select SQL: %s", datasource.DBType)
 	}
 
 	sql, err := buildSelectSQL(params.Schema, params.Table, params.Limit, dialect)

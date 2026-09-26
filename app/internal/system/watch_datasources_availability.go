@@ -20,7 +20,7 @@ const (
 // frontend from Ping itself, along with every other way a database is reached,
 // so the dot moves the moment anything learns something rather than at the top
 // of the next sweep.
-func (s *System) StartDatabaseWatcher() {
+func (s *System) StartDatasourceWatcher() {
 	s.mu.Lock()
 	if s.dbWatcherCancel != nil {
 		s.dbWatcherCancel()
@@ -29,20 +29,20 @@ func (s *System) StartDatabaseWatcher() {
 	s.dbWatcherCancel = cancel
 	s.mu.Unlock()
 
-	go s.watchDatabases(ctx)
+	go s.watchDatasources(ctx)
 }
 
-func (s *System) watchDatabases(ctx context.Context) {
+func (s *System) watchDatasources(ctx context.Context) {
 	backoff := make(map[string]time.Duration)
 	lastPing := make(map[string]time.Time)
 
 	for {
 		ws, err := graph.EnsureWorkspaceGraph(s.Graph)
 		if err == nil && ws != nil {
-			dbs := s.Graph.WorkspaceGraph.DBInstances
+			dbs := s.Graph.WorkspaceGraph.Datasources
 			now := time.Now()
 
-			var toCheck []*graph.DBInstanceNode
+			var toCheck []*graph.DatasourceNode
 			for _, db := range dbs {
 				interval := backoff[db.ID]
 				if interval == 0 {
@@ -59,10 +59,10 @@ func (s *System) watchDatabases(ctx context.Context) {
 
 				for i, db := range toCheck {
 					wg.Add(1)
-					go func(idx int, db *graph.DBInstanceNode) {
+					go func(idx int, db *graph.DatasourceNode) {
 						defer wg.Done()
 						result := s.DbClient.Ping(db_client.PingParams{
-							DbInstanceID: db.ID,
+							DatasourceID: db.ID,
 							DbType:       db.DBType,
 							Dsn:          db.DSN,
 							FolderId:     db.FolderID,
@@ -94,12 +94,12 @@ func (s *System) watchDatabases(ctx context.Context) {
 			}
 
 			// Clean up entries for removed databases
-			dbIDs := make(map[string]bool, len(dbs))
+			datasourceIDs := make(map[string]bool, len(dbs))
 			for _, db := range dbs {
-				dbIDs[db.ID] = true
+				datasourceIDs[db.ID] = true
 			}
 			for id := range backoff {
-				if !dbIDs[id] {
+				if !datasourceIDs[id] {
 					delete(backoff, id)
 					delete(lastPing, id)
 				}

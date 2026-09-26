@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS permission (
     workspace_id    TEXT NOT NULL,
     -- NULL across all four db fields = app-level rule (workspace settings, user management, etc.)
     -- '*' in schema/table/column = wildcard (applies to all at that level)
-    db_instance_id  TEXT,
+    datasource_id  TEXT,
     schema_name     TEXT,
     table_name      TEXT,
     column_name     TEXT,
@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_permission_updated_at ON permission(updated_at);
 -- SQLite treats NULLs as distinct in UNIQUE constraints, so we use a COALESCE index
 -- to make NULLs equal and prevent duplicate rules.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_unique
-    ON permission(role_id, COALESCE(db_instance_id, ''), COALESCE(schema_name, ''), COALESCE(table_name, ''), COALESCE(column_name, ''), action);
+    ON permission(role_id, COALESCE(datasource_id, ''), COALESCE(schema_name, ''), COALESCE(table_name, ''), COALESCE(column_name, ''), action);
 
 CREATE INDEX IF NOT EXISTS idx_permission_role_id ON permission(role_id);
 -- +goose StatementEnd

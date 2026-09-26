@@ -106,7 +106,7 @@ func AnalyzeEditableColumns(meta *core.Metadata, stmt core.InspectStatement, ins
 		out[colIndex] = ColumnEditMeta{
 			IsPrimaryKey:       isPrimaryKey,
 			IsForeignKey:       isForeignKey,
-			DatabaseID:         instanceID,
+			DatasourceID:       instanceID,
 			Schema:             field.Schema,
 			Table:              field.Table,
 			OriginalColumnName: field.Name,

@@ -226,8 +226,8 @@ func TestRemovedMember_LosesAccessToThatWorkspaceOnly(t *testing.T) {
 func TestAPIKeyRolesRemoved_ReachesTheKeyInHand(t *testing.T) {
 	f := e2e.Setup(t)
 
-	dsID := uuid.NewString()
-	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+dsID, f.Actor.Token, map[string]any{
+	datasourceID := uuid.NewString()
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+datasourceID, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "warehouse",
@@ -240,9 +240,9 @@ func TestAPIKeyRolesRemoved_ReachesTheKeyInHand(t *testing.T) {
 	roleID := uuid.NewString()
 	e2e.SeedRole(t, f.Conn, roleID, f.Actor.WorkspaceID, "Datasource Manager")
 	_, err := f.Conn.Exec(
-		`INSERT INTO app.permission (id, role_id, workspace_id, db_instance_id, action, effect)
+		`INSERT INTO app.permission (id, role_id, workspace_id, datasource_id, action, effect)
 		 VALUES ($1::uuid,$2::uuid,$3::uuid,$4,'manage','allow')`,
-		uuid.NewString(), roleID, f.Actor.WorkspaceID, dsID)
+		uuid.NewString(), roleID, f.Actor.WorkspaceID, datasourceID)
 	require.NoError(t, err)
 
 	rec = e2e.CreateAPIKey(t, f.H, f.Actor.Token, f.Actor.WorkspaceID, roleID, "ci")
@@ -253,7 +253,7 @@ func TestAPIKeyRolesRemoved_ReachesTheKeyInHand(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
 
-	rec = e2e.Do(t, f.H, http.MethodGet, "/datasources/"+dsID, created.Key, nil)
+	rec = e2e.Do(t, f.H, http.MethodGet, "/datasources/"+datasourceID, created.Key, nil)
 	require.Equalf(t, http.StatusOK, rec.Code, "the key starts able to read it: %s", rec.Body.String())
 
 	rec = e2e.Do(t, f.H, http.MethodPut, "/apikeys/"+created.ID+"/roles", f.Actor.Token, map[string]any{
@@ -262,7 +262,7 @@ func TestAPIKeyRolesRemoved_ReachesTheKeyInHand(t *testing.T) {
 	})
 	require.Equalf(t, http.StatusNoContent, rec.Code, "set roles: %s", rec.Body.String())
 
-	rec = e2e.Do(t, f.H, http.MethodGet, "/datasources/"+dsID, created.Key, nil)
+	rec = e2e.Do(t, f.H, http.MethodGet, "/datasources/"+datasourceID, created.Key, nil)
 	require.Equalf(t, http.StatusForbidden, rec.Code,
 		"a key still reads with a role the manager took off it: %s", rec.Body.String())
 }

@@ -11,21 +11,21 @@ import (
 )
 
 type PingParams struct {
-	DbInstanceID string                     `json:"DbInstanceID"`
+	DatasourceID string                     `json:"DatasourceID"`
 	DbType       string                     `json:"db_type"`
 	Dsn          string                     `json:"dsn"`
 	FolderId     string                     `json:"folder_id"`
-	Ssh          *graph.DBInstanceSSHConfig `json:"ssh,omitempty"`
+	Ssh          *graph.DatasourceSSHConfig `json:"ssh,omitempty"`
 	Proxified    bool                       `json:"proxified"`
 	NoCache      bool                       `json:"no_cache,omitempty"`
 }
 
-// Ping checks if the database instance is reachable, and reports what it found.
+// Ping checks if the datasource is reachable, and reports what it found.
 //
 // A ping has no other purpose, so the report is deferred rather than left to
 // the caller: no return path can be added that forgets to say what it learned.
 func (dbc *DbClient) Ping(params PingParams) (result string) {
-	defer func() { emitAvailability(params.DbInstanceID, result) }()
+	defer func() { emitAvailability(params.DatasourceID, result) }()
 
 	base := dbc.ctx
 	if base == nil {
@@ -36,8 +36,8 @@ func (dbc *DbClient) Ping(params PingParams) (result string) {
 
 	openWorkspaceID, _, _ := graph.OpenWorkspace()
 
-	node := &graph.DBInstanceNode{
-		ID:          params.DbInstanceID,
+	node := &graph.DatasourceNode{
+		ID:          params.DatasourceID,
 		WorkspaceID: openWorkspaceID,
 		DBType:      params.DbType,
 		DSN:         params.Dsn,
@@ -51,7 +51,7 @@ func (dbc *DbClient) Ping(params PingParams) (result string) {
 		return fmt.Sprintf("Unable to establish a connection with the database.\nError: %v", err)
 	}
 
-	inst := query.DBInstance{
+	inst := query.Datasource{
 		ID:        node.ID,
 		DBType:    node.DBType,
 		Proxified: node.Proxified,

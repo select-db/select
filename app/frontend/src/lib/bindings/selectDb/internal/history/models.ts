@@ -9,7 +9,7 @@ export class CreateQueryHistoryParams {
     "Dsn": string;
     "Uri": string;
     "WorkspaceID": string;
-    "DbInstanceID": string;
+    "DatasourceID": string;
     "Statement": string;
     "AffectedRows": number | null;
     "RowCount": number | null;
@@ -27,8 +27,8 @@ export class CreateQueryHistoryParams {
         if (!("WorkspaceID" in $$source)) {
             this["WorkspaceID"] = "";
         }
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("Statement" in $$source)) {
             this["Statement"] = "";
@@ -65,7 +65,7 @@ export class CreateQueryHistoryParams {
 /**
  * HistoryEntry is the frontend-facing shape of a recorded statement. The
  * database name/type are intentionally omitted: the frontend resolves them
- * from the workspace graph via DbInstanceID so renamed/removed instances stay
+ * from the workspace graph via DatasourceID so renamed/removed instances stay
  * in sync instead of showing a stale snapshot.
  */
 export class HistoryEntry {
@@ -76,7 +76,7 @@ export class HistoryEntry {
     "durationMs": number | null;
     "errors": string[];
     "workspaceId": string;
-    "dbInstanceId": string;
+    "datasourceId": string;
     "createdAt": string;
 
     /** Creates a new HistoryEntry instance. */
@@ -102,8 +102,8 @@ export class HistoryEntry {
         if (!("workspaceId" in $$source)) {
             this["workspaceId"] = "";
         }
-        if (!("dbInstanceId" in $$source)) {
-            this["dbInstanceId"] = "";
+        if (!("datasourceId" in $$source)) {
+            this["datasourceId"] = "";
         }
         if (!("createdAt" in $$source)) {
             this["createdAt"] = "";

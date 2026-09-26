@@ -28,7 +28,7 @@ const executeQueryOutputSchema = z.union([
 ]);
 
 const queryInputSchema = z.object({
-	dbInstanceId: z.string().describe('Database instance ID (required)'),
+	datasourceId: z.string().describe('Datasource ID (required)'),
 	statement: z.string().describe('SQL statement to execute (required)'),
 	folderId: z
 		.string()
@@ -42,7 +42,7 @@ export const executeQueryDef = toolDefinition({
 	name: 'execute_query',
 	description: `Executes a read-only SQL SELECT statement against a registered database and returns results capped at 100 rows.
 
-Before calling this tool: verify tables with get_database_schemas; use get_database_table_detail(schemaId, tableName) when you need a table's DDL. Never guess schema. Table names may be case-sensitive and require quoting (e.g. "Collaborator" not collaborator).
+Before calling this tool: verify tables with get_datasource_schemas; use get_datasource_table_detail(schemaId, tableName) when you need a table's DDL. Never guess schema. Table names may be case-sensitive and require quoting (e.g. "Collaborator" not collaborator).
 
 Use this to validate queries, explore data, check counts, or debug results. Always run a SELECT here before presenting a query as a final answer to the user.
 Never use this for INSERT, UPDATE, DELETE, or DDL; use execute_statement for those.
@@ -56,10 +56,10 @@ If error is returned, surface the message to the user and do not proceed.`,
 type ImplArgs = z.infer<typeof queryInputSchema> & { __fileId?: string };
 
 async function executeQueryImpl(args: unknown) {
-	const { dbInstanceId, folderId, statement, __fileId } = args as ImplArgs;
+	const { datasourceId, folderId, statement, __fileId } = args as ImplArgs;
 	const fileId = __fileId ?? '';
 	const [result, err] = await tryCatch(Query, {
-		DbInstanceID: dbInstanceId,
+		DatasourceID: datasourceId,
 		FileID: fileId,
 		FolderID: folderId ?? '',
 		Statement: statement,

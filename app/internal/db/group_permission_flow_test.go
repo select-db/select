@@ -49,7 +49,7 @@ func TestGroupRoleFlow_AppliesToLocalPermissions(t *testing.T) {
 	exec(`INSERT INTO workspace_to_user (id, workspace_id, user_id, current) VALUES ('wtu1','ws1','u1',1)`)
 	// A role that denies SELECT on a specific datasource (db-scoped => enforceable).
 	exec(`INSERT INTO role (id, workspace_id, name) VALUES ('r1','ws1','Restrictor')`)
-	exec(`INSERT INTO permission (id, role_id, workspace_id, db_instance_id, action, effect)
+	exec(`INSERT INTO permission (id, role_id, workspace_id, datasource_id, action, effect)
 	      VALUES ('p1','r1','ws1','db-1','select','deny')`)
 
 	// Drive the actual service methods.
@@ -71,7 +71,7 @@ func TestGroupRoleFlow_AppliesToLocalPermissions(t *testing.T) {
 		t.Fatalf("GetMyPermissions: %v", err)
 	}
 	if len(perms) != 1 || perms[0].Action != "select" || perms[0].Effect != "deny" ||
-		perms[0].DbInstanceID == nil || *perms[0].DbInstanceID != "db-1" {
+		perms[0].DatasourceID == nil || *perms[0].DatasourceID != "db-1" {
 		t.Fatalf("group-derived permission not resolved; got %+v", perms)
 	}
 

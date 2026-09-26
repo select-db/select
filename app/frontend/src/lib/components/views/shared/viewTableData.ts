@@ -15,36 +15,36 @@ import type * as graph from '$lib/wails/graph';
  */
 const PREVIEWABLE_TYPES = new Set(['table', 'view']);
 
-export const isPreviewableDbItem = (item: graph.DBInstanceItemNode): boolean =>
+export const isPreviewableDatasourceItem = (item: graph.DatasourceItemNode): boolean =>
 	PREVIEWABLE_TYPES.has(item.type);
 
 type TableLocation = {
-	databaseId: string;
+	datasourceId: string;
 	schema: string;
 	folderId: string;
 };
 
 /**
- * Locates the database instance and schema owning a catalog item.
+ * Locates the datasource and schema owning a catalog item.
  *
- * The tree is db_instance → schema → group ("Tables", "Views", ...) → item, so
+ * The tree is datasource → schema → group ("Tables", "Views", ...) → item, so
  * the item is a direct child of one of the schema's groups. Walking the graph
  * rather than parsing node ids keeps this correct for names containing ':'.
  */
-export const findDbItemLocation = (itemId: string): TableLocation | null => {
+export const findDatasourceItemLocation = (itemId: string): TableLocation | null => {
 	const workspace = get(workspaceGraphStore);
 
-	for (const database of (workspace?.db_instances ?? [])) {
-		for (const schema of database.children) {
+	for (const datasource of workspace?.datasources ?? []) {
+		for (const schema of datasource.children) {
 			if (schema.type !== 'schema') continue;
 
 			for (const group of schema.children) {
 				if (!group.children.some((child) => child.id === itemId)) continue;
 
 				return {
-					databaseId: database.id,
+					datasourceId: datasource.id,
 					schema: schema.name,
-					folderId: database.folder_id ?? ''
+					folderId: datasource.folder_id ?? ''
 				};
 			}
 		}
@@ -57,15 +57,15 @@ export const findDbItemLocation = (itemId: string): TableLocation | null => {
  * Opens a temp SQL tab holding a preview SELECT for the given table, bound to
  * the owning database and run as soon as the tab mounts.
  */
-export const viewTableData = async (item: graph.DBInstanceItemNode) => {
-	const location = findDbItemLocation(item.id);
+export const viewTableData = async (item: graph.DatasourceItemNode) => {
+	const location = findDatasourceItemLocation(item.id);
 	if (!location) {
 		notifyError(`Could not resolve the database of ${item.name}`);
 		return;
 	}
 
 	const params = db_client.GenerateSelectSQLParams.createFrom({
-		databaseId: location.databaseId,
+		datasourceId: location.datasourceId,
 		schema: location.schema,
 		table: item.name,
 		// 0 lets the backend apply its default preview limit.
@@ -83,7 +83,7 @@ export const viewTableData = async (item: graph.DBInstanceItemNode) => {
 		{
 			content: result.sql,
 			name: `[${item.name}].sql`,
-			dbInstanceId: location.databaseId,
+			datasourceId: location.datasourceId,
 			folderId: location.folderId,
 			runOnOpen: true
 		},

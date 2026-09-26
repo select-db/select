@@ -17,7 +17,7 @@ type PermissionEntry struct {
 	ID           string  `json:"id"`
 	RoleID       string  `json:"role_id"`
 	WorkspaceID  string  `json:"workspace_id"`
-	DbInstanceID *string `json:"db_instance_id"`
+	DatasourceID *string `json:"datasource_id"`
 	SchemaName   *string `json:"schema_name"`
 	TableName    *string `json:"table_name"`
 	ColumnName   *string `json:"column_name"`
@@ -27,7 +27,7 @@ type PermissionEntry struct {
 
 type AddPermissionParams struct {
 	RoleID       string  `json:"role_id"`
-	DbInstanceID *string `json:"db_instance_id"`
+	DatasourceID *string `json:"datasource_id"`
 	SchemaName   *string `json:"schema_name"`
 	TableName    *string `json:"table_name"`
 	ColumnName   *string `json:"column_name"`
@@ -47,7 +47,7 @@ func (r *Role) ListPermissions(roleID string) ([]PermissionEntry, error) {
 			ID:           row.ID,
 			RoleID:       row.RoleID,
 			WorkspaceID:  row.WorkspaceID,
-			DbInstanceID: row.DbInstanceID.Ptr(),
+			DatasourceID: row.DatasourceID.Ptr(),
 			SchemaName:   row.SchemaName.Ptr(),
 			TableName:    row.TableName.Ptr(),
 			ColumnName:   row.ColumnName.Ptr(),
@@ -76,7 +76,7 @@ func (r *Role) AddPermission(params AddPermissionParams) (PermissionEntry, error
 		ID:           utils.GenerateUUID(),
 		RoleID:       params.RoleID,
 		WorkspaceID:  workspaceID,
-		DbInstanceID: db_types.NewJSONNullStringFromPtr(params.DbInstanceID),
+		DatasourceID: db_types.NewJSONNullStringFromPtr(params.DatasourceID),
 		SchemaName:   db_types.NewJSONNullStringFromPtr(params.SchemaName),
 		TableName:    db_types.NewJSONNullStringFromPtr(params.TableName),
 		ColumnName:   db_types.NewJSONNullStringFromPtr(params.ColumnName),
@@ -91,7 +91,7 @@ func (r *Role) AddPermission(params AddPermissionParams) (PermissionEntry, error
 		ID:           row.ID,
 		RoleID:       row.RoleID,
 		WorkspaceID:  row.WorkspaceID,
-		DbInstanceID: row.DbInstanceID.Ptr(),
+		DatasourceID: row.DatasourceID.Ptr(),
 		SchemaName:   row.SchemaName.Ptr(),
 		TableName:    row.TableName.Ptr(),
 		ColumnName:   row.ColumnName.Ptr(),
@@ -140,7 +140,7 @@ func GetMyPermissions(queries *generated.Queries) ([]core.PermissionEntry, error
 	out := make([]core.PermissionEntry, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, core.PermissionEntry{
-			DbInstanceID: row.DbInstanceID.Ptr(),
+			DatasourceID: row.DatasourceID.Ptr(),
 			SchemaName:   row.SchemaName.Ptr(),
 			TableName:    row.TableName.Ptr(),
 			ColumnName:   row.ColumnName.Ptr(),

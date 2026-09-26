@@ -27,8 +27,8 @@ func boolPtr(b bool) *bool { return &b }
 func defaultTools() []Tool {
 	return []Tool{
 		toolListDatasources(),
-		toolGetDatabaseSchemas(),
-		toolGetDatabaseTableDetail(),
+		toolGetDatasourceSchemas(),
+		toolGetDatasourceTableDetail(),
 		toolExecuteQuery(),
 		toolPlanQuery(),
 		toolExplainQuery(),

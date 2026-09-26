@@ -2,7 +2,7 @@
 	import { Ping, ChooseSSHKeyFile } from '$lib/bindings/selectDb/internal/db_client/dbclient';
 	import * as db_client from '$lib/bindings/selectDb/internal/db_client/models';
 	import * as fs from '$lib/bindings/selectDb/internal/fs_provider/fsprovider';
-	import { DB_CONFIG_FILE } from '$lib/components/views/FileSystem/Files/options/helpers';
+	import { DATASOURCE_CONFIG_FILE } from '$lib/components/views/FileSystem/Files/options/helpers';
 	import {
 		GetDatasource,
 		UpsertDatasource
@@ -25,15 +25,15 @@
 	import { modalStore } from '$lib/system/Modal/ModalStore';
 
 	import VariablePicker from '$lib/components/views/File/Header/VariablePicker.svelte';
-	import DatabaseFieldHelpModal from './help/DatabaseFieldHelpModal.svelte';
+	import DatasourceFieldHelpModal from './help/DatasourceFieldHelpModal.svelte';
 	import { ensureSSHPassphrase } from '$lib/utils/ssh/passphrase';
-	import type { DatabaseFieldKey } from './help/fieldHelpContent';
+	import type { DatasourceFieldKey } from './help/fieldHelpContent';
 	import type { Component } from 'svelte';
 	import Checkbox from '$lib/system/Checkbox/Checkbox.svelte';
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import Alert from '$lib/system/Alert/Alert.svelte';
 
-	export type AvailableDatabases = 'sqlite' | 'mysql' | 'postgresql';
+	export type AvailableDatasources = 'sqlite' | 'mysql' | 'postgresql';
 
 	type SSHAuthMethod = 'password' | 'private_key' | 'agent' | 'key_file';
 
@@ -50,42 +50,42 @@
 	};
 
 	/** Payload passed to onSuccess after a successful save (use to update tab/store). */
-	export type SavedDatabaseData = {
+	export type SavedDatasourceData = {
 		/** Identifies which database was saved: the save is async, so the caller
 		 *  can't assume it still is whatever it was looking at when it started. */
 		id: string;
 		name: string;
-		db_type: AvailableDatabases;
+		db_type: AvailableDatasources;
 		dsn: string;
 		ssh: SSHConfig;
 		proxified: boolean;
 	};
 
-	type DatabaseFormProps = {
+	type DatasourceFormProps = {
 		id?: string;
 		uri?: string;
-		db_type?: AvailableDatabases;
+		db_type?: AvailableDatasources;
 		dsn?: string;
 		ssh?: SSHConfig;
 		proxified?: boolean;
 		folder_id?: string;
 
-		onSuccess?: (saved: SavedDatabaseData) => void;
+		onSuccess?: (saved: SavedDatasourceData) => void;
 	};
 
-	const DIALECT_LABELS: Record<AvailableDatabases, string> = {
+	const DIALECT_LABELS: Record<AvailableDatasources, string> = {
 		sqlite: 'SQLite',
 		mysql: 'MySQL',
 		postgresql: 'PostgreSQL'
 	};
 
-	const DIALECT_ICONS: Record<AvailableDatabases, Icons> = {
+	const DIALECT_ICONS: Record<AvailableDatasources, Icons> = {
 		sqlite: 'sqlite',
 		mysql: 'mysql',
 		postgresql: 'postgresql'
 	};
 
-	const DSN_PLACEHOLDERS: Record<AvailableDatabases, string> = {
+	const DSN_PLACEHOLDERS: Record<AvailableDatasources, string> = {
 		postgresql:
 			'host=prod.db.example.com port=5432 user=read_only password=*** dbname=postgres sslmode=require',
 		mysql: 'user:password@tcp(host:3306)/dbname?parseTime=true',
@@ -95,7 +95,7 @@
 	let {
 		id = $bindable(''),
 		uri = $bindable(''),
-		db_type = $bindable<AvailableDatabases>('postgresql'),
+		db_type = $bindable<AvailableDatasources>('postgresql'),
 		dsn = $bindable(''),
 		ssh = $bindable<SSHConfig>({
 			enabled: false,
@@ -112,7 +112,7 @@
 		folder_id = $bindable(''),
 
 		onSuccess
-	}: DatabaseFormProps = $props();
+	}: DatasourceFormProps = $props();
 
 	// Local form state (simple primitives)
 	// keeps UI reactive and avoids nested mutations on $bindable objects.
@@ -324,9 +324,9 @@
 		await save();
 	};
 
-	const openFieldHelp = (field: DatabaseFieldKey) => {
+	const openFieldHelp = (field: DatasourceFieldKey) => {
 		modalStore.set({
-			content: (() => DatabaseFieldHelpModal) as () => Component,
+			content: (() => DatasourceFieldHelpModal) as () => Component,
 			props: { field },
 			width: 520
 		});
@@ -334,7 +334,7 @@
 
 	const writeConfigFile = async (data: unknown) => {
 		const [, err] = await tryCatch(fs.Write, {
-			uri: `${uri}/${DB_CONFIG_FILE}`,
+			uri: `${uri}/${DATASOURCE_CONFIG_FILE}`,
 			content: JSON.stringify(data, null, 2)
 		});
 		if (!err) return;
@@ -421,7 +421,7 @@
 		await save();
 		return await Ping(
 			db_client.PingParams.createFrom({
-				DbInstanceID: id,
+				DatasourceID: id,
 				db_type,
 				dsn: dsnLocal,
 				folder_id,
@@ -464,7 +464,7 @@
 					{#snippet optionDisplay(option: SelectOption<string> | null)}
 						{#if option}
 							<span class="dialect-option">
-								<Icon icon={DIALECT_ICONS[option.value as AvailableDatabases]} size={16} />
+								<Icon icon={DIALECT_ICONS[option.value as AvailableDatasources]} size={16} />
 								<span class="dialect-option-label">{option.label}</span>
 							</span>
 						{:else}
@@ -560,7 +560,7 @@
 							<Icon icon="info" size={12} />
 						</button>
 					</p>
-					<div class="action-wrapper" data-test="database.dsn">
+					<div class="action-wrapper" data-test="datasource.dsn">
 						<Input
 							bind:value={dsnLocal}
 							type="text"

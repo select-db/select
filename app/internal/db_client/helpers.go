@@ -14,14 +14,14 @@ import (
 
 func (dbc *DbClient) inspectStatement(
 	statement string,
-	dbInstance *graph.DBInstanceNode,
+	datasource *graph.DatasourceNode,
 ) (*core.Metadata, []core.InspectStatement, bool) {
-	metadata, err := dbc.getCachedMetadata(dbInstance, false)
+	metadata, err := dbc.getCachedMetadata(datasource, false)
 	if err != nil {
 		return nil, nil, false
 	}
 
-	dialect := dialects.Get(dbInstance.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	inspectStatements := query.Inspect(dialect, metadata, statement)
 	if len(inspectStatements) == 0 {
 		return nil, nil, false
@@ -32,8 +32,8 @@ func (dbc *DbClient) inspectStatement(
 
 // InspectStatement satisfies sqllang.InspectFunc.
 // TODO: move to dialect/ when metadata cache is shared with remote backend.
-func (dbc *DbClient) InspectStatement(statement string, dbInstance *graph.DBInstanceNode) []core.InspectStatement {
-	_, inspectStatements, _ := dbc.inspectStatement(statement, dbInstance)
+func (dbc *DbClient) InspectStatement(statement string, datasource *graph.DatasourceNode) []core.InspectStatement {
+	_, inspectStatements, _ := dbc.inspectStatement(statement, datasource)
 	return inspectStatements
 }
 
@@ -86,7 +86,7 @@ func columnEditMetaToGraph(in []query.ColumnEditMeta) []graph.ColumnMetadata {
 			HasAllPrimaryKeys:  m.HasAllPrimaryKeys,
 			IsPrimaryKey:       m.IsPrimaryKey,
 			IsForeignKey:       m.IsForeignKey,
-			DatabaseID:         m.DatabaseID,
+			DatasourceID:       m.DatasourceID,
 			Schema:             m.Schema,
 			Table:              m.Table,
 			OriginalColumnName: m.OriginalColumnName,
@@ -109,6 +109,6 @@ func varResolver(runtimeVars map[string]string, fallback sqllang.VarReplacer) sq
 }
 
 // queryKey matches the frontend loading key format.
-func queryKey(dbInstanceID, fileID string) string {
-	return fmt.Sprintf("db:%s:file:%s", dbInstanceID, fileID)
+func queryKey(datasourceID, fileID string) string {
+	return fmt.Sprintf("db:%s:file:%s", datasourceID, fileID)
 }

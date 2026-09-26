@@ -67,7 +67,7 @@ func permKey(e core.PermissionEntry) string {
 		}
 		return *p
 	}
-	return s(e.DbInstanceID) + "|" + s(e.SchemaName) + "|" + s(e.TableName) + "|" +
+	return s(e.DatasourceID) + "|" + s(e.SchemaName) + "|" + s(e.TableName) + "|" +
 		s(e.ColumnName) + "|" + e.Action + "|" + e.Effect + "|" + e.RoleName
 }
 

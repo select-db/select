@@ -2,7 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import ResourceMenu from '$lib/components/ResourceMenu/ResourceMenu.svelte';
 	import SearchScopePanel from './SearchScopePanel.svelte';
-	import { parseDbInstanceIdFromSchemaId } from '$lib/components/ResourceMenu/resourceMenuScope';
+	import { parseDatasourceIdFromSchemaId } from '$lib/components/ResourceMenu/resourceMenuScope';
 	import { addTab, focusTab } from '$lib/components/Layout/layoutStore';
 	import {
 		quickActions,
@@ -27,11 +27,11 @@
 
 	let { onClose }: Props = $props();
 
-	const databases = $derived($workspaceGraphStore?.db_instances ?? []);
+	const datasources = $derived($workspaceGraphStore?.datasources ?? []);
 
 	const persisted = readWorkspaceSearch();
 	let searchQuery = $state('');
-	let dbOn = $state<Record<string, boolean>>(persisted.dbOn);
+	let datasourceOn = $state<Record<string, boolean>>(persisted.datasourceOn);
 	let schemaOn = $state<Record<string, boolean>>(persisted.schemaOn);
 
 	function syncKeyMap(prev: Record<string, boolean>, keys: string[]): Record<string, boolean> {
@@ -43,52 +43,50 @@
 	}
 
 	$effect(() => {
-		const dbs = databases;
-		const dbIds = dbs.map((d) => d.id);
-		const schemaIds = dbs.flatMap((db) =>
+		const datasourceIds = datasources.map((d) => d.id);
+		const schemaIds = datasources.flatMap((db) =>
 			db.children.filter((c) => c.type === 'schema').map((c) => c.id)
 		);
 		untrack(() => {
-			dbOn = syncKeyMap(dbOn, dbIds);
+			datasourceOn = syncKeyMap(datasourceOn, datasourceIds);
 			schemaOn = syncKeyMap(schemaOn, schemaIds);
 		});
 	});
 
 	$effect(() => {
-		writeWorkspaceSearch({ query: '', dbOn, schemaOn });
+		writeWorkspaceSearch({ query: '', datasourceOn, schemaOn });
 	});
 
 	const searchScope = $derived.by((): ResourceSearchScope | undefined => {
-		const dbs = databases;
-		if (dbs.length === 0) return undefined;
+		if (datasources.length === 0) return undefined;
 
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const knownSchemaIds = new Set<string>();
-		for (const db of dbs) {
+		for (const db of datasources) {
 			for (const ch of db.children) {
 				if (ch.type === 'schema') knownSchemaIds.add(ch.id);
 			}
 		}
 
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
-		const enabledDbIds = new Set<string>();
-		for (const db of dbs) {
-			if (dbOn[db.id] !== false) enabledDbIds.add(db.id);
+		const enabledDatasourceIds = new Set<string>();
+		for (const db of datasources) {
+			if (datasourceOn[db.id] !== false) enabledDatasourceIds.add(db.id);
 		}
 
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const enabledSchemaIds = new Set<string>();
 		for (const sid of knownSchemaIds) {
 			if (schemaOn[sid] === false) continue;
-			const dbId = parseDbInstanceIdFromSchemaId(sid);
-			if (dbId && dbOn[dbId] !== false) enabledSchemaIds.add(sid);
+			const datasourceId = parseDatasourceIdFromSchemaId(sid);
+			if (datasourceId && datasourceOn[datasourceId] !== false) enabledSchemaIds.add(sid);
 		}
 
-		return { knownSchemaIds, enabledDbIds, enabledSchemaIds };
+		return { knownSchemaIds, enabledDatasourceIds, enabledSchemaIds };
 	});
 
 	onMount(() => {
-		for (const db of databases) void loadSchemaIfEmpty(db);
+		for (const db of datasources) void loadSchemaIfEmpty(db);
 	});
 
 	async function handleSelect(option: ResourceMenuOption) {
@@ -108,10 +106,10 @@
 		} else if (option.type === 'temp_file') {
 			addTab(option.node as graph.FileNode);
 			onClose();
-		} else if (option.type === 'db_instance') {
-			addTab(option.node as graph.DBInstanceNode);
+		} else if (option.type === 'datasource') {
+			addTab(option.node as graph.DatasourceNode);
 			onClose();
-		} else if (option.type === 'db_item') {
+		} else if (option.type === 'datasource_item') {
 			modalStore.set({
 				content: () => ItemInfoModal as unknown as Component,
 				props: { item: option.node },
@@ -122,14 +120,14 @@
 </script>
 
 <div class="search-modal" style:max-height="{PANEL_MAX_HEIGHT}px">
-	<SearchScopePanel {databases} bind:dbOn bind:schemaOn maxHeight={PANEL_MAX_HEIGHT} />
+	<SearchScopePanel {datasources} bind:datasourceOn bind:schemaOn maxHeight={PANEL_MAX_HEIGHT} />
 	<div class="results-panel">
 		<ResourceMenu
 			types={[
 				'file',
 				'temp_file',
-				'db_instance',
-				'db_item',
+				'datasource',
+				'datasource_item',
 				'quick_action',
 				'settings',
 				'schema',

@@ -36,9 +36,9 @@ func RunSeeCases(t *testing.T, dialect core.SQLDialect, cases []SeeCase) {
 				statements = []core.InspectStatement{core.UnknownStatement()}
 			}
 
-			err := core.CheckQueryPermissions(statements, TestDBInstanceID, perms)
+			err := core.CheckQueryPermissions(statements, TestDatasourceID, perms)
 			if err == nil {
-				err = core.CheckSeePredicates(statements, TestDBInstanceID, perms)
+				err = core.CheckSeePredicates(statements, TestDatasourceID, perms)
 			}
 
 			var masked []int
@@ -78,7 +78,7 @@ func seeOnResult(statements []core.InspectStatement, columns []string, perms cor
 		if !core.ReturnsRows(statement.Operation) {
 			continue
 		}
-		return core.EvaluateSee(statement, columns, TestDBInstanceID, perms)
+		return core.EvaluateSee(statement, columns, TestDatasourceID, perms)
 	}
 	return nil, nil
 }

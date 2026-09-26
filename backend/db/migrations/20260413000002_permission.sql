@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS app.permission (
     workspace_id    UUID NOT NULL REFERENCES app.workspace(id) ON DELETE CASCADE,
     -- NULL across all four db fields = app-level rule (workspace settings, user management, etc.)
     -- '*' in schema/table/column = wildcard (applies to all at that level)
-    db_instance_id  TEXT,
+    datasource_id  TEXT,
     schema_name     TEXT,
     table_name      TEXT,
     column_name     TEXT,

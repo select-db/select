@@ -15,7 +15,7 @@ import (
 )
 
 type executeParams struct {
-	DbInstanceID string
+	DatasourceID string
 	FileID       string
 	Statement    string
 	FolderID     string
@@ -25,8 +25,8 @@ type executeParams struct {
 
 type prepared struct {
 	conn       query.Conn
-	instance   query.DBInstance
-	dbInstance *graph.DBInstanceNode
+	instance   query.Datasource
+	datasource *graph.DatasourceNode
 	statement  string
 	timeout    time.Duration
 	maxBytes   int64
@@ -35,19 +35,19 @@ type prepared struct {
 // prepare resolves conn / perms / variables for an execution.
 // Used by both the blocking path (execute) and the streaming path.
 func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DbInstanceID)
-	if dbInstance == nil {
-		return nil, fmt.Errorf("failed to get DB instance with id: %s", params.DbInstanceID)
+	datasource := dbc.Graph.GetDatasourceNodeByID(params.DatasourceID)
+	if datasource == nil {
+		return nil, fmt.Errorf("failed to get datasource with id: %s", params.DatasourceID)
 	}
 
-	instance := query.DBInstance{
-		ID:        dbInstance.ID,
-		DBType:    dbInstance.DBType,
-		Proxified: dbInstance.Proxified,
+	instance := query.Datasource{
+		ID:        datasource.ID,
+		DBType:    datasource.DBType,
+		Proxified: datasource.Proxified,
 	}
 
 	statement := params.Statement
-	if !dbInstance.Proxified {
+	if !datasource.Proxified {
 		var err error
 		statement, err = sqllang.SubstituteVariablesSQL(
 			varResolver(params.RuntimeVars, dbc.Graph),
@@ -59,14 +59,14 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 		}
 	}
 
-	conn, err := dbc.getEngineConn(dbInstance)
+	conn, err := dbc.getEngineConn(datasource)
 	if err != nil {
-		emitAvailability(dbInstance.ID, err.Error())
+		emitAvailability(datasource.ID, err.Error())
 		return nil, fmt.Errorf("failed to open DB: %v", err)
 	}
 
-	if !dbInstance.Proxified {
-		conn.Meta, _ = dbc.getCachedMetadata(dbInstance, false)
+	if !datasource.Proxified {
+		conn.Meta, _ = dbc.getCachedMetadata(datasource, false)
 		if perms, permErr := role.GetMyPermissions(dbc.Queries); permErr == nil {
 			conn.Perms = core.Compile(perms)
 		}
@@ -75,7 +75,7 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 	return &prepared{
 		conn:       conn,
 		instance:   instance,
-		dbInstance: dbInstance,
+		datasource: datasource,
 		statement:  statement,
 		timeout:    dbc.getStatementTimeout(),
 		maxBytes:   dbc.getMaxResultSizeBytes(),
@@ -84,7 +84,7 @@ func (dbc *DbClient) prepare(params executeParams) (*prepared, error) {
 
 // execute runs the statement to completion and returns a buffered Result.
 // Used by callers that need the full row set up front (Export, Explain, Plan).
-func (dbc *DbClient) execute(params executeParams) (*query.Result, *graph.DBInstanceNode) {
+func (dbc *DbClient) execute(params executeParams) (*query.Result, *graph.DatasourceNode) {
 	p, err := dbc.prepare(params)
 	if err != nil {
 		return &query.Result{Errors: []string{err.Error()}}, nil
@@ -98,7 +98,7 @@ func (dbc *DbClient) execute(params executeParams) (*query.Result, *graph.DBInst
 		ctx,
 		p.conn,
 		p.instance,
-		p.dbInstance.WorkspaceID,
+		p.datasource.WorkspaceID,
 		p.statement,
 		query.Options{
 			ForExport: params.ForExport,
@@ -108,21 +108,21 @@ func (dbc *DbClient) execute(params executeParams) (*query.Result, *graph.DBInst
 	)
 
 	if len(result.Columns) > 0 && len(result.ColumnEditMeta) == 0 {
-		result.ColumnEditMeta = dbc.computeColumnEditMeta(p.dbInstance, p.statement)
+		result.ColumnEditMeta = dbc.computeColumnEditMeta(p.datasource, p.statement)
 	}
 
-	return result, p.dbInstance
+	return result, p.datasource
 }
 
 // computeColumnEditMeta returns per-column editability metadata for the
 // resolved statement. Returns nil when metadata is missing or the statement
 // is not a SELECT.
-func (dbc *DbClient) computeColumnEditMeta(dbInstance *graph.DBInstanceNode, statement string) []query.ColumnEditMeta {
-	meta, _ := dbc.getCachedMetadata(dbInstance, false)
+func (dbc *DbClient) computeColumnEditMeta(datasource *graph.DatasourceNode, statement string) []query.ColumnEditMeta {
+	meta, _ := dbc.getCachedMetadata(datasource, false)
 	if meta == nil {
 		return nil
 	}
-	dialect := dialects.Get(dbInstance.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
 		return nil
 	}
@@ -131,5 +131,5 @@ func (dbc *DbClient) computeColumnEditMeta(dbInstance *graph.DBInstanceNode, sta
 	if !ok {
 		return nil
 	}
-	return query.AnalyzeEditableColumns(meta, stmt, dbInstance.ID)
+	return query.AnalyzeEditableColumns(meta, stmt, datasource.ID)
 }

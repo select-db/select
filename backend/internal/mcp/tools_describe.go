@@ -47,9 +47,9 @@ func toolListDatasources() Tool {
 				return nil, fmt.Errorf("list datasources: %w", err)
 			}
 
-			// Wildcard-DB entries (DbInstanceID "*") apply to every datasource
+			// Wildcard-DB entries (DatasourceID "*") apply to every datasource
 			entries := authz.Entries(r)
-			scopedByDB, wildcardEntries := indexEntriesByDB(entries)
+			scopedByDatasource, wildcardEntries := indexEntriesByDatasource(entries)
 
 			type item struct {
 				ID          string   `json:"id"`
@@ -61,7 +61,7 @@ func toolListDatasources() Tool {
 			out := make([]item, 0, len(rows))
 			for _, row := range rows {
 				id := row.ID.String()
-				specific := scopedByDB[id]
+				specific := scopedByDatasource[id]
 				if !hasAllowEntry(specific) && !hasAllowEntry(wildcardEntries) {
 					continue
 				}
@@ -84,15 +84,15 @@ func toolListDatasources() Tool {
 	}
 }
 
-// indexEntriesByDB splits entries into per-DB and wildcard buckets.
-// Nil DbInstanceID entries (workspace-level) are skipped.
-func indexEntriesByDB(entries []core.PermissionEntry) (perDB map[string][]core.PermissionEntry, wildcard []core.PermissionEntry) {
+// indexEntriesByDatasource splits entries into per-DB and wildcard buckets.
+// Nil DatasourceID entries (workspace-level) are skipped.
+func indexEntriesByDatasource(entries []core.PermissionEntry) (perDB map[string][]core.PermissionEntry, wildcard []core.PermissionEntry) {
 	perDB = map[string][]core.PermissionEntry{}
 	for _, e := range entries {
-		if e.DbInstanceID == nil {
+		if e.DatasourceID == nil {
 			continue
 		}
-		id := *e.DbInstanceID
+		id := *e.DatasourceID
 		if id == "*" {
 			wildcard = append(wildcard, e)
 			continue
@@ -130,14 +130,14 @@ func hasAllowEntry(entries []core.PermissionEntry) bool {
 }
 
 // ----------------------------------------------------------------------
-// get_database_schemas
+// get_datasource_schemas
 // ----------------------------------------------------------------------
 
-func toolGetDatabaseSchemas() Tool {
+func toolGetDatasourceSchemas() Tool {
 	return Tool{
-		Name: "get_database_schemas",
+		Name: "get_datasource_schemas",
 		Description: "Returns all schemas for a datasource with table and view names in each. " +
-			"Use this first; then call get_database_table_detail(schemaId, tableName) when you need a table's DDL.",
+			"Use this first; then call get_datasource_table_detail(schemaId, tableName) when you need a table's DDL.",
 		InputSchema: jsonObjectSchema(map[string]any{
 			"datasource_id": stringProp("Datasource ID (required)."),
 		}, []string{"datasource_id"}),
@@ -188,18 +188,18 @@ func toolGetDatabaseSchemas() Tool {
 }
 
 // ----------------------------------------------------------------------
-// get_database_table_detail
+// get_datasource_table_detail
 // ----------------------------------------------------------------------
 
-func toolGetDatabaseTableDetail() Tool {
+func toolGetDatasourceTableDetail() Tool {
 	return Tool{
-		Name: "get_database_table_detail",
-		Description: "Returns the DDL for a single table or view. Call after get_database_schemas " +
+		Name: "get_datasource_table_detail",
+		Description: "Returns the DDL for a single table or view. Call after get_datasource_schemas " +
 			"when you need the full definition (columns, types, constraints) to write or validate queries.",
 		InputSchema: jsonObjectSchema(map[string]any{
 			"datasource_id": stringProp("Datasource ID (required)."),
-			"schema_id":     stringProp("Schema ID from get_database_schemas(...).schemas[].id"),
-			"table_name":    stringProp("Table or view name from get_database_schemas(...).schemas[].tables[] or .views[]"),
+			"schema_id":     stringProp("Schema ID from get_datasource_schemas(...).schemas[].id"),
+			"table_name":    stringProp("Table or view name from get_datasource_schemas(...).schemas[].tables[] or .views[]"),
 		}, []string{"datasource_id", "schema_id", "table_name"}),
 		Annotations: &ToolAnnotations{
 			ReadOnlyHint:   boolPtr(true),

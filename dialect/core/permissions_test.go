@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-const testDBID = "db-1"
+const testDatasourceID = "db-1"
 
 func strPtr(s string) *string {
 	if s == "" {
@@ -13,9 +13,9 @@ func strPtr(s string) *string {
 	return &s
 }
 
-func pe(dbID, schema, table, column, action, effect string) PermissionEntry {
+func pe(datasourceID, schema, table, column, action, effect string) PermissionEntry {
 	return PermissionEntry{
-		DbInstanceID: strPtr(dbID),
+		DatasourceID: strPtr(datasourceID),
 		SchemaName:   strPtr(schema),
 		TableName:    strPtr(table),
 		ColumnName:   strPtr(column),
@@ -28,10 +28,10 @@ func pe(dbID, schema, table, column, action, effect string) PermissionEntry {
 // nothing else. Manage is what the tests around it add or withhold.
 func dataActionsOnly() []PermissionEntry {
 	return []PermissionEntry{
-		pe(testDBID, "*", "*", "*", ActionSelect, "allow"),
-		pe(testDBID, "*", "*", "*", ActionInsert, "allow"),
-		pe(testDBID, "*", "*", "*", ActionUpdate, "allow"),
-		pe(testDBID, "*", "*", "*", ActionDelete, "allow"),
+		pe(testDatasourceID, "*", "*", "*", ActionSelect, "allow"),
+		pe(testDatasourceID, "*", "*", "*", ActionInsert, "allow"),
+		pe(testDatasourceID, "*", "*", "*", ActionUpdate, "allow"),
+		pe(testDatasourceID, "*", "*", "*", ActionDelete, "allow"),
 	}
 }
 
@@ -79,21 +79,21 @@ func getPermissionTestCases() []permTestCase {
 		{
 			name:    "explicit column allow",
 			results: []InspectStatement{selectRes("public", "t1", "c1")},
-			entries: []PermissionEntry{pe(testDBID, "public", "t1", "c1", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "t1", "c1", "select", "allow")},
 			wantErr: false,
 		},
 		{
 			name:    "instance managed but no matching allow rule",
 			results: []InspectStatement{selectRes("public", "t1", "c1")},
-			entries: []PermissionEntry{pe(testDBID, "public", "other", "c1", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "other", "c1", "select", "allow")},
 			wantErr: true,
 		},
 		{
 			name:    "explicit deny overrides allow at same level",
 			results: []InspectStatement{selectRes("public", "t1", "secret")},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "t1", "secret", "select", "allow"),
-				pe(testDBID, "public", "t1", "secret", "select", "deny"),
+				pe(testDatasourceID, "public", "t1", "secret", "select", "allow"),
+				pe(testDatasourceID, "public", "t1", "secret", "select", "deny"),
 			},
 			wantErr: true,
 		},
@@ -102,19 +102,19 @@ func getPermissionTestCases() []permTestCase {
 		{
 			name:    "table wildcard allows all tables",
 			results: []InspectStatement{selectRes("public", "t1", "c1")},
-			entries: []PermissionEntry{pe(testDBID, "public", "", "", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "", "", "select", "allow")},
 			wantErr: false,
 		},
 		{
 			name:    "schema wildcard allows all schemas",
 			results: []InspectStatement{selectRes("public", "t1", "c1")},
-			entries: []PermissionEntry{pe(testDBID, "", "", "", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "", "", "", "select", "allow")},
 			wantErr: false,
 		},
 		{
 			name:    "column wildcard allows all columns",
 			results: []InspectStatement{selectRes("public", "t1", "c1", "c2")},
-			entries: []PermissionEntry{pe(testDBID, "public", "t1", "", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "t1", "", "select", "allow")},
 			wantErr: false,
 		},
 		{
@@ -122,8 +122,8 @@ func getPermissionTestCases() []permTestCase {
 			name:    "table-level deny blocks column-level allow",
 			results: []InspectStatement{selectRes("public", "secrets", "password")},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "secrets", "password", "select", "allow"),
-				pe(testDBID, "public", "secrets", "", "select", "deny"),
+				pe(testDatasourceID, "public", "secrets", "password", "select", "allow"),
+				pe(testDatasourceID, "public", "secrets", "", "select", "deny"),
 			},
 			wantErr: true,
 		},
@@ -135,8 +135,8 @@ func getPermissionTestCases() []permTestCase {
 			name:    "wildcard deny blocks specific allow",
 			results: []InspectStatement{selectRes("public", "t1", "c1")},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "", "", "select", "deny"),
-				pe(testDBID, "public", "t1", "c1", "select", "allow"),
+				pe(testDatasourceID, "public", "", "", "select", "deny"),
+				pe(testDatasourceID, "public", "t1", "c1", "select", "allow"),
 			},
 			wantErr: true,
 		},
@@ -144,8 +144,8 @@ func getPermissionTestCases() []permTestCase {
 			name:    "specific deny overrides wildcard allow",
 			results: []InspectStatement{selectRes("public", "t1", "secret")},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "", "", "select", "allow"),
-				pe(testDBID, "public", "t1", "secret", "select", "deny"),
+				pe(testDatasourceID, "public", "", "", "select", "allow"),
+				pe(testDatasourceID, "public", "t1", "secret", "select", "deny"),
 			},
 			wantErr: true,
 		},
@@ -158,7 +158,7 @@ func getPermissionTestCases() []permTestCase {
 				Tables:    []InspectTable{{Name: "t1", Schema: "public"}},
 				Fields:    []InspectField{{Name: "c1", Table: "t1", Schema: "public"}},
 			}},
-			entries: []PermissionEntry{pe(testDBID, "public", "t1", "c1", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "t1", "c1", "select", "allow")},
 			wantErr: true,
 		},
 
@@ -168,7 +168,7 @@ func getPermissionTestCases() []permTestCase {
 			// even with blanket allow rules, to prevent silent data exfiltration.
 			name:    "unknown table always denied",
 			results: []InspectStatement{selectRes("", "unknown_table", "c1")},
-			entries: []PermissionEntry{pe(testDBID, "", "", "", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "", "", "", "select", "allow")},
 			wantErr: true,
 		},
 
@@ -179,7 +179,7 @@ func getPermissionTestCases() []permTestCase {
 				selectRes("public", "t1", "c1"),
 				selectRes("public", "secrets", "password"),
 			},
-			entries: []PermissionEntry{pe(testDBID, "public", "t1", "c1", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "t1", "c1", "select", "allow")},
 			wantErr: true,
 		},
 
@@ -194,7 +194,7 @@ func getPermissionTestCases() []permTestCase {
 				outer.Subqueries = []InspectStatement{inner}
 				return []InspectStatement{outer}
 			}(),
-			entries: []PermissionEntry{pe(testDBID, "public", "t1", "c1", "select", "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "t1", "c1", "select", "allow")},
 			wantErr: true,
 		},
 		{
@@ -208,8 +208,8 @@ func getPermissionTestCases() []permTestCase {
 				return []InspectStatement{level1}
 			}(),
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "t1", "c1", "select", "allow"),
-				pe(testDBID, "public", "t2", "c1", "select", "allow"),
+				pe(testDatasourceID, "public", "t1", "c1", "select", "allow"),
+				pe(testDatasourceID, "public", "t2", "c1", "select", "allow"),
 			},
 			wantErr: true,
 		},
@@ -222,8 +222,8 @@ func getPermissionTestCases() []permTestCase {
 				return []InspectStatement{outer}
 			}(),
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "t1", "c1", "select", "allow"),
-				pe(testDBID, "public", "t2", "c1", "select", "allow"),
+				pe(testDatasourceID, "public", "t1", "c1", "select", "allow"),
+				pe(testDatasourceID, "public", "t2", "c1", "select", "allow"),
 			},
 			wantErr: false,
 		},
@@ -232,13 +232,13 @@ func getPermissionTestCases() []permTestCase {
 		{
 			name:    "select permission does not grant a drop",
 			results: []InspectStatement{opRes(InspectOpDrop, "public", "t1")},
-			entries: []PermissionEntry{pe(testDBID, "public", "t1", "", ActionSelect, "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "t1", "", ActionSelect, "allow")},
 			wantErr: true,
 		},
 		{
 			name:    "manage allows a drop",
 			results: []InspectStatement{opRes(InspectOpDrop, "public", "t1")},
-			entries: []PermissionEntry{pe(testDBID, "*", "*", "*", ActionManage, "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "*", "*", "*", ActionManage, "allow")},
 			wantErr: false,
 		},
 		{
@@ -246,7 +246,7 @@ func getPermissionTestCases() []permTestCase {
 			// table is not the rule this check reads.
 			name:    "manage scoped to one table does not allow a drop",
 			results: []InspectStatement{opRes(InspectOpDrop, "public", "t1")},
-			entries: []PermissionEntry{pe(testDBID, "public", "t1", "", ActionManage, "allow")},
+			entries: []PermissionEntry{pe(testDatasourceID, "public", "t1", "", ActionManage, "allow")},
 			wantErr: true,
 		},
 	}
@@ -260,15 +260,15 @@ func TestCheckQueryPermissions_NonDataOperationsNeedManage(t *testing.T) {
 		InspectOpCreate, InspectOpAlter, InspectOpDrop, InspectOpTruncate,
 		InspectOpGrant, InspectOpRevoke, InspectOpUnknown,
 	}
-	manage := append(dataActionsOnly(), pe(testDBID, "*", "*", "*", ActionManage, "allow"))
+	manage := append(dataActionsOnly(), pe(testDatasourceID, "*", "*", "*", ActionManage, "allow"))
 
 	for _, op := range ops {
 		t.Run(string(op), func(t *testing.T) {
 			stmt := []InspectStatement{opRes(op, "public", "t1")}
-			if err := CheckQueryPermissions(stmt, testDBID, Compile(dataActionsOnly())); err == nil {
+			if err := CheckQueryPermissions(stmt, testDatasourceID, Compile(dataActionsOnly())); err == nil {
 				t.Error("every data action allowed: want denied, got allowed")
 			}
-			if err := CheckQueryPermissions(stmt, testDBID, Compile(manage)); err != nil {
+			if err := CheckQueryPermissions(stmt, testDatasourceID, Compile(manage)); err != nil {
 				t.Errorf("manage allowed: want allowed, got %v", err)
 			}
 		})
@@ -280,7 +280,7 @@ func TestCheckQueryPermissions_NonDataOperationsNeedManage(t *testing.T) {
 // the check that stops an unsupported statement from running unexamined.
 func TestCheckQueryPermissions_UnresolvedStatementIsRefused(t *testing.T) {
 	stmt := []InspectStatement{UnknownStatement()}
-	err := CheckQueryPermissions(stmt, testDBID, Compile(dataActionsOnly()))
+	err := CheckQueryPermissions(stmt, testDatasourceID, Compile(dataActionsOnly()))
 	if err == nil {
 		t.Fatal("unresolved statement was allowed")
 	}
@@ -289,8 +289,8 @@ func TestCheckQueryPermissions_UnresolvedStatementIsRefused(t *testing.T) {
 		t.Errorf("error = %q, want %q", err, want)
 	}
 
-	withManage := append(dataActionsOnly(), pe(testDBID, "*", "*", "*", ActionManage, "allow"))
-	if err := CheckQueryPermissions(stmt, testDBID, Compile(withManage)); err != nil {
+	withManage := append(dataActionsOnly(), pe(testDatasourceID, "*", "*", "*", ActionManage, "allow"))
+	if err := CheckQueryPermissions(stmt, testDatasourceID, Compile(withManage)); err != nil {
 		t.Errorf("manage holder: want allowed, got %v", err)
 	}
 }
@@ -303,10 +303,10 @@ func TestCheckQueryPermissions_ManageDoesNotCoverNestedReads(t *testing.T) {
 		Subqueries: []InspectStatement{selectRes("public", "secrets", "token")},
 	}}
 	entries := []PermissionEntry{
-		pe(testDBID, "*", "*", "*", ActionManage, "allow"),
-		pe(testDBID, "public", "secrets", "token", ActionSelect, "deny"),
+		pe(testDatasourceID, "*", "*", "*", ActionManage, "allow"),
+		pe(testDatasourceID, "public", "secrets", "token", ActionSelect, "deny"),
 	}
-	if err := CheckQueryPermissions(stmt, testDBID, Compile(entries)); err == nil {
+	if err := CheckQueryPermissions(stmt, testDatasourceID, Compile(entries)); err == nil {
 		t.Error("manage holder read a select-denied column through a nested query")
 	}
 }
@@ -314,7 +314,7 @@ func TestCheckQueryPermissions_ManageDoesNotCoverNestedReads(t *testing.T) {
 func TestCheckQueryPermissions(t *testing.T) {
 	for _, tc := range getPermissionTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			err := CheckQueryPermissions(tc.results, testDBID, Compile(tc.entries))
+			err := CheckQueryPermissions(tc.results, testDatasourceID, Compile(tc.entries))
 			if tc.wantErr && err == nil {
 				t.Error("expected error, got nil")
 			}
@@ -352,7 +352,7 @@ func TestEvaluateSee(t *testing.T) {
 				Fields:    []InspectField{{Name: "email", Table: "users", Schema: "public"}},
 			},
 			driverCols: []string{"email"},
-			entries:    []PermissionEntry{pe(testDBID, "public", "users", "email", "see", "deny")},
+			entries:    []PermissionEntry{pe(testDatasourceID, "public", "users", "email", "see", "deny")},
 			wantMask:   []int{0},
 		},
 		{
@@ -362,7 +362,7 @@ func TestEvaluateSee(t *testing.T) {
 				Fields:    []InspectField{{Name: "email", Table: "users", Schema: "public"}},
 			},
 			driverCols: []string{"email"},
-			entries:    []PermissionEntry{pe(testDBID, "public", "users", "email", "see", "deny")},
+			entries:    []PermissionEntry{pe(testDatasourceID, "public", "users", "email", "see", "deny")},
 			wantMask:   nil,
 		},
 		{
@@ -373,8 +373,8 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"email"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "users", "email", "select", "allow"),
-				pe(testDBID, "public", "users", "email", "see", "allow"),
+				pe(testDatasourceID, "public", "users", "email", "select", "allow"),
+				pe(testDatasourceID, "public", "users", "email", "see", "allow"),
 			},
 			wantMask: nil,
 		},
@@ -386,7 +386,7 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"email"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "users", "email", "select", "allow"),
+				pe(testDatasourceID, "public", "users", "email", "select", "allow"),
 			},
 			wantMask: []int{0},
 		},
@@ -400,7 +400,7 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"e"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "users", "email", "select", "allow"),
+				pe(testDatasourceID, "public", "users", "email", "select", "allow"),
 			},
 			wantMask: []int{0},
 		},
@@ -415,7 +415,7 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"length"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "users", "email", "select", "allow"),
+				pe(testDatasourceID, "public", "users", "email", "select", "allow"),
 			},
 			wantErr: true,
 		},
@@ -430,10 +430,10 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"calc"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "t", "a", "select", "allow"),
-				pe(testDBID, "public", "t", "b", "select", "allow"),
-				pe(testDBID, "public", "t", "a", "see", "allow"),
-				pe(testDBID, "public", "t", "b", "see", "allow"),
+				pe(testDatasourceID, "public", "t", "a", "select", "allow"),
+				pe(testDatasourceID, "public", "t", "b", "select", "allow"),
+				pe(testDatasourceID, "public", "t", "a", "see", "allow"),
+				pe(testDatasourceID, "public", "t", "b", "see", "allow"),
 			},
 			wantMask: nil,
 		},
@@ -451,9 +451,9 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"calc"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "t", "a", "select", "allow"),
-				pe(testDBID, "public", "t", "b", "select", "allow"),
-				pe(testDBID, "public", "t", "a", "see", "allow"),
+				pe(testDatasourceID, "public", "t", "a", "select", "allow"),
+				pe(testDatasourceID, "public", "t", "b", "select", "allow"),
+				pe(testDatasourceID, "public", "t", "a", "see", "allow"),
 				// b: no see grant
 			},
 			wantErr: true,
@@ -469,8 +469,8 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"id", "email"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "users", "", "select", "allow"),
-				pe(testDBID, "public", "users", "id", "see", "allow"),
+				pe(testDatasourceID, "public", "users", "", "select", "allow"),
+				pe(testDatasourceID, "public", "users", "id", "see", "allow"),
 			},
 			wantMask: []int{1},
 		},
@@ -485,8 +485,8 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"id", "email"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "users", "", "select", "allow"),
-				pe(testDBID, "public", "users", "", "see", "allow"),
+				pe(testDatasourceID, "public", "users", "", "select", "allow"),
+				pe(testDatasourceID, "public", "users", "", "see", "allow"),
 			},
 			wantMask: nil,
 		},
@@ -501,9 +501,9 @@ func TestEvaluateSee(t *testing.T) {
 			},
 			driverCols: []string{"email", "email"},
 			entries: []PermissionEntry{
-				pe(testDBID, "public", "users", "", "select", "allow"),
-				pe(testDBID, "public", "contacts", "", "select", "allow"),
-				pe(testDBID, "public", "users", "email", "see", "allow"),
+				pe(testDatasourceID, "public", "users", "", "select", "allow"),
+				pe(testDatasourceID, "public", "contacts", "", "select", "allow"),
+				pe(testDatasourceID, "public", "users", "email", "see", "allow"),
 				// contacts.email has no see grant
 			},
 			wantMask: []int{0, 1},
@@ -516,7 +516,7 @@ func TestEvaluateSee(t *testing.T) {
 				Fields: nil,
 			},
 			driverCols: []string{"?column?"},
-			entries:    []PermissionEntry{pe(testDBID, "public", "users", "", "see", "allow")},
+			entries:    []PermissionEntry{pe(testDatasourceID, "public", "users", "", "see", "allow")},
 			wantMask:   nil,
 		},
 	}
@@ -524,7 +524,7 @@ func TestEvaluateSee(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			perms := Compile(tc.entries)
-			mask, err := EvaluateSee(tc.stmt, tc.driverCols, testDBID, perms)
+			mask, err := EvaluateSee(tc.stmt, tc.driverCols, testDatasourceID, perms)
 			if tc.wantErr && err == nil {
 				t.Fatalf("expected error, got nil (mask=%v)", mask)
 			}
@@ -566,20 +566,20 @@ func TestCheckQueryPermissions_TableWithNoFieldsIsStillChecked(t *testing.T) {
 		Fields: []InspectField{{Name: "c2", Table: "t1", Schema: "public"}},
 	}}
 
-	onlyT1 := []PermissionEntry{pe(testDBID, "public", "t1", "*", ActionSelect, "allow")}
-	if err := CheckQueryPermissions(stmt, testDBID, Compile(onlyT1)); err == nil {
+	onlyT1 := []PermissionEntry{pe(testDatasourceID, "public", "t1", "*", ActionSelect, "allow")}
+	if err := CheckQueryPermissions(stmt, testDatasourceID, Compile(onlyT1)); err == nil {
 		t.Error("read t2 on a grant covering only t1")
 	}
 
-	bothTables := append(onlyT1, pe(testDBID, "public", "t2", "*", ActionSelect, "allow"))
-	if err := CheckQueryPermissions(stmt, testDBID, Compile(bothTables)); err != nil {
+	bothTables := append(onlyT1, pe(testDatasourceID, "public", "t2", "*", ActionSelect, "allow"))
+	if err := CheckQueryPermissions(stmt, testDatasourceID, Compile(bothTables)); err != nil {
 		t.Errorf("holding select on both tables still refused it: %v", err)
 	}
 
 	// A deny on the joined table is what the grant above must not be able to
 	// override, so it is the same check from the other side.
-	denied := append(bothTables, pe(testDBID, "public", "t2", "*", ActionSelect, "deny"))
-	if err := CheckQueryPermissions(stmt, testDBID, Compile(denied)); err == nil {
+	denied := append(bothTables, pe(testDatasourceID, "public", "t2", "*", ActionSelect, "deny"))
+	if err := CheckQueryPermissions(stmt, testDatasourceID, Compile(denied)); err == nil {
 		t.Error("read a select-denied table it named no column of")
 	}
 }

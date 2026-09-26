@@ -19,8 +19,8 @@ var nodeBuilders = map[string]func(interface{}) Node{
 	"file": func(src interface{}) Node {
 		return BuildFileNode(src.(FileDTO))
 	},
-	"db_instance": func(src interface{}) Node {
-		return BuildDBInstanceNode(src.(DBInstanceDTO))
+	"datasource": func(src interface{}) Node {
+		return BuildDatasourceNode(src.(DatasourceDTO))
 	},
 }
 
@@ -102,8 +102,8 @@ func (g *Graph) handleInsert(dto interface{}, tableName string) error {
 	}
 
 	// Otherwise replace rather than duplicate: an insert for an ID the graph
-	// already holds — a file restored by git, a db instance whose config was
-	// rewritten — arrives as an insert, not an update.
+	// already holds (a file restored by git, a datasource whose config was
+	// rewritten) arrives as an insert, not an update.
 	g.detachByIDs(node.GetIDs())
 	g.attach(node)
 	ensureNodeArrays(node)
@@ -157,10 +157,10 @@ func unmarshalDTO(payloadBytes []byte, table string, operation string) (interfac
 			return nil, fmt.Errorf("failed to unmarshal file: %w", err)
 		}
 		return f, nil
-	case "db_instance":
-		var d DBInstanceDTO
+	case "datasource":
+		var d DatasourceDTO
 		if err := json.Unmarshal(payloadBytes, &d); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal db_instance: %w", err)
+			return nil, fmt.Errorf("failed to unmarshal datasource: %w", err)
 		}
 		return d, nil
 	default:
