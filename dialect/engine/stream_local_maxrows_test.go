@@ -126,3 +126,15 @@ func TestStreamLocal_MaxRowsZeroIsUnbounded(t *testing.T) {
 		t.Fatalf("did not expect OnTruncated when MaxRows is unset")
 	}
 }
+
+// A buffered result that fails part way keeps its error and none of the rows
+// read before it: a truncated result is worse than none.
+func TestExecuteLocalDropsRowsOnFailure(t *testing.T) {
+	db := newDBWithRows(t, 3)
+	defer db.Close()
+	result := ExecuteLocal(context.Background(), Conn{DB: db}, DBInstance{ID: "x"},
+		"SELECT id FROM t ORDER BY id", Options{MaxBytes: 1})
+	if len(result.Errors) == 0 || result.Rows != nil || result.RowCount != 0 {
+		t.Fatalf("errors %v, rows %v, count %d; want an error and no rows", result.Errors, result.Rows, result.RowCount)
+	}
+}

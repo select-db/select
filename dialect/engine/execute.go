@@ -13,131 +13,16 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
+// ExecuteLocal runs sql like StreamLocal and returns the whole result at once.
 func ExecuteLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options) *Result {
 	result := &Result{}
-
-	inspected, err := checkPermissions(conn, inst, sql)
-	if err != nil {
-		result.Errors = []string{err.Error()}
-		return result
-	}
-
-	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-		defer cancel()
-	}
-
-	q, release, err := conn.statementConn(ctx, sql)
-	if err != nil {
-		result.Errors = []string{err.Error()}
-		return result
-	}
-	defer release()
-
-	start := time.Now()
-	rows, err := q.QueryContext(ctx, sql, opts.Args...)
-	result.DurationMs = max1ms(time.Since(start).Milliseconds())
-
-	if err != nil {
-		msg, pos := parseQueryError(ctx, err)
-		result.Errors = []string{msg}
-		result.ErrorPosition = pos
-		if !conn.execFallback() {
-			return result
-		}
-
-		// non-SELECT: try ExecContext
-		start = time.Now()
-		res, execErr := q.ExecContext(ctx, sql, opts.Args...)
-		result.DurationMs = max1ms(time.Since(start).Milliseconds())
-		if execErr != nil {
-			execMsg, execPos := parseQueryError(ctx, execErr)
-			result.Errors = append(result.Errors, execMsg)
-			if result.ErrorPosition == nil {
-				result.ErrorPosition = execPos
-			}
-		} else if affected, err := res.RowsAffected(); err == nil {
-			result.AffectedRows = affected
-		}
-		return result
-	}
-	defer func() { _ = rows.Close() }()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		result.Errors = []string{fmt.Sprintf("failed to get columns: %v", err)}
-		return result
-	}
-	result.Columns = columns
-
-	maskPositions, seeErr := evaluateSeeForResult(conn, inst, inspected, columns)
-	if seeErr != nil {
-		result.Errors = []string{seeErr.Error()}
-		result.Columns = nil
-		return result
-	}
-
-	colTypes, _ := rows.ColumnTypes()
-	hasTZ := makeHasTZ(colTypes)
-
-	maxBytes := effectiveMaxBytes(opts)
-	var bytesScanned int64
-	for rows.Next() {
-		if ctx.Err() != nil {
-			result.Errors = []string{ctx.Err().Error()}
-			return result
-		}
-		values := make([]any, len(columns))
-		ptrs := make([]any, len(columns))
-		for i := range values {
-			ptrs[i] = &values[i]
-		}
-		if err := rows.Scan(ptrs...); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to scan row: %v", err))
-			continue
-		}
-		for i, v := range values {
-			switch val := v.(type) {
-			case []byte:
-				values[i] = string(val)
-			case time.Time:
-				values[i] = formatTime(val, hasTZ, i)
-			}
-			bytesScanned += estimateValueBytes(values[i])
-		}
-
-		applyMask(values, maskPositions)
-
-		if bytesScanned > maxBytes {
-			result.Errors = []string{fmt.Sprintf("result exceeded %dMB limit, refine your query or raise the max result size in the workspace settings", maxBytes/1024/1024)}
-			return result
-		}
-		result.Rows = append(result.Rows, values)
-		result.RowCount++
-	}
-
-	if err := rows.Err(); err != nil {
-		msg, pos := parseQueryError(ctx, err)
-		result.Errors = []string{msg}
-		result.ErrorPosition = pos
-		// discard partial rows, a truncated result is worse than no result
-		result.Rows = nil
-		result.RowCount = 0
-		return result
-	}
-
+	StreamLocal(ctx, conn, inst, sql, opts, resultSink{result})
 	return result
 }
 
-func StreamLocal(
-	ctx context.Context,
-	conn Conn,
-	inst DBInstance,
-	sql string,
-	opts Options,
-	sink RowSink,
-) {
+// StreamLocal runs sql on conn and streams the result into sink: the columns,
+// each row, then OnDone. Any failure ends the stream with one OnError.
+func StreamLocal(ctx context.Context, conn Conn, inst DBInstance, sql string, opts Options, sink RowSink) {
 	inspected, err := checkPermissions(conn, inst, sql)
 	if err != nil {
 		sink.OnError(err)
@@ -150,7 +35,7 @@ func StreamLocal(
 		defer cancel()
 	}
 
-	q, release, err := conn.statementConn(ctx, sql)
+	q, release, err := conn.acquire(ctx, sql)
 	if err != nil {
 		sink.OnError(err)
 		return
@@ -160,31 +45,24 @@ func StreamLocal(
 	start := time.Now()
 	rows, err := q.QueryContext(ctx, sql, opts.Args...)
 	durationMs := max1ms(time.Since(start).Milliseconds())
-
-	if err != nil && conn.execFallback() {
-		// Mirror ExecuteLocal's fallback: a statement that doesn't return rows
-		// (INSERT / UPDATE / DELETE / DDL) will fail QueryContext on most
-		// drivers; retry via ExecContext to surface affected-row counts.
-		execStart := time.Now()
-		res, execErr := q.ExecContext(ctx, sql, opts.Args...)
-		execDurationMs := max1ms(time.Since(execStart).Milliseconds())
-		if execErr == nil {
-			_ = sink.OnColumns(nil)
-			var affected int64
-			if a, aerr := res.RowsAffected(); aerr == nil {
-				affected = a
-			}
-			if doneErr := sink.OnDone(0, affected, execDurationMs); doneErr != nil {
-				sink.OnError(doneErr)
-			}
-			return
-		}
-	}
 	if err != nil {
-		// Surface the original SELECT-style error; it's the more useful
-		// diagnostic for users writing SELECT-shaped statements.
-		msg, _ := parseQueryError(ctx, err)
-		sink.OnError(fmt.Errorf("%s", msg))
+		// Retried as an exec, to report the rows it affected:
+		//   - a write or DDL, which most drivers refuse to run as a query
+		// Not retried:
+		//   - a QueryRunsAll driver, whose query may already have run part of the script
+		if _, runsAll := conn.DB.Driver().(QueryRunsAll); !runsAll {
+			start := time.Now()
+			if res, execErr := q.ExecContext(ctx, sql, opts.Args...); execErr == nil {
+				affected, _ := res.RowsAffected()
+				_ = sink.OnColumns(nil)
+				if err := sink.OnDone(0, affected, max1ms(time.Since(start).Milliseconds())); err != nil {
+					sink.OnError(err)
+				}
+				return
+			}
+		}
+		// The query's error, the more useful one for a SELECT-shaped statement.
+		sink.OnError(newQueryError(ctx, err))
 		return
 	}
 	defer func() { _ = rows.Close() }()
@@ -194,39 +72,36 @@ func StreamLocal(
 		sink.OnError(fmt.Errorf("failed to get columns: %w", err))
 		return
 	}
-
-	maskPositions, seeErr := evaluateSeeForResult(conn, inst, inspected, columns)
-	if seeErr != nil {
-		sink.OnError(seeErr)
+	maskPositions, err := evaluateSeeForResult(conn, inst, inspected, columns)
+	if err != nil {
+		sink.OnError(err)
 		return
 	}
-
 	if err := sink.OnColumns(columns); err != nil {
 		sink.OnError(err)
 		return
 	}
-
-	// Must fire after OnColumns so the start event on the wire precedes this
-	if n, ok := sink.(interface{ OnExecuted(int64) }); ok {
-		n.OnExecuted(durationMs)
+	// After OnColumns, so the start event on the wire precedes this one.
+	if s, ok := sink.(executedSink); ok {
+		s.OnExecuted(durationMs)
 	}
-
 	colTypes, _ := rows.ColumnTypes()
+	if s, ok := sink.(columnTypesSink); ok {
+		s.SetColumnTypes(colTypes)
+	}
 	hasTZ := makeHasTZ(colTypes)
-	setColumnTypes(sink, colTypes)
 
 	maxBytes := effectiveMaxBytes(opts)
-	maxRows := int64(opts.MaxRows) // 0 = unbounded
-	var rowCount int64
-	var bytesScanned int64
-	truncated := false
+	var rowCount, bytesScanned int64
 	for rows.Next() {
 		if ctx.Err() != nil {
-			sink.OnError(ctx.Err())
+			sink.OnError(newQueryError(ctx, ctx.Err()))
 			return
 		}
-		if maxRows > 0 && rowCount >= maxRows {
-			truncated = true
+		if opts.MaxRows > 0 && rowCount >= int64(opts.MaxRows) {
+			if s, ok := sink.(truncatedSink); ok {
+				s.OnTruncated()
+			}
 			break
 		}
 		values := make([]any, len(columns))
@@ -247,9 +122,7 @@ func StreamLocal(
 			}
 			bytesScanned += estimateValueBytes(values[i])
 		}
-
 		applyMask(values, maskPositions)
-
 		if bytesScanned > maxBytes {
 			sink.OnError(fmt.Errorf("result exceeded %dMB limit, refine your query or raise the max result size in the workspace settings", maxBytes/1024/1024))
 			return
@@ -260,21 +133,42 @@ func StreamLocal(
 		}
 		rowCount++
 	}
-
 	if err := rows.Err(); err != nil {
-		msg, _ := parseQueryError(ctx, err)
-		sink.OnError(fmt.Errorf("%s", msg))
+		sink.OnError(newQueryError(ctx, err))
 		return
 	}
-
-	if truncated {
-		if n, ok := sink.(interface{ OnTruncated() }); ok {
-			n.OnTruncated()
-		}
-	}
-
 	if err := sink.OnDone(rowCount, 0, durationMs); err != nil {
 		sink.OnError(err)
+	}
+}
+
+// resultSink collects a stream into a Result. A failed stream leaves its error
+// and no rows: a truncated result is worse than none.
+type resultSink struct{ result *Result }
+
+func (s resultSink) OnColumns(cols []string) error {
+	s.result.Columns = cols
+	return nil
+}
+
+func (s resultSink) OnRow(values []any) error {
+	s.result.Rows = append(s.result.Rows, values)
+	return nil
+}
+
+func (s resultSink) OnDone(rowCount, affected, durationMs int64) error {
+	s.result.RowCount = int(rowCount)
+	s.result.AffectedRows = affected
+	s.result.DurationMs = durationMs
+	return nil
+}
+
+func (s resultSink) OnError(err error) {
+	s.result.Rows, s.result.RowCount = nil, 0
+	s.result.Errors = []string{err.Error()}
+	var qe *QueryError
+	if errors.As(err, &qe) {
+		s.result.ErrorPosition = qe.Position
 	}
 }
 
@@ -339,31 +233,37 @@ func applyMask(values []any, maskPositions []int) {
 	}
 }
 
-// ctx.Err() takes precedence: drivers often wrap it in their own type
-func parseQueryError(ctx context.Context, err error) (msg string, position *int) {
-	if err == nil {
-		return "", nil
-	}
+// QueryError is a statement the database refused, with the 1-based character
+// offset it reported, when it did.
+type QueryError struct {
+	Message  string
+	Position *int
+}
+
+func (e *QueryError) Error() string {
+	return e.Message
+}
+
+// newQueryError words err for the user. ctx.Err() takes precedence: drivers
+// often wrap it in their own type.
+func newQueryError(ctx context.Context, err error) *QueryError {
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		if errors.Is(ctxErr, context.DeadlineExceeded) {
-			return "query timed out, raise the statement timeout in the workspace settings", nil
-		}
-		return "query was cancelled", nil
+		err = ctxErr
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return "query timed out, raise the statement timeout in the workspace settings", nil
+		return &QueryError{Message: "query timed out, raise the statement timeout in the workspace settings"}
 	}
 	if errors.Is(err, context.Canceled) {
-		return "query was cancelled", nil
+		return &QueryError{Message: "query was cancelled"}
 	}
-	msg = err.Error()
+	qe := &QueryError{Message: err.Error()}
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) && pqErr.Position != "" {
 		if pos, parseErr := strconv.Atoi(pqErr.Position); parseErr == nil && pos > 0 {
-			position = &pos
+			qe.Position = &pos
 		}
 	}
-	return msg, position
+	return qe
 }
 
 func estimateValueBytes(v any) int64 {
@@ -386,15 +286,6 @@ func max1ms(ms int64) int64 {
 		return 1
 	}
 	return ms
-}
-
-func setColumnTypes(sink RowSink, colTypes []*sql.ColumnType) {
-	type setter interface {
-		SetColumnTypes([]*sql.ColumnType)
-	}
-	if s, ok := sink.(setter); ok {
-		s.SetColumnTypes(colTypes)
-	}
 }
 
 func makeHasTZ(colTypes []*sql.ColumnType) []bool {

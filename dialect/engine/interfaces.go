@@ -7,48 +7,43 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-// Conn holds DB handle + metadata + permissions for local query execution.
+// Conn is an open database and the rules a statement on it is checked against.
 // Empty Conn{} for proxified queries (remote handles everything).
 type Conn struct {
 	DB    *sql.DB
 	Meta  *core.Metadata
 	Perms core.CompiledPermissions
-	// Prepare, when set, runs with each user statement on the connection taken
-	// for it, before it: for rules a driver keeps per connection, and checks the
-	// permissions do not cover. An error refuses the statement.
+	// Prepare, when set, runs on the connection a statement is about to run on,
+	// for settings a driver keeps per connection. An error refuses the statement.
 	Prepare func(c *sql.Conn, statement string) error
 }
 
+// QueryRunsAll marks a driver whose Query runs every statement, rows or not.
+// The engine never retries its failed query as an exec: part of it may have run.
+type QueryRunsAll interface{ QueryRunsAll() }
+
+// querier is what a statement runs on: the pool, or one connection.
 type querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// QueryRunsAll is a driver whose Query runs every statement, rows or not. The
-// engine never retries its failed Query as Exec: the statement may have run.
-type QueryRunsAll interface{ QueryRunsAll() }
-
-// execFallback reports whether a failed Query may be retried as Exec.
-func (c Conn) execFallback() bool {
-	_, runsAll := c.DB.Driver().(QueryRunsAll)
-	return !runsAll
-}
-
-// statementConn is where statement runs: the pool, or a connection Prepare has
-// set up. Call release once the statement's rows are closed.
-func (c Conn) statementConn(ctx context.Context, statement string) (q querier, release func(), err error) {
+// acquire returns what statement runs on. Call release once its rows are closed.
+//   - no Prepare: the pool
+//   - Prepare: one connection, which Prepare has set up for statement
+func (c Conn) acquire(ctx context.Context, statement string) (q querier, release func(), err error) {
 	if c.Prepare == nil {
 		return c.DB, func() {}, nil
 	}
-	sc, err := c.DB.Conn(ctx)
+	conn, err := c.DB.Conn(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := c.Prepare(sc, statement); err != nil {
-		_ = sc.Close()
+	if err := c.Prepare(conn, statement); err != nil {
+		_ = conn.Close()
 		return nil, nil, err
 	}
-	return sc, func() { _ = sc.Close() }, nil
+	return conn, func() { _ = conn.Close() }, nil
 }
 
 // RowStream reads streamed query results.
@@ -59,10 +54,21 @@ type RowStream interface {
 	Close() error
 }
 
-// RowSink writes streamed query results.
+// RowSink receives a query's result: OnColumns, OnRow for each row, then
+// OnDone, or OnError at the first failure.
 type RowSink interface {
 	OnColumns(cols []string) error
 	OnRow(values []any) error
 	OnDone(rowCount, affected, durationMs int64) error
 	OnError(err error)
 }
+
+// Optional RowSink hooks, called when the sink implements them.
+type (
+	// executedSink learns how long the statement took, before its rows stream.
+	executedSink interface{ OnExecuted(durationMs int64) }
+	// columnTypesSink learns the driver's column types.
+	columnTypesSink interface{ SetColumnTypes([]*sql.ColumnType) }
+	// truncatedSink learns that Options.MaxRows cut the result short.
+	truncatedSink interface{ OnTruncated() }
+)
