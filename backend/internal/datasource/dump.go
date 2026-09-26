@@ -8,6 +8,7 @@ import (
 
 	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 )
 
 func DumpHandler() http.HandlerFunc {
@@ -40,7 +41,7 @@ func localDump(ctx context.Context, o Opened) (string, error) {
 	}
 	// CLI tools dial the host themselves (no Go guard); pin to the same
 	// validated endpoint as the driver
-	dumpDSN, err := engine.ResolveDumpDSN(o.WorkspaceID, o.DS.DBType, o.DS.DSN, o.DS.SSH)
+	dumpDSN, err := connect.ResolveDumpDSN(o.WorkspaceID, o.DS.DBType, o.DS.DSN, o.DS.SSH)
 	if err != nil {
 		return "", err
 	}

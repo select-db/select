@@ -14,6 +14,7 @@ import (
 
 	core "github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 	"github.com/selectDb/dialect/engine/transport"
 )
 
@@ -22,7 +23,7 @@ import (
 // concurrent queries could open dozens of connections and trip the remote's
 // "too many clients already". MetadataConcurrency=1 (below) keeps a schema load
 // to a single connection; the rest of this budget is for user queries.
-var appPoolConfig = engine.PoolConfig{
+var appPoolConfig = connect.PoolConfig{
 	MaxOpenConns:    4,
 	MaxIdleConns:    2,
 	ConnMaxLifetime: 30 * time.Minute,
@@ -85,7 +86,7 @@ func (dbc *DbClient) GetOrOpenConn(workspaceID, dbType, dsn, folderID string, ss
 		return nil, fmt.Errorf("SSH config: %w", err)
 	}
 
-	return engine.GetOrOpenConn(workspaceID, dbType, dsn, resolvedSSH, appPoolConfig)
+	return connect.GetOrOpen(workspaceID, dbType, dsn, resolvedSSH, appPoolConfig)
 }
 
 // getEngineConn returns Conn with DB for local, empty Conn{} for proxified.

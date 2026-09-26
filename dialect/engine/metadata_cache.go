@@ -8,6 +8,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/engine/connect"
 	"github.com/selectDb/toolkit/cache"
 )
 
@@ -40,7 +41,7 @@ func GetOrFetchMetadata(
 	refresh bool,
 	maxConcurrency ...int,
 ) (*core.Metadata, error) {
-	key := workspaceCacheKey(workspaceID, dsn)
+	key := connect.WorkspaceCacheKey(workspaceID, dsn)
 
 	if refresh {
 		metadataCache.Delete(key)
@@ -64,7 +65,7 @@ func GetOrGenerateDump(
 	metadata *core.Metadata,
 	refresh bool,
 ) string {
-	key := workspaceCacheKey(workspaceID, dsn)
+	key := connect.WorkspaceCacheKey(workspaceID, dsn)
 
 	if refresh {
 		dumpCache.Delete(key)
@@ -95,7 +96,7 @@ func GetOrGenerateDump(
 
 // InvalidateMetadata drops metadata and dump entries for (workspaceID, dsn).
 func InvalidateMetadata(workspaceID, dsn string) {
-	key := workspaceCacheKey(workspaceID, dsn)
+	key := connect.WorkspaceCacheKey(workspaceID, dsn)
 	metadataCache.Delete(key)
 	dumpCache.Delete(key)
 }
@@ -104,7 +105,7 @@ func InvalidateMetadata(workspaceID, dsn string) {
 // workspace, which is what a workspace being deleted leaves behind otherwise:
 // its schema and its DDL, served from memory for the rest of the TTL.
 func InvalidateWorkspaceMetadata(workspaceID string) {
-	prefix := workspaceKeyPrefix(workspaceID)
+	prefix := connect.WorkspaceKeyPrefix(workspaceID)
 	matches := func(key string) bool { return strings.HasPrefix(key, prefix) }
 
 	metadataCache.DeleteFunc(matches)

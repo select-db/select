@@ -1,4 +1,4 @@
-package engine
+package connect
 
 import (
 	"crypto/ed25519"

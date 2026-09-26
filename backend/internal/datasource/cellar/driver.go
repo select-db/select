@@ -25,7 +25,7 @@ import (
 )
 
 // Scheme is the scheme of a managed database's DSN, and the name of the
-// database/sql driver that opens it: engine.GetOrOpenConn opens it like any
+// database/sql driver that opens it: connect.GetOrOpen opens it like any
 // other datasource.
 const Scheme = "cellar"
 

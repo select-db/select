@@ -9,8 +9,9 @@ import (
 	"selectDb/internal/graph"
 	"selectDb/internal/sqllang"
 
-	"github.com/selectDb/dialect/engine"
 	"selectDb/internal/desktop"
+
+	"github.com/selectDb/dialect/engine/connect"
 )
 
 // sshPassphrases holds key-file passphrases entered at runtime, keyed by the
@@ -46,7 +47,7 @@ func storedSSHPassphrase(keyPath string) string {
 }
 
 // resolveSSHConfig substitutes .env variables in the SSH config fields.
-func (dbc *DbClient) resolveSSHConfig(sshCfg *graph.DBInstanceSSHConfig, folderID string) (*engine.ResolvedSSHConfig, error) {
+func (dbc *DbClient) resolveSSHConfig(sshCfg *graph.DBInstanceSSHConfig, folderID string) (*connect.ResolvedSSHConfig, error) {
 	if sshCfg == nil || !sshCfg.Enabled {
 		return nil, nil
 	}
@@ -92,7 +93,7 @@ func (dbc *DbClient) resolveSSHConfig(sshCfg *graph.DBInstanceSSHConfig, folderI
 		passphrase = storedSSHPassphrase(sshCfg.KeyPath)
 	}
 
-	return &engine.ResolvedSSHConfig{
+	return &connect.ResolvedSSHConfig{
 		Host:       host,
 		Port:       port,
 		User:       user,

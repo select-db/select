@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 )
 
 func TestAsToolError_HidesUnknownErrors(t *testing.T) {
@@ -30,7 +30,7 @@ func TestAsToolError_PassesToolErrorsThrough(t *testing.T) {
 }
 
 func TestAsToolError_ShowsConfigErrors(t *testing.T) {
-	err := fmt.Errorf("open datasource: %w", &engine.ConfigError{Msg: "SSH tunneling is not supported for sqlite"})
+	err := fmt.Errorf("open datasource: %w", &connect.ConfigError{Msg: "SSH tunneling is not supported for sqlite"})
 	te := asToolError(err)
 	if te.Code != "upstream" || te.Message != "SSH tunneling is not supported for sqlite" {
 		t.Fatalf("got %+v", te)

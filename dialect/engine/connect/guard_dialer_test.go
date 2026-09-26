@@ -1,4 +1,4 @@
-package engine
+package connect
 
 import (
 	"errors"
@@ -33,9 +33,9 @@ func TestOpenGuardedDBRefusesABlockedAddressAtDial(t *testing.T) {
 }
 
 // sqlite has no host to tunnel to; the guard side is TestProxyRefusesNonNetworkedDialect.
-func TestGetOrOpenConnRefusesASqliteFileOverSSH(t *testing.T) {
+func TestGetOrOpenRefusesASqliteFileOverSSH(t *testing.T) {
 	var cfgErr *ConfigError
-	_, err := GetOrOpenConn("ws", "sqlite", "file:/etc/passwd", &ResolvedSSHConfig{Host: "bastion"})
+	_, err := GetOrOpen("ws", "sqlite", "file:/etc/passwd", &ResolvedSSHConfig{Host: "bastion"})
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("err = %v, want a ConfigError", err)
 	}

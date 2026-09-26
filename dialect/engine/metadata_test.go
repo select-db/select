@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/engine/connect"
 	"github.com/selectDb/dialect/sqlite"
 	sqlitedriver "modernc.org/sqlite"
 )
@@ -232,18 +233,18 @@ func TestGetOrFetchMetadata_InvalidateForcesFresh(t *testing.T) {
 }
 
 func TestHashWorkspaceDSN_StableAndScoped(t *testing.T) {
-	if workspaceCacheKey("ws-1", "dsn-1") != workspaceCacheKey("ws-1", "dsn-1") {
+	if connect.WorkspaceCacheKey("ws-1", "dsn-1") != connect.WorkspaceCacheKey("ws-1", "dsn-1") {
 		t.Fatal("key must be stable for the same inputs")
 	}
-	if workspaceCacheKey("ws-1", "dsn-1") == workspaceCacheKey("ws-2", "dsn-1") {
+	if connect.WorkspaceCacheKey("ws-1", "dsn-1") == connect.WorkspaceCacheKey("ws-2", "dsn-1") {
 		t.Fatal("workspace must be part of the key")
 	}
-	if workspaceCacheKey("ws-1", "dsn-1") == workspaceCacheKey("ws-1", "dsn-2") {
+	if connect.WorkspaceCacheKey("ws-1", "dsn-1") == connect.WorkspaceCacheKey("ws-1", "dsn-2") {
 		t.Fatal("dsn must be part of the key")
 	}
 	// Defence-in-depth: the literal DSN must not appear in the key.
 	const sneakyDSN = "postgres://user:secret@host/db"
-	k := workspaceCacheKey("ws", sneakyDSN)
+	k := connect.WorkspaceCacheKey("ws", sneakyDSN)
 	if k == sneakyDSN {
 		t.Fatal("DSN leaked verbatim into cache key")
 	}

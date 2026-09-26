@@ -4,7 +4,7 @@ import (
 	"selectDb/internal/graph"
 	"selectDb/internal/sqllang"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/engine/connect"
 )
 
 // effectiveDSN resolves variables and rewrites host:port to the SSH tunnel
@@ -22,7 +22,7 @@ func (dbc *DbClient) effectiveDSN(dbInstance *graph.DBInstanceNode) string {
 	if err != nil || resolvedSSH == nil {
 		return dsn
 	}
-	tunneled, err := engine.ResolveDumpDSN(dbInstance.WorkspaceID, dbInstance.DBType, dsn, resolvedSSH)
+	tunneled, err := connect.ResolveDumpDSN(dbInstance.WorkspaceID, dbInstance.DBType, dsn, resolvedSSH)
 	if err != nil {
 		return dsn
 	}

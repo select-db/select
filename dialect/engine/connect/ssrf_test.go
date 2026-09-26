@@ -1,4 +1,4 @@
-package engine
+package connect
 
 import (
 	"testing"
@@ -106,8 +106,8 @@ func TestProxyRefusesNonNetworkedDialect(t *testing.T) {
 		{"clickhouse", "tcp://attacker/db"},
 		{"postgresql", "host=169.254.169.254 port=80 user=x"}, // metadata still blocked
 	} {
-		if _, err := GetOrOpenConn("ws", tc.dbType, tc.dsn, nil); err == nil {
-			t.Errorf("GetOrOpenConn(%q,%q) = nil err, want refused", tc.dbType, tc.dsn)
+		if _, err := GetOrOpen("ws", tc.dbType, tc.dsn, nil); err == nil {
+			t.Errorf("GetOrOpen(%q,%q) = nil err, want refused", tc.dbType, tc.dsn)
 		}
 	}
 }
