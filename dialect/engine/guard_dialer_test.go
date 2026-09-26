@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -28,5 +29,14 @@ func TestOpenGuardedDBRefusesABlockedAddressAtDial(t *testing.T) {
 
 	if _, err := sqlite.NewDialect().OpenGuardedDB("file:/etc/passwd", guardedDial); err == nil {
 		t.Fatal("sqlite: a guarded open of a file succeeded")
+	}
+}
+
+// sqlite has no host to tunnel to; the guard side is TestProxyRefusesNonNetworkedDialect.
+func TestGetOrOpenConnRefusesASqliteFileOverSSH(t *testing.T) {
+	var cfgErr *ConfigError
+	_, err := GetOrOpenConn("ws", "sqlite", "file:/etc/passwd", &ResolvedSSHConfig{Host: "bastion"})
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("err = %v, want a ConfigError", err)
 	}
 }

@@ -112,18 +112,14 @@ func CloseWorkspaceConns(workspaceID string) {
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
 // Concurrent first queries for one datasource share a single open.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
-	// Refused:
-	//   - SSH to a sqlite file, which has no host to tunnel to
-	if dbType == "sqlite" && ssh != nil {
-		return nil, newConfigError("SSH tunneling is not supported for sqlite")
-	}
-
 	// Tunneled, then opened on the local port, unguarded:
 	//   - any datasource with SSH
+	// Refused:
+	//   - a DSN with no host to tunnel to, such as a sqlite file
 	if ssh != nil {
 		remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
 		if err != nil {
-			return nil, fmt.Errorf("parse DSN for SSH: %w", err)
+			return nil, newConfigErrorf("parse DSN for SSH: %v", err)
 		}
 		// The bastion dials remoteHost for us; stop it pivoting to its own
 		// cloud-metadata/link-local (loopback stays allowed: common tunnel case).
@@ -156,10 +152,9 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	guarded := ssh == nil && EnforceOutboundGuard && !sqlite.IsCellarDSN(dsn)
 	if guarded {
 		// Refused:
-		//   - anything but postgresql or mysql, incl. a sqlite file (a path on this host)
-		//   - a DSN whose host does not parse
+		//   - a DSN whose host does not parse, incl. a sqlite file (a path on this host)
 		host, _, perr := core.ParseDSNRemote(dbType, dsn)
-		if perr != nil || (dbType != "postgresql" && dbType != "mysql") {
+		if perr != nil {
 			return nil, fmt.Errorf("connection target is not permitted")
 		}
 		// Cheap pre-dial reject; fails closed on unresolvable / all-blocked
