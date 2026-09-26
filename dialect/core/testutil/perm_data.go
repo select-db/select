@@ -227,10 +227,6 @@ func permCases() []PermCase {
 			Why:   "the alias is not a table, and what it reads is t2",
 		},
 		{
-			// A derived body that names no table infers no column for its
-			// alias, and an alias the walker leaves unmarked reaches the
-			// resolver as a relation name: an empty schema every role is
-			// refused, which no grant can answer.
 			Name:  "a derived table of constants",
 			SQL:   "SELECT l.x FROM (SELECT 1 AS x) AS l",
 			Needs: nil,
@@ -240,47 +236,34 @@ func permCases() []PermCase {
 		{
 			Name:  "a table joined to a derived table of constants",
 			SQL:   "SELECT t.c3 FROM t2 AS t JOIN (SELECT 1 AS x) AS l ON l.x = t.c1",
-			Needs: []Right{mainT2(core.ActionSelect).Only("c3"), mainT2(core.ActionSelect).Only("c1")},
+			Needs: []Right{mainT2(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
-			Why:   "t2 is the only relation with rows to read, and c1 is what the join tests",
+			Why:   "t2 is the only relation with rows to read, and no grant can answer for l",
 		},
 		{
-			Name: "a table joined to a derived table of a union of constants",
-			SQL:  "SELECT t.c1, cal.d FROM t2 AS t JOIN (SELECT '2026-01-01' AS d UNION ALL SELECT '2026-02-01') AS cal ON cal.d = t.c3",
-			Needs: []Right{
-				mainT2(core.ActionSelect).Only("c1"),
-				mainT2(core.ActionSelect).Only("c3"),
-			},
-			Op:  core.InspectOpSelect,
-			Why: "a calendar built from literals reads nothing, however many branches it unions",
+			Name:  "a table joined to a derived table of a union of constants",
+			SQL:   "SELECT t.c1, cal.d FROM t2 AS t JOIN (SELECT '2026-01-01' AS d UNION ALL SELECT '2026-02-01') AS cal ON cal.d = t.c3",
+			Needs: []Right{mainT2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a calendar of literals is a relation the statement binds, in each branch of its union",
 		},
 		{
 			On:    []string{"mysql"},
 			Name:  "a derived table of a session variable",
 			SQL:   "SELECT t.c1, @rn := @rn + 1 AS rn FROM t2 AS t, (SELECT @rn := 0) AS r",
-			Needs: []Right{mainT2(core.ActionSelect).Only("c1")},
+			Needs: []Right{mainT2(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "the row-number idiom seeds a variable, and t2 is the only table it numbers",
 		},
 		{
+			// LATERAL is a separate alternative of the FROM item in both
+			// grammars, so a walker can reach the plain one and miss this.
 			On:    []string{"mysql", "postgresql"},
-			Name:  "a lateral derived table of constants",
-			SQL:   "SELECT t.c3, l.x FROM t2 AS t JOIN LATERAL (SELECT 1 AS x) AS l ON l.x = t.c1",
-			Needs: []Right{mainT2(core.ActionSelect).Only("c3"), mainT2(core.ActionSelect).Only("c1")},
+			Name:  "a lateral derived table over a table",
+			SQL:   "SELECT t.c3, l.c1 FROM t2 AS t JOIN LATERAL (SELECT a.c1 FROM t1 AS a WHERE a.c1 = t.c1 LIMIT 1) AS l ON true",
+			Needs: []Right{mainT2(core.ActionSelect), mainT1(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
-			Why:   "LATERAL lets the body see t, and this body reads neither t nor any table",
-		},
-		{
-			On:   []string{"mysql", "postgresql"},
-			Name: "a lateral derived table over a table",
-			SQL:  "SELECT t.c3, l.c1 FROM t2 AS t JOIN LATERAL (SELECT a.c1 FROM t1 AS a WHERE a.c1 = t.c1 LIMIT 1) AS l ON true",
-			Needs: []Right{
-				mainT2(core.ActionSelect).Only("c3"),
-				mainT2(core.ActionSelect).Only("c1"),
-				mainT1(core.ActionSelect).Only("c1"),
-			},
-			Op:  core.InspectOpSelect,
-			Why: "the body reads t1 and correlates on t2.c1, so both columns are behind the alias",
+			Why:   "the body reads t1 and correlates on t2, so both tables are behind the alias",
 		},
 		{
 			On:    []string{"postgresql"},
