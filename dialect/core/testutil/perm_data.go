@@ -256,8 +256,6 @@ func permCases() []PermCase {
 			Why:   "the row-number idiom seeds a variable, and t2 is the only table it numbers",
 		},
 		{
-			// LATERAL is a separate alternative of the FROM item in both
-			// grammars, so a walker can reach the plain one and miss this.
 			On:    []string{"mysql", "postgresql"},
 			Name:  "a lateral derived table over a table",
 			SQL:   "SELECT t.c3, l.c1 FROM t2 AS t JOIN LATERAL (SELECT a.c1 FROM t1 AS a WHERE a.c1 = t.c1 LIMIT 1) AS l ON true",
