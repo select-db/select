@@ -40,3 +40,13 @@ func TestGetOrOpenConnRefusesASqliteFileOverSSH(t *testing.T) {
 		t.Fatalf("err = %v, want a ConfigError", err)
 	}
 }
+
+// The dump tools dial for themselves, so the server must refuse a sqlite file
+// before handing its DSN over.
+func TestResolveDumpDSNRefusesASqliteFileOnTheServer(t *testing.T) {
+	EnforceOutboundGuard = true
+	defer func() { EnforceOutboundGuard = false }()
+	if _, err := ResolveDumpDSN("ws", "sqlite", "file:/etc/passwd", nil); err == nil {
+		t.Fatal("a sqlite file was handed to the dump tools")
+	}
+}

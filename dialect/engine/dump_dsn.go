@@ -11,11 +11,12 @@ import (
 
 // ResolveDumpDSN returns a DSN safe for the out-of-process dump tools, which
 // resolve/dial the host themselves (the Go guarded dialer can't reach them).
-// Pins the target like the driver path:
-//   - SSH: rewrite to the existing tunnel's local endpoint
-//   - direct + guard on: substitute the resolved+validated literal IP (no re-resolve)
-//   - guard off (desktop): unchanged
+// Pins the target like the driver path.
 func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (string, error) {
+	// Rewritten to the tunnel's local endpoint:
+	//   - any datasource with SSH
+	// Refused:
+	//   - a DSN with no host to tunnel to, such as a sqlite file
 	if ssh != nil {
 		remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
 		if err != nil {
@@ -35,12 +36,19 @@ func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (st
 		return core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
 	}
 
+	// Unchanged:
+	//   - the desktop app
+	//   - a cellar DSN, whose driver dials only the configured cellar
 	if !EnforceOutboundGuard || sqlite.IsCellarDSN(dsn) {
 		return dsn, nil
 	}
 
+	// Rewritten to the resolved and validated literal IP, so the tool cannot re-resolve:
+	//   - the server dialing a user's DSN directly
+	// Refused:
+	//   - a DSN whose host does not parse, incl. a sqlite file (a path on this host)
 	host, port, err := core.ParseDSNRemote(dbType, dsn)
-	if err != nil || (dbType != "postgresql" && dbType != "mysql") {
+	if err != nil {
 		return "", fmt.Errorf("connection target is not permitted")
 	}
 	ip, err := resolveAllowedIP(host)
