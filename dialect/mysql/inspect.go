@@ -15,9 +15,8 @@ type Inspector struct {
 	meta     core.Metadata
 	resolver core.Resolver
 
-	// inBody marks the inspector reading a statement carried as text by
-	// another. MySQL refuses a PREPARE inside a prepared statement, so one
-	// level is the whole language and the flag also bounds the recursion.
+	// inBody stops a statement read out of another's text from nesting again,
+	// which MySQL refuses too.
 	inBody bool
 }
 
@@ -1043,11 +1042,11 @@ func (i *Inspector) viewBody(tail mysql.IViewTailContext) []core.InspectStatemen
 }
 
 // preparedBody is the statement a PREPARE names, read out of the text literal
-// carrying it. That text is SQL of this dialect, so it is inspected in turn.
-// Text arriving through a user variable is session state no static check can
-// see, and EXECUTE names a handle bound in the session rather than a body;
-// both report nothing, which leaves the caller with the floor alone.
+// carrying it, which is SQL of this dialect.
 func (i *Inspector) preparedBody(stmt mysql.IPreparedStatementContext) []core.InspectStatement {
+	// EXECUTE and DEALLOCATE name a handle bound in the session, and a body
+	// arriving through a user variable is session state too. Neither is
+	// statically visible, so the caller is left with the floor alone.
 	lit := stmt.TextLiteral()
 	if lit == nil || i.inBody {
 		return nil
