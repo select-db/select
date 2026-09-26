@@ -1,3 +1,5 @@
+// Package query runs one statement on an open database, under the permission
+// rules, and streams its result into a sink.
 package query
 
 import (

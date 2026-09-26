@@ -1,5 +1,6 @@
-// Package engine: dialect-aware query layer shared by app and remote backend.
-// App uses Client (routes local vs proxified). Backend calls package funcs directly.
+// Package engine is the desktop app's entry point: Client sends each call to
+// the local subpackages (connect, query, results, schema) or, for a proxied
+// datasource, to the backend through Transport. The backend uses them directly.
 package engine
 
 import (
