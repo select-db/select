@@ -50,3 +50,16 @@ func TestResolveDumpDSNRefusesASqliteFileOnTheServer(t *testing.T) {
 		t.Fatal("a sqlite file was handed to the dump tools")
 	}
 }
+
+// The dump path follows the driver path's rule and pins an allowed host to its IP.
+func TestResolveDumpDSNFollowsTheOutboundRule(t *testing.T) {
+	EnforceOutboundGuard = true
+	defer func() { EnforceOutboundGuard = false }()
+	if _, err := ResolveDumpDSN("ws", "postgresql", "host=169.254.169.254 dbname=x", nil); err == nil {
+		t.Fatal("a metadata host was handed to the dump tools")
+	}
+	got, err := ResolveDumpDSN("ws", "postgresql", "host=8.8.8.8 port=5432 dbname=x", nil)
+	if err != nil || !strings.Contains(got, "host=8.8.8.8") {
+		t.Fatalf("got %q, %v; want the literal IP kept", got, err)
+	}
+}
