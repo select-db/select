@@ -286,6 +286,14 @@ func permCases() []PermCase {
 			Why:   "it writes c2 from a literal mapping and reads c1 to choose the rows",
 		},
 		{
+			On:    []string{"sqlite"},
+			Name:  "an update from a VALUES list, SQLite's spelling",
+			SQL:   "UPDATE t1 SET c2 = v.column2 FROM (VALUES (1, 'a')) AS v WHERE t1.c1 = v.column1",
+			Needs: []Right{mainT1(core.ActionUpdate), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpUpdate,
+			Why:   "it writes c2 from a literal mapping and reads c1 to choose the rows",
+		},
+		{
 			On:    []string{"postgresql"},
 			Name:  "an insert from a VALUES list given an alias",
 			SQL:   "INSERT INTO t1 (c1) SELECT v.n FROM (VALUES (1), (2)) AS v(n)",
