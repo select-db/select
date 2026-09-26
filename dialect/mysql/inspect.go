@@ -1313,6 +1313,7 @@ func (l *relationRefListener) EnterDerivedTable(ctx *mysql.DerivedTableContext) 
 	})
 	l.refs = append(l.refs, core.RelationRef{
 		Table:         alias,
+		IsVirtual:     true,
 		ScopeStartPos: -1,
 		ScopeEndPos:   -1,
 	})
