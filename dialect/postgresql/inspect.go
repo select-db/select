@@ -877,10 +877,9 @@ func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectSta
 }
 
 // bodyText is the SQL a string constant holds. The parser's own
-// GetRoutineBodyString is not reused: its TrimQuotes takes one character too
-// many off a plain string, which turns the last name in the body into a table
-// nobody has a grant on. An escape or unicode string returns nothing, since a
-// body read wrongly is worse than one left at the floor.
+// GetRoutineBodyString takes one character too many off a plain string, which
+// turns the last name in the body into a table nobody holds a grant on. An
+// escape or a unicode string reports nothing and keeps the floor.
 func bodyText(sconst pg.ISconstContext) string {
 	anyconst := sconst.Anysconst()
 	if anyconst == nil {

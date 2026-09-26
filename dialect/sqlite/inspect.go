@@ -322,6 +322,9 @@ func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.Inspect
 // bodyStatements is what the statements carried inside node require: the body
 // of a trigger, which SQLite writes as parse nodes. Only the outermost of them
 // is inspected, since one nested deeper is part of a statement already read.
+// MySQL has the same function over one node type, because its grammar puts
+// every statement of a body under simpleStatement; SQLite has no such node, so
+// the four kinds share one depth here.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
 	listener := &bodyStatementListener{
 		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},

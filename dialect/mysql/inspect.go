@@ -1053,7 +1053,8 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 
 // bodyStatements is what the statements carried inside node require. Only the
 // outermost of them is inspected: a statement nested deeper is part of one
-// already read, which reports it itself.
+// already read, which reports it itself. SQLite has the same function over the
+// four statement kinds its trigger bodies hold.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
 	listener := &bodyStatementListener{
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
