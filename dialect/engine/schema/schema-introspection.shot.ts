@@ -8,8 +8,8 @@ import {
 	expect,
 	test,
 	type Framing
-} from '../../app/frontend/tests/e2e/shots';
-import { testId, editor } from '../../app/frontend/tests/e2e/selectors';
+} from '../../../app/frontend/tests/e2e/shots';
+import { testId, editor } from '../../../app/frontend/tests/e2e/selectors';
 
 /**
  * The schema explorer, for the Schema Introspection page.

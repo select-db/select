@@ -76,5 +76,5 @@ func TestGetDialect(t *testing.T) {
 	}
 }
 
-// Metadata caching is exercised in dialect/engine/metadata_test.go now
+// Metadata caching is exercised in dialect/engine/schema/metadata_test.go now
 // that the cache lives there. App tests cover only the wiring layer.

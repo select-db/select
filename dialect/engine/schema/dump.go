@@ -1,4 +1,4 @@
-package engine
+package schema
 
 import (
 	"strings"
@@ -6,12 +6,12 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-// DumpSchema returns authoritative schema SQL for the given DSN. It tries
+// Dump returns authoritative schema SQL for the given DSN. It tries
 // the dialect's native CLI tool first (pg_dump, mysqldump); if that is
 // unavailable it falls back to reconstructing DDL from metadata with a
 // warning comment prepended. On the proxy the caller must pass a
 // ResolveDumpDSN-pinned DSN: the CLI tools re-resolve and can't use the Go guard.
-func DumpSchema(dialect core.SQLDialect, dsn string, metadata *core.Metadata) string {
+func Dump(dialect core.SQLDialect, dsn string, metadata *core.Metadata) string {
 	if sql, ok := dialect.DumpSchema(dsn); ok {
 		return sql
 	}

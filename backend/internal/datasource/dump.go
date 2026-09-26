@@ -7,8 +7,8 @@ import (
 	"backend/internal/middlewares"
 
 	"github.com/selectDb/dialect/dialects"
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/engine/schema"
 )
 
 func DumpHandler() http.HandlerFunc {
@@ -45,5 +45,5 @@ func localDump(ctx context.Context, o Opened) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return engine.GetOrGenerateDump(dialects.Get(o.DS.DBType), o.WorkspaceID, dumpDSN, meta, false), nil
+	return schema.GetOrGenerateDump(dialects.Get(o.DS.DBType), o.WorkspaceID, dumpDSN, meta, false), nil
 }

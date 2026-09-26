@@ -130,7 +130,7 @@ The root `CLAUDE.md` and `CONTRIBUTING.md` carry the repository's rules, and
 they win. Two have a specific shape in this package:
 
 - Compose what exists before adding a layer. `core.Resolver`, `core.Scope`,
-  `core.OrUnknown` and `core.UnknownStatement` already exist; `engine.Inspect`
+  `core.OrUnknown` and `core.UnknownStatement` already exist; `query.Inspect`
   already floors an unrecognised statement. Reach for those before inventing a
   guard.
 - Never hand-edit the generated parser files under `*/parser/`. A grammar fix

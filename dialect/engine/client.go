@@ -8,6 +8,7 @@ import (
 	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine/query"
 	"github.com/selectDb/dialect/engine/results"
+	"github.com/selectDb/dialect/engine/schema"
 )
 
 // Client routes queries local vs proxified, manages cancel + result cache.
@@ -124,7 +125,7 @@ func (client *Client) GetMetadata(ctx context.Context, conn query.Conn, instance
 			return nil, fmt.Errorf("unsupported database type: %s", instance.DBType)
 		}
 
-		return GetOrFetchMetadata(ctx, workspaceID, instance.ID, conn.DB, dialect, dbName, noCache, client.MetadataConcurrency)
+		return schema.GetOrFetch(ctx, workspaceID, instance.ID, conn.DB, dialect, dbName, noCache, client.MetadataConcurrency)
 	}
 
 	if client.Transport == nil {
@@ -153,7 +154,7 @@ func (client *Client) DumpSchema(ctx context.Context, instance query.DBInstance,
 		return ""
 	}
 
-	return GetOrGenerateDump(dialect, workspaceID, dsn, metadata, noCache)
+	return schema.GetOrGenerateDump(dialect, workspaceID, dsn, metadata, noCache)
 }
 
 // query.Cancel aborts in-flight query under key. No-op if absent.

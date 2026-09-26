@@ -12,9 +12,9 @@ import (
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/connect"
 	"github.com/selectDb/dialect/engine/query"
+	"github.com/selectDb/dialect/engine/schema"
 )
 
 // genericConnErr is returned to clients for any datasource connection
@@ -59,7 +59,7 @@ func (o *Opened) Metadata(ctx context.Context, noCache bool) (*core.Metadata, er
 	if dialect == nil {
 		return nil, fmt.Errorf("unsupported database type: %s", o.DS.DBType)
 	}
-	return engine.GetOrFetchMetadata(ctx, o.WorkspaceID, o.DS.DSN, o.Conn.DB, dialect, "", noCache)
+	return schema.GetOrFetch(ctx, o.WorkspaceID, o.DS.DSN, o.Conn.DB, dialect, "", noCache)
 }
 
 // Stream runs sql into sink, checked against the caller's permissions.

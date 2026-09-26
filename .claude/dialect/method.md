@@ -29,10 +29,10 @@ diagnostic becomes a zero-width range at the origin. A consumer that iterates
 and finds nothing concludes there is nothing to do, so the query runs
 unchecked, the file lints clean, the user sees no marker.
 
-`engine.Inspect` floors a whole statement that comes back unrecognised to
+`query.Inspect` floors a whole statement that comes back unrecognised to
 `core.UnknownStatement()`, which takes manage. The floor is per top-level
 statement, so everything below it (a table list, a CTE body, a source query)
-still degrades silently. Probe through `engine.Inspect`, not `dialect.Inspect`,
+still degrades silently. Probe through `query.Inspect`, not `dialect.Inspect`,
 or you measure a hole the seam already closes. `agentprobe` does.
 
 Hold this as a prior, not a conclusion. Confirm it by measurement.

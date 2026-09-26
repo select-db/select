@@ -1,4 +1,4 @@
-package engine
+package schema
 
 import (
 	"context"
@@ -9,27 +9,27 @@ import (
 	"github.com/selectDb/dialect/core"
 )
 
-// defaultMetadataConcurrency bounds how many introspection queries FetchMetadata
+// defaultMetadataConcurrency bounds how many introspection queries Fetch
 // runs at once when the caller doesn't specify. Metadata fetches fan out one
 // query per schema × object type; left unbounded they can open dozens of pooled
 // connections at once and trip the remote's max_connections ("too many clients").
 const defaultMetadataConcurrency = 8
 
-// FetchMetadata loads full schema info (schemas/tables/views/indexes/
+// Fetch loads full schema info (schemas/tables/views/indexes/
 // triggers/stats/types/functions) into a *core.Metadata. Uncached;
-// most callers want GetOrFetchMetadata. ctx bounds every query.
+// most callers want GetOrFetch. ctx bounds every query.
 //
 // maxConcurrency optionally caps how many introspection queries run at once
 // across all schemas. Unset or <=0 uses defaultMetadataConcurrency. The desktop
 // app passes 1 so the whole load serialises onto a single pooled connection,
 // staying well under the remote's connection limit; user queries then reuse the
 // same cached pool.
-func FetchMetadata(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName string, maxConcurrency ...int) (*core.Metadata, error) {
+func Fetch(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName string, maxConcurrency ...int) (*core.Metadata, error) {
 	if db == nil {
-		return nil, fmt.Errorf("FetchMetadata: db is nil")
+		return nil, fmt.Errorf("Fetch: db is nil")
 	}
 	if dialect == nil {
-		return nil, fmt.Errorf("FetchMetadata: dialect is nil")
+		return nil, fmt.Errorf("Fetch: dialect is nil")
 	}
 
 	// A shared buffered channel bounds concurrent DB calls across every schema.
