@@ -1,3 +1,5 @@
+// Package schema reads what a database holds (schemas, tables, columns,
+// indexes) and dumps its DDL, both cached per workspace.
 package schema
 
 import (

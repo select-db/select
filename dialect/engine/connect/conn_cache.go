@@ -1,3 +1,5 @@
+// Package connect opens databases: the cached pools, the outbound guard on the
+// server, and the SSH tunnels.
 package connect
 
 import (

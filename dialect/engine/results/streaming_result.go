@@ -1,3 +1,5 @@
+// Package results keeps a streamed result so the desktop app can read it page
+// by page while rows still arrive.
 package results
 
 import (
