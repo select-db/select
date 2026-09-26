@@ -7,6 +7,7 @@ import (
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine/query"
+	"github.com/selectDb/dialect/engine/results"
 )
 
 // Client routes queries local vs proxified, manages cancel + result cache.
@@ -18,7 +19,7 @@ type Client struct {
 	MetadataConcurrency int
 }
 
-// query.Stream kicks off sql execution and returns a *StreamingResult that fills
+// query.Stream kicks off sql execution and returns a *results.StreamingResult that fills
 // asynchronously. The result is registered in the cache under key so subsequent
 // Page() calls can read it. The listener (optional) is notified on start /
 // progress / done / error.
@@ -33,15 +34,15 @@ func (client *Client) Stream(
 	instance query.DBInstance,
 	workspaceID, sql string,
 	options query.Options,
-	listener StreamListener,
-) *StreamingResult {
-	result := NewStreamingResult(resultID)
-	SetStreamingResult(key, result)
+	listener results.StreamListener,
+) *results.StreamingResult {
+	result := results.NewStreamingResult(resultID)
+	results.Set(key, result)
 
 	cancelCtx, cancelFunc := context.WithCancel(ctx)
 	unregisterCancel := query.RegisterCancel(key, cancelFunc)
 
-	sink := NewStreamingSink(result, listener)
+	sink := results.NewStreamingSink(result, listener)
 
 	go func() {
 		defer unregisterCancel()
@@ -95,10 +96,10 @@ func (client *Client) Execute(
 // Page retrieves a page from a streaming result. Returns nil + false if no
 // streaming result exists under key. Status indicates whether the page is
 // complete, partial (more rows arriving), or pending (none yet).
-func (client *Client) Page(key string, page, pageSize int) (*PageData, PageStatus, bool) {
-	cached, ok := GetStreamingResult(key)
+func (client *Client) Page(key string, page, pageSize int) (*results.PageData, results.PageStatus, bool) {
+	cached, ok := results.Get(key)
 	if !ok {
-		return nil, PagePending, false
+		return nil, results.PagePending, false
 	}
 	data, status := cached.Page(page, pageSize)
 	return data, status, true
@@ -158,4 +159,53 @@ func (client *Client) DumpSchema(ctx context.Context, instance query.DBInstance,
 // query.Cancel aborts in-flight query under key. No-op if absent.
 func (client *Client) Cancel(key string) {
 	query.Cancel(key)
+}
+
+// drainStreamInto pulls rows from a remote query.RowStream into a results.StreamingResult
+// via the supplied listener. Used by the proxified path.
+func drainStreamInto(stream query.RowStream, sink query.RowSink) {
+	defer func() { _ = stream.Close() }()
+
+	cols, err := stream.Columns()
+	if err != nil {
+		sink.OnError(err)
+		return
+	}
+	if err := sink.OnColumns(cols); err != nil {
+		sink.OnError(err)
+		return
+	}
+
+	// Forward the early SQL-execution duration when the wire format carries
+	// it. Streams that don't expose it return 0; sinks that don't care
+	// implement nothing.
+	if e, ok := stream.(interface{ Executed() int64 }); ok {
+		if executed := e.Executed(); executed > 0 {
+			if n, ok := sink.(query.ExecutedSink); ok {
+				n.OnExecuted(executed)
+			}
+		}
+	}
+
+	for {
+		values, ok, err := stream.Next()
+		if err != nil {
+			sink.OnError(err)
+			return
+		}
+		if !ok {
+			break
+		}
+		if err := sink.OnRow(values); err != nil {
+			sink.OnError(err)
+			return
+		}
+	}
+
+	rowCount, affected, durationMs, err := stream.Summary()
+	if err != nil {
+		sink.OnError(err)
+		return
+	}
+	_ = sink.OnDone(rowCount, affected, durationMs)
 }

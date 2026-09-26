@@ -1,4 +1,4 @@
-package engine
+package results
 
 import (
 	"sync"
@@ -114,53 +114,4 @@ func (s *streamingSink) OnError(err error) {
 	if s.listener != nil {
 		s.listener.OnError(err.Error(), position)
 	}
-}
-
-// drainStreamInto pulls rows from a remote query.RowStream into a StreamingResult
-// via the supplied listener. Used by the proxified path.
-func drainStreamInto(stream query.RowStream, sink query.RowSink) {
-	defer func() { _ = stream.Close() }()
-
-	cols, err := stream.Columns()
-	if err != nil {
-		sink.OnError(err)
-		return
-	}
-	if err := sink.OnColumns(cols); err != nil {
-		sink.OnError(err)
-		return
-	}
-
-	// Forward the early SQL-execution duration when the wire format carries
-	// it. Streams that don't expose it return 0; sinks that don't care
-	// implement nothing.
-	if e, ok := stream.(interface{ Executed() int64 }); ok {
-		if executed := e.Executed(); executed > 0 {
-			if n, ok := sink.(query.ExecutedSink); ok {
-				n.OnExecuted(executed)
-			}
-		}
-	}
-
-	for {
-		values, ok, err := stream.Next()
-		if err != nil {
-			sink.OnError(err)
-			return
-		}
-		if !ok {
-			break
-		}
-		if err := sink.OnRow(values); err != nil {
-			sink.OnError(err)
-			return
-		}
-	}
-
-	rowCount, affected, durationMs, err := stream.Summary()
-	if err != nil {
-		sink.OnError(err)
-		return
-	}
-	_ = sink.OnDone(rowCount, affected, durationMs)
 }
