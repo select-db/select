@@ -1264,3 +1264,87 @@ class TestR008AmbiguousColumn:
         sql = ("WITH c AS (SELECT id FROM orders) SELECT c.id FROM users u "
                "JOIN users u ON 1 = 1 JOIN c ON c.id = u.id WHERE u.name = NULL")
         assert len(_diags(_r(sql), "null-equality")) == 1
+
+# ---------------------------------------------------------------------------
+# R001, the target of a CREATE
+# ---------------------------------------------------------------------------
+# The target of a CREATE is a definition and not a reference, so the catalog
+# lookup is inverted on it: absence is the correct case, presence is the
+# mistake the server refuses.
+
+SCHEMA_DDL = {"main": {"t1": ["c1", "c2"], "t2": ["c1", "c3"]}}
+DDL_DIALECTS = ["postgresql", "mysql", "sqlite"]
+
+
+def _ddl(sql, dialect="postgresql"):
+    return analyze(sql, dialect=dialect, schema_dict=SCHEMA_DDL, default_schema="main")
+
+
+class TestCreateTargetIsNotAReference:
+    def test_new_table_not_flagged_on_any_dialect(self):
+        for dialect in DDL_DIALECTS:
+            assert _diags(_ddl("CREATE TABLE t9 (c1 integer)", dialect), "unknown-table") == [], dialect
+
+    def test_create_as_select_target_not_flagged(self):
+        r = _ddl("CREATE TABLE main.t9 AS SELECT c1 FROM main.t1", "sqlite")
+        assert _diags(r, "unknown-table") == []
+        assert _diags(r, "table-already-exists") == []
+
+    def test_if_not_exists_target_not_flagged(self):
+        assert _diags(_ddl("CREATE TABLE IF NOT EXISTS t9 (c1 integer)"), "unknown-table") == []
+
+    def test_view_target_not_flagged(self):
+        assert _diags(_ddl("CREATE VIEW v9 AS SELECT c1 FROM t1"), "unknown-table") == []
+
+    def test_later_reference_still_flagged(self):
+        # A buffer whose CREATE never ran has no t9 in the catalog, so the
+        # reference in statement two keeps its diagnostic.
+        diags = _diags(_ddl("CREATE TABLE t9 (c1 integer); SELECT c1 FROM t9"), "unknown-table")
+        assert len(diags) == 1
+        assert diags[0]["start_col"] == 45
+
+    def test_other_references_to_an_absent_table_still_flagged(self):
+        for sql in ("DROP TABLE t9",
+                    "ALTER TABLE t9 ADD COLUMN c9 integer",
+                    "INSERT INTO t9 (c1) VALUES (1)"):
+            assert len(_diags(_ddl(sql), "unknown-table")) == 1, sql
+
+
+class TestTableAlreadyExists:
+    def test_existing_name_flagged_on_any_dialect(self):
+        for dialect in DDL_DIALECTS:
+            diags = _diags(_ddl("CREATE TABLE t1 (c1 integer)", dialect), "table-already-exists")
+            assert len(diags) == 1, dialect
+            assert "main.t1" in diags[0]["message"], dialect
+
+    def test_new_name_not_flagged(self):
+        assert _diags(_ddl("CREATE TABLE t9 (c1 integer)"), "table-already-exists") == []
+
+    def test_create_as_select_existing_target_flagged(self):
+        sql = "CREATE TABLE main.t1 AS SELECT c1 FROM main.t2"
+        assert len(_diags(_ddl(sql, "sqlite"), "table-already-exists")) == 1
+
+    def test_if_not_exists_not_flagged(self):
+        assert _diags(_ddl("CREATE TABLE IF NOT EXISTS t1 (c1 integer)"), "table-already-exists") == []
+
+    def test_or_replace_not_flagged(self):
+        assert _diags(_ddl("CREATE OR REPLACE VIEW t1 AS SELECT c1 FROM t2"), "table-already-exists") == []
+
+    def test_temporary_not_flagged(self):
+        assert _diags(_ddl("CREATE TEMPORARY TABLE t1 (c1 integer)"), "table-already-exists") == []
+
+    def test_dropped_earlier_in_the_buffer_not_flagged(self):
+        sql = "DROP TABLE t1; CREATE TABLE t1 (c1 integer)"
+        assert _diags(_ddl(sql), "table-already-exists") == []
+
+    def test_dropped_after_the_create_still_flagged(self):
+        sql = "CREATE TABLE t1 (c1 integer); DROP TABLE t1"
+        assert len(_diags(_ddl(sql), "table-already-exists")) == 1
+
+    def test_unloaded_schema_not_flagged(self):
+        assert _diags(_ddl("CREATE TABLE other.t1 (c1 integer)"), "table-already-exists") == []
+
+    def test_empty_metadata_not_flagged(self):
+        r = analyze("CREATE TABLE t1 (c1 integer)", dialect="postgresql",
+                    schema_dict={}, default_schema="main")
+        assert _diags(r, "table-already-exists") == []
