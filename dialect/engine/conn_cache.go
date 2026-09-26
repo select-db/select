@@ -107,17 +107,21 @@ func CloseWorkspaceConns(workspaceID string) {
 	connCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 }
 
+// CellarDriver, when set, is the database/sql driver of managed databases and
+// the scheme of their DSNs. Only the backend builds such a DSN, never a user.
+var CellarDriver string
+
+// IsCellarDSN reports whether dsn is a managed database, served by a cellar.
+func IsCellarDSN(dsn string) bool {
+	return CellarDriver != "" && strings.HasPrefix(dsn, CellarDriver+"://")
+}
+
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
 // Concurrent first queries for one datasource share a single open.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
 	if dbType == "sqlite" && ssh != nil {
 		return nil, newConfigError("SSH tunneling is not supported for sqlite")
-	}
-	if OnSQLiteServer(dbType, dsn) {
-		// Its driver dials only the server the process configured, never a
-		// host from the DSN, so the outbound guard has nothing to check.
-		return openCached(workspaceID, dsn, func() (*sql.DB, error) { return sql.Open(SQLiteServer, dsn) }, pool...)
 	}
 
 	if ssh != nil {
@@ -147,8 +151,10 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		}
 	}
 
-	guardedDirect := false
-	if ssh == nil && EnforceOutboundGuard {
+	// The cellar driver dials only the cellar the backend configured, never a
+	// host from the DSN, so the guard has nothing to check.
+	guarded := ssh == nil && EnforceOutboundGuard && !IsCellarDSN(dsn)
+	if guarded {
 		// Proxy: only validated networked dialects may be dialed. Anything we
 		// cannot parse+validate, or any non-networked driver (sqlite and other
 		// local-file drivers open a path on THIS host), is refused.
@@ -160,36 +166,21 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		if verr := validateOutboundHost(host); verr != nil {
 			return nil, verr
 		}
-		// Authoritative check is the per-dial IP guard below (re-runs on the
+		// Authoritative check is the per-dial IP guard in open (re-runs on the
 		// real resolved IP), so rebinding is caught
-		guardedDirect = true
 	}
 	// Guard off (desktop app): dialing the user's own machine, incl. a local
 	// sqlite file, is the intended use and must not be restricted.
-	return openCached(workspaceID, dsn, func() (*sql.DB, error) {
-		if guardedDirect {
-			// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
-			return openGuardedDB(dbType, dsn)
-		}
-		return openDialect(dbType, dsn)
-	}, pool...)
+	return getOrOpen(workspaceID, dbType, dsn, guarded, pool...)
 }
 
 // GetOrOpenTrusted is GetOrOpenConn without the outbound guard, for a DSN the
-// caller built itself and never one a user supplied, such as its own file.
+// caller built itself and never one a user supplied: a cellar's own files.
 func GetOrOpenTrusted(workspaceID, dbType, dsn string, pool ...PoolConfig) (*sql.DB, error) {
-	return openCached(workspaceID, dsn, func() (*sql.DB, error) { return openDialect(dbType, dsn) }, pool...)
+	return getOrOpen(workspaceID, dbType, dsn, false, pool...)
 }
 
-func openDialect(dbType, dsn string) (*sql.DB, error) {
-	dialect := GetDialect(dbType)
-	if dialect == nil {
-		return nil, newConfigErrorf("unsupported database type: %s", dbType)
-	}
-	return dialect.OpenDB(dsn)
-}
-
-func openCached(workspaceID, dsn string, open func() (*sql.DB, error), pool ...PoolConfig) (*sql.DB, error) {
+func getOrOpen(workspaceID, dbType, dsn string, guarded bool, pool ...PoolConfig) (*sql.DB, error) {
 	var cfg PoolConfig
 	if len(pool) > 0 {
 		cfg = pool[0]
@@ -199,7 +190,7 @@ func openCached(workspaceID, dsn string, open func() (*sql.DB, error), pool ...P
 	// GetOrCreate opens at most once per key: concurrent first queries for one
 	// datasource share the open rather than each dialing. A failure is not cached.
 	value, err := connCache.GetOrCreate(hash, func() (any, error) {
-		db, err := open()
+		db, err := open(dbType, dsn, guarded)
 		if err != nil {
 			return nil, err
 		}
@@ -215,6 +206,21 @@ func openCached(workspaceID, dsn string, open func() (*sql.DB, error), pool ...P
 		return nil, err
 	}
 	return value.(*sql.DB), nil
+}
+
+func open(dbType, dsn string, guarded bool) (*sql.DB, error) {
+	if IsCellarDSN(dsn) {
+		return sql.Open(CellarDriver, dsn)
+	}
+	if guarded {
+		// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
+		return openGuardedDB(dbType, dsn)
+	}
+	dialect := GetDialect(dbType)
+	if dialect == nil {
+		return nil, newConfigErrorf("unsupported database type: %s", dbType)
+	}
+	return dialect.OpenDB(dsn)
 }
 
 // ClearConnCache drops all connection cache entries, closing each pool.

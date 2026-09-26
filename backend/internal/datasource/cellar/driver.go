@@ -31,7 +31,7 @@ const Scheme = "cellar"
 
 func init() {
 	sql.Register(Scheme, sqlDriver{})
-	engine.SQLiteServer = Scheme
+	engine.CellarDriver = Scheme
 }
 
 // ErrUnavailable is a cellar the backend could not reach. The cause, which
