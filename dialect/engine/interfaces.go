@@ -24,8 +24,6 @@ type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// statementConn is where statement runs: the pool, or a connection Prepare has
-// set up. Call release once the statement's rows are closed.
 // QueryRunsAll is a driver whose Query runs every statement, rows or not. The
 // engine never retries its failed Query as Exec: the statement may have run.
 type QueryRunsAll interface{ QueryRunsAll() }
@@ -36,6 +34,8 @@ func (c Conn) execFallback() bool {
 	return !runsAll
 }
 
+// statementConn is where statement runs: the pool, or a connection Prepare has
+// set up. Call release once the statement's rows are closed.
 func (c Conn) statementConn(ctx context.Context, statement string) (q querier, release func(), err error) {
 	if c.Prepare == nil {
 		return c.DB, func() {}, nil
