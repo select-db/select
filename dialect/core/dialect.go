@@ -45,6 +45,18 @@ type SQLDialect interface {
 	// dialect that opens no network connection refuses.
 	OpenGuardedDB(dsn string, dial DialFunc) (*sql.DB, error)
 
+	// DSNHost returns the host and port the driver dials. A dialect with no
+	// network target, or a DSN that does not parse, returns an error.
+	DSNHost(dsn string) (host string, port int, err error)
+	// DSNWithHost returns dsn pointed at host:port.
+	DSNWithHost(dsn, host string, port int) (string, error)
+	// DSNPassword returns the password in dsn, or "" when it holds none.
+	DSNPassword(dsn string) string
+	// DSNWithPassword returns dsn holding password.
+	DSNWithPassword(dsn, password string) string
+	// DSNWithoutPassword returns dsn with no password.
+	DSNWithoutPassword(dsn string) string
+
 	// GetSchemas returns all user schemas in the database.
 	// For PostgreSQL, this excludes system schemas (pg_*, information_schema).
 	// For SQLite, this returns ["main"] as SQLite doesn't have real schemas.

@@ -112,13 +112,18 @@ func CloseWorkspaceConns(workspaceID string) {
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
 // Concurrent first queries for one datasource share a single open.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
+	dialect := GetDialect(dbType)
+	if dialect == nil {
+		return nil, newConfigErrorf("unsupported database type: %s", dbType)
+	}
+
 	// Tunneled, then opened on the local port, unguarded:
 	//   - any datasource with SSH
 	// Refused:
 	//   - a DSN with no host to tunnel to, such as a sqlite file
 	if ssh != nil {
 		var err error
-		if dsn, err = tunneledDSN(workspaceID, dbType, dsn, *ssh); err != nil {
+		if dsn, err = tunneledDSN(workspaceID, dialect, dsn, *ssh); err != nil {
 			return nil, err
 		}
 	}
@@ -133,7 +138,7 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	if guarded {
 		// Refused:
 		//   - a DSN whose host does not parse, incl. a sqlite file (a path on this host)
-		host, _, perr := core.ParseDSNRemote(dbType, dsn)
+		host, _, perr := dialect.DSNHost(dsn)
 		if perr != nil {
 			return nil, fmt.Errorf("connection target is not permitted")
 		}
@@ -144,16 +149,20 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		// Authoritative check is the per-dial IP guard in open (re-runs on the
 		// real resolved IP), so rebinding is caught
 	}
-	return getOrOpen(workspaceID, dbType, dsn, guarded, pool...)
+	return getOrOpen(workspaceID, dialect, dsn, guarded, pool...)
 }
 
 // GetOrOpenTrusted opens with the dialect's driver, unguarded, for a DSN the
 // caller built itself and never one a user supplied: a cellar's own files.
 func GetOrOpenTrusted(workspaceID, dbType, dsn string, pool ...PoolConfig) (*sql.DB, error) {
-	return getOrOpen(workspaceID, dbType, dsn, false, pool...)
+	dialect := GetDialect(dbType)
+	if dialect == nil {
+		return nil, newConfigErrorf("unsupported database type: %s", dbType)
+	}
+	return getOrOpen(workspaceID, dialect, dsn, false, pool...)
 }
 
-func getOrOpen(workspaceID, dbType, dsn string, guarded bool, pool ...PoolConfig) (*sql.DB, error) {
+func getOrOpen(workspaceID string, dialect core.SQLDialect, dsn string, guarded bool, pool ...PoolConfig) (*sql.DB, error) {
 	var cfg PoolConfig
 	if len(pool) > 0 {
 		cfg = pool[0]
@@ -163,7 +172,7 @@ func getOrOpen(workspaceID, dbType, dsn string, guarded bool, pool ...PoolConfig
 	// GetOrCreate opens at most once per key: concurrent first queries for one
 	// datasource share the open rather than each dialing. A failure is not cached.
 	value, err := connCache.GetOrCreate(hash, func() (any, error) {
-		db, err := open(dbType, dsn, guarded)
+		db, err := open(dialect, dsn, guarded)
 		if err != nil {
 			return nil, err
 		}
@@ -181,11 +190,7 @@ func getOrOpen(workspaceID, dbType, dsn string, guarded bool, pool ...PoolConfig
 	return value.(*sql.DB), nil
 }
 
-func open(dbType, dsn string, guarded bool) (*sql.DB, error) {
-	dialect := GetDialect(dbType)
-	if dialect == nil {
-		return nil, newConfigErrorf("unsupported database type: %s", dbType)
-	}
+func open(dialect core.SQLDialect, dsn string, guarded bool) (*sql.DB, error) {
 	// Guarded dialer, re-validating the resolved IP at connect (beats rebinding):
 	//   - the server dialing a user's postgresql or mysql DSN
 	if guarded {

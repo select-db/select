@@ -2,8 +2,6 @@ package engine
 
 import (
 	"testing"
-
-	"github.com/selectDb/dialect/core"
 )
 
 func TestValidateOutboundHostDisabledByDefault(t *testing.T) {
@@ -49,16 +47,16 @@ func TestValidateOutboundHostEnforced(t *testing.T) {
 }
 
 // TestSSRFParserDifferentialClosed is the regression test for the SSRF guard
-// bypass: a libpq-quoted host must be unquoted by ParseDSNRemote (so it equals
+// bypass: a libpq-quoted host must be unquoted by DSNHost (so it equals
 // what lib/pq dials) and then blocked by the guard.
 func TestSSRFParserDifferentialClosed(t *testing.T) {
 	EnforceOutboundGuard = true
 	defer func() { EnforceOutboundGuard = false }()
 
 	dsn := "host='169.254.169.254' port=80 sslmode=disable dbname=x user=x"
-	host, port, err := core.ParseDSNRemote("postgresql", dsn)
+	host, port, err := GetDialect("postgresql").DSNHost(dsn)
 	if err != nil {
-		t.Fatalf("ParseDSNRemote error: %v", err)
+		t.Fatalf("DSNHost error: %v", err)
 	}
 	if host != "169.254.169.254" {
 		t.Fatalf("host = %q, want unquoted 169.254.169.254 (must match lib/pq)", host)

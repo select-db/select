@@ -70,8 +70,8 @@ func closeDeletedTunnel(_ string, value any) {
 
 // tunneledDSN opens, or reuses, the tunnel to the DSN's host and returns the
 // DSN pointed at its local end.
-func tunneledDSN(workspaceID, dbType, dsn string, ssh ResolvedSSHConfig) (string, error) {
-	remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
+func tunneledDSN(workspaceID string, dialect core.SQLDialect, dsn string, ssh ResolvedSSHConfig) (string, error) {
+	remoteHost, remotePort, err := dialect.DSNHost(dsn)
 	if err != nil {
 		return "", newConfigErrorf("parse DSN for SSH: %v", err)
 	}
@@ -88,7 +88,7 @@ func tunneledDSN(workspaceID, dbType, dsn string, ssh ResolvedSSHConfig) (string
 	if err != nil {
 		return "", fmt.Errorf("SSH tunnel local port: %w", err)
 	}
-	return core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
+	return dialect.DSNWithHost(dsn, "127.0.0.1", localPort)
 }
 
 // GetOrCreateTunnel returns a live cached tunnel, dialling via StartSSHTunnel on miss.
