@@ -19,8 +19,8 @@ import (
 	"backend/internal/auth"
 	server "backend/internal/cellar"
 
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
 
@@ -31,7 +31,7 @@ const Scheme = "cellar"
 
 func init() {
 	sql.Register(Scheme, sqlDriver{})
-	engine.CellarDriver = Scheme
+	sqlite.CellarDriver = Scheme
 }
 
 // ErrUnavailable is a cellar the backend could not reach. The cause, which

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/sqlite"
 )
 
 // ResolveDumpDSN returns a DSN safe for the out-of-process dump tools, which
@@ -34,7 +35,7 @@ func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (st
 		return core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
 	}
 
-	if !EnforceOutboundGuard || IsCellarDSN(dsn) {
+	if !EnforceOutboundGuard || sqlite.IsCellarDSN(dsn) {
 		return dsn, nil
 	}
 

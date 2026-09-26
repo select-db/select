@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
 
@@ -78,7 +79,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 			return nil, err
 		}
 		dsn = cellar.DSN(cellarID, id, workspaceID, workspace.Plan, int(workspace.Members))
-	} else if engine.IsCellarDSN(dsn) {
+	} else if sqlite.IsCellarDSN(dsn) {
 		// It would open another workspace's database.
 		return nil, errors.New("datasource DSN uses a reserved scheme")
 	}

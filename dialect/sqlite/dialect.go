@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -153,8 +154,25 @@ func (d *Dialect) Name() string {
 	return "sqlite"
 }
 
+// CellarDriver, when set, is the database/sql driver of managed databases and
+// the scheme of their DSNs. Only the backend builds such a DSN, never a user.
+var CellarDriver string
+
+// IsCellarDSN reports whether dsn is a managed database, served by a cellar.
+func IsCellarDSN(dsn string) bool {
+	return CellarDriver != "" && strings.HasPrefix(dsn, CellarDriver+"://")
+}
+
 func (d *Dialect) OpenDB(dsn string) (*sql.DB, error) {
+	if IsCellarDSN(dsn) {
+		return sql.Open(CellarDriver, dsn)
+	}
 	return sql.Open("sqlite3", dsn)
+}
+
+// OpenGuardedDB refuses: a sqlite DSN is a path on this host.
+func (d *Dialect) OpenGuardedDB(string, core.DialFunc) (*sql.DB, error) {
+	return nil, errors.New("connection target is not permitted")
 }
 
 // GetTables, GetViews, GetIndexes, GetTriggers, and GetStats are implemented in schema.go

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
 
@@ -107,15 +108,6 @@ func CloseWorkspaceConns(workspaceID string) {
 	connCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 }
 
-// CellarDriver, when set, is the database/sql driver of managed databases and
-// the scheme of their DSNs. Only the backend builds such a DSN, never a user.
-var CellarDriver string
-
-// IsCellarDSN reports whether dsn is a managed database, served by a cellar.
-func IsCellarDSN(dsn string) bool {
-	return CellarDriver != "" && strings.HasPrefix(dsn, CellarDriver+"://")
-}
-
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
 // Concurrent first queries for one datasource share a single open.
@@ -161,7 +153,7 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	//   - SSH, whose target was checked above
 	//   - the desktop app
 	//   - a cellar DSN, whose driver dials only the configured cellar
-	guarded := ssh == nil && EnforceOutboundGuard && !IsCellarDSN(dsn)
+	guarded := ssh == nil && EnforceOutboundGuard && !sqlite.IsCellarDSN(dsn)
 	if guarded {
 		// Refused:
 		//   - anything but postgresql or mysql, incl. a sqlite file (a path on this host)
@@ -215,24 +207,20 @@ func getOrOpen(workspaceID, dbType, dsn string, guarded bool, pool ...PoolConfig
 }
 
 func open(dbType, dsn string, guarded bool) (*sql.DB, error) {
-	// Cellar driver:
-	//   - a cellar DSN, the backend opening a managed database
-	if IsCellarDSN(dsn) {
-		return sql.Open(CellarDriver, dsn)
-	}
-	// Guarded dialer, re-validating the resolved IP at connect (beats rebinding):
-	//   - the server dialing a user's postgresql or mysql DSN
-	if guarded {
-		return openGuardedDB(dbType, dsn)
-	}
-	// Dialect's driver:
-	//   - the desktop app
-	//   - SSH, on the tunnel's local port
-	//   - a cellar's own file (GetOrOpenTrusted)
 	dialect := GetDialect(dbType)
 	if dialect == nil {
 		return nil, newConfigErrorf("unsupported database type: %s", dbType)
 	}
+	// Guarded dialer, re-validating the resolved IP at connect (beats rebinding):
+	//   - the server dialing a user's postgresql or mysql DSN
+	if guarded {
+		return dialect.OpenGuardedDB(dsn, guardedDial)
+	}
+	// Dialect's own dialing:
+	//   - the desktop app
+	//   - SSH, on the tunnel's local port
+	//   - a cellar DSN, which the sqlite dialect opens with the cellar driver
+	//   - a cellar's own file (GetOrOpenTrusted)
 	return dialect.OpenDB(dsn)
 }
 
