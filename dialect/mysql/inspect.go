@@ -169,6 +169,12 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 		read := core.NestUnderUnknown(i.preparedBody(prep)...)
 		return &read
 	}
+	// LOAD DATA reads a file, which the four row actions do not cover, and
+	// inserts what it read into the table and the columns it names.
+	if load := stmt.LoadStatement(); load != nil {
+		read := core.NestUnderUnknown(i.loadTarget(load))
+		return &read
+	}
 	// A boundary of this session's own transaction. LOCK TABLES and the XA
 	// forms share the grammar rule and are not that: a lock blocks other
 	// sessions, and an XA transaction can be ended by a session that did not
@@ -1029,7 +1035,80 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 		}
 		result.Subqueries = i.viewBody(cv.ViewTail())
 	}
+	// A routine, a trigger and an event body carry plain statements as parse
+	// nodes. Creating one is administration, and each statement in the body
+	// still needs the rights for the rows it names, whenever it runs.
+	for _, body := range []antlr.ParseTree{
+		core.TreeOrNil(stmt.CreateProcedure()),
+		core.TreeOrNil(stmt.CreateFunction()),
+		core.TreeOrNil(stmt.CreateTrigger()),
+		core.TreeOrNil(stmt.CreateEvent()),
+	} {
+		if body != nil {
+			result.Subqueries = append(result.Subqueries, i.bodyStatements(body)...)
+		}
+	}
 	return result
+}
+
+// bodyStatements is what the statements carried inside node require. Only the
+// outermost of them is inspected: a statement nested deeper is part of one
+// already read, which reports it itself. SQLite has the same function over the
+// four statement kinds its trigger bodies hold.
+func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
+	listener := &bodyStatementListener{
+		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
+		inspector:               i,
+	}
+	antlr.ParseTreeWalkerDefault.Walk(listener, node)
+	return listener.results
+}
+
+type bodyStatementListener struct {
+	*mysql.BaseMySQLParserListener
+	inspector *Inspector
+	results   []core.InspectStatement
+	depth     int
+}
+
+func (l *bodyStatementListener) EnterSimpleStatement(ctx *mysql.SimpleStatementContext) {
+	if l.depth == 0 {
+		if read := l.inspector.inspectStatement(ctx); read != nil {
+			l.results = append(l.results, *read)
+		}
+	}
+	l.depth++
+}
+
+func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementContext) {
+	l.depth--
+}
+
+// loadTarget is the insert a LOAD DATA performs. A file with no column list
+// fills every column, which is what naming none asks the right on.
+func (i *Inspector) loadTarget(stmt mysql.ILoadStatementContext) core.InspectStatement {
+	schema, table := i.resolveTableRef(stmt.TableRef())
+	if table == "" {
+		return core.UnknownStatement()
+	}
+	read := core.InspectStatement{
+		Operation: core.InspectOpInsert,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+	}
+	tail := stmt.LoadDataFileTail()
+	if tail == nil || tail.LoadDataFileTargetList() == nil {
+		return read
+	}
+	list := tail.LoadDataFileTargetList().FieldOrVariableList()
+	if list == nil {
+		return read
+	}
+	for _, col := range list.AllColumnRef() {
+		if name := i.columnRefName(col); name != "" {
+			read.Fields = append(read.Fields, core.InspectField{Name: name, Table: table, Schema: schema})
+		}
+	}
+	return read
 }
 
 // viewBody is the query a view is defined as, shared by CREATE VIEW and the

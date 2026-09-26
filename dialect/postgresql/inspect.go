@@ -14,6 +14,10 @@ type Inspector struct {
 	dialect  *Dialect
 	meta     core.Metadata
 	resolver core.Resolver
+
+	// inBody stops a statement read out of another's body from nesting again,
+	// which bounds the recursion on a body that carries a body.
+	inBody bool
 }
 
 // NewInspector creates a new PostgreSQL statement inspector
@@ -166,6 +170,28 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 	// is not a right to read rows, so EXECUTE cannot be a way around select.
 	if prepareStmt := stmt.Preparestmt(); prepareStmt != nil {
 		read := core.NestUnderUnknown(i.inspectPreparable(prepareStmt.Preparablestmt()))
+		return &read
+	}
+
+	// A DO block runs the statements of its body as part of running the block,
+	// and a routine body runs them whenever the routine is called. Writing the
+	// body is administration, and the statements in it still read and write
+	// what they name: manage is not a right to read or write rows.
+	if doStmt := stmt.Dostmt(); doStmt != nil {
+		read := core.NestUnderUnknown(i.bodyStatements(blockBodies(doStmt.Dostmt_opt_list()))...)
+		return &read
+	}
+
+	if funcStmt := stmt.Createfunctionstmt(); funcStmt != nil {
+		read := core.NestUnderUnknown(i.bodyStatements(routineBodies(funcStmt.Createfunc_opt_list()))...)
+		return &read
+	}
+
+	// CREATE SCHEMA carries its elements as parse nodes rather than as text, so
+	// the query a view among them is defined as is read here the same way the
+	// same CREATE VIEW on its own is.
+	if schemaStmt := stmt.Createschemastmt(); schemaStmt != nil {
+		read := core.NestUnderUnknown(i.schemaElementReads(schemaStmt.Optschemaeltlist())...)
 		return &read
 	}
 
@@ -827,6 +853,99 @@ func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.Inspe
 		return core.OrUnknown(i.inspectDelete(stmt.Deletestmt()))
 	}
 	return core.UnknownStatement()
+}
+
+// bodyStatements is what the statements of a procedural body require, read out
+// of the string constants carrying it, which are SQL of this dialect. A body
+// the parser cannot read reports its own floor, so a language this inspector
+// does not speak keeps manage and nothing more.
+func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectStatement {
+	if i.inBody {
+		return nil
+	}
+	var reads []core.InspectStatement
+	for _, body := range bodies {
+		text := bodyText(body)
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		inner := NewInspector(i.dialect, i.meta)
+		inner.inBody = true
+		reads = append(reads, inner.Inspect(text)...)
+	}
+	return reads
+}
+
+// bodyText is the SQL a string constant holds. The parser's own
+// GetRoutineBodyString takes one character too many off a plain string, which
+// turns the last name in the body into a table nobody holds a grant on. An
+// escape or a unicode string reports nothing and keeps the floor.
+func bodyText(sconst pg.ISconstContext) string {
+	anyconst := sconst.Anysconst()
+	if anyconst == nil {
+		return ""
+	}
+	if plain := anyconst.StringConstant(); plain != nil {
+		raw := plain.GetText()
+		if len(raw) < 2 {
+			return ""
+		}
+		return strings.ReplaceAll(raw[1:len(raw)-1], "''", "'")
+	}
+	var dollarQuoted strings.Builder
+	for _, part := range anyconst.AllDollarText() {
+		dollarQuoted.WriteString(part.GetText())
+	}
+	return dollarQuoted.String()
+}
+
+// blockBodies are the code strings of a DO block. LANGUAGE takes its own branch
+// of the grammar, so every sconst here is code.
+func blockBodies(list pg.IDostmt_opt_listContext) []pg.ISconstContext {
+	if list == nil {
+		return nil
+	}
+	var bodies []pg.ISconstContext
+	for _, item := range list.AllDostmt_opt_item() {
+		if body := item.Sconst(); body != nil {
+			bodies = append(bodies, body)
+		}
+	}
+	return bodies
+}
+
+// routineBodies are the definition strings of a CREATE FUNCTION or CREATE
+// PROCEDURE. A compiled language writes a file name and a symbol there instead,
+// and neither parses as a statement naming a table.
+func routineBodies(list pg.ICreatefunc_opt_listContext) []pg.ISconstContext {
+	if list == nil {
+		return nil
+	}
+	var bodies []pg.ISconstContext
+	for _, item := range list.AllCreatefunc_opt_item() {
+		if as := item.Func_as(); as != nil {
+			bodies = append(bodies, as.AllSconst()...)
+		}
+	}
+	return bodies
+}
+
+// schemaElementReads is what the elements of a CREATE SCHEMA require. A view is
+// the only element carrying a query; the others name objects the schema is
+// created with, and creating those is what the block's own manage covers.
+func (i *Inspector) schemaElementReads(list pg.IOptschemaeltlistContext) []core.InspectStatement {
+	if list == nil {
+		return nil
+	}
+	var reads []core.InspectStatement
+	for _, element := range list.AllSchema_stmt() {
+		view := element.Viewstmt()
+		if view == nil {
+			continue
+		}
+		reads = append(reads, core.OrUnknown(i.inspectCreateFrom(view.Qualified_name(), view.Selectstmt())))
+	}
+	return reads
 }
 
 // resolveAnyName extracts (schema, table) from an any_name node (used in DROP statements).

@@ -312,11 +312,65 @@ func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.Inspect
 		return nil
 	}
 	// No branch of the dispatcher reads this statement, so it takes manage for
-	// whatever it does. The reads nested in it are still reads: manage is not a
-	// right to read rows, so each of those tables needs its own select.
-	read := core.NestUnderUnknown(i.extractEmbeddedSubqueries(stmt)...)
+	// whatever it does. The statements carried inside it still read and write
+	// what they name: a trigger body writes its rows whenever it fires, and
+	// manage is not a right to read or write rows.
+	read := core.NestUnderUnknown(i.bodyStatements(stmt)...)
 	return &read
 }
+
+// bodyStatements is what the statements carried inside node require: the body
+// of a trigger, which SQLite writes as parse nodes. Only the outermost of them
+// is inspected, since one nested deeper is part of a statement already read.
+// MySQL has the same function over one node type, because its grammar puts
+// every statement of a body under simpleStatement; SQLite has no such node, so
+// the four kinds share one depth here.
+func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
+	listener := &bodyStatementListener{
+		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},
+		inspector:                i,
+	}
+	antlr.ParseTreeWalkerDefault.Walk(listener, node)
+	return listener.results
+}
+
+type bodyStatementListener struct {
+	*sqlite.BaseSQLiteParserListener
+	inspector *Inspector
+	results   []core.InspectStatement
+	depth     int
+}
+
+func (l *bodyStatementListener) collect(read *core.InspectStatement) {
+	if l.depth == 0 && read != nil && len(read.Tables) > 0 {
+		l.results = append(l.results, *read)
+	}
+	l.depth++
+}
+
+func (l *bodyStatementListener) EnterSelect_stmt(ctx *sqlite.Select_stmtContext) {
+	l.collect(l.inspector.inspectSelect(ctx))
+}
+
+func (l *bodyStatementListener) ExitSelect_stmt(_ *sqlite.Select_stmtContext) { l.depth-- }
+
+func (l *bodyStatementListener) EnterInsert_stmt(ctx *sqlite.Insert_stmtContext) {
+	l.collect(l.inspector.inspectInsert(ctx))
+}
+
+func (l *bodyStatementListener) ExitInsert_stmt(_ *sqlite.Insert_stmtContext) { l.depth-- }
+
+func (l *bodyStatementListener) EnterUpdate_stmt(ctx *sqlite.Update_stmtContext) {
+	l.collect(l.inspector.inspectUpdate(ctx))
+}
+
+func (l *bodyStatementListener) ExitUpdate_stmt(_ *sqlite.Update_stmtContext) { l.depth-- }
+
+func (l *bodyStatementListener) EnterDelete_stmt(ctx *sqlite.Delete_stmtContext) {
+	l.collect(l.inspector.inspectDelete(ctx))
+}
+
+func (l *bodyStatementListener) ExitDelete_stmt(_ *sqlite.Delete_stmtContext) { l.depth-- }
 
 // inspectSelect analyzes a SELECT statement, including UNION/INTERSECT/EXCEPT compounds.
 func (i *Inspector) inspectSelect(selectStmt sqlite.ISelect_stmtContext) *core.InspectStatement {
