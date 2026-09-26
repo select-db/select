@@ -62,31 +62,28 @@ func isMetadataIP(ip net.IP) bool {
 // user's own machine, so it stays off (default).
 var EnforceOutboundGuard bool
 
-// checkHostBlocked resolves host and rejects it if any IP matches blocked.
-// Fails closed: unparseable/unresolvable host is rejected (the driver may
-// still dial it). Pre-dial only; no DNS-rebinding defence (out of scope).
-func checkHostBlocked(host string, blocked func(net.IP) bool) error {
+// resolveAllowed resolves host and returns its IPs. The one rule for every
+// outbound check: the host is refused when it does not resolve or when any of
+// its IPs is blocked, since the driver may dial any of them.
+func resolveAllowed(host string, blocked func(net.IP) bool) ([]net.IP, error) {
 	host = strings.TrimSpace(host)
 	host = strings.Trim(host, "[]") // strip IPv6 literal brackets
 	if host == "" {
-		return fmt.Errorf("connection target is not permitted")
+		return nil, fmt.Errorf("connection target is not permitted")
 	}
-	if ip := net.ParseIP(host); ip != nil {
-		if blocked(ip) {
-			return fmt.Errorf("connection to %q is not permitted", host)
+	ips := []net.IP{net.ParseIP(host)}
+	if ips[0] == nil {
+		var err error
+		if ips, err = net.LookupIP(host); err != nil || len(ips) == 0 {
+			return nil, fmt.Errorf("connection to %q is not permitted", host)
 		}
-		return nil
-	}
-	ips, err := net.LookupIP(host)
-	if err != nil || len(ips) == 0 {
-		return fmt.Errorf("connection to %q is not permitted", host)
 	}
 	for _, ip := range ips {
 		if blocked(ip) {
-			return fmt.Errorf("connection to %q is not permitted", host)
+			return nil, fmt.Errorf("connection to %q is not permitted", host)
 		}
 	}
-	return nil
+	return ips, nil
 }
 
 // validateOutboundHost: a direct proxy->DB dial. Blocks loopback too (reaching
@@ -95,7 +92,8 @@ func validateOutboundHost(host string) error {
 	if !EnforceOutboundGuard {
 		return nil
 	}
-	return checkHostBlocked(host, isBlockedIP)
+	_, err := resolveAllowed(host, isBlockedIP)
+	return err
 }
 
 // validateTunnelTarget: the DB host a bastion dials on our behalf. Blocks
@@ -105,5 +103,6 @@ func validateTunnelTarget(host string) error {
 	if !EnforceOutboundGuard {
 		return nil
 	}
-	return checkHostBlocked(host, isMetadataIP)
+	_, err := resolveAllowed(host, isMetadataIP)
+	return err
 }

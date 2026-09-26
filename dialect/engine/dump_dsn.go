@@ -2,8 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"net"
-	"strings"
 
 	"github.com/selectDb/dialect/sqlite"
 )
@@ -40,34 +38,9 @@ func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (st
 	if err != nil {
 		return "", fmt.Errorf("connection target is not permitted")
 	}
-	ip, err := resolveAllowedIP(host)
+	ips, err := resolveAllowed(host, isBlockedIP)
 	if err != nil {
 		return "", err
 	}
-	return dialect.DSNWithHost(dsn, ip, port)
-}
-
-// resolveAllowedIP returns the first guard-passing IP for host, failing closed
-// if none. A literal IP leaves no second resolution to rebind.
-func resolveAllowedIP(host string) (string, error) {
-	host = strings.TrimSpace(strings.Trim(host, "[]"))
-	if host == "" {
-		return "", fmt.Errorf("connection target is not permitted")
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		if isBlockedIP(ip) {
-			return "", fmt.Errorf("connection to %q is not permitted", host)
-		}
-		return ip.String(), nil
-	}
-	ips, err := net.LookupIP(host)
-	if err != nil || len(ips) == 0 {
-		return "", fmt.Errorf("connection to %q is not permitted", host)
-	}
-	for _, ip := range ips {
-		if !isBlockedIP(ip) {
-			return ip.String(), nil
-		}
-	}
-	return "", fmt.Errorf("connection to %q is not permitted", host)
+	return dialect.DSNWithHost(dsn, ips[0].String(), port)
 }
