@@ -42,6 +42,11 @@ func (r Resolver) virtualNames(s Scope) map[string]bool {
 // schema, which is refused for every role. Only such a name can be virtual:
 // dropping a qualified one would be a read nobody checks, so a qualified name
 // keeps the schema it was written with whether or not the metadata has it.
+//
+// A ref the walker marked IsVirtual is a name the statement binds, so it is
+// dropped whether or not the derived relation reported any column: a VALUES
+// list reports none, and asking for a right on its alias asks for one no grant
+// can express.
 func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 	virtual := r.virtualNames(s)
 	var tables []InspectTable
@@ -51,7 +56,7 @@ func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 		if ref.Schema == "" && ref.Table == "" {
 			continue
 		}
-		if !ref.Qualified && virtual[r.Dialect.NormalizeIdentifier(ref.Table)] {
+		if !ref.Qualified && (ref.IsVirtual || virtual[r.Dialect.NormalizeIdentifier(ref.Table)]) {
 			continue
 		}
 
