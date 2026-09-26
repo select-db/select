@@ -43,8 +43,8 @@ Seven tools, no shell access, no file access. The model is bounded to the dataso
 | Tool                          | Effect                                                                |
 |-------------------------------|-----------------------------------------------------------------------|
 | `list_datasources`            | Lists the workspace's datasources the API key's role can touch, each with its permission rules as `effect.action.schema.table.column` strings (e.g. `allow.select.public.*.*`, `deny.select.public.users.password`). Datasources the role has no allow rules on are omitted. |
-| `get_datasource_schemas`        | Lists schemas, tables, and views for a datasource.                    |
-| `get_datasource_table_detail`   | Returns the DDL string for one table or view.                         |
+| `get_datasource_schemas`      | Lists schemas, tables, and views for a datasource.                    |
+| `get_datasource_table_detail` | Returns the DDL string for one table or view.                         |
 | `execute_query`               | Runs a read-only statement and returns up to 250 rows.                 |
 | `execute_statement`           | Runs a write or DDL statement. Host prompts the user via the `destructiveHint` annotation. |
 | `plan_query`                  | Returns the planner's tree without executing the query.               |

@@ -215,7 +215,7 @@ func writeDatasource(root string) error {
   },
   "proxified": false
 }`
-	if err := writeIfMissing(filepath.Join(dbDir, "datasource.config.json"), []byte(config)); err != nil {
+	if err := writeIfMissing(filepath.Join(dbDir, graph.DatasourceConfigFileName), []byte(config)); err != nil {
 		return err
 	}
 

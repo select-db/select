@@ -11,8 +11,7 @@ export function getEffectiveSelectedDatasourceId(
 	if (!file) return null;
 	const selected = tab?.file?.activeDatasourceId;
 	if (selected != null && selected !== '') return selected;
-	const dbs = file.datasources;
-	return dbs?.[0]?.id ?? null;
+	return file.datasources?.[0]?.id ?? null;
 }
 
 /**

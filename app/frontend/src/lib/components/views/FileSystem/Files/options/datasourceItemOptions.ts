@@ -1,6 +1,6 @@
 import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { modalStore } from '$lib/system/Modal/ModalStore';
-import DatasourceSystemInfo from '../../modals/ItemInfoModal.svelte';
+import ItemInfoModal from '../../modals/ItemInfoModal.svelte';
 import type * as graph from '$lib/wails/graph';
 import {
 	isPreviewableDatasourceItem,
@@ -12,7 +12,7 @@ const infoOption = {
 	runOnClick: true,
 	action: async (onClose, item: graph.DatasourceItemNode) => {
 		modalStore.set({
-			content: () => DatasourceSystemInfo,
+			content: () => ItemInfoModal,
 			props: { item },
 			width: 600
 		});

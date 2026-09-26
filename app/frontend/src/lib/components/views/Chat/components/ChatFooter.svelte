@@ -11,7 +11,11 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import { updateTab, datasourceToContext, getAllGroups } from '$lib/components/Layout/layoutStore';
 	import { findItemById } from '$lib/components/views/FileSystem/Files/helpers/dragHelpers';
-	import type { Tab, ChatContextFile } from '$lib/components/Layout/layoutStore';
+	import type {
+		Tab,
+		ChatContextFile,
+		ChatContextDatasource
+	} from '$lib/components/Layout/layoutStore';
 	import type { ResourceMenuOption } from '$lib/components/ResourceMenu/types';
 	import type * as graph from '$lib/wails/graph';
 
@@ -89,11 +93,10 @@
 	function handleDatasourceChange(v: string | string[]) {
 		const ids = Array.isArray(v) ? v : v ? [v] : [];
 		const ws = get(workspaceGraphStore);
-		const all = ws?.datasources ?? [];
+		const all = (ws?.datasources ?? []).map(datasourceToContext);
 		const datasources = ids
 			.map((id) => all.find((d) => d.id === id))
-			.filter(Boolean)
-			.map((d) => datasourceToContext(d!));
+			.filter((d): d is ChatContextDatasource => d != null);
 
 		updateTab({
 			...tab,

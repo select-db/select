@@ -77,9 +77,9 @@ type permissionKey struct {
 
 // CompiledPermissions is a compiled []PermissionEntry for fast lookups.
 type CompiledPermissions struct {
-	deny             map[permissionKey]string
-	allow            map[permissionKey]string
-	managedInstances map[string]bool
+	deny               map[permissionKey]string
+	allow              map[permissionKey]string
+	managedDatasources map[string]bool
 	// When set, IsManaged returns true for every DB, forcing the
 	// per-statement allow scan even when the role has no rules on a DB
 	denyUnmanaged bool
@@ -94,15 +94,15 @@ func derefWildcard(s *string) string {
 
 func Compile(entries []PermissionEntry) CompiledPermissions {
 	idx := CompiledPermissions{
-		deny:             make(map[permissionKey]string),
-		allow:            make(map[permissionKey]string),
-		managedInstances: make(map[string]bool),
+		deny:               make(map[permissionKey]string),
+		allow:              make(map[permissionKey]string),
+		managedDatasources: make(map[string]bool),
 	}
 
 	for _, e := range entries {
 		datasourceID := derefWildcard(e.DatasourceID)
 		if e.DatasourceID != nil {
-			idx.managedInstances[datasourceID] = true
+			idx.managedDatasources[datasourceID] = true
 		}
 
 		k := permissionKey{
@@ -122,7 +122,7 @@ func Compile(entries []PermissionEntry) CompiledPermissions {
 }
 
 func (idx CompiledPermissions) IsManaged(datasourceID string) bool {
-	return idx.denyUnmanaged || idx.managedInstances[datasourceID]
+	return idx.denyUnmanaged || idx.managedDatasources[datasourceID]
 }
 
 // WithDenyUnmanaged returns a copy where "no rules on a DB" means deny.
@@ -207,7 +207,7 @@ func checkStatement(stmt InspectStatement, datasourceID string, compiledPermissi
 	switch action {
 	case ActionNone:
 	case ActionManage:
-		err = checkInstance(stmt, datasourceID, compiledPermissions)
+		err = checkDatasource(stmt, datasourceID, compiledPermissions)
 	default:
 		err = checkTables(stmt, action, datasourceID, compiledPermissions)
 	}
@@ -249,10 +249,10 @@ func scopeBareRead(read InspectStatement, tested []InspectField) InspectStatemen
 	return read
 }
 
-// checkInstance checks manage, which is granted on the connection rather than
+// checkDatasource checks manage, which is granted on the connection rather than
 // per table. It is also the only check a statement we could not resolve can
 // get: that statement names no table, so a per-table walk would see nothing.
-func checkInstance(stmt InspectStatement, datasourceID string, compiledPermissions CompiledPermissions) error {
+func checkDatasource(stmt InspectStatement, datasourceID string, compiledPermissions CompiledPermissions) error {
 	allowed, role := compiledPermissions.manageAllowed(datasourceID)
 	if allowed {
 		return nil

@@ -16,7 +16,7 @@
 	import FieldIndicators from '$lib/components/views/shared/FieldIndicators.svelte';
 	import DatasourceIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceIndicator.svelte';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
-	import DatasourceSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
+	import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 
 	type DatasourceItem = {
 		id?: string;
@@ -110,7 +110,7 @@
 		if (!target) return;
 
 		modalStore.set({
-			content: () => DatasourceSystemInfo,
+			content: () => ItemInfoModal,
 			props: { item: target },
 			width: 600
 		});
@@ -140,7 +140,7 @@
 					: {}),
 				action: () =>
 					modalStore.set({
-						content: () => DatasourceSystemInfo,
+						content: () => ItemInfoModal,
 						props: { item: child },
 						width: 600
 					})

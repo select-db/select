@@ -2,7 +2,7 @@ import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 import { modalStore } from '$lib/system/Modal/ModalStore';
 import { loadSchema } from '$lib/utils/query/loadSchema';
 import type * as graph from '$lib/wails/graph';
-import DatasourceSystemInfo from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
+import ItemInfoModal from '$lib/components/views/FileSystem/modals/ItemInfoModal.svelte';
 
 import { deleteEntries } from '$lib/components/views/shared/deleteEntries';
 import { navigateToDatasource } from '$lib/components/views/shared/navigateToDatasource';
@@ -31,7 +31,7 @@ export const datasourceOptions = [
 		label: 'Infos...',
 		action: async (onClose, datasource: graph.DatasourceNode) => {
 			modalStore.set({
-				content: () => DatasourceSystemInfo,
+				content: () => ItemInfoModal,
 				props: { item: datasource },
 				width: 600
 			});

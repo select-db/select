@@ -837,9 +837,9 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 	if (!group || !ws) return;
 
 	const activeTab = getActiveTab();
-	const allDbs = ws.datasources.map(datasourceToContext);
+	const allDatasources = ws.datasources.map(datasourceToContext);
 
-	let datasources: ChatContextDatasource[] = allDbs;
+	let datasources: ChatContextDatasource[] = allDatasources;
 	let files: ChatContextFile[] = [];
 
 	const taskDatasourceId =
@@ -850,11 +850,11 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 		const fileDatasourceIds = file.datasources?.map((d) => d.id).filter(Boolean) ?? [];
 		if (fileDatasourceIds.length > 0) {
 			datasources = fileDatasourceIds
-				.map((id) => allDbs.find((d) => d.id === id))
+				.map((id) => allDatasources.find((d) => d.id === id))
 				.filter((d): d is ChatContextDatasource => d != null);
 		} else {
 			const activeId = activeTab.file?.activeDatasourceId ?? taskDatasourceId ?? undefined;
-			const one = activeId ? allDbs.find((d) => d.id === activeId) : undefined;
+			const one = activeId ? allDatasources.find((d) => d.id === activeId) : undefined;
 			if (one) datasources = [one];
 		}
 		// Temp tabs: ResourceMenu / getOpenTabOptions use Tab.id; virtual FileNode.id is temp://…
@@ -868,7 +868,7 @@ export const addChatTab = (task?: Record<string, unknown>) => {
 	} else if (activeTab?.datasource?.node) {
 		datasources = [datasourceToContext(activeTab.datasource.node)];
 	} else if (activeTab?.schema?.datasourceId) {
-		const one = allDbs.find((d) => d.id === activeTab.schema!.datasourceId);
+		const one = allDatasources.find((d) => d.id === activeTab.schema!.datasourceId);
 		if (one) datasources = [one];
 	}
 

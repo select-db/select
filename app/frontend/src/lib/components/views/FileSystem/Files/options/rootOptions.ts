@@ -14,8 +14,8 @@ type FolderLike = graph.FolderNode | graph.DatasourceNode;
 /**
  * Every name the folder is already using, whatever kind of thing is using it.
  *
- * One namespace, because a directory has one: a database is a directory now,
- * so a database named for a folder that is already there does not fail, it
+ * One namespace, because a directory has one: a datasource is a directory,
+ * so a datasource named for a folder that is already there does not fail, it
  * writes a datasource.config.json into that folder and takes it over.
  */
 const namesInFolder = (folder: FolderLike): Set<string> =>
@@ -89,10 +89,10 @@ export const rootOptions = [
 		action: async (onClose, folder: graph.FolderNode) => {
 			const { uri, id } = folder;
 			const name = findUniqueName(namesInFolder(folder), (n) => `db #${n}`);
-			const { id: datasourceId, uri: dbUri } = await writeDatasource(uri, name);
+			const { id: datasourceId, uri: datasourceUri } = await writeDatasource(uri, name);
 			navigateToDatasource({
 				id: datasourceId,
-				uri: dbUri,
+				uri: datasourceUri,
 				type: 'datasource',
 				name,
 				folder_id: id,

@@ -6,7 +6,7 @@ import type * as graph from '$lib/wails/graph';
 import { notifyError } from '$lib/system/Notifications/notificationsStore';
 
 import { tryCatch } from '../tryCatch';
-import { ensureSSHPassphraseForInstance } from '../ssh/passphrase';
+import { ensureSSHPassphraseForDatasource } from '../ssh/passphrase';
 import { pushToLoadingStore, removeFromLoadingStore } from './loadingStore';
 import { executions, markCancelled, waitForStarted } from './queryStream.svelte';
 import { registerPendingHistory } from './historyRecorder';
@@ -32,7 +32,7 @@ const runOperation = async <T extends RunOperationParams, R>(
 
 	if (err) {
 		// Encrypted SSH key: prompt once for the passphrase, then retry.
-		if (!retried && (await ensureSSHPassphraseForInstance(DatasourceID, err.message))) {
+		if (!retried && (await ensureSSHPassphraseForDatasource(DatasourceID, err.message))) {
 			return runOperation(params, executor, failureMessage, true);
 		}
 		notifyError(failureMessage);
@@ -101,7 +101,7 @@ export const runQuery = async (
 		// briefly show a stuck spinner.
 		removeFromLoadingStore(DatasourceID, FileID);
 		// Encrypted SSH key: prompt once for the passphrase, then retry.
-		if (!retried && (await ensureSSHPassphraseForInstance(DatasourceID, start.errors[0]))) {
+		if (!retried && (await ensureSSHPassphraseForDatasource(DatasourceID, start.errors[0]))) {
 			return runQuery(params, true);
 		}
 		// Return an error result (not null) so the failure surfaces in the
@@ -113,7 +113,7 @@ export const runQuery = async (
 	if (waitErr || !exec) {
 		const msg = waitErr?.message ?? 'Failed to run query';
 		// Encrypted SSH key: prompt once for the passphrase, then retry.
-		if (!retried && (await ensureSSHPassphraseForInstance(DatasourceID, msg))) {
+		if (!retried && (await ensureSSHPassphraseForDatasource(DatasourceID, msg))) {
 			removeFromLoadingStore(DatasourceID, FileID);
 			return runQuery(params, true);
 		}

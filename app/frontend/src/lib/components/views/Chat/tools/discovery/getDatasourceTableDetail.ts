@@ -32,7 +32,7 @@ async function getDatasourceTableDetailImpl(args: unknown) {
 
 	if (error) {
 		return {
-			datasourceId: datasourceId,
+			datasourceId,
 			schemaId,
 			tableName: '',
 			ddl: '',

@@ -8,7 +8,7 @@ const inputSchema = z.object({
 
 export const getDatasourceSchemasDef = toolDefinition({
 	name: 'get_datasource_schemas',
-	description: `Returns all schemas for a database with table and view names in each. Use this first; then call get_datasource_table_detail(schemaId, tableName) when you need a table's DDL. If error is returned, surface it to the user and do not proceed.`,
+	description: `Returns all schemas for a datasource with table and view names in each. Use this first; then call get_datasource_table_detail(schemaId, tableName) when you need a table's DDL. If error is returned, surface it to the user and do not proceed.`,
 	inputSchema,
 	outputSchema: z.object({
 		datasourceId: z.string(),
@@ -36,7 +36,7 @@ async function getDatasourceSchemasImpl(args: unknown) {
 
 	if (error) {
 		return {
-			datasourceId: datasourceId,
+			datasourceId,
 			datasourceName: '',
 			dialect: '',
 			schemas: [],

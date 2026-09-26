@@ -54,7 +54,7 @@ export const ensureSSHPassphrase = async (
  * Same as ensureSSHPassphrase but resolves the key file path from a datasource
  * id (for callers that only know the instance, e.g. the query runner).
  */
-export const ensureSSHPassphraseForInstance = async (
+export const ensureSSHPassphraseForDatasource = async (
 	datasourceId: string,
 	error: string | null | undefined
 ): Promise<boolean> => {

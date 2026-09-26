@@ -60,33 +60,33 @@ type DatasourceSSHConfig struct {
 	HostKey    string `json:"host_key"` // pinned bastion public key
 }
 
-func BuildDatasourceNode(dbi DatasourceDTO) *DatasourceNode {
-	folderID := dbi.FolderID
+func BuildDatasourceNode(dto DatasourceDTO) *DatasourceNode {
+	folderID := dto.FolderID
 	if *folderID == "" {
 		folderID = utils.Ptr("root")
 	}
 
 	workspaceID := ""
-	if dbi.WorkspaceID != nil {
-		workspaceID = *dbi.WorkspaceID
+	if dto.WorkspaceID != nil {
+		workspaceID = *dto.WorkspaceID
 	}
 
-	children := dbi.Children
+	children := dto.Children
 	if children == nil {
 		children = []*DatasourceItemNode{}
 	}
-	files := dbi.Files
+	files := dto.Files
 	if files == nil {
 		files = []*FileNode{}
 	}
-	folders := dbi.Folders
+	folders := dto.Folders
 	if folders == nil {
 		folders = []*FolderNode{}
 	}
 
 	var sshConfig *DatasourceSSHConfig
-	if dbi.SSH != nil {
-		ssh := *dbi.SSH
+	if dto.SSH != nil {
+		ssh := *dto.SSH
 		// Default port to 22 if not set and SSH is enabled.
 		if ssh.Enabled && ssh.Port == 0 {
 			ssh.Port = 22
@@ -95,18 +95,18 @@ func BuildDatasourceNode(dbi DatasourceDTO) *DatasourceNode {
 	}
 
 	proxified := false
-	if dbi.Proxified != nil {
-		proxified = *dbi.Proxified
+	if dto.Proxified != nil {
+		proxified = *dto.Proxified
 	}
 
 	return &DatasourceNode{
-		ID:   *dbi.ID,
-		URI:  *dbi.URI,
+		ID:   *dto.ID,
+		URI:  *dto.URI,
 		Type: "datasource",
 
-		Name:      *utils.DefaultIfNil(dbi.Name, ""),
-		DBType:    *utils.DefaultIfNil(dbi.DBType, "postgresql"),
-		DSN:       *utils.DefaultIfNil(dbi.DSN, ""),
+		Name:      *utils.DefaultIfNil(dto.Name, ""),
+		DBType:    *utils.DefaultIfNil(dto.DBType, "postgresql"),
+		DSN:       *utils.DefaultIfNil(dto.DSN, ""),
 		Proxified: proxified,
 
 		SSH: sshConfig,
@@ -120,58 +120,58 @@ func BuildDatasourceNode(dbi DatasourceDTO) *DatasourceNode {
 	}
 }
 
-func (dbi *DatasourceNode) GetIDs() []string {
-	return []string{dbi.ID, dbi.URI}
+func (dto *DatasourceNode) GetIDs() []string {
+	return []string{dto.ID, dto.URI}
 }
 
-func (dbi *DatasourceNode) GetParentIDs() []string {
-	return []string{dbi.FolderID, dbi.WorkspaceID}
+func (dto *DatasourceNode) GetParentIDs() []string {
+	return []string{dto.FolderID, dto.WorkspaceID}
 }
 
-func (dbi *DatasourceNode) RemoveChildByIDs(IDs []string) bool {
-	for i, child := range dbi.Children {
+func (dto *DatasourceNode) RemoveChildByIDs(IDs []string) bool {
+	for i, child := range dto.Children {
 		if toolkit.Intersects(child.GetIDs(), IDs) {
-			dbi.Children = slices.Delete(dbi.Children, i, i+1)
+			dto.Children = slices.Delete(dto.Children, i, i+1)
 			return true
 		}
 	}
-	for i, file := range dbi.Files {
+	for i, file := range dto.Files {
 		if toolkit.Intersects(file.GetIDs(), IDs) {
-			dbi.Files = slices.Delete(dbi.Files, i, i+1)
+			dto.Files = slices.Delete(dto.Files, i, i+1)
 			return true
 		}
 	}
-	for i, folder := range dbi.Folders {
+	for i, folder := range dto.Folders {
 		if toolkit.Intersects(folder.GetIDs(), IDs) {
-			dbi.Folders = slices.Delete(dbi.Folders, i, i+1)
+			dto.Folders = slices.Delete(dto.Folders, i, i+1)
 			return true
 		}
 	}
 	return false
 }
 
-func (dbi *DatasourceNode) GetChildren() []Node {
-	nodes := make([]Node, 0, len(dbi.Children)+len(dbi.Files)+len(dbi.Folders))
-	for _, c := range dbi.Children {
+func (dto *DatasourceNode) GetChildren() []Node {
+	nodes := make([]Node, 0, len(dto.Children)+len(dto.Files)+len(dto.Folders))
+	for _, c := range dto.Children {
 		nodes = append(nodes, c)
 	}
-	for _, f := range dbi.Files {
+	for _, f := range dto.Files {
 		nodes = append(nodes, f)
 	}
-	for _, folder := range dbi.Folders {
+	for _, folder := range dto.Folders {
 		nodes = append(nodes, folder)
 	}
 	return nodes
 }
 
-func (dbi *DatasourceNode) AddChild(n Node) bool {
+func (dto *DatasourceNode) AddChild(n Node) bool {
 	switch node := n.(type) {
 	case *DatasourceItemNode:
-		dbi.Children = append(dbi.Children, node)
+		dto.Children = append(dto.Children, node)
 	case *FileNode:
-		dbi.Files = append(dbi.Files, node)
+		dto.Files = append(dto.Files, node)
 	case *FolderNode:
-		dbi.Folders = append(dbi.Folders, node)
+		dto.Folders = append(dto.Folders, node)
 	default:
 		return false
 	}

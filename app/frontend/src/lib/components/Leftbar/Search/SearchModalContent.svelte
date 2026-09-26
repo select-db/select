@@ -43,9 +43,8 @@
 	}
 
 	$effect(() => {
-		const dbs = datasources;
-		const datasourceIds = dbs.map((d) => d.id);
-		const schemaIds = dbs.flatMap((db) =>
+		const datasourceIds = datasources.map((d) => d.id);
+		const schemaIds = datasources.flatMap((db) =>
 			db.children.filter((c) => c.type === 'schema').map((c) => c.id)
 		);
 		untrack(() => {
@@ -59,12 +58,11 @@
 	});
 
 	const searchScope = $derived.by((): ResourceSearchScope | undefined => {
-		const dbs = datasources;
-		if (dbs.length === 0) return undefined;
+		if (datasources.length === 0) return undefined;
 
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const knownSchemaIds = new Set<string>();
-		for (const db of dbs) {
+		for (const db of datasources) {
 			for (const ch of db.children) {
 				if (ch.type === 'schema') knownSchemaIds.add(ch.id);
 			}
@@ -72,7 +70,7 @@
 
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set built and consumed within this derivation
 		const enabledDatasourceIds = new Set<string>();
-		for (const db of dbs) {
+		for (const db of datasources) {
 			if (datasourceOn[db.id] !== false) enabledDatasourceIds.add(db.id);
 		}
 
