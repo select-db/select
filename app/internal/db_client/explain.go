@@ -13,7 +13,7 @@ import (
 type ExplainParams struct {
 	FileID       string
 	Statement    string
-	DbInstanceID string
+	DatasourceID string
 	FolderID     string
 	RuntimeVars  map[string]string
 }
@@ -24,20 +24,20 @@ func (dbc *DbClient) Explain(params ExplainParams) graph.ExplainResult {
 		result.Id = id
 	}
 
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DbInstanceID)
-	if dbInstance == nil {
-		result.Errors = []string{fmt.Sprintf("failed to get DB instance with id: %s", params.DbInstanceID)}
+	datasource := dbc.Graph.GetDatasourceNodeByID(params.DatasourceID)
+	if datasource == nil {
+		result.Errors = []string{fmt.Sprintf("failed to get datasource with id: %s", params.DatasourceID)}
 		return result
 	}
 
-	parser, err := core.NewExplainParser(dbInstance.DBType)
+	parser, err := core.NewExplainParser(datasource.DBType)
 	if err != nil {
-		result.Errors = []string{fmt.Sprintf("explain not supported for %s: %v", dbInstance.DBType, err)}
+		result.Errors = []string{fmt.Sprintf("explain not supported for %s: %v", datasource.DBType, err)}
 		return result
 	}
 
 	engineResult, _ := dbc.execute(executeParams{
-		DbInstanceID: params.DbInstanceID,
+		DatasourceID: params.DatasourceID,
 		FileID:       params.FileID,
 		Statement:    parser.BuildExplainQuery(params.Statement),
 		FolderID:     params.FolderID,

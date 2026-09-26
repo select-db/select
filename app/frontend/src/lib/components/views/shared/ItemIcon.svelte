@@ -3,7 +3,7 @@
 	import { expandedItemIdsStore } from '$lib/components/views/shared/sharedStore';
 	import type * as graph from '$lib/wails/graph';
 	import { getItemIconSlot } from '$lib/components/views/shared/getIcon';
-	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
+	import DatasourceIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceIndicator.svelte';
 	import { expandableItemTypes } from './expandableItemTypes';
 
 	let {
@@ -11,7 +11,7 @@
 		muted,
 		noDepth
 	}: {
-		item: graph.FileNode | graph.FolderNode | graph.DBInstanceNode | graph.DBInstanceItemNode;
+		item: graph.FileNode | graph.FolderNode | graph.DatasourceNode | graph.DatasourceItemNode;
 		muted?: boolean;
 		noDepth?: boolean;
 	} = $props();
@@ -61,8 +61,8 @@
 	/>
 	{#if slot.content.kind === 'file'}
 		<Icon icon={slot.content.icon} size={slot.content.size} stroke={slot.content.color} />
-	{:else if slot.content.kind === 'database-indicator'}
-		<DatabaseIndicator id={slot.content.id} size={16} loaderSize={14} />
+	{:else if slot.content.kind === 'datasource-indicator'}
+		<DatasourceIndicator id={slot.content.id} size={16} loaderSize={14} />
 	{:else if slot.content.kind === 'icon'}
 		{#if slot.content.spacer}
 			<div class="spacer"></div>
@@ -71,8 +71,8 @@
 	{/if}
 {:else if slot?.kind === 'file'}
 	<Icon icon={slot.icon} size={slot.size} stroke={slot.color} />
-{:else if slot?.kind === 'database-indicator'}
-	<DatabaseIndicator id={slot.id} size={16} loaderSize={14} />
+{:else if slot?.kind === 'datasource-indicator'}
+	<DatasourceIndicator id={slot.id} size={16} loaderSize={14} />
 {:else if slot?.kind === 'icon'}
 	{#if slot.spacer}
 		<div class="spacer"></div>

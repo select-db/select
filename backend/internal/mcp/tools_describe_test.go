@@ -20,7 +20,7 @@ func TestRuleString(t *testing.T) {
 		{
 			name: "fully specific allow",
 			entry: core.PermissionEntry{
-				DbInstanceID: strPtr("db-1"),
+				DatasourceID: strPtr("db-1"),
 				SchemaName:   strPtr("public"),
 				TableName:    strPtr("users"),
 				ColumnName:   strPtr("password"),
@@ -32,7 +32,7 @@ func TestRuleString(t *testing.T) {
 		{
 			name: "wildcard column",
 			entry: core.PermissionEntry{
-				DbInstanceID: strPtr("db-1"),
+				DatasourceID: strPtr("db-1"),
 				SchemaName:   strPtr("public"),
 				TableName:    strPtr("events"),
 				ColumnName:   nil,
@@ -44,7 +44,7 @@ func TestRuleString(t *testing.T) {
 		{
 			name: "schema only (table + column wildcard)",
 			entry: core.PermissionEntry{
-				DbInstanceID: strPtr("db-1"),
+				DatasourceID: strPtr("db-1"),
 				SchemaName:   strPtr("public"),
 				TableName:    nil,
 				ColumnName:   nil,
@@ -56,7 +56,7 @@ func TestRuleString(t *testing.T) {
 		{
 			name: "all wildcards",
 			entry: core.PermissionEntry{
-				DbInstanceID: strPtr("db-1"),
+				DatasourceID: strPtr("db-1"),
 				SchemaName:   nil,
 				TableName:    nil,
 				ColumnName:   nil,
@@ -68,7 +68,7 @@ func TestRuleString(t *testing.T) {
 		{
 			name: "explicit star is treated as wildcard",
 			entry: core.PermissionEntry{
-				DbInstanceID: strPtr("db-1"),
+				DatasourceID: strPtr("db-1"),
 				SchemaName:   strPtr("*"),
 				TableName:    strPtr("*"),
 				ColumnName:   strPtr("*"),

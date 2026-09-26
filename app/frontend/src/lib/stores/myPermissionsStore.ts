@@ -16,7 +16,7 @@ export async function loadMyPermissions(): Promise<void> {
 	const permissions = (raw ?? []).map((p) => ({
 		id: '',
 		role_id: '',
-		db_instance_id: p.DbInstanceID ?? null,
+		datasource_id: p.DatasourceID ?? null,
 		schema_name: p.SchemaName ?? null,
 		table_name: p.TableName ?? null,
 		column_name: p.ColumnName ?? null,
@@ -41,10 +41,10 @@ export const myPermissions = derived(
 		const permMap: PermissionMap = buildPermissionMap($perms);
 		return {
 			isAllowed: (action: string) => isAppActionAllowed($perms, action, isOwner),
-			canAccessDb: (dbId: string, isProxified?: boolean) =>
+			canAccessDatasource: (datasourceId: string, isProxified?: boolean) =>
 				!isProxified ||
 				isOwner ||
-				permissionActions.some((a) => resolve(permMap, dbId, '*', '*', '*', a) === 'allow'),
+				permissionActions.some((a) => resolve(permMap, datasourceId, '*', '*', '*', a) === 'allow'),
 
 			/**
 			 * Whether this person administrates the connection, which is the same
@@ -52,8 +52,8 @@ export const myPermissions = derived(
 			 * (`Actor.IsOwner() || Actor.CanManage(id)`). Asking it here only
 			 * decides what the UI offers: the server refuses either way.
 			 */
-			canManageDb: (dbId: string) =>
-				isOwner || resolve(permMap, dbId, '*', '*', '*', 'manage') === 'allow'
+			canManageDatasource: (datasourceId: string) =>
+				isOwner || resolve(permMap, datasourceId, '*', '*', '*', 'manage') === 'allow'
 		};
 	}
 );

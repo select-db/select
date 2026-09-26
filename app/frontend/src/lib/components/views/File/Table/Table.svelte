@@ -15,7 +15,7 @@
 	type TableProps = {
 		tableHeight?: number;
 		tab: Tab;
-		effectiveDbId: string | null;
+		effectiveDatasourceId: string | null;
 		currentQueryResult: graph.QueryResult | null;
 		currentPlanResult: graph.ExplainResult | null;
 		currentExplainResult: graph.ExplainResult | null;
@@ -25,7 +25,7 @@
 	let {
 		tableHeight = 0,
 		tab,
-		effectiveDbId,
+		effectiveDatasourceId,
 		currentQueryResult,
 		currentPlanResult,
 		currentExplainResult,
@@ -36,14 +36,16 @@
 	const file = $derived(tab.file?.node);
 	const activeView = $derived(tab.file?.viewMode ?? 'results');
 
-	const loading = $derived($loadingStore.includes(toKey(effectiveDbId ?? undefined, file?.id)));
+	const loading = $derived(
+		$loadingStore.includes(toKey(effectiveDatasourceId ?? undefined, file?.id))
+	);
 	const queryResult = $derived(currentQueryResult);
 	const planResult = $derived(currentPlanResult);
 	const explainResult = $derived(currentExplainResult);
 
 	function openFixInChat(error: string) {
 		addChatTab({
-			databaseId: effectiveDbId,
+			datasourceId: effectiveDatasourceId,
 			action:
 				activeView === 'results' ? 'fix-query' : activeView === 'plan' ? 'fix-plan' : 'fix-explain',
 			error,
@@ -68,19 +70,12 @@
 		{@const affectedRows = execution?.affectedRows ?? queryResult?.affectedRows}
 		{@const errorMessage = execution?.error ?? queryResult?.errors?.[0]}
 		{@const affectedOnly =
-			!hasRows &&
-			!isStreaming &&
-			affectedRows !== undefined &&
-			(affectedRows > 0 || !hasColumns)}
+			!hasRows && !isStreaming && affectedRows !== undefined && (affectedRows > 0 || !hasColumns)}
 		{#if loading && !execution}
 			<p class="placeholder">Loading...</p>
 		{:else if queryResult}
 			{#if errorMessage}
-				<TableErrorRow
-					error={errorMessage}
-					onFixInChat={openFixInChat}
-					onRun={() => run('run')}
-				/>
+				<TableErrorRow error={errorMessage} onFixInChat={openFixInChat} onRun={() => run('run')} />
 			{/if}
 			{#if affectedOnly}
 				<p class="placeholder">{affectedRows} row(s) affected.</p>
@@ -135,7 +130,13 @@
 			/>
 		{/if}
 	{:else if activeView === 'graph'}
-		<GraphView {tab} {effectiveDbId} queryResult={currentQueryResult} {content} onRun={() => run('run')} />
+		<GraphView
+			{tab}
+			{effectiveDatasourceId}
+			queryResult={currentQueryResult}
+			{content}
+			onRun={() => run('run')}
+		/>
 	{/if}
 </div>
 

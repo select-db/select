@@ -2,13 +2,13 @@
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import Select from '$lib/system/Select/Select.svelte';
 	import type { SelectOption } from '$lib/system/Select/Select.types';
-	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
-	import DatabaseGroupIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseGroupIndicator.svelte';
+	import DatasourceIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceIndicator.svelte';
+	import DatasourceGroupIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceGroupIndicator.svelte';
 
 	type Props = {
 		value?: string | string[];
 		multiple?: boolean;
-		onchange?: (databaseId: string | string[]) => void;
+		onchange?: (datasourceId: string | string[]) => void;
 		open?: boolean;
 	};
 
@@ -17,7 +17,7 @@
 	const options = $derived.by(() => {
 		const graph = $workspaceGraphStore;
 		if (!graph) return [];
-		return graph.db_instances.map((db) => ({
+		return graph.datasources.map((db) => ({
 			label: db.name,
 			value: db.id
 		}));
@@ -28,7 +28,7 @@
 	);
 </script>
 
-<div class="picker" data-test="database.picker">
+<div class="picker" data-test="datasource.picker">
 	<Select
 		{multiple}
 		value={internalValue}
@@ -44,7 +44,7 @@
 		{#snippet optionDisplay(option: SelectOption<string> | null)}
 			{#if option}
 				<span class="db-option">
-					<DatabaseIndicator id={option.value} size={17} loaderSize={15} />
+					<DatasourceIndicator id={option.value} size={17} loaderSize={15} />
 					<span class="db-option-label">{option.label}</span>
 				</span>
 			{:else}
@@ -54,7 +54,7 @@
 
 		{#snippet summaryDisplay(selected: SelectOption<string>[])}
 			<span class="db-option">
-				<DatabaseGroupIndicator ids={selected.map((s) => s.value)} size={17} loaderSize={15} />
+				<DatasourceGroupIndicator ids={selected.map((s) => s.value)} size={17} loaderSize={15} />
 				<span class="db-option-label">{selected.length} databases</span>
 			</span>
 		{/snippet}

@@ -242,7 +242,7 @@
           "selectable": true
         },
         {
-          "name": "db_instance_id",
+          "name": "datasource_id",
           "type": "text",
           "operators": [
             "eq",

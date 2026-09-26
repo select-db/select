@@ -17,7 +17,7 @@ func emitAvailability(id, errMsg string) {
 		entry["error"] = errMsg
 	}
 
-	desktop.Emit("databaseAvailability", map[string]interface{}{
-		"databases": []map[string]interface{}{entry},
+	desktop.Emit("datasourceAvailability", map[string]interface{}{
+		"datasources": []map[string]interface{}{entry},
 	})
 }

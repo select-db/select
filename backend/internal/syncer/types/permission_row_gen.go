@@ -9,7 +9,7 @@ type PermissionRow struct {
 	ID           string     `json:"id"`
 	RoleID       string     `json:"role_id"`
 	WorkspaceID  string     `json:"workspace_id"`
-	DbInstanceID string     `json:"db_instance_id"`
+	DatasourceID string     `json:"datasource_id"`
 	SchemaName   string     `json:"schema_name"`
 	TableName    string     `json:"table_name"`
 	ColumnName   string     `json:"column_name"`

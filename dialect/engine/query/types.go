@@ -2,8 +2,8 @@ package query
 
 import "time"
 
-// DBInstance describes a query target. Proxified routes through Transport.
-type DBInstance struct {
+// Datasource describes a query target. Proxified routes through Transport.
+type Datasource struct {
 	ID        string
 	DBType    string
 	Proxified bool
@@ -48,7 +48,7 @@ type ColumnEditMeta struct {
 	HasAllPrimaryKeys  bool
 	IsPrimaryKey       bool
 	IsForeignKey       bool
-	DatabaseID         string
+	DatasourceID       string
 	Schema             string
 	Table              string
 	OriginalColumnName string

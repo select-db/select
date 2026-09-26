@@ -616,7 +616,7 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 }
 
 const getPermissionByID = `-- name: GetPermissionByID :one
-SELECT id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at, deleted_at
+SELECT id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect, updated_at, deleted_at
 FROM app.permission
 WHERE id = $1 AND workspace_id = $2
 `
@@ -633,7 +633,7 @@ func (q *Queries) GetPermissionByID(ctx context.Context, arg GetPermissionByIDPa
 		&i.ID,
 		&i.RoleID,
 		&i.WorkspaceID,
-		&i.DbInstanceID,
+		&i.DatasourceID,
 		&i.SchemaName,
 		&i.TableName,
 		&i.ColumnName,
@@ -646,7 +646,7 @@ func (q *Queries) GetPermissionByID(ctx context.Context, arg GetPermissionByIDPa
 }
 
 const getPermissionsByRoleID = `-- name: GetPermissionsByRoleID :many
-SELECT id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at, deleted_at
+SELECT id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect, updated_at, deleted_at
 FROM app.permission
 WHERE role_id = $1 AND deleted_at IS NULL
 `
@@ -664,7 +664,7 @@ func (q *Queries) GetPermissionsByRoleID(ctx context.Context, roleID uuid.UUID) 
 			&i.ID,
 			&i.RoleID,
 			&i.WorkspaceID,
-			&i.DbInstanceID,
+			&i.DatasourceID,
 			&i.SchemaName,
 			&i.TableName,
 			&i.ColumnName,
@@ -687,7 +687,7 @@ func (q *Queries) GetPermissionsByRoleID(ctx context.Context, roleID uuid.UUID) 
 }
 
 const getPermissionsForUserSince = `-- name: GetPermissionsForUserSince :many
-SELECT r.id, r.role_id, r.workspace_id, r.db_instance_id, r.schema_name, r.table_name, r.column_name, r.action, r.effect, r.updated_at, r.deleted_at
+SELECT r.id, r.role_id, r.workspace_id, r.datasource_id, r.schema_name, r.table_name, r.column_name, r.action, r.effect, r.updated_at, r.deleted_at
 FROM app.permission r
 INNER JOIN app.workspace_to_user wtu ON wtu.workspace_id = r.workspace_id AND wtu.user_id = $1
 WHERE r.updated_at > $2
@@ -711,7 +711,7 @@ func (q *Queries) GetPermissionsForUserSince(ctx context.Context, arg GetPermiss
 			&i.ID,
 			&i.RoleID,
 			&i.WorkspaceID,
-			&i.DbInstanceID,
+			&i.DatasourceID,
 			&i.SchemaName,
 			&i.TableName,
 			&i.ColumnName,
@@ -2023,10 +2023,10 @@ func (q *Queries) UpsertGroupToRole(ctx context.Context, arg UpsertGroupToRolePa
 }
 
 const upsertPermission = `-- name: UpsertPermission :exec
-INSERT INTO app.permission (id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at)
+INSERT INTO app.permission (id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 ON CONFLICT (id) DO UPDATE SET
-  db_instance_id = EXCLUDED.db_instance_id,
+  datasource_id = EXCLUDED.datasource_id,
   schema_name = EXCLUDED.schema_name,
   table_name = EXCLUDED.table_name,
   column_name = EXCLUDED.column_name,
@@ -2040,7 +2040,7 @@ type UpsertPermissionParams struct {
 	ID           uuid.UUID
 	RoleID       uuid.UUID
 	WorkspaceID  uuid.UUID
-	DbInstanceID db_types.JSONNullString
+	DatasourceID db_types.JSONNullString
 	SchemaName   db_types.JSONNullString
 	TableName    db_types.JSONNullString
 	ColumnName   db_types.JSONNullString
@@ -2053,7 +2053,7 @@ func (q *Queries) UpsertPermission(ctx context.Context, arg UpsertPermissionPara
 		arg.ID,
 		arg.RoleID,
 		arg.WorkspaceID,
-		arg.DbInstanceID,
+		arg.DatasourceID,
 		arg.SchemaName,
 		arg.TableName,
 		arg.ColumnName,

@@ -30,7 +30,7 @@ type Opened struct {
 	ID, WorkspaceID string
 	DS              *ResolvedDatasource
 	Conn            query.Conn
-	Inst            query.DBInstance
+	Inst            query.Datasource
 }
 
 // Open resolves the datasource id for the request's caller. Errors go through
@@ -49,7 +49,7 @@ func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 		WorkspaceID: workspaceID,
 		DS:          ds,
 		Conn:        query.Conn{DB: db, Perms: authz.Perms(r)},
-		Inst:        query.DBInstance{ID: id, DBType: ds.DBType},
+		Inst:        query.Datasource{ID: id, DBType: ds.DBType},
 	}, nil
 }
 
@@ -78,14 +78,14 @@ func (o *Opened) Stream(ctx context.Context, sql string, opts query.Options, sin
 }
 
 // OpenError answers a request whose datasource could not be opened or reached.
-func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, dsID string) {
-	status, msg := openFailure(err, logPrefix, workspaceID, dsID)
+func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, datasourceID string) {
+	status, msg := openFailure(err, logPrefix, workspaceID, datasourceID)
 	http.Error(w, msg, status)
 }
 
 // openFailure shows only config errors: a raw dial error maps the internal
 // network, and a cellar's names its address. The rest is logged.
-func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
+func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, string) {
 	var cfgErr *connect.ConfigError
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -97,6 +97,6 @@ func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
 	case errors.As(err, &cfgErr):
 		return http.StatusBadGateway, cfgErr.Msg
 	}
-	log.Printf("%s: ws=%s id=%s: %v", logPrefix, workspaceID, dsID, err)
+	log.Printf("%s: ws=%s id=%s: %v", logPrefix, workspaceID, datasourceID, err)
 	return http.StatusBadGateway, genericConnErr
 }

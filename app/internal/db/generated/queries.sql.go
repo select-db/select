@@ -25,7 +25,7 @@ INSERT INTO history (
     duration_ms,
     errors,
     workspace_id,
-    db_instance_id,
+    datasource_id,
     created_at
 ) VALUES (
     ?1,
@@ -40,7 +40,7 @@ INSERT INTO history (
     ?10,
     CURRENT_TIMESTAMP
 )
-RETURNING id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, db_instance_id
+RETURNING id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, datasource_id
 `
 
 type CreateHistoryParams struct {
@@ -53,7 +53,7 @@ type CreateHistoryParams struct {
 	DurationMs   sql.NullInt64 `json:"duration_ms"`
 	Errors       string        `json:"errors"`
 	WorkspaceID  string        `json:"workspace_id"`
-	DbInstanceID string        `json:"db_instance_id"`
+	DatasourceID string        `json:"datasource_id"`
 }
 
 func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (History, error) {
@@ -67,7 +67,7 @@ func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (H
 		arg.DurationMs,
 		arg.Errors,
 		arg.WorkspaceID,
-		arg.DbInstanceID,
+		arg.DatasourceID,
 	)
 	var i History
 	err := row.Scan(
@@ -81,7 +81,7 @@ func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (H
 		&i.Dsn,
 		&i.CreatedAt,
 		&i.WorkspaceID,
-		&i.DbInstanceID,
+		&i.DatasourceID,
 	)
 	return i, err
 }
@@ -620,17 +620,17 @@ func (q *Queries) InsertGroupToRole(ctx context.Context, arg InsertGroupToRolePa
 }
 
 const insertPermission = `-- name: InsertPermission :one
-INSERT INTO permission (id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect)
+INSERT INTO permission (id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-ON CONFLICT(role_id, COALESCE(db_instance_id, ''), COALESCE(schema_name, ''), COALESCE(table_name, ''), COALESCE(column_name, ''), action) DO UPDATE SET effect = excluded.effect
-RETURNING id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect
+ON CONFLICT(role_id, COALESCE(datasource_id, ''), COALESCE(schema_name, ''), COALESCE(table_name, ''), COALESCE(column_name, ''), action) DO UPDATE SET effect = excluded.effect
+RETURNING id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect
 `
 
 type InsertPermissionParams struct {
 	ID           string                  `json:"id"`
 	RoleID       string                  `json:"role_id"`
 	WorkspaceID  string                  `json:"workspace_id"`
-	DbInstanceID db_types.JSONNullString `json:"db_instance_id"`
+	DatasourceID db_types.JSONNullString `json:"datasource_id"`
 	SchemaName   db_types.JSONNullString `json:"schema_name"`
 	TableName    db_types.JSONNullString `json:"table_name"`
 	ColumnName   db_types.JSONNullString `json:"column_name"`
@@ -642,7 +642,7 @@ type InsertPermissionRow struct {
 	ID           string                  `json:"id"`
 	RoleID       string                  `json:"role_id"`
 	WorkspaceID  string                  `json:"workspace_id"`
-	DbInstanceID db_types.JSONNullString `json:"db_instance_id"`
+	DatasourceID db_types.JSONNullString `json:"datasource_id"`
 	SchemaName   db_types.JSONNullString `json:"schema_name"`
 	TableName    db_types.JSONNullString `json:"table_name"`
 	ColumnName   db_types.JSONNullString `json:"column_name"`
@@ -655,7 +655,7 @@ func (q *Queries) InsertPermission(ctx context.Context, arg InsertPermissionPara
 		arg.ID,
 		arg.RoleID,
 		arg.WorkspaceID,
-		arg.DbInstanceID,
+		arg.DatasourceID,
 		arg.SchemaName,
 		arg.TableName,
 		arg.ColumnName,
@@ -667,7 +667,7 @@ func (q *Queries) InsertPermission(ctx context.Context, arg InsertPermissionPara
 		&i.ID,
 		&i.RoleID,
 		&i.WorkspaceID,
-		&i.DbInstanceID,
+		&i.DatasourceID,
 		&i.SchemaName,
 		&i.TableName,
 		&i.ColumnName,
@@ -819,7 +819,7 @@ func (q *Queries) ListGroupsByWorkspace(ctx context.Context, workspaceID string)
 }
 
 const listHistory = `-- name: ListHistory :many
-SELECT id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, db_instance_id
+SELECT id, statement, affected_rows, row_count, duration_ms, errors, uri, dsn, created_at, workspace_id, datasource_id
 FROM history
 WHERE workspace_id = ?1
   AND created_at >= datetime('now', '-7 days')
@@ -853,7 +853,7 @@ func (q *Queries) ListHistory(ctx context.Context, arg ListHistoryParams) ([]His
 			&i.Dsn,
 			&i.CreatedAt,
 			&i.WorkspaceID,
-			&i.DbInstanceID,
+			&i.DatasourceID,
 		); err != nil {
 			return nil, err
 		}
@@ -873,7 +873,7 @@ SELECT
   p.id,
   p.role_id,
   p.workspace_id,
-  p.db_instance_id,
+  p.datasource_id,
   p.schema_name,
   p.table_name,
   p.column_name,
@@ -897,7 +897,7 @@ WHERE p.deleted_at IS NULL
     WHERE ug.user_id = ?2 AND gr.deleted_at IS NULL
   )
 ORDER BY
-  p.db_instance_id,
+  p.datasource_id,
   p.schema_name,
   p.table_name,
   p.column_name,
@@ -913,7 +913,7 @@ type ListMyPermissionsRow struct {
 	ID           string                  `json:"id"`
 	RoleID       string                  `json:"role_id"`
 	WorkspaceID  string                  `json:"workspace_id"`
-	DbInstanceID db_types.JSONNullString `json:"db_instance_id"`
+	DatasourceID db_types.JSONNullString `json:"datasource_id"`
 	SchemaName   db_types.JSONNullString `json:"schema_name"`
 	TableName    db_types.JSONNullString `json:"table_name"`
 	ColumnName   db_types.JSONNullString `json:"column_name"`
@@ -935,7 +935,7 @@ func (q *Queries) ListMyPermissions(ctx context.Context, arg ListMyPermissionsPa
 			&i.ID,
 			&i.RoleID,
 			&i.WorkspaceID,
-			&i.DbInstanceID,
+			&i.DatasourceID,
 			&i.SchemaName,
 			&i.TableName,
 			&i.ColumnName,
@@ -957,17 +957,17 @@ func (q *Queries) ListMyPermissions(ctx context.Context, arg ListMyPermissionsPa
 }
 
 const listPermissionsByRole = `-- name: ListPermissionsByRole :many
-SELECT id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect
+SELECT id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect
 FROM permission
 WHERE role_id = ?1
-ORDER BY db_instance_id, schema_name, table_name, column_name, action
+ORDER BY datasource_id, schema_name, table_name, column_name, action
 `
 
 type ListPermissionsByRoleRow struct {
 	ID           string                  `json:"id"`
 	RoleID       string                  `json:"role_id"`
 	WorkspaceID  string                  `json:"workspace_id"`
-	DbInstanceID db_types.JSONNullString `json:"db_instance_id"`
+	DatasourceID db_types.JSONNullString `json:"datasource_id"`
 	SchemaName   db_types.JSONNullString `json:"schema_name"`
 	TableName    db_types.JSONNullString `json:"table_name"`
 	ColumnName   db_types.JSONNullString `json:"column_name"`
@@ -988,7 +988,7 @@ func (q *Queries) ListPermissionsByRole(ctx context.Context, roleID string) ([]L
 			&i.ID,
 			&i.RoleID,
 			&i.WorkspaceID,
-			&i.DbInstanceID,
+			&i.DatasourceID,
 			&i.SchemaName,
 			&i.TableName,
 			&i.ColumnName,
@@ -1771,12 +1771,12 @@ func (q *Queries) UpsertGroupToRoleForSync(ctx context.Context, arg UpsertGroupT
 
 const upsertPermissionForSync = `-- name: UpsertPermissionForSync :exec
 ; -- @no-track
-INSERT INTO permission (id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect)
+INSERT INTO permission (id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 ON CONFLICT (id) DO UPDATE SET
     role_id = excluded.role_id,
     workspace_id = excluded.workspace_id,
-    db_instance_id = excluded.db_instance_id,
+    datasource_id = excluded.datasource_id,
     schema_name = excluded.schema_name,
     table_name = excluded.table_name,
     column_name = excluded.column_name,
@@ -1788,7 +1788,7 @@ type UpsertPermissionForSyncParams struct {
 	ID           string                  `json:"id"`
 	RoleID       string                  `json:"role_id"`
 	WorkspaceID  string                  `json:"workspace_id"`
-	DbInstanceID db_types.JSONNullString `json:"db_instance_id"`
+	DatasourceID db_types.JSONNullString `json:"datasource_id"`
 	SchemaName   db_types.JSONNullString `json:"schema_name"`
 	TableName    db_types.JSONNullString `json:"table_name"`
 	ColumnName   db_types.JSONNullString `json:"column_name"`
@@ -1801,7 +1801,7 @@ func (q *Queries) UpsertPermissionForSync(ctx context.Context, arg UpsertPermiss
 		arg.ID,
 		arg.RoleID,
 		arg.WorkspaceID,
-		arg.DbInstanceID,
+		arg.DatasourceID,
 		arg.SchemaName,
 		arg.TableName,
 		arg.ColumnName,

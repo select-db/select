@@ -44,7 +44,7 @@ func TestHistoryMigrationAndQueries(t *testing.T) {
 			Statement:    "SELECT " + strconv.Itoa(i),
 			Errors:       "[]",
 			WorkspaceID:  "ws-1",
-			DbInstanceID: "db-1",
+			DatasourceID: "db-1",
 		}); err != nil {
 			t.Fatalf("CreateHistory %d: %v", i, err)
 		}
@@ -52,7 +52,7 @@ func TestHistoryMigrationAndQueries(t *testing.T) {
 	// A second workspace, untouched by the per-workspace prune above.
 	if _, err := q.CreateHistory(ctx, generated.CreateHistoryParams{
 		ID: "other", Dsn: "", Uri: "", Statement: "SELECT 1", Errors: "[]",
-		WorkspaceID: "ws-2", DbInstanceID: "db-2",
+		WorkspaceID: "ws-2", DatasourceID: "db-2",
 	}); err != nil {
 		t.Fatalf("CreateHistory other: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestHistoryMigrationAndQueries(t *testing.T) {
 	if rows[0].CreatedAt.IsZero() {
 		t.Fatalf("created_at not populated")
 	}
-	if rows[0].WorkspaceID != "ws-1" || rows[0].DbInstanceID != "db-1" {
+	if rows[0].WorkspaceID != "ws-1" || rows[0].DatasourceID != "db-1" {
 		t.Fatalf("unexpected workspace/db ids: %+v", rows[0])
 	}
 

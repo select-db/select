@@ -14,14 +14,14 @@ export function createSqlHoverProvider(
 		provideHover: (model, position) => {
 			return new Promise((resolve) => {
 				const file = getFile();
-				const dbId = file?.databases?.[0]?.id;
-				if (!file || !dbId) {
+				const datasourceId = file?.datasources?.[0]?.id;
+				if (!file || !datasourceId) {
 					resolve(null);
 					return;
 				}
 
 				const sql = model.getValue();
-				const key = `${dbId}:${position.lineNumber}:${position.column}:${sql.length}`;
+				const key = `${datasourceId}:${position.lineNumber}:${position.column}:${sql.length}`;
 				const hit = cache.get(key);
 				if (hit && Date.now() - hit.at < cacheTtlMs) {
 					resolve(hit.markdown ? { contents: [{ value: hit.markdown, isTrusted: true }] } : null);
@@ -37,7 +37,7 @@ export function createSqlHoverProvider(
 						pending.delete(key);
 						try {
 							const r = await Hover({
-								DbInstanceID: dbId,
+								DatasourceID: datasourceId,
 								FileID: file.id,
 								SQL: sql,
 								Line: position.lineNumber,

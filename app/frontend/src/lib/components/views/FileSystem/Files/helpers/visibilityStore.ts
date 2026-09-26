@@ -61,8 +61,8 @@ export function buildVisibilityIndex(
 	ctx: Context,
 	folders: graph.FolderNode[],
 	files: graph.FileNode[],
-	databases: graph.DBInstanceNode[],
-	databaseItems: graph.DBInstanceItemNode[],
+	datasources: graph.DatasourceNode[],
+	datasourceItems: graph.DatasourceItemNode[],
 	expandedIds: Map<string, boolean>,
 	hiddenChildren: Record<string, string[]> = {}
 ): void {
@@ -82,13 +82,13 @@ export function buildVisibilityIndex(
 		return children.filter((c) => !set.has(c.id));
 	};
 
-	const walkDatabaseItems = (items: graph.DBInstanceItemNode[]): void => {
+	const walkDatasourceItems = (items: graph.DatasourceItemNode[]): void => {
 		for (const item of items) {
 			const myIndex = flatIds.length;
 			flatIds.push(item.id);
 
 			if (expandedIds.get(item.id) && item.children?.length) {
-				walkDatabaseItems(visibleChildren(item.id, item.children));
+				walkDatasourceItems(visibleChildren(item.id, item.children));
 			}
 
 			recordRange(item.id, myIndex + 1);
@@ -98,10 +98,10 @@ export function buildVisibilityIndex(
 	const walk = (
 		folders: graph.FolderNode[],
 		files: graph.FileNode[],
-		databases: graph.DBInstanceNode[],
-		databaseItems: graph.DBInstanceItemNode[]
+		datasources: graph.DatasourceNode[],
+		datasourceItems: graph.DatasourceItemNode[]
 	): void => {
-		for (const db of databases) {
+		for (const db of datasources) {
 			const myIndex = flatIds.length;
 			flatIds.push(db.id);
 
@@ -117,20 +117,20 @@ export function buildVisibilityIndex(
 			flatIds.push(folder.id);
 
 			if (expandedIds.get(folder.id)) {
-				walk(folder.folders, folder.files, folder.db_instances, []);
+				walk(folder.folders, folder.files, folder.datasources, []);
 			}
 
 			recordRange(folder.id, myIndex + 1);
 		}
 
-		walkDatabaseItems(databaseItems);
+		walkDatasourceItems(datasourceItems);
 
 		for (const file of files) {
 			flatIds.push(file.id);
 		}
 	};
 
-	walk(folders, files, databases, databaseItems);
+	walk(folders, files, datasources, datasourceItems);
 
 	contextStatesStore.update((states) => {
 		const newStates = new Map(states);

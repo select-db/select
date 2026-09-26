@@ -65,13 +65,13 @@ func TestEmitPermissionUniform(t *testing.T) {
 	// precise, safe 422 (never revealing cross-workspace existence).
 	has(t, apply, `&types.FieldError{Field: "role_id", Message: "does not reference a role in this workspace"}`)
 	has(t, apply, `utils.PatchValue(payload, "role_id", existing.RoleID, roleUUID)`)
-	has(t, apply, `utils.PatchNullStr(payload, "db_instance_id", existing.DbInstanceID)`)
+	has(t, apply, `utils.PatchNullStr(payload, "datasource_id", existing.DatasourceID)`)
 	has(t, apply, `utils.PatchValue(payload, "action", existing.Action, utils.MapGetString(payload, "action"))`)
 
 	sql := sqlByName(t, schema.PermissionTable())
 	has(t, sql["get_permission_by_id_query.sql"], "WHERE id = $1 AND workspace_id = $2;")
 	up := sql["upsert_permission_statement.sql"]
-	has(t, up, "INSERT INTO app.permission (id, role_id, workspace_id, db_instance_id, schema_name, table_name, column_name, action, effect, updated_at)")
+	has(t, up, "INSERT INTO app.permission (id, role_id, workspace_id, datasource_id, schema_name, table_name, column_name, action, effect, updated_at)")
 	has(t, up, "effect = EXCLUDED.effect,")
 	hasNot(t, up, "role_id = EXCLUDED.role_id") // FK identity, never updated
 }

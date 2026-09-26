@@ -1,9 +1,9 @@
 import type { Component } from 'svelte';
 
 import { modalStore } from '$lib/system/Modal/ModalStore';
-import SSHPassphraseModal from '$lib/components/views/Database/SSHPassphraseModal.svelte';
+import SSHPassphraseModal from '$lib/components/views/Datasource/SSHPassphraseModal.svelte';
 import { SetSSHKeyPassphrase } from '$lib/bindings/selectDb/internal/db_client/dbclient';
-import { GetDBInstanceNodeByID } from '$lib/wails/graph';
+import { GetDatasourceNodeByID } from '$lib/wails/graph';
 import { tryCatch } from '$lib/utils/tryCatch';
 
 /** Whether a connection error indicates the SSH key file needs a passphrase. */
@@ -54,13 +54,13 @@ export const ensureSSHPassphrase = async (
  * Same as ensureSSHPassphrase but resolves the key file path from a datasource
  * id (for callers that only know the instance, e.g. the query runner).
  */
-export const ensureSSHPassphraseForInstance = async (
-	dbInstanceId: string,
+export const ensureSSHPassphraseForDatasource = async (
+	datasourceId: string,
 	error: string | null | undefined
 ): Promise<boolean> => {
 	if (!isEncryptedKeyError(error)) return false;
 
-	const [node] = await tryCatch(GetDBInstanceNodeByID, dbInstanceId);
+	const [node] = await tryCatch(GetDatasourceNodeByID, datasourceId);
 
 	return ensureSSHPassphrase(node?.ssh?.key_path, error, node?.ssh?.host ?? '');
 };

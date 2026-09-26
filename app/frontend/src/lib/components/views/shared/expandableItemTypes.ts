@@ -1,6 +1,6 @@
 export const expandableItemTypes = new Set([
 	'folder',
-	'db_instance',
+	'datasource',
 	'indexes',
 	'triggers',
 	'tables',

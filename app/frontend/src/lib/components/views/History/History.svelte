@@ -42,11 +42,11 @@
 		}
 	});
 
-	function dbNameFor(item: history.HistoryEntry): string {
+	function datasourceNameFor(item: history.HistoryEntry): string {
 		const ws = $workspaceGraphStore;
 		if (!ws) return '';
-		const node = findItemById(item.dbInstanceId, [], ws.folders, ws.db_instances);
-		return node && 'db_type' in node ? (node as graph.DBInstanceNode).name : '';
+		const node = findItemById(item.datasourceId, [], ws.folders, ws.datasources);
+		return node && 'db_type' in node ? (node as graph.DatasourceNode).name : '';
 	}
 
 	function hasError(item: history.HistoryEntry): boolean {
@@ -83,8 +83,8 @@
 			height: 'min(70vh, 600px)',
 			props: {
 				sql: item.statement,
-				dbInstanceId: item.dbInstanceId,
-				dbName: dbNameFor(item) || 'unknown database',
+				datasourceId: item.datasourceId,
+				datasourceName: datasourceNameFor(item) || 'unknown database',
 				hasError: hasError(item),
 				errors: item.errors ?? [],
 				createdAt: item.createdAt,
@@ -143,7 +143,7 @@
 	{:else}
 		<div class="list no-scrollbar" bind:this={listEl} use:scrollShadow={{ top: true }}>
 			{#each $historyItems as item (item.id)}
-				{@const dbName = dbNameFor(item)}
+				{@const datasourceName = datasourceNameFor(item)}
 				{@const error = hasError(item)}
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -157,10 +157,10 @@
 						<div class="row-meta">
 							<p class="time">{formatRelativeTime(item.createdAt)}</p>
 							<Badge status={error ? 'error' : 'success'} />
-							{#if dbName}
-								<p class="db-name truncate">{dbName}</p>
+							{#if datasourceName}
+								<p class="datasource-name truncate">{datasourceName}</p>
 							{:else}
-								<p class="db-name placeholder truncate">unknown</p>
+								<p class="datasource-name placeholder truncate">unknown</p>
 							{/if}
 							<div class="db"></div>
 						</div>
@@ -263,7 +263,7 @@
 		min-width: 0;
 	}
 
-	.db-name.placeholder {
+	.datasource-name.placeholder {
 		color: var(--gray-700);
 		font-style: italic;
 	}

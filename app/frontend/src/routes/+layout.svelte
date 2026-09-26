@@ -14,7 +14,7 @@
 	import {
 		StartFileWatcher,
 		StopFileWatcher,
-		StartDatabaseWatcher
+		StartDatasourceWatcher
 	} from '$lib/bindings/selectDb/internal/system/system';
 
 	import Leftbar from '$lib/components/Leftbar/Leftbar.svelte';
@@ -105,7 +105,7 @@
 		gitFileStatusStore.set(null);
 		loadGitStatus();
 		StartFileWatcher(workspace.id);
-		StartDatabaseWatcher();
+		StartDatasourceWatcher();
 	});
 
 	$effect(() => setContext('leftPanelVisible', $isLeftbarOpened));

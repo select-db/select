@@ -172,13 +172,13 @@ func TestBuildSelectSQLEscapesQuotesInIdentifiers(t *testing.T) {
 	}
 }
 
-func TestGenerateSelectSQLUnknownDatabase(t *testing.T) {
+func TestGenerateSelectSQLUnknownDatasource(t *testing.T) {
 	dbc := &DbClient{Graph: &graph.Graph{}}
 
 	if _, err := dbc.GenerateSelectSQL(GenerateSelectSQLParams{
-		DatabaseID: "does-not-exist",
-		Schema:     "public",
-		Table:      "users",
+		DatasourceID: "does-not-exist",
+		Schema:       "public",
+		Table:        "users",
 	}); err == nil {
 		t.Error("expected an error for an unknown database, got none")
 	}

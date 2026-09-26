@@ -60,7 +60,7 @@ SELECT supports **PostgreSQL**, **MySQL**, and **SQLite**.
    | MySQL      | `user:password@tcp(host:3306)/dbname?parseTime=true` |
    | SQLite     | `file:./local.db` or `/path/to/database.sqlite` |
 
-3. Click **Test connection** to check it. There is nothing to save: the form writes `db.config.json` for you once the connection is valid.
+3. Click **Test connection** to check it. There is nothing to save: the form writes `datasource.config.json` for you once the connection is valid.
 
 ![The connection form: dialect, name, and a DSN written as $WAREHOUSE_DSN rather than a literal connection string.](/shots/getting-started.database.light.webp)
 

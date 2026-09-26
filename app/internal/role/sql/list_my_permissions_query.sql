@@ -3,7 +3,7 @@ SELECT
   p.id,
   p.role_id,
   p.workspace_id,
-  p.db_instance_id,
+  p.datasource_id,
   p.schema_name,
   p.table_name,
   p.column_name,
@@ -27,7 +27,7 @@ WHERE p.deleted_at IS NULL
     WHERE ug.user_id = :user_id AND gr.deleted_at IS NULL
   )
 ORDER BY
-  p.db_instance_id,
+  p.datasource_id,
   p.schema_name,
   p.table_name,
   p.column_name,

@@ -50,7 +50,7 @@ A workspace folder contains:
   it is how a teammate who clones the repository lands in the right workspace.
   See [Workspace Folder](/docs/workspace/workspace-folder/)
 - `.sql` files and their `.metadata.json` sidecars
-- `db.config.json` files (credentials should use `$VAR` references, not hardcoded values)
+- `datasource.config.json` files (credentials should use `$VAR` references, not hardcoded values)
 - `.env` files (add to `.gitignore` if they contain secrets)
 - `.lint` rules
 

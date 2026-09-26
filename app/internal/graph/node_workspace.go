@@ -25,7 +25,7 @@ type WorkspaceNode struct {
 
 	User        *UserNode         `json:"user"`
 	Folders     []*FolderNode     `json:"folders"`
-	DBInstances []*DBInstanceNode `json:"db_instances"`
+	Datasources []*DatasourceNode `json:"datasources"`
 }
 
 func (wg *WorkspaceNode) GetIDs() []string {
@@ -47,9 +47,9 @@ func (wg *WorkspaceNode) RemoveChildByIDs(IDs []string) bool {
 			return true
 		}
 	}
-	for i, db := range wg.DBInstances {
+	for i, db := range wg.Datasources {
 		if toolkit.Intersects(db.GetIDs(), IDs) {
-			wg.DBInstances = slices.Delete(wg.DBInstances, i, i+1)
+			wg.Datasources = slices.Delete(wg.Datasources, i, i+1)
 			return true
 		}
 	}
@@ -57,11 +57,11 @@ func (wg *WorkspaceNode) RemoveChildByIDs(IDs []string) bool {
 }
 
 func (wg *WorkspaceNode) GetChildren() []Node {
-	nodes := make([]Node, 0, len(wg.Folders)+len(wg.DBInstances))
+	nodes := make([]Node, 0, len(wg.Folders)+len(wg.Datasources))
 	for _, f := range wg.Folders {
 		nodes = append(nodes, f)
 	}
-	for _, db := range wg.DBInstances {
+	for _, db := range wg.Datasources {
 		nodes = append(nodes, db)
 	}
 	return nodes
@@ -71,8 +71,8 @@ func (wg *WorkspaceNode) AddChild(n Node) bool {
 	switch node := n.(type) {
 	case *FolderNode:
 		wg.Folders = append(wg.Folders, node)
-	case *DBInstanceNode:
-		wg.DBInstances = append(wg.DBInstances, node)
+	case *DatasourceNode:
+		wg.Datasources = append(wg.Datasources, node)
 	default:
 		return false
 	}

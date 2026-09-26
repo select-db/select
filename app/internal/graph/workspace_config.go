@@ -9,7 +9,7 @@ import (
 )
 
 // WorkspaceConfigFileName marks a directory as a workspace, the way
-// db.config.json marks one as a database.
+// datasource.config.json marks one as a database.
 const WorkspaceConfigFileName = "select.config.json"
 
 // workspaceConfigVersion is the format this build writes.
@@ -21,7 +21,7 @@ const workspaceConfigComment = "Managed by SELECT. Do not edit by hand."
 // WorkspaceConfig is select.config.json. It is meant to be committed, so a
 // teammate who clones the repository lands in the right workspace.
 //
-// The name is absent on purpose: the server owns it, as with db.config.json.
+// The name is absent on purpose: the server owns it, as with datasource.config.json.
 type WorkspaceConfig struct {
 	Comment     string `json:"$comment"`
 	Version     int    `json:"version"`

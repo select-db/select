@@ -33,7 +33,7 @@ const MaskedValue = "*****"
 
 // PermissionEntry is a single rule. nil pointer fields mean wildcard.
 type PermissionEntry struct {
-	DbInstanceID *string
+	DatasourceID *string
 	SchemaName   *string
 	TableName    *string
 	ColumnName   *string
@@ -72,14 +72,14 @@ func (e *PermissionDeniedError) Error() string {
 }
 
 type permissionKey struct {
-	dbID, schema, table, column, action string
+	datasourceID, schema, table, column, action string
 }
 
 // CompiledPermissions is a compiled []PermissionEntry for fast lookups.
 type CompiledPermissions struct {
-	deny             map[permissionKey]string
-	allow            map[permissionKey]string
-	managedInstances map[string]bool
+	deny               map[permissionKey]string
+	allow              map[permissionKey]string
+	managedDatasources map[string]bool
 	// When set, IsManaged returns true for every DB, forcing the
 	// per-statement allow scan even when the role has no rules on a DB
 	denyUnmanaged bool
@@ -94,19 +94,19 @@ func derefWildcard(s *string) string {
 
 func Compile(entries []PermissionEntry) CompiledPermissions {
 	idx := CompiledPermissions{
-		deny:             make(map[permissionKey]string),
-		allow:            make(map[permissionKey]string),
-		managedInstances: make(map[string]bool),
+		deny:               make(map[permissionKey]string),
+		allow:              make(map[permissionKey]string),
+		managedDatasources: make(map[string]bool),
 	}
 
 	for _, e := range entries {
-		dbID := derefWildcard(e.DbInstanceID)
-		if e.DbInstanceID != nil {
-			idx.managedInstances[dbID] = true
+		datasourceID := derefWildcard(e.DatasourceID)
+		if e.DatasourceID != nil {
+			idx.managedDatasources[datasourceID] = true
 		}
 
 		k := permissionKey{
-			dbID,
+			datasourceID,
 			derefWildcard(e.SchemaName),
 			derefWildcard(e.TableName),
 			derefWildcard(e.ColumnName),
@@ -121,8 +121,8 @@ func Compile(entries []PermissionEntry) CompiledPermissions {
 	return idx
 }
 
-func (idx CompiledPermissions) IsManaged(dbID string) bool {
-	return idx.denyUnmanaged || idx.managedInstances[dbID]
+func (idx CompiledPermissions) IsManaged(datasourceID string) bool {
+	return idx.denyUnmanaged || idx.managedDatasources[datasourceID]
 }
 
 // WithDenyUnmanaged returns a copy where "no rules on a DB" means deny.
@@ -138,27 +138,27 @@ func (idx CompiledPermissions) WithDenyUnmanaged() CompiledPermissions {
 	return idx
 }
 
-func (idx CompiledPermissions) CanManage(dbInstanceID string) bool {
-	allowed, _ := idx.manageAllowed(dbInstanceID)
+func (idx CompiledPermissions) CanManage(datasourceID string) bool {
+	allowed, _ := idx.manageAllowed(datasourceID)
 	return allowed
 }
 
-// manageAllowed reports whether dbInstanceID may be administrated, and the role
+// manageAllowed reports whether datasourceID may be administrated, and the role
 // that decided it. Manage is granted on the connection, so schema, table and
 // column are empty here; one lookup is what stops running a statement and
 // editing the connection disagreeing about who holds it.
-func (idx CompiledPermissions) manageAllowed(dbInstanceID string) (bool, string) {
-	return idx.isAllowed(dbInstanceID, "", "", "", ActionManage)
+func (idx CompiledPermissions) manageAllowed(datasourceID string) (bool, string) {
+	return idx.isAllowed(datasourceID, "", "", "", ActionManage)
 }
 
-// IsAllowed checks a workspace-level action (no db_instance_id)
+// IsAllowed checks a workspace-level action (no datasource_id)
 func (idx CompiledPermissions) IsAllowed(action string) bool {
 	allowed, _ := idx.isAllowed("", "", "", "", action)
 	return allowed
 }
 
 // scan tries all wildcard combinations for a fixed db and action
-func (idx CompiledPermissions) scan(m map[permissionKey]string, dbID, schema, table, column, action string) (bool, string) {
+func (idx CompiledPermissions) scan(m map[permissionKey]string, datasourceID, schema, table, column, action string) (bool, string) {
 	schemas := [2]string{schema, ""}
 	tables := [2]string{table, ""}
 	cols := [2]string{column, ""}
@@ -166,7 +166,7 @@ func (idx CompiledPermissions) scan(m map[permissionKey]string, dbID, schema, ta
 	for _, s := range schemas {
 		for _, t := range tables {
 			for _, c := range cols {
-				if v, ok := m[permissionKey{dbID, s, t, c, action}]; ok {
+				if v, ok := m[permissionKey{datasourceID, s, t, c, action}]; ok {
 					return true, v
 				}
 			}
@@ -176,23 +176,23 @@ func (idx CompiledPermissions) scan(m map[permissionKey]string, dbID, schema, ta
 	return false, ""
 }
 
-func (idx CompiledPermissions) isAllowed(dbID, schema, table, column, action string) (bool, string) {
-	denied, role := idx.scan(idx.deny, dbID, schema, table, column, action)
+func (idx CompiledPermissions) isAllowed(datasourceID, schema, table, column, action string) (bool, string) {
+	denied, role := idx.scan(idx.deny, datasourceID, schema, table, column, action)
 	if denied {
 		return false, role
 	}
 
-	allowed, role := idx.scan(idx.allow, dbID, schema, table, column, action)
+	allowed, role := idx.scan(idx.allow, datasourceID, schema, table, column, action)
 	return allowed, role
 }
 
-func CheckQueryPermissions(statements []InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
-	if !compiledPermissions.IsManaged(dbInstanceID) {
+func CheckQueryPermissions(statements []InspectStatement, datasourceID string, compiledPermissions CompiledPermissions) error {
+	if !compiledPermissions.IsManaged(datasourceID) {
 		return nil
 	}
 
 	for _, statememt := range statements {
-		err := checkStatement(statememt, dbInstanceID, compiledPermissions)
+		err := checkStatement(statememt, datasourceID, compiledPermissions)
 		if err != nil {
 			return err
 		}
@@ -200,16 +200,16 @@ func CheckQueryPermissions(statements []InspectStatement, dbInstanceID string, c
 	return nil
 }
 
-func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
+func checkStatement(stmt InspectStatement, datasourceID string, compiledPermissions CompiledPermissions) error {
 	action := operationToAction(stmt.Operation)
 
 	var err error
 	switch action {
 	case ActionNone:
 	case ActionManage:
-		err = checkInstance(stmt, dbInstanceID, compiledPermissions)
+		err = checkDatasource(stmt, datasourceID, compiledPermissions)
 	default:
-		err = checkTables(stmt, action, dbInstanceID, compiledPermissions)
+		err = checkTables(stmt, action, datasourceID, compiledPermissions)
 	}
 	if err != nil {
 		return err
@@ -218,12 +218,12 @@ func checkStatement(stmt InspectStatement, dbInstanceID string, compiledPermissi
 	// A CREATE TABLE AS or an INSERT ... SELECT carries its source query here,
 	// so holding manage never stands in for the select the source still needs.
 	for _, sub := range stmt.Subqueries {
-		if err := checkStatement(scopeBareRead(sub, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
+		if err := checkStatement(scopeBareRead(sub, stmt.Where), datasourceID, compiledPermissions); err != nil {
 			return err
 		}
 	}
 	for _, also := range stmt.Also {
-		if err := checkStatement(scopeBareRead(also, stmt.Where), dbInstanceID, compiledPermissions); err != nil {
+		if err := checkStatement(scopeBareRead(also, stmt.Where), datasourceID, compiledPermissions); err != nil {
 			return err
 		}
 	}
@@ -249,11 +249,11 @@ func scopeBareRead(read InspectStatement, tested []InspectField) InspectStatemen
 	return read
 }
 
-// checkInstance checks manage, which is granted on the connection rather than
+// checkDatasource checks manage, which is granted on the connection rather than
 // per table. It is also the only check a statement we could not resolve can
 // get: that statement names no table, so a per-table walk would see nothing.
-func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissions CompiledPermissions) error {
-	allowed, role := compiledPermissions.manageAllowed(dbInstanceID)
+func checkDatasource(stmt InspectStatement, datasourceID string, compiledPermissions CompiledPermissions) error {
+	allowed, role := compiledPermissions.manageAllowed(datasourceID)
 	if allowed {
 		return nil
 	}
@@ -271,7 +271,7 @@ func checkInstance(stmt InspectStatement, dbInstanceID string, compiledPermissio
 // write is scoped by the columns it writes, and a column it only tests is read
 // rather than written: that column needs select, and never stands in for the
 // right on the table, or a grant on one column would delete the whole row.
-func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPermissions CompiledPermissions) error {
+func checkTables(stmt InspectStatement, action, datasourceID string, compiledPermissions CompiledPermissions) error {
 	// scoping is what names the table for the action. A select is scoped by
 	// every column it reads, so a table reached only through a predicate is
 	// named by one; a write is not, since a column it reads is no part of what
@@ -307,7 +307,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 				continue
 			}
 			named = true
-			if denied := checkColumn(field, table, action, dbInstanceID, compiledPermissions); denied != nil {
+			if denied := checkColumn(field, table, action, datasourceID, compiledPermissions); denied != nil {
 				return denied
 			}
 		}
@@ -320,7 +320,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 					continue
 				}
 				named = true
-				if denied := checkColumn(field, table, action, dbInstanceID, compiledPermissions); denied != nil {
+				if denied := checkColumn(field, table, action, datasourceID, compiledPermissions); denied != nil {
 					return denied
 				}
 			}
@@ -331,7 +331,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 			// its rows, filtered on in a WHERE. The per-column walk matches
 			// nothing for it, so the table as a whole is what there is to ask
 			// about.
-			allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, "", action)
+			allowed, role := compiledPermissions.isAllowed(datasourceID, table.Schema, table.Name, "", action)
 			if !allowed {
 				return &PermissionDeniedError{
 					Action:    action,
@@ -349,7 +349,7 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 			if !fieldOf(field, table) {
 				continue
 			}
-			if denied := checkColumn(field, table, ActionSelect, dbInstanceID, compiledPermissions); denied != nil {
+			if denied := checkColumn(field, table, ActionSelect, datasourceID, compiledPermissions); denied != nil {
 				return denied
 			}
 		}
@@ -416,10 +416,10 @@ func fieldOf(field InspectField, table InspectTable) bool {
 func checkColumn(
 	field InspectField,
 	table InspectTable,
-	action, dbInstanceID string,
+	action, datasourceID string,
 	compiledPermissions CompiledPermissions,
 ) *PermissionDeniedError {
-	allowed, role := compiledPermissions.isAllowed(dbInstanceID, table.Schema, table.Name, field.Name, action)
+	allowed, role := compiledPermissions.isAllowed(datasourceID, table.Schema, table.Name, field.Name, action)
 	if allowed {
 		return nil
 	}
@@ -446,8 +446,8 @@ func checkColumn(
 // fields share a name (JOINs), any see-denied one masks the position. The whole
 // statement is read, subqueries included: a derived table returns its columns to
 // the outer select, so hiding one means finding it wherever it was read.
-func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string, perms CompiledPermissions) ([]int, error) {
-	if !perms.IsManaged(dbInstanceID) {
+func EvaluateSee(stmt InspectStatement, driverCols []string, datasourceID string, perms CompiledPermissions) ([]int, error) {
+	if !perms.IsManaged(datasourceID) {
 		return nil, nil
 	}
 
@@ -471,9 +471,9 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	for i, dc := range driverCols {
 		// The statement's own projection decides where it resolves the column
 		// to a table, so a name another scope reuses cannot hide one it shows.
-		resolved, deny := seeColumn(own, 0, dc, matched, dbInstanceID, perms)
+		resolved, deny := seeColumn(own, 0, dc, matched, datasourceID, perms)
 		if !resolved {
-			resolved, deny = seeColumn(nested, len(own), dc, matched, dbInstanceID, perms)
+			resolved, deny = seeColumn(nested, len(own), dc, matched, datasourceID, perms)
 		}
 		// A field that resolved to no table carries no permission, so it
 		// accounts for nothing.
@@ -488,14 +488,14 @@ func EvaluateSee(stmt InspectStatement, driverCols []string, dbInstanceID string
 	// A see-denied column the statement selects under no name of its own sits
 	// inside an expression, which has no position to mask. Only its own fields
 	// are read here: a subquery may select one the outer statement then drops.
-	if denied := firstSeeDenied(own, matched, dbInstanceID, perms); denied != nil {
+	if denied := firstSeeDenied(own, matched, datasourceID, perms); denied != nil {
 		return nil, denied
 	}
 
 	// A result column nothing accounts for may be carrying a hidden one, and
 	// the fields left unmatched are what it could be carrying.
 	if !allAccounted {
-		if denied := firstSeeDenied(fields, matched, dbInstanceID, perms); denied != nil {
+		if denied := firstSeeDenied(fields, matched, datasourceID, perms); denied != nil {
 			return nil, denied
 		}
 	}
@@ -531,7 +531,7 @@ func seeColumn(
 	offset int,
 	dc string,
 	matched []bool,
-	dbInstanceID string,
+	datasourceID string,
 	perms CompiledPermissions,
 ) (resolved, deny bool) {
 	for fi := range fields {
@@ -544,7 +544,7 @@ func seeColumn(
 			continue
 		}
 		resolved = true
-		if allowed, _ := perms.isAllowed(dbInstanceID, f.Schema, f.Table, f.Name, ActionSee); !allowed {
+		if allowed, _ := perms.isAllowed(datasourceID, f.Schema, f.Table, f.Name, ActionSee); !allowed {
 			deny = true
 		}
 	}
@@ -553,7 +553,7 @@ func seeColumn(
 
 // firstSeeDenied returns the error for the first field no role may see, or nil.
 // A field marked in matched is skipped, as is one that resolved to no table.
-func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, perms CompiledPermissions) *PermissionDeniedError {
+func firstSeeDenied(fields []InspectField, matched []bool, datasourceID string, perms CompiledPermissions) *PermissionDeniedError {
 	for fi, f := range fields {
 		if fi < len(matched) && matched[fi] {
 			continue
@@ -561,7 +561,7 @@ func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, 
 		if f.Schema == "" || f.Table == "" {
 			continue
 		}
-		allowed, role := perms.isAllowed(dbInstanceID, f.Schema, f.Table, f.Name, ActionSee)
+		allowed, role := perms.isAllowed(datasourceID, f.Schema, f.Table, f.Name, ActionSee)
 		if allowed {
 			continue
 		}
@@ -585,12 +585,12 @@ func firstSeeDenied(fields []InspectField, matched []bool, dbInstanceID string, 
 // It runs whether or not the statement returns rows, which is why it is not
 // part of EvaluateSee: that one needs the driver's columns, and only a
 // statement handing rows back has any.
-func CheckSeePredicates(stmts []InspectStatement, dbInstanceID string, perms CompiledPermissions) error {
-	if !perms.IsManaged(dbInstanceID) {
+func CheckSeePredicates(stmts []InspectStatement, datasourceID string, perms CompiledPermissions) error {
+	if !perms.IsManaged(datasourceID) {
 		return nil
 	}
 	for _, stmt := range stmts {
-		if denied := firstSeeDenied(predicateFields(stmt, false, nil), nil, dbInstanceID, perms); denied != nil {
+		if denied := firstSeeDenied(predicateFields(stmt, false, nil), nil, datasourceID, perms); denied != nil {
 			return denied
 		}
 	}

@@ -61,7 +61,7 @@ func (wg *WorkspaceNode) Clone() *WorkspaceNode {
 	out := *wg
 	out.User = wg.User.Clone()
 	out.Folders = cloneAll(wg.Folders)
-	out.DBInstances = cloneAll(wg.DBInstances)
+	out.Datasources = cloneAll(wg.Datasources)
 	return &out
 }
 
@@ -80,7 +80,7 @@ func (f *FolderNode) Clone() *FolderNode {
 	out := *f
 	out.Files = cloneAll(f.Files)
 	out.Folders = cloneAll(f.Folders)
-	out.DBInstances = cloneAll(f.DBInstances)
+	out.Datasources = cloneAll(f.Datasources)
 	out.Variables = maps.Clone(f.Variables)
 	out.Badges = slices.Clone(f.Badges)
 	return &out
@@ -91,7 +91,7 @@ func (f *FileNode) Clone() *FileNode {
 		return nil
 	}
 	out := *f
-	out.Databases = slices.Clone(f.Databases)
+	out.Datasources = slices.Clone(f.Datasources)
 	out.Badges = slices.Clone(f.Badges)
 	out.QueryResults = maps.Clone(f.QueryResults)
 	out.PlanResults = maps.Clone(f.PlanResults)
@@ -99,7 +99,7 @@ func (f *FileNode) Clone() *FileNode {
 	return &out
 }
 
-func (d *DBInstanceNode) Clone() *DBInstanceNode {
+func (d *DatasourceNode) Clone() *DatasourceNode {
 	if d == nil {
 		return nil
 	}
@@ -114,7 +114,7 @@ func (d *DBInstanceNode) Clone() *DBInstanceNode {
 	return &out
 }
 
-func (d *DBInstanceItemNode) Clone() *DBInstanceItemNode {
+func (d *DatasourceItemNode) Clone() *DatasourceItemNode {
 	if d == nil {
 		return nil
 	}

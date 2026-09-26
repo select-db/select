@@ -2,27 +2,27 @@
 	import type { ContextMenuOption } from '$lib/system/ContextMenu/types';
 	import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 	import Contextable from '$lib/system/ContextMenu/Contextable.svelte';
-	import DatabaseIndicator from '$lib/components/shared/DatabaseIndicator/DatabaseIndicator.svelte';
+	import DatasourceIndicator from '$lib/components/shared/DatasourceIndicator/DatasourceIndicator.svelte';
 
 	type Props = {
-		dbId: string;
-		run: (type: 'run' | 'explain' | 'plan', dbIds?: string[]) => Promise<void>;
+		datasourceId: string;
+		run: (type: 'run' | 'explain' | 'plan', datasourceIds?: string[]) => Promise<void>;
 		active?: boolean;
 		error?: boolean;
 		onclick?: (e: MouseEvent) => void;
 	};
 
-	let { dbId, run, active = false, error = false, onclick }: Props = $props();
+	let { datasourceId, run, active = false, error = false, onclick }: Props = $props();
 
-	const dbInstances = $derived(($workspaceGraphStore?.db_instances ?? []));
-	const name = $derived(dbInstances.find((dbi) => dbi.id === dbId)?.name ?? dbId);
+	const datasources = $derived($workspaceGraphStore?.datasources ?? []);
+	const name = $derived(datasources.find((dbi) => dbi.id === datasourceId)?.name ?? datasourceId);
 
 	const options = $derived<ContextMenuOption[]>([
 		{
 			label: 'Run',
 			icon: 'play',
 			action: async (onClose: () => void) => {
-				await run('run', [dbId]);
+				await run('run', [datasourceId]);
 				onClose();
 			}
 		},
@@ -30,7 +30,7 @@
 			label: 'Plan (no execution)',
 			icon: 'map',
 			action: async (onClose: () => void) => {
-				await run('plan', [dbId]);
+				await run('plan', [datasourceId]);
 				onClose();
 			}
 		},
@@ -38,7 +38,7 @@
 			label: 'Analyse (execute)',
 			icon: 'chart',
 			action: async (onClose: () => void) => {
-				await run('explain', [dbId]);
+				await run('explain', [datasourceId]);
 				onClose();
 			}
 		}
@@ -49,7 +49,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="db-badge" class:active {onclick}>
-		<DatabaseIndicator id={dbId} size={17} loaderSize={15} {error} />
+		<DatasourceIndicator id={datasourceId} size={17} loaderSize={15} {error} />
 		<p style="margin-top: -1px;">{name}</p>
 	</div>
 </Contextable>

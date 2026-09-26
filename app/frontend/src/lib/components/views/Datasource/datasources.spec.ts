@@ -1,5 +1,5 @@
 import {
-	databasesInGraph,
+	datasourcesInGraph,
 	onDisk,
 	expect,
 	exec,
@@ -8,7 +8,13 @@ import {
 	workspaceId,
 	type Page
 } from '../../../../../tests/e2e/wails';
-import { dbStatus, renameBox, tab, testId, treeRow } from '../../../../../tests/e2e/selectors';
+import {
+	datasourceStatus,
+	renameBox,
+	tab,
+	testId,
+	treeRow
+} from '../../../../../tests/e2e/selectors';
 import {
 	choose,
 	openFolderTo,
@@ -64,10 +70,10 @@ test('names a database by its directory, and renames the directory with it', asy
 	await expect(renameBox(page)).toBeFocused();
 
 	// A database's config is written while its form is open -- the form saves on
-	// a debounce -- and that arrives as a db_instance update like any other. It
+	// a debounce -- and that arrives as a datasource update like any other. It
 	// used to close the rename box, so whatever was being typed went nowhere.
 	// Touching the config raises the same update without the wait.
-	await exec(request, id, 'touch', 'db #1/db.config.json');
+	await exec(request, id, 'touch', 'db #1/datasource.config.json');
 	await expect(renameBox(page)).toBeFocused();
 
 	await renameTo(page, 'analytics');
@@ -79,7 +85,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	// one is not left behind.
 	expect(await onDisk(request, id, 'analytics')).toBe(true);
 	expect(await onDisk(request, id, 'db #1')).toBe(false);
-	expect(await databasesInGraph(request)).toContain('analytics');
+	expect(await datasourcesInGraph(request)).toContain('analytics');
 
 	// --- What a name is allowed to be ---------------------------------------
 
@@ -106,7 +112,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	await expect(box).toBeHidden();
 
 	await expect(treeRow(page, 'analytics')).toBeVisible();
-	expect(await databasesInGraph(request)).toEqual(['analytics', 'warehouse']);
+	expect(await datasourcesInGraph(request)).toEqual(['analytics', 'warehouse']);
 
 	// --- Renamed again, and the form follows --------------------------------
 
@@ -139,7 +145,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	await expect(treeRow(page, 'europe')).toBeVisible();
 	await openFolderTo(page, 'europe', 'reporting');
 	expect(await onDisk(request, id, 'reporting')).toBe(false);
-	expect(await databasesInGraph(request)).toContain('reporting');
+	expect(await datasourcesInGraph(request)).toContain('reporting');
 
 	// --- Renamed from outside the app ---------------------------------------
 
@@ -168,7 +174,7 @@ test('names a database by its directory, and renames the directory with it', asy
 	await choose(page, 'Delete');
 	await expect(treeRow(page, 'europe')).toHaveCount(0);
 
-	expect(await databasesInGraph(request)).toEqual(['warehouse']);
+	expect(await datasourcesInGraph(request)).toEqual(['warehouse']);
 	await expect(treeRow(page, 'warehouse')).toBeVisible();
 });
 
@@ -182,13 +188,13 @@ test('shows what the last attempt to reach a database found', async ({ page, sig
 	// this test moves away from and back to.
 	// Scoped to the tree: the same indicator appears wherever a database is named
 	// -- an open tab, a results badge -- and the tree is where it went stale.
-	const dot = testId(page, 'tree.panel').locator(dbStatus(page, WAREHOUSE));
+	const dot = testId(page, 'tree.panel').locator(datasourceStatus(page, WAREHOUSE));
 	await expect(dot).toHaveAttribute('data-test-state', 'online', { timeout: 30_000 });
 
 	await openRowMenu(page, 'warehouse');
 	await choose(page, 'Edit...');
 
-	const dsn = testId(page, 'database.dsn').locator('input');
+	const dsn = testId(page, 'datasource.dsn').locator('input');
 	await expect(dsn).toBeVisible();
 	const seeded = await dsn.inputValue();
 

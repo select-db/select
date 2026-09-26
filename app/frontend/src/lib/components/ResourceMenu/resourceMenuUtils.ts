@@ -13,16 +13,16 @@ import { resourceOptionInSearchScope } from './resourceMenuScope';
 export const MAX_RESOURCE_MENU_OPTIONS = 50;
 
 /** Tables/views first, then columns, then indexes/functions/triggers/types. */
-function dbItemTypePriority(opt: ResourceMenuOption): number {
-	if (opt.type !== 'db_item') return 0;
-	const t = (opt.node as graph.DBInstanceItemNode).type;
+function datasourceItemTypePriority(opt: ResourceMenuOption): number {
+	if (opt.type !== 'datasource_item') return 0;
+	const t = (opt.node as graph.DatasourceItemNode).type;
 	if (t === 'table' || t === 'view') return 0;
 	if (t.startsWith('column:')) return 1;
 	return 2;
 }
 
 /**
- * Menu rows for `types`: every instance in `workspace.db_instances` with its
+ * Menu rows for `types`: every instance in `workspace.datasources` with its
  * schema items, plus one row per file in `files`.
  *
  * Files are a parameter because the graph holds only opened folders; callers
@@ -50,19 +50,19 @@ export function resourceMenuOptions(
 		}
 	}
 
-	for (const db of workspace.db_instances) {
-		if (types.includes('db_instance')) {
-			options.push({ id: db.id, label: db.name, type: 'db_instance', uri: db.uri, node: db });
+	for (const db of workspace.datasources) {
+		if (types.includes('datasource')) {
+			options.push({ id: db.id, label: db.name, type: 'datasource', uri: db.uri, node: db });
 		}
-		if (types.includes('db_item') && db.children) {
-			collectDbItems(db.children, options);
+		if (types.includes('datasource_item') && db.children) {
+			collectDatasourceItems(db.children, options);
 		}
 	}
 
 	return options;
 }
 
-const EXCLUDED_DB_ITEM_TYPES = [
+const EXCLUDED_DATASOURCE_ITEM_TYPES = [
 	'columns',
 	'column',
 	'index',
@@ -73,9 +73,12 @@ const EXCLUDED_DB_ITEM_TYPES = [
 	'triggers'
 ];
 
-function collectDbItems(items: graph.DBInstanceItemNode[], options: ResourceMenuOption[]): void {
+function collectDatasourceItems(
+	items: graph.DatasourceItemNode[],
+	options: ResourceMenuOption[]
+): void {
 	for (const item of items) {
-		const isExcluded = EXCLUDED_DB_ITEM_TYPES.some(
+		const isExcluded = EXCLUDED_DATASOURCE_ITEM_TYPES.some(
 			(t) => item.type === t || item.type.startsWith('column:')
 		);
 
@@ -83,14 +86,14 @@ function collectDbItems(items: graph.DBInstanceItemNode[], options: ResourceMenu
 			options.push({
 				id: item.id,
 				label: item.name,
-				type: 'db_item',
+				type: 'datasource_item',
 				uri: item.uri,
 				node: item
 			});
 		}
 
 		if (item.children?.length) {
-			collectDbItems(item.children, options);
+			collectDatasourceItems(item.children, options);
 		}
 	}
 }
@@ -120,7 +123,7 @@ function tabType(tab: Tab): ResourceType | null {
 	if (tab.schema) return 'schema';
 	if (tab.chat) return 'chat';
 	if (tab.terminal) return 'terminal';
-	if (tab.database) return 'db_instance';
+	if (tab.datasource) return 'datasource';
 	if (tab.diff) return 'diff';
 	return null;
 }
@@ -163,7 +166,7 @@ export function getOpenTabOptions(
 				label,
 				type,
 				uri: tab.uri,
-				node: tab.database?.node ?? tabNode(tab.id, label, type, tab.uri)
+				node: tab.datasource?.node ?? tabNode(tab.id, label, type, tab.uri)
 			});
 		}
 	}
@@ -224,8 +227,8 @@ export function filterOptions(
 	return merged
 		.sort((a, b) => {
 			// 1. Type priority: tables/views always before indexes/functions/triggers
-			const aPri = dbItemTypePriority(a);
-			const bPri = dbItemTypePriority(b);
+			const aPri = datasourceItemTypePriority(a);
+			const bPri = datasourceItemTypePriority(b);
 			if (aPri !== bPri) return aPri - bPri;
 
 			const aLabel = a.label.toLowerCase();

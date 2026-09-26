@@ -228,7 +228,7 @@ export class LintResult {
  * PositionParams identifies a caret position inside a SQL file/buffer.
  */
 export class PositionParams {
-    "DbInstanceID": string;
+    "DatasourceID": string;
 
     /**
      * optional; enables variable substitution
@@ -240,8 +240,8 @@ export class PositionParams {
 
     /** Creates a new PositionParams instance. */
     constructor($$source: Partial<PositionParams> = {}) {
-        if (!("DbInstanceID" in $$source)) {
-            this["DbInstanceID"] = "";
+        if (!("DatasourceID" in $$source)) {
+            this["DatasourceID"] = "";
         }
         if (!("FileID" in $$source)) {
             this["FileID"] = "";
@@ -272,7 +272,7 @@ export class PositionParams {
  * ResolveResult is returned by Resolve for ItemInfoModal navigation.
  */
 export class ResolveResult {
-    "node"?: graph$0.DBInstanceItemNode | null;
+    "node"?: graph$0.DatasourceItemNode | null;
     "found": boolean;
     "kind": string;
 
@@ -307,5 +307,5 @@ const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Array($Create.Any);
 const $$createType3 = LintDiagnostic.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = graph$0.DBInstanceItemNode.createFrom;
+const $$createType5 = graph$0.DatasourceItemNode.createFrom;
 const $$createType6 = $Create.Nullable($$createType5);

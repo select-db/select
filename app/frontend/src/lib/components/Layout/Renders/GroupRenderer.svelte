@@ -7,7 +7,7 @@
 	 * or not anything was open.
 	 */
 	const File = () => import('$lib/components/views/File/file.svelte');
-	const Database = () => import('$lib/components/views/Database/Database.svelte');
+	const Datasource = () => import('$lib/components/views/Datasource/Datasource.svelte');
 	const SchemaTab = () => import('$lib/components/views/Schema/Schema.svelte');
 	const DiffView = () => import('$lib/components/views/Diff/DiffView.svelte');
 	const Terminal = () => import('$lib/components/views/Terminal/Terminal.svelte');
@@ -120,8 +120,8 @@
 				{#if activeTab}
 					{#if activeTab.file}
 						{#await File() then { default: View }}<View tab={activeTab} />{/await}
-					{:else if activeTab.database}
-						{#await Database() then { default: View }}<View tab={activeTab} />{/await}
+					{:else if activeTab.datasource}
+						{#await Datasource() then { default: View }}<View tab={activeTab} />{/await}
 					{:else if activeTab.schema}
 						{#await SchemaTab() then { default: View }}<View tab={activeTab} />{/await}
 					{:else if activeTab.diff}

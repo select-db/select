@@ -9,7 +9,7 @@ import (
 
 func TestToSnake(t *testing.T) {
 	cases := map[string]string{
-		"DbInstanceID": "db_instance_id",
+		"DatasourceID": "datasource_id",
 		"RoleID":       "role_id",
 		"WorkspaceID":  "workspace_id",
 		"Action":       "action",

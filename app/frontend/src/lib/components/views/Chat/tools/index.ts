@@ -1,13 +1,13 @@
 import { clientTools } from '$lib/components/views/Chat/core/chat/tool-definition';
 
 import {
-	getDatabaseSchemasClient,
-	getDatabaseSchemasExecutor
-} from './discovery/getDatabaseSchemas';
+	getDatasourceSchemasClient,
+	getDatasourceSchemasExecutor
+} from './discovery/getDatasourceSchemas';
 import {
-	getDatabaseTableDetailClient,
-	getDatabaseTableDetailExecutor
-} from './discovery/getDatabaseTableDetail';
+	getDatasourceTableDetailClient,
+	getDatasourceTableDetailExecutor
+} from './discovery/getDatasourceTableDetail';
 import { readFileClient, readFileExecutor } from './discovery/readFile';
 import type { OnApprovalRequested } from '$lib/components/views/Chat/composables/useToolExecution.svelte';
 import {
@@ -26,7 +26,7 @@ export type { ChatContext } from './context';
 export { createDefaultGetContext, getContextForChatTab } from './context';
 
 type QueryExecutorArgs = {
-	dbInstanceId: string;
+	datasourceId: string;
 	statement: string;
 	folderId?: string | null;
 	__fileId?: string;
@@ -40,11 +40,11 @@ function wrapQueryExecutor(
 	return async (args: unknown) => {
 		const a = args as QueryExecutorArgs;
 		const fileId = `chat://${sessionId}/${crypto.randomUUID()}`;
-		registry.add(a.dbInstanceId, fileId);
+		registry.add(a.datasourceId, fileId);
 		try {
 			return await executor({ ...a, __fileId: fileId });
 		} finally {
-			registry.remove(a.dbInstanceId, fileId);
+			registry.remove(a.datasourceId, fileId);
 		}
 	};
 }
@@ -61,8 +61,8 @@ export function createChatTools(sessionId: string, queryRegistry: QueryRegistry)
 	const wrappedPlanQuery = wrapQueryExecutor(planQueryExecutor, sessionId, queryRegistry);
 
 	const tools = clientTools(
-		getDatabaseSchemasClient,
-		getDatabaseTableDetailClient,
+		getDatasourceSchemasClient,
+		getDatasourceTableDetailClient,
 		readFileClient,
 		editFileClient,
 		executeCommandClient,
@@ -73,8 +73,8 @@ export function createChatTools(sessionId: string, queryRegistry: QueryRegistry)
 	);
 
 	const toolExecutors: Record<string, (args: unknown, ctx?: unknown) => Promise<unknown>> = {
-		get_database_schemas: getDatabaseSchemasExecutor,
-		get_database_table_detail: getDatabaseTableDetailExecutor,
+		get_datasource_schemas: getDatasourceSchemasExecutor,
+		get_datasource_table_detail: getDatasourceTableDetailExecutor,
 		read_file: readFileExecutor,
 		edit_file: editFileExecutor as (args: unknown, ctx?: unknown) => Promise<unknown>,
 		execute_command: executeCommandExecutor,

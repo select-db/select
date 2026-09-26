@@ -40,7 +40,7 @@
 	// replaces what was typed.
 	let placed = false;
 
-	const RENAMABLE_TYPES = new Set(['file', 'folder', 'db_instance']);
+	const RENAMABLE_TYPES = new Set(['file', 'folder', 'datasource']);
 
 	$effect(() => {
 		if ($renamingItemIdStore !== id) {
