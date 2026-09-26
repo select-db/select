@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
 
@@ -111,57 +112,48 @@ func CloseWorkspaceConns(workspaceID string) {
 // ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
 // Concurrent first queries for one datasource share a single open.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
-	if dbType == "sqlite" && ssh != nil {
-		return nil, newConfigError("SSH tunneling is not supported for sqlite")
-	}
-
+	// Tunneled, then opened on the local port, unguarded:
+	//   - any datasource with SSH
+	// Refused:
+	//   - a DSN with no host to tunnel to, such as a sqlite file
 	if ssh != nil {
-		remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
-		if err != nil {
-			return nil, fmt.Errorf("parse DSN for SSH: %w", err)
-		}
-		// The bastion dials remoteHost for us; stop it pivoting to its own
-		// cloud-metadata/link-local (loopback stays allowed: common tunnel case).
-		if verr := validateTunnelTarget(remoteHost); verr != nil {
-			return nil, verr
-		}
-
-		tunnel, err := GetOrCreateTunnel(workspaceID, *ssh, remoteHost, remotePort)
-		if err != nil {
-			return nil, fmt.Errorf("SSH tunnel: %w", err)
-		}
-
-		localPort, err := tunnel.LocalPort()
-		if err != nil {
-			return nil, fmt.Errorf("SSH tunnel local port: %w", err)
-		}
-
-		dsn, err = core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
-		if err != nil {
-			return nil, fmt.Errorf("rewrite DSN for SSH: %w", err)
+		var err error
+		if dsn, err = tunneledDSN(workspaceID, dbType, dsn, *ssh); err != nil {
+			return nil, err
 		}
 	}
 
-	guardedDirect := false
-	if ssh == nil && EnforceOutboundGuard {
-		// Proxy: only validated networked dialects may be dialed. Anything we
-		// cannot parse+validate, or any non-networked driver (sqlite and other
-		// local-file drivers open a path on THIS host), is refused.
+	// Guarded:
+	//   - the server (EnforceOutboundGuard) dialing a user's DSN directly
+	// Unguarded:
+	//   - SSH, whose target was checked above
+	//   - the desktop app
+	//   - a cellar DSN, whose driver dials only the configured cellar
+	guarded := ssh == nil && EnforceOutboundGuard && !sqlite.IsCellarDSN(dsn)
+	if guarded {
+		// Refused:
+		//   - a DSN whose host does not parse, incl. a sqlite file (a path on this host)
 		host, _, perr := core.ParseDSNRemote(dbType, dsn)
-		if perr != nil || (dbType != "postgresql" && dbType != "mysql") {
+		if perr != nil {
 			return nil, fmt.Errorf("connection target is not permitted")
 		}
 		// Cheap pre-dial reject; fails closed on unresolvable / all-blocked
 		if verr := validateOutboundHost(host); verr != nil {
 			return nil, verr
 		}
-		// Authoritative check is the per-dial IP guard below (re-runs on the
+		// Authoritative check is the per-dial IP guard in open (re-runs on the
 		// real resolved IP), so rebinding is caught
-		guardedDirect = true
 	}
-	// Guard off (desktop app): dialing the user's own machine, incl. a local
-	// sqlite file, is the intended use and must not be restricted.
+	return getOrOpen(workspaceID, dbType, dsn, guarded, pool...)
+}
 
+// GetOrOpenTrusted opens with the dialect's driver, unguarded, for a DSN the
+// caller built itself and never one a user supplied: a cellar's own files.
+func GetOrOpenTrusted(workspaceID, dbType, dsn string, pool ...PoolConfig) (*sql.DB, error) {
+	return getOrOpen(workspaceID, dbType, dsn, false, pool...)
+}
+
+func getOrOpen(workspaceID, dbType, dsn string, guarded bool, pool ...PoolConfig) (*sql.DB, error) {
 	var cfg PoolConfig
 	if len(pool) > 0 {
 		cfg = pool[0]
@@ -171,21 +163,7 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	// GetOrCreate opens at most once per key: concurrent first queries for one
 	// datasource share the open rather than each dialing. A failure is not cached.
 	value, err := connCache.GetOrCreate(hash, func() (any, error) {
-		dialect := GetDialect(dbType)
-		if dialect == nil {
-			return nil, newConfigErrorf("unsupported database type: %s", dbType)
-		}
-
-		var (
-			db  *sql.DB
-			err error
-		)
-		if guardedDirect {
-			// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
-			db, err = openGuardedDB(dbType, dsn)
-		} else {
-			db, err = dialect.OpenDB(dsn)
-		}
+		db, err := open(dbType, dsn, guarded)
 		if err != nil {
 			return nil, err
 		}
@@ -201,6 +179,24 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		return nil, err
 	}
 	return value.(*sql.DB), nil
+}
+
+func open(dbType, dsn string, guarded bool) (*sql.DB, error) {
+	dialect := GetDialect(dbType)
+	if dialect == nil {
+		return nil, newConfigErrorf("unsupported database type: %s", dbType)
+	}
+	// Guarded dialer, re-validating the resolved IP at connect (beats rebinding):
+	//   - the server dialing a user's postgresql or mysql DSN
+	if guarded {
+		return dialect.OpenGuardedDB(dsn, guardedDial)
+	}
+	// Dialect's own dialing:
+	//   - the desktop app
+	//   - SSH, on the tunnel's local port
+	//   - a cellar DSN, which the sqlite dialect opens with the cellar driver
+	//   - a cellar's own file (GetOrOpenTrusted)
+	return dialect.OpenDB(dsn)
 }
 
 // ClearConnCache drops all connection cache entries, closing each pool.

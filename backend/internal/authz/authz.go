@@ -34,7 +34,7 @@ func RequestPrincipal(r *http.Request, workspaceID string) audit.Principal {
 		Name:        p.Name,
 		WorkspaceID: workspaceID,
 		Roles:       roles,
-		Permissions: EntriesForWorkspace(roleIDs, workspaceID),
+		Permissions: workspaceEntries(roleIDs, workspaceID),
 	}
 }
 
@@ -60,7 +60,7 @@ func isWorkspaceOwner(r *http.Request, workspaceID string) bool {
 	return InSet(middlewares.GetOwnedWorkspaceIDs(r), workspaceID)
 }
 
-func ToDialectPermissions(rows []generated.AppPermission) []core.PermissionEntry {
+func toEntries(rows []generated.AppPermission) []core.PermissionEntry {
 	out := make([]core.PermissionEntry, 0, len(rows))
 	for _, p := range rows {
 		if p.DeletedAt.Valid {
@@ -78,23 +78,26 @@ func ToDialectPermissions(rows []generated.AppPermission) []core.PermissionEntry
 	return out
 }
 
-// CompiledForWorkspace keeps only permissions belonging to workspaceID, and
-// makes a database nobody has written a rule for deny-by-default: everything
-// the backend serves runs on our credentials. See core.WithDenyUnmanaged.
-func CompiledForWorkspace(roleIDs []string, workspaceID string) core.CompiledPermissions {
-	return core.Compile(EntriesForWorkspace(roleIDs, workspaceID)).WithDenyUnmanaged()
-}
-
-func CompiledFromRequest(r *http.Request) core.CompiledPermissions {
+// Entries are the caller's raw permission rules in its workspace, to show to a
+// user or an LLM. Decide with Perms, which bakes in wildcards and denies.
+func Entries(r *http.Request) []core.PermissionEntry {
 	ws := middlewares.MemberWorkspaceID(r)
-	return CompiledForWorkspace(workspaceRoleIDs(r, ws), ws)
+	return workspaceEntries(workspaceRoleIDs(r, ws), ws)
 }
 
-// EntriesForWorkspace returns the raw permission entries (not compiled)
-// that apply in this workspace. Use when you want to show the underlying
-// rules to a user or LLM. For permission decisions, use
-// CompiledForWorkspace; it bakes the wildcard and deny semantics in.
-func EntriesForWorkspace(roleIDs []string, workspaceID string) []core.PermissionEntry {
+// Perms are the caller's compiled permissions in its workspace.
+func Perms(r *http.Request) core.CompiledPermissions {
+	ws := middlewares.MemberWorkspaceID(r)
+	return WorkspacePerms(workspaceRoleIDs(r, ws), ws)
+}
+
+// WorkspacePerms compiles the rules roleIDs hold in workspaceID. A database
+// nobody wrote a rule for is denied: the backend dials it with our credentials.
+func WorkspacePerms(roleIDs []string, workspaceID string) core.CompiledPermissions {
+	return core.Compile(workspaceEntries(roleIDs, workspaceID)).WithDenyUnmanaged()
+}
+
+func workspaceEntries(roleIDs []string, workspaceID string) []core.PermissionEntry {
 	all := MergeForRoles(roleIDs)
 	scoped := make([]generated.AppPermission, 0, len(all))
 	for _, p := range all {
@@ -102,11 +105,5 @@ func EntriesForWorkspace(roleIDs []string, workspaceID string) []core.Permission
 			scoped = append(scoped, p)
 		}
 	}
-	return ToDialectPermissions(scoped)
-}
-
-// EntriesFromRequest is EntriesForWorkspace driven by request context.
-func EntriesFromRequest(r *http.Request) []core.PermissionEntry {
-	ws := middlewares.MemberWorkspaceID(r)
-	return EntriesForWorkspace(workspaceRoleIDs(r, ws), ws)
+	return toEntries(scoped)
 }

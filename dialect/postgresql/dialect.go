@@ -1,9 +1,12 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"strings"
+	"time"
 	"unicode"
 
 	core "github.com/selectDb/dialect/core"
@@ -11,7 +14,7 @@ import (
 	pg "github.com/selectDb/dialect/postgresql/parser"
 
 	antlr "github.com/antlr4-go/antlr/v4"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 // Register the PostgreSQL dialect on package init
@@ -65,19 +68,46 @@ func (d *Dialect) Name() string {
 }
 
 func (d *Dialect) OpenDB(dsn string) (*sql.DB, error) {
-	return openPostgresDBWithFallback(dsn)
-}
-
-func openPostgresDBWithFallback(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, err
 	}
+	return pinged(db)
+}
+
+func (d *Dialect) OpenGuardedDB(dsn string, dial core.DialFunc) (*sql.DB, error) {
+	connector, err := pq.NewConnector(dsn)
+	if err != nil {
+		return nil, err
+	}
+	connector.Dialer(pqDialer(dial))
+	return pinged(sql.OpenDB(connector))
+}
+
+// pinged returns db once it has reached the server, so a bad DSN fails at open.
+func pinged(db *sql.DB) (*sql.DB, error) {
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+// pqDialer adapts a core.DialFunc to lib/pq's Dialer and DialerContext.
+type pqDialer core.DialFunc
+
+func (d pqDialer) Dial(network, address string) (net.Conn, error) {
+	return d(context.Background(), network, address)
+}
+
+func (d pqDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return d(ctx, network, address)
+}
+
+func (d pqDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return d(ctx, network, address)
 }
 
 func (d *Dialect) CreateLexer(input string) antlr.Lexer {

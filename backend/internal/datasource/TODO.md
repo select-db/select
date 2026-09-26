@@ -2,7 +2,7 @@
 
 A managed database is a SQLite database that SELECT hosts. Users create it
 from the app, the REST API or MCP, and query it through the backend like any
-proxified datasource. Target cost: one small VM plus Object Storage at about
+other datasource. Target cost: one small VM plus Object Storage at about
 $0.01 per GB-month.
 
 ## Words
@@ -25,14 +25,20 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
                    plans, quotas, rows                          Litestream
 ```
 
-1. The backend checks who is calling and what they may do, as for any
-   proxified datasource.
-2. It signs a 60s token for one db and forwards the request over the existing
-   engine HTTP transport.
+1. A managed datasource is a DSN, `cellar://<cellar id>/<datasource id>`,
+   opened by `engine.GetOrOpenConn` like any other. The backend checks
+   permissions and masks columns as for every datasource.
+2. The `cellar` database/sql driver sends each statement to the cellar with a
+   service token and the grant (workspace, limits) in headers.
 3. The cellar checks the token, wakes the db if cold, runs the statement under
-   its limits and streams the result back.
+   its isolation rules and limits and streams the rows back.
 4. Litestream streams every write to the bucket. The bucket is the truth, the
    cellar disk is a cache.
+
+Code follows the process it runs in. `internal/cellar` is only what runs on
+the cellar, plus the grant and query it accepts. The backend's side, the
+driver, is in `internal/datasource/cellar`; startup is in
+`cmd/server/cellar.go`.
 
 ## Rules
 
@@ -62,20 +68,22 @@ Settled. Reopen with a reason, not a preference.
 
 - The plan is a new `workspace.plan`, set by hand until billing exists.
 - The backend checks totals and counts on create and fork.
-- The per-db cap and the window reach the cellar in the token (`max`,
-  `pitr`). The cellar applies `max` as `max_page_count` on open; a db over a
-  lowered cap keeps its data and stops growing. It keeps the last `pitr` seen
+- The per-db cap reaches the cellar in the grant (`max_bytes`), and the
+  window (`pitr_days`) will with Litestream. The cellar applies `max_bytes`
+  as `max_page_count` on open; a db over a lowered cap keeps its data and
+  stops growing. It keeps the last `pitr_days` seen
   per db and uses 7 days when it does not know, so history is never cut early.
 - Raise limits with data, never lower them.
 
 ### Limits on every cellar statement
-- Time: the workspace setting, capped at 60s, enforced by the cellar. Never
-  read from the request.
-- Concurrency: 10 statements in flight per workspace. More wait for a slot;
-  the wait counts against the same 60s.
-- Both are constants on the cellar, enforced by one `InFlight` middleware next
-  to `RateLimit`, keyed by the token's `ws`. Query-seconds per workspace are
-  recorded, not enforced.
+- Time: capped at 60s, enforced by the cellar. The cap is never read from
+  the request; a caller's own timeout can only shorten it.
+- Concurrency: `max(4, 2 x members)` statements in flight per workspace. The
+  backend counts members and sends the result as the grant's `max_in_flight`; the
+  cellar enforces it with the `InFlight` middleware, keyed by the grant's `workspace_id`.
+  More wait for a slot; the wait counts against the same 60s.
+- Query-seconds per workspace are recorded, not enforced, as the duration of
+  the backend's audit query event.
 
 ### Routes
 - `POST /datasources`: create any datasource type, server-generated id. Same
@@ -94,18 +102,30 @@ Settled. Reopen with a reason, not a preference.
 - Each db gets a dedicated role with full access, created and deleted with it.
   `grant_to` is optional: the caller can always grant itself, anyone else
   needs `users.manage` or `api-keys.manage`. Empty means nobody, as for any
-  proxified datasource.
+  datasource.
 - Fork and download need `manage` on the source: both hand over all the data.
 - Deleting a db deletes roles scoped only to it and strips its rules from
   other roles.
 
-### Cellar token
-- `CellarClaims{db, ws, cel, max, pitr}`, audience `select-cellar`, 60s,
-  signed with the existing JWT signer (`auth/jwt.go`). The backend caches one
-  token per db for about 50s because each KMS sign is a remote call.
-- The cellar holds only the public key. It rejects a token whose `db` differs
-  from the path or whose `cel` is not itself. User tokens have another
-  audience and never open a db.
+### Backend to cellar
+- The cellar is a SQLite server with one route, `POST
+  /datasources/{id}/query`: a statement and its arguments in, an Arrow
+  stream out. It knows no permissions; the backend checks them before the
+  statement is sent, as for every datasource.
+- The cellar trusts the backend, on a private network. The backend proves
+  itself with one service JWT: audience `selectdb-cellar`, 60s, signed with
+  `auth.Sign` like user tokens, and reused for 50s because each KMS sign is a
+  remote call. The cellar holds only the public key. The token names no db,
+  so a leaked one opens any db on the cellar until it expires.
+- The grant `{workspace_id, cellar_id, max_bytes, max_in_flight}` is
+  base64url JSON in `X-Cellar-Grant`, read from the DSN's query; `pitr_days`
+  joins it with Litestream. The cellar refuses a grant whose `cellar_id` is
+  not itself.
+- Only the backend builds a `cellar://` DSN, when it loads a row with a
+  cellar. A user row with one is refused: it would open another workspace's
+  db.
+- The driver has no transactions or prepared statements: the engine uses
+  neither for a datasource.
 
 ### Storage
 - Replicas live at `dbs/{db_id}/`, never under a cellar, so moving or
@@ -162,13 +182,16 @@ id, both sides log it, the caller sees it as `ref`.
 ### Scaling
 - Any number of backends: wake dedup and limits live on the cellar.
 - More cellars later: each row has a `cellar_id`; a move is mark `moving`,
-  evict on the old cellar, flip `cellar_id`. The token's `cel` fences a stale
+  evict on the old cellar, flip `cellar_id`. The grant's `cellar_id` fences a stale
   route, so two cellars never write one replica.
 
 ### Environments
-- Dev: `./dev.sh backend start` as today, with `CELLAR=local` and a directory
-  replica in `backend/.dev/`. No MinIO. A cellar that fails to start only
-  makes managed routes answer `unavailable`.
+- Dev: `./dev.sh backend start` as today, with `CELLAR=local`: the cellar
+  runs in-process on a loopback port over `CELLAR_DIR` (default `.dev/cellar`),
+  with a directory replica in `backend/.dev/`. No MinIO. A local cellar that
+  cannot start stops the server, as a bad `CELLAR` does: it is a config error.
+  One that stops later, or a remote one down, makes managed routes answer
+  `unavailable`.
 - Staging: a second systemd unit on the staging box, own data dir and bucket.
 - Prod: a d2-4 VM on the private network, same region as the backend.
 
@@ -189,23 +212,33 @@ Numbers are order; items inside a milestone can run in parallel.
 
 ### 1. Cellar runs queries (local files, no bucket)
 Needs 0.
-- [ ] Cellar mode: execute, schema, ping, dump over the existing engine
-      transport, `StreamLocal` against local files. `CELLAR=local` starts it
+- [x] Cellar mode: one query route running `StreamLocal` against local
+      files, reached through the `cellar` database/sql driver, so REST and
+      MCP open a managed datasource like any other. `CELLAR=local` starts it
       in-process.
-- [ ] `CellarClaims` signing with cache in the backend, verification in the
-      cellar.
-- [ ] Isolation: pragmas in the DSN, PRAGMA allowlist, and
-      `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement.
-      The engine pools connections and the driver has no per-connection hook
-      that can set limits, so per statement is the only fail-closed place.
-- [ ] `InFlight` middleware, 60s cap, query-seconds recorded.
+- [x] Service token signed and reused by the backend (`datasource/cellar`),
+      and checked with the grant header by the cellar (`cellar.Authenticated`
+      middleware, which puts the grant in the context for `InFlight` to key
+      on).
+- [x] Isolation: pragmas in the DSN, PRAGMA allowlist, and
+      `sqlite.Limit(ATTACHED, 0)` on the `*sql.Conn` taken for each statement
+      (`engine.Conn.Prepare`). The engine pools connections and the driver has
+      no per-connection hook that can set limits, so per statement is the only
+      fail-closed place. `max_page_count` from the grant is set there too.
+- [x] Files open through the engine's pool cache, as on the desktop app
+      (`engine.GetOrOpenTrusted`: no outbound guard, for a DSN the cellar
+      builds), so idle files are closed.
+- [x] `InFlight` middleware (`middlewares.InFlight`).
+- [x] 60s cap on every cellar statement (`middlewares.Timeout` in `cellar.Register`).
+- [ ] Query-seconds: the audit query event gets its duration back (dropped
+      in `audit_drop_query_metrics`, to return as a dedicated column).
 - [ ] Error codes and request id, end to end to REST and MCP. The request id
       lives in the context so `ref` matches the request log; MCP's mid-stream
       `collectSink` error goes through the same classification.
-- [ ] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
-      every non-allowlisted PRAGMA); token rejection (expired, wrong db, wrong
-      cellar, unsigned, user token); no error body contains a path, bucket or
-      address.
+- [x] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
+      every non-allowlisted PRAGMA); token rejection (expired, unsigned, other
+      key, user token) and a grant for another cellar; no error body contains
+      a path, bucket or address.
 
 ### 2. Create, fork, download, delete
 Needs 1.
@@ -225,7 +258,7 @@ Needs 1. Can run alongside 2. Start with the spikes.
       One page of findings before building on it.
 - [ ] Spike: OVH bucket supports `NoncurrentVersionExpiration`; restore speed
       from the bucket to a d2-4.
-- [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr`.
+- [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr_days`.
 - [ ] Directory replica when no S3, with the startup preflight.
 - [ ] LRU eviction on disk pressure; wake with shared restore and 15s wait.
 - [ ] `size_bytes`, `state`, `last_used_at` reported back to the row.

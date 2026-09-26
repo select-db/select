@@ -48,7 +48,7 @@ func toolListDatasources() Tool {
 			}
 
 			// Wildcard-DB entries (DbInstanceID "*") apply to every datasource
-			entries := authz.EntriesFromRequest(r)
+			entries := authz.Entries(r)
 			scopedByDB, wildcardEntries := indexEntriesByDB(entries)
 
 			type item struct {
@@ -145,14 +145,18 @@ func toolGetDatabaseSchemas() Tool {
 			ReadOnlyHint:   boolPtr(true),
 			IdempotentHint: boolPtr(true),
 		},
-		Run: func(ctx context.Context, _ *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
+		Run: func(ctx context.Context, r *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
 			var args struct {
 				DatasourceID string `json:"datasource_id"`
 			}
 			if err := json.Unmarshal(raw, &args); err != nil || args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			o, err := openDatasource(ctx, args.DatasourceID, workspaceID)
+			o, err := openDatasource(r, args.DatasourceID, workspaceID)
+			if err != nil {
+				return nil, err
+			}
+			meta, err := describe(ctx, o)
 			if err != nil {
 				return nil, err
 			}
@@ -163,8 +167,8 @@ func toolGetDatabaseSchemas() Tool {
 				Tables []string `json:"tables"`
 				Views  []string `json:"views,omitempty"`
 			}
-			out := make([]schemaRow, 0, len(o.meta.Schemas))
-			for _, s := range o.meta.Schemas {
+			out := make([]schemaRow, 0, len(meta.Schemas))
+			for _, s := range meta.Schemas {
 				row := schemaRow{ID: s.Name, Name: s.Name}
 				for _, t := range s.Tables {
 					row.Tables = append(row.Tables, t.Name)
@@ -176,7 +180,7 @@ func toolGetDatabaseSchemas() Tool {
 			}
 			return map[string]any{
 				"datasource_id": args.DatasourceID,
-				"dialect":       o.dialect.Name(),
+				"dialect":       o.DS.DBType,
 				"schemas":       out,
 			}, nil
 		},
@@ -201,7 +205,7 @@ func toolGetDatabaseTableDetail() Tool {
 			ReadOnlyHint:   boolPtr(true),
 			IdempotentHint: boolPtr(true),
 		},
-		Run: func(ctx context.Context, _ *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
+		Run: func(ctx context.Context, r *http.Request, workspaceID string, raw json.RawMessage) (any, error) {
 			var args struct {
 				DatasourceID string `json:"datasource_id"`
 				SchemaID     string `json:"schema_id"`
@@ -213,11 +217,15 @@ func toolGetDatabaseTableDetail() Tool {
 			if args.DatasourceID == "" || args.SchemaID == "" || args.TableName == "" {
 				return nil, errBadArgument("datasource_id, schema_id, and table_name are required")
 			}
-			o, err := openDatasource(ctx, args.DatasourceID, workspaceID)
+			o, err := openDatasource(r, args.DatasourceID, workspaceID)
 			if err != nil {
 				return nil, err
 			}
-			for _, s := range o.meta.Schemas {
+			meta, err := describe(ctx, o)
+			if err != nil {
+				return nil, err
+			}
+			for _, s := range meta.Schemas {
 				if s.Name != args.SchemaID {
 					continue
 				}

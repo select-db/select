@@ -71,7 +71,7 @@ func runPlanOrExplain(ctx context.Context, r *http.Request, workspaceID string, 
 		return nil, errBadArgument("datasource_id and statement are required")
 	}
 
-	conn, ds, dialect, err := openConn(ctx, r, args.DatasourceID, workspaceID)
+	o, err := openDatasource(r, args.DatasourceID, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,20 +82,20 @@ func runPlanOrExplain(ctx context.Context, r *http.Request, workspaceID string, 
 		planParser core.PlanParser
 	)
 	if planOnly {
-		planParser, err = core.NewPlanParser(dialect.Name())
+		planParser, err = core.NewPlanParser(o.DS.DBType)
 		if err != nil {
-			return nil, errExecution(fmt.Sprintf("plan not supported for %s", dialect.Name()), "")
+			return nil, errExecution(fmt.Sprintf("plan not supported for %s", o.DS.DBType), "")
 		}
 		wrappedSQL = planParser.BuildPlanQuery(args.Statement)
 	} else {
-		parser, err = core.NewExplainParser(dialect.Name())
+		parser, err = core.NewExplainParser(o.DS.DBType)
 		if err != nil {
-			return nil, errExecution(fmt.Sprintf("explain not supported for %s", dialect.Name()), "")
+			return nil, errExecution(fmt.Sprintf("explain not supported for %s", o.DS.DBType), "")
 		}
 		wrappedSQL = parser.BuildExplainQuery(args.Statement)
 	}
 
-	res := runQuery(ctx, conn, ds, wrappedSQL, maxRowsCeiling, nil).(map[string]any)
+	res := runQuery(ctx, o, wrappedSQL, maxRowsCeiling, nil).(map[string]any)
 	if ok, _ := res["success"].(bool); !ok {
 		return res, nil
 	}

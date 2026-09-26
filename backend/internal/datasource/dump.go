@@ -1,7 +1,7 @@
 package datasource
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 
 	"backend/internal/middlewares"
@@ -16,47 +16,32 @@ func DumpHandler() http.HandlerFunc {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
-
 		workspaceID := middlewares.MemberWorkspaceID(r)
 
-		ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
+		o, err := Open(r, id, workspaceID)
 		if err != nil {
-			http.Error(w, "datasource not found", http.StatusNotFound)
+			OpenError(w, err, "datasource dump", workspaceID, id)
 			return
 		}
-
-		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
+		schemaSQL, err := localDump(r.Context(), o)
 		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
+			OpenError(w, err, "datasource dump", workspaceID, id)
 			return
 		}
-
-		dialect := engine.GetDialect(ds.DBType)
-		if dialect == nil {
-			http.Error(w, "unsupported database type", http.StatusBadRequest)
-			return
-		}
-
-		meta, err := engine.GetOrFetchMetadata(r.Context(), workspaceID, ds.DSN, dbConn, dialect, "", false)
-		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
-			return
-		}
-
-		// CLI tools dial the host themselves (no Go guard); pin to the same
-		// validated endpoint as the driver
-		dumpDSN, err := engine.ResolveDumpDSN(workspaceID, ds.DBType, ds.DSN, ds.SSH)
-		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource dump", workspaceID, id), http.StatusBadGateway)
-			return
-		}
-
-		schemaSQL := engine.GetOrGenerateDump(dialect, workspaceID, dumpDSN, meta, false)
-
-		jsonBytes, _ := json.Marshal(map[string]string{"sql": schemaSQL})
-		compressed := zstdEncoder.EncodeAll(jsonBytes, nil)
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Encoding", "zstd")
-		_, _ = w.Write(compressed)
+		writeZstdJSON(w, map[string]string{"sql": schemaSQL})
 	}
+}
+
+func localDump(ctx context.Context, o Opened) (string, error) {
+	meta, err := o.Metadata(ctx, false)
+	if err != nil {
+		return "", err
+	}
+	// CLI tools dial the host themselves (no Go guard); pin to the same
+	// validated endpoint as the driver
+	dumpDSN, err := engine.ResolveDumpDSN(o.WorkspaceID, o.DS.DBType, o.DS.DSN, o.DS.SSH)
+	if err != nil {
+		return "", err
+	}
+	return engine.GetOrGenerateDump(engine.GetDialect(o.DS.DBType), o.WorkspaceID, dumpDSN, meta, false), nil
 }

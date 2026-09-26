@@ -32,7 +32,7 @@ func authorizeCommit(userID string, workspaceIDs []string, roleIDs []string, own
 		return true
 	}
 
-	compiled := authz.CompiledForWorkspace(roleIDs, c.WorkspaceID)
+	compiled := authz.WorkspacePerms(roleIDs, c.WorkspaceID)
 
 	// Per-table write requirements come from gen.RequiredActions (generated from
 	// each @app.sync table's @app.api `requires` clause; see gen/authorize.go).

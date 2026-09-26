@@ -23,6 +23,9 @@ type Options struct {
 	// the app's adapter slices the first page from the buffered Result.
 	PageSize int
 
+	// Args bind the statement's placeholders.
+	Args []any
+
 	// ForExport disables result-caching at the call site (full result
 	// is returned but not stored for pagination).
 	ForExport bool

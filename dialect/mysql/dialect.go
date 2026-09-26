@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -10,7 +11,7 @@ import (
 	mysql "github.com/selectDb/dialect/mysql/parser"
 
 	antlr "github.com/antlr4-go/antlr/v4"
-	_ "github.com/go-sql-driver/mysql"
+	mysqldriver "github.com/go-sql-driver/mysql"
 )
 
 // Register the MySQL dialect on package init
@@ -61,6 +62,23 @@ func (d *Dialect) Name() string {
 
 func (d *Dialect) OpenDB(dsn string) (*sql.DB, error) {
 	return sql.Open("mysql", dsn)
+}
+
+func (d *Dialect) OpenGuardedDB(dsn string, dial core.DialFunc) (*sql.DB, error) {
+	cfg, err := mysqldriver.ParseDSN(dsn)
+	if err != nil {
+		return nil, err
+	}
+	// TCP only: a unix socket or custom net would open something on this host.
+	if cfg.Net != "" && cfg.Net != "tcp" {
+		return nil, errors.New("connection target is not permitted")
+	}
+	cfg.DialFunc = dial
+	connector, err := mysqldriver.NewConnector(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return sql.OpenDB(connector), nil
 }
 
 func (d *Dialect) CreateLexer(input string) antlr.Lexer {

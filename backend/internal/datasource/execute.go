@@ -8,8 +8,6 @@ import (
 	"backend/internal/middlewares"
 	"time"
 
-	"backend/internal/authz"
-
 	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
@@ -36,30 +34,10 @@ func ExecuteHandler() http.HandlerFunc {
 
 		workspaceID := middlewares.MemberWorkspaceID(r)
 
-		ds, err := GetOrLoadDatasource(r.Context(), req.ID, workspaceID)
+		o, err := Open(r, req.ID, workspaceID)
 		if err != nil {
-			http.Error(w, "datasource not found", http.StatusNotFound)
+			OpenError(w, err, "datasource execute", workspaceID, req.ID)
 			return
-		}
-
-		dbConn, err := engine.GetOrOpenConn(workspaceID, ds.DBType, ds.DSN, ds.SSH, ds.Pool)
-		if err != nil {
-			http.Error(w, safeConnErr(err, "datasource execute", workspaceID, req.ID), http.StatusBadGateway)
-			return
-		}
-
-		dialect := engine.GetDialect(ds.DBType)
-		if dialect == nil {
-			http.Error(w, "unsupported database type", http.StatusBadRequest)
-			return
-		}
-
-		meta, _ := engine.GetOrFetchMetadata(r.Context(), workspaceID, ds.DSN, dbConn, dialect, "", false)
-
-		conn := engine.Conn{
-			DB:    dbConn,
-			Meta:  meta,
-			Perms: authz.CompiledFromRequest(r),
 		}
 
 		ctx := r.Context()
@@ -69,27 +47,34 @@ func ExecuteHandler() http.HandlerFunc {
 			defer cancel()
 		}
 
-		w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-		w.Header().Set("Content-Encoding", "zstd")
-		w.WriteHeader(http.StatusOK)
-
-		inner := arrowstream.NewSink(w)
+		inner := arrowResponse(w)
 		defer inner.Close()
 
-		// Push compressed bytes through HTTP buffering after every batch so
-		// the client sees rows arrive steadily instead of in one tail clump
-		// when the handler returns.
-		if flusher, ok := w.(http.Flusher); ok {
-			inner.SetDownstreamFlusher(flusher.Flush)
-		}
-
 		// Wrap the sink to capture the query's outcome for the audit log.
-		sink := newLoggingSink(inner, newQueryAuditRecord(r, req, ds.DBType))
-
-		inst := engine.DBInstance{ID: req.ID, DBType: ds.DBType}
-		engine.StreamLocal(ctx, conn, inst, req.SQL, engine.Options{
-			MaxBytes: req.MaxBytes,
-			Timeout:  time.Duration(req.TimeoutMs) * time.Millisecond,
-		}, sink)
+		sink := newLoggingSink(inner, newQueryAuditRecord(r, req, o.DS.DBType))
+		o.Stream(ctx, req.SQL, req.options(), sink)
 	}
+}
+
+func (req executeRequest) options() engine.Options {
+	return engine.Options{
+		MaxBytes: req.MaxBytes,
+		Timeout:  time.Duration(req.TimeoutMs) * time.Millisecond,
+	}
+}
+
+// arrowResponse starts a streamed result; the caller closes the sink.
+func arrowResponse(w http.ResponseWriter) *arrowstream.Sink {
+	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+	w.Header().Set("Content-Encoding", "zstd")
+	w.WriteHeader(http.StatusOK)
+
+	sink := arrowstream.NewSink(w)
+	// Push compressed bytes through HTTP buffering after every batch so
+	// the client sees rows arrive steadily instead of in one tail clump
+	// when the handler returns.
+	if flusher, ok := w.(http.Flusher); ok {
+		sink.SetDownstreamFlusher(flusher.Flush)
+	}
+	return sink
 }

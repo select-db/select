@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net"
 
 	antlr "github.com/antlr4-go/antlr/v4"
 )
@@ -27,6 +28,9 @@ const (
 	FeatureSchemas
 )
 
+// DialFunc dials address for a driver; it may refuse the address.
+type DialFunc func(ctx context.Context, network, address string) (net.Conn, error)
+
 // SQLDialect defines the interface that all database dialects must implement
 type SQLDialect interface {
 	// Name returns the dialect name (e.g., "postgresql", "mysql", "sqlite")
@@ -36,6 +40,10 @@ type SQLDialect interface {
 	// It returns a *sql.DB connection that can be used for querying the database.
 	// The caller is responsible for closing the connection when done.
 	OpenDB(dsn string) (*sql.DB, error)
+
+	// OpenGuardedDB is OpenDB with every connection dialed through dial. A
+	// dialect that opens no network connection refuses.
+	OpenGuardedDB(dsn string, dial DialFunc) (*sql.DB, error)
 
 	// GetSchemas returns all user schemas in the database.
 	// For PostgreSQL, this excludes system schemas (pg_*, information_schema).

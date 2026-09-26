@@ -3,14 +3,17 @@ package datasource
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
 	"backend/db"
 	"backend/db/generated"
+	"backend/internal/datasource/cellar"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
 
@@ -68,6 +71,17 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	dsn, err := decryptField(ctx, enc, row.EncryptedDsn, fieldAAD(parsedWorkspaceID, parsedID, "dsn"))
 	if err != nil {
 		return nil, err
+	}
+	// A managed database's DSN is built here and never read from the row.
+	if cellarID := row.CellarID.ValueOrEmpty(); cellarID != "" {
+		workspace, err := db.Queries.GetWorkspacePlan(ctx, parsedWorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+		dsn = cellar.DSN(cellarID, id, workspaceID, workspace.Plan, int(workspace.Members))
+	} else if sqlite.IsCellarDSN(dsn) {
+		// It would open another workspace's database.
+		return nil, errors.New("datasource DSN uses a reserved scheme")
 	}
 	ssh, err := decryptField(ctx, enc, row.EncryptedSsh, fieldAAD(parsedWorkspaceID, parsedID, "ssh"))
 	if err != nil {

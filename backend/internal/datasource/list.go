@@ -52,7 +52,7 @@ func ListHandler() http.HandlerFunc {
 		// is the wrong shape for a loop: compiled once here, the per-row check is
 		// the map lookup it should be. Same rule -- CanManage is exactly this.
 		owner := a.IsOwner()
-		perms := authz.CompiledFromRequest(r)
+		perms := authz.Perms(r)
 
 		out := make([]listedDatasource, 0, len(rows))
 		for _, row := range rows {
