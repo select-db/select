@@ -7,8 +7,8 @@ import (
 
 	"selectDb/internal/desktop"
 
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/query"
+	"github.com/selectDb/dialect/engine/results"
 )
 
 // queryStartedEvent is the payload of "query:started". The frontend uses it
@@ -60,7 +60,7 @@ type queryErrorEvent struct {
 	ErrorPosition *int   `json:"errorPosition,omitempty"`
 }
 
-// queryEventListener implements engine.StreamListener and emits Wails events.
+// queryEventListener implements results.StreamListener and emits Wails events.
 // Also responsible for computing column edit metadata once columns are known
 // and stashing it on the StreamingResult so subsequent Page() calls expose it.
 type queryEventListener struct {
@@ -86,7 +86,7 @@ func (l *queryEventListener) OnStart(columns []string, columnEditMeta []query.Co
 	if len(columnEditMeta) == 0 && len(columns) > 0 {
 		columnEditMeta = l.dbc.computeColumnEditMeta(l.dbInstance, l.statement)
 		if len(columnEditMeta) > 0 {
-			if sr, ok := engine.GetStreamingResult(queryKey(l.dbInstanceID, l.fileID)); ok {
+			if sr, ok := results.Get(queryKey(l.dbInstanceID, l.fileID)); ok {
 				sr.SetColumnEditMeta(columnEditMeta)
 			}
 		}

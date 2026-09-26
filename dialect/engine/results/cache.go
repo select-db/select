@@ -1,4 +1,4 @@
-package engine
+package results
 
 import (
 	"time"
@@ -15,8 +15,8 @@ import (
 // query.Execute are not cached; only query.Stream() populates this cache.
 var resultCache = cache.New(cache.Options{TTL: 20 * time.Minute, MaxEntries: 10})
 
-// GetStreamingResult looks up a *StreamingResult for key.
-func GetStreamingResult(key string) (*StreamingResult, bool) {
+// Get looks up a *StreamingResult for key.
+func Get(key string) (*StreamingResult, bool) {
 	v, ok := resultCache.Get(key)
 	if !ok {
 		return nil, false
@@ -24,17 +24,17 @@ func GetStreamingResult(key string) (*StreamingResult, bool) {
 	return v.(*StreamingResult), true
 }
 
-// SetStreamingResult stores a *StreamingResult under key.
-func SetStreamingResult(key string, result *StreamingResult) {
+// Set stores a *StreamingResult under key.
+func Set(key string, result *StreamingResult) {
 	resultCache.Set(key, result)
 }
 
-// DeleteResult removes the entry for key. No-op if absent.
-func DeleteResult(key string) {
+// Delete removes the entry for key. No-op if absent.
+func Delete(key string) {
 	resultCache.Delete(key)
 }
 
-// ClearResultCache drops all entries.
-func ClearResultCache() {
+// Clear drops all entries.
+func Clear() {
 	resultCache.DeleteFunc(func(string) bool { return true })
 }

@@ -1,4 +1,4 @@
-package engine
+package results
 
 import "testing"
 
@@ -19,16 +19,16 @@ func TestPageCarriesOwningExecutionID(t *testing.T) {
 
 	// A re-run of the same file takes over the same cache slot.
 	const key = "db:d:file:f"
-	SetStreamingResult(key, first)
+	Set(key, first)
 	second := NewStreamingResult("exec-second")
 	second.SetColumns([]string{"workspace_id", "occurred_at"})
 	second.AppendRow([]any{"row-from-second", "t0"})
 	second.Finalize(1, 0, 1)
-	SetStreamingResult(key, second)
+	Set(key, second)
 
-	t.Cleanup(func() { DeleteResult(key) })
+	t.Cleanup(func() { Delete(key) })
 
-	cached, ok := GetStreamingResult(key)
+	cached, ok := Get(key)
 	if !ok {
 		t.Fatal("expected the slot to hold a result")
 	}
