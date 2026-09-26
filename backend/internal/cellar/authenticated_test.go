@@ -29,7 +29,7 @@ func signWith(t *testing.T, priv *rsa.PrivateKey) string {
 	return tok
 }
 
-func TestAuthenticate(t *testing.T) {
+func TestAuthenticated(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -44,8 +44,8 @@ func TestAuthenticate(t *testing.T) {
 
 	var seen Grant
 	mux := http.NewServeMux()
-	mux.Handle("POST /dbs/{id}/execute", Authenticate(&priv.PublicKey, "local")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = GrantFrom(r.Context())
+	mux.Handle("POST /dbs/{id}/execute", Authenticated(&priv.PublicKey, "local")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = GetGrant(r)
 	})))
 
 	cases := []struct {

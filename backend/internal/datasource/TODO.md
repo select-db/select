@@ -217,7 +217,7 @@ Needs 0.
       MCP open a managed datasource like any other. `CELLAR=local` starts it
       in-process.
 - [x] Service token signed and reused by the backend (`datasource/cellar`),
-      and checked with the grant header by the cellar (`cellar.Authenticate`
+      and checked with the grant header by the cellar (`cellar.Authenticated`
       middleware, which puts the grant in the context for `InFlight` to key
       on).
 - [x] Isolation: pragmas in the DSN, PRAGMA allowlist, and
@@ -229,7 +229,7 @@ Needs 0.
       (`engine.GetOrOpenTrusted`: no outbound guard, for a DSN the cellar
       builds), so idle files are closed.
 - [x] `InFlight` middleware (`middlewares.InFlight`).
-- [x] 60s cap on every cellar statement (`cellar.Handler`).
+- [x] 60s cap on every cellar statement (`middlewares.Timeout` in `cellar.Register`).
 - [ ] Query-seconds: the audit query event gets its duration back (dropped
       in `audit_drop_query_metrics`, to return as a dedicated column).
 - [ ] Error codes and request id, end to end to REST and MCP. The request id

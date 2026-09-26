@@ -53,8 +53,10 @@ func serveLocalCellar() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	mux := http.NewServeMux()
+	cellar.Register(mux, dir, pub, localCellar)
 	srv := &http.Server{
-		Handler:           cellar.Handler(&cellar.Files{Dir: dir}, pub, localCellar),
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	// Managed databases answer unavailable if it stops; the rest keeps serving.

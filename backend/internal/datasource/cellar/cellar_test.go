@@ -49,7 +49,9 @@ func newManagedDB(t *testing.T) managedDB {
 
 	pub, err := auth.PublicKey()
 	require.NoError(t, err)
-	srv := httptest.NewServer(server.Handler(&server.Files{Dir: dir}, pub, "local"))
+	mux := http.NewServeMux()
+	server.Register(mux, dir, pub, "local")
+	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	cellar.URL = srv.URL
 	t.Cleanup(func() { cellar.URL = "" })

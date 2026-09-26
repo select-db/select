@@ -1,7 +1,6 @@
 package cellar
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -10,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine"
 	"modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
 )
 
 func init() {
@@ -25,15 +23,12 @@ type sqliteDriver struct{ *sqlite.Driver }
 
 func (sqliteDriver) QueryRunsAll() {}
 
-// Files holds the managed databases of one cellar, one SQLite file each,
-// named after the datasource id in Dir.
-type Files struct {
-	Dir string
-}
+// dbType is the engine dialect of every database a cellar holds.
+const dbType = "sqlite"
 
-// Open returns the grant's datasource, set up so every statement runs under
-// the isolation rules.
-func (f *Files) Open(grant Grant) (engine.Conn, error) {
+// Open returns the grant's datasource, the file named after its id in dir, set
+// up so every statement runs under the isolation rules.
+func Open(dir string, grant Grant) (engine.Conn, error) {
 	if grant.MaxBytes <= 0 {
 		return engine.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)
 	}
@@ -44,7 +39,7 @@ func (f *Files) Open(grant Grant) (engine.Conn, error) {
 
 	// mode=rw: a missing file is an error, never a new empty database. WAL lets
 	// readers run beside a writer.
-	dsn := (&url.URL{Scheme: "file", Path: filepath.Join(f.Dir, grant.DatasourceID+".db"), RawQuery: "mode=rw&_defensive=1" +
+	dsn := (&url.URL{Scheme: "file", Path: filepath.Join(dir, grant.DatasourceID+".db"), RawQuery: "mode=rw&_defensive=1" +
 		"&_busy_timeout=5000&_foreign_keys=1&_pragma=trusted_schema(0)&_pragma=journal_mode(WAL)"}).String()
 	db, err := engine.GetOrOpenTrusted(grant.WorkspaceID, dbType, dsn)
 
@@ -54,27 +49,7 @@ func (f *Files) Open(grant Grant) (engine.Conn, error) {
 	return engine.Conn{
 		DB: db,
 		Prepare: func(c *sql.Conn, statement string) error {
-			if err := CheckStatement(statement); err != nil {
-				return err
-			}
-			return limit(c, grant.MaxBytes)
+			return isolate(c, statement, grant.MaxBytes)
 		},
 	}, nil
-}
-
-// limit applies the settings SQLite keeps per connection, before each user
-// statement: no ATTACH (which VACUUM INTO also needs), and the size cap.
-func limit(c *sql.Conn, maxBytes int64) error {
-	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_ATTACHED, 0); err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-	var pageSize int64
-	if err := c.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
-		return err
-	}
-
-	_, err := c.ExecContext(ctx, fmt.Sprintf("PRAGMA max_page_count = %d", max(maxBytes/pageSize, 1)))
-	return err
 }
