@@ -4,7 +4,6 @@ import (
 	"selectDb/internal/graph"
 	"selectDb/internal/sqllang"
 
-	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -23,21 +22,9 @@ func (dbc *DbClient) effectiveDSN(dbInstance *graph.DBInstanceNode) string {
 	if err != nil || resolvedSSH == nil {
 		return dsn
 	}
-	remoteHost, remotePort, err := core.ParseDSNRemote(dbInstance.DBType, dsn)
+	tunneled, err := engine.ResolveDumpDSN(dbInstance.WorkspaceID, dbInstance.DBType, dsn, resolvedSSH)
 	if err != nil {
 		return dsn
 	}
-	tunnel, err := engine.GetOrCreateTunnel(dbInstance.WorkspaceID, *resolvedSSH, remoteHost, remotePort)
-	if err != nil || tunnel == nil {
-		return dsn
-	}
-	localPort, err := tunnel.LocalPort()
-	if err != nil {
-		return dsn
-	}
-	rewritten, err := core.RewriteDSNForLocal(dbInstance.DBType, dsn, "127.0.0.1", localPort)
-	if err != nil {
-		return dsn
-	}
-	return rewritten
+	return tunneled
 }

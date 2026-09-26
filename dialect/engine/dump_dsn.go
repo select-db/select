@@ -5,7 +5,6 @@ import (
 	"net"
 	"strings"
 
-	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/sqlite"
 )
 
@@ -13,12 +12,17 @@ import (
 // resolve/dial the host themselves (the Go guarded dialer can't reach them).
 // Pins the target like the driver path.
 func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (string, error) {
+	dialect := GetDialect(dbType)
+	if dialect == nil {
+		return "", newConfigErrorf("unsupported database type: %s", dbType)
+	}
+
 	// Rewritten to the tunnel's local endpoint:
 	//   - any datasource with SSH
 	// Refused:
 	//   - a DSN with no host to tunnel to, such as a sqlite file
 	if ssh != nil {
-		return tunneledDSN(workspaceID, dbType, dsn, *ssh)
+		return tunneledDSN(workspaceID, dialect, dsn, *ssh)
 	}
 
 	// Unchanged:
@@ -32,7 +36,7 @@ func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (st
 	//   - the server dialing a user's DSN directly
 	// Refused:
 	//   - a DSN whose host does not parse, incl. a sqlite file (a path on this host)
-	host, port, err := core.ParseDSNRemote(dbType, dsn)
+	host, port, err := dialect.DSNHost(dsn)
 	if err != nil {
 		return "", fmt.Errorf("connection target is not permitted")
 	}
@@ -40,7 +44,7 @@ func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (st
 	if err != nil {
 		return "", err
 	}
-	return core.RewriteDSNForLocal(dbType, dsn, ip, port)
+	return dialect.DSNWithHost(dsn, ip, port)
 }
 
 // resolveAllowedIP returns the first guard-passing IP for host, failing closed
