@@ -139,11 +139,11 @@ func (s *Search) SearchWithNodes(params SearchParams) (*SearchResultWithNodes, e
 
 	// Map results to graph nodes. A hit can be in a folder nobody has opened,
 	// so the databases a file is bound to come from the graph through
-	// FileDatabases, which falls back to the file's sidecar.
+	// FileDatasources, which falls back to the file's sidecar.
 	fileFolders := make([]*graph.FolderNode, 0, len(result.Files))
 	for _, r := range result.Files {
-		databases := s.Graph.FileDatabases(buildFileURI(params.WorkspaceID, r.Path))
-		fileFolders = append(fileFolders, mapSearchFileResultToFolderNode(params.WorkspaceID, r, databases))
+		datasources := s.Graph.FileDatasources(buildFileURI(params.WorkspaceID, r.Path))
+		fileFolders = append(fileFolders, mapSearchFileResultToFolderNode(params.WorkspaceID, r, datasources))
 	}
 
 	return &SearchResultWithNodes{
@@ -154,7 +154,7 @@ func (s *Search) SearchWithNodes(params SearchParams) (*SearchResultWithNodes, e
 			Name:        strconv.Itoa(result.TotalMatches) + " results in " + strconv.Itoa(result.TotalFiles) + " files",
 			Folders:     fileFolders,
 			Files:       []*graph.FileNode{},
-			DBInstances: []*graph.DBInstanceNode{},
+			Datasources: []*graph.DatasourceNode{},
 			Badges:      []string{},
 		},
 		TotalFiles:   result.TotalFiles,
@@ -162,10 +162,10 @@ func (s *Search) SearchWithNodes(params SearchParams) (*SearchResultWithNodes, e
 	}, nil
 }
 
-func mapSearchFileResultToFolderNode(workspaceID string, r SearchFileResult, databases []graph.DatabaseRef) *graph.FolderNode {
+func mapSearchFileResultToFolderNode(workspaceID string, r SearchFileResult, datasources []graph.DatasourceRef) *graph.FolderNode {
 	matchNodes := make([]*graph.FileNode, len(r.Matches))
 	for i, match := range r.Matches {
-		matchNodes[i] = mapMatchToFileNode(workspaceID, r.Path, match, i, databases)
+		matchNodes[i] = mapMatchToFileNode(workspaceID, r.Path, match, i, datasources)
 	}
 
 	return &graph.FolderNode{
@@ -178,23 +178,23 @@ func mapSearchFileResultToFolderNode(workspaceID string, r SearchFileResult, dat
 	}
 }
 
-func mapMatchToFileNode(workspaceID, filePath string, match SearchMatch, matchIndex int, fileDatabases []graph.DatabaseRef) *graph.FileNode {
+func mapMatchToFileNode(workspaceID, filePath string, match SearchMatch, matchIndex int, fileDatasources []graph.DatasourceRef) *graph.FileNode {
 	preview := strings.TrimSpace(match.LineText)
 	if len(preview) > 100 {
 		preview = preview[:100] + "..."
 	}
 
-	var databases []graph.DatabaseRef
-	if len(fileDatabases) > 0 {
-		databases = make([]graph.DatabaseRef, len(fileDatabases))
-		copy(databases, fileDatabases)
+	var datasources []graph.DatasourceRef
+	if len(fileDatasources) > 0 {
+		datasources = make([]graph.DatasourceRef, len(fileDatasources))
+		copy(datasources, fileDatasources)
 	}
 
 	return &graph.FileNode{
-		ID:        "search::" + filePath + "::" + strconv.Itoa(matchIndex),
-		URI:       buildFileURI(workspaceID, filePath) + "::L" + strconv.Itoa(match.Line) + "::C" + strconv.Itoa(match.Column),
-		Type:      "file",
-		Name:      strconv.Itoa(match.Line) + ": " + preview,
-		Databases: databases,
+		ID:          "search::" + filePath + "::" + strconv.Itoa(matchIndex),
+		URI:         buildFileURI(workspaceID, filePath) + "::L" + strconv.Itoa(match.Line) + "::C" + strconv.Itoa(match.Column),
+		Type:        "file",
+		Name:        strconv.Itoa(match.Line) + ": " + preview,
+		Datasources: datasources,
 	}
 }

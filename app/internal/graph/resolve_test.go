@@ -70,7 +70,7 @@ func TestResolveFolder_ReadsOneLevelAhead(t *testing.T) {
 			Type:        "workspace",
 			Name:        "MyWorkspace",
 			Folders:     []*FolderNode{},
-			DBInstances: []*DBInstanceNode{},
+			Datasources: []*DatasourceNode{},
 		},
 	}
 

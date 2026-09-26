@@ -44,7 +44,7 @@ func GetOrLoad(roleID string) ([]generated.AppPermission, error) {
 			ID:           r.ID,
 			RoleID:       r.RoleID,
 			WorkspaceID:  r.WorkspaceID,
-			DbInstanceID: r.DbInstanceID,
+			DatasourceID: r.DatasourceID,
 			SchemaName:   r.SchemaName,
 			TableName:    r.TableName,
 			ColumnName:   r.ColumnName,

@@ -36,7 +36,7 @@ If the native tool is not available, SELECT queries the database's information s
 
 Schema metadata is **cached for 20 minutes** to avoid repeated queries. The cache is invalidated automatically when:
 
-- You modify `db.config.json` (change DSN, SSH settings, etc.)
+- You modify `datasource.config.json` (change DSN, SSH settings, etc.)
 - You reconnect to the database
 
 You can force a refresh from the schema panel. Cached schema dumps are **compressed with zstd** to reduce memory usage.

@@ -9,7 +9,7 @@
 	import { revokeConnections } from '$lib/components/views/shared/revokeConnections';
 	import { ListDatasources } from '$lib/bindings/selectDb/internal/datasource/datasource';
 	import type * as datasource from '$lib/bindings/selectDb/internal/datasource/models';
-	import { SharedDatabasesUnder } from '$lib/wails/graph';
+	import { SharedDatasourcesUnder } from '$lib/wails/graph';
 
 	/**
 	 * The proxified connections this workspace has, whether or not anything in
@@ -45,7 +45,7 @@
 
 	const load = async () => {
 		const [rows, err] = await tryCatch(ListDatasources);
-		const [inWorkspace] = await tryCatch(SharedDatabasesUnder, []);
+		const [inWorkspace] = await tryCatch(SharedDatasourcesUnder, []);
 		if (err) {
 			loadError = err.message;
 			return;
@@ -118,7 +118,7 @@
 			</span>
 		{/if}
 	{:else if key === 'actions'}
-		{#if $myPermissions.canManageDb(connection.id)}
+		{#if $myPermissions.canManageDatasource(connection.id)}
 			<Button content="Revoke" emphasis="low" size="sm" onclick={() => revoke(connection)} />
 		{/if}
 	{/if}

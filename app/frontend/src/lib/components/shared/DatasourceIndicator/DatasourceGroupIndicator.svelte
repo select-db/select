@@ -2,7 +2,7 @@
 	import Loader from '$lib/system/Loader/Loader.svelte';
 	import Icon from '$lib/system/Icon/Icon.svelte';
 	import { loadingStore } from '$lib/utils/query/loadingStore';
-	import { databaseAvailabilityStore } from '$lib/components/shared/DatabaseIndicator/databaseIndicatorStore';
+	import { datasourceAvailabilityStore } from '$lib/components/shared/DatasourceIndicator/datasourceIndicatorStore';
 
 	type Props = {
 		ids: string[];
@@ -13,11 +13,11 @@
 	let { ids, size = 18, loaderSize = 16 }: Props = $props();
 
 	const isLoading = $derived(
-		ids.some((id) => $loadingStore.some((entry) => entry.startsWith(`db:${id}`)))
+		ids.some((id) => $loadingStore.some((entry) => entry.startsWith(`datasource:${id}`)))
 	);
 
 	const allConnected = $derived(
-		ids.length > 0 && ids.every((id) => $databaseAvailabilityStore.get(id) === true)
+		ids.length > 0 && ids.every((id) => $datasourceAvailabilityStore.get(id) === true)
 	);
 </script>
 

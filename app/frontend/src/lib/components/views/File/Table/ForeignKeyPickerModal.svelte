@@ -12,7 +12,7 @@
 	import { debounce } from '$lib/utils/debounce';
 
 	type Props = {
-		databaseId: string;
+		datasourceId: string;
 		sourceColumn: string;
 		currentValue: string;
 		targetSchema: string;
@@ -26,7 +26,7 @@
 	};
 
 	let {
-		databaseId,
+		datasourceId,
 		currentValue,
 		targetSchema,
 		targetTable,
@@ -79,7 +79,7 @@
 		error = null;
 		try {
 			const params = new db_client.LookupForeignKeyParams({
-				databaseId,
+				datasourceId,
 				schema: targetSchema,
 				table: targetTable,
 				fkColumn: targetColumn,

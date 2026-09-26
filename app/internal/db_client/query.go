@@ -16,7 +16,7 @@ import (
 type QueryParams struct {
 	FileID       string
 	Statement    string
-	DbInstanceID string
+	DatasourceID string
 	FolderID     string
 	ForExport    bool
 	RuntimeVars  map[string]string
@@ -39,7 +39,7 @@ func (dbc *DbClient) Query(params QueryParams) graph.QueryResult {
 	}
 
 	engineResult, _ := dbc.execute(executeParams{
-		DbInstanceID: params.DbInstanceID,
+		DatasourceID: params.DatasourceID,
 		FileID:       params.FileID,
 		Statement:    params.Statement,
 		FolderID:     params.FolderID,
@@ -67,7 +67,7 @@ func (dbc *DbClient) Query(params QueryParams) graph.QueryResult {
 type StartQueryParams struct {
 	FileID       string
 	Statement    string
-	DbInstanceID string
+	DatasourceID string
 	FolderID     string
 	RuntimeVars  map[string]string
 }
@@ -76,7 +76,7 @@ type StartQueryParams struct {
 // in a background goroutine; results arrive via Wails events.
 type StartQueryResult struct {
 	ExecutionID  string   `json:"executionId"`
-	DbInstanceID string   `json:"dbInstanceId"`
+	DatasourceID string   `json:"datasourceId"`
 	FileID       string   `json:"fileId"`
 	Errors       []string `json:"errors,omitempty"`
 }
@@ -88,12 +88,12 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 
 	out := StartQueryResult{
 		ExecutionID:  executionID,
-		DbInstanceID: params.DbInstanceID,
+		DatasourceID: params.DatasourceID,
 		FileID:       params.FileID,
 	}
 
 	p, err := dbc.prepare(executeParams{
-		DbInstanceID: params.DbInstanceID,
+		DatasourceID: params.DatasourceID,
 		FileID:       params.FileID,
 		Statement:    params.Statement,
 		FolderID:     params.FolderID,
@@ -105,7 +105,7 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 		// through the same event channel as live failures.
 		desktop.Emit("query:error", queryErrorEvent{
 			ExecutionID:  executionID,
-			DbInstanceID: params.DbInstanceID,
+			DatasourceID: params.DatasourceID,
 			FileID:       params.FileID,
 			Message:      err.Error(),
 		})
@@ -118,9 +118,9 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 	listener := &queryEventListener{
 		ctx:          dbc.ctx,
 		executionID:  executionID,
-		dbInstanceID: params.DbInstanceID,
+		datasourceID: params.DatasourceID,
 		fileID:       params.FileID,
-		dbInstance:   p.dbInstance,
+		datasource:   p.datasource,
 		statement:    p.statement,
 		dbc:          dbc,
 		cancelTimer:  cancel,
@@ -128,11 +128,11 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 
 	engineClient.Stream(
 		ctx,
-		queryKey(params.DbInstanceID, params.FileID),
+		queryKey(params.DatasourceID, params.FileID),
 		executionID,
 		p.conn,
 		p.instance,
-		p.dbInstance.WorkspaceID,
+		p.datasource.WorkspaceID,
 		p.statement,
 		query.Options{
 			MaxBytes: p.maxBytes,
@@ -145,7 +145,7 @@ func (dbc *DbClient) StartQuery(params StartQueryParams) StartQueryResult {
 }
 
 type GetResultPageParams struct {
-	DbInstanceID string
+	DatasourceID string
 	FileID       string
 	ResultID     string
 	Page         int
@@ -160,7 +160,7 @@ func (dbc *DbClient) GetResultPage(params GetResultPageParams) graph.QueryResult
 	queryResult.Id = params.ResultID
 
 	page, status, ok := engineClient.Page(
-		queryKey(params.DbInstanceID, params.FileID),
+		queryKey(params.DatasourceID, params.FileID),
 		params.Page,
 		PageSize,
 	)

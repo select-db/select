@@ -15,9 +15,9 @@ export async function buildContext(ctx: ChatContext): Promise<string | null> {
 		lines.push(`workspace: ${path}`);
 	}
 
-	if (ctx.databases?.length) {
-		lines.push('databases:');
-		for (const db of ctx.databases) {
+	if (ctx.datasources?.length) {
+		lines.push('datasources:');
+		for (const db of ctx.datasources) {
 			const path = await resolveUri(db.uri);
 			lines.push(`  - id: ${db.id}, name: ${db.name} (${db.dialect}), path: ${path}`);
 		}

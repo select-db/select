@@ -4,49 +4,48 @@ import type { Tab } from '$lib/components/Layout/layoutStore';
 /**
  * Effective database id for the table view: explicit selection or single DB.
  */
-export function getEffectiveSelectedDbId(
+export function getEffectiveSelectedDatasourceId(
 	file: graph.FileNode | null | undefined,
 	tab: Tab | null | undefined
 ): string | null {
 	if (!file) return null;
-	const selected = tab?.file?.activeDatabaseId;
+	const selected = tab?.file?.activeDatasourceId;
 	if (selected != null && selected !== '') return selected;
-	const dbs = file.databases;
-	return dbs?.[0]?.id ?? null;
+	return file.datasources?.[0]?.id ?? null;
 }
 
 /**
  * Query result for the currently selected database.
- * Accepts pre-computed dbId to avoid redundant getEffectiveSelectedDbId calls.
+ * Accepts pre-computed datasourceId to avoid redundant getEffectiveSelectedDatasourceId calls.
  */
-export function getQueryResultForDb(
+export function getQueryResultForDatasource(
 	file: graph.FileNode | null | undefined,
-	dbId: string | null
+	datasourceId: string | null
 ): graph.QueryResult | null {
-	if (!file || !dbId) return null;
-	return file.queryResults?.[dbId] ?? null;
+	if (!file || !datasourceId) return null;
+	return file.queryResults?.[datasourceId] ?? null;
 }
 
 /**
  * Plan result for the currently selected database.
- * Accepts pre-computed dbId to avoid redundant getEffectiveSelectedDbId calls.
+ * Accepts pre-computed datasourceId to avoid redundant getEffectiveSelectedDatasourceId calls.
  */
-export function getPlanResultForDb(
+export function getPlanResultForDatasource(
 	file: graph.FileNode | null | undefined,
-	dbId: string | null
+	datasourceId: string | null
 ): graph.ExplainResult | null {
-	if (!file || !dbId) return null;
-	return file.planResults?.[dbId] ?? null;
+	if (!file || !datasourceId) return null;
+	return file.planResults?.[datasourceId] ?? null;
 }
 
 /**
  * Explain result for the currently selected database.
- * Accepts pre-computed dbId to avoid redundant getEffectiveSelectedDbId calls.
+ * Accepts pre-computed datasourceId to avoid redundant getEffectiveSelectedDatasourceId calls.
  */
-export function getExplainResultForDb(
+export function getExplainResultForDatasource(
 	file: graph.FileNode | null | undefined,
-	dbId: string | null
+	datasourceId: string | null
 ): graph.ExplainResult | null {
-	if (!file || !dbId) return null;
-	return file.explainResults?.[dbId] ?? null;
+	if (!file || !datasourceId) return null;
+	return file.explainResults?.[datasourceId] ?? null;
 }

@@ -44,8 +44,8 @@ const FRAMING: Framing = { name: 'agent', width: 1840, height: 820, density: 2, 
 const REPLIES: ModelReply[] = [
 	{
 		call: {
-			name: 'get_database_schemas',
-			input: { databaseInstanceId: 'sample-warehouse' },
+			name: 'get_datasource_schemas',
+			input: { datasourceId: 'sample-warehouse' },
 			id: 'toolu_e2e_1'
 		}
 	},
@@ -53,7 +53,7 @@ const REPLIES: ModelReply[] = [
 		call: {
 			name: 'execute_query',
 			input: {
-				dbInstanceId: 'sample-warehouse',
+				datasourceId: 'sample-warehouse',
 				statement: 'SELECT email FROM customers LIMIT 5'
 			},
 			id: 'toolu_e2e_2'

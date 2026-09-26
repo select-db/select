@@ -41,7 +41,7 @@ func TestMutate_InsertRootFileFolder(t *testing.T) {
 	}
 }
 
-func TestMutate_InsertRootDbInstanceFolder(t *testing.T) {
+func TestMutate_InsertRootDatasourceFolder(t *testing.T) {
 	ctx := context.Background()
 	g := setupGraph()
 

@@ -160,14 +160,14 @@ func TestInspectClassifyingIntoKeepsNestedReads(t *testing.T) {
 	// directions are pinned.
 	db, schema, t1, all := "db1", "main", "t1", "*"
 	onlyT1 := core.Compile([]core.PermissionEntry{{
-		DbInstanceID: &db, SchemaName: &schema, TableName: &t1,
+		DatasourceID: &db, SchemaName: &schema, TableName: &t1,
 		Action: core.ActionSelect, Effect: "allow", RoleName: "r",
 	}}).WithDenyUnmanaged()
 
 	var entries []core.PermissionEntry
 	for _, a := range []string{core.ActionSelect, core.ActionInsert, core.ActionUpdate, core.ActionDelete, core.ActionManage} {
 		entries = append(entries, core.PermissionEntry{
-			DbInstanceID: &db, SchemaName: &all,
+			DatasourceID: &db, SchemaName: &all,
 			Action: a, Effect: "allow", RoleName: "r",
 		})
 	}

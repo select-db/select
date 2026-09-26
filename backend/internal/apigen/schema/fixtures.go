@@ -35,7 +35,7 @@ func PermissionTable() RawTable {
 			{Name: "id", DataType: "uuid", NotNull: true},
 			{Name: "role_id", DataType: "uuid", NotNull: true},
 			{Name: "workspace_id", DataType: "uuid", NotNull: true},
-			{Name: "db_instance_id", DataType: "text"},
+			{Name: "datasource_id", DataType: "text"},
 			{Name: "schema_name", DataType: "text"},
 			{Name: "table_name", DataType: "text"},
 			{Name: "column_name", DataType: "text"},

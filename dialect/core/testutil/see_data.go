@@ -25,8 +25,8 @@ type SeeCase struct {
 	Masked  []int
 }
 
-// TestDBInstanceID is the database the see cases are checked against.
-const TestDBInstanceID = "db1"
+// TestDatasourceID is the database the see cases are checked against.
+const TestDatasourceID = "db1"
 
 // GetSeeTestMetadata describes two tables that share a column name, which is
 // what tells a rule hiding one table's column from a rule hiding the other's.
@@ -74,18 +74,18 @@ func GetSeeTestMetadata() core.Metadata {
 // action and see on the schema, with see denied on main.users.email alone.
 // main.contacts.email stays visible, so a case that confuses the two shows up.
 func GetSeeTestPermissions() core.CompiledPermissions {
-	instance := TestDBInstanceID
+	instance := TestDatasourceID
 	schema := "main"
 	users := "users"
 	email := "email"
 	return core.Compile([]core.PermissionEntry{
-		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionSelect, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionInsert, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionUpdate, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionDelete, Effect: "allow"},
-		{DbInstanceID: &instance, SchemaName: &schema, Action: core.ActionSee, Effect: "allow"},
+		{DatasourceID: &instance, SchemaName: &schema, Action: core.ActionSelect, Effect: "allow"},
+		{DatasourceID: &instance, SchemaName: &schema, Action: core.ActionInsert, Effect: "allow"},
+		{DatasourceID: &instance, SchemaName: &schema, Action: core.ActionUpdate, Effect: "allow"},
+		{DatasourceID: &instance, SchemaName: &schema, Action: core.ActionDelete, Effect: "allow"},
+		{DatasourceID: &instance, SchemaName: &schema, Action: core.ActionSee, Effect: "allow"},
 		{
-			DbInstanceID: &instance, SchemaName: &schema, TableName: &users, ColumnName: &email,
+			DatasourceID: &instance, SchemaName: &schema, TableName: &users, ColumnName: &email,
 			Action: core.ActionSee, Effect: "deny",
 		},
 	})

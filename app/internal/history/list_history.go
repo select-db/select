@@ -10,7 +10,7 @@ import (
 
 // HistoryEntry is the frontend-facing shape of a recorded statement. The
 // database name/type are intentionally omitted: the frontend resolves them
-// from the workspace graph via DbInstanceID so renamed/removed instances stay
+// from the workspace graph via DatasourceID so renamed/removed instances stay
 // in sync instead of showing a stale snapshot.
 type HistoryEntry struct {
 	ID           string   `json:"id"`
@@ -20,7 +20,7 @@ type HistoryEntry struct {
 	DurationMs   *int64   `json:"durationMs"`
 	Errors       []string `json:"errors"`
 	WorkspaceID  string   `json:"workspaceId"`
-	DbInstanceID string   `json:"dbInstanceId"`
+	DatasourceID string   `json:"datasourceId"`
 	CreatedAt    string   `json:"createdAt"`
 }
 
@@ -75,7 +75,7 @@ func toHistoryEntry(row generated.History) HistoryEntry {
 		ID:           row.ID,
 		Statement:    row.Statement,
 		WorkspaceID:  row.WorkspaceID,
-		DbInstanceID: row.DbInstanceID,
+		DatasourceID: row.DatasourceID,
 		CreatedAt:    row.CreatedAt.UTC().Format(time.RFC3339),
 		Errors:       []string{},
 	}

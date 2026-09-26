@@ -27,7 +27,7 @@ type FolderNode struct {
 
 	Files       []*FileNode       `json:"files"`
 	Folders     []*FolderNode     `json:"folders"`
-	DBInstances []*DBInstanceNode `json:"db_instances"`
+	Datasources []*DatasourceNode `json:"datasources"`
 
 	// Resolved reports whether this folder's files have been read from disk. A
 	// build only lays out the folder skeleton; a folder's files are materialized
@@ -59,7 +59,7 @@ func BuildFolderNode(f FolderDTO) *FolderNode {
 
 		Files:       []*FileNode{},
 		Folders:     []*FolderNode{},
-		DBInstances: []*DBInstanceNode{},
+		Datasources: []*DatasourceNode{},
 
 		Variables: make(map[string]string),
 	}
@@ -74,14 +74,14 @@ func (f *FolderNode) GetParentIDs() []string {
 }
 
 func (f *FolderNode) GetChildren() []Node {
-	nodes := make([]Node, 0, len(f.Folders)+len(f.Files)+len(f.DBInstances))
+	nodes := make([]Node, 0, len(f.Folders)+len(f.Files)+len(f.Datasources))
 	for _, subFolder := range f.Folders {
 		nodes = append(nodes, subFolder)
 	}
 	for _, file := range f.Files {
 		nodes = append(nodes, file)
 	}
-	for _, db := range f.DBInstances {
+	for _, db := range f.Datasources {
 		nodes = append(nodes, db)
 	}
 	return nodes
@@ -100,9 +100,9 @@ func (f *FolderNode) RemoveChildByIDs(IDs []string) bool {
 			return true
 		}
 	}
-	for i, db := range f.DBInstances {
+	for i, db := range f.Datasources {
 		if toolkit.Intersects(db.GetIDs(), IDs) {
-			f.DBInstances = slices.Delete(f.DBInstances, i, i+1)
+			f.Datasources = slices.Delete(f.Datasources, i, i+1)
 			return true
 		}
 	}
@@ -115,8 +115,8 @@ func (f *FolderNode) AddChild(n Node) bool {
 		f.Files = append(f.Files, node)
 	case *FolderNode:
 		f.Folders = append(f.Folders, node)
-	case *DBInstanceNode:
-		f.DBInstances = append(f.DBInstances, node)
+	case *DatasourceNode:
+		f.Datasources = append(f.Datasources, node)
 	default:
 		return false
 	}

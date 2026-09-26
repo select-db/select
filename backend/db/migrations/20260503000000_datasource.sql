@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS app.datasource (
-    id                 UUID        PRIMARY KEY,  -- matches the local DB instance UUID from the app
+    id                 UUID        PRIMARY KEY,  -- matches the local datasource UUID from the app
     workspace_id       UUID        NOT NULL REFERENCES app.workspace(id) ON DELETE CASCADE,
     db_type            TEXT        NOT NULL,
     encrypted_dsn      BYTEA,       -- kms envelope blob of the DSN

@@ -14,7 +14,7 @@ import (
 // deliberately structured (no SQL strings on the wire) so the dialect-specific
 // SQL building happens entirely in the corresponding dialect package.
 type LookupForeignKeyParams struct {
-	DatabaseID     string   `json:"databaseId"`
+	DatasourceID   string   `json:"datasourceId"`
 	Schema         string   `json:"schema"`
 	Table          string   `json:"table"`
 	FKColumn       string   `json:"fkColumn"`
@@ -32,15 +32,15 @@ func (dbc *DbClient) LookupForeignKey(params LookupForeignKeyParams) graph.Query
 		result.Id = id
 	}
 
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DatabaseID)
-	if dbInstance == nil {
+	datasource := dbc.Graph.GetDatasourceNodeByID(params.DatasourceID)
+	if datasource == nil {
 		result.Errors = []string{"database not found"}
 		return result
 	}
 
-	dialect := dialects.Get(dbInstance.DBType)
+	dialect := dialects.Get(datasource.DBType)
 	if dialect == nil {
-		result.Errors = []string{fmt.Sprintf("unsupported DB type for FK lookup: %s", dbInstance.DBType)}
+		result.Errors = []string{fmt.Sprintf("unsupported DB type for FK lookup: %s", datasource.DBType)}
 		return result
 	}
 
@@ -55,7 +55,7 @@ func (dbc *DbClient) LookupForeignKey(params LookupForeignKeyParams) graph.Query
 	})
 
 	engineResult, _ := dbc.execute(executeParams{
-		DbInstanceID: params.DatabaseID,
+		DatasourceID: params.DatasourceID,
 		Statement:    sql,
 		// No file context: the picker query is incidental, not tracked.
 		ForExport: true,

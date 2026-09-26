@@ -203,8 +203,8 @@ func TestGetUriVariables_EmptyVariables(t *testing.T) {
 	}
 }
 
-func TestGetUriVariables_DBInstance(t *testing.T) {
-	// Test that GetUriVariables works for DBInstance nodes
+func TestGetUriVariables_Datasource(t *testing.T) {
+	// Test that GetUriVariables works for Datasource nodes
 	folder := &FolderNode{
 		ID:       "folder-1",
 		URI:      "selectdb://workspaces/test/folder",
@@ -217,16 +217,16 @@ func TestGetUriVariables_DBInstance(t *testing.T) {
 		},
 	}
 
-	dbInstance := &DBInstanceNode{
+	datasource := &DatasourceNode{
 		ID:          "db-1",
 		URI:         "selectdb://workspaces/test/folder/mydb",
-		Type:        "db_instance",
+		Type:        "datasource",
 		Name:        "mydb",
 		FolderID:    "folder-1",
 		WorkspaceID: "ws-1",
 	}
 
-	folder.DBInstances = []*DBInstanceNode{dbInstance}
+	folder.Datasources = []*DatasourceNode{datasource}
 
 	g := &Graph{
 		WorkspaceGraph: &WorkspaceNode{
@@ -234,7 +234,7 @@ func TestGetUriVariables_DBInstance(t *testing.T) {
 			Type:        "workspace",
 			Name:        "Test Workspace",
 			Folders:     []*FolderNode{folder},
-			DBInstances: []*DBInstanceNode{dbInstance},
+			Datasources: []*DatasourceNode{datasource},
 		},
 	}
 

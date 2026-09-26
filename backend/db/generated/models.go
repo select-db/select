@@ -60,8 +60,8 @@ type AppPermission struct {
 	ID          uuid.UUID
 	RoleID      uuid.UUID
 	WorkspaceID uuid.UUID
-	// Database instance the rule applies to; null = any.
-	DbInstanceID db_types.JSONNullString
+	// Datasource the rule applies to; null = any.
+	DatasourceID db_types.JSONNullString
 	// Schema the rule applies to; null = any.
 	SchemaName db_types.JSONNullString
 	// Table the rule applies to; null = any.

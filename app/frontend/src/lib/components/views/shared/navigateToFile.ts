@@ -10,8 +10,8 @@ export const navigateToFile = async (file: graph.FileNode) => {
 	addTab(file);
 
 	const workspace = get(workspaceGraphStore);
-	const fileDatabase = (workspace?.db_instances ?? []).find(
-		({ id }) => id === file.databases?.[0]?.id
+	const fileDatasource = (workspace?.datasources ?? []).find(
+		({ id }) => id === file.datasources?.[0]?.id
 	);
-	if (fileDatabase) void loadSchemaIfEmpty(fileDatabase);
+	if (fileDatasource) void loadSchemaIfEmpty(fileDatasource);
 };

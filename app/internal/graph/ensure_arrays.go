@@ -1,7 +1,7 @@
 package graph
 
-// The bindings type every child slice on these nodes as an array —
-// `children: (DBInstanceItemNode | null)[]`, not `children?: …` — and the
+// The bindings type every child slice on these nodes as an array,
+// `children: (DatasourceItemNode | null)[]`, not `children?: ...`, and the
 // frontend reads them without guarding, because the type says it is safe.
 //
 // Go disagrees on one point: a nil slice marshals as `null`. Nodes collect
@@ -24,32 +24,32 @@ func ensureArrays(workspace *WorkspaceNode) {
 	if workspace.Folders == nil {
 		workspace.Folders = []*FolderNode{}
 	}
-	if workspace.DBInstances == nil {
-		workspace.DBInstances = []*DBInstanceNode{}
+	if workspace.Datasources == nil {
+		workspace.Datasources = []*DatasourceNode{}
 	}
 
 	for _, folder := range workspace.Folders {
 		ensureFolderArrays(folder)
 	}
-	for _, dbInstance := range workspace.DBInstances {
-		ensureDBInstanceArrays(dbInstance)
+	for _, datasource := range workspace.Datasources {
+		ensureDatasourceArrays(datasource)
 	}
 }
 
 // ensureNodeArrays sweeps a single node that just entered the graph, plus the
-// schema items an inserted db instance carries with it.
+// schema items an inserted datasource carries with it.
 func ensureNodeArrays(n Node) {
 	switch node := n.(type) {
 	case *FolderNode:
 		ensureFolderOwnArrays(node)
 	case *FileNode:
 		ensureFileArrays(node)
-	case *DBInstanceNode:
-		ensureDBInstanceOwnArrays(node)
+	case *DatasourceNode:
+		ensureDatasourceOwnArrays(node)
 		for _, item := range node.Children {
 			ensureItemArrays(item)
 		}
-	case *DBInstanceItemNode:
+	case *DatasourceItemNode:
 		ensureItemArrays(node)
 	}
 }
@@ -65,8 +65,8 @@ func ensureFolderOwnArrays(folder *FolderNode) {
 	if folder.Folders == nil {
 		folder.Folders = []*FolderNode{}
 	}
-	if folder.DBInstances == nil {
-		folder.DBInstances = []*DBInstanceNode{}
+	if folder.Datasources == nil {
+		folder.Datasources = []*DatasourceNode{}
 	}
 	if folder.Badges == nil {
 		folder.Badges = []string{}
@@ -86,52 +86,52 @@ func ensureFolderArrays(folder *FolderNode) {
 	for _, child := range folder.Folders {
 		ensureFolderArrays(child)
 	}
-	for _, dbInstance := range folder.DBInstances {
-		ensureDBInstanceArrays(dbInstance)
+	for _, datasource := range folder.Datasources {
+		ensureDatasourceArrays(datasource)
 	}
 }
 
-func ensureDBInstanceOwnArrays(dbInstance *DBInstanceNode) {
-	if dbInstance == nil {
+func ensureDatasourceOwnArrays(datasource *DatasourceNode) {
+	if datasource == nil {
 		return
 	}
 
-	if dbInstance.Children == nil {
-		dbInstance.Children = []*DBInstanceItemNode{}
+	if datasource.Children == nil {
+		datasource.Children = []*DatasourceItemNode{}
 	}
-	if dbInstance.Files == nil {
-		dbInstance.Files = []*FileNode{}
+	if datasource.Files == nil {
+		datasource.Files = []*FileNode{}
 	}
-	if dbInstance.Folders == nil {
-		dbInstance.Folders = []*FolderNode{}
+	if datasource.Folders == nil {
+		datasource.Folders = []*FolderNode{}
 	}
 }
 
-func ensureDBInstanceArrays(dbInstance *DBInstanceNode) {
-	if dbInstance == nil {
+func ensureDatasourceArrays(datasource *DatasourceNode) {
+	if datasource == nil {
 		return
 	}
 
-	ensureDBInstanceOwnArrays(dbInstance)
+	ensureDatasourceOwnArrays(datasource)
 
-	for _, item := range dbInstance.Children {
+	for _, item := range datasource.Children {
 		ensureItemArrays(item)
 	}
-	for _, file := range dbInstance.Files {
+	for _, file := range datasource.Files {
 		ensureFileArrays(file)
 	}
-	for _, folder := range dbInstance.Folders {
+	for _, folder := range datasource.Folders {
 		ensureFolderArrays(folder)
 	}
 }
 
-func ensureItemArrays(item *DBInstanceItemNode) {
+func ensureItemArrays(item *DatasourceItemNode) {
 	if item == nil {
 		return
 	}
 
 	if item.Children == nil {
-		item.Children = []*DBInstanceItemNode{}
+		item.Children = []*DatasourceItemNode{}
 	}
 	if item.Badges == nil {
 		item.Badges = []string{}

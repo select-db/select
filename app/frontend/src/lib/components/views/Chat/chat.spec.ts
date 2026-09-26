@@ -36,7 +36,7 @@ const WAREHOUSE = 'sample-warehouse';
 /** A reply in which the model says something, then runs a query. */
 const runs = (text: string, statement: string, callId: string): ModelReply => ({
 	text,
-	call: { name: 'execute_query', input: { dbInstanceId: WAREHOUSE, statement }, id: callId }
+	call: { name: 'execute_query', input: { datasourceId: WAREHOUSE, statement }, id: callId }
 });
 
 /** Holds every execute_query call open until released, to act while one runs. */
@@ -143,7 +143,7 @@ test('a call that carries no arguments at all still runs', async ({ page, signIn
 	await expectCallsFinished(page, 1);
 	// The tool's own complaint, not one the app invented on its behalf.
 	await toolCall(page).click();
-	await expect(page.getByText('failed to get DB instance', { exact: false })).toBeVisible();
+	await expect(page.getByText('failed to get datasource', { exact: false })).toBeVisible();
 });
 
 test('a call to a tool the app does not have settles as a failed call', async ({

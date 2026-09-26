@@ -47,7 +47,7 @@ func storedSSHPassphrase(keyPath string) string {
 }
 
 // resolveSSHConfig substitutes .env variables in the SSH config fields.
-func (dbc *DbClient) resolveSSHConfig(sshCfg *graph.DBInstanceSSHConfig, folderID string) (*connect.ResolvedSSHConfig, error) {
+func (dbc *DbClient) resolveSSHConfig(sshCfg *graph.DatasourceSSHConfig, folderID string) (*connect.ResolvedSSHConfig, error) {
 	if sshCfg == nil || !sshCfg.Enabled {
 		return nil, nil
 	}

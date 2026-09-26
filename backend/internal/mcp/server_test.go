@@ -75,8 +75,8 @@ func TestHandler_ToolsList(t *testing.T) {
 		t.Fatalf("want 7 tools, got %d", len(tools))
 	}
 	wantSet := map[string]bool{
-		"list_datasources":     true,
-		"get_database_schemas": true, "get_database_table_detail": true,
+		"list_datasources":       true,
+		"get_datasource_schemas": true, "get_datasource_table_detail": true,
 		"execute_query": true, "execute_statement": true,
 		"explain_query": true, "plan_query": true,
 	}
@@ -118,8 +118,8 @@ func TestHandler_ToolsListEmitsAnnotations(t *testing.T) {
 		annotationsExpected bool
 	}{
 		{"list_datasources", true, false, true},
-		{"get_database_schemas", true, false, true},
-		{"get_database_table_detail", true, false, true},
+		{"get_datasource_schemas", true, false, true},
+		{"get_datasource_table_detail", true, false, true},
 		{"execute_query", true, false, true},
 		{"plan_query", true, false, true},
 		{"explain_query", true, false, true},

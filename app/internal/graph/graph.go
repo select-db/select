@@ -9,7 +9,7 @@ type Graph struct {
 	Queries        *generated.Queries
 	WorkspaceGraph *WorkspaceNode
 
-	// Optional; app sets to System.LoadAllDatabaseSchemas.
+	// Optional; app sets to System.LoadAllDatasourceSchemas.
 	// Invoked without Graph.mu held after a successful BuildWorkspaceGraph.
 	AfterWorkspaceGraphBuild func(ws *WorkspaceNode)
 

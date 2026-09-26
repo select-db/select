@@ -88,7 +88,7 @@ Before writing a new service method, store, helper or abstraction, ask:
   the code you are about to duplicate. The guard you are about to write is
   often already in the function you were going to call.
 - **Is the new thing an existing thing plus a marker?** A database is a folder
-  holding a `db.config.json`. Where that is true, make it behave like the
+  holding a `datasource.config.json`. Where that is true, make it behave like the
   existing thing. A special case needs its own validation, error messages,
   tests and documentation; a composition inherits all four.
 - **Does the rule this encodes live anywhere else?** Two copies of a naming

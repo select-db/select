@@ -105,10 +105,10 @@ export const createFileClickHandler = (
 		if (file.name === 'schema.sql' && file.folder_id) {
 			const workspace = get(workspaceGraphStore);
 			// Find database whose URI matches the file's folder_id
-			const database = (workspace?.db_instances ?? []).find((db) => db.uri === file.folder_id);
-			if (database) {
+			const datasource = (workspace?.datasources ?? []).find((db) => db.uri === file.folder_id);
+			if (datasource) {
 				setItemSelection([file.id]);
-				await navigateToSchema(database.id);
+				await navigateToSchema(datasource.id);
 				setFocusedFsItem(file.id);
 				requestFsPanelFocus();
 				lastClickedId.current = file.id;
@@ -133,19 +133,19 @@ export const createFileClickHandler = (
  * as its tables landed, so seeing anything took two clicks and a guess at the
  * timing. A database that already has its schema toggles like any other row.
  */
-export const clickDatabase = (database: graph.DBInstanceNode) => {
-	if (database.children?.length) {
-		toggleIsItemExpanded(database.id);
+export const clickDatasource = (datasource: graph.DatasourceNode) => {
+	if (datasource.children?.length) {
+		toggleIsItemExpanded(datasource.id);
 		return;
 	}
 
-	expandItem(database.id);
-	void loadSchemaIfEmpty(database);
+	expandItem(datasource.id);
+	void loadSchemaIfEmpty(datasource);
 };
 
-const clickItem = async (item: graph.DBInstanceNode | graph.DBInstanceItemNode) => {
-	if (item.type === 'db_instance') {
-		clickDatabase(item as graph.DBInstanceNode);
+const clickItem = async (item: graph.DatasourceNode | graph.DatasourceItemNode) => {
+	if (item.type === 'datasource') {
+		clickDatasource(item as graph.DatasourceNode);
 	} else {
 		toggleIsItemExpanded(item.id);
 	}
@@ -158,14 +158,14 @@ const clickItem = async (item: graph.DBInstanceNode | graph.DBInstanceItemNode) 
 /**
  * Create database click handler with selection support
  */
-export const createDatabaseClickHandler = (
+export const createDatasourceClickHandler = (
 	ctx: 'fs' | 'git' | 'search',
 	lastClickedId: { current: string | null }
 ) => {
-	return (item: graph.DBInstanceNode | graph.DBInstanceItemNode, event?: MouseEvent) => {
-		const isDbInstance = item.type === 'db_instance';
+	return (item: graph.DatasourceNode | graph.DatasourceItemNode, event?: MouseEvent) => {
+		const isDatasource = item.type === 'datasource';
 
-		if (ctx !== 'fs' || !isDbInstance) {
+		if (ctx !== 'fs' || !isDatasource) {
 			clickItem(item);
 			return;
 		}
@@ -193,11 +193,11 @@ export const createClickHandlers = (
 	return {
 		handleFolderClick: createFolderClickHandler(ctx, lastClickedId),
 		handleFileClick: createFileClickHandler(ctx, lastClickedId),
-		handleDatabaseClick: createDatabaseClickHandler(ctx, lastClickedId)
+		handleDatasourceClick: createDatasourceClickHandler(ctx, lastClickedId)
 	};
 };
 
-type SelectableItem = graph.FileNode | graph.FolderNode | graph.DBInstanceNode;
+type SelectableItem = graph.FileNode | graph.FolderNode | graph.DatasourceNode;
 
 /**
  * Find an item and its parent path in the graph
@@ -206,7 +206,7 @@ const findItemWithParent = (
 	id: string,
 	files: graph.FileNode[],
 	folders: graph.FolderNode[],
-	databases: graph.DBInstanceNode[],
+	datasources: graph.DatasourceNode[],
 	parentId: string | null = null
 ): { item: SelectableItem; parentId: string | null } | null => {
 	// Check files
@@ -215,7 +215,7 @@ const findItemWithParent = (
 	}
 
 	// Check databases
-	for (const db of databases) {
+	for (const db of datasources) {
 		if (db.id === id) return { item: db, parentId };
 	}
 
@@ -228,7 +228,7 @@ const findItemWithParent = (
 			id,
 			folder.files,
 			folder.folders,
-			folder.db_instances,
+			folder.datasources,
 			folder.id
 		);
 		if (result) return result;
@@ -245,7 +245,7 @@ const getItemsAtLevel = (parentFolder: graph.FolderNode): SelectableItem[] => {
 
 	// Order: folders, databases, files (matching the display order in FileItems.svelte)
 	items.push(...parentFolder.folders);
-	items.push(...parentFolder.db_instances);
+	items.push(...parentFolder.datasources);
 	items.push(...parentFolder.files);
 
 	return items;
@@ -263,8 +263,8 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
 	if (!root) return [];
 
 	// Find both items with their parent information
-	const fromResult = findItemWithParent(fromId, root.files, root.folders, root.db_instances);
-	const toResult = findItemWithParent(toId, root.files, root.folders, root.db_instances);
+	const fromResult = findItemWithParent(fromId, root.files, root.folders, root.datasources);
+	const toResult = findItemWithParent(toId, root.files, root.folders, root.datasources);
 
 	if (!fromResult || !toResult) return [];
 
@@ -284,7 +284,7 @@ export const getRangeSelection = (fromId: string, toId: string): string[] => {
 			fromResult.parentId,
 			root.files,
 			root.folders,
-			root.db_instances
+			root.datasources
 		);
 		if (!parentResult || parentResult.item.type !== 'folder') return [];
 		levelItems = getItemsAtLevel(parentResult.item as graph.FolderNode);

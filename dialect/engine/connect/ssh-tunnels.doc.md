@@ -39,7 +39,7 @@ Local (non-proxified) connections run on the user's own machine, so SELECT can a
 
 A pinned host key lets SELECT verify, on every connection, that it is reaching the real bastion and not an impostor (a man-in-the-middle). When a host key is pinned, a mismatch aborts the connection. Whether a key is pinned depends on the mode:
 
-**Local connections** pin automatically when possible: at connect time SELECT looks the host up in `~/.ssh/known_hosts` and pins that key, reusing the trust your own `ssh` client already established, so there is nothing to fill in. If the host is **not** in `known_hosts`, there is no key to pin, so the connection proceeds **unverified**. To get verification, pin the key first: either `ssh` to the host once so it lands in `known_hosts`, or set `host_key` in `db.config.json` directly.
+**Local connections** pin automatically when possible: at connect time SELECT looks the host up in `~/.ssh/known_hosts` and pins that key, reusing the trust your own `ssh` client already established, so there is nothing to fill in. If the host is **not** in `known_hosts`, there is no key to pin, so the connection proceeds **unverified**. To get verification, pin the key first: either `ssh` to the host once so it lands in `known_hosts`, or set `host_key` in `datasource.config.json` directly.
 
 **Proxified connections** always require a pinned key, they refuse to connect without one. The server connects on your behalf and has no access to your machine, so you must supply the key upfront. Get it by running:
 

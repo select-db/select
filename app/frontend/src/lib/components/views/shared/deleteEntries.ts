@@ -3,7 +3,7 @@ import * as graph from '$lib/wails/graph';
 import { revokeConnections } from '$lib/components/views/shared/revokeConnections';
 import { must, tryCatch } from '$lib/utils/tryCatch';
 
-export type Entry = graph.FileNode | graph.FolderNode | graph.DBInstanceNode;
+export type Entry = graph.FileNode | graph.FolderNode | graph.DatasourceNode;
 
 /** Removes one entry from the workspace, and nothing else. */
 export const removeEntry = async (entry: Entry) =>
@@ -36,7 +36,7 @@ export const removeEntry = async (entry: Entry) =>
 export const deleteEntries = async (entries: Entry[], onDeleted?: () => void): Promise<void> => {
 	const shared = await must(
 		tryCatch(
-			graph.SharedDatabasesUnder,
+			graph.SharedDatasourcesUnder,
 			entries.map((entry) => entry.id)
 		)
 	);

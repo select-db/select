@@ -7,7 +7,7 @@ import { Create as $Create } from "@wailsio/runtime";
 
 export class AddPermissionParams {
     "role_id": string;
-    "db_instance_id": string | null;
+    "datasource_id": string | null;
     "schema_name": string | null;
     "table_name": string | null;
     "column_name": string | null;
@@ -19,8 +19,8 @@ export class AddPermissionParams {
         if (!("role_id" in $$source)) {
             this["role_id"] = "";
         }
-        if (!("db_instance_id" in $$source)) {
-            this["db_instance_id"] = null;
+        if (!("datasource_id" in $$source)) {
+            this["datasource_id"] = null;
         }
         if (!("schema_name" in $$source)) {
             this["schema_name"] = null;
@@ -54,7 +54,7 @@ export class PermissionEntry {
     "id": string;
     "role_id": string;
     "workspace_id": string;
-    "db_instance_id": string | null;
+    "datasource_id": string | null;
     "schema_name": string | null;
     "table_name": string | null;
     "column_name": string | null;
@@ -72,8 +72,8 @@ export class PermissionEntry {
         if (!("workspace_id" in $$source)) {
             this["workspace_id"] = "";
         }
-        if (!("db_instance_id" in $$source)) {
-            this["db_instance_id"] = null;
+        if (!("datasource_id" in $$source)) {
+            this["datasource_id"] = null;
         }
         if (!("schema_name" in $$source)) {
             this["schema_name"] = null;

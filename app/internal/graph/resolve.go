@@ -1,6 +1,6 @@
 package graph
 
-// A build lays out a workspace's folders and db instances but not its files. A
+// A build lays out a workspace's folders and datasources but not its files. A
 // folder reads its files the first time it is opened, along with the folders
 // directly inside it, and records that in FolderNode.Resolved; a lookup by ID
 // resolves the folders along the path first, so callers never have to know
@@ -187,10 +187,10 @@ func (g *Graph) nodeForURI(uri string) Node {
 	return g.lookup(uri)
 }
 
-// FileDatabases returns the databases a file is bound to: from the node when
+// FileDatasources returns the databases a file is bound to: from the node when
 // the file's folder has been resolved, from the file's sidecar when it has not,
 // which answers without resolving the folder.
-func (g *Graph) FileDatabases(fileURI string) []DatabaseRef {
+func (g *Graph) FileDatasources(fileURI string) []DatasourceRef {
 	g.mu.RLock()
 	node, _ := g.lookup(fileURI).(*FileNode)
 	workspaceID := ""
@@ -200,7 +200,7 @@ func (g *Graph) FileDatabases(fileURI string) []DatabaseRef {
 	g.mu.RUnlock()
 
 	if node != nil {
-		return node.Databases
+		return node.Datasources
 	}
 	if workspaceID == "" {
 		return nil
@@ -218,5 +218,5 @@ func (g *Graph) FileDatabases(fileURI string) []DatabaseRef {
 	if err != nil {
 		return nil
 	}
-	return meta.Databases
+	return meta.Datasources
 }

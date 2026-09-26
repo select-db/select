@@ -52,7 +52,7 @@ Settled. Reopen with a reason, not a preference.
 - Access goes through the backend only. No direct client endpoint in v1, so
   plain SQLite files (`modernc.org/sqlite`) rather than `sqld`.
 - The server owns the list of managed dbs. The app shows them in Settings and
-  "Add to workspace" shows a `db.config.json` to paste; removing the folder
+  "Add to workspace" shows a `datasource.config.json` to paste; removing the folder
   removes a bookmark, not the db.
 - Opt-in: one `CELLAR` setting. Unset (default): managed dbs are off and the
   backend behaves as today. `local`: cellar in the same process (dev, small
@@ -88,14 +88,14 @@ Settled. Reopen with a reason, not a preference.
 ### Routes
 - `POST /datasources`: create any datasource type, server-generated id. Same
   validation as `PUT /datasources/{id}`. Returns the id and the
-  `db.config.json` content. Names are free text, as for every datasource.
+  `datasource.config.json` content. Names are free text, as for every datasource.
 - `POST /datasources/{id}/fork`: optional `at` forks from a point in time into
   a new db. The source is never touched. The backend checks `at` is inside the
   plan's window.
 - `GET /datasources/{id}/download`: the `.db` file.
 - `PUT /datasources/{id}` on a managed db: rename only.
 - `DELETE /datasources/{id}`: stops serving at once; the reconciler purges.
-- MCP: `create_database` and `fork_database`, same code as REST. No delete.
+- MCP: `create_datasource` and `fork_datasource`, same code as REST. No delete.
 
 ### Permissions
 - Create: the existing rule (owner, or `manage` on `*`).
@@ -248,7 +248,7 @@ Needs 1.
 - [ ] Backend: `POST /datasources`, fork, download, rename-only `PUT`,
       delete marking `deleting`; quota checks; dedicated role and `grant_to`.
 - [ ] `disabled` on each of these entry points when `CELLAR` is unset.
-- [ ] MCP `create_database`, `fork_database`.
+- [ ] MCP `create_datasource`, `fork_datasource`.
 - [ ] Audit: reuse `datasource.lifecycle.*`.
 
 ### 3. Bucket: replicate, evict, wake
@@ -275,7 +275,7 @@ Needs 2 and 3.
 ### 5. App
 Needs 2. Waking UI needs 3.
 - [ ] Settings: create, list with size and state, delete with typed-name
-      confirmation, download, "Add to workspace" modal with `db.config.json`.
+      confirmation, download, "Add to workspace" modal with `datasource.config.json`.
 - [ ] "Waking database..." after about 1s; retry on `waking`.
 - [ ] `.doc.md`: plans, wake latency, delete is final, deleted data leaves
       storage within 7 days.
@@ -296,7 +296,7 @@ Needs 3 for staging, all for prod.
 - Upload of an existing `.db`, with untrusted-file hardening.
 - In-place restore with an automatic backup fork, if changing ids hurts.
 - Delete protection or a recovery window as a Teams perk.
-- `delete_database` over MCP for dbs whose role the key holds.
+- `delete_datasource` over MCP for dbs whose role the key holds.
 - `managed_enabled` flag so the app can hide the create button.
 - Second cellar: an `app.cellar` table for placement data (with a foreign key
   from `cellar_id`), `move`, dead-cellar runbook.

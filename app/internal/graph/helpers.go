@@ -81,14 +81,14 @@ func isZero(v reflect.Value) bool {
 	return false
 }
 
-// GetDBInstanceNodeByID returns the DBInstanceNode with the given ID from the
-// current WorkspaceGraph, or nil if no such node exists. A db instance answers
+// GetDatasourceNodeByID returns the DatasourceNode with the given ID from the
+// current WorkspaceGraph, or nil if no such node exists. A datasource answers
 // to both its config ID and its URI.
-func (g *Graph) GetDBInstanceNodeByID(ID string) *DBInstanceNode {
+func (g *Graph) GetDatasourceNodeByID(ID string) *DatasourceNode {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	node, _ := g.lookup(ID).(*DBInstanceNode)
+	node, _ := g.lookup(ID).(*DatasourceNode)
 	return node
 }
 

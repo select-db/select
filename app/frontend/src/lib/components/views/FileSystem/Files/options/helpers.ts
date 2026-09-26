@@ -20,7 +20,7 @@ export const renameOption = {
 };
 
 /** The file that makes a directory a database. */
-export const DB_CONFIG_FILE = 'db.config.json';
+export const DATASOURCE_CONFIG_FILE = 'datasource.config.json';
 
 export const writeFolder = async (uri: string) => {
 	await must(
@@ -40,7 +40,7 @@ export const writeFile = async (uri: string) => {
 
 	// Write .metadata.json sidecar with proper content
 	// The filesystem watcher will detect this and mutate the new file
-	const config = { databases: [] };
+	const config = { datasources: [] };
 
 	await must(
 		tryCatch(fs.Write, {
@@ -50,17 +50,17 @@ export const writeFile = async (uri: string) => {
 	);
 };
 
-export const writeDatabase = async (
+export const writeDatasource = async (
 	parentUri: string,
 	name: string
 ): Promise<{ id: string; uri: string }> => {
 	const id = crypto.randomUUID();
-	const dbUri = `${parentUri}/${name}`;
+	const datasourceUri = `${parentUri}/${name}`;
 
-	await must(tryCatch(fs.Mkdir, { uri: dbUri }));
+	await must(tryCatch(fs.Mkdir, { uri: datasourceUri }));
 
 	// The directory is only a folder until this lands: the watcher reads the
-	// config and turns it into a db instance node.
+	// config and turns it into a datasource node.
 	// No name: the directory is the name.
 	const config = {
 		id,
@@ -70,10 +70,10 @@ export const writeDatabase = async (
 
 	await must(
 		tryCatch(fs.Write, {
-			uri: `${dbUri}/${DB_CONFIG_FILE}`,
+			uri: `${datasourceUri}/${DATASOURCE_CONFIG_FILE}`,
 			content: JSON.stringify(config, null, 2)
 		})
 	);
 
-	return { id, uri: dbUri };
+	return { id, uri: datasourceUri };
 };

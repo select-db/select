@@ -91,11 +91,11 @@ passes just as well when everything is refused. Assert both directions:
 ```go
 for idx, missing := range tt.needs {
     rest := slices.Delete(slices.Clone(tt.needs), idx, idx+1)
-    if err := core.CheckQueryPermissions(inspected, dbID, holding(rest...)); err == nil {
+    if err := core.CheckQueryPermissions(inspected, datasourceID, holding(rest...)); err == nil {
         t.Errorf("ran without %q. %s", missing, tt.why)
     }
 }
-if err := core.CheckQueryPermissions(inspected, dbID, holding(tt.needs...)); err != nil {
+if err := core.CheckQueryPermissions(inspected, datasourceID, holding(tt.needs...)); err != nil {
     t.Errorf("holding %v still refused it: %v", tt.needs, err)
 }
 ```

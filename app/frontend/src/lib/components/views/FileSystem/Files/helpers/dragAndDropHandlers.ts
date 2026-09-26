@@ -31,7 +31,7 @@ let hoveredItemId: string | null = null;
  * Handle drag start event
  */
 export const createDragStartHandler = (ctx: 'fs' | 'git' | 'search') => {
-	return (item: graph.FileNode | graph.FolderNode | graph.DBInstanceNode, event: DragEvent) => {
+	return (item: graph.FileNode | graph.FolderNode | graph.DatasourceNode, event: DragEvent) => {
 		if (ctx !== 'fs') return;
 
 		let draggedIds: Set<string>;
@@ -72,7 +72,7 @@ const clearAutoExpandTimer = () => {
  * Handle drag over event with auto-expand
  */
 export const createDragOverHandler = (ctx: 'fs' | 'git' | 'search') => {
-	return (item: graph.FolderNode | graph.DBInstanceNode, event: DragEvent) => {
+	return (item: graph.FolderNode | graph.DatasourceNode, event: DragEvent) => {
 		const dragState = get(dragStateStore);
 		if (ctx !== 'fs' || !dragState.isDragging) return;
 
@@ -107,7 +107,7 @@ export const createDragOverHandler = (ctx: 'fs' | 'git' | 'search') => {
  * Handle drop event
  */
 export const createDropHandler = (ctx: 'fs' | 'git' | 'search') => {
-	return async (targetItem: graph.FolderNode | graph.DBInstanceNode, event: DragEvent) => {
+	return async (targetItem: graph.FolderNode | graph.DatasourceNode, event: DragEvent) => {
 		const dragState = get(dragStateStore);
 		if (ctx !== 'fs' || !dragState.isDragging) return;
 
@@ -128,12 +128,12 @@ export const createDropHandler = (ctx: 'fs' | 'git' | 'search') => {
 		try {
 			// Get root data for finding items
 			const workspace = get(workspaceGraphStore);
-			const rootFiles = (workspace?.folders[0]?.files ?? []);
-			const rootFolders = (workspace?.folders[0]?.folders ?? []);
-			const rootDatabases = (workspace?.folders[0]?.db_instances ?? []);
+			const rootFiles = workspace?.folders[0]?.files ?? [];
+			const rootFolders = workspace?.folders[0]?.folders ?? [];
+			const rootDatasources = workspace?.folders[0]?.datasources ?? [];
 
 			for (const id of draggedIds) {
-				const item = findItemById(id, rootFiles, rootFolders, rootDatabases);
+				const item = findItemById(id, rootFiles, rootFolders, rootDatasources);
 				if (!item) continue;
 
 				// Calculate new URI (move item into target folder)

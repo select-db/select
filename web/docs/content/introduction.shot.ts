@@ -34,7 +34,7 @@ const EDITOR: Framing = { name: 'getting-started', width: 940, height: 560, dens
 const FORM: Framing = { ...EDITOR, height: 380 };
 
 /** What the seed ships: a database, and a query file to point at it. */
-const DATABASE = 'warehouse';
+const DATASOURCE = 'warehouse';
 /*
  * weekly_revenue.sql, not top_customers.sql. The seeded user holds the
  * analyst-readonly role, which denies select on customers.email, and
@@ -43,7 +43,7 @@ const DATABASE = 'warehouse';
  * file reads orders only, which the role allows.
  */
 const QUERY_FILE = 'weekly_revenue.sql';
-/** The DSN db.config.json holds — a variable, not a secret. */
+/** The DSN datasource.config.json holds: a variable, not a secret. */
 const DSN = '$WAREHOUSE_DSN';
 
 for (const theme of THEMES) {
@@ -82,13 +82,13 @@ for (const theme of THEMES) {
 			// the pair can arrive as two clicks and no dblclick at all. The form
 			// that opens for a database that exists is the form a new one is
 			// created with, so nothing here walks the New Database flow.
-			await testId(page, 'tree.node', DATABASE).click({ button: 'right' });
+			await testId(page, 'tree.node', DATASOURCE).click({ button: 'right' });
 			await page.getByText('Edit...', { exact: true }).click();
-			await expect(testId(page, 'database.form')).toBeVisible();
+			await expect(testId(page, 'datasource.form')).toBeVisible();
 			// The DSN is the point of the figure: it is a $VAR, which is what the
 			// tip under this step tells the reader to do. Assert it rather than
 			// trusting the form rendered something.
-			await expect(testId(page, 'database.dsn').locator('input')).toHaveValue(DSN, {
+			await expect(testId(page, 'datasource.dsn').locator('input')).toHaveValue(DSN, {
 				timeout: 15_000
 			});
 			// Resized for this one shot, then put back: the form is the only short
@@ -98,7 +98,7 @@ for (const theme of THEMES) {
 			await page.setViewportSize({ width: EDITOR.width, height: EDITOR.height });
 
 			// 2. The database picker, step 4's least guessable moment. Cmd+Shift+D
-			// is `editor.toggleDatabasePicker` in the shipped keybindings, so this
+			// is `editor.toggleDatasourcePicker` in the shipped keybindings, so this
 			// is the shortcut the guide names, not a click that stands in for it.
 			await testId(page, 'tree.node', QUERY_FILE).click();
 			await expect(editor.surface(page)).toBeVisible();

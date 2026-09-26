@@ -3,32 +3,37 @@
 	import type * as graph from '$lib/wails/graph';
 
 	type Props = {
-		databases: graph.DBInstanceNode[];
-		dbOn: Record<string, boolean>;
+		datasources: graph.DatasourceNode[];
+		datasourceOn: Record<string, boolean>;
 		schemaOn: Record<string, boolean>;
 		maxHeight: number;
 	};
 
-	let { databases, dbOn = $bindable(), schemaOn = $bindable(), maxHeight }: Props = $props();
+	let {
+		datasources,
+		datasourceOn = $bindable(),
+		schemaOn = $bindable(),
+		maxHeight
+	}: Props = $props();
 </script>
 
 <aside class="scope-panel" style:max-height="{maxHeight}px">
 	<p class="scope-heading">Search in</p>
 	<div class="scopes scrollable">
-		{#each databases as db (db.id)}
+		{#each datasources as db (db.id)}
 			{@const schemas = db.children.filter((c) => c.type === 'schema')}
 			<div class="db-block">
 				<div class="scope-row">
 					<Checkbox
-						checked={dbOn[db.id] !== false}
+						checked={datasourceOn[db.id] !== false}
 						size="sm"
 						label={db.name}
 						onchange={(on) => {
-							dbOn = { ...dbOn, [db.id]: on };
+							datasourceOn = { ...datasourceOn, [db.id]: on };
 						}}
 					/>
 				</div>
-				{#if dbOn[db.id] !== false}
+				{#if datasourceOn[db.id] !== false}
 					{#each schemas as sch (sch.id)}
 						<div class="scope-row schema-row">
 							<Checkbox

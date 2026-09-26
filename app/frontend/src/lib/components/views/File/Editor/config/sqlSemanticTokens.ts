@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type * as graph from '$lib/wails/graph';
 import { workspaceGraphStore } from '$lib/utils/graph/workspaceGraphStore';
 
-function addNamesFromFunctionsFolder(folder: graph.DBInstanceItemNode, names: Set<string>): void {
+function addNamesFromFunctionsFolder(folder: graph.DatasourceItemNode, names: Set<string>): void {
 	for (const leaf of folder.children) {
 		if (leaf.type !== 'function') continue;
 		const meta = leaf.metadata as Record<string, unknown> | undefined | null;
@@ -16,13 +16,13 @@ function addNamesFromFunctionsFolder(folder: graph.DBInstanceItemNode, names: Se
 	}
 }
 
-function collectSqlFunctionNamesForDbInstance(
+function collectSqlFunctionNamesForDatasource(
 	workspace: graph.WorkspaceNode | undefined,
-	dbInstanceId: string
+	datasourceId: string
 ): Set<string> {
 	const names = new Set<string>();
-	if (!workspace || !dbInstanceId) return names;
-	const db = workspace.db_instances.find((d) => d.id === dbInstanceId);
+	if (!workspace || !datasourceId) return names;
+	const db = workspace.datasources.find((d) => d.id === datasourceId);
 	if (!db?.children?.length) return names;
 	for (const top of db.children) {
 		if (top.type === 'schema') {
@@ -153,18 +153,18 @@ function buildHighlightDecorations(
  */
 export function attachSqlFunctionHighlighter(
 	editor: monaco.editor.IStandaloneCodeEditor,
-	getDbId: () => string | null | undefined
+	getDatasourceId: () => string | null | undefined
 ): monaco.IDisposable {
 	const decos = editor.createDecorationsCollection([]);
 
 	const refresh = () => {
 		const model = editor.getModel();
-		const dbId = getDbId();
-		if (!model || !dbId || model.isDisposed()) {
+		const datasourceId = getDatasourceId();
+		if (!model || !datasourceId || model.isDisposed()) {
 			decos.clear();
 			return;
 		}
-		const names = collectSqlFunctionNamesForDbInstance(get(workspaceGraphStore), dbId);
+		const names = collectSqlFunctionNamesForDatasource(get(workspaceGraphStore), datasourceId);
 		decos.set(buildHighlightDecorations(model, names));
 	};
 

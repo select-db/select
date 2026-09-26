@@ -26,7 +26,7 @@ import (
 // package var.)
 var updateBodySchema = validate.Schema{Fields: []validate.Field{
 	{Name: "role_id", Kind: query.KindUUID},
-	{Name: "db_instance_id", Kind: query.KindText, Nullable: true},
+	{Name: "datasource_id", Kind: query.KindText, Nullable: true},
 	{Name: "schema_name", Kind: query.KindText, Nullable: true},
 	{Name: "table_name", Kind: query.KindText, Nullable: true},
 	{Name: "column_name", Kind: query.KindText, Nullable: true},

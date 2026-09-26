@@ -55,7 +55,7 @@ func (r *Role) DuplicateRole(id string) (generated.Role, error) {
 		_, err := r.Queries.InsertPermission(ctx, generated.InsertPermissionParams{
 			ID:           utils.GenerateUUID(),
 			RoleID:       newRole.ID,
-			DbInstanceID: p.DbInstanceID,
+			DatasourceID: p.DatasourceID,
 			SchemaName:   p.SchemaName,
 			TableName:    p.TableName,
 			ColumnName:   p.ColumnName,

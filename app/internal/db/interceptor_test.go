@@ -21,7 +21,7 @@ func TestMapOrdinalToField(t *testing.T) {
 			UPDATE file
 			SET content = ?1
 			WHERE id = ?2
-			RETURNING id, name, content, edit_mode, workspace_id, folder_id, db_instance_id`,
+			RETURNING id, name, content, edit_mode, workspace_id, folder_id, datasource_id`,
 			args: []driver.NamedValue{
 				{Ordinal: 1}, {Ordinal: 2},
 			},
@@ -30,8 +30,8 @@ func TestMapOrdinalToField(t *testing.T) {
 			wantArgs:      []string{"content", "id"},
 		}, {
 			name: "UPDATE with id and args",
-			query: `-- name: UpdateDbInstance :one
-			UPDATE db_instance
+			query: `-- name: UpdateDatasource :one
+			UPDATE datasource
 			SET
 				name = ?1,
 				db_type = ?2,
@@ -45,13 +45,13 @@ func TestMapOrdinalToField(t *testing.T) {
 			args: []driver.NamedValue{
 				{Ordinal: 1}, {Ordinal: 2}, {Ordinal: 3}, {Ordinal: 4}, {Ordinal: 5}, {Ordinal: 6}, {Ordinal: 7}, {Ordinal: 8},
 			},
-			wantTableName: "db_instance",
+			wantTableName: "datasource",
 			wantOperation: "update",
 			wantArgs:      []string{"name", "db_type", "dsn", "ssh_enabled", "ssh_dsn", "ssh_public_key", "ssh_private_key_encrypted", "id"},
 		}, {
 			name: "INSERT with args",
-			query: `-- name: CreateDbInstance :one
-			INSERT INTO db_instance (
+			query: `-- name: CreateDatasource :one
+			INSERT INTO datasource (
 				id,
 				name,
 				db_type,
@@ -76,7 +76,7 @@ func TestMapOrdinalToField(t *testing.T) {
 			args: []driver.NamedValue{
 				{Ordinal: 1}, {Ordinal: 2}, {Ordinal: 3}, {Ordinal: 4}, {Ordinal: 5}, {Ordinal: 6}, {Ordinal: 7}, {Ordinal: 8}, {Ordinal: 9},
 			},
-			wantTableName: "db_instance",
+			wantTableName: "datasource",
 			wantOperation: "insert",
 			wantArgs:      []string{"id", "name", "db_type", "dsn", "ssh_enabled", "ssh_dsn", "ssh_public_key", "ssh_private_key_encrypted", "workspace_id"},
 		}, {

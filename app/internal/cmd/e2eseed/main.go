@@ -142,10 +142,6 @@ LIMIT
   50;
 `
 
-// DatasourceID re-exports the sample database's id, so a spec and the fixture
-// cannot disagree about which database they mean.
-const DatasourceID = sample.WarehouseID
-
 func main() {
 	if len(os.Args) < 2 || len(os.Args) > 3 {
 		log.Fatalf("usage: %s <data-dir> [server-domain]", filepath.Base(os.Args[0]))
@@ -374,7 +370,7 @@ func seedRoles(ctx context.Context, queries *generated.Queries) error {
 			ID:           r.id,
 			RoleID:       RoleID,
 			WorkspaceID:  WorkspaceID,
-			DbInstanceID: nullable(DatasourceID),
+			DatasourceID: nullable(sample.WarehouseID),
 			SchemaName:   nullable(r.schema),
 			TableName:    nullable(r.table),
 			ColumnName:   nullable(r.column),
@@ -418,15 +414,15 @@ func seedTeam(ctx context.Context, queries *generated.Queries) error {
 		datasource     string // "" for a workspace-level rule
 		action, effect string
 	}{
-		{"e2e-perm-eng-select", RoleEngineerID, DatasourceID, "select", "allow"},
-		{"e2e-perm-eng-see", RoleEngineerID, DatasourceID, "see", "allow"},
-		{"e2e-perm-eng-insert", RoleEngineerID, DatasourceID, "insert", "allow"},
-		{"e2e-perm-eng-update", RoleEngineerID, DatasourceID, "update", "allow"},
-		{"e2e-perm-eng-delete", RoleEngineerID, DatasourceID, "delete", "allow"},
+		{"e2e-perm-eng-select", RoleEngineerID, sample.WarehouseID, "select", "allow"},
+		{"e2e-perm-eng-see", RoleEngineerID, sample.WarehouseID, "see", "allow"},
+		{"e2e-perm-eng-insert", RoleEngineerID, sample.WarehouseID, "insert", "allow"},
+		{"e2e-perm-eng-update", RoleEngineerID, sample.WarehouseID, "update", "allow"},
+		{"e2e-perm-eng-delete", RoleEngineerID, sample.WarehouseID, "delete", "allow"},
 
 		{"e2e-perm-admin-manage", RoleAdminID, "", "manage", "allow"},
-		{"e2e-perm-admin-select", RoleAdminID, DatasourceID, "select", "allow"},
-		{"e2e-perm-admin-see", RoleAdminID, DatasourceID, "see", "allow"},
+		{"e2e-perm-admin-select", RoleAdminID, sample.WarehouseID, "select", "allow"},
+		{"e2e-perm-admin-see", RoleAdminID, sample.WarehouseID, "see", "allow"},
 	}
 	for _, r := range rules {
 		params := generated.UpsertPermissionForSyncParams{
@@ -437,7 +433,7 @@ func seedTeam(ctx context.Context, queries *generated.Queries) error {
 			Effect:      r.effect,
 		}
 		if r.datasource != "" {
-			params.DbInstanceID = nullable(r.datasource)
+			params.DatasourceID = nullable(r.datasource)
 			params.SchemaName = nullable("*")
 			params.TableName = nullable("*")
 			params.ColumnName = nullable("*")

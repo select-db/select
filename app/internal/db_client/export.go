@@ -21,7 +21,7 @@ const (
 type ExportParams struct {
 	FileID       string // temp or disk file identifier
 	Statement    string // SQL content to execute
-	DbInstanceID string
+	DatasourceID string
 	FolderID     string
 	Format       string // csv_semicolon | csv_comma | json
 	Filename     string
@@ -30,14 +30,14 @@ type ExportParams struct {
 
 // Export runs the query with full results, formats the output, and saves via OS save dialog.
 func (dbc *DbClient) Export(params ExportParams) error {
-	dbInstance := dbc.Graph.GetDBInstanceNodeByID(params.DbInstanceID)
-	if dbInstance == nil {
-		return fmt.Errorf("failed to get DB instance with id: %s", params.DbInstanceID)
+	datasource := dbc.Graph.GetDatasourceNodeByID(params.DatasourceID)
+	if datasource == nil {
+		return fmt.Errorf("failed to get datasource with id: %s", params.DatasourceID)
 	}
 	result := dbc.Query(QueryParams{
 		FileID:       params.FileID,
 		Statement:    params.Statement,
-		DbInstanceID: params.DbInstanceID,
+		DatasourceID: params.DatasourceID,
 		FolderID:     params.FolderID,
 		ForExport:    true,
 		RuntimeVars:  params.RuntimeVars,

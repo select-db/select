@@ -2,7 +2,7 @@ package sqllang
 
 // PositionParams identifies a caret position inside a SQL file/buffer.
 type PositionParams struct {
-	DbInstanceID string
+	DatasourceID string
 	FileID       string // optional; enables variable substitution
 	SQL          string
 	Line         int

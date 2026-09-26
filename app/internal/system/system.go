@@ -13,14 +13,14 @@ import (
 )
 
 type System struct {
-	ctx               context.Context
-	mu                sync.Mutex
-	fileWatcherCancel context.CancelFunc
-	dbWatcherCancel   context.CancelFunc
-	Queries           *generated.Queries
-	Graph             *graph.Graph
-	DbClient          *db_client.DbClient
-	FSProvider        *fs_provider.FSProvider
+	ctx                     context.Context
+	mu                      sync.Mutex
+	fileWatcherCancel       context.CancelFunc
+	datasourceWatcherCancel context.CancelFunc
+	Queries                 *generated.Queries
+	Graph                   *graph.Graph
+	DbClient                *db_client.DbClient
+	FSProvider              *fs_provider.FSProvider
 	// emitHook is an optional test hook that, when set, is called instead of
 	// invoking Graph.Mutate from emitMutation. It is nil in production.
 	emitHook func(generated.MutationCommit)

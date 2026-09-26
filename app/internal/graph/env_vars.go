@@ -102,7 +102,7 @@ func (g *Graph) folderIDForURI(uri string) string {
 		return node.FolderID
 	case *FolderNode:
 		return node.ID
-	case *DBInstanceNode:
+	case *DatasourceNode:
 		return node.FolderID
 	default:
 		return ""

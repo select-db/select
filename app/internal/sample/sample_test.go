@@ -47,7 +47,7 @@ func TestWriteSeedsTheDocumentedWorkspace(t *testing.T) {
 		".lint",
 		".gitignore",
 		".env",
-		"warehouse/db.config.json",
+		"warehouse/datasource.config.json",
 		"weekly_revenue.sql",
 		"weekly_revenue.sql.metadata.json",
 		"top_customers.sql",
@@ -62,7 +62,7 @@ func TestWriteSeedsTheDocumentedWorkspace(t *testing.T) {
 // The database has to be connectable, not merely present: the placeholder this
 // replaced pointed at a variable nothing defined, so a new workspace opened
 // with a database that could never connect.
-func TestWriteLeavesAQueryableDatabase(t *testing.T) {
+func TestWriteLeavesAQueryableDatasource(t *testing.T) {
 	root := seedInto(t)
 
 	env, err := os.ReadFile(filepath.Join(root, ".env"))

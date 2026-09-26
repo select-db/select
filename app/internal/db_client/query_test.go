@@ -22,7 +22,7 @@ func TestCancelQueryCallsAndCleansUp(t *testing.T) {
 	})
 
 	dbc.CancelQuery(CancelQueryParams{
-		DbInstanceID: "test-db",
+		DatasourceID: "test-db",
 		FileID:       params.FileID,
 	})
 

@@ -15,7 +15,7 @@ type FileDTO struct {
 	Name *string `json:"name,omitempty"`
 
 	FolderID       *string                   `json:"folder_id,omitempty"`
-	Databases      *[]DatabaseRef            `json:"databases,omitempty"`
+	Datasources    *[]DatasourceRef          `json:"datasources,omitempty"`
 	QueryResults   map[string]*QueryResult   `json:"queryResults,omitempty"`
 	PlanResults    map[string]*ExplainResult `json:"planResults,omitempty"`
 	ExplainResults map[string]*ExplainResult `json:"explainResults,omitempty"`
@@ -49,7 +49,7 @@ type ColumnMetadata struct {
 	HasAllPrimaryKeys  bool     `json:"hasAllPrimaryKeys"`            // Whether this column's table has all primary keys present in result (enables editing)
 	IsPrimaryKey       bool     `json:"isPrimaryKey"`                 // Whether this specific column is a primary key for its table
 	IsForeignKey       bool     `json:"isForeignKey,omitempty"`       // Whether this specific column is a foreign key
-	DatabaseID         string   `json:"databaseId,omitempty"`         // Database ID (only if hasAllPrimaryKeys)
+	DatasourceID       string   `json:"datasourceId,omitempty"`       // Datasource ID (only if hasAllPrimaryKeys)
 	Schema             string   `json:"schema,omitempty"`             // Schema name (only if hasAllPrimaryKeys)
 	Table              string   `json:"table,omitempty"`              // Table name (only if hasAllPrimaryKeys)
 	OriginalColumnName string   `json:"originalColumnName,omitempty"` // Original column name (before alias)
@@ -77,7 +77,7 @@ type FileNode struct {
 	Name string `json:"name"`
 
 	FolderID       string                    `json:"folder_id"`
-	Databases      []DatabaseRef             `json:"databases,omitempty"`
+	Datasources    []DatasourceRef           `json:"datasources,omitempty"`
 	QueryResults   map[string]*QueryResult   `json:"queryResults,omitempty"`
 	PlanResults    map[string]*ExplainResult `json:"planResults,omitempty"`
 	ExplainResults map[string]*ExplainResult `json:"explainResults,omitempty"`
@@ -92,9 +92,9 @@ type FileNode struct {
 // so a file cannot arrive with its databases attached by one route and missing
 // by another.
 func FileNodeFromDisk(filePath, fileURI, parentURI string) *FileNode {
-	var databases []DatabaseRef
-	if meta, err := ReadFileMetadata(filePath + ".metadata.json"); err == nil && len(meta.Databases) > 0 {
-		databases = meta.Databases
+	var datasources []DatasourceRef
+	if meta, err := ReadFileMetadata(filePath + ".metadata.json"); err == nil && len(meta.Datasources) > 0 {
+		datasources = meta.Datasources
 	}
 
 	return &FileNode{
@@ -104,19 +104,19 @@ func FileNodeFromDisk(filePath, fileURI, parentURI string) *FileNode {
 
 		Name: filepath.Base(filePath),
 
-		FolderID:  parentURI,
-		Databases: databases,
+		FolderID:    parentURI,
+		Datasources: datasources,
 	}
 }
 
 // FileDTOFromNode is the node as the mutation pipeline carries it.
 func FileDTOFromNode(f *FileNode) FileDTO {
 	return FileDTO{
-		ID:        &f.ID,
-		URI:       &f.URI,
-		Name:      &f.Name,
-		FolderID:  &f.FolderID,
-		Databases: &f.Databases,
+		ID:          &f.ID,
+		URI:         &f.URI,
+		Name:        &f.Name,
+		FolderID:    &f.FolderID,
+		Datasources: &f.Datasources,
 	}
 }
 
@@ -126,11 +126,11 @@ func BuildFileNode(f FileDTO) *FileNode {
 		folderID = utils.Ptr("root")
 	}
 
-	var databases []DatabaseRef
-	if f.Databases != nil {
-		databases = *f.Databases
+	var datasources []DatasourceRef
+	if f.Datasources != nil {
+		datasources = *f.Datasources
 	} else {
-		databases = []DatabaseRef{}
+		datasources = []DatasourceRef{}
 	}
 
 	return &FileNode{
@@ -141,7 +141,7 @@ func BuildFileNode(f FileDTO) *FileNode {
 		Name: *utils.DefaultIfNil(f.Name, ""),
 
 		FolderID:       *folderID,
-		Databases:      databases,
+		Datasources:    datasources,
 		QueryResults:   f.QueryResults,
 		PlanResults:    f.PlanResults,
 		ExplainResults: f.ExplainResults,
