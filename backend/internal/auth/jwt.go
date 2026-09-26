@@ -61,13 +61,11 @@ func getSigner() (crypto.Signer, error) {
 	return jwtSigner, keyErr
 }
 
-func getPublicKey() (*rsa.PublicKey, error) {
+// PublicKey is the key every token Sign issues verifies against.
+func PublicKey() (*rsa.PublicKey, error) {
 	keyOnce.Do(loadSigner)
 	return publicKey, keyErr
 }
-
-// PublicKey is the key every token Sign issues verifies against.
-func PublicKey() (*rsa.PublicKey, error) { return getPublicKey() }
 
 // rsaSignerMethod adapts a crypto.Signer (local RSA key or remote KMS key) to
 // golang-jwt. It emits standard RS256 signatures, so tokens verify with the
@@ -177,7 +175,7 @@ func CreateRefreshToken(ctx context.Context, userID uuid.UUID, deviceID string, 
 
 // ValidateJWT verifies a user access token and returns its claims if valid.
 func ValidateJWT(tokenStr string) (*jwt.Token, *CustomClaims, error) {
-	pubKey, err := getPublicKey()
+	pubKey, err := PublicKey()
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to validate JWT: %w", err)
 	}

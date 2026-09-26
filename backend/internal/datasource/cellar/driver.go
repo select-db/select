@@ -58,7 +58,7 @@ func (d sqlDriver) Open(dsn string) (driver.Conn, error) {
 }
 
 func (sqlDriver) OpenConnector(dsn string) (driver.Connector, error) {
-	if base == "" {
+	if URL == "" {
 		return nil, ErrOff
 	}
 	u, err := url.Parse(dsn)
@@ -142,7 +142,7 @@ func (c conn) ExecContext(ctx context.Context, query string, args []driver.Named
 }
 
 func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) (io.ReadCloser, error) {
-	if base == "" {
+	if URL == "" {
 		return nil, ErrOff
 	}
 	values := make([]any, len(args))
@@ -157,7 +157,7 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+c.path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, URL+c.path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

@@ -59,6 +59,14 @@ Cut, in order:
 Doc comments on exported identifiers say what a caller has to know, not the
 story of the implementation.
 
+## No one-line functions
+
+A function whose body is one statement is written inline at its callers: a
+constructor that fills a struct, a getter, a wrapper that renames a call. The
+line itself is shorter to read than the name and then its definition. Keep one
+only when an interface requires the method, or when it is another package's
+only way to reach unexported code.
+
 ## Compose what exists before adding a layer
 
 Most of what looks like a missing capability is a composition of parts that are

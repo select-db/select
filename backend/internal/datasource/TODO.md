@@ -229,7 +229,7 @@ Needs 0.
       (`engine.GetOrOpenTrusted`: no outbound guard, for a DSN the cellar
       builds), so idle files are closed.
 - [x] `InFlight` middleware (`middlewares.InFlight`).
-- [x] 60s cap on every cellar route (`cellar.Admit`).
+- [x] 60s cap on every cellar statement (`cellar.Handler`).
 - [ ] Query-seconds: the audit query event gets its duration back (dropped
       in `audit_drop_query_metrics`, to return as a dedicated column).
 - [ ] Error codes and request id, end to end to REST and MCP. The request id

@@ -25,18 +25,10 @@ type sqliteDriver struct{ *sqlite.Driver }
 
 func (sqliteDriver) QueryRunsAll() {}
 
-// Files holds the managed databases of one cellar, one SQLite file each.
+// Files holds the managed databases of one cellar, one SQLite file each,
+// named after the datasource id in Dir.
 type Files struct {
-	dir string
-}
-
-func NewFiles(dir string) *Files {
-	return &Files{dir: dir}
-}
-
-// Path is where the database id lives, and the key its schema is cached under.
-func (f *Files) Path(id string) string {
-	return filepath.Join(f.dir, id+".db")
+	Dir string
 }
 
 // Open returns the grant's datasource, set up so every statement runs under
@@ -52,7 +44,7 @@ func (f *Files) Open(grant Grant) (engine.Conn, error) {
 
 	// mode=rw: a missing file is an error, never a new empty database. WAL lets
 	// readers run beside a writer.
-	dsn := (&url.URL{Scheme: "file", Path: f.Path(grant.DatasourceID), RawQuery: "mode=rw&_defensive=1" +
+	dsn := (&url.URL{Scheme: "file", Path: filepath.Join(f.Dir, grant.DatasourceID+".db"), RawQuery: "mode=rw&_defensive=1" +
 		"&_busy_timeout=5000&_foreign_keys=1&_pragma=trusted_schema(0)&_pragma=journal_mode(WAL)"}).String()
 	db, err := engine.GetOrOpenTrusted(grant.WorkspaceID, dbType, dsn)
 

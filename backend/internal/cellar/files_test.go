@@ -3,6 +3,7 @@ package cellar
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,8 +13,8 @@ import (
 
 func newFile(t *testing.T) (*Files, string) {
 	t.Helper()
-	files, id := NewFiles(t.TempDir()), uuid.NewString()
-	db, err := sql.Open("sqlite", files.Path(id))
+	files, id := &Files{Dir: t.TempDir()}, uuid.NewString()
+	db, err := sql.Open("sqlite", filepath.Join(files.Dir, id+".db"))
 	require.NoError(t, err)
 	_, err = db.Exec("CREATE TABLE blob (b BLOB)")
 	require.NoError(t, err)
@@ -68,5 +69,5 @@ func TestOpenRefuses(t *testing.T) {
 	conn, err := files.Open(Grant{DatasourceID: missing, MaxBytes: 1 << 20})
 	require.NoError(t, err)
 	require.Error(t, conn.DB.Ping(), "a database that does not exist")
-	require.NoFileExists(t, files.Path(missing))
+	require.NoFileExists(t, filepath.Join(files.Dir, missing+".db"))
 }

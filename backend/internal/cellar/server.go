@@ -1,10 +1,13 @@
 package cellar
 
 import (
+	"backend/internal/middlewares"
+	"context"
 	"crypto/rsa"
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
@@ -12,6 +15,10 @@ import (
 
 // dbType is the engine dialect of every database a cellar holds.
 const dbType = "sqlite"
+
+// statementTimeout caps every statement, its wait for one of the workspace's
+// slots included. It is never read from the request.
+const statementTimeout = 60 * time.Second
 
 // Query is the body of POST /datasources/{id}/query: one statement and its
 // placeholder values. The answer is the Arrow stream arrowstream.Stream reads.
@@ -23,8 +30,17 @@ type Query struct {
 // Handler serves the databases in files as a SQLite server: the backend's
 // driver sends each statement here, and checks permissions itself.
 func Handler(files *Files, pub *rsa.PublicKey, cellarID string) http.Handler {
+	slot := middlewares.InFlight(func(r *http.Request) (string, int) {
+		grant := GrantFrom(r.Context())
+		return grant.WorkspaceID, grant.MaxInFlight
+	})(query(files))
+	timed := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), statementTimeout)
+		defer cancel()
+		slot.ServeHTTP(w, r.WithContext(ctx))
+	})
 	mux := http.NewServeMux()
-	mux.Handle("POST /datasources/{id}/query", Admit(pub, cellarID)(query(files)))
+	mux.Handle("POST /datasources/{id}/query", Authenticate(pub, cellarID)(timed))
 	return mux
 }
 

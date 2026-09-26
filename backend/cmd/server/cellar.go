@@ -34,7 +34,7 @@ func startCellar() {
 			log.Fatalf("cellar: %v", err)
 		}
 	}
-	managed.Use(v)
+	managed.URL = v
 }
 
 func serveLocalCellar() (string, error) {
@@ -54,7 +54,7 @@ func serveLocalCellar() (string, error) {
 		return "", err
 	}
 	srv := &http.Server{
-		Handler:           cellar.Handler(cellar.NewFiles(dir), pub, localCellar),
+		Handler:           cellar.Handler(&cellar.Files{Dir: dir}, pub, localCellar),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	// Managed databases answer unavailable if it stops; the rest keeps serving.

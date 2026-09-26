@@ -16,11 +16,9 @@ var maxBytes = map[string]int64{
 	"teams": 1 << 30,
 }
 
-// base is the URL of the cellar managed databases run on; "" while off.
-var base string
-
-// Use sends managed databases to the cellar at url. Call once at startup.
-func Use(url string) { base = url }
+// URL is the cellar managed databases run on, set once at startup; "" means
+// they are off.
+var URL string
 
 // DSN is the DSN of datasource id, kept on cellar cellarID, with its
 // workspace's limits: the plan's size cap and two statements per member.
