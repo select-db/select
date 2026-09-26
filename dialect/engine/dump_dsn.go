@@ -18,22 +18,7 @@ func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (st
 	// Refused:
 	//   - a DSN with no host to tunnel to, such as a sqlite file
 	if ssh != nil {
-		remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
-		if err != nil {
-			return "", fmt.Errorf("parse DSN for SSH: %w", err)
-		}
-		if verr := validateTunnelTarget(remoteHost); verr != nil {
-			return "", verr
-		}
-		tunnel, err := GetOrCreateTunnel(workspaceID, *ssh, remoteHost, remotePort)
-		if err != nil {
-			return "", fmt.Errorf("SSH tunnel: %w", err)
-		}
-		localPort, err := tunnel.LocalPort()
-		if err != nil {
-			return "", fmt.Errorf("SSH tunnel local port: %w", err)
-		}
-		return core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
+		return tunneledDSN(workspaceID, dbType, dsn, *ssh)
 	}
 
 	// Unchanged:

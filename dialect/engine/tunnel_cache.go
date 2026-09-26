@@ -3,11 +3,13 @@ package engine
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/toolkit/cache"
 )
 
@@ -64,6 +66,29 @@ func closeDeletedTunnel(_ string, value any) {
 	addr := tunnel.LocalAddr()
 	tunnel.Close()
 	DeleteConnsByAddr(addr)
+}
+
+// tunneledDSN opens, or reuses, the tunnel to the DSN's host and returns the
+// DSN pointed at its local end.
+func tunneledDSN(workspaceID, dbType, dsn string, ssh ResolvedSSHConfig) (string, error) {
+	remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
+	if err != nil {
+		return "", newConfigErrorf("parse DSN for SSH: %v", err)
+	}
+	// The bastion dials remoteHost for us; stop it pivoting to its own
+	// cloud-metadata/link-local (loopback stays allowed: common tunnel case).
+	if err := validateTunnelTarget(remoteHost); err != nil {
+		return "", err
+	}
+	tunnel, err := GetOrCreateTunnel(workspaceID, ssh, remoteHost, remotePort)
+	if err != nil {
+		return "", fmt.Errorf("SSH tunnel: %w", err)
+	}
+	localPort, err := tunnel.LocalPort()
+	if err != nil {
+		return "", fmt.Errorf("SSH tunnel local port: %w", err)
+	}
+	return core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
 }
 
 // GetOrCreateTunnel returns a live cached tunnel, dialling via StartSSHTunnel on miss.

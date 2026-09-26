@@ -117,29 +117,9 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 	// Refused:
 	//   - a DSN with no host to tunnel to, such as a sqlite file
 	if ssh != nil {
-		remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
-		if err != nil {
-			return nil, newConfigErrorf("parse DSN for SSH: %v", err)
-		}
-		// The bastion dials remoteHost for us; stop it pivoting to its own
-		// cloud-metadata/link-local (loopback stays allowed: common tunnel case).
-		if verr := validateTunnelTarget(remoteHost); verr != nil {
-			return nil, verr
-		}
-
-		tunnel, err := GetOrCreateTunnel(workspaceID, *ssh, remoteHost, remotePort)
-		if err != nil {
-			return nil, fmt.Errorf("SSH tunnel: %w", err)
-		}
-
-		localPort, err := tunnel.LocalPort()
-		if err != nil {
-			return nil, fmt.Errorf("SSH tunnel local port: %w", err)
-		}
-
-		dsn, err = core.RewriteDSNForLocal(dbType, dsn, "127.0.0.1", localPort)
-		if err != nil {
-			return nil, fmt.Errorf("rewrite DSN for SSH: %w", err)
+		var err error
+		if dsn, err = tunneledDSN(workspaceID, dbType, dsn, *ssh); err != nil {
+			return nil, err
 		}
 	}
 
