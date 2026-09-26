@@ -26,7 +26,7 @@ func TestMeasurePermissions(t *testing.T) {
 			name:    "a write inside a CTE is asked for alongside the read around it",
 			dialect: "postgresql",
 			sql:     "WITH x AS (DELETE FROM t1 RETURNING c1) SELECT c1 FROM x",
-			needs:   []string{"select on main.t1", "delete on main.t1"},
+			needs:   []string{"select on main.t1.c1", "delete on main.t1"},
 			allowed: []string{"data"},
 		},
 		{

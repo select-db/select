@@ -304,6 +304,20 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 			}
 		}
 
+		if !named && action == ActionSelect {
+			// A derived table or a CTE reports its tables up onto the read
+			// above it without the columns that scope them, so a table the
+			// outer scoping does not name may still be named one hop down.
+			// Asking for the whole table here refuses a column grant that
+			// answers the nested read itself.
+			for _, field := range nestedScoping(stmt, table, nil) {
+				named = true
+				if denied := checkColumn(field, table, action, dbInstanceID, compiledPermissions); denied != nil {
+					return denied
+				}
+			}
+		}
+
 		if !named {
 			// A table none of the fields came from is still read: joined for
 			// its rows, filtered on in a WHERE. The per-column walk matches
@@ -334,6 +348,28 @@ func checkTables(stmt InspectStatement, action, dbInstanceID string, compiledPer
 	}
 
 	return nil
+}
+
+// nestedScoping are the columns a statement's nested reads name on table, at any
+// depth. A column a nested read names is one it holds a right on already, so
+// scoping the outer copy of the table by them demands nothing new.
+func nestedScoping(stmt InspectStatement, table InspectTable, into []InspectField) []InspectField {
+	for _, nested := range stmt.Subqueries {
+		into = nestedScopingOf(nested, table, into)
+	}
+	for _, nested := range stmt.Also {
+		into = nestedScopingOf(nested, table, into)
+	}
+	return into
+}
+
+func nestedScopingOf(stmt InspectStatement, table InspectTable, into []InspectField) []InspectField {
+	for _, field := range slices.Concat(stmt.Fields, stmt.Where) {
+		if fieldOf(field, table) {
+			into = append(into, field)
+		}
+	}
+	return nestedScoping(stmt, table, into)
 }
 
 // reachingOut are the columns a statement's nested reads name that belong to
