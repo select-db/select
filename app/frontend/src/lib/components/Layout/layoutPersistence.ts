@@ -42,22 +42,6 @@ function toSerializable(value: unknown): unknown {
 	return value;
 }
 
-// Layouts saved by earlier versions name the db instance with the old keys.
-function renameKey(obj: unknown, from: string, to: string) {
-	if (obj === null || typeof obj !== 'object' || !(from in obj)) return;
-	const o = obj as Record<string, unknown>;
-	o[to] ??= o[from];
-	delete o[from];
-}
-
-function reviveLegacyKeys(key: string, value: unknown): unknown {
-	if (key === 'schema') renameKey(value, 'databaseId', 'dbInstanceId');
-	if (key === 'file') renameKey(value, 'activeDatabaseId', 'activeDbInstanceId');
-	if (key === 'edits' && value !== null && typeof value === 'object')
-		for (const edit of Object.values(value)) renameKey(edit, 'databaseId', 'dbInstanceId');
-	return value;
-}
-
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 let lastUserId: string | undefined;
 let lastWorkspaceId: string | undefined;
@@ -102,9 +86,7 @@ export function initLayoutPersistence(): () => void {
 		if (key !== lastKey) {
 			lastKey = key;
 			const raw = localStorage.getItem(getStorageKey(userId!, workspaceId!));
-			const [layout, err] = raw
-				? tryCatch(() => JSON.parse(raw, reviveLegacyKeys) as Layout)
-				: [null, true];
+			const [layout, err] = raw ? tryCatch(() => JSON.parse(raw) as Layout) : [null, true];
 			layoutStore.set(!err && layout ? layout : createInitialLayout());
 		}
 
