@@ -117,17 +117,15 @@ func IsCellarDSN(dsn string) bool {
 }
 
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.
-// Concurrent first queries for one datasource share a single open. Each datasource takes one path:
-//   - SSH: tunnel to the target (sqlite refused), then the dialect's driver on the local port.
-//   - Cellar DSN: the cellar driver, unguarded, since it dials only the configured cellar.
-//   - Server (EnforceOutboundGuard), postgresql or mysql: host checked, then the guarded dialer.
-//   - Server, anything else (a sqlite file, an unparseable DSN): refused.
-//   - Desktop app: the dialect's driver, unguarded.
+// ssh is optional: when non-nil, establishes/reuses a tunnel and rewrites the DSN before opening.
+// Concurrent first queries for one datasource share a single open.
 func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool ...PoolConfig) (*sql.DB, error) {
+	// SSH to a sqlite file: refused, a file has no host to tunnel to.
 	if dbType == "sqlite" && ssh != nil {
 		return nil, newConfigError("SSH tunneling is not supported for sqlite")
 	}
 
+	// SSH: tunnel to the target, then open on the local port, unguarded.
 	if ssh != nil {
 		remoteHost, remotePort, err := core.ParseDSNRemote(dbType, dsn)
 		if err != nil {
@@ -155,11 +153,12 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		}
 	}
 
+	// Guarded: the server (EnforceOutboundGuard) dialing a user's DSN directly.
+	// Unguarded: SSH, the desktop app, and a cellar DSN, whose driver dials only the configured cellar.
 	guarded := ssh == nil && EnforceOutboundGuard && !IsCellarDSN(dsn)
 	if guarded {
-		// Proxy: only validated networked dialects may be dialed. Anything we
-		// cannot parse+validate, or any non-networked driver (sqlite and other
-		// local-file drivers open a path on THIS host), is refused.
+		// Only postgresql and mysql with a parseable host; a sqlite file is a
+		// path on this host and is refused.
 		host, _, perr := core.ParseDSNRemote(dbType, dsn)
 		if perr != nil || (dbType != "postgresql" && dbType != "mysql") {
 			return nil, fmt.Errorf("connection target is not permitted")
@@ -209,13 +208,15 @@ func getOrOpen(workspaceID, dbType, dsn string, guarded bool, pool ...PoolConfig
 }
 
 func open(dbType, dsn string, guarded bool) (*sql.DB, error) {
+	// Cellar DSN, on the backend: the cellar driver.
 	if IsCellarDSN(dsn) {
 		return sql.Open(CellarDriver, dsn)
 	}
+	// Server, postgresql or mysql: re-validates the resolved IP at connect (beats rebinding).
 	if guarded {
-		// Per-dial IP guard: re-validates the resolved IP at connect (beats rebinding)
 		return openGuardedDB(dbType, dsn)
 	}
+	// Desktop app, SSH local port, a cellar's own file: the dialect's driver.
 	dialect := GetDialect(dbType)
 	if dialect == nil {
 		return nil, newConfigErrorf("unsupported database type: %s", dbType)
