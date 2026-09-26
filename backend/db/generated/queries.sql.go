@@ -435,13 +435,7 @@ SELECT
   d.max_idle_conns,
   d.conn_max_lifetime,
   d.conn_max_idle_time,
-  d.cellar_id,
-  w.plan,
-  (
-    SELECT count(*)
-    FROM app.workspace_to_user wu
-    WHERE wu.workspace_id = w.id AND wu.deleted_at IS NULL
-  ) AS members
+  d.cellar_id
 FROM
   app.datasource d
   JOIN app.workspace w ON w.id = d.workspace_id
@@ -466,8 +460,6 @@ type GetDatasourceRow struct {
 	ConnMaxLifetime int32
 	ConnMaxIdleTime int32
 	CellarID        db_types.JSONNullString
-	Plan            string
-	Members         int64
 }
 
 func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (GetDatasourceRow, error) {
@@ -483,8 +475,6 @@ func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (G
 		&i.ConnMaxLifetime,
 		&i.ConnMaxIdleTime,
 		&i.CellarID,
-		&i.Plan,
-		&i.Members,
 	)
 	return i, err
 }
@@ -1239,6 +1229,37 @@ func (q *Queries) GetWorkspaceOwnerID(ctx context.Context, id uuid.UUID) (db_typ
 	var owner_id db_types.JSONNullUUID
 	err := row.Scan(&owner_id)
 	return owner_id, err
+}
+
+const getWorkspacePlan = `-- name: GetWorkspacePlan :one
+SELECT
+  w.plan,
+  (
+    SELECT
+      count(*)
+    FROM
+      app.workspace_to_user wtu
+    WHERE
+      wtu.workspace_id = w.id
+      AND wtu.deleted_at IS NULL
+  ) AS members
+FROM
+  app.workspace w
+WHERE
+  w.id = $1
+  AND w.deleted_at IS NULL
+`
+
+type GetWorkspacePlanRow struct {
+	Plan    string
+	Members int64
+}
+
+func (q *Queries) GetWorkspacePlan(ctx context.Context, id uuid.UUID) (GetWorkspacePlanRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkspacePlan, id)
+	var i GetWorkspacePlanRow
+	err := row.Scan(&i.Plan, &i.Members)
+	return i, err
 }
 
 const getWorkspaceToUserByID = `-- name: GetWorkspaceToUserByID :one

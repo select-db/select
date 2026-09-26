@@ -8,13 +8,7 @@ SELECT
   d.max_idle_conns,
   d.conn_max_lifetime,
   d.conn_max_idle_time,
-  d.cellar_id,
-  w.plan,
-  (
-    SELECT count(*)
-    FROM app.workspace_to_user wu
-    WHERE wu.workspace_id = w.id AND wu.deleted_at IS NULL
-  ) AS members
+  d.cellar_id
 FROM
   app.datasource d
   JOIN app.workspace w ON w.id = d.workspace_id
