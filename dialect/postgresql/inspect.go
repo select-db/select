@@ -865,8 +865,8 @@ func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectSta
 	}
 	var reads []core.InspectStatement
 	for _, body := range bodies {
-		text := stringConstantValue(body)
-		if text == "" {
+		text := bodyText(body)
+		if strings.TrimSpace(text) == "" {
 			continue
 		}
 		inner := NewInspector(i.dialect, i.meta)
@@ -874,6 +874,30 @@ func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectSta
 		reads = append(reads, inner.Inspect(text)...)
 	}
 	return reads
+}
+
+// bodyText is the SQL a string constant holds. The parser's own
+// GetRoutineBodyString is not reused: its TrimQuotes takes one character too
+// many off a plain string, which turns the last name in the body into a table
+// nobody has a grant on. An escape or unicode string returns nothing, since a
+// body read wrongly is worse than one left at the floor.
+func bodyText(sconst pg.ISconstContext) string {
+	anyconst := sconst.Anysconst()
+	if anyconst == nil {
+		return ""
+	}
+	if plain := anyconst.StringConstant(); plain != nil {
+		raw := plain.GetText()
+		if len(raw) < 2 {
+			return ""
+		}
+		return strings.ReplaceAll(raw[1:len(raw)-1], "''", "'")
+	}
+	var dollarQuoted strings.Builder
+	for _, part := range anyconst.AllDollarText() {
+		dollarQuoted.WriteString(part.GetText())
+	}
+	return dollarQuoted.String()
 }
 
 // blockBodies are the code strings of a DO block. LANGUAGE takes its own branch
@@ -905,32 +929,6 @@ func routineBodies(list pg.ICreatefunc_opt_listContext) []pg.ISconstContext {
 		}
 	}
 	return bodies
-}
-
-// stringConstantValue is the text a string constant stands for. A body is read
-// off the token stream rather than off the node, because a node's text drops
-// the whitespace between its tokens and the body is SQL that needs it.
-func stringConstantValue(sconst pg.ISconstContext) string {
-	if sconst == nil || sconst.GetStart() == nil || sconst.GetStop() == nil {
-		return ""
-	}
-	raw := sconst.GetParser().GetTokenStream().GetTextFromInterval(
-		antlr.NewInterval(sconst.GetStart().GetTokenIndex(), sconst.GetStop().GetTokenIndex()))
-
-	if strings.HasPrefix(raw, "$") {
-		if end := strings.Index(raw[1:], "$"); end >= 0 {
-			tag := raw[:end+2]
-			return strings.TrimSuffix(strings.TrimPrefix(raw, tag), tag)
-		}
-		return ""
-	}
-	// A quote inside a plain string is written by doubling it. The other
-	// spellings, E'' among them, escape with a backslash as well, and a body
-	// this inspector reads wrongly is worse than one it does not read.
-	if len(raw) >= 2 && strings.HasPrefix(raw, "'") && strings.HasSuffix(raw, "'") {
-		return strings.ReplaceAll(raw[1:len(raw)-1], "''", "'")
-	}
-	return ""
 }
 
 // schemaElementReads is what the elements of a CREATE SCHEMA require. A view is

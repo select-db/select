@@ -2115,6 +2115,14 @@ func permCases() []PermCase {
 			Why:    "the body is SQL of this dialect, and calling the routine deletes the rows it names",
 		},
 		{
+			On:     []string{"postgresql"},
+			Name:   "a routine body written as a plain string",
+			SQL:    "CREATE FUNCTION f9() RETURNS int LANGUAGE sql AS 'SELECT c1 FROM t1'",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "a body is quoted either way, and the rights it takes do not turn on which quoting was used",
+		},
+		{
 			On:     []string{"mysql"},
 			Name:   "a routine body carrying a write",
 			SQL:    "CREATE PROCEDURE p9() BEGIN DELETE FROM t1 WHERE c1 = 1; END",
