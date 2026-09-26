@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMain(m *testing.M) { e2e.Run(m) }
+
 type managedDB struct {
 	f   e2e.Fixture
 	id  string
