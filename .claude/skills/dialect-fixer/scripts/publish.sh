@@ -49,9 +49,15 @@ if [ -z "$pr" ]; then
 	[ ${#todo[@]} -eq 0 ] || ask "$(printf '%s; ' "${todo[@]}")then commit and end the run."
 fi
 
+# With no open pull request, a rerun replaces what a closed one left on the
+# branch, leased on the commit seen here; with one open, only a fast-forward.
+lease=()
+if [ -z "$pr" ]; then
+	lease=(--force-with-lease="refs/heads/$branch:$(git ls-remote origin "refs/heads/$branch" | cut -f1)")
+fi
 for delay in 2 4 8 0; do
-	git push -q origin "HEAD:refs/heads/$branch" && break
-	[ "$delay" = 0 ] && ask "git push to $branch failed; see the log. End the run."
+	err=$(git push -q "${lease[@]}" origin "HEAD:refs/heads/$branch" 2>&1) && break
+	[ "$delay" = 0 ] && ask "git push to $branch failed: $(grep -E '^( ! |error|fatal)' <<<"$err" | head -n 2 | paste -sd' ') End the run."
 	sleep "$delay"
 done
 
