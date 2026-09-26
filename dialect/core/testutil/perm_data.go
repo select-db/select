@@ -687,6 +687,18 @@ func permCases() []PermCase {
 			Why: "a CTE body scopes the tables it reports up exactly as a derived table does",
 		},
 		{
+			On:   []string{"postgresql"},
+			Name: "a column a write inside a CTE writes rather than reads",
+			SQL:  "WITH x AS (INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c2 = 'x' RETURNING c1) SELECT count(*) FROM x",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT1(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "counting the rows the CTE returns reads c1, and c2 is written on conflict, so nothing reads it",
+		},
+		{
 			Name: "a table a derived table joins for its rows alone",
 			SQL:  "SELECT d.c1 FROM (SELECT a.c1 FROM t1 a CROSS JOIN t2 b) d",
 			Needs: []Right{
