@@ -193,7 +193,7 @@ jobs:
           #
           # A single reviewed site is suppressed with `// nosemgrep`, which
           # leaves the rule live for new code. There are two: the desktop TOFU
-          # SSH host key in dialect/engine/ssh.go, and a reflect by name over a
+          # SSH host key in dialect/engine/connect/ssh.go, and a reflect by name over a
           # struct's own field names in app/internal/graph/helpers.go.
           pipx run --spec 'semgrep==1.170.0' semgrep scan \
             --config p/gosec --config p/golang \

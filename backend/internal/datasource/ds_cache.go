@@ -12,8 +12,8 @@ import (
 	"backend/internal/datasource/cellar"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/engine/schema"
 	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
@@ -139,5 +139,5 @@ func InvalidateWorkspaceCache(workspaceID string) {
 
 	connect.CloseWorkspaceTunnels(workspaceID)
 	connect.CloseWorkspaceConns(workspaceID)
-	engine.InvalidateWorkspaceMetadata(workspaceID)
+	schema.InvalidateWorkspace(workspaceID)
 }

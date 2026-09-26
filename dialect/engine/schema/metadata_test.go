@@ -1,4 +1,4 @@
-package engine
+package schema
 
 import (
 	"context"
@@ -21,8 +21,8 @@ func init() {
 }
 
 func TestGetOrFetchMetadata_HitAndMiss(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	dialect := sqlite.NewDialect()
 	db, err := dialect.OpenDB(":memory:")
@@ -39,11 +39,11 @@ func TestGetOrFetchMetadata_HitAndMiss(t *testing.T) {
 	const ws = "ws-1"
 	const dsn = "dsn-1"
 
-	m1, err := GetOrFetchMetadata(ctx, ws, dsn, db, dialect, "test_db", false)
+	m1, err := GetOrFetch(ctx, ws, dsn, db, dialect, "test_db", false)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
-	m2, err := GetOrFetchMetadata(ctx, ws, dsn, db, dialect, "test_db", false)
+	m2, err := GetOrFetch(ctx, ws, dsn, db, dialect, "test_db", false)
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestGetOrFetchMetadata_HitAndMiss(t *testing.T) {
 	}
 
 	// Different DSN, same workspace → different entry.
-	m3, err := GetOrFetchMetadata(ctx, ws, "dsn-2", db, dialect, "test_db", false)
+	m3, err := GetOrFetch(ctx, ws, "dsn-2", db, dialect, "test_db", false)
 	if err != nil {
 		t.Fatalf("third call: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestGetOrFetchMetadata_HitAndMiss(t *testing.T) {
 	// Same DSN, different workspace → different entry. This is the
 	// multi-tenant isolation guarantee: two users in two workspaces
 	// pointing at the same DB never share a cache row.
-	m4, err := GetOrFetchMetadata(ctx, "ws-2", dsn, db, dialect, "test_db", false)
+	m4, err := GetOrFetch(ctx, "ws-2", dsn, db, dialect, "test_db", false)
 	if err != nil {
 		t.Fatalf("fourth call: %v", err)
 	}
@@ -73,8 +73,8 @@ func TestGetOrFetchMetadata_HitAndMiss(t *testing.T) {
 }
 
 func TestGetOrFetchMetadata_RefreshForcesFresh(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	dialect := sqlite.NewDialect()
 	db, err := dialect.OpenDB(":memory:")
@@ -85,11 +85,11 @@ func TestGetOrFetchMetadata_RefreshForcesFresh(t *testing.T) {
 
 	ctx := context.Background()
 
-	m1, err := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "test_db", false)
+	m1, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "test_db", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m2, err := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "test_db", true)
+	m2, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "test_db", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestGetOrFetchMetadata_RefreshForcesFresh(t *testing.T) {
 		t.Fatal("expected refresh=true to bypass cache")
 	}
 	// And the new entry replaced the old one.
-	m3, err := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "test_db", false)
+	m3, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "test_db", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,8 +107,8 @@ func TestGetOrFetchMetadata_RefreshForcesFresh(t *testing.T) {
 }
 
 func TestInvalidateMetadata(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	dialect := sqlite.NewDialect()
 	db, err := dialect.OpenDB(":memory:")
@@ -119,13 +119,13 @@ func TestInvalidateMetadata(t *testing.T) {
 
 	ctx := context.Background()
 
-	m1a, _ := GetOrFetchMetadata(ctx, "ws", "dsn-A", db, dialect, "db", false)
-	m2a, _ := GetOrFetchMetadata(ctx, "ws", "dsn-B", db, dialect, "db", false)
+	m1a, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2a, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
 
-	InvalidateMetadata("ws", "dsn-A")
+	Invalidate("ws", "dsn-A")
 
-	m1b, _ := GetOrFetchMetadata(ctx, "ws", "dsn-A", db, dialect, "db", false)
-	m2b, _ := GetOrFetchMetadata(ctx, "ws", "dsn-B", db, dialect, "db", false)
+	m1b, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2b, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
 	if m1a == m1b {
 		t.Fatal("dsn-A should have been refetched after Invalidate")
 	}
@@ -135,8 +135,8 @@ func TestInvalidateMetadata(t *testing.T) {
 }
 
 func TestClearMetadataCache(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	dialect := sqlite.NewDialect()
 	db, err := dialect.OpenDB(":memory:")
@@ -147,21 +147,21 @@ func TestClearMetadataCache(t *testing.T) {
 
 	ctx := context.Background()
 
-	m1a, _ := GetOrFetchMetadata(ctx, "ws", "dsn-A", db, dialect, "db", false)
-	m2a, _ := GetOrFetchMetadata(ctx, "ws", "dsn-B", db, dialect, "db", false)
+	m1a, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2a, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
 
-	ClearMetadataCache()
+	ClearCache()
 
-	m1b, _ := GetOrFetchMetadata(ctx, "ws", "dsn-A", db, dialect, "db", false)
-	m2b, _ := GetOrFetchMetadata(ctx, "ws", "dsn-B", db, dialect, "db", false)
+	m1b, _ := GetOrFetch(ctx, "ws", "dsn-A", db, dialect, "db", false)
+	m2b, _ := GetOrFetch(ctx, "ws", "dsn-B", db, dialect, "db", false)
 	if m1a == m1b || m2a == m2b {
 		t.Fatal("expected fresh metadata after Clear")
 	}
 }
 
 func TestGetOrFetchMetadata_Concurrent(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	dialect := sqlite.NewDialect()
 	db, err := dialect.OpenDB(":memory:")
@@ -179,7 +179,7 @@ func TestGetOrFetchMetadata_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			m, err := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "db", false)
+			m, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
 			if err != nil {
 				t.Errorf("goroutine %d: %v", idx, err)
 				return
@@ -197,8 +197,8 @@ func TestGetOrFetchMetadata_Concurrent(t *testing.T) {
 }
 
 func TestGetOrFetchMetadata_InvalidateForcesFresh(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	dialect := sqlite.NewDialect()
 	db, err := dialect.OpenDB(":memory:")
@@ -209,11 +209,11 @@ func TestGetOrFetchMetadata_InvalidateForcesFresh(t *testing.T) {
 
 	ctx := context.Background()
 
-	m1, err := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "db", false)
+	m1, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m2, err := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "db", false)
+	m2, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,9 +221,9 @@ func TestGetOrFetchMetadata_InvalidateForcesFresh(t *testing.T) {
 		t.Fatal("expected cache hit before invalidation")
 	}
 
-	InvalidateMetadata("ws", "dsn")
+	Invalidate("ws", "dsn")
 
-	m3, err := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "db", false)
+	m3, err := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,8 +285,8 @@ func openMemoryDB(t *testing.T) *sql.DB {
 }
 
 func TestGetOrFetchMetadata_RefreshJoinsTheFetchInProgress(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	db := openMemoryDB(t)
 	dialect := newGatedDialect()
@@ -294,13 +294,13 @@ func TestGetOrFetchMetadata_RefreshJoinsTheFetchInProgress(t *testing.T) {
 
 	results := make(chan *core.Metadata, 2)
 	go func() {
-		m, _ := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "db", false)
+		m, _ := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", false)
 		results <- m
 	}()
 	<-dialect.started
 
 	go func() {
-		m, _ := GetOrFetchMetadata(ctx, "ws", "dsn", db, dialect, "db", true)
+		m, _ := GetOrFetch(ctx, "ws", "dsn", db, dialect, "db", true)
 		results <- m
 	}()
 	// No hook says the second caller is waiting; give it time to arrive.
@@ -317,21 +317,21 @@ func TestGetOrFetchMetadata_RefreshJoinsTheFetchInProgress(t *testing.T) {
 }
 
 func TestGetOrFetchMetadata_OtherDatabasesDoNotWait(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	db := openMemoryDB(t)
 	slow := newGatedDialect()
 	ctx := context.Background()
 
-	cached, err := GetOrFetchMetadata(ctx, "ws", "dsn-cached", db, sqlite.NewDialect(), "db", false)
+	cached, err := GetOrFetch(ctx, "ws", "dsn-cached", db, sqlite.NewDialect(), "db", false)
 	if err != nil {
 		t.Fatalf("prime cache: %v", err)
 	}
 
 	done := make(chan struct{})
 	go func() {
-		_, _ = GetOrFetchMetadata(ctx, "ws", "dsn-slow", db, slow, "db", false)
+		_, _ = GetOrFetch(ctx, "ws", "dsn-slow", db, slow, "db", false)
 		close(done)
 	}()
 	<-slow.started
@@ -342,11 +342,11 @@ func TestGetOrFetchMetadata_OtherDatabasesDoNotWait(t *testing.T) {
 
 	answered := make(chan error, 2)
 	go func() {
-		_, err := GetOrFetchMetadata(ctx, "ws", "dsn-other", db, sqlite.NewDialect(), "db", false)
+		_, err := GetOrFetch(ctx, "ws", "dsn-other", db, sqlite.NewDialect(), "db", false)
 		answered <- err
 	}()
 	go func() {
-		m, err := GetOrFetchMetadata(ctx, "ws", "dsn-cached", db, sqlite.NewDialect(), "db", false)
+		m, err := GetOrFetch(ctx, "ws", "dsn-cached", db, sqlite.NewDialect(), "db", false)
 		if err == nil && m != cached {
 			err = errors.New("cache hit returned a different result")
 		}
@@ -390,8 +390,8 @@ func (d *gatedDumpDialect) DumpSchema(string) (string, bool) {
 }
 
 func TestGetOrGenerateDump_RefreshJoinsTheDumpInProgress(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	dialect := newGatedDumpDialect()
 	meta := &core.Metadata{}
@@ -415,8 +415,8 @@ func TestGetOrGenerateDump_RefreshJoinsTheDumpInProgress(t *testing.T) {
 }
 
 func TestGetOrGenerateDump_OtherDatabasesDoNotWait(t *testing.T) {
-	t.Cleanup(ClearMetadataCache)
-	ClearMetadataCache()
+	t.Cleanup(ClearCache)
+	ClearCache()
 
 	slow := newGatedDumpDialect()
 	meta := &core.Metadata{}

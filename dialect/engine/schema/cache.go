@@ -1,4 +1,4 @@
-package engine
+package schema
 
 import (
 	"context"
@@ -26,13 +26,13 @@ var (
 	dumpDecoder, _ = zstd.NewReader(nil)
 )
 
-// GetOrFetchMetadata returns cached metadata, fetching on miss. refresh=true
+// GetOrFetch returns cached metadata, fetching on miss. refresh=true
 // forces a fresh fetch.
 //
 // Callers asking for the same database while a fetch runs share it, including
 // a refresh, and run under the context of the caller that started it. Other
 // databases, and cache hits, never wait.
-func GetOrFetchMetadata(
+func GetOrFetch(
 	ctx context.Context,
 	workspaceID, dsn string,
 	db *sql.DB,
@@ -48,7 +48,7 @@ func GetOrFetchMetadata(
 	}
 
 	meta, err := metadataCache.GetOrCreate(key, func() (any, error) {
-		return FetchMetadata(ctx, db, dialect, dbName, maxConcurrency...)
+		return Fetch(ctx, db, dialect, dbName, maxConcurrency...)
 	})
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func GetOrGenerateDump(
 		dumpCache.Delete(key)
 	}
 
-	generate := func() string { return DumpSchema(dialect, dsn, metadata) }
+	generate := func() string { return Dump(dialect, dsn, metadata) }
 
 	// The caller that generates keeps the plain text rather than decoding what
 	// it just compressed.
@@ -94,17 +94,17 @@ func GetOrGenerateDump(
 	return string(decompressed)
 }
 
-// InvalidateMetadata drops metadata and dump entries for (workspaceID, dsn).
-func InvalidateMetadata(workspaceID, dsn string) {
+// Invalidate drops metadata and dump entries for (workspaceID, dsn).
+func Invalidate(workspaceID, dsn string) {
 	key := connect.WorkspaceCacheKey(workspaceID, dsn)
 	metadataCache.Delete(key)
 	dumpCache.Delete(key)
 }
 
-// InvalidateWorkspaceMetadata drops every metadata and dump entry of one
+// InvalidateWorkspace drops every metadata and dump entry of one
 // workspace, which is what a workspace being deleted leaves behind otherwise:
 // its schema and its DDL, served from memory for the rest of the TTL.
-func InvalidateWorkspaceMetadata(workspaceID string) {
+func InvalidateWorkspace(workspaceID string) {
 	prefix := connect.WorkspaceKeyPrefix(workspaceID)
 	matches := func(key string) bool { return strings.HasPrefix(key, prefix) }
 
@@ -112,8 +112,8 @@ func InvalidateWorkspaceMetadata(workspaceID string) {
 	dumpCache.DeleteFunc(matches)
 }
 
-// ClearMetadataCache drops all metadata and dump entries.
-func ClearMetadataCache() {
+// ClearCache drops all metadata and dump entries.
+func ClearCache() {
 	metadataCache.DeleteFunc(func(string) bool { return true })
 	dumpCache.DeleteFunc(func(string) bool { return true })
 }

@@ -11,7 +11,7 @@ import (
 // is blank.
 //
 // The floor on an empty result is for dialects registered from outside this
-// module, which RegisterDialect accepts and this package cannot audit: a
+// module, which dialects.Register accepts and this package cannot audit: a
 // permission check reads no statements as nothing to check, so sql that ran
 // through a dialect and came back with none is reported as one unknown
 // statement rather than as nothing.

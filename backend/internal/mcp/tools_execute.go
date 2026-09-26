@@ -193,7 +193,7 @@ func (c *collectSink) OnColumns(cols []string) error {
 }
 
 func (c *collectSink) OnRow(values []any) error {
-	// StreamLocal reuses backing slices
+	// query.Stream reuses backing slices
 	row := make([]any, len(values))
 	copy(row, values)
 	c.rows = append(c.rows, row)
