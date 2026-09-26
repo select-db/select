@@ -65,20 +65,9 @@ def _delete_target_bindings(stmt: exp.Expression) -> dict[int, set[str]]:
     return bindings
 
 
-def _definition_sites(stmt: exp.Expression) -> dict[int, exp.Create]:
-    """Map each table node a CREATE defines to the CREATE that defines it.
-
-    A definition site is not a reference, so the catalog lookup is inverted on
-    it: the name is absent because the statement is about to add it.
-    """
-    sites: dict[int, exp.Create] = {}
-    for create in stmt.find_all(exp.Create):
-        target = create.this
-        if isinstance(target, exp.Schema):  # CREATE TABLE t (cols), as against AS SELECT
-            target = target.this
-        if isinstance(target, exp.Table):
-            sites[id(target)] = create
-    return sites
+def _qualified(table: exp.Table, default_schema: str) -> tuple[str, str]:
+    """A table's (schema, name) as the catalog keys it, lowercased."""
+    return (table.db or default_schema).lower(), table.name.lower()
 
 
 def _may_already_exist(create: exp.Create) -> bool:
@@ -87,21 +76,24 @@ def _may_already_exist(create: exp.Create) -> bool:
     IF NOT EXISTS and OR REPLACE write it into the SQL, and a temporary table
     shadows a permanent one of the same name on all three dialects.
     """
-    if create.args.get("exists") or create.args.get("replace"):
-        return True
-    properties = create.args.get("properties")
-    return properties is not None and any(
-        isinstance(p, exp.TemporaryProperty) for p in properties.expressions)
+    return bool(create.args.get("exists") or create.args.get("replace")
+                or create.find(exp.TemporaryProperty))
 
 
-def names_dropped(stmt: exp.Expression, default_schema: str) -> set[str]:
-    """The schema-qualified names this statement drops, lowercased."""
-    dropped = set()
-    for drop in stmt.find_all(exp.Drop):
-        for table in drop.find_all(exp.Table):
-            if table.name:
-                dropped.add(f"{(table.db or default_schema).lower()}.{table.name.lower()}")
-    return dropped
+def names_freed(stmt: exp.Expression, default_schema: str) -> set[tuple[str, str]]:
+    """The names this statement leaves free for a later CREATE of the same name.
+
+    A DROP releases the names it drops and a rename releases the one it renames
+    away from. Both are statement roots, so nothing here walks a whole tree.
+    """
+    if isinstance(stmt, exp.Drop):
+        freed = stmt.find_all(exp.Table)  # one DROP may name several tables
+    elif isinstance(stmt, exp.Alter) and stmt.find(exp.AlterRename):
+        freed = [stmt.this]
+    else:
+        return set()
+    return {_qualified(t, default_schema) for t in freed
+            if isinstance(t, exp.Table) and t.name and not t.catalog}
 
 
 def analyze_unknown_tables(
@@ -109,7 +101,7 @@ def analyze_unknown_tables(
     schema_dict: dict,
     default_schema: str,
     virtual_names: set[str],
-    dropped_names: set[str],
+    freed_names: set[tuple[str, str]],
 ) -> list[dict]:
     """R001, names that disagree with the schema, in either direction.
 
@@ -120,12 +112,11 @@ def analyze_unknown_tables(
         return []
 
     results = []
-    loaded_schemas = {s.lower() for s in schema_dict}
+    known = {s.lower(): {t.lower() for t in tables} for s, tables in schema_dict.items()}
     delete_targets = _delete_target_bindings(stmt)
-    definitions = _definition_sites(stmt)
 
     for table in stmt.find_all(exp.Table):
-        name = table.name.lower()
+        schema_name, name = _qualified(table, default_schema)
         if not name:
             continue
 
@@ -142,21 +133,24 @@ def analyze_unknown_tables(
         if table.catalog:  # cross-database reference is unvalidatable
             continue
 
-        schema_name = (table.db or default_schema).lower()
-        if schema_name not in loaded_schemas:
+        known_tables = known.get(schema_name)
+        if known_tables is None:
             continue  # schema not loaded, can't validate
 
-        known_tables = {t.lower() for t in schema_dict.get(schema_name, {})}
-        create = definitions.get(id(table))
+        # The target of a CREATE is a definition, not a reference, so the
+        # lookup is inverted on it: absent is correct, present is the mistake.
+        create = table.parent
+        if isinstance(create, exp.Schema):  # CREATE TABLE t (cols), as against AS SELECT
+            create = create.parent
 
-        if create is None:
+        if not isinstance(create, exp.Create):
             if name not in known_tables:
                 results.append(_table_diag(
                     "unknown-table", table, f"unknown table or view {table.name!r}"))
             continue
 
         if name in known_tables and not _may_already_exist(create) \
-                and f"{schema_name}.{name}" not in dropped_names:
+                and (schema_name, name) not in freed_names:
             kind = (create.args.get("kind") or "table").lower()
             qualified = f"{schema_name}.{table.name}"
             results.append(_table_diag(
