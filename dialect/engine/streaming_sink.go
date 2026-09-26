@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"errors"
 	"sync"
 	"time"
 )
@@ -108,11 +107,7 @@ func (s *streamingSink) OnError(err error) {
 	if err == nil {
 		return
 	}
-	var position *int
-	var qe *QueryError
-	if errors.As(err, &qe) {
-		position = qe.Position
-	}
+	position := errorPosition(err)
 	s.result.Fail(err.Error(), position)
 	if s.listener != nil {
 		s.listener.OnError(err.Error(), position)

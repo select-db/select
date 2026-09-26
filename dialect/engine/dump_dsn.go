@@ -10,9 +10,9 @@ import (
 // resolve/dial the host themselves (the Go guarded dialer can't reach them).
 // Pins the target like the driver path.
 func ResolveDumpDSN(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig) (string, error) {
-	dialect := GetDialect(dbType)
-	if dialect == nil {
-		return "", newConfigErrorf("unsupported database type: %s", dbType)
+	dialect, err := dialectFor(dbType)
+	if err != nil {
+		return "", err
 	}
 
 	// Rewritten to the tunnel's local endpoint:

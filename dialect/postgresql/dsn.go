@@ -151,8 +151,7 @@ func isURLDSN(dsn string) bool {
 	return strings.HasPrefix(t, "postgres://") || strings.HasPrefix(t, "postgresql://")
 }
 
-// libpq key=value parsing, single-quote and backslash aware like lib/pq.
-
+// kvToken is one key=value pair of a libpq DSN.
 type kvToken struct {
 	key   string
 	value string
@@ -249,8 +248,8 @@ func buildKV(tokens []kvToken) string {
 	return strings.Join(parts, " ")
 }
 
-// A postgres URL is parsed byte by byte: net/url rejects or encodes non-ASCII userinfo.
-
+// urlDSN is a postgres URL, parsed byte by byte: net/url rejects or encodes
+// non-ASCII userinfo.
 type urlDSN struct {
 	prefix   string // up to and including "://"
 	user     string
@@ -328,52 +327,32 @@ func (u urlDSN) hostPort() (string, string) {
 	return hp, ""
 }
 
-// connParams splits a postgres URL or libpq key=value DSN into
-// components (defaults host 127.0.0.1, port 5432; ok=false without dbname).
-// Lets pg_dump take discrete args instead of -d <dsn>, which would honour
-// sslkey=/passfile=/service=/options=.
-func connParams(dsn string) (user, pass, host, port, dbname string, ok bool) {
+// connParams returns the parts of dsn pg_dump takes as arguments. ok is
+// false without a dbname.
+func (d *Dialect) connParams(dsn string) (user, pass, host, port, dbname string, ok bool) {
+	h, p, err := d.DSNHost(dsn)
+	if err != nil {
+		return "", "", "", "", "", false
+	}
+	host, port, pass = h, strconv.Itoa(p), d.DSNPassword(dsn)
 	if isURLDSN(dsn) {
-		u, parsed := parseURLDSN(dsn)
-		if !parsed {
-			return "", "", "", "", "", false
-		}
+		u, _ := parseURLDSN(dsn)
 		user = u.user
-		if u.hasPass {
-			pass = u.pass
+		path := u.tail
+		if i := strings.IndexAny(path, "?#"); i >= 0 {
+			path = path[:i]
 		}
-		host, port = u.hostPort()
-		t := u.tail
-		if i := strings.IndexAny(t, "?#"); i >= 0 {
-			t = t[:i]
-		}
-		dbname = strings.TrimPrefix(t, "/")
+		dbname = strings.TrimPrefix(path, "/")
 	} else {
-		tokens, err := parseKV(dsn)
-		if err != nil {
-			return "", "", "", "", "", false
-		}
-		for _, tk := range tokens {
-			switch tk.key {
+		tokens, _ := parseKV(dsn)
+		for _, t := range tokens {
+			switch t.key {
 			case "user":
-				user = tk.value
-			case "password":
-				pass = tk.value
-			case "host":
-				host = tk.value
-			case "port":
-				port = tk.value
+				user = t.value
 			case "dbname":
-				dbname = tk.value
+				dbname = t.value
 			}
 		}
 	}
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	if port == "" {
-		port = "5432"
-	}
-	ok = dbname != ""
-	return
+	return user, pass, host, port, dbname, dbname != ""
 }

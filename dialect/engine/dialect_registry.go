@@ -38,6 +38,15 @@ func RegisterDialect(dbType string, dialect core.SQLDialect) {
 	dialectRegistryMu.Unlock()
 }
 
+// dialectFor is GetDialect for a datasource, failing with a config error the
+// user can act on when the type is unknown.
+func dialectFor(dbType string) (core.SQLDialect, error) {
+	if dialect := GetDialect(dbType); dialect != nil {
+		return dialect, nil
+	}
+	return nil, newConfigErrorf("unsupported database type: %s", dbType)
+}
+
 // GetDialect returns the dialect for dbType. Built-in types are created on
 // first call and cached; custom types must be pre-registered via RegisterDialect.
 func GetDialect(dbType string) core.SQLDialect {
