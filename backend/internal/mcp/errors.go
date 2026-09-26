@@ -4,9 +4,9 @@ import (
 	"errors"
 	"log"
 
-	"backend/internal/datasource/cellar"
 	"backend/internal/utils"
 
+	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/selectDb/dialect/engine/connect"
 )
 
@@ -51,11 +51,10 @@ func asToolError(err error) *toolError {
 	if errors.As(err, &cfgErr) {
 		return &toolError{Code: "upstream", Message: cfgErr.Msg}
 	}
-	if errors.Is(err, cellar.ErrOff) {
-		return &toolError{Code: "disabled", Message: cellar.ErrOff.Error()}
-	}
-	if errors.Is(err, cellar.ErrUnavailable) {
-		return &toolError{Code: "unavailable", Message: cellar.ErrUnavailable.Error()}
+	// A managed database's failure is already classified and safe to show.
+	var coded *arrowstream.Error
+	if errors.As(err, &coded) && coded.Code != "" {
+		return &toolError{Code: coded.Code, Message: coded.Message}
 	}
 	ref := utils.GenerateRequestID()
 	log.Printf("mcp: internal error ref=%s: %v", ref, err)

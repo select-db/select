@@ -1,6 +1,7 @@
 package datasource
 
 import (
+	server "backend/internal/cellar"
 	"context"
 	"errors"
 	"fmt"
@@ -8,10 +9,10 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
-	"backend/internal/datasource/cellar"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
+	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/selectDb/dialect/engine/connect"
 	"github.com/selectDb/dialect/engine/query"
 	"github.com/selectDb/dialect/engine/schema"
@@ -69,8 +70,8 @@ func (o *Opened) Stream(ctx context.Context, sql string, opts query.Options, sin
 	if err != nil {
 		// Without a schema the permission check would refuse the statement
 		// and hide why; the reason goes through the same filter as OpenError.
-		_, msg := openFailure(err, "datasource stream", o.WorkspaceID, o.ID)
-		sink.OnError(errors.New(msg))
+		_, shown := openFailure(err, "datasource stream", o.WorkspaceID, o.ID)
+		sink.OnError(shown)
 		return
 	}
 	conn.Meta = meta
@@ -79,24 +80,35 @@ func (o *Opened) Stream(ctx context.Context, sql string, opts query.Options, sin
 
 // OpenError answers a request whose datasource could not be opened or reached.
 func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, datasourceID string) {
-	status, msg := openFailure(err, logPrefix, workspaceID, datasourceID)
-	http.Error(w, msg, status)
+	status, shown := openFailure(err, logPrefix, workspaceID, datasourceID)
+	http.Error(w, shown.Error(), status)
 }
 
-// openFailure shows only config errors: a raw dial error maps the internal
-// network, and a cellar's names its address. The rest is logged.
-func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, string) {
+// codeStatus is the HTTP status of each code a managed database's failure carries.
+var codeStatus = map[string]int{
+	server.CodeSQLError:           http.StatusBadRequest,
+	server.CodeForbiddenStatement: http.StatusBadRequest,
+	server.CodeQuotaExceeded:      http.StatusForbidden,
+	server.CodeTimeout:            http.StatusRequestTimeout,
+	server.CodeUnavailable:        http.StatusServiceUnavailable,
+	server.CodeDisabled:           http.StatusNotImplemented,
+	server.CodeInternal:           http.StatusInternalServerError,
+}
+
+// openFailure returns the status and the error a caller may see. A managed
+// database's failure is already classified; of the rest, only config errors
+// are shown, since a raw dial error maps the internal network. The rest is logged.
+func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, error) {
+	var coded *arrowstream.Error
 	var cfgErr *connect.ConfigError
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return http.StatusNotFound, err.Error()
-	case errors.Is(err, cellar.ErrOff):
-		return http.StatusNotImplemented, err.Error()
-	case errors.Is(err, cellar.ErrUnavailable):
-		return http.StatusServiceUnavailable, err.Error()
+		return http.StatusNotFound, err
+	case errors.As(err, &coded) && codeStatus[coded.Code] != 0:
+		return codeStatus[coded.Code], coded
 	case errors.As(err, &cfgErr):
-		return http.StatusBadGateway, cfgErr.Msg
+		return http.StatusBadGateway, cfgErr
 	}
 	log.Printf("%s: ws=%s id=%s: %v", logPrefix, workspaceID, datasourceID, err)
-	return http.StatusBadGateway, genericConnErr
+	return http.StatusBadGateway, errors.New(genericConnErr)
 }

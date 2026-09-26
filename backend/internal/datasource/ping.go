@@ -37,11 +37,11 @@ func PingHandler() http.HandlerFunc {
 			err = o.Conn.DB.PingContext(ctx)
 		}
 		if err != nil {
-			status, msg := openFailure(err, "datasource ping", workspaceID, id)
+			status, shown := openFailure(err, "datasource ping", workspaceID, id)
 			if status == http.StatusBadGateway {
-				pingCache.Set(pingKey, msg)
+				pingCache.Set(pingKey, shown.Error())
 			}
-			http.Error(w, msg, status)
+			http.Error(w, shown.Error(), status)
 			return
 		}
 

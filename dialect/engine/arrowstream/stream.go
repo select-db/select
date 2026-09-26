@@ -46,7 +46,7 @@ type Stream struct {
 	rowCount   int64
 	affected   int64
 	durationMs int64
-	streamErr  string
+	streamErr  *Error
 }
 
 // NewStream wraps a zstd-compressed Arrow IPC response body. The decoder is
@@ -75,10 +75,10 @@ func (s *Stream) Columns() ([]string, error) {
 
 	// Check for immediate error (query failed before any rows)
 	if idx := meta.FindKey("error"); idx >= 0 {
-		s.streamErr = meta.Values()[idx]
+		s.streamErr = errorFrom(meta)
 		s.done = true
 		reader.Release()
-		return nil, fmt.Errorf("%s", s.streamErr)
+		return nil, s.streamErr
 	}
 
 	// Optional early-duration segment: a header-only stream whose schema
@@ -96,10 +96,10 @@ func (s *Stream) Columns() ([]string, error) {
 		}
 		meta = reader.Schema().Metadata()
 		if idx := meta.FindKey("error"); idx >= 0 {
-			s.streamErr = meta.Values()[idx]
+			s.streamErr = errorFrom(meta)
 			s.done = true
 			reader.Release()
-			return nil, fmt.Errorf("%s", s.streamErr)
+			return nil, s.streamErr
 		}
 	}
 
@@ -153,9 +153,9 @@ func (s *Stream) Next() ([]any, bool, error) {
 					return nil, false, nil
 				}
 				if idx := meta.FindKey("error"); idx >= 0 {
-					s.streamErr = meta.Values()[idx]
+					s.streamErr = errorFrom(meta)
 					s.done = true
-					return nil, false, fmt.Errorf("%s", s.streamErr)
+					return nil, false, s.streamErr
 				}
 			}
 
@@ -188,9 +188,9 @@ func (s *Stream) Next() ([]any, bool, error) {
 				return nil, false, nil
 			}
 			if idx := meta.FindKey("error"); idx >= 0 {
-				s.streamErr = meta.Values()[idx]
+				s.streamErr = errorFrom(meta)
 				s.done = true
-				return nil, false, fmt.Errorf("%s", s.streamErr)
+				return nil, false, s.streamErr
 			}
 		}
 	}
@@ -198,8 +198,8 @@ func (s *Stream) Next() ([]any, bool, error) {
 
 // Summary returns query summary. Only valid after Next returns false.
 func (s *Stream) Summary() (rowCount, affected, durationMs int64, err error) {
-	if s.streamErr != "" {
-		return 0, 0, 0, fmt.Errorf("%s", s.streamErr)
+	if s.streamErr != nil {
+		return 0, 0, 0, s.streamErr
 	}
 	return s.rowCount, s.affected, s.durationMs, nil
 }

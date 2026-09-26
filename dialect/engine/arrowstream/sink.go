@@ -282,7 +282,7 @@ func (s *Sink) OnError(err error) {
 	}
 
 	// Write error as metadata in a terminal stream
-	meta := arrow.NewMetadata([]string{"error"}, []string{err.Error()})
+	meta := errorMetadata(err)
 	var fields []arrow.Field
 	if s.schema != nil {
 		fields = s.schema.Fields()

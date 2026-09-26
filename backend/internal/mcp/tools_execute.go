@@ -14,6 +14,7 @@ import (
 	"backend/internal/datasource"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/selectDb/dialect/engine/query"
 )
 
@@ -219,11 +220,16 @@ func (c *collectSink) OnError(err error) {
 
 func (c *collectSink) Result() any {
 	if c.err != nil {
-		return map[string]any{
+		out := map[string]any{
 			"success":     false,
 			"error":       c.err.Error(),
 			"duration_ms": c.duration,
 		}
+		var coded *arrowstream.Error
+		if errors.As(c.err, &coded) && coded.Code != "" {
+			out["code"] = coded.Code
+		}
+		return out
 	}
 	out := map[string]any{
 		"success":     true,

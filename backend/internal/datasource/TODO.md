@@ -163,8 +163,9 @@ All required, none sufficient alone. Checked on `modernc.org/sqlite` v1.59.0.
 
 ### Errors
 The cellar maps every failure to one code; anything unmapped is `internal`, so
-nothing leaks paths, bucket names or addresses. The backend creates a request
-id, both sides log it, the caller sees it as `ref`.
+nothing leaks paths, bucket names or addresses. The side that meets an internal
+error logs it under a fresh ref and shows the caller only the ref. Permission
+errors are the backend's, before the cellar sees the statement.
 
 | Code                  | Caller sees                              | HTTP |
 | --------------------- | ---------------------------------------- | ---- |
@@ -228,9 +229,8 @@ Needs 0.
       builds), so idle files are closed.
 - [x] `InFlight` middleware (`middlewares.InFlight`).
 - [x] 60s cap on every cellar statement (`middlewares.Timeout` in `cellar.Register`).
-- [ ] Error codes and request id, end to end to REST and MCP. The request id
-      lives in the context so `ref` matches the request log; MCP's mid-stream
-      `collectSink` error goes through the same classification.
+- [x] Error codes end to end (`cellar.classify`, carried in the Arrow stream's
+      `code` metadata, mapped to HTTP in `openFailure` and to MCP's `code`).
 - [x] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
       every non-allowlisted PRAGMA); token rejection (expired, unsigned, other
       key, user token) and a grant for another cellar; no error body contains
