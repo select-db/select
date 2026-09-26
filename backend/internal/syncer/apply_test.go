@@ -194,7 +194,7 @@ func TestApply_Permission_NullableFieldsOmitted(t *testing.T) {
 func TestApply_Permission_NullableFieldsStored(t *testing.T) {
 	conn := newTestDB(t)
 	ownerID, wsID, roleID, permID := newID(), newID(), newID(), newID()
-	dbInstanceID := newID()
+	datasourceID := newID()
 	seedUser(t, conn, ownerID, "Owner")
 	seedWorkspace(t, conn, wsID, "WS", ownerID)
 	seedRole(t, conn, roleID, wsID, "Admins")
@@ -213,7 +213,7 @@ func TestApply_Permission_NullableFieldsStored(t *testing.T) {
 				"role_id":        roleID,
 				"action":         "select",
 				"effect":         "allow",
-				"db_instance_id": dbInstanceID,
+				"db_instance_id": datasourceID,
 				"schema_name":    "public",
 				"table_name":     "users",
 				"column_name":    "email",
@@ -229,7 +229,7 @@ func TestApply_Permission_NullableFieldsStored(t *testing.T) {
 	require.NoError(t, err)
 	perm, err := db.Queries.GetPermissionByID(context.Background(), generated.GetPermissionByIDParams{ID: idUUID, WorkspaceID: wsUUID})
 	require.NoError(t, err)
-	assert.Equal(t, dbInstanceID, perm.DbInstanceID.String)
+	assert.Equal(t, datasourceID, perm.DbInstanceID.String)
 	assert.Equal(t, "public", perm.SchemaName.String)
 	assert.Equal(t, "users", perm.TableName.String)
 	assert.Equal(t, "email", perm.ColumnName.String)

@@ -75,14 +75,14 @@ func (o *Opened) Stream(ctx context.Context, sql string, opts engine.Options, si
 }
 
 // OpenError answers a request whose datasource could not be opened or reached.
-func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, dsID string) {
-	status, msg := openFailure(err, logPrefix, workspaceID, dsID)
+func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, datasourceID string) {
+	status, msg := openFailure(err, logPrefix, workspaceID, datasourceID)
 	http.Error(w, msg, status)
 }
 
 // openFailure shows only config errors: a raw dial error maps the internal
 // network, and a cellar's names its address. The rest is logged.
-func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
+func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, string) {
 	var cfgErr *engine.ConfigError
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -94,6 +94,6 @@ func openFailure(err error, logPrefix, workspaceID, dsID string) (int, string) {
 	case errors.As(err, &cfgErr):
 		return http.StatusBadGateway, cfgErr.Msg
 	}
-	log.Printf("%s: ws=%s id=%s: %v", logPrefix, workspaceID, dsID, err)
+	log.Printf("%s: ws=%s id=%s: %v", logPrefix, workspaceID, datasourceID, err)
 	return http.StatusBadGateway, genericConnErr
 }

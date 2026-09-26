@@ -23,8 +23,8 @@ func TestAudit_MCPQueryExecuted(t *testing.T) {
 	f := e2e.Setup(t)
 
 	// A datasource the engine can actually connect to: this test's own database.
-	dsID := uuid.NewString()
-	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+dsID, f.Actor.Token, map[string]any{
+	datasourceID := uuid.NewString()
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+datasourceID, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "self",
@@ -36,7 +36,7 @@ func TestAudit_MCPQueryExecuted(t *testing.T) {
 	// workspace (MCP requires an API key; Authenticated() would overwrite an
 	// injected context, so call the handler directly like the protocol tests).
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_query","arguments":{"datasource_id":"` +
-		dsID + `","statement":"SELECT 1 AS n"}}}`
+		datasourceID + `","statement":"SELECT 1 AS n"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := middlewares.ContextWithAPIKeyPrincipal(req.Context(), uuid.NewString(), "mcp-key", f.Actor.WorkspaceID, nil)
@@ -69,8 +69,8 @@ func TestAudit_MCPQueryExecuted(t *testing.T) {
 func TestAudit_MCPQueryDenied(t *testing.T) {
 	f := e2e.Setup(t)
 
-	dsID := uuid.NewString()
-	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+dsID, f.Actor.Token, map[string]any{
+	datasourceID := uuid.NewString()
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+datasourceID, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "self",
@@ -79,7 +79,7 @@ func TestAudit_MCPQueryDenied(t *testing.T) {
 	require.Equalf(t, http.StatusNoContent, rec.Code, "upsert failed: %s", rec.Body.String())
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_query","arguments":{"datasource_id":"` +
-		dsID + `","statement":"SELECT * FROM app.workspace"}}}`
+		datasourceID + `","statement":"SELECT * FROM app.workspace"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := middlewares.ContextWithAPIKeyPrincipal(req.Context(), uuid.NewString(), "mcp-key", f.Actor.WorkspaceID, nil)

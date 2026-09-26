@@ -20,15 +20,15 @@ import (
 // the app's.
 func TestMCPAppliesDatasourceScopedRules(t *testing.T) {
 	f := e2e.Setup(t)
-	dsID := uuid.NewString()
+	datasourceID := uuid.NewString()
 	// Before any request, which would cache the role's rules without these.
 	for _, action := range []string{"select", "see"} {
 		_, err := f.Conn.Exec(`INSERT INTO app.permission (role_id, workspace_id, db_instance_id, action, effect)
-			VALUES ($1::uuid, $2::uuid, $3, $4, 'allow')`, f.Actor.RoleID, f.Actor.WorkspaceID, dsID, action)
+			VALUES ($1::uuid, $2::uuid, $3, $4, 'allow')`, f.Actor.RoleID, f.Actor.WorkspaceID, datasourceID, action)
 		require.NoError(t, err)
 	}
 
-	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+dsID, f.Actor.Token, map[string]any{
+	rec := e2e.Do(t, f.H, http.MethodPut, "/datasources/"+datasourceID, f.Actor.Token, map[string]any{
 		"workspace_id": f.Actor.WorkspaceID,
 		"db_type":      "postgresql",
 		"name":         "self",
@@ -37,7 +37,7 @@ func TestMCPAppliesDatasourceScopedRules(t *testing.T) {
 	require.Equalf(t, http.StatusNoContent, rec.Code, "upsert failed: %s", rec.Body.String())
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_query","arguments":{"datasource_id":"` +
-		dsID + `","statement":"SELECT name FROM app.workspace"}}}`
+		datasourceID + `","statement":"SELECT name FROM app.workspace"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	roles := []auth.RoleRef{{ID: f.Actor.RoleID, Name: "Owner Role"}}
