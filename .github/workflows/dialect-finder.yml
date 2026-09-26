@@ -63,10 +63,11 @@ jobs:
           echo "FINDER_CASES=$RUNNER_TEMP/finder-memory/cases.jsonl" >> "$GITHUB_ENV"
           dialect/agentprobe -export-cases > .finder-work/known.jsonl
           gh issue list --label agent:finder --state all --limit 1000 \
-            --json number,title,state,labels,body,comments --jq 'map({number, title, state,
-              labels: [.labels[].name], body: .body[0:800],
-              ruling: ([.comments[] | select(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"))] | last | .body // null)})' \
-            > .finder-work/issues.json
+            --json number,title,state,labels,body,comments > "$RUNNER_TEMP/issues.json"
+          writers=$(jq -r '.[].comments[].author.login' "$RUNNER_TEMP/issues.json" | $SCRIPTS/writers.sh | jq -Rsc 'split("\n") - [""]')
+          jq --argjson ok "$writers" 'map({number, title, state, labels: [.labels[].name], body: .body[0:800],
+            ruling: ([.comments[] | select(.author.login | IN($ok[]))] | last | .body // null)})' \
+            "$RUNNER_TEMP/issues.json" > .finder-work/issues.json
           [ "$FINDER_DRY_RUN" = 1 ] || $SCRIPTS/labels.sh
           echo "FINDER_DEADLINE=$(( $(date +%s) + FINDER_MINUTES * 60 ))" >> "$GITHUB_ENV"
           echo "hard_timeout=$(( FINDER_MINUTES + 10 ))" >> "$GITHUB_OUTPUT"

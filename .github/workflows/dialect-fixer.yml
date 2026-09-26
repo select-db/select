@@ -46,13 +46,13 @@ jobs:
       - name: Read the issue
         run: |
           mkdir -p .fixer-work
+          comments=$(gh api "repos/$GITHUB_REPOSITORY/issues/$FIXER_ISSUE/comments" --paginate --jq '.[]')
+          writers=$(jq -r '.user.login' <<<"$comments" | .claude/skills/dialect-finder/scripts/writers.sh | jq -Rsc 'split("\n") - [""]')
           {
             gh issue view "$FIXER_ISSUE" --json number,title,body --jq '"# #\(.number) \(.title)\n\n\(.body)"'
             echo; echo "## Comments from maintainers and the finder"
-            gh api "repos/$GITHUB_REPOSITORY/issues/$FIXER_ISSUE/comments" --paginate --jq '.[]
-              | select(.author_association == "OWNER" or .author_association == "MEMBER"
-                or .author_association == "COLLABORATOR" or .user.login == "github-actions[bot]")
-              | "\n### \(.user.login), \(.created_at)\n\n\(.body)"'
+            jq -r --argjson ok "$writers" 'select((.user.login | IN($ok[])) or .user.login == "github-actions[bot]")
+              | "\n### \(.user.login), \(.created_at)\n\n\(.body)"' <<<"$comments"
           } > .fixer-work/issue.md
           echo "FIXER_DEADLINE=$(( $(date +%s) + 60 * 60 ))" >> "$GITHUB_ENV"
 
