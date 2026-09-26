@@ -169,8 +169,8 @@ func GetOrOpenConn(workspaceID, dbType, dsn string, ssh *ResolvedSSHConfig, pool
 		// Authoritative check is the per-dial IP guard in open (re-runs on the
 		// real resolved IP), so rebinding is caught
 	}
-	// Guard off (desktop app): dialing the user's own machine, incl. a local
-	// sqlite file, is the intended use and must not be restricted.
+	// Guard off: the desktop app dialing the user's own machine, incl. a local
+	// sqlite file, or a cellar DSN, which open hands to the cellar driver.
 	return getOrOpen(workspaceID, dbType, dsn, guarded, pool...)
 }
 
