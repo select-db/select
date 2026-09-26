@@ -14,11 +14,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
+	"backend/internal/auth"
 	server "backend/internal/cellar"
 
 	"github.com/selectDb/dialect/engine"
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/toolkit/cache"
 )
 
 // Scheme is the scheme of a managed database's DSN, and the name of the
@@ -40,8 +43,16 @@ var (
 	errNoTx      = errors.New("cellar: transactions are not supported")
 
 	httpClient = &http.Client{}
-	signed     = newTokens()
 )
+
+// The service token lives tokenTTL and is reused for the 50s window it was
+// signed in, so it has 10s left when it reaches the cellar. Each sign is a KMS call.
+const (
+	tokenTTL = 60 * time.Second
+	reuseFor = 50 * time.Second
+)
+
+var tokens = cache.New(cache.Options{MaxEntries: 1})
 
 type sqlDriver struct{}
 
@@ -153,7 +164,10 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 	if err != nil {
 		return nil, err
 	}
-	token, err := signed.Token()
+	window := strconv.FormatInt(time.Now().Unix()/int64(reuseFor.Seconds()), 10)
+	token, err := tokens.GetOrCreate(window, func() (any, error) {
+		return auth.Sign(auth.CustomClaims{}, server.Audience, tokenTTL)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +175,7 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+token.(string))
 	req.Header.Set(server.GrantHeader, c.grant)
 	resp, err := httpClient.Do(req)
 	if err != nil {
