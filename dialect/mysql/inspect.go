@@ -14,6 +14,10 @@ type Inspector struct {
 	dialect  *Dialect
 	meta     core.Metadata
 	resolver core.Resolver
+
+	// inBody stops a statement read out of another's text from nesting again,
+	// which MySQL refuses too.
+	inBody bool
 }
 
 // NewInspector creates a new MySQL statement inspector.
@@ -157,6 +161,13 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 	}
 	if cr := stmt.CreateStatement(); cr != nil {
 		return i.inspectCreate(cr)
+	}
+	// PREPARE names a statement the session runs later by name. Naming it is
+	// administration, and the body still reads and writes what it says: manage
+	// is not a right to read rows, so EXECUTE cannot be a way around select.
+	if prep := stmt.PreparedStatement(); prep != nil {
+		read := core.NestUnderUnknown(i.preparedBody(prep)...)
+		return &read
 	}
 	// A boundary of this session's own transaction. LOCK TABLES and the XA
 	// forms share the grammar rule and are not that: a lock blocks other
@@ -988,6 +999,11 @@ func (i *Inspector) inspectAlter(stmt mysql.IAlterStatementContext) *core.Inspec
 			result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 		}
 	}
+	// Replacing a view body is the same read CREATE VIEW performs, and anyone
+	// selecting the view inherits it.
+	if av := stmt.AlterView(); av != nil {
+		result.Subqueries = i.viewBody(av.ViewTail())
+	}
 	return result
 }
 
@@ -1011,13 +1027,72 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 				result.Tables = []core.InspectTable{{Name: view, Schema: schema}}
 			}
 		}
-		if tail := cv.ViewTail(); tail != nil {
-			if vs := tail.ViewSelect(); vs != nil {
-				result.Subqueries = i.sourceQuery(vs.QueryExpressionOrParens())
-			}
-		}
+		result.Subqueries = i.viewBody(cv.ViewTail())
 	}
 	return result
+}
+
+// viewBody is the query a view is defined as, shared by CREATE VIEW and the
+// ALTER VIEW that replaces it.
+func (i *Inspector) viewBody(tail mysql.IViewTailContext) []core.InspectStatement {
+	if tail == nil || tail.ViewSelect() == nil {
+		return nil
+	}
+	return i.sourceQuery(tail.ViewSelect().QueryExpressionOrParens())
+}
+
+// preparedBody is the statement a PREPARE names, read out of the text literal
+// carrying it, which is SQL of this dialect.
+func (i *Inspector) preparedBody(stmt mysql.IPreparedStatementContext) []core.InspectStatement {
+	// EXECUTE and DEALLOCATE name a handle bound in the session, and a body
+	// arriving through a user variable is session state too. Neither is
+	// statically visible, so the caller is left with the floor alone.
+	lit := stmt.TextLiteral()
+	if lit == nil || i.inBody {
+		return nil
+	}
+	body := NewInspector(i.dialect, i.meta)
+	body.inBody = true
+	return body.Inspect(textLiteralValue(lit))
+}
+
+// textLiteralValue is the string a text literal stands for. MySQL writes one as
+// adjacent quoted parts that concatenate, and hides a quote inside a part by
+// doubling it or by a backslash.
+func textLiteralValue(lit mysql.ITextLiteralContext) string {
+	var value strings.Builder
+	for _, part := range lit.AllTextStringLiteral() {
+		raw := part.GetText()
+		if len(raw) < 2 {
+			continue
+		}
+		quote := raw[0]
+		value.WriteString(unescapeText(raw[1:len(raw)-1], quote))
+	}
+	return value.String()
+}
+
+// textEscapes are the backslash sequences that do not stand for the character
+// they precede. Leaving \n as an n would run two SQL tokens together.
+var textEscapes = map[byte]byte{'0': 0, 'b': '\b', 'n': '\n', 'r': '\r', 't': '\t', 'Z': 26}
+
+func unescapeText(body string, quote byte) string {
+	var out strings.Builder
+	out.Grow(len(body))
+	for idx := 0; idx < len(body); idx++ {
+		switch {
+		case body[idx] == quote && idx+1 < len(body) && body[idx+1] == quote:
+			idx++
+		case body[idx] == '\\' && idx+1 < len(body):
+			idx++
+			if escaped, ok := textEscapes[body[idx]]; ok {
+				out.WriteByte(escaped)
+				continue
+			}
+		}
+		out.WriteByte(body[idx])
+	}
+	return out.String()
 }
 
 // sourceQuery is the query a CREATE TABLE ... AS or a CREATE VIEW is filled from, as its own
