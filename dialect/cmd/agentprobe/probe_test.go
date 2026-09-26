@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -46,7 +47,7 @@ func TestMeasurePermissions(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			statements := engine.Inspect(engine.GetDialect(tc.dialect), &meta, tc.sql)
+			statements := engine.Inspect(dialects.Get(tc.dialect), &meta, tc.sql)
 			measured := measurePermissions(statements)
 			if !measured.Converged {
 				t.Fatalf("never converged, holding %v", measured.Needs)

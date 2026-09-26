@@ -5,6 +5,7 @@ import (
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/core/testutil"
+	"github.com/selectDb/dialect/dialects"
 )
 
 const permDBID = testutil.TestDBInstanceID
@@ -32,10 +33,10 @@ func dataActionsOnly() core.CompiledPermissions {
 // Blank input is not a statement, so it stays empty rather than becoming an
 // unknown one that a caller would then have to refuse.
 func TestInspect_BlankSQLStaysEmpty(t *testing.T) {
-	for _, dialect := range BuiltinDialects() {
+	for _, dialect := range dialects.Builtin() {
 		t.Run(dialect, func(t *testing.T) {
 			for _, sql := range []string{"", "   ", "\n\t "} {
-				if got := Inspect(GetDialect(dialect), permMeta(), sql); len(got) != 0 {
+				if got := Inspect(dialects.Get(dialect), permMeta(), sql); len(got) != 0 {
 					t.Errorf("Inspect(%q) = %d statements, want 0", sql, len(got))
 				}
 			}
@@ -47,10 +48,10 @@ func TestInspect_BlankSQLStaysEmpty(t *testing.T) {
 // audit, so engine.Inspect puts a floor under an empty result rather than
 // trusting every implementation to have read the contract.
 func TestInspect_ForeignDialectCannotReturnNothing(t *testing.T) {
-	RegisterDialect("silent-test-dialect", silentDialect{})
-	t.Cleanup(func() { RegisterDialect("silent-test-dialect", nil) })
+	dialects.Register("silent-test-dialect", silentDialect{})
+	t.Cleanup(func() { dialects.Register("silent-test-dialect", nil) })
 
-	got := Inspect(GetDialect("silent-test-dialect"), permMeta(), "DROP TABLE t1")
+	got := Inspect(dialects.Get("silent-test-dialect"), permMeta(), "DROP TABLE t1")
 	if len(got) != 1 || got[0].Operation != core.InspectOpUnknown {
 		t.Fatalf("got %+v, want one unknown statement", got)
 	}
@@ -77,9 +78,9 @@ func TestInspect_AQualifiedNameSurvivesAnAliasOfTheSameName(t *testing.T) {
 		"SELECT * FROM (SELECT c1 FROM t1) t3 JOIN other.t3 ON 1=1",
 		"SELECT other.t3.c4 FROM (SELECT c1 FROM t1) t3, other.t3",
 	} {
-		for _, dialect := range BuiltinDialects() {
+		for _, dialect := range dialects.Builtin() {
 			t.Run(dialect+": "+sql, func(t *testing.T) {
-				inspected := Inspect(GetDialect(dialect), permMeta(), sql)
+				inspected := Inspect(dialects.Get(dialect), permMeta(), sql)
 				if !testutil.Touches(inspected, want) {
 					t.Errorf("no read of other.t3 anywhere in %+v", inspected)
 				}
@@ -111,7 +112,7 @@ func TestPermissions_AWriteNamingNoTableIsRefused(t *testing.T) {
 							t.Fatalf("inspecting panicked, which fails the request rather than refusing it: %v", r)
 						}
 					}()
-					inspected = Inspect(GetDialect(dialect), permMeta(), sql)
+					inspected = Inspect(dialects.Get(dialect), permMeta(), sql)
 				}()
 				if len(inspected) == 0 {
 					t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
@@ -141,7 +142,7 @@ func TestPermissions_ATruncatedWriteNeverRunsUnchecked(t *testing.T) {
 		"INSERT",
 		"INSERT INTO",
 	} {
-		for _, dialect := range BuiltinDialects() {
+		for _, dialect := range dialects.Builtin() {
 			t.Run(dialect+": "+sql, func(t *testing.T) {
 				var inspected []core.InspectStatement
 				func() {
@@ -150,7 +151,7 @@ func TestPermissions_ATruncatedWriteNeverRunsUnchecked(t *testing.T) {
 							t.Fatalf("inspecting panicked: %v", r)
 						}
 					}()
-					inspected = Inspect(GetDialect(dialect), permMeta(), sql)
+					inspected = Inspect(dialects.Get(dialect), permMeta(), sql)
 				}()
 				if len(inspected) == 0 {
 					t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
@@ -178,7 +179,7 @@ func TestPermissions_TextNoStatementCoversIsReported(t *testing.T) {
 		{"sqlite", "SELECT c1 FROM t1; ]]] not sql"},
 	} {
 		t.Run(tt.dialect, func(t *testing.T) {
-			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			inspected := Inspect(dialects.Get(tt.dialect), permMeta(), tt.sql)
 			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
 				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
 			}
@@ -211,7 +212,7 @@ func TestPermissions_ACTEShadowsTheTableItIsNamedAfter(t *testing.T) {
 		{"sqlite", "WITH t2 AS (SELECT c1 FROM t1) SELECT * FROM t2"},
 	} {
 		t.Run(tt.dialect, func(t *testing.T) {
-			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			inspected := Inspect(dialects.Get(tt.dialect), permMeta(), tt.sql)
 			if !testutil.Touches(inspected, testutil.Touch{Op: core.InspectOpSelect, Schema: "main", Name: "t1"}) {
 				t.Fatalf("no read of main.t1, so nothing here was checked: %+v", inspected)
 			}
@@ -233,7 +234,7 @@ func TestPermissions_ACTEShadowsTheTableItIsNamedAfter(t *testing.T) {
 // whole of it, since the branches are one statement.
 func TestPermissions_ACompoundSelectIsOneStatement(t *testing.T) {
 	sql := "SELECT c1 FROM t1 UNION SELECT readfile('/etc/passwd')"
-	inspected := Inspect(GetDialect("sqlite"), permMeta(), sql)
+	inspected := Inspect(dialects.Get("sqlite"), permMeta(), sql)
 	if len(inspected) == 0 {
 		t.Fatal("inspected to nothing: a caller reading this as an empty result runs it unchecked")
 	}
@@ -259,7 +260,7 @@ func TestPermissions_AScriptIsClassifiedStatementByStatement(t *testing.T) {
 		{"sqlite", "SELECT c1 FROM t1; SELECT readfile('/etc/passwd')"},
 	} {
 		t.Run(tt.dialect+": "+tt.sql, func(t *testing.T) {
-			inspected := Inspect(GetDialect(tt.dialect), permMeta(), tt.sql)
+			inspected := Inspect(dialects.Get(tt.dialect), permMeta(), tt.sql)
 			unknown := 0
 			for _, stmt := range inspected {
 				if stmt.Operation == core.InspectOpUnknown {
@@ -292,11 +293,11 @@ func TestPermissions_AColumnScopedRoleStillUpserts(t *testing.T) {
 	for _, name := range []string{"postgresql", "sqlite"} {
 		t.Run(name, func(t *testing.T) {
 			sql := "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c2 = 'x'"
-			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), sql), permDBID, perms); err != nil {
+			if err := core.CheckQueryPermissions(Inspect(dialects.Get(name), permMeta(), sql), permDBID, perms); err != nil {
 				t.Errorf("refused a role holding update on the column it sets: %v", err)
 			}
 			other := "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c1 = 2"
-			if err := core.CheckQueryPermissions(Inspect(GetDialect(name), permMeta(), other), permDBID, perms); err == nil {
+			if err := core.CheckQueryPermissions(Inspect(dialects.Get(name), permMeta(), other), permDBID, perms); err == nil {
 				t.Error("ran, and it sets a column the role may not update")
 			}
 		})

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/selectDb/dialect/core"
+	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit/cache"
 )
@@ -106,6 +107,15 @@ func DeleteConnsByAddr(addr string) {
 func CloseWorkspaceConns(workspaceID string) {
 	prefix := workspaceKeyPrefix(workspaceID)
 	connCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
+}
+
+// dialectFor is dialects.Get for a datasource, failing with a config error the
+// user can act on when the type is unknown.
+func dialectFor(dbType string) (core.SQLDialect, error) {
+	if dialect := dialects.Get(dbType); dialect != nil {
+		return dialect, nil
+	}
+	return nil, newConfigErrorf("unsupported database type: %s", dbType)
 }
 
 // GetOrOpenConn returns a cached *sql.DB, opening one on miss. dsn must have $variables substituted.

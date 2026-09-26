@@ -10,6 +10,7 @@ import (
 	coreRefs "github.com/selectDb/dialect/core/references"
 	"github.com/selectDb/dialect/core/testutil"
 	"github.com/selectDb/dialect/core/tokenanalyzer"
+	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/engine"
 )
 
@@ -117,7 +118,7 @@ type prober struct {
 
 func (p prober) probe(probeCase Case) Result {
 	result := Result{ID: probeCase.ID, Dialect: probeCase.Dialect, SQL: probeCase.SQL}
-	dialect := engine.GetDialect(probeCase.Dialect)
+	dialect := dialects.Get(probeCase.Dialect)
 	if dialect == nil {
 		result.Error = fmt.Sprintf("unknown dialect %q (want postgresql, mysql or sqlite)", probeCase.Dialect)
 		return result

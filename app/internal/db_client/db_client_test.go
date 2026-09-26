@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/selectDb/dialect/engine"
+	"github.com/selectDb/dialect/dialects"
 	"github.com/selectDb/dialect/mysql"
 	"github.com/selectDb/dialect/postgresql"
 	_ "github.com/selectDb/dialect/sqlite" // blank import triggers package init(), registering SQLite dialect
@@ -37,19 +37,19 @@ func TestOpenConn(t *testing.T) {
 
 func TestGetDialect(t *testing.T) {
 	// Caching works
-	d1 := engine.GetDialect("postgresql")
-	d2 := engine.GetDialect("postgresql")
+	d1 := dialects.Get("postgresql")
+	d2 := dialects.Get("postgresql")
 	if d1 != d2 {
 		t.Fatal("expected cached dialect instance")
 	}
 
 	// Different types return different instances
-	if d1 == engine.GetDialect("mysql") {
+	if d1 == dialects.Get("mysql") {
 		t.Fatal("expected different instances for different types")
 	}
 
 	// Unsupported type returns nil
-	if engine.GetDialect("unsupported") != nil {
+	if dialects.Get("unsupported") != nil {
 		t.Fatal("expected nil for unsupported type")
 	}
 
@@ -57,7 +57,7 @@ func TestGetDialect(t *testing.T) {
 	if _, ok := d1.(*postgresql.Dialect); !ok {
 		t.Fatal("expected *postgresql.Dialect")
 	}
-	if _, ok := engine.GetDialect("mysql").(*mysql.Dialect); !ok {
+	if _, ok := dialects.Get("mysql").(*mysql.Dialect); !ok {
 		t.Fatal("expected *mysql.Dialect")
 	}
 
@@ -66,7 +66,7 @@ func TestGetDialect(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			defer func() { done <- true }()
-			if engine.GetDialect("postgresql") == nil || engine.GetDialect("mysql") == nil {
+			if dialects.Get("postgresql") == nil || dialects.Get("mysql") == nil {
 				t.Error("expected non-nil dialects")
 			}
 		}()
