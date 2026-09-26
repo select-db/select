@@ -657,6 +657,46 @@ func permCases() []PermCase {
 			Why:   "the right is on the column of t2 the inner query reads, not on the alias",
 		},
 		{
+			Name: "a column a derived table joins on",
+			SQL:  "SELECT d.c1 FROM (SELECT a.c1 FROM t1 a JOIN t2 b ON a.c1 = b.c1) d",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "wrapping the join in a derived table changes no column it reads, so it asks for no wider right than the same join unwrapped",
+		},
+		{
+			Name: "a column a derived table matches a view against",
+			SQL:  "SELECT d.c1 FROM (SELECT v.c1 FROM v1 v, t2 t WHERE v.c1 = t.c1) d",
+			Needs: []Right{
+				mainV1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "t2 is reached through the predicate, and that predicate's column is what names it",
+		},
+		{
+			Name: "a column a CTE joins on",
+			SQL:  "WITH d AS (SELECT v.c1 FROM v1 v LEFT JOIN t2 t ON v.c1 = t.c1) SELECT d.c1 FROM d",
+			Needs: []Right{
+				mainV1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "a CTE body scopes the tables it reports up exactly as a derived table does",
+		},
+		{
+			Name: "a table a derived table joins for its rows alone",
+			SQL:  "SELECT d.c1 FROM (SELECT a.c1 FROM t1 a CROSS JOIN t2 b) d",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "no column of t2 is read, so how many rows come back is all it is asked for, and that is the table",
+		},
+		{
 			Name:  "a column of the other schema",
 			SQL:   "SELECT c4 FROM other.t3",
 			Needs: []Right{otherT3(core.ActionSelect).Only("c4")},
