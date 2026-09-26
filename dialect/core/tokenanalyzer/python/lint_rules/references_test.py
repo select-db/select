@@ -1337,6 +1337,15 @@ class TestTableAlreadyExists:
         sql = "DROP TABLE t1; CREATE TABLE t1 (c1 integer)"
         assert _diags(_ddl(sql), "table-already-exists") == []
 
+    def test_renamed_away_earlier_in_the_buffer_not_flagged(self):
+        sql = "ALTER TABLE t1 RENAME TO t9; CREATE TABLE t1 (c1 integer)"
+        assert _diags(_ddl(sql), "table-already-exists") == []
+
+    def test_drop_in_another_database_still_flagged(self):
+        # The drop names otherdb.main.t1, which is not the local main.t1.
+        sql = "DROP TABLE otherdb.main.t1; CREATE TABLE main.t1 (c1 integer)"
+        assert len(_diags(_ddl(sql), "table-already-exists")) == 1
+
     def test_dropped_after_the_create_still_flagged(self):
         sql = "CREATE TABLE t1 (c1 integer); DROP TABLE t1"
         assert len(_diags(_ddl(sql), "table-already-exists")) == 1
