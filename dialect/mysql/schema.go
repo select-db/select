@@ -62,16 +62,20 @@ const schemaQuery = `
 	WHERE table_schema ` + userSchemas + `
 	UNION ALL
 	SELECT 'mysql_foreign_key', JSON_OBJECT(
-		'schema', k.table_schema, 'table', k.table_name, 'column', k.column_name,
-		'refSchema', k.referenced_table_schema, 'refTable', k.referenced_table_name,
-		'refColumn', k.referenced_column_name, 'constraint', k.constraint_name,
-		'position', k.ordinal_position,
-		'onUpdate', COALESCE(r.update_rule, ''), 'onDelete', COALESCE(r.delete_rule, ''))
-	FROM information_schema.key_column_usage k
-	LEFT JOIN information_schema.referential_constraints r
-		ON r.constraint_schema = k.constraint_schema AND r.constraint_name = k.constraint_name
-		AND r.table_name = k.table_name
-	WHERE k.table_schema ` + userSchemas + ` AND k.referenced_table_name IS NOT NULL
+		'schema', table_schema, 'table', table_name, 'column', column_name,
+		'refSchema', referenced_table_schema, 'refTable', referenced_table_name,
+		'refColumn', referenced_column_name, 'constraint', constraint_name,
+		'position', ordinal_position)
+	FROM information_schema.key_column_usage
+	WHERE table_schema ` + userSchemas + ` AND referenced_table_name IS NOT NULL
+	UNION ALL
+	-- Joined in Go: joining two information_schema views loops one per row of
+	-- the other, seconds on a few thousand keys.
+	SELECT 'mysql_foreign_key_rule', JSON_OBJECT(
+		'schema', constraint_schema, 'table', table_name, 'constraint', constraint_name,
+		'onUpdate', update_rule, 'onDelete', delete_rule)
+	FROM information_schema.referential_constraints
+	WHERE constraint_schema ` + userSchemas + `
 	UNION ALL
 	SELECT 'mysql_trigger', JSON_OBJECT(
 		'schema', trigger_schema, 'table', event_object_table, 'name', trigger_name,
@@ -161,8 +165,19 @@ type foreignKeyRow struct {
 	core.ForeignKeyRow
 	Constraint string `json:"constraint"`
 	Position   int    `json:"position"`
-	OnUpdate   string `json:"onUpdate"`
-	OnDelete   string `json:"onDelete"`
+	foreignKeyRule
+}
+
+type foreignKeyRule struct {
+	OnUpdate string `json:"onUpdate"`
+	OnDelete string `json:"onDelete"`
+}
+
+type foreignKeyRuleRow struct {
+	Schema     string `json:"schema"`
+	Table      string `json:"table"`
+	Constraint string `json:"constraint"`
+	foreignKeyRule
 }
 
 type triggerRow struct {
@@ -197,13 +212,15 @@ func fillSchemaRows(r *core.SchemaRows) error {
 		columns      []columnRow
 		indexColumns []indexColumnRow
 		foreignKeys  []foreignKeyRow
+		fkRules      []foreignKeyRuleRow
 		triggers     []triggerRow
 		parameters   []parameterRow
 	)
 	for kind, dst := range map[string]any{
 		"mysql_server": &server, "mysql_table": &tables, "mysql_view": &views,
 		"mysql_column": &columns, "mysql_index_column": &indexColumns,
-		"mysql_foreign_key": &foreignKeys, "mysql_trigger": &triggers, "mysql_parameter": &parameters,
+		"mysql_foreign_key": &foreignKeys, "mysql_foreign_key_rule": &fkRules,
+		"mysql_trigger": &triggers, "mysql_parameter": &parameters,
 	} {
 		if err := r.DecodeOther(kind, dst); err != nil {
 			return err
@@ -250,8 +267,13 @@ func fillSchemaRows(r *core.SchemaRows) error {
 		indexesByTable[k] = append(indexesByTable[k], ic)
 	}
 
+	rules := make(map[[3]string]foreignKeyRule, len(fkRules))
+	for _, rule := range fkRules {
+		rules[[3]string{rule.Schema, rule.Table, rule.Constraint}] = rule.foreignKeyRule
+	}
 	foreignKeysByTable := make(map[tableKey][]foreignKeyRow)
 	for _, fk := range foreignKeys {
+		fk.foreignKeyRule = rules[[3]string{fk.Schema, fk.Table, fk.Constraint}]
 		r.ForeignKeys = append(r.ForeignKeys, fk.ForeignKeyRow)
 		k := tableKey{fk.Schema, fk.Table}
 		foreignKeysByTable[k] = append(foreignKeysByTable[k], fk)

@@ -24,20 +24,31 @@ const schemaQuery = `
 		FROM pg_catalog.pg_namespace
 		WHERE (nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema') OR nspname = 'pg_catalog'
 	),
-	table_cols AS (
-		SELECT c.oid,
-			'CREATE TABLE ' || quote_ident(n.nspname) || '.' || quote_ident(c.relname) || E' (\n' ||
-			string_agg(
-				'    ' || quote_ident(a.attname) || ' ' || pg_catalog.format_type(a.atttypid, a.atttypmod) ||
-				CASE WHEN a.attnotnull THEN ' NOT NULL' ELSE '' END ||
-				CASE WHEN ad.adbin IS NOT NULL THEN ' DEFAULT ' || pg_catalog.pg_get_expr(ad.adbin, ad.adrelid) ELSE '' END,
-				E',\n' ORDER BY a.attnum) AS ddl
-		FROM pg_catalog.pg_class c
+	-- Read once: the column rows and the CREATE TABLE text both come from it.
+	cols AS MATERIALIZED (
+		SELECT c.oid, n.nspname, c.relname, c.relkind, a.attname, a.attnum, a.attnotnull,
+			pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+			pg_catalog.pg_get_expr(ad.adbin, ad.adrelid) AS def,
+			d.description
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 		JOIN ns n ON n.oid = c.relnamespace
-		JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
 		LEFT JOIN pg_catalog.pg_attrdef ad ON ad.adrelid = c.oid AND ad.adnum = a.attnum
-		WHERE c.relkind IN ('r', 'p')
-		GROUP BY n.nspname, c.relname, c.oid
+		LEFT JOIN pg_catalog.pg_description d
+			ON d.objoid = c.oid AND d.classoid = 'pg_catalog.pg_class'::regclass AND d.objsubid = a.attnum
+		WHERE c.relkind IN ('r', 'p', 'v') AND a.attnum > 0 AND NOT a.attisdropped
+	),
+	table_cols AS (
+		SELECT oid,
+			'CREATE TABLE ' || quote_ident(nspname) || '.' || quote_ident(relname) || E' (\n' ||
+			string_agg(
+				'    ' || quote_ident(attname) || ' ' || type ||
+				CASE WHEN attnotnull THEN ' NOT NULL' ELSE '' END ||
+				CASE WHEN def IS NOT NULL THEN ' DEFAULT ' || def ELSE '' END,
+				E',\n' ORDER BY attnum) AS ddl
+		FROM cols
+		WHERE relkind IN ('r', 'p')
+		GROUP BY oid, nspname, relname
 	),
 	table_cons AS (
 		SELECT con.conrelid AS oid,
@@ -72,18 +83,10 @@ const schemaQuery = `
 	JOIN ns n ON n.oid = c.relnamespace
 	WHERE c.relkind = 'v'
 	UNION ALL
-	SELECT 'column', json_build_object('schema', n.nspname, 'table', c.relname, 'name', a.attname,
-		'type', pg_catalog.format_type(a.atttypid, a.atttypmod), 'nullable', NOT a.attnotnull,
-		'default', NULLIF(pg_catalog.pg_get_expr(ad.adbin, ad.adrelid), ''), 'position', a.attnum,
-		'description', COALESCE(d.description, ''))
-	FROM pg_catalog.pg_attribute a
-	JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-	JOIN ns n ON n.oid = c.relnamespace
-	LEFT JOIN pg_catalog.pg_attrdef ad ON ad.adrelid = c.oid AND ad.adnum = a.attnum
-	-- A join, not col_description per row: one pass over pg_description.
-	LEFT JOIN pg_catalog.pg_description d
-		ON d.objoid = c.oid AND d.classoid = 'pg_catalog.pg_class'::regclass AND d.objsubid = a.attnum
-	WHERE c.relkind IN ('r', 'p', 'v') AND a.attnum > 0 AND NOT a.attisdropped
+	SELECT 'column', json_build_object('schema', nspname, 'table', relname, 'name', attname,
+		'type', type, 'nullable', NOT attnotnull, 'default', NULLIF(def, ''), 'position', attnum,
+		'description', COALESCE(description, ''))
+	FROM cols
 	UNION ALL
 	SELECT 'primary_key', json_build_object('schema', n.nspname, 'table', c.relname, 'column', a.attname,
 		'position', array_position(con.conkey, a.attnum))
@@ -132,13 +135,21 @@ const schemaQuery = `
 	JOIN ns n ON n.oid = c.relnamespace AND NOT n.catalog
 	WHERE NOT tg.tgisinternal
 	UNION ALL
-	SELECT 'stat', json_build_object('schema', s.schemaname, 'name', s.relname, 'value', s.n_live_tup::text)
-	FROM pg_catalog.pg_stat_user_tables s
-	JOIN ns n ON n.nspname = s.schemaname AND NOT n.catalog
+	-- The stats functions by oid, not the pg_stat_user_* views: joined to ns by
+	-- name, a view is scanned once per schema.
+	SELECT 'stat', json_build_object('schema', n.nspname, 'name', c.relname,
+		'value', pg_catalog.pg_stat_get_live_tuples(c.oid)::text)
+	FROM pg_catalog.pg_class c
+	JOIN ns n ON n.oid = c.relnamespace AND NOT n.catalog
+	WHERE c.relkind IN ('r', 't', 'm', 'p')
 	UNION ALL
-	SELECT 'stat', json_build_object('schema', s.schemaname, 'name', s.indexrelname, 'value', COALESCE(s.idx_scan, 0)::text)
-	FROM pg_catalog.pg_stat_user_indexes s
-	JOIN ns n ON n.nspname = s.schemaname AND NOT n.catalog
+	SELECT 'stat', json_build_object('schema', n.nspname, 'name', i.relname,
+		'value', COALESCE(pg_catalog.pg_stat_get_numscans(i.oid), 0)::text)
+	FROM pg_catalog.pg_index ix
+	JOIN pg_catalog.pg_class i ON i.oid = ix.indexrelid
+	JOIN pg_catalog.pg_class t ON t.oid = ix.indrelid
+	JOIN ns n ON n.oid = t.relnamespace AND NOT n.catalog
+	WHERE t.relkind IN ('r', 't', 'm')
 	UNION ALL
 	SELECT 'type', json_build_object('schema', n.nspname, 'name', t.typname, 'kind', t.typtype,
 		'display', COALESCE(pg_catalog.format_type(t.oid, NULL), t.typname::text),
