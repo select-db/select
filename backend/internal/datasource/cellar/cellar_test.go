@@ -61,7 +61,9 @@ func newManagedDB(t *testing.T) managedDB {
 }
 
 // run executes stmt through the backend and returns its rows or its error.
-func (m managedDB) run(t *testing.T, stmt string) ([][]any, string) {
+// run executes stmt through the backend's REST route and returns its rows, or
+// the error the caller sees, with its code.
+func (m managedDB) run(t *testing.T, stmt string) ([][]any, *arrowstream.Error) {
 	t.Helper()
 	rec := e2e.Do(t, m.f.H, http.MethodPost, "/datasources/"+m.id+"/execute", m.f.Actor.Token,
 		map[string]any{"workspace_id": m.f.Actor.WorkspaceID, "sql": stmt})
@@ -69,14 +71,19 @@ func (m managedDB) run(t *testing.T, stmt string) ([][]any, string) {
 	stream, err := arrowstream.NewStream(io.NopCloser(rec.Body))
 	require.NoError(t, err)
 	defer func() { _ = stream.Close() }()
+	failed := func(err error) *arrowstream.Error {
+		var coded *arrowstream.Error
+		require.ErrorAs(t, err, &coded)
+		return coded
+	}
 	if _, err := stream.Columns(); err != nil {
-		return nil, err.Error()
+		return nil, failed(err)
 	}
 	var rows [][]any
 	for {
 		row, ok, err := stream.Next()
 		if err != nil {
-			return nil, err.Error()
+			return nil, failed(err)
 		}
 		if !ok {
 			break
@@ -84,28 +91,29 @@ func (m managedDB) run(t *testing.T, stmt string) ([][]any, string) {
 		rows = append(rows, row)
 	}
 	if _, _, _, err := stream.Summary(); err != nil {
-		return nil, err.Error()
+		return nil, failed(err)
 	}
-	return rows, ""
+	return rows, nil
 }
 
 func TestManagedDatasourceRunsOnTheCellar(t *testing.T) {
 	m := newManagedDB(t)
 
-	rows, errMsg := m.run(t, "SELECT body FROM note")
-	require.Empty(t, errMsg)
+	rows, failure := m.run(t, "SELECT body FROM note")
+	require.Nil(t, failure)
 	require.Equal(t, [][]any{{"hello"}}, rows)
 
-	_, errMsg = m.run(t, "INSERT INTO note (body) VALUES ('again')")
-	require.Empty(t, errMsg)
+	_, failure = m.run(t, "INSERT INTO note (body) VALUES ('again')")
+	require.Nil(t, failure)
 
-	_, errMsg = m.run(t, "INSERT INTO note (body) VALUES ('once'); INSERT INTO note (id, body) VALUES (1, 'taken')")
-	require.NotEmpty(t, errMsg)
+	_, failure = m.run(t, "INSERT INTO note (body) VALUES ('once'); INSERT INTO note (id, body) VALUES (1, 'taken')")
+	require.Equal(t, server.CodeSQLError, failure.Code)
+	require.Contains(t, failure.Message, "UNIQUE constraint failed", "SQLite's message reaches the caller as it is")
 	rows, _ = m.run(t, "SELECT count(*) FROM note WHERE body = 'once'")
 	require.Equal(t, [][]any{{"1"}}, rows, "a failed script is never run twice")
 
-	_, errMsg = m.run(t, "DELETE FROM note")
-	require.Contains(t, errMsg, "permission", "the caller's permissions reach the cellar")
+	_, failure = m.run(t, "DELETE FROM note")
+	require.Contains(t, failure.Message, "permission", "the backend answers permissions")
 
 	e2e.RequireEvent(t, m.f.Conn, "query", "executed")
 
@@ -135,15 +143,17 @@ func TestManagedDatasourceRefusesHostileSQL(t *testing.T) {
 		"SELECT * FROM \"PRAGMA_compile_options\"",
 	} {
 		t.Run(stmt, func(t *testing.T) {
-			_, errMsg := m.run(t, stmt)
-			require.NotEmpty(t, errMsg)
-			require.NotContains(t, errMsg, m.dir, "errors never name a path")
+			_, failure := m.run(t, stmt)
+			// Refused by the backend's permission check (no code) or by the cellar.
+			require.NotNil(t, failure)
+			require.Contains(t, []string{"", server.CodeForbiddenStatement, server.CodeSQLError}, failure.Code)
+			require.NotContains(t, failure.Message, m.dir, "errors never name a path")
 		})
 	}
 	require.NoFileExists(t, outside)
 
-	_, errMsg := m.run(t, "PRAGMA table_info(note)")
-	require.Empty(t, errMsg, "introspection PRAGMAs are allowed")
+	_, failure := m.run(t, "PRAGMA table_info(note)")
+	require.Nil(t, failure, "introspection PRAGMAs are allowed")
 }
 
 func TestManagedDatasourceWithoutCellar(t *testing.T) {
@@ -161,9 +171,9 @@ func TestManagedDatasourceWithCellarDown(t *testing.T) {
 	down.Close()
 	cellar.URL = down.URL
 
-	_, errMsg := m.run(t, "SELECT 1")
-	require.Contains(t, errMsg, "unavailable")
-	require.NotContains(t, errMsg, strings.TrimPrefix(down.URL, "http://"), "errors never name the cellar")
+	_, failure := m.run(t, "SELECT 1")
+	require.Equal(t, server.CodeUnavailable, failure.Code)
+	require.NotContains(t, failure.Message, strings.TrimPrefix(down.URL, "http://"), "errors never name the cellar")
 
 	rec := e2e.Do(t, m.f.H, http.MethodGet, "/datasources/"+m.id+"/schema", m.f.Actor.Token,
 		map[string]any{"workspace_id": m.f.Actor.WorkspaceID})

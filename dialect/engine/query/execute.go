@@ -238,10 +238,15 @@ func applyMask(values []any, maskPositions []int) {
 type queryError struct {
 	message  string
 	position *int
+	cause    error
 }
 
 func (e *queryError) Error() string {
 	return e.message
+}
+
+func (e *queryError) Unwrap() error {
+	return e.cause
 }
 
 // ErrorPosition returns where in the statement err occurred, or nil.
@@ -265,7 +270,7 @@ func toQueryError(ctx context.Context, err error) *queryError {
 	if errors.Is(err, context.Canceled) {
 		return &queryError{message: "query was cancelled"}
 	}
-	qe := &queryError{message: err.Error()}
+	qe := &queryError{message: err.Error(), cause: err}
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) && pqErr.Position != "" {
 		if pos, parseErr := strconv.Atoi(pqErr.Position); parseErr == nil && pos > 0 {

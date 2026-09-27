@@ -36,7 +36,7 @@ func init() {
 
 // ErrUnavailable is a cellar the backend could not reach. The cause, which
 // names the cellar's address, is only logged.
-var ErrUnavailable = errors.New("managed database temporarily unavailable, retry")
+var ErrUnavailable error = &arrowstream.Error{Code: server.CodeUnavailable, Message: "managed database temporarily unavailable, retry"}
 
 var (
 	errNoPrepare = errors.New("cellar: prepared statements are not supported")
@@ -186,9 +186,15 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 		return nil, ErrUnavailable
 	}
 	if resp.StatusCode != http.StatusOK {
+		// Failures inside a query arrive in the stream, already classified;
+		// only the cellar's middlewares answer with a status.
 		defer func() { _ = resp.Body.Close() }()
+		// InFlight answers 408 when no slot freed up within the statement's time.
+		if resp.StatusCode == http.StatusRequestTimeout {
+			return nil, &arrowstream.Error{Code: server.CodeTimeout, Message: "managed database busy: no free slot within the time limit, retry"}
+		}
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("cellar %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+		return nil, server.InternalError(fmt.Sprintf("cellar: %s: %d %s", c.path, resp.StatusCode, strings.TrimSpace(string(msg))))
 	}
 	return resp.Body, nil
 }

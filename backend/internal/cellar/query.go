@@ -2,7 +2,6 @@ package cellar
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
@@ -26,19 +25,17 @@ func QueryHandler(dir string) http.HandlerFunc {
 			return
 		}
 		grant := GetGrant(r)
+		w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+		stream := arrowstream.NewSink(w)
+		defer stream.Close()
+		if f, ok := w.(http.Flusher); ok {
+			stream.SetDownstreamFlusher(f.Flush)
+		}
+		sink := classifiedSink{Sink: stream, ctx: r.Context(), grant: grant}
 		conn, err := Open(dir, grant)
 		if err != nil {
-			// The cause names a path, so it is only logged.
-			log.Printf("cellar: %s: %v", r.URL.Path, err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			sink.OnError(err)
 			return
-		}
-
-		w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-		sink := arrowstream.NewSink(w)
-		defer sink.Close()
-		if f, ok := w.(http.Flusher); ok {
-			sink.SetDownstreamFlusher(f.Flush)
 		}
 		query.Stream(r.Context(), conn, query.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, query.Options{Args: q.Args}, sink)
 	}

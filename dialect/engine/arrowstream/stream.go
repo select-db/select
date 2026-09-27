@@ -46,7 +46,7 @@ type Stream struct {
 	rowCount   int64
 	affected   int64
 	durationMs int64
-	streamErr  string
+	streamErr  *Error
 }
 
 // NewStream wraps a zstd-compressed Arrow IPC response body. The decoder is
@@ -74,11 +74,11 @@ func (s *Stream) Columns() ([]string, error) {
 	meta := reader.Schema().Metadata()
 
 	// Check for immediate error (query failed before any rows)
-	if idx := meta.FindKey("error"); idx >= 0 {
-		s.streamErr = meta.Values()[idx]
+	if e := errorFrom(meta); e != nil {
+		s.streamErr = e
 		s.done = true
 		reader.Release()
-		return nil, fmt.Errorf("%s", s.streamErr)
+		return nil, s.streamErr
 	}
 
 	// Optional early-duration segment: a header-only stream whose schema
@@ -95,11 +95,11 @@ func (s *Stream) Columns() ([]string, error) {
 			return nil, fmt.Errorf("arrow reader: %w", err)
 		}
 		meta = reader.Schema().Metadata()
-		if idx := meta.FindKey("error"); idx >= 0 {
-			s.streamErr = meta.Values()[idx]
+		if e := errorFrom(meta); e != nil {
+			s.streamErr = e
 			s.done = true
 			reader.Release()
-			return nil, fmt.Errorf("%s", s.streamErr)
+			return nil, s.streamErr
 		}
 	}
 
@@ -152,10 +152,10 @@ func (s *Stream) Next() ([]any, bool, error) {
 					s.done = true
 					return nil, false, nil
 				}
-				if idx := meta.FindKey("error"); idx >= 0 {
-					s.streamErr = meta.Values()[idx]
+				if e := errorFrom(meta); e != nil {
+					s.streamErr = e
 					s.done = true
-					return nil, false, fmt.Errorf("%s", s.streamErr)
+					return nil, false, s.streamErr
 				}
 			}
 
@@ -187,10 +187,10 @@ func (s *Stream) Next() ([]any, bool, error) {
 				s.done = true
 				return nil, false, nil
 			}
-			if idx := meta.FindKey("error"); idx >= 0 {
-				s.streamErr = meta.Values()[idx]
+			if e := errorFrom(meta); e != nil {
+				s.streamErr = e
 				s.done = true
-				return nil, false, fmt.Errorf("%s", s.streamErr)
+				return nil, false, s.streamErr
 			}
 		}
 	}
@@ -198,8 +198,8 @@ func (s *Stream) Next() ([]any, bool, error) {
 
 // Summary returns query summary. Only valid after Next returns false.
 func (s *Stream) Summary() (rowCount, affected, durationMs int64, err error) {
-	if s.streamErr != "" {
-		return 0, 0, 0, fmt.Errorf("%s", s.streamErr)
+	if s.streamErr != nil {
+		return 0, 0, 0, s.streamErr
 	}
 	return s.rowCount, s.affected, s.durationMs, nil
 }

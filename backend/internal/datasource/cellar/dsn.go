@@ -1,13 +1,16 @@
 package cellar
 
 import (
-	"errors"
 	"net/url"
 	"strconv"
+
+	server "backend/internal/cellar"
+
+	"github.com/selectDb/dialect/engine/arrowstream"
 )
 
 // ErrOff answers any use of a managed database while CELLAR is unset.
-var ErrOff = errors.New("managed databases are not enabled on this server")
+var ErrOff error = &arrowstream.Error{Code: server.CodeDisabled, Message: "managed databases are not enabled on this server"}
 
 // maxBytes is what a managed database's workspace plan lets it grow to. An
 // unknown plan has no size cap, which the cellar refuses.
