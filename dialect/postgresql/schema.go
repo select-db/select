@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/lib/pq"
 	core "github.com/selectDb/dialect/core"
@@ -108,33 +107,22 @@ func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]c
 		return nil, nil
 	}
 
-	// Phase 2: bulk-fetch columns, PKs, FKs, DDL in parallel.
-	var (
-		wg                                  sync.WaitGroup
-		allColumns                          map[string][]core.Column
-		allPKs                              map[string][]string
-		allFKs                              map[string]map[string]core.ForeignKeyRef
-		allDDLs                             map[string]string
-		errColumns, errPKs, errFKs, errDDLs error
-	)
-	wg.Add(4)
-	go func() { defer wg.Done(); allColumns, errColumns = d.batchColumns(ctx, db, schema, tableNames) }()
-	go func() { defer wg.Done(); allPKs, errPKs = d.batchPrimaryKeys(ctx, db, schema, tableNames) }()
-	go func() { defer wg.Done(); allFKs, errFKs = d.batchForeignKeys(ctx, db, schema, tableNames) }()
-	go func() { defer wg.Done(); allDDLs, errDDLs = d.batchTableDDL(ctx, db, schema, tableNames) }()
-	wg.Wait()
-
-	if errColumns != nil {
-		return nil, fmt.Errorf("failed to batch columns: %w", errColumns)
+	// Phase 2: bulk-fetch columns, PKs, FKs, DDL, in order on one connection.
+	allColumns, err := d.batchColumns(ctx, db, schema, tableNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch columns: %w", err)
 	}
-	if errPKs != nil {
-		return nil, fmt.Errorf("failed to batch primary keys: %w", errPKs)
+	allPKs, err := d.batchPrimaryKeys(ctx, db, schema, tableNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch primary keys: %w", err)
 	}
-	if errFKs != nil {
-		return nil, fmt.Errorf("failed to batch foreign keys: %w", errFKs)
+	allFKs, err := d.batchForeignKeys(ctx, db, schema, tableNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch foreign keys: %w", err)
 	}
-	if errDDLs != nil {
-		return nil, fmt.Errorf("failed to batch table DDL: %w", errDDLs)
+	allDDLs, err := d.batchTableDDL(ctx, db, schema, tableNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch table DDL: %w", err)
 	}
 
 	// Phase 3: assemble

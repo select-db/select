@@ -23,236 +23,133 @@ func (d *Dialect) GetSchemas(_ context.Context, _ *sql.DB) ([]string, error) {
 	return []string{"main"}, nil
 }
 
-// GetTables returns all tables in the SQLite database.
+// GetTables returns every table with its columns, primary key and foreign
+// keys, in two queries whatever the number of tables.
 // The schema parameter is ignored as SQLite only has "main".
 func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
-	query := `
-		SELECT name, sql
-		FROM sqlite_master
-		WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-		ORDER BY name ASC;
-	`
-
-	rows, err := db.QueryContext(ctx, query)
+	tables, err := d.relationsWithColumns(ctx, db, "table")
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-
-	var tables []core.Table
-	for rows.Next() {
-		var tableName string
-		var tableDDL sql.NullString
-		if err := rows.Scan(&tableName, &tableDDL); err != nil {
-			return nil, fmt.Errorf("failed to scan table name: %w", err)
-		}
-
-		columns, err := d.discoverColumns(ctx, db, tableName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to discover columns for table %s: %w", tableName, err)
-		}
-
-		primaryKey, _ := d.discoverPrimaryKey(ctx, db, tableName)
-		foreignKeys, _ := d.discoverForeignKeys(ctx, db, tableName)
-		core.EnrichColumnsWithConstraints(&columns, primaryKey, foreignKeys)
-
-		tables = append(tables, core.Table{
-			Name:       tableName,
-			Columns:    columns,
-			PrimaryKey: primaryKey,
-			DDL:        getString(tableDDL),
-		})
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating table rows: %w", err)
-	}
-
-	return tables, nil
-}
-
-// discoverPrimaryKey returns the column names that make up the primary key for a table
-func (d *Dialect) discoverPrimaryKey(ctx context.Context, db *sql.DB, tableName string) ([]string, error) {
-	query := fmt.Sprintf("PRAGMA table_info(%q)", tableName)
-
-	rows, err := db.QueryContext(ctx, query)
+	foreignKeys, err := d.foreignKeys(ctx, db)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query primary key: %w", err)
+		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-
-	type pkColumn struct {
-		name     string
-		position int
+	for i := range tables {
+		core.EnrichColumnsWithConstraints(&tables[i].Columns, tables[i].PrimaryKey, foreignKeys[tables[i].Name])
 	}
-	var pkColumns []pkColumn
-
-	for rows.Next() {
-		var (
-			columnID     int
-			columnName   string
-			columnType   string
-			isNotNull    int
-			defaultVal   sql.NullString
-			isPrimaryKey int
-		)
-
-		if err := rows.Scan(&columnID, &columnName, &columnType, &isNotNull, &defaultVal, &isPrimaryKey); err != nil {
-			return nil, fmt.Errorf("failed to scan column: %w", err)
-		}
-
-		if isPrimaryKey > 0 {
-			pkColumns = append(pkColumns, pkColumn{name: columnName, position: isPrimaryKey})
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating columns: %w", err)
-	}
-
-	if len(pkColumns) == 0 {
-		return nil, nil
-	}
-
-	primaryKey := make([]string, len(pkColumns))
-	for _, col := range pkColumns {
-		primaryKey[col.position-1] = col.name
-	}
-
-	return primaryKey, nil
+	return tables, nil
 }
 
 // GetViews returns all views in the SQLite database.
 // The schema parameter is ignored as SQLite only has "main".
 func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
-	query := `
-		SELECT name, sql
-		FROM sqlite_master
-		WHERE type = 'view' AND name NOT LIKE 'sqlite_%'
-		ORDER BY name ASC;
-	`
-
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var views []core.Table
-	for rows.Next() {
-		var viewName string
-		var viewDDL sql.NullString
-		if err := rows.Scan(&viewName, &viewDDL); err != nil {
-			return nil, fmt.Errorf("failed to scan view name: %w", err)
-		}
-
-		columns, err := d.discoverColumns(ctx, db, viewName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to discover columns for view %s: %w", viewName, err)
-		}
-
-		views = append(views, core.Table{
-			Name:    viewName,
-			Columns: columns,
-			DDL:     getString(viewDDL),
-		})
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating view rows: %w", err)
-	}
-
-	return views, nil
+	return d.relationsWithColumns(ctx, db, "view")
 }
 
-// discoverColumns discovers all columns for a table or view using PRAGMA table_info
-func (d *Dialect) discoverColumns(ctx context.Context, db *sql.DB, relationName string) ([]core.Column, error) {
-	query := fmt.Sprintf("PRAGMA table_info(%q)", relationName)
-
-	rows, err := db.QueryContext(ctx, query)
+// relationsWithColumns reads every table or view (kind) and its columns in one
+// query: pragma_table_info joined to sqlite_master, rather than one per relation.
+// Columns keep the table's order; a primary key's order is on the table.
+func (d *Dialect) relationsWithColumns(ctx context.Context, db *sql.DB, kind string) ([]core.Table, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT m.name, m.sql, p.name, p.type, p."notnull", p.dflt_value, p.pk
+		FROM sqlite_master m JOIN pragma_table_info(m.name) p
+		WHERE m.type = ? AND m.name NOT LIKE 'sqlite_%'
+		ORDER BY m.name, p.cid`, kind)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query columns: %w", err)
+		return nil, fmt.Errorf("failed to query %ss: %w", kind, err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var columns []core.Column
+	var relations []core.Table
+	pkOrder := map[string]map[int]string{} // relation -> key position -> column
 	for rows.Next() {
 		var (
-			columnID     int
-			columnName   string
-			columnType   string
-			isNotNull    int
-			defaultVal   sql.NullString
-			isPrimaryKey int
+			relName, colName, colType string
+			ddl, defaultVal           sql.NullString
+			notNull, pk               int
 		)
-
-		if err := rows.Scan(&columnID, &columnName, &columnType, &isNotNull, &defaultVal, &isPrimaryKey); err != nil {
-			return nil, fmt.Errorf("failed to scan column: %w", err)
+		if err := rows.Scan(&relName, &ddl, &colName, &colType, &notNull, &defaultVal, &pk); err != nil {
+			return nil, fmt.Errorf("failed to scan %s column: %w", kind, err)
 		}
-
-		nullable := isNotNull == 0 && isPrimaryKey == 0
-
+		if len(relations) == 0 || relations[len(relations)-1].Name != relName {
+			relations = append(relations, core.Table{Name: relName, DDL: getString(ddl)})
+		}
 		col := core.Column{
-			Name:         columnName,
-			Type:         columnType,
-			Nullable:     nullable,
-			IsPrimaryKey: isPrimaryKey > 0,
+			Name:         colName,
+			Type:         colType,
+			Nullable:     notNull == 0 && pk == 0,
+			IsPrimaryKey: pk > 0,
 		}
 		if defaultVal.Valid && defaultVal.String != "" {
 			col.Default = &defaultVal.String
 		}
-		columns = append(columns, col)
+		rel := &relations[len(relations)-1]
+		rel.Columns = append(rel.Columns, col)
+		if pk > 0 {
+			if pkOrder[relName] == nil {
+				pkOrder[relName] = map[int]string{}
+			}
+			pkOrder[relName][pk] = colName
+		}
 	}
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating column rows: %w", err)
+		return nil, fmt.Errorf("error iterating %s rows: %w", kind, err)
 	}
-
-	return columns, nil
+	for i := range relations {
+		for pos := 1; pos <= len(pkOrder[relations[i].Name]); pos++ {
+			relations[i].PrimaryKey = append(relations[i].PrimaryKey, pkOrder[relations[i].Name][pos])
+		}
+	}
+	return relations, nil
 }
 
 // sqliteDefaultSchema is the default schema name for SQLite (PRAGMA database_list reports "main").
 const sqliteDefaultSchema = "main"
 
-// discoverForeignKeys returns a map of local column name to referenced (schema, table, column) for the given table.
-func (d *Dialect) discoverForeignKeys(ctx context.Context, db *sql.DB, relationName string) (map[string]core.ForeignKeyRef, error) {
-	query := fmt.Sprintf("PRAGMA foreign_key_list(%q)", relationName)
-	rows, err := db.QueryContext(ctx, query)
+// foreignKeys maps each table to its local column -> referenced column, in one
+// query over every table.
+func (d *Dialect) foreignKeys(ctx context.Context, db *sql.DB) (map[string]map[string]core.ForeignKeyRef, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT m.name, f."from", f."table", f."to"
+		FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) f
+		WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query foreign keys: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	result := make(map[string]core.ForeignKeyRef)
+	result := make(map[string]map[string]core.ForeignKeyRef)
 	for rows.Next() {
-		var id, seq int
-		var refTable, fromCol, toCol string
-		if err := rows.Scan(&id, &seq, &refTable, &fromCol, &toCol); err != nil {
+		var table, fromCol, refTable string
+		var toCol sql.NullString
+		if err := rows.Scan(&table, &fromCol, &refTable, &toCol); err != nil {
 			return nil, fmt.Errorf("failed to scan foreign key row: %w", err)
 		}
-		result[fromCol] = core.ForeignKeyRef{
+		if result[table] == nil {
+			result[table] = make(map[string]core.ForeignKeyRef)
+		}
+		result[table][fromCol] = core.ForeignKeyRef{
 			SchemaName: sqliteDefaultSchema,
 			TableName:  refTable,
-			ColumnName: toCol,
+			ColumnName: getString(toCol),
 		}
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating foreign key rows: %w", err)
 	}
-
 	return result, nil
 }
 
 // GetIndexes returns all indexes in the SQLite database.
 // The schema parameter is ignored as SQLite only has "main".
 func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]core.IndexInfo, error) {
+	// One query: pragma_index_xinfo joined to sqlite_master, rather than one per index.
 	rows, err := db.QueryContext(ctx, `
-        SELECT name, tbl_name, sql
-        FROM sqlite_master
-        WHERE type = 'index'
-        ORDER BY tbl_name, name;
-    `)
+		SELECT m.name, m.tbl_name, m.sql, x.seqno, x.name, x.coll, x."desc"
+		FROM sqlite_master m LEFT JOIN pragma_index_xinfo(m.name) x
+		WHERE m.type = 'index'
+		ORDER BY m.tbl_name, m.name, x.seqno`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query indexes: %w", err)
 	}
@@ -260,65 +157,36 @@ func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]
 
 	var indexes []core.IndexInfo
 	for rows.Next() {
-		var indexName, tableName, indexSQL sql.NullString
-		if err := rows.Scan(&indexName, &tableName, &indexSQL); err != nil {
+		var indexName, tableName, indexSQL, colName, colCollation sql.NullString
+		var seqNo, isDesc sql.NullInt64
+		if err := rows.Scan(&indexName, &tableName, &indexSQL, &seqNo, &colName, &colCollation, &isDesc); err != nil {
 			return nil, fmt.Errorf("failed to scan index: %w", err)
 		}
-
 		if !indexName.Valid {
 			continue
 		}
-
-		indexInfoRows, err := db.QueryContext(ctx, `
-			SELECT seqno, cid, "key", name, coll, desc
-			FROM pragma_index_xinfo(?)
-			ORDER BY seqno ASC;
-		`, indexName.String)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query index columns: %w", err)
-		}
-		defer func() { _ = indexInfoRows.Close() }()
-
-		var columnInfos []core.IndexColumnInfo
-		for indexInfoRows.Next() {
-			var seqNo, colID, isKey, isDesc sql.NullInt64
-			var colName, colCollation sql.NullString
-
-			if err := indexInfoRows.Scan(&seqNo, &colID, &isKey, &colName, &colCollation, &isDesc); err != nil {
-				return nil, fmt.Errorf("failed to scan index column: %w", err)
-			}
-
-			if !colName.Valid {
-				continue
-			}
-
-			position := int(getInt64(seqNo)) + 1
-			descending := getInt64(isDesc) != 0
-
-			columnInfos = append(columnInfos, core.IndexColumnInfo{
-				Name:       colName.String,
-				Position:   position,
-				Collation:  getString(colCollation),
-				Descending: descending,
+		if len(indexes) == 0 || indexes[len(indexes)-1].Name != indexName.String {
+			indexes = append(indexes, core.IndexInfo{
+				Name:      indexName.String,
+				TableName: getString(tableName),
+				DDL:       getString(indexSQL),
 			})
 		}
-
-		if err := indexInfoRows.Err(); err != nil {
-			return nil, fmt.Errorf("error iterating index column rows: %w", err)
+		// An expression or the rowid has no column name.
+		if !colName.Valid {
+			continue
 		}
-
-		indexes = append(indexes, core.IndexInfo{
-			Name:      indexName.String,
-			TableName: getString(tableName),
-			DDL:       getString(indexSQL),
-			Columns:   columnInfos,
+		idx := &indexes[len(indexes)-1]
+		idx.Columns = append(idx.Columns, core.IndexColumnInfo{
+			Name:       colName.String,
+			Position:   int(getInt64(seqNo)) + 1,
+			Collation:  getString(colCollation),
+			Descending: getInt64(isDesc) != 0,
 		})
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating index rows: %w", err)
 	}
-
 	return indexes, nil
 }
 
@@ -359,14 +227,10 @@ func (d *Dialect) GetTriggers(ctx context.Context, db *sql.DB, schema string) ([
 	return triggers, nil
 }
 
-// GetStats returns statistics for tables and indexes in the SQLite database.
+// GetStats returns what the last ANALYZE left in sqlite_stat1, if anything:
+// reading a schema never writes to the database.
 // The schema parameter is ignored as SQLite only has "main".
 func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, schema string) (core.TableStats, error) {
-	_, err := db.ExecContext(ctx, "ANALYZE")
-	if err != nil {
-		return nil, fmt.Errorf("failed to run ANALYZE: %w", err)
-	}
-
 	query := `
         SELECT tbl, idx, stat
         FROM sqlite_stat1

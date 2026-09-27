@@ -39,7 +39,6 @@ func GetOrFetch(
 	dialect core.SQLDialect,
 	dbName string,
 	refresh bool,
-	maxConcurrency ...int,
 ) (*core.Metadata, error) {
 	key := connect.WorkspaceCacheKey(workspaceID, dsn)
 
@@ -48,7 +47,7 @@ func GetOrFetch(
 	}
 
 	meta, err := metadataCache.GetOrCreate(key, func() (any, error) {
-		return Fetch(ctx, db, dialect, dbName, maxConcurrency...)
+		return Fetch(ctx, db, dialect, dbName)
 	})
 	if err != nil {
 		return nil, err
