@@ -26,12 +26,12 @@ func QueryHandler(dir string) http.HandlerFunc {
 		}
 		grant := GetGrant(r)
 		w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-		inner := arrowstream.NewSink(w)
-		defer inner.Close()
+		stream := arrowstream.NewSink(w)
+		defer stream.Close()
 		if f, ok := w.(http.Flusher); ok {
-			inner.SetDownstreamFlusher(f.Flush)
+			stream.SetDownstreamFlusher(f.Flush)
 		}
-		sink := classifiedSink{Sink: inner, ctx: r.Context(), grant: grant}
+		sink := classifiedSink{Sink: stream, ctx: r.Context(), grant: grant}
 		conn, err := Open(dir, grant)
 		if err != nil {
 			sink.OnError(err)

@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"errors"
-	"log"
+	"fmt"
 
 	"backend/internal/utils"
 
@@ -56,7 +56,6 @@ func asToolError(err error) *toolError {
 	if errors.As(err, &coded) && coded.Code != "" {
 		return &toolError{Code: coded.Code, Message: coded.Message}
 	}
-	ref := utils.GenerateRequestID()
-	log.Printf("mcp: internal error ref=%s: %v", ref, err)
+	ref := utils.LogWithRef(fmt.Sprintf("mcp: internal error: %v", err))
 	return &toolError{Code: "internal", Message: "internal error", Ref: ref}
 }

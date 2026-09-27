@@ -1,9 +1,10 @@
 package cellar
 
 import (
-	server "backend/internal/cellar"
 	"net/url"
 	"strconv"
+
+	server "backend/internal/cellar"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 )

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"backend/internal/utils"
 
@@ -46,8 +45,13 @@ func classify(ctx context.Context, err error, grant Grant) *arrowstream.Error {
 			return &arrowstream.Error{Code: CodeUnavailable, Message: "database busy, retry"}
 		}
 	}
-	ref := utils.GenerateRequestID()
-	log.Printf("cellar: datasource %s ref=%s: %v", grant.DatasourceID, ref, err)
+	return InternalError(fmt.Sprintf("cellar: datasource %s: %v", grant.DatasourceID, err))
+}
+
+// InternalError logs detail under a ref and returns the error the caller sees,
+// which names only the ref.
+func InternalError(detail string) *arrowstream.Error {
+	ref := utils.LogWithRef(detail)
 	return &arrowstream.Error{Code: CodeInternal, Message: "internal error, ref " + ref}
 }
 

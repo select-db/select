@@ -18,7 +18,6 @@ import (
 
 	"backend/internal/auth"
 	server "backend/internal/cellar"
-	"backend/internal/utils"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/selectDb/dialect/sqlite"
@@ -190,13 +189,12 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 		// Failures inside a query arrive in the stream, already classified;
 		// only the cellar's middlewares answer with a status.
 		defer func() { _ = resp.Body.Close() }()
+		// InFlight answers 408 when no slot freed up within the statement's time.
 		if resp.StatusCode == http.StatusRequestTimeout {
-			return nil, &arrowstream.Error{Code: server.CodeUnavailable, Message: "managed database busy: no free slot in time, retry"}
+			return nil, &arrowstream.Error{Code: server.CodeTimeout, Message: "managed database busy: no free slot within the time limit, retry"}
 		}
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		ref := utils.GenerateRequestID()
-		log.Printf("cellar: %s ref=%s: %d %s", c.path, ref, resp.StatusCode, strings.TrimSpace(string(msg)))
-		return nil, &arrowstream.Error{Code: server.CodeInternal, Message: "internal error, ref " + ref}
+		return nil, server.InternalError(fmt.Sprintf("cellar: %s: %d %s", c.path, resp.StatusCode, strings.TrimSpace(string(msg))))
 	}
 	return resp.Body, nil
 }

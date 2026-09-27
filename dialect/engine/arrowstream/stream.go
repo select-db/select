@@ -74,8 +74,8 @@ func (s *Stream) Columns() ([]string, error) {
 	meta := reader.Schema().Metadata()
 
 	// Check for immediate error (query failed before any rows)
-	if idx := meta.FindKey("error"); idx >= 0 {
-		s.streamErr = errorFrom(meta)
+	if e := errorFrom(meta); e != nil {
+		s.streamErr = e
 		s.done = true
 		reader.Release()
 		return nil, s.streamErr
@@ -95,8 +95,8 @@ func (s *Stream) Columns() ([]string, error) {
 			return nil, fmt.Errorf("arrow reader: %w", err)
 		}
 		meta = reader.Schema().Metadata()
-		if idx := meta.FindKey("error"); idx >= 0 {
-			s.streamErr = errorFrom(meta)
+		if e := errorFrom(meta); e != nil {
+			s.streamErr = e
 			s.done = true
 			reader.Release()
 			return nil, s.streamErr
@@ -152,8 +152,8 @@ func (s *Stream) Next() ([]any, bool, error) {
 					s.done = true
 					return nil, false, nil
 				}
-				if idx := meta.FindKey("error"); idx >= 0 {
-					s.streamErr = errorFrom(meta)
+				if e := errorFrom(meta); e != nil {
+					s.streamErr = e
 					s.done = true
 					return nil, false, s.streamErr
 				}
@@ -187,8 +187,8 @@ func (s *Stream) Next() ([]any, bool, error) {
 				s.done = true
 				return nil, false, nil
 			}
-			if idx := meta.FindKey("error"); idx >= 0 {
-				s.streamErr = errorFrom(meta)
+			if e := errorFrom(meta); e != nil {
+				s.streamErr = e
 				s.done = true
 				return nil, false, s.streamErr
 			}

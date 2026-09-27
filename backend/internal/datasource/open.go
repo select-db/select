@@ -1,7 +1,6 @@
 package datasource
 
 import (
-	server "backend/internal/cellar"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
+	"backend/internal/cellar"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
@@ -35,7 +35,7 @@ type Opened struct {
 }
 
 // Open resolves the datasource id for the request's caller. Errors go through
-// OpenError or, in MCP, are matched on ErrNotFound and cellar.ErrOff.
+// OpenError or, in MCP, asToolError.
 func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
 	if err != nil {
@@ -86,13 +86,13 @@ func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, datasou
 
 // codeStatus is the HTTP status of each code a managed database's failure carries.
 var codeStatus = map[string]int{
-	server.CodeSQLError:           http.StatusBadRequest,
-	server.CodeForbiddenStatement: http.StatusBadRequest,
-	server.CodeQuotaExceeded:      http.StatusForbidden,
-	server.CodeTimeout:            http.StatusRequestTimeout,
-	server.CodeUnavailable:        http.StatusServiceUnavailable,
-	server.CodeDisabled:           http.StatusNotImplemented,
-	server.CodeInternal:           http.StatusInternalServerError,
+	cellar.CodeSQLError:           http.StatusBadRequest,
+	cellar.CodeForbiddenStatement: http.StatusBadRequest,
+	cellar.CodeQuotaExceeded:      http.StatusForbidden,
+	cellar.CodeTimeout:            http.StatusRequestTimeout,
+	cellar.CodeUnavailable:        http.StatusServiceUnavailable,
+	cellar.CodeDisabled:           http.StatusNotImplemented,
+	cellar.CodeInternal:           http.StatusInternalServerError,
 }
 
 // openFailure returns the status and the error a caller may see. A managed
