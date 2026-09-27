@@ -18,12 +18,15 @@ func EnrichEnumValues(meta *Metadata) {
 	if meta == nil {
 		return
 	}
-	// Collected once: scanning every type per column is quadratic on large catalogs.
-	var enums []Type
-	for _, s := range meta.Schemas {
-		for _, t := range s.Types {
-			if t.Kind == "e" && len(t.EnumLabels) > 0 {
-				enums = append(enums, t)
+	// Keyed by lowercased Name and Display so each column is one lookup, not a scan.
+	enums := make(map[string][]string)
+	for _, t := range meta.AllTypes() {
+		if t.Kind != "e" || len(t.EnumLabels) == 0 {
+			continue
+		}
+		for _, key := range []string{strings.ToLower(t.Name), strings.ToLower(t.Display)} {
+			if _, taken := enums[key]; !taken && key != "" {
+				enums[key] = t.EnumLabels
 			}
 		}
 	}
@@ -36,7 +39,7 @@ func EnrichEnumValues(meta *Metadata) {
 	}
 }
 
-func enrichTables(enums []Type, tables []Table) {
+func enrichTables(enums map[string][]string, tables []Table) {
 	for ti := range tables {
 		cols := tables[ti].Columns
 		for ci := range cols {
@@ -45,7 +48,7 @@ func enrichTables(enums []Type, tables []Table) {
 	}
 }
 
-func resolveEnumValues(enums []Type, columnType string) []string {
+func resolveEnumValues(enums map[string][]string, columnType string) []string {
 	if vals := ParseInlineEnumValues(columnType); len(vals) > 0 {
 		return vals
 	}
@@ -59,14 +62,11 @@ func resolveEnumValues(enums []Type, columnType string) []string {
 		return nil
 	}
 
-	for _, t := range enums {
-		if strings.EqualFold(t.Name, name) ||
-			strings.EqualFold(t.Display, name) ||
-			strings.EqualFold(t.Display, columnType) {
-			return append([]string(nil), t.EnumLabels...)
-		}
+	labels, ok := enums[strings.ToLower(name)]
+	if !ok {
+		labels = enums[strings.ToLower(columnType)]
 	}
-	return nil
+	return append([]string(nil), labels...)
 }
 
 // ParseInlineEnumValues extracts the quoted members of an inline enum/set

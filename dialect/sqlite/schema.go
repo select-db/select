@@ -25,33 +25,8 @@ func (d *Dialect) GetSchemas(_ context.Context, _ *sql.DB) ([]string, error) {
 
 // The Get methods answer for "main", SQLite's only schema, whatever schemas holds.
 
+// GetTables returns every table with its columns, primary key and foreign keys.
 func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, _ []string) (map[string][]core.Table, error) {
-	v, err := d.readTables(ctx, db)
-	return map[string][]core.Table{sqliteDefaultSchema: v}, err
-}
-
-func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, _ []string) (map[string][]core.Table, error) {
-	v, err := d.readViews(ctx, db)
-	return map[string][]core.Table{sqliteDefaultSchema: v}, err
-}
-
-func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, _ []string) (map[string][]core.IndexInfo, error) {
-	v, err := d.readIndexes(ctx, db)
-	return map[string][]core.IndexInfo{sqliteDefaultSchema: v}, err
-}
-
-func (d *Dialect) GetTriggers(ctx context.Context, db *sql.DB, _ []string) (map[string][]core.TriggerInfo, error) {
-	v, err := d.readTriggers(ctx, db)
-	return map[string][]core.TriggerInfo{sqliteDefaultSchema: v}, err
-}
-
-func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, _ []string) (map[string]core.TableStats, error) {
-	v, err := d.readStats(ctx, db)
-	return map[string]core.TableStats{sqliteDefaultSchema: v}, err
-}
-
-// readTables returns every table with its columns, primary key and foreign keys.
-func (d *Dialect) readTables(ctx context.Context, db *sql.DB) ([]core.Table, error) {
 	tables, err := d.relationsWithColumns(ctx, db, "table")
 	if err != nil {
 		return nil, err
@@ -60,12 +35,13 @@ func (d *Dialect) readTables(ctx context.Context, db *sql.DB) ([]core.Table, err
 	for i := range tables {
 		core.EnrichColumnsWithConstraints(&tables[i].Columns, tables[i].PrimaryKey, foreignKeys[tables[i].Name])
 	}
-	return tables, nil
+	return map[string][]core.Table{sqliteDefaultSchema: tables}, nil
 }
 
-// readViews returns all views in the SQLite database.
-func (d *Dialect) readViews(ctx context.Context, db *sql.DB) ([]core.Table, error) {
-	return d.relationsWithColumns(ctx, db, "view")
+// GetViews returns all views in the SQLite database.
+func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, _ []string) (map[string][]core.Table, error) {
+	views, err := d.relationsWithColumns(ctx, db, "view")
+	return map[string][]core.Table{sqliteDefaultSchema: views}, err
 }
 
 // relationsWithColumns reads every table or view (kind) and its columns in one
@@ -156,8 +132,8 @@ func (d *Dialect) foreignKeys(ctx context.Context, db *sql.DB) (map[string]map[s
 	return result, nil
 }
 
-// readIndexes returns all indexes in the SQLite database.
-func (d *Dialect) readIndexes(ctx context.Context, db *sql.DB) ([]core.IndexInfo, error) {
+// GetIndexes returns all indexes in the SQLite database.
+func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, _ []string) (map[string][]core.IndexInfo, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT m.name, m.tbl_name, m.sql, x.seqno, x.name, x.coll, x."desc"
 		FROM sqlite_master m LEFT JOIN pragma_index_xinfo(m.name, 'main') x
@@ -200,11 +176,11 @@ func (d *Dialect) readIndexes(ctx context.Context, db *sql.DB) ([]core.IndexInfo
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating index rows: %w", err)
 	}
-	return indexes, nil
+	return map[string][]core.IndexInfo{sqliteDefaultSchema: indexes}, nil
 }
 
-// readTriggers returns all triggers in the SQLite database.
-func (d *Dialect) readTriggers(ctx context.Context, db *sql.DB) ([]core.TriggerInfo, error) {
+// GetTriggers returns all triggers in the SQLite database.
+func (d *Dialect) GetTriggers(ctx context.Context, db *sql.DB, _ []string) (map[string][]core.TriggerInfo, error) {
 	query := `
 		SELECT name, tbl_name, sql
 		FROM sqlite_master
@@ -236,12 +212,12 @@ func (d *Dialect) readTriggers(ctx context.Context, db *sql.DB) ([]core.TriggerI
 		return nil, fmt.Errorf("error iterating trigger rows: %w", err)
 	}
 
-	return triggers, nil
+	return map[string][]core.TriggerInfo{sqliteDefaultSchema: triggers}, nil
 }
 
-// readStats returns what the last ANALYZE left in sqlite_stat1, if anything:
+// GetStats returns what the last ANALYZE left in sqlite_stat1, if anything:
 // reading a schema never writes to the database.
-func (d *Dialect) readStats(ctx context.Context, db *sql.DB) (core.TableStats, error) {
+func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, _ []string) (map[string]core.TableStats, error) {
 	query := `
         SELECT tbl, idx, stat
         FROM sqlite_stat1
@@ -249,7 +225,7 @@ func (d *Dialect) readStats(ctx context.Context, db *sql.DB) (core.TableStats, e
 
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		return make(core.TableStats), nil
+		return nil, nil
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -274,7 +250,7 @@ func (d *Dialect) readStats(ctx context.Context, db *sql.DB) (core.TableStats, e
 		return nil, fmt.Errorf("error iterating statistic rows: %w", err)
 	}
 
-	return stats, nil
+	return map[string]core.TableStats{sqliteDefaultSchema: stats}, nil
 }
 
 // GetTypes returns nil; SQLite has no user-defined types per schema.

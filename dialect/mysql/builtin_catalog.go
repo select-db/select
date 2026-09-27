@@ -97,15 +97,12 @@ func enrichBuiltinFunctionsFromHelp(ctx context.Context, db *sql.DB, base []core
 		return base
 	}
 
-	placeholders := make([]string, len(base))
-	args := make([]any, len(base))
+	names := make([]string, len(base))
 	for i, f := range base {
-		placeholders[i] = "?"
-		args[i] = f.Name
+		names[i] = f.Name
 	}
-
-	query := "SELECT name, description FROM mysql.help_topic WHERE name IN (" +
-		strings.Join(placeholders, ",") + ")"
+	in, args := buildInClause(names)
+	query := "SELECT name, description FROM mysql.help_topic WHERE name IN (" + in + ")"
 
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
