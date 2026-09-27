@@ -74,25 +74,28 @@ type SQLDialect interface {
 	// for dialects without a meaningful default (e.g. MySQL).
 	DefaultSchemaName() string
 
-	// GetTables returns all tables in a specific schema.
-	GetTables(ctx context.Context, db *sql.DB, schema string) ([]Table, error)
+	// The Get methods below read every schema in schemas at once and key the
+	// result by schema name, so a load costs the same whatever the schema count.
 
-	// GetViews returns all views in a specific schema.
-	GetViews(ctx context.Context, db *sql.DB, schema string) ([]Table, error)
+	// GetTables returns the tables of each schema.
+	GetTables(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Table, error)
 
-	// GetIndexes returns all indexes in a specific schema.
-	GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]IndexInfo, error)
+	// GetViews returns the views of each schema.
+	GetViews(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Table, error)
 
-	// GetTriggers returns all triggers in a specific schema.
-	GetTriggers(ctx context.Context, db *sql.DB, schema string) ([]TriggerInfo, error)
+	// GetIndexes returns the indexes of each schema.
+	GetIndexes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]IndexInfo, error)
 
-	// GetStats returns statistics for tables and indexes in a specific schema.
-	GetStats(ctx context.Context, db *sql.DB, schema string) (TableStats, error)
+	// GetTriggers returns the triggers of each schema.
+	GetTriggers(ctx context.Context, db *sql.DB, schemas []string) (map[string][]TriggerInfo, error)
 
-	// GetTypes returns types for the given user schema.
-	GetTypes(ctx context.Context, db *sql.DB, schema string) ([]Type, error)
-	// GetFunctions returns callable routines for the given user schema.
-	GetFunctions(ctx context.Context, db *sql.DB, schema string) ([]Function, error)
+	// GetStats returns the table and index statistics of each schema.
+	GetStats(ctx context.Context, db *sql.DB, schemas []string) (map[string]TableStats, error)
+
+	// GetTypes returns the types of each user schema.
+	GetTypes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Type, error)
+	// GetFunctions returns the callable routines of each user schema.
+	GetFunctions(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Function, error)
 	// GetCatalogSchema returns the system/built-in catalog as a fully-populated Schema,
 	// or nil if the dialect does not have one. For PostgreSQL this is pg_catalog
 	// (tables, views, types, functions). For SQLite this is a synthetic schema with

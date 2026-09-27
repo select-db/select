@@ -36,33 +36,34 @@ func Fetch(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName stri
 		currentSchema = defaultSchema
 	}
 
+	tables, err := dialect.GetTables(ctx, db, schemaNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tables: %w", err)
+	}
+	views, err := dialect.GetViews(ctx, db, schemaNames)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get views: %w", err)
+	}
+	// The rest is detail: a dialect or server without it still has a schema.
+	indexes, _ := dialect.GetIndexes(ctx, db, schemaNames)
+	triggers, _ := dialect.GetTriggers(ctx, db, schemaNames)
+	stats, _ := dialect.GetStats(ctx, db, schemaNames)
+	types, _ := dialect.GetTypes(ctx, db, schemaNames)
+	functions, _ := dialect.GetFunctions(ctx, db, schemaNames)
+
 	var schemas []core.Schema
 	for _, name := range schemaNames {
-		tables, err := dialect.GetTables(ctx, db, name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tables for schema %s: %w", name, err)
-		}
-		views, err := dialect.GetViews(ctx, db, name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get views for schema %s: %w", name, err)
-		}
-		// The rest is detail: a dialect or server without it still has a schema.
-		indexes, _ := dialect.GetIndexes(ctx, db, name)
-		triggers, _ := dialect.GetTriggers(ctx, db, name)
-		stats, _ := dialect.GetStats(ctx, db, name)
-		types, _ := dialect.GetTypes(ctx, db, name)
-		functions, _ := dialect.GetFunctions(ctx, db, name)
 		schemas = append(schemas, core.Schema{
 			Name:              name,
-			Tables:            tables,
+			Tables:            tables[name],
 			ForeignTables:     []core.Table{},
-			Views:             views,
+			Views:             views[name],
 			MaterializedViews: []core.Table{},
-			Indexes:           indexes,
-			Triggers:          triggers,
-			Stats:             stats,
-			Types:             types,
-			Functions:         functions,
+			Indexes:           indexes[name],
+			Triggers:          triggers[name],
+			Stats:             stats[name],
+			Types:             types[name],
+			Functions:         functions[name],
 		})
 	}
 

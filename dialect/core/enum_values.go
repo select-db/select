@@ -18,25 +18,34 @@ func EnrichEnumValues(meta *Metadata) {
 	if meta == nil {
 		return
 	}
+	// Collected once: scanning every type per column is quadratic on large catalogs.
+	var enums []Type
+	for _, s := range meta.Schemas {
+		for _, t := range s.Types {
+			if t.Kind == "e" && len(t.EnumLabels) > 0 {
+				enums = append(enums, t)
+			}
+		}
+	}
 	for si := range meta.Schemas {
 		s := &meta.Schemas[si]
-		enrichTables(meta, s.Tables)
-		enrichTables(meta, s.Views)
-		enrichTables(meta, s.MaterializedViews)
-		enrichTables(meta, s.ForeignTables)
+		enrichTables(enums, s.Tables)
+		enrichTables(enums, s.Views)
+		enrichTables(enums, s.MaterializedViews)
+		enrichTables(enums, s.ForeignTables)
 	}
 }
 
-func enrichTables(meta *Metadata, tables []Table) {
+func enrichTables(enums []Type, tables []Table) {
 	for ti := range tables {
 		cols := tables[ti].Columns
 		for ci := range cols {
-			cols[ci].EnumValues = resolveEnumValues(meta, cols[ci].Type)
+			cols[ci].EnumValues = resolveEnumValues(enums, cols[ci].Type)
 		}
 	}
 }
 
-func resolveEnumValues(meta *Metadata, columnType string) []string {
+func resolveEnumValues(enums []Type, columnType string) []string {
 	if vals := ParseInlineEnumValues(columnType); len(vals) > 0 {
 		return vals
 	}
@@ -50,10 +59,7 @@ func resolveEnumValues(meta *Metadata, columnType string) []string {
 		return nil
 	}
 
-	for _, t := range meta.AllTypes() {
-		if t.Kind != "e" || len(t.EnumLabels) == 0 {
-			continue
-		}
+	for _, t := range enums {
 		if strings.EqualFold(t.Name, name) ||
 			strings.EqualFold(t.Display, name) ||
 			strings.EqualFold(t.Display, columnType) {

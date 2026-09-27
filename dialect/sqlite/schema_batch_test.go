@@ -27,7 +27,8 @@ func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 	}
 	d, ctx := NewDialect(), context.Background()
 
-	tables, err := d.GetTables(ctx, db, "main")
+	allTables, err := d.GetTables(ctx, db, []string{"main"})
+	tables := allTables["main"]
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,12 +56,14 @@ func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 		t.Errorf("foreign keys = %v", fk)
 	}
 
-	views, err := d.GetViews(ctx, db, "main")
+	allViews, err := d.GetViews(ctx, db, []string{"main"})
+	views := allViews["main"]
 	if err != nil || len(views) != 1 || len(views[0].Columns) != 2 {
 		t.Fatalf("views = %+v, %v", views, err)
 	}
 
-	indexes, err := d.GetIndexes(ctx, db, "main")
+	allIndexes, err := d.GetIndexes(ctx, db, []string{"main"})
+	indexes := allIndexes["main"]
 	if err != nil {
 		t.Fatal(err)
 	}

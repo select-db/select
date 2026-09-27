@@ -14,13 +14,13 @@ import (
 // @app tags; PK/FK/types come enriched from GetTables.
 func Introspect(ctx context.Context, db *sql.DB, schemas ...string) (RawSchema, error) {
 	d := postgresql.NewDialect()
+	tables, err := d.GetTables(ctx, db, schemas)
+	if err != nil {
+		return RawSchema{}, err
+	}
 	var out RawSchema
 	for _, schema := range schemas {
-		tables, err := d.GetTables(ctx, db, schema)
-		if err != nil {
-			return RawSchema{}, err
-		}
-		for _, t := range tables {
+		for _, t := range tables[schema] {
 			out.Tables = append(out.Tables, mapTable(schema, t))
 		}
 	}

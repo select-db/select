@@ -52,90 +52,104 @@ func (d *Dialect) GetSchemas(ctx context.Context, db *sql.DB) ([]string, error) 
 	return schemas, rows.Err()
 }
 
-// GetTables returns all base tables in the given database with their columns,
+// tableKey names a table or view across databases.
+type tableKey struct{ schema, table string }
+
+// GetTables returns the base tables of each database with their columns,
 // primary keys, foreign keys, and DDL.
-func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
-	const listQuery = `
-		SELECT table_name
+func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Table, error) {
+	out := make(map[string][]core.Table)
+	if len(schemas) == 0 {
+		return out, nil
+	}
+	in, args := buildInClause(schemas)
+	keys, err := listTables(ctx, db, fmt.Sprintf(`
+		SELECT table_schema, table_name
 		FROM information_schema.tables
-		WHERE table_schema = ?
+		WHERE table_schema IN (%s)
 		  AND table_type = 'BASE TABLE'
-		ORDER BY table_name ASC;
-	`
-	rows, err := db.QueryContext(ctx, listQuery, schema)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query tables: %w", err)
-	}
-	var tableNames []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("failed to scan table row: %w", err)
-		}
-		tableNames = append(tableNames, name)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if len(tableNames) == 0 {
-		return nil, nil
+		ORDER BY table_schema, table_name;
+	`, in), args, "tables")
+	if err != nil || len(keys) == 0 {
+		return out, err
 	}
 
-	columnsByTable, err := d.batchColumns(ctx, db, schema, tableNames)
+	columnsByTable, err := d.batchColumns(ctx, db, schemas, "BASE TABLE")
 	if err != nil {
 		return nil, err
 	}
-	pksByTable, err := d.batchPrimaryKeys(ctx, db, schema, tableNames)
+	pksByTable, err := d.batchPrimaryKeys(ctx, db, schemas)
 	if err != nil {
 		return nil, err
 	}
-	fksByTable, err := d.batchForeignKeys(ctx, db, schema, tableNames)
+	fksByTable, err := d.batchForeignKeys(ctx, db, schemas)
 	if err != nil {
 		return nil, err
 	}
-	ddlByTable, err := d.batchTableDDL(ctx, db, schema, tableNames)
+	ddlByTable, err := d.batchTableDDL(ctx, db, keys)
 	if err != nil {
 		return nil, err
 	}
 
-	tables := make([]core.Table, 0, len(tableNames))
-	for _, name := range tableNames {
-		cols := columnsByTable[name]
-		pk := pksByTable[name]
-		fk := fksByTable[name]
-		core.EnrichColumnsWithConstraints(&cols, pk, fk)
-		tables = append(tables, core.Table{
-			Name:       name,
+	for _, k := range keys {
+		cols := columnsByTable[k]
+		pk := pksByTable[k]
+		core.EnrichColumnsWithConstraints(&cols, pk, fksByTable[k])
+		out[k.schema] = append(out[k.schema], core.Table{
+			Name:       k.table,
 			Columns:    cols,
 			PrimaryKey: pk,
-			DDL:        ddlByTable[name],
+			DDL:        ddlByTable[k],
 		})
 	}
-	return tables, nil
+	return out, nil
 }
 
-// batchColumns reads columns for all tables in schema in one round-trip.
-func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string][]core.Column, error) {
-	placeholders, args := buildInClause(tableNames, schema)
-	query := fmt.Sprintf(`
-		SELECT table_name, column_name, column_type, is_nullable, column_default, extra
-		FROM information_schema.columns
-		WHERE table_schema = ? AND table_name IN (%s)
-		ORDER BY table_name, ordinal_position;
-	`, placeholders)
+// listTables runs a query selecting (schema, name) pairs and closes it before
+// returning, so the caller's next query does not hold a second connection.
+func listTables(ctx context.Context, db *sql.DB, query string, args []any, what string) ([]tableKey, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query %s: %w", what, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var keys []tableKey
+	for rows.Next() {
+		var k tableKey
+		if err := rows.Scan(&k.schema, &k.table); err != nil {
+			return nil, fmt.Errorf("failed to scan %s row: %w", what, err)
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
+// batchColumns reads the columns of every table of tableType in schemas in one
+// round trip. The join keeps view columns out of the table load and vice versa.
+func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schemas []string, tableType string) (map[tableKey][]core.Column, error) {
+	in, args := buildInClause(schemas)
+	query := fmt.Sprintf(`
+		SELECT c.table_schema, c.table_name, c.column_name, c.column_type, c.is_nullable, c.column_default, c.extra
+		FROM information_schema.columns c
+		JOIN information_schema.tables t
+		  ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+		WHERE c.table_schema IN (%s) AND t.table_type = ?
+		ORDER BY c.table_schema, c.table_name, c.ordinal_position;
+	`, in)
+	rows, err := db.QueryContext(ctx, query, append(args, tableType)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query columns: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := make(map[string][]core.Column)
+	out := make(map[tableKey][]core.Column)
 	for rows.Next() {
-		var tableName, colName, colType, isNullable string
+		var k tableKey
+		var colName, colType, isNullable string
 		var defaultVal sql.NullString
 		var extra sql.NullString
-		if err := rows.Scan(&tableName, &colName, &colType, &isNullable, &defaultVal, &extra); err != nil {
+		if err := rows.Scan(&k.schema, &k.table, &colName, &colType, &isNullable, &defaultVal, &extra); err != nil {
 			return nil, fmt.Errorf("failed to scan column row: %w", err)
 		}
 		col := core.Column{
@@ -150,63 +164,64 @@ func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schema string, t
 		if extra.Valid && extra.String != "" {
 			col.Extra = map[string]any{"extra": extra.String}
 		}
-		out[tableName] = append(out[tableName], col)
+		out[k] = append(out[k], col)
 	}
 	return out, rows.Err()
 }
 
-// batchPrimaryKeys reads PRIMARY KEY columns for all tables in schema.
-func (d *Dialect) batchPrimaryKeys(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string][]string, error) {
-	placeholders, args := buildInClause(tableNames, schema)
+// batchPrimaryKeys reads PRIMARY KEY columns for all tables in schemas.
+func (d *Dialect) batchPrimaryKeys(ctx context.Context, db *sql.DB, schemas []string) (map[tableKey][]string, error) {
+	in, args := buildInClause(schemas)
 	query := fmt.Sprintf(`
-		SELECT table_name, column_name
+		SELECT table_schema, table_name, column_name
 		FROM information_schema.key_column_usage
-		WHERE table_schema = ? AND table_name IN (%s) AND constraint_name = 'PRIMARY'
-		ORDER BY table_name, ordinal_position;
-	`, placeholders)
+		WHERE table_schema IN (%s) AND constraint_name = 'PRIMARY'
+		ORDER BY table_schema, table_name, ordinal_position;
+	`, in)
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query primary keys: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := make(map[string][]string)
+	out := make(map[tableKey][]string)
 	for rows.Next() {
-		var tableName, colName string
-		if err := rows.Scan(&tableName, &colName); err != nil {
+		var k tableKey
+		var colName string
+		if err := rows.Scan(&k.schema, &k.table, &colName); err != nil {
 			return nil, fmt.Errorf("failed to scan primary key row: %w", err)
 		}
-		out[tableName] = append(out[tableName], colName)
+		out[k] = append(out[k], colName)
 	}
 	return out, rows.Err()
 }
 
-// batchForeignKeys reads foreign-key references for all tables in schema.
-func (d *Dialect) batchForeignKeys(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string]map[string]core.ForeignKeyRef, error) {
-	placeholders, args := buildInClause(tableNames, schema)
+// batchForeignKeys reads foreign-key references for all tables in schemas.
+func (d *Dialect) batchForeignKeys(ctx context.Context, db *sql.DB, schemas []string) (map[tableKey]map[string]core.ForeignKeyRef, error) {
+	in, args := buildInClause(schemas)
 	query := fmt.Sprintf(`
-		SELECT table_name, column_name, referenced_table_schema, referenced_table_name, referenced_column_name
+		SELECT table_schema, table_name, column_name, referenced_table_schema, referenced_table_name, referenced_column_name
 		FROM information_schema.key_column_usage
-		WHERE table_schema = ?
-		  AND table_name IN (%s)
+		WHERE table_schema IN (%s)
 		  AND referenced_table_name IS NOT NULL;
-	`, placeholders)
+	`, in)
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query foreign keys: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := make(map[string]map[string]core.ForeignKeyRef)
+	out := make(map[tableKey]map[string]core.ForeignKeyRef)
 	for rows.Next() {
-		var tableName, colName, refSchema, refTable, refColumn string
-		if err := rows.Scan(&tableName, &colName, &refSchema, &refTable, &refColumn); err != nil {
+		var k tableKey
+		var colName, refSchema, refTable, refColumn string
+		if err := rows.Scan(&k.schema, &k.table, &colName, &refSchema, &refTable, &refColumn); err != nil {
 			return nil, fmt.Errorf("failed to scan foreign key row: %w", err)
 		}
-		if _, ok := out[tableName]; !ok {
-			out[tableName] = make(map[string]core.ForeignKeyRef)
+		if _, ok := out[k]; !ok {
+			out[k] = make(map[string]core.ForeignKeyRef)
 		}
-		out[tableName][colName] = core.ForeignKeyRef{
+		out[k][colName] = core.ForeignKeyRef{
 			SchemaName: refSchema,
 			TableName:  refTable,
 			ColumnName: refColumn,
@@ -216,97 +231,91 @@ func (d *Dialect) batchForeignKeys(ctx context.Context, db *sql.DB, schema strin
 }
 
 // batchTableDDL collects SHOW CREATE TABLE output for every table. One query per
-// table, but the alternative (joining information_schema views) is incomplete.
-func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string]string, error) {
-	out := make(map[string]string, len(tableNames))
-	for _, name := range tableNames {
-		query := fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", escapeBackticks(schema), escapeBackticks(name))
-		row := db.QueryRowContext(ctx, query)
+// table: information_schema cannot rebuild the full statement.
+func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, keys []tableKey) (map[tableKey]string, error) {
+	out := make(map[tableKey]string, len(keys))
+	for _, k := range keys {
+		query := fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", escapeBackticks(k.schema), escapeBackticks(k.table))
 		var tname, ddl string
-		if err := row.Scan(&tname, &ddl); err != nil {
+		if err := db.QueryRowContext(ctx, query).Scan(&tname, &ddl); err != nil {
 			continue
 		}
-		out[name] = ddl
+		out[k] = ddl
 	}
 	return out, nil
 }
 
-// GetViews returns all views in the given database with their columns and DDL.
-func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
-	const listQuery = `
-		SELECT table_name
+// GetViews returns the views of each database with their columns and DDL.
+// DDL stays one SHOW CREATE VIEW per view: information_schema.views has no
+// ALGORITHM and always qualifies names, so it cannot reproduce that output.
+func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Table, error) {
+	out := make(map[string][]core.Table)
+	if len(schemas) == 0 {
+		return out, nil
+	}
+	in, args := buildInClause(schemas)
+	keys, err := listTables(ctx, db, fmt.Sprintf(`
+		SELECT table_schema, table_name
 		FROM information_schema.views
-		WHERE table_schema = ?
-		ORDER BY table_name ASC;
-	`
-	rows, err := db.QueryContext(ctx, listQuery, schema)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query views: %w", err)
-	}
-	var viewNames []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("failed to scan view row: %w", err)
-		}
-		viewNames = append(viewNames, name)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if len(viewNames) == 0 {
-		return nil, nil
+		WHERE table_schema IN (%s)
+		ORDER BY table_schema, table_name;
+	`, in), args, "views")
+	if err != nil || len(keys) == 0 {
+		return out, err
 	}
 
-	columnsByView, err := d.batchColumns(ctx, db, schema, viewNames)
+	columnsByView, err := d.batchColumns(ctx, db, schemas, "VIEW")
 	if err != nil {
 		return nil, err
 	}
 
-	views := make([]core.Table, 0, len(viewNames))
-	for _, name := range viewNames {
+	for _, k := range keys {
 		var ddl string
-		row := db.QueryRowContext(ctx, fmt.Sprintf("SHOW CREATE VIEW `%s`.`%s`", escapeBackticks(schema), escapeBackticks(name)))
+		row := db.QueryRowContext(ctx, fmt.Sprintf("SHOW CREATE VIEW `%s`.`%s`", escapeBackticks(k.schema), escapeBackticks(k.table)))
 		var vname, viewDDL string
 		var charset, collation sql.NullString
 		if err := row.Scan(&vname, &viewDDL, &charset, &collation); err == nil {
 			ddl = viewDDL
 		}
-		views = append(views, core.Table{
-			Name:    name,
-			Columns: columnsByView[name],
+		out[k.schema] = append(out[k.schema], core.Table{
+			Name:    k.table,
+			Columns: columnsByView[k],
 			DDL:     ddl,
 		})
 	}
-	return views, nil
+	return out, nil
 }
 
-// GetIndexes returns all indexes in the given database, grouped by index name.
-func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]core.IndexInfo, error) {
-	const query = `
-		SELECT table_name, index_name, seq_in_index, column_name, collation
+// GetIndexes returns the indexes of each database, grouped by index name.
+func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.IndexInfo, error) {
+	out := make(map[string][]core.IndexInfo)
+	if len(schemas) == 0 {
+		return out, nil
+	}
+	in, args := buildInClause(schemas)
+	query := fmt.Sprintf(`
+		SELECT table_schema, table_name, index_name, seq_in_index, column_name, collation
 		FROM information_schema.statistics
-		WHERE table_schema = ?
-		ORDER BY table_name, index_name, seq_in_index;
-	`
-	rows, err := db.QueryContext(ctx, query, schema)
+		WHERE table_schema IN (%s)
+		ORDER BY table_schema, table_name, index_name, seq_in_index;
+	`, in)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query indexes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	type indexKey struct{ table, name string }
+	type indexKey struct{ schema, table, name string }
 	indexMap := make(map[indexKey]*core.IndexInfo)
 	var order []indexKey
 	for rows.Next() {
-		var tableName, indexName, columnName string
+		var schema, tableName, indexName, columnName string
 		var seqInIndex int
 		var collation sql.NullString
-		if err := rows.Scan(&tableName, &indexName, &seqInIndex, &columnName, &collation); err != nil {
+		if err := rows.Scan(&schema, &tableName, &indexName, &seqInIndex, &columnName, &collation); err != nil {
 			return nil, fmt.Errorf("failed to scan index row: %w", err)
 		}
-		key := indexKey{tableName, indexName}
+		key := indexKey{schema, tableName, indexName}
 		idx, ok := indexMap[key]
 		if !ok {
 			idx = &core.IndexInfo{Name: indexName, TableName: tableName}
@@ -324,90 +333,106 @@ func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]
 		return nil, err
 	}
 
-	out := make([]core.IndexInfo, 0, len(order))
 	for _, k := range order {
-		out = append(out, *indexMap[k])
+		out[k.schema] = append(out[k.schema], *indexMap[k])
 	}
 	return out, nil
 }
 
-// GetTriggers returns all triggers in the given database.
-func (d *Dialect) GetTriggers(ctx context.Context, db *sql.DB, schema string) ([]core.TriggerInfo, error) {
-	const query = `
-		SELECT trigger_name, event_object_table, action_statement, action_timing, event_manipulation
+// GetTriggers returns the triggers of each database.
+func (d *Dialect) GetTriggers(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.TriggerInfo, error) {
+	out := make(map[string][]core.TriggerInfo)
+	if len(schemas) == 0 {
+		return out, nil
+	}
+	in, args := buildInClause(schemas)
+	query := fmt.Sprintf(`
+		SELECT trigger_schema, trigger_name, event_object_table, action_statement, action_timing, event_manipulation
 		FROM information_schema.triggers
-		WHERE trigger_schema = ?
-		ORDER BY trigger_name ASC;
-	`
-	rows, err := db.QueryContext(ctx, query, schema)
+		WHERE trigger_schema IN (%s)
+		ORDER BY trigger_schema, trigger_name;
+	`, in)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query triggers: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var triggers []core.TriggerInfo
 	for rows.Next() {
-		var name, tableName, action, timing, event string
-		if err := rows.Scan(&name, &tableName, &action, &timing, &event); err != nil {
+		var schema, name, tableName, action, timing, event string
+		if err := rows.Scan(&schema, &name, &tableName, &action, &timing, &event); err != nil {
 			return nil, fmt.Errorf("failed to scan trigger row: %w", err)
 		}
 		ddl := fmt.Sprintf("CREATE TRIGGER `%s` %s %s ON `%s` FOR EACH ROW %s", name, timing, event, tableName, action)
-		triggers = append(triggers, core.TriggerInfo{
+		out[schema] = append(out[schema], core.TriggerInfo{
 			Name:      name,
 			TableName: tableName,
 			DDL:       ddl,
 		})
 	}
-	return triggers, rows.Err()
+	return out, rows.Err()
 }
 
-// GetStats returns approximate row counts and data sizes per table.
-func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, schema string) (core.TableStats, error) {
-	const query = `
-		SELECT table_name, table_rows, data_length, index_length
+// GetStats returns approximate row counts and data sizes per table of each database.
+func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, schemas []string) (map[string]core.TableStats, error) {
+	out := make(map[string]core.TableStats)
+	if len(schemas) == 0 {
+		return out, nil
+	}
+	in, args := buildInClause(schemas)
+	query := fmt.Sprintf(`
+		SELECT table_schema, table_name, table_rows, data_length, index_length
 		FROM information_schema.tables
-		WHERE table_schema = ?;
-	`
-	rows, err := db.QueryContext(ctx, query, schema)
+		WHERE table_schema IN (%s);
+	`, in)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query stats: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	stats := make(core.TableStats)
 	for rows.Next() {
-		var name string
+		var schema, name string
 		var tableRows, dataLen, indexLen sql.NullInt64
-		if err := rows.Scan(&name, &tableRows, &dataLen, &indexLen); err != nil {
+		if err := rows.Scan(&schema, &name, &tableRows, &dataLen, &indexLen); err != nil {
 			return nil, fmt.Errorf("failed to scan stats row: %w", err)
+		}
+		stats, ok := out[schema]
+		if !ok {
+			stats = make(core.TableStats)
+			out[schema] = stats
 		}
 		stats[name] = fmt.Sprintf("rows=%d data_length=%d index_length=%d", tableRows.Int64, dataLen.Int64, indexLen.Int64)
 	}
-	return stats, rows.Err()
+	return out, rows.Err()
 }
 
-// GetTypes returns one synthetic Type per ENUM or SET column in schema, so
-// the editor's Types tree exposes them as named entries. MySQL has no
+// GetTypes returns one synthetic Type per ENUM or SET column of each database,
+// so the editor's Types tree exposes them as named entries. MySQL has no
 // CREATE TYPE, so these are derived from information_schema.columns instead
 // of a system catalog. Name is "<table>_<column>" to avoid collisions when
 // two tables share a column name with different value sets.
-func (d *Dialect) GetTypes(ctx context.Context, db *sql.DB, schema string) ([]core.Type, error) {
-	const query = `
-		SELECT table_name, column_name, data_type, column_type
+func (d *Dialect) GetTypes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Type, error) {
+	out := make(map[string][]core.Type)
+	if len(schemas) == 0 {
+		return out, nil
+	}
+	in, args := buildInClause(schemas)
+	query := fmt.Sprintf(`
+		SELECT table_schema, table_name, column_name, data_type, column_type
 		FROM information_schema.columns
-		WHERE table_schema = ? AND data_type IN ('enum','set')
-		ORDER BY table_name, column_name;
-	`
-	rows, err := db.QueryContext(ctx, query, schema)
+		WHERE table_schema IN (%s) AND data_type IN ('enum','set')
+		ORDER BY table_schema, table_name, column_name;
+	`, in)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query enum/set columns: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []core.Type
 	for rows.Next() {
-		var table, column, dataType, columnType string
-		if err := rows.Scan(&table, &column, &dataType, &columnType); err != nil {
+		var schema, table, column, dataType, columnType string
+		if err := rows.Scan(&schema, &table, &column, &dataType, &columnType); err != nil {
 			return nil, fmt.Errorf("failed to scan enum/set row: %w", err)
 		}
 		// "e" matches the convention EnrichEnumValues uses for named-enum
@@ -416,7 +441,7 @@ func (d *Dialect) GetTypes(ctx context.Context, db *sql.DB, schema string) ([]co
 		if dataType == "set" {
 			kind = "set"
 		}
-		out = append(out, core.Type{
+		out[schema] = append(out[schema], core.Type{
 			Schema:     schema,
 			Name:       table + "_" + column,
 			Kind:       kind,
@@ -427,28 +452,32 @@ func (d *Dialect) GetTypes(ctx context.Context, db *sql.DB, schema string) ([]co
 	return out, rows.Err()
 }
 
-// GetFunctions returns stored functions and procedures from the given database.
+// GetFunctions returns stored functions and procedures of each database.
 // Args come from information_schema.parameters, joined in Go to avoid
 // GROUP_CONCAT truncation on long signatures. Result uses dtd_identifier so
 // length/precision are preserved (e.g. varchar(50) not varchar). Description
 // is the routine's COMMENT clause, not its body.
-func (d *Dialect) GetFunctions(ctx context.Context, db *sql.DB, schema string) ([]core.Function, error) {
-	const routinesQuery = `
-		SELECT routine_name, routine_type, COALESCE(dtd_identifier, ''), COALESCE(routine_comment, '')
+func (d *Dialect) GetFunctions(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Function, error) {
+	out := make(map[string][]core.Function)
+	if len(schemas) == 0 {
+		return out, nil
+	}
+	in, args := buildInClause(schemas)
+	query := fmt.Sprintf(`
+		SELECT routine_schema, routine_name, routine_type, COALESCE(dtd_identifier, ''), COALESCE(routine_comment, '')
 		FROM information_schema.routines
-		WHERE routine_schema = ?
-		ORDER BY routine_name ASC;
-	`
-	rows, err := db.QueryContext(ctx, routinesQuery, schema)
+		WHERE routine_schema IN (%s)
+		ORDER BY routine_schema, routine_name;
+	`, in)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query routines: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var fns []core.Function
 	for rows.Next() {
-		var name, kind, result, comment string
-		if err := rows.Scan(&name, &kind, &result, &comment); err != nil {
+		var schema, name, kind, result, comment string
+		if err := rows.Scan(&schema, &name, &kind, &result, &comment); err != nil {
+			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan routine row: %w", err)
 		}
 		fns = append(fns, core.Function{
@@ -460,52 +489,59 @@ func (d *Dialect) GetFunctions(ctx context.Context, db *sql.DB, schema string) (
 		})
 	}
 	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
 		return nil, err
 	}
 	if len(fns) == 0 {
-		return nil, nil
+		return out, nil
 	}
 
-	argsByRoutine, err := d.batchRoutineArgs(ctx, db, schema)
+	argsByRoutine, err := d.batchRoutineArgs(ctx, db, schemas)
 	if err != nil {
 		return nil, err
 	}
-	for i := range fns {
-		fns[i].Args = argsByRoutine[fns[i].Name]
+	for _, fn := range fns {
+		fn.Args = argsByRoutine[tableKey{fn.Schema, fn.Name}]
+		out[fn.Schema] = append(out[fn.Schema], fn)
 	}
-	return fns, nil
+	return out, nil
 }
 
-// batchRoutineArgs reads parameter rows for every routine in the schema and
+// batchRoutineArgs reads parameter rows for every routine in schemas and
 // builds a postgres-style "mode name type, ..." signature per routine. The
 // ordinal_position = 0 row (function return value) is skipped; Result already
 // carries that information.
-func (d *Dialect) batchRoutineArgs(ctx context.Context, db *sql.DB, schema string) (map[string]string, error) {
-	const query = `
-		SELECT specific_name, parameter_mode, COALESCE(parameter_name, ''), dtd_identifier
+func (d *Dialect) batchRoutineArgs(ctx context.Context, db *sql.DB, schemas []string) (map[tableKey]string, error) {
+	in, args := buildInClause(schemas)
+	query := fmt.Sprintf(`
+		SELECT specific_schema, specific_name, parameter_mode, COALESCE(parameter_name, ''), dtd_identifier
 		FROM information_schema.parameters
-		WHERE specific_schema = ? AND ordinal_position > 0
-		ORDER BY specific_name, ordinal_position;
-	`
-	rows, err := db.QueryContext(ctx, query, schema)
+		WHERE specific_schema IN (%s) AND ordinal_position > 0
+		ORDER BY specific_schema, specific_name, ordinal_position;
+	`, in)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query routine parameters: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	parts := make(map[string][]string)
+	parts := make(map[tableKey][]string)
 	for rows.Next() {
-		var routine, mode, name, dtype string
-		if err := rows.Scan(&routine, &mode, &name, &dtype); err != nil {
+		var k tableKey
+		var mode, name, dtype string
+		if err := rows.Scan(&k.schema, &k.table, &mode, &name, &dtype); err != nil {
 			return nil, fmt.Errorf("failed to scan parameter row: %w", err)
 		}
-		parts[routine] = append(parts[routine], formatParam(mode, name, dtype))
+		parts[k] = append(parts[k], formatParam(mode, name, dtype))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	out := make(map[string]string, len(parts))
+	out := make(map[tableKey]string, len(parts))
 	for routine, ps := range parts {
 		out[routine] = strings.Join(ps, ", ")
 	}
@@ -564,15 +600,14 @@ func (d *Dialect) GetSettings(ctx context.Context, db *sql.DB) ([]core.Setting, 
 	return out, rows.Err()
 }
 
-// buildInClause returns "?, ?, ?, ..." and the prefixed args slice
-// ([schema, name1, name2, ...]) for IN(...) queries scoped to a schema.
-func buildInClause(names []string, schema string) (string, []any) {
-	placeholders := make([]string, len(names))
-	args := make([]any, 0, len(names)+1)
-	args = append(args, schema)
-	for i, n := range names {
+// buildInClause returns "?, ?, ..." with one placeholder per value, and the
+// values as query args, so names are never spliced into the SQL text.
+func buildInClause(values []string) (string, []any) {
+	placeholders := make([]string, len(values))
+	args := make([]any, len(values))
+	for i, v := range values {
 		placeholders[i] = "?"
-		args = append(args, n)
+		args[i] = v
 	}
 	return strings.Join(placeholders, ", "), args
 }

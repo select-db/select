@@ -71,83 +71,83 @@ func (d *Dialect) GetSchemas(ctx context.Context, db *sql.DB) ([]string, error) 
 	return schemas, rows.Err()
 }
 
-// GetTables returns all tables in the specified PostgreSQL schema.
-// Uses 5 bulk queries total regardless of table count (was 5×N previously).
-func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
-	// Phase 1: list table names
+// relKey identifies a relation across the schemas of one batch query.
+type relKey struct{ schema, name string }
+
+// GetTables returns the tables of each schema in five queries, whatever the
+// number of schemas or tables.
+func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Table, error) {
 	const listQuery = `
-		SELECT c.relname, pg_catalog.obj_description(c.oid, 'pg_class')
+		SELECT n.nspname, c.relname, pg_catalog.obj_description(c.oid, 'pg_class')
 		FROM pg_catalog.pg_class AS c
 		JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
-		WHERE n.nspname = $1
+		WHERE n.nspname = ANY($1::text[])
 		  AND c.relkind IN ('r', 'p')
-		ORDER BY c.relname ASC;
+		ORDER BY n.nspname, c.relname ASC;
 	`
-	rows, err := db.QueryContext(ctx, listQuery, schema)
+	rows, err := db.QueryContext(ctx, listQuery, pq.Array(schemas))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query tables: %w", err)
 	}
-	var tableNames []string
-	tableComments := make(map[string]string)
+	var keys []relKey
+	tableComments := make(map[relKey]string)
 	for rows.Next() {
-		var name string
+		var k relKey
 		var comment sql.NullString
-		if err := rows.Scan(&name, &comment); err != nil {
+		if err := rows.Scan(&k.schema, &k.name, &comment); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan table row: %w", err)
 		}
-		tableNames = append(tableNames, name)
-		tableComments[name] = comment.String
+		keys = append(keys, k)
+		tableComments[k] = comment.String
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
 
-	if len(tableNames) == 0 {
-		return nil, nil
+	if len(keys) == 0 {
+		return map[string][]core.Table{}, nil
 	}
 
-	// Phase 2: bulk-fetch columns, PKs, FKs, DDL, in order on one connection.
-	allColumns, err := d.batchColumns(ctx, db, schema, tableNames)
+	allColumns, err := d.batchColumns(ctx, db, schemas, []string{"r", "p"})
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch columns: %w", err)
 	}
-	allPKs, err := d.batchPrimaryKeys(ctx, db, schema, tableNames)
+	allPKs, err := d.batchPrimaryKeys(ctx, db, schemas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch primary keys: %w", err)
 	}
-	allFKs, err := d.batchForeignKeys(ctx, db, schema, tableNames)
+	allFKs, err := d.batchForeignKeys(ctx, db, schemas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch foreign keys: %w", err)
 	}
-	allDDLs, err := d.batchTableDDL(ctx, db, schema, tableNames)
+	allDDLs, err := d.batchTableDDL(ctx, db, schemas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch table DDL: %w", err)
 	}
 
-	// Phase 3: assemble
-	tables := make([]core.Table, 0, len(tableNames))
-	for _, name := range tableNames {
-		cols := allColumns[name]
-		pk := allPKs[name]
-		fk := allFKs[name]
-		core.EnrichColumnsWithConstraints(&cols, pk, fk)
-		tables = append(tables, core.Table{
-			Name:        name,
+	tables := make(map[string][]core.Table)
+	for _, k := range keys {
+		cols := allColumns[k]
+		pk := allPKs[k]
+		core.EnrichColumnsWithConstraints(&cols, pk, allFKs[k])
+		tables[k.schema] = append(tables[k.schema], core.Table{
+			Name:        k.name,
 			Columns:     cols,
 			PrimaryKey:  pk,
-			DDL:         allDDLs[name],
-			Description: tableComments[name],
+			DDL:         allDDLs[k],
+			Description: tableComments[k],
 		})
 	}
 	return tables, nil
 }
 
-// batchColumns fetches columns for all given tables in one query.
-// Returns map[tableName][]Column.
-func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string][]core.Column, error) {
+// batchColumns fetches the columns of every relation of the given relkinds in
+// the given schemas in one query.
+func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schemas, relkinds []string) (map[relKey][]core.Column, error) {
 	const query = `
 		SELECT
+			n.nspname,
 			c.relname,
 			a.attname,
 			pg_catalog.format_type(a.atttypid, a.atttypmod),
@@ -158,71 +158,73 @@ func (d *Dialect) batchColumns(ctx context.Context, db *sql.DB, schema string, t
 		JOIN pg_catalog.pg_class AS c ON c.oid = a.attrelid
 		JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
 		LEFT JOIN pg_catalog.pg_attrdef AS ad ON ad.adrelid = c.oid AND ad.adnum = a.attnum
-		WHERE n.nspname = $1
-		  AND c.relname = ANY($2::text[])
+		WHERE n.nspname = ANY($1::text[])
+		  AND c.relkind::text = ANY($2::text[])
 		  AND a.attnum > 0
 		  AND NOT a.attisdropped
-		ORDER BY c.relname, a.attnum;
+		ORDER BY n.nspname, c.relname, a.attnum;
 	`
-	rows, err := db.QueryContext(ctx, query, schema, pq.Array(tableNames))
+	rows, err := db.QueryContext(ctx, query, pq.Array(schemas), pq.Array(relkinds))
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
-	result := make(map[string][]core.Column, len(tableNames))
+	result := make(map[relKey][]core.Column)
 	for rows.Next() {
-		var tableName, colName, dataType string
+		var k relKey
+		var colName, dataType string
 		var notNull bool
 		var colDefault, colComment sql.NullString
-		if err := rows.Scan(&tableName, &colName, &dataType, &notNull, &colDefault, &colComment); err != nil {
+		if err := rows.Scan(&k.schema, &k.name, &colName, &dataType, &notNull, &colDefault, &colComment); err != nil {
 			return nil, err
 		}
 		col := core.Column{Name: colName, Type: dataType, Nullable: !notNull, Description: colComment.String}
 		if colDefault.Valid && colDefault.String != "" {
 			col.Default = &colDefault.String
 		}
-		result[tableName] = append(result[tableName], col)
+		result[k] = append(result[k], col)
 	}
 	return result, rows.Err()
 }
 
-// batchPrimaryKeys fetches primary key columns for all given tables in one query.
-// Returns map[tableName][]columnName.
-func (d *Dialect) batchPrimaryKeys(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string][]string, error) {
+// batchPrimaryKeys fetches the primary key columns of every table in the
+// given schemas in one query.
+func (d *Dialect) batchPrimaryKeys(ctx context.Context, db *sql.DB, schemas []string) (map[relKey][]string, error) {
 	const query = `
-		SELECT c.relname, a.attname
+		SELECT n.nspname, c.relname, a.attname
 		FROM pg_constraint con
 		JOIN pg_class c ON c.oid = con.conrelid
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(con.conkey)
 		WHERE con.contype = 'p'
-		  AND n.nspname = $1
-		  AND c.relname = ANY($2::text[])
-		ORDER BY c.relname, array_position(con.conkey, a.attnum);
+		  AND n.nspname = ANY($1::text[])
+		ORDER BY n.nspname, c.relname, array_position(con.conkey, a.attnum);
 	`
-	rows, err := db.QueryContext(ctx, query, schema, pq.Array(tableNames))
+	rows, err := db.QueryContext(ctx, query, pq.Array(schemas))
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
-	result := make(map[string][]string)
+	result := make(map[relKey][]string)
 	for rows.Next() {
-		var tableName, colName string
-		if err := rows.Scan(&tableName, &colName); err != nil {
+		var k relKey
+		var colName string
+		if err := rows.Scan(&k.schema, &k.name, &colName); err != nil {
 			return nil, err
 		}
-		result[tableName] = append(result[tableName], colName)
+		result[k] = append(result[k], colName)
 	}
 	return result, rows.Err()
 }
 
-// batchForeignKeys fetches foreign key relationships for all given tables in one query.
-// Returns map[tableName]map[localColumn]ForeignKeyRef.
-func (d *Dialect) batchForeignKeys(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string]map[string]core.ForeignKeyRef, error) {
+// batchForeignKeys fetches the foreign keys of every table in the given
+// schemas in one query, as local column to referenced column.
+func (d *Dialect) batchForeignKeys(ctx context.Context, db *sql.DB, schemas []string) (map[relKey]map[string]core.ForeignKeyRef, error) {
 	const query = `
 		SELECT
+			n.nspname,
 			c.relname,
 			a.attname,
 			ref_n.nspname,
@@ -238,25 +240,25 @@ func (d *Dialect) batchForeignKeys(ctx context.Context, db *sql.DB, schema strin
 		JOIN pg_catalog.pg_namespace AS ref_n ON ref_n.oid = ref_c.relnamespace
 		JOIN pg_catalog.pg_attribute AS ref_a ON ref_a.attrelid = ref_c.oid AND ref_a.attnum = r.attnum AND NOT ref_a.attisdropped AND ref_a.attnum > 0
 		WHERE con.contype = 'f'
-		  AND n.nspname = $1
-		  AND c.relname = ANY($2::text[]);
+		  AND n.nspname = ANY($1::text[]);
 	`
-	rows, err := db.QueryContext(ctx, query, schema, pq.Array(tableNames))
+	rows, err := db.QueryContext(ctx, query, pq.Array(schemas))
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
-	result := make(map[string]map[string]core.ForeignKeyRef)
+	result := make(map[relKey]map[string]core.ForeignKeyRef)
 	for rows.Next() {
-		var tableName, localCol, refSchema, refTable, refCol string
-		if err := rows.Scan(&tableName, &localCol, &refSchema, &refTable, &refCol); err != nil {
+		var k relKey
+		var localCol, refSchema, refTable, refCol string
+		if err := rows.Scan(&k.schema, &k.name, &localCol, &refSchema, &refTable, &refCol); err != nil {
 			return nil, err
 		}
-		if result[tableName] == nil {
-			result[tableName] = make(map[string]core.ForeignKeyRef)
+		if result[k] == nil {
+			result[k] = make(map[string]core.ForeignKeyRef)
 		}
-		result[tableName][localCol] = core.ForeignKeyRef{
+		result[k][localCol] = core.ForeignKeyRef{
 			SchemaName: refSchema,
 			TableName:  refTable,
 			ColumnName: refCol,
@@ -265,14 +267,13 @@ func (d *Dialect) batchForeignKeys(ctx context.Context, db *sql.DB, schema strin
 	return result, rows.Err()
 }
 
-// batchTableDDL builds full CREATE TABLE DDL for all given tables in two queries
-// (columns aggregation + constraints aggregation joined via CTE), replacing the
-// previous per-table two-query approach.
-// Returns map[tableName]ddlString.
-func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, schema string, tableNames []string) (map[string]string, error) {
+// batchTableDDL builds the CREATE TABLE DDL of every table in the given
+// schemas in one query, columns and constraints aggregated separately.
+func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, schemas []string) (map[relKey]string, error) {
 	const query = `
 		WITH cols AS (
 			SELECT
+				n.nspname AS schema_name,
 				c.relname AS table_name,
 				c.oid     AS table_oid,
 				'CREATE TABLE ' || quote_ident(n.nspname) || '.' || quote_ident(c.relname) || E' (\n' ||
@@ -293,8 +294,7 @@ func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, schema string, 
 			WHERE c.relkind IN ('r', 'p')
 			  AND a.attnum > 0
 			  AND NOT a.attisdropped
-			  AND n.nspname = $1
-			  AND c.relname = ANY($2::text[])
+			  AND n.nspname = ANY($1::text[])
 			GROUP BY n.nspname, c.relname, c.oid
 		),
 		cons AS (
@@ -319,6 +319,7 @@ func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, schema string, 
 			GROUP BY con.conrelid
 		)
 		SELECT
+			cols.schema_name,
 			cols.table_name,
 			cols.columns_ddl ||
 			CASE WHEN cons.constraints_ddl IS NOT NULL
@@ -329,132 +330,126 @@ func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, schema string, 
 		LEFT JOIN cons ON cons.table_oid = cols.table_oid;
 	`
 
-	rows, err := db.QueryContext(ctx, query, schema, pq.Array(tableNames))
+	rows, err := db.QueryContext(ctx, query, pq.Array(schemas))
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
-	result := make(map[string]string, len(tableNames))
+	result := make(map[relKey]string)
 	for rows.Next() {
-		var tableName, rawDDL string
-		if err := rows.Scan(&tableName, &rawDDL); err != nil {
+		var k relKey
+		var rawDDL string
+		if err := rows.Scan(&k.schema, &k.name, &rawDDL); err != nil {
 			return nil, err
 		}
-		result[tableName] = core.FormatTableDDL(rawDDL)
+		result[k] = core.FormatTableDDL(rawDDL)
 	}
 	return result, rows.Err()
 }
 
-// GetViews returns all views in the specified PostgreSQL schema.
-// Columns are bulk-fetched in one query.
-func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
+// GetViews returns the views of each schema in two queries.
+func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Table, error) {
 	const listQuery = `
-		SELECT c.relname, pg_catalog.pg_get_viewdef(c.oid, true)
+		SELECT n.nspname, c.relname, pg_catalog.pg_get_viewdef(c.oid, true)
 		FROM pg_catalog.pg_class AS c
 		JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
-		WHERE n.nspname = $1 AND c.relkind = 'v'
-		ORDER BY c.relname ASC;
+		WHERE n.nspname = ANY($1::text[]) AND c.relkind = 'v'
+		ORDER BY n.nspname, c.relname ASC;
 	`
-	rows, err := db.QueryContext(ctx, listQuery, schema)
+	rows, err := db.QueryContext(ctx, listQuery, pq.Array(schemas))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query views: %w", err)
 	}
 
 	type viewRow struct {
-		name string
-		def  sql.NullString
+		key relKey
+		def sql.NullString
 	}
 	var viewRows []viewRow
-	var viewNames []string
 	for rows.Next() {
 		var r viewRow
-		if err := rows.Scan(&r.name, &r.def); err != nil {
+		if err := rows.Scan(&r.key.schema, &r.key.name, &r.def); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan view row: %w", err)
 		}
 		viewRows = append(viewRows, r)
-		viewNames = append(viewNames, r.name)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
 
-	if len(viewNames) == 0 {
-		return nil, nil
+	if len(viewRows) == 0 {
+		return map[string][]core.Table{}, nil
 	}
 
-	allColumns, err := d.batchColumns(ctx, db, schema, viewNames)
+	allColumns, err := d.batchColumns(ctx, db, schemas, []string{"v"})
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch view columns: %w", err)
 	}
 
-	views := make([]core.Table, 0, len(viewRows))
+	views := make(map[string][]core.Table)
 	for _, r := range viewRows {
 		definition := strings.TrimSpace(getString(r.def))
 		ddl := ""
 		if definition != "" {
-			ddl = fmt.Sprintf("CREATE VIEW %s AS\n%s", r.name, definition)
+			ddl = fmt.Sprintf("CREATE VIEW %s AS\n%s", r.key.name, definition)
 		}
-		views = append(views, core.Table{
-			Name:    r.name,
-			Columns: allColumns[r.name],
+		views[r.key.schema] = append(views[r.key.schema], core.Table{
+			Name:    r.key.name,
+			Columns: allColumns[r.key],
 			DDL:     ddl,
 		})
 	}
 	return views, nil
 }
 
-// GetIndexes returns index metadata for the specified PostgreSQL schema.
-// Index columns are bulk-fetched in one query instead of one per index.
-func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]core.IndexInfo, error) {
+// GetIndexes returns the indexes of each schema in two queries.
+func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.IndexInfo, error) {
 	const listQuery = `
-		SELECT i.relname, t.relname, pg_catalog.pg_get_indexdef(i.oid), i.oid::bigint
+		SELECT n.nspname, i.relname, t.relname, pg_catalog.pg_get_indexdef(i.oid), i.oid::bigint
 		FROM pg_catalog.pg_class AS i
 		JOIN pg_catalog.pg_index AS ix ON ix.indexrelid = i.oid
 		JOIN pg_catalog.pg_class AS t ON t.oid = ix.indrelid
 		JOIN pg_catalog.pg_namespace AS n ON n.oid = t.relnamespace
-		WHERE n.nspname = $1
-		ORDER BY t.relname, i.relname;
+		WHERE n.nspname = ANY($1::text[])
+		ORDER BY n.nspname, t.relname, i.relname;
 	`
-	rows, err := db.QueryContext(ctx, listQuery, schema)
+	rows, err := db.QueryContext(ctx, listQuery, pq.Array(schemas))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query indexes: %w", err)
 	}
 
 	type indexRow struct {
-		name, table string
-		ddl         sql.NullString
-		oid         int64
+		schema, name, table string
+		ddl                 sql.NullString
+		oid                 int64
 	}
 	var indexRows []indexRow
-	var oids []int64
 	for rows.Next() {
 		var r indexRow
-		if err := rows.Scan(&r.name, &r.table, &r.ddl, &r.oid); err != nil {
+		if err := rows.Scan(&r.schema, &r.name, &r.table, &r.ddl, &r.oid); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan index row: %w", err)
 		}
 		indexRows = append(indexRows, r)
-		oids = append(oids, r.oid)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
 
-	if len(oids) == 0 {
-		return nil, nil
+	if len(indexRows) == 0 {
+		return map[string][]core.IndexInfo{}, nil
 	}
 
-	// Bulk-fetch all index columns in one query
-	allCols, err := d.batchIndexColumns(ctx, db, oids)
+	allCols, err := d.batchIndexColumns(ctx, db, schemas)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch index columns: %w", err)
 	}
 
-	indexes := make([]core.IndexInfo, 0, len(indexRows))
+	indexes := make(map[string][]core.IndexInfo)
 	for _, r := range indexRows {
-		indexes = append(indexes, core.IndexInfo{
+		indexes[r.schema] = append(indexes[r.schema], core.IndexInfo{
 			Name:      r.name,
 			TableName: r.table,
 			DDL:       getString(r.ddl),
@@ -464,9 +459,9 @@ func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]
 	return indexes, nil
 }
 
-// batchIndexColumns fetches column info for all given index OIDs in one query.
-// Returns map[indexOID][]IndexColumnInfo.
-func (d *Dialect) batchIndexColumns(ctx context.Context, db *sql.DB, oids []int64) (map[int64][]core.IndexColumnInfo, error) {
+// batchIndexColumns fetches the columns of every index on a relation in the
+// given schemas in one query, keyed by index OID.
+func (d *Dialect) batchIndexColumns(ctx context.Context, db *sql.DB, schemas []string) (map[int64][]core.IndexColumnInfo, error) {
 	const query = `
 		SELECT
 			ix.indexrelid::bigint,
@@ -476,14 +471,15 @@ func (d *Dialect) batchIndexColumns(ctx context.Context, db *sql.DB, oids []int6
 			(ix.indoption[cols.ordinality - 1] & 1) = 1
 		FROM pg_catalog.pg_index AS ix
 		JOIN pg_catalog.pg_class AS t ON t.oid = ix.indrelid
+		JOIN pg_catalog.pg_namespace AS n ON n.oid = t.relnamespace
 		JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS cols(attnum, ordinality) ON true
 		LEFT JOIN pg_catalog.pg_attribute AS a ON a.attrelid = t.oid AND a.attnum = cols.attnum
 		LEFT JOIN pg_catalog.pg_collation AS coll ON coll.oid = ix.indcollation[cols.ordinality - 1]
-		WHERE ix.indexrelid = ANY($1::bigint[])
+		WHERE n.nspname = ANY($1::text[])
 		  AND cols.attnum <> 0
 		ORDER BY ix.indexrelid, cols.ordinality;
 	`
-	rows, err := db.QueryContext(ctx, query, pq.Array(oids))
+	rows, err := db.QueryContext(ctx, query, pq.Array(schemas))
 	if err != nil {
 		return nil, err
 	}
@@ -511,99 +507,168 @@ func (d *Dialect) batchIndexColumns(ctx context.Context, db *sql.DB, oids []int6
 	return result, rows.Err()
 }
 
-// GetTriggers returns trigger metadata for the specified PostgreSQL schema.
-func (d *Dialect) GetTriggers(ctx context.Context, db *sql.DB, schema string) ([]core.TriggerInfo, error) {
+// GetTriggers returns the triggers of each schema in one query.
+func (d *Dialect) GetTriggers(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.TriggerInfo, error) {
 	const query = `
-		SELECT tg.tgname, tbl.relname, pg_catalog.pg_get_triggerdef(tg.oid, true)
+		SELECT n.nspname, tg.tgname, tbl.relname, pg_catalog.pg_get_triggerdef(tg.oid, true)
 		FROM pg_catalog.pg_trigger AS tg
 		JOIN pg_catalog.pg_class AS tbl ON tbl.oid = tg.tgrelid
 		JOIN pg_catalog.pg_namespace AS n ON n.oid = tbl.relnamespace
-		WHERE NOT tg.tgisinternal AND n.nspname = $1
-		ORDER BY tg.tgname ASC;
+		WHERE NOT tg.tgisinternal AND n.nspname = ANY($1::text[])
+		ORDER BY n.nspname, tg.tgname ASC;
 	`
-	rows, err := db.QueryContext(ctx, query, schema)
+	rows, err := db.QueryContext(ctx, query, pq.Array(schemas))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query triggers: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var triggers []core.TriggerInfo
+	triggers := make(map[string][]core.TriggerInfo)
 	for rows.Next() {
-		var name, table string
+		var schema, name, table string
 		var ddl sql.NullString
-		if err := rows.Scan(&name, &table, &ddl); err != nil {
+		if err := rows.Scan(&schema, &name, &table, &ddl); err != nil {
 			return nil, fmt.Errorf("failed to scan trigger row: %w", err)
 		}
-		triggers = append(triggers, core.TriggerInfo{Name: name, TableName: table, DDL: getString(ddl)})
+		triggers[schema] = append(triggers[schema], core.TriggerInfo{Name: name, TableName: table, DDL: getString(ddl)})
 	}
 	return triggers, rows.Err()
 }
 
-// GetStats returns basic table and index statistics for the specified schema.
-func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, schema string) (core.TableStats, error) {
-	stats := make(core.TableStats)
-
-	tableRows, err := db.QueryContext(ctx, `
-		SELECT relname, n_live_tup::text
-		FROM pg_catalog.pg_stat_user_tables
-		WHERE schemaname = $1;
-	`, schema)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query table statistics: %w", err)
+// GetStats returns the table row counts and index scan counts of each schema
+// in two queries.
+func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, schemas []string) (map[string]core.TableStats, error) {
+	stats := make(map[string]core.TableStats)
+	queries := []struct{ sql, what string }{
+		{`SELECT schemaname, relname, n_live_tup::text
+		  FROM pg_catalog.pg_stat_user_tables
+		  WHERE schemaname = ANY($1::text[]);`, "table"},
+		{`SELECT schemaname, indexrelname, COALESCE(idx_scan, 0)::text
+		  FROM pg_catalog.pg_stat_user_indexes
+		  WHERE schemaname = ANY($1::text[]);`, "index"},
 	}
-	defer func() { _ = tableRows.Close() }()
-	for tableRows.Next() {
-		var name, val string
-		if err := tableRows.Scan(&name, &val); err != nil {
+	for _, q := range queries {
+		rows, err := db.QueryContext(ctx, q.sql, pq.Array(schemas))
+		if err != nil {
+			return nil, fmt.Errorf("failed to query %s statistics: %w", q.what, err)
+		}
+		for rows.Next() {
+			var schema, name, val string
+			if err := rows.Scan(&schema, &name, &val); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			if stats[schema] == nil {
+				stats[schema] = make(core.TableStats)
+			}
+			stats[schema][name] = val
+		}
+		if err := rows.Close(); err != nil {
 			return nil, err
 		}
-		stats[name] = val
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
-	if err := tableRows.Err(); err != nil {
+	return stats, nil
+}
+
+// GetTypes returns the scalar and enum types of each schema in one query.
+func (d *Dialect) GetTypes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Type, error) {
+	const q = `
+SELECT n.nspname, t.typname, t.typtype::text,
+       COALESCE(pg_catalog.format_type(t.oid, NULL), t.typname::text),
+       obj_description(t.oid, 'pg_type'),
+       (SELECT string_agg(e.enumlabel, E'\x01' ORDER BY e.enumsortorder)
+        FROM pg_catalog.pg_enum e WHERE e.enumtypid = t.oid)
+FROM pg_catalog.pg_type t
+JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+WHERE t.typisdefined
+  AND n.nspname = ANY($1::text[])
+  AND t.typcategory NOT IN ('p', 'x')
+  AND t.typelem = 0
+  AND t.typname NOT LIKE 'pg_%'
+ORDER BY n.nspname, t.typname
+`
+	rows, err := db.QueryContext(ctx, q, pq.Array(schemas))
+	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 
-	indexRows, err := db.QueryContext(ctx, `
-		SELECT indexrelname, COALESCE(idx_scan, 0)::text
-		FROM pg_catalog.pg_stat_user_indexes
-		WHERE schemaname = $1;
-	`, schema)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query index statistics: %w", err)
-	}
-	defer func() { _ = indexRows.Close() }()
-	for indexRows.Next() {
-		var name, val string
-		if err := indexRows.Scan(&name, &val); err != nil {
+	out := make(map[string][]core.Type)
+	for rows.Next() {
+		var schemaName, name, kind, display string
+		var description, enumRaw sql.NullString
+		if err := rows.Scan(&schemaName, &name, &kind, &display, &description, &enumRaw); err != nil {
 			return nil, err
 		}
-		stats[name] = val
+		ct := core.Type{
+			Schema:      schemaName,
+			Name:        name,
+			Kind:        kind,
+			Display:     display,
+			Description: strings.TrimSpace(getString(description)),
+		}
+		if enumRaw.Valid && enumRaw.String != "" {
+			ct.EnumLabels = strings.Split(enumRaw.String, "\x01")
+		}
+		out[schemaName] = append(out[schemaName], ct)
 	}
-	return stats, indexRows.Err()
+	return out, rows.Err()
 }
 
-// GetTypes returns SQL types for the given user schema.
-func (d *Dialect) GetTypes(ctx context.Context, db *sql.DB, schema string) ([]core.Type, error) {
-	return loadPGTypesForSchema(ctx, db, schema)
-}
+// GetFunctions returns the callable routines of each user schema in one query.
+// System schemas are skipped: pg_catalog builtins come from GetCatalogSchema.
+func (d *Dialect) GetFunctions(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Function, error) {
+	const q = `
+SELECT p.oid::bigint, n.nspname, p.proname,
+       pg_catalog.pg_get_function_identity_arguments(p.oid),
+       pg_catalog.pg_get_function_result(p.oid),
+       p.prokind::text,
+       obj_description(p.oid, 'pg_proc')
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = ANY($1::text[])
+  AND n.nspname NOT IN ('pg_toast', 'information_schema', 'pg_catalog')
+ORDER BY n.nspname, p.proname, p.oid
+`
+	rows, err := db.QueryContext(ctx, q, pq.Array(schemas))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
 
-// GetFunctions returns callable routines for the given user schema.
-func (d *Dialect) GetFunctions(ctx context.Context, db *sql.DB, schema string) ([]core.Function, error) {
-	return loadUserSchemaFunctions(ctx, db, []string{schema})
+	out := make(map[string][]core.Function)
+	for rows.Next() {
+		var oid int64
+		var schema, name, args, result, kind string
+		var description sql.NullString
+		if err := rows.Scan(&oid, &schema, &name, &args, &result, &kind, &description); err != nil {
+			return nil, err
+		}
+		out[schema] = append(out[schema], core.Function{
+			OID: oid, Schema: schema, Name: name, Args: args,
+			Result: result, Kind: kind,
+			Description: strings.TrimSpace(getString(description)),
+		})
+	}
+	return out, rows.Err()
 }
 
 // GetCatalogSchema returns pg_catalog as a fully-populated Schema.
 // Called lazily for lint/completion, not during regular schema load.
 func (d *Dialect) GetCatalogSchema(ctx context.Context, db *sql.DB) (*core.Schema, error) {
-	tables, err := d.GetTables(ctx, db, "pg_catalog")
+	catalog := []string{"pg_catalog"}
+	tables, err := d.GetTables(ctx, db, catalog)
 	if err != nil {
 		return nil, err
 	}
-	views, err := d.GetViews(ctx, db, "pg_catalog")
+	views, err := d.GetViews(ctx, db, catalog)
 	if err != nil {
 		return nil, err
 	}
-	types, err := loadPGTypesForSchema(ctx, db, "pg_catalog")
+	types, err := d.GetTypes(ctx, db, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -613,9 +678,9 @@ func (d *Dialect) GetCatalogSchema(ctx context.Context, db *sql.DB) (*core.Schem
 	}
 	return &core.Schema{
 		Name:      "pg_catalog",
-		Tables:    tables,
-		Views:     views,
-		Types:     types,
+		Tables:    tables["pg_catalog"],
+		Views:     views["pg_catalog"],
+		Types:     types["pg_catalog"],
 		Functions: funcs,
 	}, nil
 }
@@ -647,86 +712,6 @@ func getString(ns sql.NullString) string {
 		return ns.String
 	}
 	return ""
-}
-
-func loadPGTypesForSchema(ctx context.Context, db *sql.DB, schema string) ([]core.Type, error) {
-	const q = `
-SELECT n.nspname, t.typname, t.typtype::text,
-       COALESCE(pg_catalog.format_type(t.oid, NULL), t.typname::text),
-       obj_description(t.oid, 'pg_type'),
-       (SELECT string_agg(e.enumlabel, E'\x01' ORDER BY e.enumsortorder)
-        FROM pg_catalog.pg_enum e WHERE e.enumtypid = t.oid)
-FROM pg_catalog.pg_type t
-JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-WHERE t.typisdefined
-  AND n.nspname = $1
-  AND t.typcategory NOT IN ('p', 'x')
-  AND t.typelem = 0
-  AND t.typname NOT LIKE 'pg_%'
-ORDER BY t.typname
-`
-	rows, err := db.QueryContext(ctx, q, schema)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []core.Type
-	for rows.Next() {
-		var schemaName, name, kind, display string
-		var description, enumRaw sql.NullString
-		if err := rows.Scan(&schemaName, &name, &kind, &display, &description, &enumRaw); err != nil {
-			return nil, err
-		}
-		ct := core.Type{
-			Schema:      schemaName,
-			Name:        name,
-			Kind:        kind,
-			Display:     display,
-			Description: strings.TrimSpace(getString(description)),
-		}
-		if enumRaw.Valid && enumRaw.String != "" {
-			ct.EnumLabels = strings.Split(enumRaw.String, "\x01")
-		}
-		out = append(out, ct)
-	}
-	return out, rows.Err()
-}
-
-func loadUserSchemaFunctions(ctx context.Context, db *sql.DB, userSchemas []string) ([]core.Function, error) {
-	const q = `
-SELECT p.oid::bigint, n.nspname, p.proname,
-       pg_catalog.pg_get_function_identity_arguments(p.oid),
-       pg_catalog.pg_get_function_result(p.oid),
-       p.prokind::text,
-       obj_description(p.oid, 'pg_proc')
-FROM pg_catalog.pg_proc p
-JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
-WHERE n.nspname = ANY($1::text[])
-  AND n.nspname NOT IN ('pg_toast', 'information_schema', 'pg_catalog')
-ORDER BY n.nspname, p.proname, p.oid
-`
-	rows, err := db.QueryContext(ctx, q, pq.Array(userSchemas))
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []core.Function
-	for rows.Next() {
-		var oid int64
-		var schema, name, args, result, kind string
-		var description sql.NullString
-		if err := rows.Scan(&oid, &schema, &name, &args, &result, &kind, &description); err != nil {
-			return nil, err
-		}
-		out = append(out, core.Function{
-			OID: oid, Schema: schema, Name: name, Args: args,
-			Result: result, Kind: kind,
-			Description: strings.TrimSpace(getString(description)),
-		})
-	}
-	return out, rows.Err()
 }
 
 func nonPgBuiltinNames() []string {

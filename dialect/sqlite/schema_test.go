@@ -69,12 +69,14 @@ func TestGetTablesAndViews(t *testing.T) {
 
 	ctx := context.Background()
 
-	tables, err := dialect.GetTables(ctx, testDB, "main")
+	allTables, err := dialect.GetTables(ctx, testDB, []string{"main"})
+	tables := allTables["main"]
 	if err != nil {
 		t.Fatalf("GetTables failed: %v", err)
 	}
 
-	views, err := dialect.GetViews(ctx, testDB, "main")
+	allViews, err := dialect.GetViews(ctx, testDB, []string{"main"})
+	views := allViews["main"]
 	if err != nil {
 		t.Fatalf("GetViews failed: %v", err)
 	}
@@ -219,17 +221,20 @@ func TestGetSchemaDDLFromMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	// Get all objects with their DDL
-	tables, err := dialect.GetTables(ctx, testDB, "main")
+	allTables, err := dialect.GetTables(ctx, testDB, []string{"main"})
+	tables := allTables["main"]
 	if err != nil {
 		t.Fatalf("GetTables failed: %v", err)
 	}
 
-	views, err := dialect.GetViews(ctx, testDB, "main")
+	allViews, err := dialect.GetViews(ctx, testDB, []string{"main"})
+	views := allViews["main"]
 	if err != nil {
 		t.Fatalf("GetViews failed: %v", err)
 	}
 
-	indexes, err := dialect.GetIndexes(ctx, testDB, "main")
+	allIndexes, err := dialect.GetIndexes(ctx, testDB, []string{"main"})
+	indexes := allIndexes["main"]
 	if err != nil {
 		t.Fatalf("GetIndexes failed: %v", err)
 	}
