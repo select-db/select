@@ -10,9 +10,6 @@ import (
 // DefaultSchemaName implements core.SQLDialect.DefaultSchemaName.
 func (d *Dialect) DefaultSchemaName() string { return "main" }
 
-// sqliteDefaultSchema is the default schema name for SQLite (PRAGMA database_list reports "main").
-const sqliteDefaultSchema = "main"
-
 // schemaQuery reads everything but the statistics in one round trip.
 // sqlite_stat1 exists only after an ANALYZE, so has_stat1 says whether to read it.
 const schemaQuery = `
