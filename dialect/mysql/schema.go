@@ -60,7 +60,7 @@ type objectKey struct{ schema, name string }
 func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Table, error) {
 	out := make(map[string][]core.Table)
 	in, args := buildInClause(schemas)
-	keys, err := listTables(ctx, db, fmt.Sprintf(`
+	keys, err := listObjects(ctx, db, fmt.Sprintf(`
 		SELECT table_schema, table_name
 		FROM information_schema.tables
 		WHERE table_schema IN (%s)
@@ -102,9 +102,9 @@ func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schemas []string) (
 	return out, nil
 }
 
-// listTables runs a query selecting (schema, name) pairs and closes it before
+// listObjects runs a query selecting (schema, name) pairs and closes it before
 // returning, so the caller's next query does not hold a second connection.
-func listTables(ctx context.Context, db *sql.DB, query string, args []any, what string) ([]objectKey, error) {
+func listObjects(ctx context.Context, db *sql.DB, query string, args []any, what string) ([]objectKey, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query %s: %w", what, err)
@@ -248,7 +248,7 @@ func (d *Dialect) batchTableDDL(ctx context.Context, db *sql.DB, keys []objectKe
 func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, schemas []string) (map[string][]core.Table, error) {
 	out := make(map[string][]core.Table)
 	in, args := buildInClause(schemas)
-	keys, err := listTables(ctx, db, fmt.Sprintf(`
+	keys, err := listObjects(ctx, db, fmt.Sprintf(`
 		SELECT table_schema, table_name
 		FROM information_schema.views
 		WHERE table_schema IN (%s)
@@ -455,7 +455,7 @@ func (d *Dialect) GetFunctions(ctx context.Context, db *sql.DB, schemas []string
 	if err != nil {
 		return nil, fmt.Errorf("failed to query routines: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make(map[string][]core.Function)
 	for rows.Next() {
 		var schema, name, kind, result, comment string

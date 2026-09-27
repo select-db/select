@@ -28,10 +28,10 @@ func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 	d, ctx := NewDialect(), context.Background()
 
 	allTables, err := d.GetTables(ctx, db, []string{"main"})
-	tables := allTables["main"]
 	if err != nil {
 		t.Fatal(err)
 	}
+	tables := allTables["main"]
 	byName := map[string]core.Table{}
 	for _, tbl := range tables {
 		byName[tbl.Name] = tbl
@@ -63,10 +63,10 @@ func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 	}
 
 	allIndexes, err := d.GetIndexes(ctx, db, []string{"main"})
-	indexes := allIndexes["main"]
 	if err != nil {
 		t.Fatal(err)
 	}
+	indexes := allIndexes["main"]
 	var idx []string
 	for _, i := range indexes {
 		if i.Name == "child_idx" {

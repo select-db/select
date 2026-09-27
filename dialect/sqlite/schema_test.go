@@ -70,16 +70,16 @@ func TestGetTablesAndViews(t *testing.T) {
 	ctx := context.Background()
 
 	allTables, err := dialect.GetTables(ctx, testDB, []string{"main"})
-	tables := allTables["main"]
 	if err != nil {
 		t.Fatalf("GetTables failed: %v", err)
 	}
+	tables := allTables["main"]
 
 	allViews, err := dialect.GetViews(ctx, testDB, []string{"main"})
-	views := allViews["main"]
 	if err != nil {
 		t.Fatalf("GetViews failed: %v", err)
 	}
+	views := allViews["main"]
 
 	// Verify tables
 	if len(tables) != 1 {
@@ -222,22 +222,22 @@ func TestGetSchemaDDLFromMetadata(t *testing.T) {
 
 	// Get all objects with their DDL
 	allTables, err := dialect.GetTables(ctx, testDB, []string{"main"})
-	tables := allTables["main"]
 	if err != nil {
 		t.Fatalf("GetTables failed: %v", err)
 	}
+	tables := allTables["main"]
 
 	allViews, err := dialect.GetViews(ctx, testDB, []string{"main"})
-	views := allViews["main"]
 	if err != nil {
 		t.Fatalf("GetViews failed: %v", err)
 	}
+	views := allViews["main"]
 
 	allIndexes, err := dialect.GetIndexes(ctx, testDB, []string{"main"})
-	indexes := allIndexes["main"]
 	if err != nil {
 		t.Fatalf("GetIndexes failed: %v", err)
 	}
+	indexes := allIndexes["main"]
 
 	// Reconstruct DDL from metadata
 	var ddlStatements []string
