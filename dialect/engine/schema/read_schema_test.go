@@ -38,7 +38,7 @@ type schemaTarget struct {
 	scaleTables func(n int) string
 
 	schemaA, schemaB, schemaEmpty, scaleSchema, catalog, current string
-	maxQueries                                                    int
+	maxQueries                                                   int
 
 	crossSchema, comments, enumType, expressionIndex, functions, stats, settings bool
 }
