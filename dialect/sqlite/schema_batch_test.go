@@ -9,8 +9,8 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// The one-query-per-kind reads must keep what per-relation reads gave: column
-// order, key order, foreign keys (an implicit target included) and index columns.
+// The one-query read must keep what per-relation reads gave: column order, key
+// order, foreign keys (an implicit target included) and index columns.
 func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "s.db"))
 	if err != nil {
@@ -27,11 +27,11 @@ func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 	}
 	d, ctx := NewDialect(), context.Background()
 
-	allTables, err := d.GetTables(ctx, db, []string{"main"})
+	meta, err := d.ReadSchema(ctx, db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tables := allTables["main"]
+	tables := meta.Schemas[0].Tables
 	byName := map[string]core.Table{}
 	for _, tbl := range tables {
 		byName[tbl.Name] = tbl
@@ -56,17 +56,12 @@ func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 		t.Errorf("foreign keys = %v", fk)
 	}
 
-	allViews, err := d.GetViews(ctx, db, []string{"main"})
-	views := allViews["main"]
-	if err != nil || len(views) != 1 || len(views[0].Columns) != 2 {
-		t.Fatalf("views = %+v, %v", views, err)
+	views := meta.Schemas[0].Views
+	if len(views) != 1 || len(views[0].Columns) != 2 {
+		t.Fatalf("views = %+v", views)
 	}
 
-	allIndexes, err := d.GetIndexes(ctx, db, []string{"main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	indexes := allIndexes["main"]
+	indexes := meta.Schemas[0].Indexes
 	var idx []string
 	for _, i := range indexes {
 		if i.Name == "child_idx" {

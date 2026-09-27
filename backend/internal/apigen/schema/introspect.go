@@ -11,17 +11,21 @@ import (
 // Introspect reads the given schemas through the dialect's Postgres
 // introspection — the same engine the SQL IDE uses — and maps the result into
 // RawSchema. Table and column COMMENTs (now captured by the dialect) carry the
-// @app tags; PK/FK/types come enriched from GetTables.
+// @app tags; PK/FK/types come enriched from ReadSchema.
 func Introspect(ctx context.Context, db *sql.DB, schemas ...string) (RawSchema, error) {
-	d := postgresql.NewDialect()
-	tables, err := d.GetTables(ctx, db, schemas)
+	meta, err := postgresql.NewDialect().ReadSchema(ctx, db)
 	if err != nil {
 		return RawSchema{}, err
 	}
 	var out RawSchema
-	for _, schema := range schemas {
-		for _, t := range tables[schema] {
-			out.Tables = append(out.Tables, mapTable(schema, t))
+	for _, name := range schemas {
+		for _, s := range meta.Schemas {
+			if s.Name != name {
+				continue
+			}
+			for _, t := range s.Tables {
+				out.Tables = append(out.Tables, mapTable(name, t))
+			}
 		}
 	}
 	return out, nil

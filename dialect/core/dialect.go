@@ -57,53 +57,14 @@ type SQLDialect interface {
 	// DSNWithoutPassword returns dsn with no password.
 	DSNWithoutPassword(dsn string) string
 
-	// GetSchemas returns all user schemas in the database.
-	// For PostgreSQL, this excludes system schemas (pg_*, information_schema).
-	// For SQLite, this returns ["main"] as SQLite doesn't have real schemas.
-	// For MySQL, this returns an empty slice as MySQL uses databases instead of schemas.
-	GetSchemas(ctx context.Context, db *sql.DB) ([]string, error)
-
-	// GetCurrentSchema returns the current active schema for the session.
-	// For PostgreSQL, this queries current_schema() or the first schema in search_path.
-	// For SQLite, this returns "main".
-	// For MySQL, this returns an empty string (MySQL uses databases, not schemas).
-	GetCurrentSchema(ctx context.Context, db *sql.DB) (string, error)
-
 	// DefaultSchemaName is the conventional default schema for this dialect,
-	// used as a fallback when GetCurrentSchema reports nothing. Returns ""
-	// for dialects without a meaningful default (e.g. MySQL).
+	// used when ReadSchema reports no current schema. Returns "" for dialects
+	// without a meaningful default (e.g. MySQL).
 	DefaultSchemaName() string
 
-	// The Get methods below read every schema in schemas at once and key the
-	// result by schema name, so a load costs the same whatever the schema count.
-
-	// GetTables returns the tables of each schema.
-	GetTables(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Table, error)
-
-	// GetViews returns the views of each schema.
-	GetViews(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Table, error)
-
-	// GetIndexes returns the indexes of each schema.
-	GetIndexes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]IndexInfo, error)
-
-	// GetTriggers returns the triggers of each schema.
-	GetTriggers(ctx context.Context, db *sql.DB, schemas []string) (map[string][]TriggerInfo, error)
-
-	// GetStats returns the table and index statistics of each schema.
-	GetStats(ctx context.Context, db *sql.DB, schemas []string) (map[string]TableStats, error)
-
-	// GetTypes returns the types of each user schema.
-	GetTypes(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Type, error)
-	// GetFunctions returns the callable routines of each user schema.
-	GetFunctions(ctx context.Context, db *sql.DB, schemas []string) (map[string][]Function, error)
-	// GetCatalogSchema returns the system/built-in catalog as a fully-populated Schema,
-	// or nil if the dialect does not have one. For PostgreSQL this is pg_catalog
-	// (tables, views, types, functions). For SQLite this is a synthetic schema with
-	// built-in types and functions.
-	GetCatalogSchema(ctx context.Context, db *sql.DB) (*Schema, error)
-	// GetSettings returns runtime parameters (MySQL system variables, PG GUCs,
-	// SQLite pragmas). Stashed on the catalog schema.
-	GetSettings(ctx context.Context, db *sql.DB) ([]Setting, error)
+	// ReadSchema reads every schema, the built-in catalog and the settings in
+	// as few round trips as the database allows, the same few whatever its size.
+	ReadSchema(ctx context.Context, db *sql.DB) (*Metadata, error)
 
 	// ANTLR grammar (used by inspect system only)
 	CreateLexer(input string) antlr.Lexer
