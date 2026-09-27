@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+
+	core "github.com/selectDb/dialect/core"
 )
 
 // The one-query-per-kind reads must keep what per-relation reads gave: column
@@ -29,10 +31,14 @@ func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tables) != 2 || tables[1].Name != "parent" {
+	byName := map[string]core.Table{}
+	for _, tbl := range tables {
+		byName[tbl.Name] = tbl
+	}
+	parent, child := byName["parent"], byName["child"]
+	if len(tables) != 2 || len(parent.Columns) != 2 || len(child.Columns) != 3 {
 		t.Fatalf("tables = %+v", tables)
 	}
-	parent, child := tables[1], tables[0]
 	if parent.Columns[0].Name != "a" || parent.Columns[1].Name != "b" {
 		t.Errorf("columns out of table order: %+v", parent.Columns)
 	}

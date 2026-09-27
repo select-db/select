@@ -23,18 +23,14 @@ func (d *Dialect) GetSchemas(_ context.Context, _ *sql.DB) ([]string, error) {
 	return []string{"main"}, nil
 }
 
-// GetTables returns every table with its columns, primary key and foreign
-// keys, in two queries whatever the number of tables.
+// GetTables returns every table with its columns, primary key and foreign keys.
 // The schema parameter is ignored as SQLite only has "main".
 func (d *Dialect) GetTables(ctx context.Context, db *sql.DB, schema string) ([]core.Table, error) {
 	tables, err := d.relationsWithColumns(ctx, db, "table")
 	if err != nil {
 		return nil, err
 	}
-	foreignKeys, err := d.foreignKeys(ctx, db)
-	if err != nil {
-		return nil, err
-	}
+	foreignKeys, _ := d.foreignKeys(ctx, db)
 	for i := range tables {
 		core.EnrichColumnsWithConstraints(&tables[i].Columns, tables[i].PrimaryKey, foreignKeys[tables[i].Name])
 	}
@@ -48,12 +44,11 @@ func (d *Dialect) GetViews(ctx context.Context, db *sql.DB, schema string) ([]co
 }
 
 // relationsWithColumns reads every table or view (kind) and its columns in one
-// query: pragma_table_info joined to sqlite_master, rather than one per relation.
-// Columns keep the table's order; a primary key's order is on the table.
+// query, so a schema load costs the same whatever the number of relations.
 func (d *Dialect) relationsWithColumns(ctx context.Context, db *sql.DB, kind string) ([]core.Table, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT m.name, m.sql, p.name, p.type, p."notnull", p.dflt_value, p.pk
-		FROM sqlite_master m JOIN pragma_table_info(m.name) p
+		FROM sqlite_master m JOIN pragma_table_info(m.name, 'main') p
 		WHERE m.type = ? AND m.name NOT LIKE 'sqlite_%'
 		ORDER BY m.name, p.cid`, kind)
 	if err != nil {
@@ -62,7 +57,6 @@ func (d *Dialect) relationsWithColumns(ctx context.Context, db *sql.DB, kind str
 	defer func() { _ = rows.Close() }()
 
 	var relations []core.Table
-	pkOrder := map[string]map[int]string{} // relation -> key position -> column
 	for rows.Next() {
 		var (
 			relName, colName, colType string
@@ -73,7 +67,7 @@ func (d *Dialect) relationsWithColumns(ctx context.Context, db *sql.DB, kind str
 			return nil, fmt.Errorf("failed to scan %s column: %w", kind, err)
 		}
 		if len(relations) == 0 || relations[len(relations)-1].Name != relName {
-			relations = append(relations, core.Table{Name: relName, DDL: getString(ddl)})
+			relations = append(relations, core.Table{Name: relName, DDL: ddl.String})
 		}
 		col := core.Column{
 			Name:         colName,
@@ -86,20 +80,16 @@ func (d *Dialect) relationsWithColumns(ctx context.Context, db *sql.DB, kind str
 		}
 		rel := &relations[len(relations)-1]
 		rel.Columns = append(rel.Columns, col)
+		// pk is the column's 1-based position in the key.
 		if pk > 0 {
-			if pkOrder[relName] == nil {
-				pkOrder[relName] = map[int]string{}
+			for len(rel.PrimaryKey) < pk {
+				rel.PrimaryKey = append(rel.PrimaryKey, "")
 			}
-			pkOrder[relName][pk] = colName
+			rel.PrimaryKey[pk-1] = colName
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating %s rows: %w", kind, err)
-	}
-	for i := range relations {
-		for pos := 1; pos <= len(pkOrder[relations[i].Name]); pos++ {
-			relations[i].PrimaryKey = append(relations[i].PrimaryKey, pkOrder[relations[i].Name][pos])
-		}
 	}
 	return relations, nil
 }
@@ -107,12 +97,12 @@ func (d *Dialect) relationsWithColumns(ctx context.Context, db *sql.DB, kind str
 // sqliteDefaultSchema is the default schema name for SQLite (PRAGMA database_list reports "main").
 const sqliteDefaultSchema = "main"
 
-// foreignKeys maps each table to its local column -> referenced column, in one
-// query over every table.
+// foreignKeys maps each table to its local column -> referenced column. The
+// referenced column is "" when the key names the parent's primary key.
 func (d *Dialect) foreignKeys(ctx context.Context, db *sql.DB) (map[string]map[string]core.ForeignKeyRef, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT m.name, f."from", f."table", f."to"
-		FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) f
+		FROM sqlite_master m JOIN pragma_foreign_key_list(m.name, 'main') f
 		WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query foreign keys: %w", err)
@@ -132,7 +122,7 @@ func (d *Dialect) foreignKeys(ctx context.Context, db *sql.DB) (map[string]map[s
 		result[table][fromCol] = core.ForeignKeyRef{
 			SchemaName: sqliteDefaultSchema,
 			TableName:  refTable,
-			ColumnName: getString(toCol),
+			ColumnName: toCol.String,
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -144,10 +134,9 @@ func (d *Dialect) foreignKeys(ctx context.Context, db *sql.DB) (map[string]map[s
 // GetIndexes returns all indexes in the SQLite database.
 // The schema parameter is ignored as SQLite only has "main".
 func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]core.IndexInfo, error) {
-	// One query: pragma_index_xinfo joined to sqlite_master, rather than one per index.
 	rows, err := db.QueryContext(ctx, `
 		SELECT m.name, m.tbl_name, m.sql, x.seqno, x.name, x.coll, x."desc"
-		FROM sqlite_master m LEFT JOIN pragma_index_xinfo(m.name) x
+		FROM sqlite_master m LEFT JOIN pragma_index_xinfo(m.name, 'main') x
 		WHERE m.type = 'index'
 		ORDER BY m.tbl_name, m.name, x.seqno`)
 	if err != nil {
@@ -168,8 +157,8 @@ func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]
 		if len(indexes) == 0 || indexes[len(indexes)-1].Name != indexName.String {
 			indexes = append(indexes, core.IndexInfo{
 				Name:      indexName.String,
-				TableName: getString(tableName),
-				DDL:       getString(indexSQL),
+				TableName: tableName.String,
+				DDL:       indexSQL.String,
 			})
 		}
 		// An expression or the rowid has no column name.
@@ -179,9 +168,9 @@ func (d *Dialect) GetIndexes(ctx context.Context, db *sql.DB, schema string) ([]
 		idx := &indexes[len(indexes)-1]
 		idx.Columns = append(idx.Columns, core.IndexColumnInfo{
 			Name:       colName.String,
-			Position:   int(getInt64(seqNo)) + 1,
-			Collation:  getString(colCollation),
-			Descending: getInt64(isDesc) != 0,
+			Position:   int(seqNo.Int64) + 1,
+			Collation:  colCollation.String,
+			Descending: isDesc.Int64 != 0,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -264,21 +253,6 @@ func (d *Dialect) GetStats(ctx context.Context, db *sql.DB, schema string) (core
 	}
 
 	return stats, nil
-}
-
-// Helper functions for SQL nullable types
-func getString(ns sql.NullString) string {
-	if ns.Valid {
-		return ns.String
-	}
-	return ""
-}
-
-func getInt64(ni sql.NullInt64) int64 {
-	if ni.Valid {
-		return ni.Int64
-	}
-	return 0
 }
 
 // GetTypes returns nil; SQLite has no user-defined types per schema.
