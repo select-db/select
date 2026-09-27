@@ -342,6 +342,10 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 			}
 			cols = append(cols, col)
 		}
+		// An expression key part has no column name to write, and "()" is not DDL.
+		if len(cols) == 0 {
+			continue
+		}
 		var line string
 		switch {
 		case name == "PRIMARY":
@@ -442,12 +446,11 @@ func columnDDL(c columnRow, tableCollation string, mariadb bool) string {
 	case c.Generated != "": // a generated column has no default
 	case c.Default != nil && (mariadb || c.DataType == "bit"):
 		s += " DEFAULT " + *c.Default
+	// MySQL 5.7 has no DEFAULT_GENERATED, so CURRENT_TIMESTAMP is known by name.
+	case c.Default != nil && strings.HasPrefix(strings.ToUpper(*c.Default), "CURRENT_TIMESTAMP"):
+		s += " DEFAULT " + *c.Default
 	case c.Default != nil && strings.Contains(extra, "default_generated"):
-		if strings.HasPrefix(strings.ToUpper(*c.Default), "CURRENT_TIMESTAMP") {
-			s += " DEFAULT " + *c.Default
-		} else {
-			s += " DEFAULT (" + *c.Default + ")"
-		}
+		s += " DEFAULT (" + *c.Default + ")"
 	case c.Default != nil:
 		s += " DEFAULT " + quoteLiteral(*c.Default)
 	case bool(c.Nullable) && !mariadb && !strings.Contains(extra, "auto_increment") && !noDefaultNull(c.DataType):
@@ -482,6 +485,10 @@ func noDefaultNull(dataType string) bool {
 // buildViewDDL approximates SHOW CREATE VIEW. information_schema qualifies
 // names with the view's own database, which SHOW CREATE leaves out.
 func buildViewDDL(v viewRow) string {
+	// The definition is empty without the SHOW VIEW privilege.
+	if v.Definition == "" {
+		return ""
+	}
 	ddl := "CREATE "
 	if v.Algorithm != "" {
 		ddl += "ALGORITHM=" + v.Algorithm + " "
