@@ -9,8 +9,8 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// The one-query read must keep what per-relation reads gave: column order, key
-// order, foreign keys (an implicit target included) and index columns.
+// A schema read keeps column order, key order, foreign keys (an implicit
+// target included) and index columns.
 func TestSchemaReadsKeepOrderAndKeys(t *testing.T) {
 	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "s.db"))
 	if err != nil {

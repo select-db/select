@@ -223,7 +223,7 @@ type relation struct{ schema, name string }
 
 // Metadata groups the rows into schemas: user schemas by name, then catalogs.
 // Tables get their primary and foreign keys; views keep their columns as read.
-func (r SchemaRows) Metadata() *Metadata {
+func (r *SchemaRows) Metadata() *Metadata {
 	slices.SortStableFunc(r.Schemas, func(a, b SchemaRow) int {
 		if a.Catalog != b.Catalog {
 			if a.Catalog {

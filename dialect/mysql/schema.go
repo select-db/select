@@ -259,7 +259,7 @@ func fillSchemaRows(r *core.SchemaRows) error {
 
 	for _, t := range triggers {
 		t.DDL = fmt.Sprintf("CREATE TRIGGER %s %s %s ON %s FOR EACH ROW %s",
-			fkQuoteIdent(t.Name), t.Timing, t.Event, fkQuoteIdent(t.Table), t.Action)
+			quoteIdent(t.Name), t.Timing, t.Event, quoteIdent(t.Table), t.Action)
 		r.Triggers = append(r.Triggers, t.TriggerRow)
 	}
 
@@ -332,7 +332,7 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 			if p.Name == "" {
 				continue
 			}
-			col := fkQuoteIdent(p.Name)
+			col := quoteIdent(p.Name)
 			// A spatial key reports a sub_part that SHOW CREATE leaves out.
 			if p.SubPart != nil && p.IndexType != "SPATIAL" {
 				col += fmt.Sprintf("(%d)", *p.SubPart)
@@ -347,15 +347,15 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 		case name == "PRIMARY":
 			line = "PRIMARY KEY"
 		case parts[0].IndexType == "FULLTEXT" || parts[0].IndexType == "SPATIAL":
-			line = parts[0].IndexType + " KEY " + fkQuoteIdent(name)
+			line = parts[0].IndexType + " KEY " + quoteIdent(name)
 		case bool(parts[0].Unique):
-			line = "UNIQUE KEY " + fkQuoteIdent(name)
+			line = "UNIQUE KEY " + quoteIdent(name)
 		default:
-			line = "KEY " + fkQuoteIdent(name)
+			line = "KEY " + quoteIdent(name)
 		}
 		line = "  " + line + " (" + strings.Join(cols, ",") + ")"
 		if parts[0].Comment != "" {
-			line += " COMMENT " + fkQuoteLiteral(parts[0].Comment)
+			line += " COMMENT " + quoteLiteral(parts[0].Comment)
 		}
 		lines = append(lines, line)
 	}
@@ -378,15 +378,15 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 		slices.SortStableFunc(parts, func(a, b foreignKeyRow) int { return cmp.Compare(a.Position, b.Position) })
 		var cols, refCols []string
 		for _, p := range parts {
-			cols = append(cols, fkQuoteIdent(p.Column))
-			refCols = append(refCols, fkQuoteIdent(p.RefColumn))
+			cols = append(cols, quoteIdent(p.Column))
+			refCols = append(refCols, quoteIdent(p.RefColumn))
 		}
-		ref := fkQuoteIdent(parts[0].RefTable)
+		ref := quoteIdent(parts[0].RefTable)
 		if parts[0].RefSchema != t.Schema {
-			ref = fkQuoteIdent(parts[0].RefSchema) + "." + ref
+			ref = quoteIdent(parts[0].RefSchema) + "." + ref
 		}
 		line := fmt.Sprintf("  CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-			fkQuoteIdent(name), strings.Join(cols, sep), ref, strings.Join(refCols, sep))
+			quoteIdent(name), strings.Join(cols, sep), ref, strings.Join(refCols, sep))
 		// Both servers leave out the rule a key gets when none is written.
 		for _, rule := range [][2]string{{"DELETE", parts[0].OnDelete}, {"UPDATE", parts[0].OnUpdate}} {
 			if rule[1] != "" && rule[1] != "RESTRICT" && rule[1] != "NO ACTION" {
@@ -396,7 +396,7 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 		lines = append(lines, line)
 	}
 
-	ddl := "CREATE TABLE " + fkQuoteIdent(t.Name) + " (\n" + strings.Join(lines, ",\n") + "\n)"
+	ddl := "CREATE TABLE " + quoteIdent(t.Name) + " (\n" + strings.Join(lines, ",\n") + "\n)"
 	if t.Engine != "" {
 		ddl += " ENGINE=" + t.Engine
 	}
@@ -409,7 +409,7 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 		ddl += " DEFAULT CHARSET=" + charset + " COLLATE=" + t.Collation
 	}
 	if t.Comment != "" {
-		ddl += " COMMENT=" + fkQuoteLiteral(t.Comment)
+		ddl += " COMMENT=" + quoteLiteral(t.Comment)
 	}
 	return ddl
 }
@@ -417,7 +417,7 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 // columnDDL writes one column as SHOW CREATE TABLE does. MariaDB reports
 // defaults as SQL text; MySQL reports the bare value unless it is an expression.
 func columnDDL(c columnRow, tableCollation string, mariadb bool) string {
-	s := fkQuoteIdent(c.Name) + " " + c.Type
+	s := quoteIdent(c.Name) + " " + c.Type
 	if c.Collation != "" && c.Collation != tableCollation {
 		s += " CHARACTER SET " + c.Charset + " COLLATE " + c.Collation
 	}
@@ -439,7 +439,7 @@ func columnDDL(c columnRow, tableCollation string, mariadb bool) string {
 		s += " INVISIBLE"
 	}
 	switch {
-	case c.Generated != "":
+	case c.Generated != "": // a generated column has no default
 	case c.Default != nil && (mariadb || c.DataType == "bit"):
 		s += " DEFAULT " + *c.Default
 	case c.Default != nil && strings.Contains(extra, "default_generated"):
@@ -449,7 +449,7 @@ func columnDDL(c columnRow, tableCollation string, mariadb bool) string {
 			s += " DEFAULT (" + *c.Default + ")"
 		}
 	case c.Default != nil:
-		s += " DEFAULT " + fkQuoteLiteral(*c.Default)
+		s += " DEFAULT " + quoteLiteral(*c.Default)
 	case bool(c.Nullable) && !mariadb && !strings.Contains(extra, "auto_increment") && !noDefaultNull(c.DataType):
 		s += " DEFAULT NULL"
 	}
@@ -463,7 +463,7 @@ func columnDDL(c columnRow, tableCollation string, mariadb bool) string {
 		s += " /*!80023 INVISIBLE */"
 	}
 	if c.Comment != "" {
-		s += " COMMENT " + fkQuoteLiteral(c.Comment)
+		s += " COMMENT " + quoteLiteral(c.Comment)
 	}
 	return s
 }
@@ -488,12 +488,12 @@ func buildViewDDL(v viewRow) string {
 	}
 	// The user name may itself hold an @, the host may not.
 	if i := strings.LastIndex(v.Definer, "@"); i >= 0 {
-		ddl += "DEFINER=" + fkQuoteIdent(v.Definer[:i]) + "@" + fkQuoteIdent(v.Definer[i+1:]) + " "
+		ddl += "DEFINER=" + quoteIdent(v.Definer[:i]) + "@" + quoteIdent(v.Definer[i+1:]) + " "
 	}
 	if v.Security != "" {
 		ddl += "SQL SECURITY " + v.Security + " "
 	}
-	ddl += "VIEW " + fkQuoteIdent(v.Name) + " AS " + unqualify(v.Definition, v.Schema)
+	ddl += "VIEW " + quoteIdent(v.Name) + " AS " + unqualify(v.Definition, v.Schema)
 	if v.CheckOption != "" && v.CheckOption != "NONE" {
 		ddl += " WITH " + v.CheckOption + " CHECK OPTION"
 	}
@@ -503,7 +503,7 @@ func buildViewDDL(v viewRow) string {
 // unqualify drops `schema`. where it starts a name, leaving a table that
 // happens to share the schema's name, as in `other`.`schema`.`col`, alone.
 func unqualify(definition, schema string) string {
-	prefix := fkQuoteIdent(schema) + "."
+	prefix := quoteIdent(schema) + "."
 	var b strings.Builder
 	for {
 		i := strings.Index(definition, prefix)

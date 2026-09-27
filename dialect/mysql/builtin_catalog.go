@@ -101,7 +101,7 @@ func enrichBuiltinFunctionsFromHelp(ctx context.Context, db *sql.DB, base []core
 	// prepare and an execute, one without is a single round trip.
 	names := make([]string, len(base))
 	for i, f := range base {
-		names[i] = fkQuoteLiteral(f.Name)
+		names[i] = quoteLiteral(f.Name)
 	}
 	query := "SELECT name, description FROM mysql.help_topic WHERE name IN (" + strings.Join(names, ", ") + ")"
 

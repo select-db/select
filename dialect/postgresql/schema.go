@@ -11,9 +11,13 @@ import (
 	pgparser "github.com/selectDb/dialect/postgresql/parser"
 )
 
+// asciiSpace is what strings.TrimSpace trims, spelled out: Postgres escape
+// strings have no \v.
+const asciiSpace = `E' \t\n\r\x0b\f'`
+
 // schemaQuery reads the user schemas and pg_catalog in one round trip. It takes
-// no bind parameters so lib/pq sends it with the simple protocol; the builtin
-// function names are inlined where :builtins stands.
+// no bind parameters so lib/pq sends it with the simple protocol; ReadSchema
+// inlines the builtin function names, quoted by pq.QuoteLiteral, at :builtins.
 const schemaQuery = `
 	WITH ns AS (
 		SELECT oid, nspname, nspname = 'pg_catalog' AS catalog
@@ -47,7 +51,7 @@ const schemaQuery = `
 	UNION ALL
 	SELECT 'current', json_build_object('name', COALESCE(
 		NULLIF(current_schema(), ''),
-		NULLIF(btrim(btrim(split_part(current_setting('search_path'), ',', 1), '"'), E' \t\n\r\x0b\f'), ''),
+		NULLIF(btrim(btrim(split_part(current_setting('search_path'), ',', 1), '"'), ` + asciiSpace + `), ''),
 		'public'))
 	UNION ALL
 	SELECT 'relation', json_build_object('schema', n.nspname, 'name', c.relname, 'kind', 'table',
@@ -63,7 +67,7 @@ const schemaQuery = `
 	UNION ALL
 	SELECT 'relation', json_build_object('schema', n.nspname, 'name', c.relname, 'kind', 'view',
 		'ddl', COALESCE('CREATE VIEW ' || c.relname || E' AS\n' ||
-			NULLIF(btrim(pg_catalog.pg_get_viewdef(c.oid, true), E' \t\n\r\x0b\f'), ''), ''))
+			NULLIF(btrim(pg_catalog.pg_get_viewdef(c.oid, true), ` + asciiSpace + `), ''), ''))
 	FROM pg_catalog.pg_class c
 	JOIN ns n ON n.oid = c.relnamespace
 	WHERE c.relkind = 'v'
@@ -138,7 +142,7 @@ const schemaQuery = `
 	UNION ALL
 	SELECT 'type', json_build_object('schema', n.nspname, 'name', t.typname, 'kind', t.typtype,
 		'display', COALESCE(pg_catalog.format_type(t.oid, NULL), t.typname::text),
-		'description', COALESCE(btrim(pg_catalog.obj_description(t.oid, 'pg_type'), E' \t\n\r\x0b\f'), ''),
+		'description', COALESCE(btrim(pg_catalog.obj_description(t.oid, 'pg_type'), ` + asciiSpace + `), ''),
 		'enumLabels', (SELECT json_agg(e.enumlabel ORDER BY e.enumsortorder) FROM pg_catalog.pg_enum e WHERE e.enumtypid = t.oid))
 	FROM pg_catalog.pg_type t
 	JOIN ns n ON n.oid = t.typnamespace
@@ -147,7 +151,7 @@ const schemaQuery = `
 	SELECT 'function', json_build_object('schema', n.nspname, 'name', p.proname, 'oid', p.oid::bigint,
 		'args', pg_catalog.pg_get_function_identity_arguments(p.oid),
 		'result', pg_catalog.pg_get_function_result(p.oid), 'kind', p.prokind,
-		'description', COALESCE(btrim(pg_catalog.obj_description(p.oid, 'pg_proc'), E' \t\n\r\x0b\f'), ''))
+		'description', COALESCE(btrim(pg_catalog.obj_description(p.oid, 'pg_proc'), ` + asciiSpace + `), ''))
 	FROM pg_catalog.pg_proc p
 	JOIN ns n ON n.oid = p.pronamespace
 	WHERE NOT n.catalog OR p.proname = ANY(:builtins)
