@@ -57,13 +57,9 @@ type SQLDialect interface {
 	// DSNWithoutPassword returns dsn with no password.
 	DSNWithoutPassword(dsn string) string
 
-	// DefaultSchemaName is the conventional default schema for this dialect,
-	// used when ReadSchema reports no current schema. Returns "" for dialects
-	// without a meaningful default (e.g. MySQL).
-	DefaultSchemaName() string
-
-	// ReadSchema reads every schema, the built-in catalog and the settings in
-	// as few round trips as the database allows, the same few whatever its size.
+	// ReadSchema reads every schema, the built-in catalog, the settings and the
+	// current schema in as few round trips as the database allows, the same few
+	// whatever its size.
 	ReadSchema(ctx context.Context, db *sql.DB) (*Metadata, error)
 
 	// ANTLR grammar (used by inspect system only)

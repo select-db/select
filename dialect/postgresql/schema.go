@@ -11,9 +11,6 @@ import (
 	pgparser "github.com/selectDb/dialect/postgresql/parser"
 )
 
-// DefaultSchemaName implements core.SQLDialect.DefaultSchemaName.
-func (d *Dialect) DefaultSchemaName() string { return "public" }
-
 // schemaQuery reads the user schemas and pg_catalog in one round trip. It takes
 // no bind parameters so lib/pq sends it with the simple protocol; the builtin
 // function names are inlined where :builtins stands.
@@ -54,10 +51,12 @@ const schemaQuery = `
 		'public'))
 	UNION ALL
 	SELECT 'relation', json_build_object('schema', n.nspname, 'name', c.relname, 'kind', 'table',
-		'description', COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'), ''),
+		'description', COALESCE(d.description, ''),
 		'ddl', COALESCE(tc.ddl || COALESCE(E',\n\n' || cons.ddl, '') || E'\n);', ''))
 	FROM pg_catalog.pg_class c
 	JOIN ns n ON n.oid = c.relnamespace
+	LEFT JOIN pg_catalog.pg_description d
+		ON d.objoid = c.oid AND d.classoid = 'pg_catalog.pg_class'::regclass AND d.objsubid = 0
 	LEFT JOIN table_cols tc ON tc.oid = c.oid
 	LEFT JOIN table_cons cons ON cons.oid = c.oid
 	WHERE c.relkind IN ('r', 'p')
@@ -72,11 +71,14 @@ const schemaQuery = `
 	SELECT 'column', json_build_object('schema', n.nspname, 'table', c.relname, 'name', a.attname,
 		'type', pg_catalog.format_type(a.atttypid, a.atttypmod), 'nullable', NOT a.attnotnull,
 		'default', NULLIF(pg_catalog.pg_get_expr(ad.adbin, ad.adrelid), ''), 'position', a.attnum,
-		'description', COALESCE(pg_catalog.col_description(c.oid, a.attnum), ''))
+		'description', COALESCE(d.description, ''))
 	FROM pg_catalog.pg_attribute a
 	JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 	JOIN ns n ON n.oid = c.relnamespace
 	LEFT JOIN pg_catalog.pg_attrdef ad ON ad.adrelid = c.oid AND ad.adnum = a.attnum
+	-- A join, not col_description per row: one pass over pg_description.
+	LEFT JOIN pg_catalog.pg_description d
+		ON d.objoid = c.oid AND d.classoid = 'pg_catalog.pg_class'::regclass AND d.objsubid = a.attnum
 	WHERE c.relkind IN ('r', 'p', 'v') AND a.attnum > 0 AND NOT a.attisdropped
 	UNION ALL
 	SELECT 'primary_key', json_build_object('schema', n.nspname, 'table', c.relname, 'column', a.attname,

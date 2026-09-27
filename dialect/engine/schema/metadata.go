@@ -25,9 +25,6 @@ func Fetch(ctx context.Context, db *sql.DB, dialect core.SQLDialect, dbName stri
 		return nil, fmt.Errorf("failed to read schema: %w", err)
 	}
 	meta.DefaultDB = dbName
-	if meta.CurrentSchema == "" {
-		meta.CurrentSchema = dialect.DefaultSchemaName()
-	}
 	meta.DefaultSchema = meta.CurrentSchema
 	core.EnrichEnumValues(meta)
 	return meta, nil

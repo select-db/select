@@ -7,9 +7,6 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// DefaultSchemaName implements core.SQLDialect.DefaultSchemaName.
-func (d *Dialect) DefaultSchemaName() string { return "main" }
-
 // schemaQuery reads everything but the statistics in one round trip.
 // sqlite_stat1 exists only after an ANALYZE, so has_stat1 says whether to read it.
 const schemaQuery = `

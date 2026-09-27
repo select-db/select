@@ -134,7 +134,7 @@ func QuerySchemaRows(ctx context.Context, db *sql.DB, query string) (SchemaRows,
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var kind string
-		var doc []byte
+		var doc sql.RawBytes
 		if err := rows.Scan(&kind, &doc); err != nil {
 			return r, fmt.Errorf("failed to scan schema row: %w", err)
 		}
@@ -182,7 +182,24 @@ func decodeRow(r *SchemaRows, kind string, doc []byte) error {
 	if r.Other == nil {
 		r.Other = make(map[string][]json.RawMessage)
 	}
-	r.Other[kind] = append(r.Other[kind], doc)
+	// doc is only valid until the next row: RawBytes is not copied on scan.
+	r.Other[kind] = append(r.Other[kind], append(json.RawMessage(nil), doc...))
+	return nil
+}
+
+// DecodeOther decodes the rows of a kind this package does not know into dst,
+// a pointer to a slice of the row type.
+func (r SchemaRows) DecodeOther(kind string, dst any) error {
+	doc := []byte{'['}
+	for i, row := range r.Other[kind] {
+		if i > 0 {
+			doc = append(doc, ',')
+		}
+		doc = append(doc, row...)
+	}
+	if err := json.Unmarshal(append(doc, ']'), dst); err != nil {
+		return fmt.Errorf("failed to decode %s row: %w", kind, err)
+	}
 	return nil
 }
 
@@ -201,7 +218,7 @@ func compareNames(a, b string) int {
 	return cmp.Or(strings.Compare(strings.ToLower(a), strings.ToLower(b)), strings.Compare(a, b))
 }
 
-// relation names a table, view or index within its schema.
+// relation names a table or view within its schema.
 type relation struct{ schema, name string }
 
 // Metadata groups the rows into schemas: user schemas by name, then catalogs.

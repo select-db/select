@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,17 +11,11 @@ import (
 	core "github.com/selectDb/dialect/core"
 )
 
-// DefaultSchemaName implements core.SQLDialect.DefaultSchemaName. MySQL has no
-// schemas; we treat the connected database as the schema, so there is no
-// meaningful static default.
-func (d *Dialect) DefaultSchemaName() string { return "" }
-
 const userSchemas = "NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')"
 
-// schemaQuery reads every user database in one round trip. It takes no
-// arguments, so the driver sends it as text without a prepare. The mysql_*
-// kinds carry what the DDL needs and become core rows in fillSchemaRows.
-// MySQL has no views.algorithm: there the name resolves outward to no_algorithm.
+// schemaQuery reads every user database in one round trip; with no arguments
+// the driver sends it as text, without a prepare. The mysql_* kinds carry what
+// the DDL needs and become core rows in fillSchemaRows.
 const schemaQuery = `
 	SELECT 'schema' AS kind, JSON_OBJECT('name', schema_name, 'catalog', FALSE) AS doc
 	FROM information_schema.schemata
@@ -41,6 +34,7 @@ const schemaQuery = `
 	FROM information_schema.tables
 	WHERE table_schema ` + userSchemas + `
 	UNION ALL
+	-- On MySQL, which has no views.algorithm, the subquery resolves it to no_algorithm's ''.
 	SELECT 'mysql_view', JSON_OBJECT(
 		'schema', v.table_schema, 'name', v.table_name, 'definition', v.view_definition,
 		'checkOption', v.check_option, 'definer', v.definer, 'security', v.security_type,
@@ -211,12 +205,8 @@ func fillSchemaRows(r *core.SchemaRows) error {
 		"mysql_column": &columns, "mysql_index_column": &indexColumns,
 		"mysql_foreign_key": &foreignKeys, "mysql_trigger": &triggers, "mysql_parameter": &parameters,
 	} {
-		doc, err := json.Marshal(r.Other[kind])
-		if err == nil {
-			err = json.Unmarshal(doc, dst)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to decode %s row: %w", kind, err)
+		if err := r.DecodeOther(kind, dst); err != nil {
+			return err
 		}
 	}
 	mariadb := len(server) > 0 && bool(server[0].MariaDB)
@@ -379,6 +369,10 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 		byConstraint[fk.Constraint] = append(byConstraint[fk.Constraint], fk)
 	}
 	slices.Sort(constraints)
+	sep := ","
+	if mariadb {
+		sep = ", "
+	}
 	for _, name := range constraints {
 		parts := byConstraint[name]
 		slices.SortStableFunc(parts, func(a, b foreignKeyRow) int { return cmp.Compare(a.Position, b.Position) })
@@ -390,10 +384,6 @@ func buildTableDDL(t tableRow, columns []columnRow, indexColumns []indexColumnRo
 		ref := fkQuoteIdent(parts[0].RefTable)
 		if parts[0].RefSchema != t.Schema {
 			ref = fkQuoteIdent(parts[0].RefSchema) + "." + ref
-		}
-		sep := ","
-		if mariadb {
-			sep = ", "
 		}
 		line := fmt.Sprintf("  CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
 			fkQuoteIdent(name), strings.Join(cols, sep), ref, strings.Join(refCols, sep))
