@@ -18,6 +18,10 @@ on:
         description: Run the analyzer. From plan; this workflow decides nothing.
         type: boolean
         required: true
+      schema-servers:
+        description: Read a schema from real servers. From plan; this workflow decides nothing.
+        type: boolean
+        required: true
 
 permissions:
   contents: read
@@ -79,3 +83,56 @@ jobs:
         working-directory: dialect/core/tokenanalyzer/python
       - run: uv run --with pytest pytest analysis/ completion/ lint_rules/ -v
         working-directory: dialect/core/tokenanalyzer/python
+
+  # A schema load is one query per server, so it has to hold on every version
+  # a user may connect to. Services start in parallel; the test waits for them.
+  schema-servers:
+    name: Schema (${{ matrix.server }})
+    if: inputs.schema-servers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - server: Postgres 13
+            image: postgres:13
+            port: 5432
+            postgres: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+          - server: Postgres 18
+            image: postgres:18
+            port: 5432
+            postgres: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+          - server: MySQL 8.0
+            image: mysql:8.0
+            port: 3306
+            mysql: root:root@tcp(127.0.0.1:3306)/
+          - server: MySQL 8.4
+            image: mysql:8.4
+            port: 3306
+            mysql: root:root@tcp(127.0.0.1:3306)/
+          - server: MariaDB 10.11
+            image: mariadb:10.11
+            port: 3306
+            mysql: root:root@tcp(127.0.0.1:3306)/
+    services:
+      db:
+        image: ${{ matrix.image }}
+        # Each image reads its own variable and ignores the others.
+        env:
+          POSTGRES_PASSWORD: postgres
+          MYSQL_ROOT_PASSWORD: root
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - ${{ matrix.port }}:${{ matrix.port }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: dialect/go.mod
+          cache-dependency-path: dialect/go.sum
+      - run: go test ./engine/schema -run 'TestReadSchema' -count=1 -v
+        working-directory: dialect
+        env:
+          SCHEMA_TEST_POSTGRES_DSN: ${{ matrix.postgres }}
+          SCHEMA_TEST_MYSQL_DSN: ${{ matrix.mysql }}

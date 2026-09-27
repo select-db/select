@@ -18,55 +18,60 @@ func EnrichEnumValues(meta *Metadata) {
 	if meta == nil {
 		return
 	}
-	// Keyed by lowercased Name and Display so each column is one lookup, not a scan.
+	// Keyed by schema.name and by bare name, lowercased, so each column is one
+	// lookup and a qualified type finds its own schema's enum.
 	enums := make(map[string][]string)
 	for _, t := range meta.AllTypes() {
 		if t.Kind != "e" || len(t.EnumLabels) == 0 {
 			continue
 		}
-		for _, key := range []string{strings.ToLower(t.Name), strings.ToLower(t.Display)} {
-			if _, taken := enums[key]; !taken && key != "" {
+		for _, key := range []string{typeKey(t.Schema + "." + t.Name), typeKey(t.Name)} {
+			if _, taken := enums[key]; !taken {
 				enums[key] = t.EnumLabels
 			}
 		}
 	}
 	for si := range meta.Schemas {
 		s := &meta.Schemas[si]
-		enrichTables(enums, s.Tables)
-		enrichTables(enums, s.Views)
-		enrichTables(enums, s.MaterializedViews)
-		enrichTables(enums, s.ForeignTables)
-	}
-}
-
-func enrichTables(enums map[string][]string, tables []Table) {
-	for ti := range tables {
-		cols := tables[ti].Columns
-		for ci := range cols {
-			cols[ci].EnumValues = resolveEnumValues(enums, cols[ci].Type)
+		for _, tables := range [][]Table{s.Tables, s.Views, s.MaterializedViews, s.ForeignTables} {
+			enrichTables(enums, s.Name, tables)
 		}
 	}
 }
 
-func resolveEnumValues(enums map[string][]string, columnType string) []string {
+func enrichTables(enums map[string][]string, schema string, tables []Table) {
+	for ti := range tables {
+		cols := tables[ti].Columns
+		for ci := range cols {
+			cols[ci].EnumValues = resolveEnumValues(enums, schema, cols[ci].Type)
+		}
+	}
+}
+
+// resolveEnumValues looks a type up as written, then an unqualified one in the
+// column's own schema before any schema, as the search path would find it.
+func resolveEnumValues(enums map[string][]string, schema, columnType string) []string {
 	if vals := ParseInlineEnumValues(columnType); len(vals) > 0 {
 		return vals
 	}
-
-	name := columnType
-	if idx := strings.LastIndexByte(name, '.'); idx >= 0 {
-		name = name[idx+1:]
-	}
-	name = strings.TrimSpace(name)
+	name := typeKey(columnType)
 	if name == "" {
 		return nil
 	}
-
-	labels, ok := enums[strings.ToLower(name)]
+	qualified := name
+	if !strings.Contains(name, ".") {
+		qualified = typeKey(schema + "." + name)
+	}
+	labels, ok := enums[qualified]
 	if !ok {
-		labels = enums[strings.ToLower(columnType)]
+		labels = enums[name[strings.LastIndexByte(name, '.')+1:]]
 	}
 	return append([]string(nil), labels...)
+}
+
+// typeKey drops the quotes format_type puts around a mixed-case name.
+func typeKey(name string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), `"`, ""))
 }
 
 // ParseInlineEnumValues extracts the quoted members of an inline enum/set

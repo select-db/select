@@ -53,6 +53,7 @@ jobs:
       go-dialect:      ${{ steps.plan.outputs.go-dialect }}
       frontend:        ${{ steps.plan.outputs.frontend }}
       python:          ${{ steps.plan.outputs.python }}
+      schema-servers:  ${{ steps.plan.outputs.schema-servers }}
       web:             ${{ steps.plan.outputs.web }}
       go-modules:      ${{ steps.plan.outputs.go-modules }}
       desktop:         ${{ steps.plan.outputs.desktop }}
@@ -69,15 +70,18 @@ jobs:
 
           # Raw per-area change flags. Everything runs on push, dispatch and
           # schedule. A PR diffs the merge against its base.
-          frontend=false; app=false; backend=false; dialect=false; toolkit=false; python=false; web=false
+          frontend=false; app=false; backend=false; dialect=false; toolkit=false; python=false; web=false; schema=false
           if [[ "$EVENT" == "push" || "$EVENT" == "workflow_dispatch" || "$EVENT" == "schedule" ]]; then
-            frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
+            frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true; schema=true
           else
             FILES="$(git diff --name-only HEAD~1 HEAD || true)"
             if grep -qE '^(\.github/|\.gitleaks\.toml)' <<<"$FILES"; then
               # Shared infrastructure changed, so run everything.
-              frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true
+              frontend=true; app=true; backend=true; dialect=true; toolkit=true; python=true; web=true; schema=true
             else
+              # The code that reads a schema, tested against real servers only
+              # when it changes: every other PR skips the servers.
+              grep -qE '^dialect/(core/(schema_rows|metadata|enum_values|dialect|ddl_format)(_test)?\.go|engine/schema/|(postgresql|mysql|sqlite)/(schema|builtin)[^/]*\.go|mysql/foreign_key_lookup\.go)' <<<"$FILES" && schema=true || true
               grep -q '^app/frontend/' <<<"$FILES" && frontend=true || true
               grep -qE '^app/(internal|build)/|^app/(main\.go|Taskfile\.yml|go\.(mod|sum)|\.golangci)' <<<"$FILES" && app=true || true
               grep -q '^backend/' <<<"$FILES" && backend=true || true
@@ -123,6 +127,7 @@ jobs:
             echo "go-dialect=$go_dialect"
             echo "frontend=$frontend"
             echo "python=$python"
+            echo "schema-servers=$schema"
             echo "web=$web"
             echo "go-modules=[${joined}]"
             echo "desktop=$desktop"
@@ -130,7 +135,7 @@ jobs:
             echo "draft-release=$draft"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Plan: go-modules=[${joined}] frontend=$frontend python=$python web=$web desktop=$desktop staging=$staging draft=$draft"
+          echo "Plan: go-modules=[${joined}] frontend=$frontend python=$python schema=$schema web=$web desktop=$desktop staging=$staging draft=$draft"
 
   # Security scanning, gated on which modules changed.
   security:
@@ -249,6 +254,7 @@ jobs:
     with:
       go-dialect: ${{ needs.plan.outputs.go-dialect == 'true' }}
       python: ${{ needs.plan.outputs.python == 'true' }}
+      schema-servers: ${{ needs.plan.outputs.schema-servers == 'true' }}
 
 
   # The website: docs, API reference and marketing pages.
