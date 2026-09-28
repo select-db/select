@@ -551,12 +551,7 @@ func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *co
 	}
 	// The columns are the statement, as they are for the SELECT * it stands
 	// for. Without them the see check has no field to find and hides nothing.
-	// A name the metadata does not carry resolves the way a FROM relation
-	// resolves it, and the right is then on the whole table.
 	fields := core.TableFields(i.meta, schema, table, i.dialect)
-	if len(fields) == 0 {
-		schema = i.resolver.SchemaFor(schema, table)
-	}
 	return &core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
@@ -970,8 +965,9 @@ func (i *Inspector) resolveAnyName(anyName pg.IAny_nameContext) (schema, table s
 	return defaultSchema, first
 }
 
-// resolveQualifiedName extracts (schema, table) from a qualified_name node.
-// Schema defaults to DefaultSchema when not specified.
+// resolveQualifiedName extracts (schema, table) from a qualified_name node. A
+// bare name resolves through the resolver, so a write target and a FROM
+// relation cannot answer differently for one name.
 func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, table string) {
 	if q == nil {
 		return "", ""
@@ -990,8 +986,6 @@ func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, t
 			}
 		}
 	} else {
-		// A write target written bare resolves the way the resolver resolves a
-		// FROM relation, so the two cannot answer differently for one name.
 		table = i.dialect.NormalizeIdentifier(colId.GetText())
 		schema = i.resolver.SchemaFor(defaultSchema, table)
 	}

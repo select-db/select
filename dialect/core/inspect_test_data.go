@@ -1342,9 +1342,8 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 						{Name: "t1", Schema: defaultSchema},
 						{Name: "unknown_table", Schema: defaultSchema},
 					},
-					// Both branches carry a schema now, so both columns are
-					// checked rather than the unknown one being dropped for
-					// having nothing to check it against.
+					// Both branches carry a schema, so both columns have
+					// something to be checked against.
 					Where: []InspectField{
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
 						{Name: "c1", Table: "unknown_table", Schema: defaultSchema},

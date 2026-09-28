@@ -2848,6 +2848,21 @@ func permCases() []PermCase {
 			Why:   "TABLE t9 is SELECT * FROM t9, and the shorthand resolves the name the same way",
 		},
 		{
+			On:    []string{"postgresql", "mysql"},
+			Name:  "the TABLE shorthand on a qualified name the metadata is missing",
+			SQL:   "TABLE other.t9",
+			Needs: []Right{{Action: core.ActionSelect, Schema: "other", Table: "t9"}},
+			Op:    core.InspectOpSelect,
+			Why:   "a qualified name keeps the schema it was written with, so the session's cannot take it over",
+		},
+		{
+			Name:  "an insert into an unqualified name the metadata is missing",
+			SQL:   "INSERT INTO t9 (c1) VALUES (1)",
+			Needs: []Right{mainT9(core.ActionInsert).Only("c1")},
+			Op:    core.InspectOpInsert,
+			Why:   "the verb in front of a name cannot change where the name resolves",
+		},
+		{
 			On:    []string{"postgresql"},
 			Name:  "a PostgreSQL system catalog",
 			SQL:   "SELECT relname FROM pg_class",

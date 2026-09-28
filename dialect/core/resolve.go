@@ -57,13 +57,10 @@ func (r Resolver) SchemaFor(schema, table string) string {
 	if session == "" {
 		session = GetDefaultSchema(r.Meta)
 	}
-	wanted := r.Dialect.NormalizeIdentifier(session)
-	for _, described := range r.Meta.Schemas {
-		if r.Dialect.NormalizeIdentifier(described.Name) == wanted {
-			return session
-		}
+	if !SchemaExists(r.Meta, session, r.Dialect.NormalizeIdentifier) {
+		return ""
 	}
-	return ""
+	return session
 }
 
 // Tables turns the relations a statement named into the tables a permission
@@ -581,11 +578,10 @@ func (r Resolver) soleRelationColumn(name string, alias *string, refs []Relation
 	// checked on the table the statement reads. A qualified name the metadata
 	// is missing keeps an empty schema, which asks for the table as a whole
 	// rather than for a column the metadata cannot confirm.
-	if !TableExistsInMetadata(r.Meta, real[0].Schema, real[0].Table, r.Dialect) {
+	if !real[0].Qualified {
+		field.Schema = r.SchemaFor(real[0].Schema, real[0].Table)
+	} else if !TableExistsInMetadata(r.Meta, real[0].Schema, real[0].Table, r.Dialect) {
 		field.Schema = ""
-		if !real[0].Qualified {
-			field.Schema = r.SchemaFor(real[0].Schema, real[0].Table)
-		}
 	}
 	return &field
 }

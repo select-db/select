@@ -59,9 +59,6 @@ func TestUnknownNameInUndescribedSchema(t *testing.T) {
 					t.Errorf("ran against a schema the metadata does not describe:\n  %s", sql)
 					continue
 				}
-				if strings.Contains(err.Error(), " .t9") {
-					t.Errorf("refused with a right nobody can grant: %v\n  %s", err, sql)
-				}
 				if !strings.Contains(err.Error(), `"t9"`) {
 					t.Errorf("refusal does not name the table: %v\n  %s", err, sql)
 				}

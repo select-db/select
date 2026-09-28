@@ -153,7 +153,7 @@ func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 // the pg_ prefix for its catalog, and every relation carrying it is reachable
 // unqualified because pg_catalog is implicitly first on the search path.
 func (d *Dialect) SystemSchema(table string) string {
-	if strings.HasPrefix(strings.ToLower(d.NormalizeIdentifier(table)), "pg_") {
+	if strings.HasPrefix(d.NormalizeIdentifier(table), "pg_") {
 		return "pg_catalog"
 	}
 	return ""
