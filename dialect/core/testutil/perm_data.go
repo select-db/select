@@ -1651,6 +1651,19 @@ func permCases() []PermCase {
 		},
 		{
 			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery on an insert reading its rows from a query",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 RETURNING (SELECT max(c1) FROM other.t3)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the rows written come from t2 and the row handed back is read out of other.t3",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
 			Name: "a RETURNING subquery over a view",
 			SQL:  "DELETE FROM t1 RETURNING (SELECT count(*) FROM v1)",
 			Needs: []Right{
@@ -1672,6 +1685,30 @@ func permCases() []PermCase {
 			},
 			Op:  core.InspectOpDelete,
 			Why: "x is the statement's own name for the read of t2, and charging a right on the name itself would refuse the statement for every role",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery over a CTE an update declares",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) UPDATE t1 SET c2 = 'x' RETURNING (SELECT max(c1) FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "each write path drops the CTE names for itself, so each needs a case saying it drops them after the returning clause is read",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery over a CTE an insert declares",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) INSERT INTO t1 (c1) VALUES (1) RETURNING (SELECT max(c1) FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "each write path drops the CTE names for itself, so each needs a case saying it drops them after the returning clause is read",
 		},
 		{
 			On:   []string{"postgresql", "sqlite"},
