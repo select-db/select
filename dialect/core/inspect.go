@@ -165,6 +165,21 @@ func dropDeclaredTables(stmts []InspectStatement, declared map[string]bool, norm
 	}
 }
 
+// DropVirtualRefs keeps the relations that name something a permission check
+// can be held on: not an alias the statement bound, and not one of virtual,
+// whose names arrive normalized. It is the rule DropVirtualTables states, one
+// step earlier, and Tables applies it to every relation it reads.
+func DropVirtualRefs(refs []RelationRef, virtual map[string]bool, normalize func(string) string) []RelationRef {
+	kept := make([]RelationRef, 0, len(refs))
+	for _, ref := range refs {
+		if !ref.Qualified && (ref.IsVirtual || virtual[normalize(ref.Table)]) {
+			continue
+		}
+		kept = append(kept, ref)
+	}
+	return kept
+}
+
 // CTEScope returns the CTE names the body at idx can refer to. A plain WITH
 // exposes only the CTEs declared before this one, so a name declared later is
 // still the real table: PostgreSQL runs "WITH a AS (SELECT c1 FROM b), b AS

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"slices"
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
@@ -581,9 +582,19 @@ func (i *Inspector) inspectSelectCore(
 ) core.InspectStatement {
 	relationRefs, subqueryColumns := i.extractRelationRefs(selectCore)
 
-	fromSubqueries := i.extractFromSubqueries(selectCore, cteToSubqueryMap)
-
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
+
+	where, whereSubqueries := i.extractWhereFields(selectCore, relationRefs, scope)
+
+	// A derived table reading a CTE reports it as a table of its own, and it is
+	// not one out here. The drop mutates what it is given, so the subqueries go
+	// in one slice and the from ones are read back as its prefix.
+	fromSubqueries := i.extractFromSubqueries(selectCore, cteToSubqueryMap)
+	subqueries := slices.Concat(fromSubqueries, whereSubqueries,
+		i.extractSelectListSubqueries(selectCore), i.extractBranchClauseSubqueries(selectCore))
+	i.resolver.DropCTETables(subqueries, ctes)
+	fromSubqueries = subqueries[:len(fromSubqueries)]
+
 	tables := i.resolver.Tables(relationRefs, scope)
 	for _, subq := range fromSubqueries {
 		tables = core.MergeInspectTables(tables, subq.Tables)
@@ -593,18 +604,8 @@ func (i *Inspector) inspectSelectCore(
 	// slice by index, the CTEs against its head and the subquery aliases
 	// against what follows. Handing it the subqueries alone maps a CTE name to
 	// a subquery's columns and leaves the alias resolving to nothing.
-	allSubqueries := make([]core.InspectStatement, 0, len(cteSubqueries)+len(fromSubqueries))
-	allSubqueries = append(allSubqueries, cteSubqueries...)
-	allSubqueries = append(allSubqueries, fromSubqueries...)
+	allSubqueries := slices.Concat(cteSubqueries, fromSubqueries)
 	fields := i.extractSelectFieldsWithResolution(selectCore, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
-
-	where, whereSubqueries := i.extractWhereFields(selectCore, relationRefs, scope)
-	selectSubqueries := i.extractSelectListSubqueries(selectCore)
-
-	subqueries := append(fromSubqueries, whereSubqueries...)
-	subqueries = append(subqueries, selectSubqueries...)
-	subqueries = append(subqueries, i.extractBranchClauseSubqueries(selectCore)...)
-	i.resolver.DropCTETables(subqueries, ctes)
 
 	tested := core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, scope, fields))
 	tested = core.MergeInspectFields(tested, i.joinFields(selectCore, relationRefs, scope))
