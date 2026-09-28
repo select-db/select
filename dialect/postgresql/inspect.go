@@ -552,11 +552,7 @@ func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *co
 	}
 	// The columns are the statement, as they are for the SELECT * it stands
 	// for. Without them the see check has no field to find and hides nothing.
-	// No column means no such table, which resolves to no schema and is refused.
 	fields := core.TableFields(i.meta, schema, table, i.dialect)
-	if len(fields) == 0 {
-		schema = ""
-	}
 	return &core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
@@ -967,11 +963,12 @@ func (i *Inspector) resolveAnyName(anyName pg.IAny_nameContext) (schema, table s
 			return first, i.dialect.NormalizeIdentifier(attrNames[0].GetText())
 		}
 	}
-	return defaultSchema, first
+	return i.resolver.SchemaFor(defaultSchema, first), first
 }
 
-// resolveQualifiedName extracts (schema, table) from a qualified_name node.
-// Schema defaults to DefaultSchema when not specified.
+// resolveQualifiedName extracts (schema, table) from a qualified_name node. A
+// bare name resolves through the resolver, so a write target and a FROM
+// relation cannot answer differently for one name.
 func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, table string) {
 	if q == nil {
 		return "", ""
@@ -990,8 +987,8 @@ func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, t
 			}
 		}
 	} else {
-		schema = defaultSchema
 		table = i.dialect.NormalizeIdentifier(colId.GetText())
+		schema = i.resolver.SchemaFor(defaultSchema, table)
 	}
 	return schema, table
 }

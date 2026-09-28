@@ -284,6 +284,16 @@ func (d *Dialect) NormalizeIdentifier(raw string) string {
 	return strings.ToLower(raw)
 }
 
+// SystemSchema implements the core.SQLDialect interface. SQLite reserves the
+// sqlite_ prefix for its own tables, and they live in the database the
+// connection opened, which "main" names.
+func (d *Dialect) SystemSchema(table string) string {
+	if strings.HasPrefix(d.NormalizeIdentifier(table), "sqlite_") {
+		return "main"
+	}
+	return ""
+}
+
 // QuoteIdentifierIfNeeded quotes an identifier if it contains special characters or is a reserved keyword
 func (d *Dialect) QuoteIdentifierIfNeeded(name string, caretQuoted bool, reserved map[string]bool) string {
 	if name == "" {

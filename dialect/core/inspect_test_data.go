@@ -1087,10 +1087,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 
 		// --- Unknown tables ---
 
-		// Unknown table: Schema="" since it cannot be resolved from metadata.
-		// Permission checker must treat Schema="" as deny, never silently allow.
-		// Columns attributed to the unknown table are included for completeness but the
-		// table-level deny is the authoritative signal.
+		// A bare name the metadata is missing resolves in the session's schema,
+		// which is where the database would resolve it and where a CREATE of
+		// the same name would have put it. The right the check then asks for is
+		// one an administrator can grant.
 		{
 			Name: "SELECT from unknown table",
 			SQL:  "SELECT c1 FROM unknown_table",
@@ -1098,10 +1098,10 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 				{
 					Operation: InspectOpSelect,
 					Fields: []InspectField{
-						{Name: "c1", Table: "unknown_table", Schema: ""},
+						{Name: "c1", Table: "unknown_table", Schema: defaultSchema},
 					},
 					Tables: []InspectTable{
-						{Name: "unknown_table", Schema: ""},
+						{Name: "unknown_table", Schema: defaultSchema},
 					},
 				},
 			},
@@ -1336,17 +1336,17 @@ func GetInspectTestCases(defaultSchema string) []InspectTestCase {
 					Operation: InspectOpSelect,
 					Fields: []InspectField{
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
-						{Name: "c1", Table: "unknown_table", Schema: ""},
+						{Name: "c1", Table: "unknown_table", Schema: defaultSchema},
 					},
 					Tables: []InspectTable{
 						{Name: "t1", Schema: defaultSchema},
-						{Name: "unknown_table", Schema: ""},
+						{Name: "unknown_table", Schema: defaultSchema},
 					},
-					// The unknown relation's column carries no schema, so there
-					// is nothing to check it against and it is dropped. The
-					// table itself is still reported, and refused.
+					// Both branches carry a schema, so both columns have
+					// something to be checked against.
 					Where: []InspectField{
 						{Name: "c1", Table: "t1", Schema: defaultSchema},
+						{Name: "c1", Table: "unknown_table", Schema: defaultSchema},
 					},
 				},
 			},
