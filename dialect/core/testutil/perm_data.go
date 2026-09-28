@@ -1628,7 +1628,7 @@ func permCases() []PermCase {
 		{
 			On:   []string{"postgresql", "sqlite"},
 			Name: "a subquery in RETURNING reads the table it names",
-			SQL:  "DELETE FROM t1 WHERE c1 = 1 RETURNING (SELECT max(c1) FROM t2)",
+			SQL:  "DELETE FROM t1 WHERE c1 = 1 RETURNING c1, (SELECT max(c1) FROM t2)",
 			Needs: []Right{
 				mainT1(core.ActionDelete),
 				mainT1(core.ActionSelect).Only("c1"),
@@ -1671,19 +1671,7 @@ func permCases() []PermCase {
 				mainT2(core.ActionSelect).Only("c1"),
 			},
 			Op:  core.InspectOpDelete,
-			Why: "x is the statement's own name for the read of t2, and no right is held on a name",
-		},
-		{
-			On:   []string{"postgresql", "sqlite"},
-			Name: "an aggregate in RETURNING returning a whole column",
-			SQL:  "UPDATE t1 SET c2 = 'x' RETURNING c1, (SELECT max(c4) FROM other.t3) AS leak",
-			Needs: []Right{
-				mainT1(core.ActionUpdate).Only("c2"),
-				mainT1(core.ActionSelect).Only("c1"),
-				otherT3(core.ActionSelect).Only("c4"),
-			},
-			Op:  core.InspectOpUpdate,
-			Why: "one value folded out of c4 is still a read of c4",
+			Why: "x is the statement's own name for the read of t2, and charging a right on the name itself would refuse the statement for every role",
 		},
 		{
 			On:   []string{"postgresql", "sqlite"},
@@ -1716,6 +1704,19 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionInsert), mainT1(core.ActionUpdate), mainT2(core.ActionSelect)},
 			Op:    core.InspectOpInsert,
 			Why:   "it inserts, it rewrites what was there, and it reads t2 to do it",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "an upsert assigning from another table, on a select source",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 ON CONFLICT (c1) DO UPDATE SET c2 = (SELECT c3 FROM other.t3)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect).Only("c3"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the value stored in c2 is read out of other.t3 whichever form the insert's source takes",
 		},
 		{
 			On:    []string{"postgresql"},

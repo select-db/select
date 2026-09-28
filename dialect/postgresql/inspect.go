@@ -703,9 +703,6 @@ func (i *Inspector) inspectExplainable(stmt pg.IExplainablestmtContext) *core.In
 // addReturningFields records the columns a RETURNING clause hands back. They
 // are read from the target table and reach the caller's rows, so a rule hiding
 // one has to find it here as it would in a select.
-//
-// It runs before the caller drops the CTE names, because a returning subquery
-// reading a CTE resolves to no schema once they are gone.
 func (i *Inspector) addReturningFields(
 	result *core.InspectStatement,
 	ret pg.IReturning_clauseContext,
@@ -718,9 +715,8 @@ func (i *Inspector) addReturningFields(
 	if targetList == nil {
 		return
 	}
-	// RETURNING is the write's select list, so a relation named inside one of
-	// its expressions is read exactly as it is in a select list: the value
-	// reaches the caller's row whether or not the write touches that table.
+	// A relation named inside a returning expression is read, the same way one
+	// in a select list is, whether or not the write touches it.
 	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(targetList)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	columns := core.TableFields(i.meta, schema, table, i.dialect)

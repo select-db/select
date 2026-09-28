@@ -728,16 +728,23 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		if sub := i.inspectSelect(selectStmt); sub != nil && len(sub.Tables) > 0 {
 			result.Subqueries = append(result.Subqueries, *sub)
 		}
-	} else {
-		// VALUES form: walk expressions for embedded subqueries.
-		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(stmt)...)
+	} else if values := stmt.Values_clause(); values != nil {
+		// VALUES form: walk expressions for embedded subqueries. The clause and
+		// not the statement, or the walk reaches the CTE bodies and the
+		// returning clause the other paths already report.
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(values)...)
 	}
 
 	// An ON CONFLICT clause chooses which rows it updates and reads values into
-	// them, both against the target table, so what it names is tested.
+	// them, both against the target table, so what it names is tested, and a
+	// subquery in either is a read of its own.
+	upsert := stmt.Upsert_clause()
 	result.Where = core.MergeInspectFields(result.Where,
-		i.testedFields(core.TreeOrNil(stmt.Upsert_clause()),
+		i.testedFields(core.TreeOrNil(upsert),
 			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
+	if upsert != nil {
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(upsert)...)
+	}
 
 	// REPLACE, and its INSERT OR REPLACE spelling, delete whatever conflicts
 	// before inserting, and an upsert rewrites it. Either way the row that was
@@ -746,7 +753,7 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 	if stmt.REPLACE_() != nil {
 		core.AlsoPerforms(result, core.InspectOpDelete, nil)
 	}
-	if upsert := stmt.Upsert_clause(); upsert != nil && upsert.UPDATE_() != nil {
+	if upsert != nil && upsert.UPDATE_() != nil {
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.upsertSetFields(upsert, schema, tableName))
 	}
@@ -1789,9 +1796,6 @@ func (l *subqueryExtractorListener) EnterTable_or_subquery(ctx *sqlite.Table_or_
 // addReturningFields records the columns a RETURNING clause hands back. They
 // are read from the target table and reach the caller's rows, so a rule hiding
 // one has to find it here as it would in a select.
-//
-// It runs before the caller drops the CTE names, because a returning subquery
-// reading a CTE resolves to no schema once they are gone.
 func (i *Inspector) addReturningFields(
 	result *core.InspectStatement,
 	ret sqlite.IReturning_clauseContext,
@@ -1800,9 +1804,8 @@ func (i *Inspector) addReturningFields(
 	if ret == nil {
 		return
 	}
-	// RETURNING is the write's select list, so a relation named inside one of
-	// its expressions is read exactly as it is in a select list: the value
-	// reaches the caller's row whether or not the write touches that table.
+	// A relation named inside a returning expression is read, the same way one
+	// in a select list is, whether or not the write touches it.
 	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(ret)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	var returned []core.InspectField
