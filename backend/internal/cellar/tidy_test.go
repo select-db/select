@@ -23,10 +23,10 @@ func TestRestAfterIdle(t *testing.T) {
 	cellar.createNotes(t, id)
 
 	cellar.databases.rest(context.Background(), time.Now())
-	require.True(t, cellar.replicating(id), "a database just used keeps replicating")
+	require.NotNil(t, cellar.databases.onDisk[id].replicating, "a database just used keeps replicating")
 
 	cellar.databases.rest(context.Background(), time.Now().Add(restAfter))
-	require.False(t, cellar.replicating(id))
+	require.Nil(t, cellar.databases.onDisk[id].replicating)
 	require.Equal(t, 2, cellar.countNotes(t, id), "a resting database stays on disk")
 }
 
@@ -36,8 +36,8 @@ func TestEvictLeastRecentlyUsedRestingFirst(t *testing.T) {
 	for _, id := range []string{oldestID, olderID, busyID} {
 		cellar.createNotes(t, id)
 	}
-	cellar.databases.lastUsed[oldestID] = time.Now().Add(-2 * time.Hour)
-	cellar.databases.lastUsed[olderID] = time.Now().Add(-time.Hour)
+	cellar.databases.onDisk[oldestID].lastUsed = time.Now().Add(-2 * time.Hour)
+	cellar.databases.onDisk[olderID].lastUsed = time.Now().Add(-time.Hour)
 	cellar.databases.rest(context.Background(), time.Now())
 
 	cellar.databases.evict(shortFor(1))

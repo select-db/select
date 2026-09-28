@@ -3,8 +3,6 @@ package cellar
 import (
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 )
 
 // StoredDatabase is one entry of GET /datasources, the list the reconciler checks.
@@ -16,23 +14,14 @@ type StoredDatabase struct {
 // InventoryHandler lists every database on this cellar's disk, with its size.
 func InventoryHandler(databases *Databases) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		entries, err := os.ReadDir(databases.dir)
-		if err != nil {
-			writeLifecycleError(w, r, err)
-			return
-		}
 		stored := []StoredDatabase{}
-		for _, entry := range entries {
-			id, isDatabase := databaseID(entry.Name())
-			if !isDatabase {
-				continue
+		databases.mu.Lock()
+		for id, database := range databases.onDisk {
+			if size, err := databaseSize(database.path); err == nil {
+				stored = append(stored, StoredDatabase{ID: id, SizeBytes: size})
 			}
-			size, err := databaseSize(filepath.Join(databases.dir, entry.Name()))
-			if err != nil {
-				continue
-			}
-			stored = append(stored, StoredDatabase{ID: id, SizeBytes: size})
 		}
+		databases.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(stored)
 	}

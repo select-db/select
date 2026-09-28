@@ -12,7 +12,7 @@ import (
 // INTO so writes may go on while it streams.
 func DownloadHandler(databases *Databases) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sourcePath, err := databases.Use(r.Context(), GetGrant(r).DatasourceID)
+		sourcePath, err := databases.use(r.Context(), GetGrant(r).DatasourceID)
 		if err != nil {
 			writeLifecycleError(w, r, err)
 			return

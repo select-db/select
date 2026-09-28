@@ -17,6 +17,6 @@ func TestOpenDatabasesReplicatesWhatIsOnDisk(t *testing.T) {
 	reopened, err := OpenDatabases(cellar.dir, cellar.replicaDir)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = reopened.Close(context.Background()) })
-	require.NotNil(t, reopened.store.FindDB(cellar.dir+"/"+id+".db"), "a write the last run had not sent reaches the replica")
-	require.Contains(t, reopened.lastUsed, id)
+	require.Contains(t, reopened.onDisk, id)
+	require.NotNil(t, reopened.onDisk[id].replicating, "a write the last run had not sent reaches the replica")
 }

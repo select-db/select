@@ -88,7 +88,7 @@ func writeLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusConflict
 	case coded == errNotFound:
 		status = http.StatusNotFound
-	case coded.Code == CodeWaking:
+	case coded == errWaking:
 		status = http.StatusServiceUnavailable
 		w.Header().Set("Retry-After", "5")
 	case coded.Code == CodeInternal:
