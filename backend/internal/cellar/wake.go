@@ -13,15 +13,15 @@ import (
 const wakeWait = 15 * time.Second
 
 // wake returns once database id is on disk, restoring it if it is cold.
-func (d *Databases) wake(ctx context.Context, id, path string) error {
-	d.mu.Lock()
-	_, onDisk := d.onDisk[id]
-	d.mu.Unlock()
+func (databases *Databases) wake(ctx context.Context, id, path string) error {
+	databases.mu.Lock()
+	_, onDisk := databases.onDisk[id]
+	databases.mu.Unlock()
 	if onDisk {
 		return nil
 	}
-	restore := d.restores.DoChan(id, func() (any, error) {
-		return nil, d.restoreLatest(id, path)
+	restore := databases.restores.DoChan(id, func() (any, error) {
+		return nil, databases.restoreLatest(id, path)
 	})
 	select {
 	case result := <-restore:
@@ -35,31 +35,31 @@ func (d *Databases) wake(ctx context.Context, id, path string) error {
 
 // restoreLatest runs outside any request, so a caller that stops waiting does
 // not cancel the restore the next caller needs.
-func (d *Databases) restoreLatest(id, path string) error {
+func (databases *Databases) restoreLatest(id, path string) error {
 	// A caller that saw the database cold as the last restore ended gets here after it.
-	d.mu.Lock()
-	_, onDisk := d.onDisk[id]
-	d.mu.Unlock()
+	databases.mu.Lock()
+	_, onDisk := databases.onDisk[id]
+	databases.mu.Unlock()
 	if onDisk {
 		return nil
 	}
-	err := d.restoreAt(context.Background(), id, time.Time{}, path)
-	if err == errNoCopyAtTime {
+	err := databases.restoreAt(context.Background(), id, time.Time{}, path)
+	if errors.Is(err, errNoCopyAtTime) {
 		return errNotFound
 	}
 	if err != nil {
 		return err
 	}
-	d.mu.Lock()
-	d.onDisk[id] = &database{id: id, path: path, lastUsed: time.Now()}
-	d.mu.Unlock()
+	databases.mu.Lock()
+	databases.onDisk[id] = &database{id: id, path: path, lastUsed: time.Now()}
+	databases.mu.Unlock()
 	return nil
 }
 
 // restoreAt writes database id as it was at the given time, or its latest
 // state when at is zero, to a new file at path.
-func (d *Databases) restoreAt(ctx context.Context, id string, at time.Time, path string) error {
-	client, err := d.replicaClient(id)
+func (databases *Databases) restoreAt(ctx context.Context, id string, at time.Time, path string) error {
+	client, err := databases.replicaClient(id)
 	if err != nil {
 		return err
 	}

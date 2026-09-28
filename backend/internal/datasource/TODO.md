@@ -150,8 +150,7 @@ Settled. Reopen with a reason, not a preference.
   15s, then answer `waking` while the restore continues.
 - Bucket: S3 with versioning and a 7-day expiry of old versions, so a wrong
   purge is recoverable for a week. Without S3 (dev, on-prem) Litestream writes
-  to a directory; a startup preflight logs the mode, as for pg_partman, and
-  warns when that directory shares the data disk.
+  to a directory, and startup warns that a lost machine loses it too.
 
 ### Isolation
 All required, none sufficient alone. Checked on `modernc.org/sqlite` v1.59.0.

@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	// restAfter is how long a database replicates after its last use.
 	restAfter = 15 * time.Minute
 	// minFreeShare is the share of the disk evict keeps free.
 	minFreeShare = 0.2
@@ -20,7 +19,8 @@ const (
 
 // tidyEvery rests idle databases and evicts resting ones while the disk is
 // short, until ctx ends.
-func (d *Databases) tidyEvery(ctx context.Context) {
+func (databases *Databases) tidyEvery(ctx context.Context) {
+	defer close(databases.tidyStopped)
 	ticker := time.NewTicker(tidyInterval)
 	defer ticker.Stop()
 	for {
@@ -28,58 +28,59 @@ func (d *Databases) tidyEvery(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			d.rest(ctx, now)
-			d.evict(func() bool { return freeShare(d.dir) < minFreeShare })
+			databases.rest(ctx, now)
+			databases.evict(func() bool { return freeShare(databases.dir) < minFreeShare })
 		}
 	}
 }
 
 // rest stops replicating the databases idle for restAfter, once the replica
 // holds every write: a resting database is whole in its replica.
-func (d *Databases) rest(ctx context.Context, now time.Time) {
-	d.mu.Lock()
+func (databases *Databases) rest(ctx context.Context, now time.Time) {
+	databases.mu.Lock()
 	idle := map[*database]*litestream.DB{}
-	for _, database := range d.onDisk {
+	for _, database := range databases.onDisk {
 		if database.replicating != nil && now.Sub(database.lastUsed) >= restAfter {
 			idle[database] = database.replicating
 		}
 	}
-	d.mu.Unlock()
+	databases.mu.Unlock()
 	for database, replicating := range idle {
-		d.restOne(ctx, database, replicating, now)
+		databases.restOne(ctx, database, replicating, now)
 	}
 }
 
 // restOne syncs without the lock, as a sync to the bucket is a round trip,
 // then unregisters unless the database was used or removed meanwhile.
-func (d *Databases) restOne(ctx context.Context, database *database, replicating *litestream.DB, now time.Time) {
+func (databases *Databases) restOne(ctx context.Context, database *database, replicating *litestream.DB, now time.Time) {
 	// Unregistering syncs only a database Litestream has opened; this opens it.
 	if err := replicating.SyncAndWait(ctx); err != nil {
 		log.Printf("cellar: rest %s: %v", database.id, err)
 		return
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.onDisk[database.id] != database || now.Sub(database.lastUsed) < restAfter {
+	databases.mu.Lock()
+	defer databases.mu.Unlock()
+	if databases.onDisk[database.id] != database || now.Sub(database.lastUsed) < restAfter {
 		return
 	}
 	connect.DeleteConnsByAddr(database.path)
 	database.replicating = nil
-	if err := d.store.UnregisterDB(ctx, database.path); err != nil {
+	// Not cancelled by Close: a half-done unregister would leave the database unsynced.
+	if err := databases.store.UnregisterDB(context.WithoutCancel(ctx), database.path); err != nil {
 		// Not in sync, so not safe to evict: replicate again, retry next time.
 		log.Printf("cellar: rest %s: %v", database.id, err)
-		_ = d.replicate(database)
+		_ = databases.replicate(database)
 	}
 }
 
 // evict deletes resting databases, least recently used first, while
 // diskShort holds. Their replica holds them; the next use restores them.
-func (d *Databases) evict(diskShort func() bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+func (databases *Databases) evict(diskShort func() bool) {
+	databases.mu.Lock()
+	defer databases.mu.Unlock()
 	for diskShort() {
 		var oldest *database
-		for _, database := range d.onDisk {
+		for _, database := range databases.onDisk {
 			if database.replicating == nil && (oldest == nil || database.lastUsed.Before(oldest.lastUsed)) {
 				oldest = database
 			}
@@ -88,11 +89,12 @@ func (d *Databases) evict(diskShort func() bool) {
 			log.Printf("cellar: disk short and no resting database to evict")
 			return
 		}
+		// Forgotten first: a half-removed database must be restored, not used.
+		delete(databases.onDisk, oldest.id)
 		if err := removeDatabaseFiles(oldest.path); err != nil {
 			log.Printf("cellar: evict %s: %v", oldest.id, err)
 			return
 		}
-		delete(d.onDisk, oldest.id)
 	}
 }
 

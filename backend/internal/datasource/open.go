@@ -95,6 +95,9 @@ func (o *Opened) Stream(ctx context.Context, sql string, opts query.Options, sin
 // OpenError answers a request whose datasource could not be opened or reached.
 func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, datasourceID string) {
 	status, shown := openFailure(err, logPrefix, workspaceID, datasourceID)
+	if status == http.StatusServiceUnavailable {
+		w.Header().Set("Retry-After", "5")
+	}
 	http.Error(w, shown.Error(), status)
 }
 

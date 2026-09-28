@@ -26,6 +26,7 @@ type Databases struct {
 	replicasURL string // a database's replica is replicasURL + its id
 	store       *litestream.Store
 	stopTidy    context.CancelFunc
+	tidyStopped chan struct{}
 	restores    singleflight.Group // one restore per cold database, shared by its callers
 
 	mu     sync.Mutex
@@ -60,11 +61,12 @@ func OpenDatabases(dir, replica string) (*Databases, error) {
 		return nil, err
 	}
 	ctx, stopTidy := context.WithCancel(context.Background())
-	databases := &Databases{
+	opened := &Databases{
 		dir:         dir,
 		replicasURL: replica + "/dbs/",
 		store:       store,
 		stopTidy:    stopTidy,
+		tidyStopped: make(chan struct{}),
 		onDisk:      map[string]*database{},
 	}
 	entries, err := os.ReadDir(dir)
@@ -85,39 +87,40 @@ func OpenDatabases(dir, replica string) (*Databases, error) {
 		// Replicated once at start, so writes the last run had not sent reach
 		// the replica before the database can rest.
 		database := &database{id: id, path: path, lastUsed: info.ModTime()}
-		if err := databases.replicate(database); err != nil {
+		if err := opened.replicate(database); err != nil {
 			return nil, err
 		}
-		databases.onDisk[id] = database
+		opened.onDisk[id] = database
 	}
-	go databases.tidyEvery(ctx)
-	return databases, nil
+	go opened.tidyEvery(ctx)
+	return opened, nil
 }
 
 // Close stops replicating, after a last sync of every replicating database.
-func (d *Databases) Close(ctx context.Context) error {
-	d.stopTidy()
-	return d.store.Close(ctx)
+func (databases *Databases) Close(ctx context.Context) error {
+	databases.stopTidy()
+	<-databases.tidyStopped
+	return databases.store.Close(ctx)
 }
 
 // use readies database id for a statement: restored if cold, replicating, its
 // idle time reset. It returns the file's path.
-func (d *Databases) use(ctx context.Context, id string) (string, error) {
-	path, err := databasePath(d.dir, id)
+func (databases *Databases) use(ctx context.Context, id string) (string, error) {
+	path, err := databasePath(databases.dir, id)
 	if err != nil {
 		return "", err
 	}
-	if err := d.wake(ctx, id, path); err != nil {
+	if err := databases.wake(ctx, id, path); err != nil {
 		return "", err
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	database, onDisk := d.onDisk[id]
+	databases.mu.Lock()
+	defer databases.mu.Unlock()
+	database, onDisk := databases.onDisk[id]
 	if !onDisk {
 		// Evicted between its wake and now.
 		return "", errWaking
 	}
-	if err := d.replicate(database); err != nil {
+	if err := databases.replicate(database); err != nil {
 		return "", err
 	}
 	database.lastUsed = time.Now()
@@ -126,44 +129,46 @@ func (d *Databases) use(ctx context.Context, id string) (string, error) {
 
 // add moves a new database file into place, unless id is taken, and
 // replicates it. It returns the file's path.
-func (d *Databases) add(id, tempPath string) (string, error) {
-	path, err := databasePath(d.dir, id)
+func (databases *Databases) add(id, tempPath string) (string, error) {
+	path, err := databasePath(databases.dir, id)
 	if err != nil {
 		return "", err
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if _, onDisk := d.onDisk[id]; onDisk {
+	databases.mu.Lock()
+	defer databases.mu.Unlock()
+	if _, onDisk := databases.onDisk[id]; onDisk {
 		return "", errAlreadyExists
 	}
 	if err := os.Rename(tempPath, path); err != nil {
 		return "", err
 	}
 	database := &database{id: id, path: path, lastUsed: time.Now()}
-	if err := d.replicate(database); err != nil {
+	if err := databases.replicate(database); err != nil {
 		return "", err
 	}
-	d.onDisk[id] = database
+	databases.onDisk[id] = database
 	return path, nil
 }
 
 // remove deletes database id from disk and from the replica.
-func (d *Databases) remove(ctx context.Context, id string) error {
-	path, err := databasePath(d.dir, id)
+func (databases *Databases) remove(ctx context.Context, id string) error {
+	path, err := databasePath(databases.dir, id)
 	if err != nil {
 		return err
 	}
-	client, err := d.replicaClient(id)
+	client, err := databases.replicaClient(id)
 	if err != nil {
 		return err
 	}
-	d.mu.Lock()
-	delete(d.onDisk, id)
+	// The backend stops sending statements for a database before it removes it,
+	// so no wake races this.
+	databases.mu.Lock()
+	delete(databases.onDisk, id)
 	connect.DeleteConnsByAddr(path)
 	// A failed last sync does not matter: the replica goes next.
-	_ = d.store.UnregisterDB(ctx, path)
+	_ = databases.store.UnregisterDB(ctx, path)
 	err = removeDatabaseFiles(path)
-	d.mu.Unlock()
+	databases.mu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -171,18 +176,18 @@ func (d *Databases) remove(ctx context.Context, id string) error {
 }
 
 // replicate starts streaming database to its replica, unless it already does.
-// Callers hold d.mu.
-func (d *Databases) replicate(database *database) error {
+// Callers hold databases.mu.
+func (databases *Databases) replicate(database *database) error {
 	if database.replicating != nil {
 		return nil
 	}
-	client, err := d.replicaClient(database.id)
+	client, err := databases.replicaClient(database.id)
 	if err != nil {
 		return err
 	}
 	replicating := litestream.NewDB(database.path)
 	replicating.Replica = litestream.NewReplicaWithClient(replicating, client)
-	if err := d.store.RegisterDB(replicating); err != nil {
+	if err := databases.store.RegisterDB(replicating); err != nil {
 		return err
 	}
 	database.replicating = replicating
@@ -190,9 +195,9 @@ func (d *Databases) replicate(database *database) error {
 }
 
 // replicaClient checks id as databasePath does: it names a folder of the bucket.
-func (d *Databases) replicaClient(id string) (litestream.ReplicaClient, error) {
-	if _, err := databasePath(d.dir, id); err != nil {
+func (databases *Databases) replicaClient(id string) (litestream.ReplicaClient, error) {
+	if _, err := databasePath(databases.dir, id); err != nil {
 		return nil, err
 	}
-	return litestream.NewReplicaClientFromURL(d.replicasURL + id)
+	return litestream.NewReplicaClientFromURL(databases.replicasURL + id)
 }
