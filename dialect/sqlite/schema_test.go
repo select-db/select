@@ -69,15 +69,11 @@ func TestGetTablesAndViews(t *testing.T) {
 
 	ctx := context.Background()
 
-	tables, err := dialect.GetTables(ctx, testDB, "main")
+	meta, err := dialect.ReadSchema(ctx, testDB)
 	if err != nil {
-		t.Fatalf("GetTables failed: %v", err)
+		t.Fatalf("ReadSchema failed: %v", err)
 	}
-
-	views, err := dialect.GetViews(ctx, testDB, "main")
-	if err != nil {
-		t.Fatalf("GetViews failed: %v", err)
-	}
+	tables, views := meta.Schemas[0].Tables, meta.Schemas[0].Views
 
 	// Verify tables
 	if len(tables) != 1 {
@@ -160,10 +156,11 @@ func TestGetCurrentSchema(t *testing.T) {
 	}
 	defer func() { _ = testDB.Close() }()
 
-	currentSchema, err := dialect.GetCurrentSchema(context.Background(), testDB)
+	meta, err := dialect.ReadSchema(context.Background(), testDB)
 	if err != nil {
-		t.Fatalf("GetCurrentSchema failed: %v", err)
+		t.Fatalf("ReadSchema failed: %v", err)
 	}
+	currentSchema := meta.CurrentSchema
 
 	// SQLite should always return "main" as the current schema
 	if currentSchema != "main" {
@@ -219,20 +216,13 @@ func TestGetSchemaDDLFromMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	// Get all objects with their DDL
-	tables, err := dialect.GetTables(ctx, testDB, "main")
+	meta, err := dialect.ReadSchema(ctx, testDB)
 	if err != nil {
-		t.Fatalf("GetTables failed: %v", err)
+		t.Fatalf("ReadSchema failed: %v", err)
 	}
+	tables, views := meta.Schemas[0].Tables, meta.Schemas[0].Views
 
-	views, err := dialect.GetViews(ctx, testDB, "main")
-	if err != nil {
-		t.Fatalf("GetViews failed: %v", err)
-	}
-
-	indexes, err := dialect.GetIndexes(ctx, testDB, "main")
-	if err != nil {
-		t.Fatalf("GetIndexes failed: %v", err)
-	}
+	indexes := meta.Schemas[0].Indexes
 
 	// Reconstruct DDL from metadata
 	var ddlStatements []string

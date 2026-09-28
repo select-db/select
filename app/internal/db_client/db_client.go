@@ -22,8 +22,8 @@ import (
 // appPoolConfig bounds every pool the desktop app opens to a remote DB. Without
 // it database/sql defaults to unlimited open connections, so schema loads and
 // concurrent queries could open dozens of connections and trip the remote's
-// "too many clients already". MetadataConcurrency=1 (below) keeps a schema load
-// to a single connection; the rest of this budget is for user queries.
+// "too many clients already". A schema load holds one connection; the rest of
+// this budget is for user queries.
 var appPoolConfig = connect.PoolConfig{
 	MaxOpenConns:    4,
 	MaxIdleConns:    2,
@@ -32,7 +32,6 @@ var appPoolConfig = connect.PoolConfig{
 }
 
 var engineClient = engine.Client{
-	MetadataConcurrency: 1,
 	Transport: &transport.HTTPTransport{
 		Fetch: func(
 			ctx context.Context,

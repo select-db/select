@@ -2,6 +2,7 @@ package core
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -96,5 +97,26 @@ func TestEnrichEnumValues(t *testing.T) {
 	}
 	if _, ok := person["id"]; ok {
 		t.Fatalf("MetaToEnumDict should omit non-enum columns, got %v", person)
+	}
+}
+
+// Two schemas may each define an enum of the same name with different labels.
+func TestEnrichEnumValuesKeepsEachSchemasEnum(t *testing.T) {
+	mood := func(schema string, labels ...string) Type {
+		return Type{Schema: schema, Name: "mood", Kind: "e", Display: schema + ".mood", EnumLabels: labels}
+	}
+	column := func(typ string) []Table {
+		return []Table{{Name: "t", Columns: []Column{{Name: "m", Type: typ}}}}
+	}
+	meta := &Metadata{Schemas: []Schema{
+		{Name: "a", Types: []Type{mood("a", "sad", "ok")}, Tables: column("mood")},
+		{Name: "b", Types: []Type{mood("b", "sad", "ok", "it's")}, Tables: column("mood")},
+		{Name: "c", Tables: column(`"b".mood`)},
+	}}
+	EnrichEnumValues(meta)
+	for i, want := range [][]string{{"sad", "ok"}, {"sad", "ok", "it's"}, {"sad", "ok", "it's"}} {
+		if got := meta.Schemas[i].Tables[0].Columns[0].EnumValues; !slices.Equal(got, want) {
+			t.Errorf("schema %s: enum values = %q, want %q", meta.Schemas[i].Name, got, want)
+		}
 	}
 }

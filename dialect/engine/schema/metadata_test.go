@@ -250,7 +250,7 @@ func TestHashWorkspaceDSN_StableAndScoped(t *testing.T) {
 	}
 }
 
-// gatedDialect holds every fetch in GetSchemas until release is closed, and
+// gatedDialect holds every fetch in ReadSchema until release is closed, and
 // counts the fetches that reach it.
 type gatedDialect struct {
 	core.SQLDialect
@@ -267,11 +267,11 @@ func newGatedDialect() *gatedDialect {
 	}
 }
 
-func (d *gatedDialect) GetSchemas(ctx context.Context, db *sql.DB) ([]string, error) {
+func (d *gatedDialect) ReadSchema(ctx context.Context, db *sql.DB) (*core.Metadata, error) {
 	d.fetches.Add(1)
 	d.started <- struct{}{}
 	<-d.release
-	return d.SQLDialect.GetSchemas(ctx, db)
+	return d.SQLDialect.ReadSchema(ctx, db)
 }
 
 func openMemoryDB(t *testing.T) *sql.DB {

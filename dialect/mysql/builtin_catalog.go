@@ -13,7 +13,7 @@ const mysqlBuiltinSchema = "mysql_builtin"
 
 // mysqlBuiltinTypes is the static catalog of MySQL built-in column types.
 // MySQL has no CREATE TYPE, so the catalog is hardcoded rather than fetched.
-// Surfaced via GetCatalogSchema for completion, hover, and the Types tree.
+// ReadSchema sets it on the catalog schema for completion, hover, and the Types tree.
 // Common aliases (INTEGER, NUMERIC, REAL, BOOL, ...) are listed as distinct
 // entries so completion suggests whichever spelling the user starts to type.
 var mysqlBuiltinTypes = []core.Type{
@@ -97,17 +97,15 @@ func enrichBuiltinFunctionsFromHelp(ctx context.Context, db *sql.DB, base []core
 		return base
 	}
 
-	placeholders := make([]string, len(base))
-	args := make([]any, len(base))
+	// Quoted literals rather than placeholders: a query with arguments costs a
+	// prepare and an execute, one without is a single round trip.
+	names := make([]string, len(base))
 	for i, f := range base {
-		placeholders[i] = "?"
-		args[i] = f.Name
+		names[i] = quoteLiteral(f.Name)
 	}
+	query := "SELECT name, description FROM mysql.help_topic WHERE name IN (" + strings.Join(names, ", ") + ")"
 
-	query := "SELECT name, description FROM mysql.help_topic WHERE name IN (" +
-		strings.Join(placeholders, ",") + ")"
-
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return base
 	}
