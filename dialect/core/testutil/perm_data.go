@@ -1390,8 +1390,6 @@ func permCases() []PermCase {
 
 		// --- rights and session statements
 		{
-			// SQLite has no GRANT, so its parser salvages a bare select, and
-			// the floor is what refuses it.
 			On:     []string{"postgresql", "mysql"},
 			Name:   "granting a right is administration",
 			SQL:    "GRANT SELECT ON t1 TO bob",
@@ -2502,8 +2500,8 @@ func permCases() []PermCase {
 			Why:    "the branches are one statement, so the call classifies all of it, and t1 is still read",
 		},
 
-		// --- a statement the parser stumbled over. Where what error recovery
-		// salvaged names no table, a per-table check has nothing to ask about.
+		// --- a statement the parser stumbled over, which is text nothing says
+		// the meaning of, so it takes the right to do anything.
 		{
 			On:    []string{"postgresql", "mysql", "sqlite"},
 			Name:  "a select cut off after FROM",

@@ -1,9 +1,6 @@
 package core
 
-import (
-	"slices"
-	"strings"
-)
+import "strings"
 
 // UnknownStatement is what an inspector returns for a statement it parsed but
 // cannot classify. Permission checks read it as manage, so a statement nobody
@@ -131,17 +128,18 @@ func AsFilter(stmts []InspectStatement) []InspectStatement {
 // An error anywhere else is a clause the grammar does not carry, such as
 // SQLite's standalone WINDOW, and what the statement named still stands.
 func SalvageOrUnreadable(read InspectStatement, syntax *SyntaxErrors, from, to int) InspectStatement {
-	switch {
-	case !syntax.In(from, to):
+	if !syntax.In(from, to) {
 		return read
-	case syntax.At(from):
-		return UnreadableStatement()
-	case len(read.Tables) > 0 && resolvedNames(read):
-		return read
-	default:
+	}
+	if syntax.At(from) || len(read.Tables) == 0 || !resolvedNames(read) {
 		return UnreadableStatement()
 	}
+	return read
 }
+
+// quoteChars delimit an identifier or a string in the dialects this package
+// reads. A resolved name has had them taken off, so one left in is debris.
+const quoteChars = "\"'`"
 
 // resolvedNames reports whether every table a statement names looks like one an
 // inspector resolved rather than debris error recovery kept. A name still
@@ -151,12 +149,17 @@ func SalvageOrUnreadable(read InspectStatement, syntax *SyntaxErrors, from, to i
 // statement goes unchecked.
 func resolvedNames(stmt InspectStatement) bool {
 	for _, table := range stmt.Tables {
-		if table.Schema == "" || strings.ContainsAny(table.Name+table.Schema, "\"'`") {
+		if table.Schema == "" || strings.ContainsAny(table.Name, quoteChars) || strings.ContainsAny(table.Schema, quoteChars) {
 			return false
 		}
 	}
-	for _, nested := range slices.Concat(stmt.Subqueries, stmt.Also) {
+	for _, nested := range stmt.Subqueries {
 		if !resolvedNames(nested) {
+			return false
+		}
+	}
+	for _, also := range stmt.Also {
+		if !resolvedNames(also) {
 			return false
 		}
 	}

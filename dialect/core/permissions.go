@@ -206,7 +206,7 @@ func checkStatement(stmt InspectStatement, datasourceID string, compiledPermissi
 	var err error
 	switch {
 	case stmt.Unreadable:
-		err = checkUnreadable(stmt, datasourceID, compiledPermissions)
+		err = checkUnreadable(datasourceID, compiledPermissions)
 	case action == ActionNone:
 	case action == ActionManage:
 		err = checkDatasource(stmt, datasourceID, compiledPermissions)
@@ -270,12 +270,10 @@ func checkDatasource(stmt InspectStatement, datasourceID string, compiledPermiss
 // connection. A statement the parser could not read may be any statement, so
 // the only requirement that covers it is the right to do anything: manage does
 // not stand in for the row rights, and a statement whose text came apart is as
-// likely to be a read as the administration it is floored to.
-func checkUnreadable(stmt InspectStatement, datasourceID string, compiledPermissions CompiledPermissions) error {
-	if err := checkDatasource(stmt, datasourceID, compiledPermissions); err != nil {
-		return err
-	}
-	for _, action := range []string{ActionSelect, ActionInsert, ActionUpdate, ActionDelete} {
+// likely to be a read as the administration it is floored to. It names no
+// table, so each right is the connection-wide one.
+func checkUnreadable(datasourceID string, compiledPermissions CompiledPermissions) error {
+	for _, action := range []string{ActionManage, ActionSelect, ActionInsert, ActionUpdate, ActionDelete} {
 		allowed, role := compiledPermissions.isAllowed(datasourceID, "", "", "", action)
 		if !allowed {
 			return &PermissionDeniedError{Action: action, RoleName: role}

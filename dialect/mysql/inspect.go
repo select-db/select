@@ -94,7 +94,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	if syntax.Uncovered() {
-		results = append(results, core.UnreadableStatement())
+		results = append(results, core.UnknownStatement())
 	}
 
 	// A subquery was inspected against its own FROM alone, so a name it takes
