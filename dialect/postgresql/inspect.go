@@ -61,7 +61,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 		// A call that reaches the server itself is not covered by the four row
 		// actions, and neither is a statement we could not read.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
@@ -69,7 +69,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	if syntax.Uncovered() {
-		results = append(results, core.UnknownStatement())
+		results = append(results, core.UnreadableStatement())
 	}
 
 	// A subquery was inspected against its own FROM alone, so a name it takes

@@ -94,7 +94,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// actions, and neither is a statement the parser stumbled over that
 		// named no table: a per-table check has nothing to ask about, so what
 		// error recovery salvaged would run on a policy granting nothing.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
@@ -102,7 +102,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	}
 
 	if syntax.Uncovered() {
-		results = append(results, core.UnknownStatement())
+		results = append(results, core.UnreadableStatement())
 	}
 
 	// A subquery was inspected against its own FROM alone, so a name it takes
