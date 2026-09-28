@@ -25,6 +25,14 @@ func OrUnknown(stmt *InspectStatement) InspectStatement {
 	return *stmt
 }
 
+// CarriesRead reports whether an inspected block still has a right to ask for:
+// a table of its own, or a read nested inside it. A block owes nothing for
+// itself when it names no table, and dropping it drops those nested reads with
+// it.
+func CarriesRead(stmt *InspectStatement) bool {
+	return stmt != nil && (len(stmt.Tables) > 0 || len(stmt.Subqueries) > 0 || len(stmt.Also) > 0)
+}
+
 // NestUnderUnknown reports reads as the nested statements of an unclassified
 // one. A statement doing something the four row actions do not cover takes
 // manage for that, and still whatever the rows themselves need.

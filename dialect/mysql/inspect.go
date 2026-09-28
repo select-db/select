@@ -604,7 +604,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 	// INSERT ... SELECT: source SELECT becomes a subquery.
 	if iqe := stmt.InsertQueryExpression(); iqe != nil {
 		if qop := iqe.QueryExpressionOrParens(); qop != nil {
-			if sub := i.inspectQueryExpressionOrParens(qop); sub != nil && len(sub.Tables) > 0 {
+			if sub := i.inspectQueryExpressionOrParens(qop); core.CarriesRead(sub) {
 				result.Subqueries = append(result.Subqueries, *sub)
 			}
 		}
@@ -674,7 +674,7 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 
 	if iqe := stmt.InsertQueryExpression(); iqe != nil {
 		if qop := iqe.QueryExpressionOrParens(); qop != nil {
-			if sub := i.inspectQueryExpressionOrParens(qop); sub != nil && len(sub.Tables) > 0 {
+			if sub := i.inspectQueryExpressionOrParens(qop); core.CarriesRead(sub) {
 				result.Subqueries = append(result.Subqueries, *sub)
 			}
 		}
@@ -1805,7 +1805,7 @@ type embeddedSubqueryListener struct {
 
 func (l *embeddedSubqueryListener) EnterSubquery(ctx *mysql.SubqueryContext) {
 	if l.subqueryDepth == 0 && ctx != nil {
-		if sub := l.inspector.inspectSubquery(ctx); sub != nil && len(sub.Tables) > 0 {
+		if sub := l.inspector.inspectSubquery(ctx); core.CarriesRead(sub) {
 			l.results = append(l.results, *sub)
 		}
 	}
@@ -1860,7 +1860,7 @@ func (l *fromSubqueryListener) EnterSubquery(ctx *mysql.SubqueryContext) {
 		// an expression-level subquery (those are picked up by extractSelectListSubqueries
 		// and extractWhereFields).
 		if isDerivedTableSubquery(ctx) {
-			if sub := l.inspector.inspectSubquery(ctx); sub != nil && len(sub.Tables) > 0 {
+			if sub := l.inspector.inspectSubquery(ctx); core.CarriesRead(sub) {
 				l.results = append(l.results, *sub)
 			}
 		}

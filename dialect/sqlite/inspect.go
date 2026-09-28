@@ -343,7 +343,7 @@ type bodyStatementListener struct {
 }
 
 func (l *bodyStatementListener) collect(read *core.InspectStatement) {
-	if l.depth == 0 && read != nil && len(read.Tables) > 0 {
+	if l.depth == 0 && core.CarriesRead(read) {
 		l.results = append(l.results, *read)
 	}
 	l.depth++
@@ -723,9 +723,9 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
-	// INSERT ... SELECT: attach source as subquery when it has real tables.
+	// INSERT ... SELECT: attach the source as a subquery when it reads anything.
 	if selectStmt := stmt.Select_stmt(); selectStmt != nil {
-		if sub := i.inspectSelect(selectStmt); sub != nil && len(sub.Tables) > 0 {
+		if sub := i.inspectSelect(selectStmt); core.CarriesRead(sub) {
 			result.Subqueries = append(result.Subqueries, *sub)
 		}
 	} else {
@@ -1610,7 +1610,7 @@ type embeddedSubqueryListener struct {
 
 func (l *embeddedSubqueryListener) EnterSelect_stmt(ctx *sqlite.Select_stmtContext) {
 	if l.subqueryDepth == 0 {
-		if sub := l.inspector.inspectSelect(ctx); sub != nil && len(sub.Tables) > 0 {
+		if sub := l.inspector.inspectSelect(ctx); core.CarriesRead(sub) {
 			l.results = append(l.results, *sub)
 		}
 	}
