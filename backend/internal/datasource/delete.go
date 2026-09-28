@@ -39,10 +39,21 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		if err := db.Queries.DeleteDatasource(r.Context(), generated.DeleteDatasourceParams{
-			ID:          id,
-			WorkspaceID: parsedWorkspaceID,
-		}); err != nil {
+		existing, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID})
+		managedDB := err == nil && existing.CellarID.ValueOrEmpty() != ""
+		if managedDB {
+			if _, err := managedRow(r.Context(), idStr, workspaceID); err != nil {
+				OpenError(w, err, "managed delete", workspaceID, idStr)
+				return
+			}
+			err = deleteManaged(r.Context(), parsedWorkspaceID, idStr)
+		} else {
+			err = db.Queries.DeleteDatasource(r.Context(), generated.DeleteDatasourceParams{
+				ID:          id,
+				WorkspaceID: parsedWorkspaceID,
+			})
+		}
+		if err != nil {
 			http.Error(w, "failed to delete datasource", http.StatusInternalServerError)
 			return
 		}
@@ -53,6 +64,7 @@ func DeleteHandler() http.HandlerFunc {
 			WorkspaceID: workspaceID,
 			TargetID:    idStr,
 			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"managed": managedDB},
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}

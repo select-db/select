@@ -72,9 +72,19 @@ func (sqlDriver) OpenConnector(dsn string) (driver.Connector, error) {
 	if URL == "" {
 		return nil, ErrOff
 	}
-	u, err := url.Parse(dsn)
+	id, grant, err := grantOf(dsn)
 	if err != nil {
 		return nil, err
+	}
+	return conn{path: "/datasources/" + id + "/query", grant: grant}, nil
+}
+
+// grantOf reads a managed database's id and the grant its cellar requests
+// carry from the DSN the backend built for it.
+func grantOf(dsn string) (string, string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "", "", err
 	}
 	q := u.Query()
 	maxBytes, _ := strconv.ParseInt(q.Get("max_bytes"), 10, 64)
@@ -85,10 +95,7 @@ func (sqlDriver) OpenConnector(dsn string) (driver.Connector, error) {
 		MaxBytes:    maxBytes,
 		MaxInFlight: maxInFlight,
 	}.Encode()
-	if err != nil {
-		return nil, err
-	}
-	return conn{path: "/datasources" + u.Path + "/query", grant: grant}, nil
+	return strings.TrimPrefix(u.Path, "/"), grant, err
 }
 
 // conn sends each statement to the cellar; it holds no state between them.
@@ -153,9 +160,6 @@ func (c conn) ExecContext(ctx context.Context, query string, args []driver.Named
 }
 
 func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) (io.ReadCloser, error) {
-	if URL == "" {
-		return nil, ErrOff
-	}
 	values := make([]any, len(args))
 	for i, a := range args {
 		values[i] = a.Value
@@ -164,26 +168,9 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 	if err != nil {
 		return nil, err
 	}
-	window := strconv.FormatInt(time.Now().Unix()/int64(reuseFor.Seconds()), 10)
-	token, err := tokens.GetOrCreate(window, func() (any, error) {
-		return auth.Sign(auth.CustomClaims{}, server.Audience, tokenTTL)
-	})
+	resp, err := request(ctx, http.MethodPost, c.path, c.grant, body)
 	if err != nil {
 		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, URL+c.path, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token.(string))
-	req.Header.Set(server.GrantHeader, c.grant)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		log.Printf("cellar: %s: %v", c.path, err)
-		return nil, ErrUnavailable
 	}
 	if resp.StatusCode != http.StatusOK {
 		// Failures inside a query arrive in the stream, already classified;
@@ -197,6 +184,36 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 		return nil, server.InternalError(fmt.Sprintf("cellar: %s: %d %s", c.path, resp.StatusCode, strings.TrimSpace(string(msg))))
 	}
 	return resp.Body, nil
+}
+
+// request sends one signed request to the cellar. A cellar it cannot reach is
+// ErrUnavailable; the cause, which names the cellar's address, is only logged.
+func request(ctx context.Context, method, path, grant string, body []byte) (*http.Response, error) {
+	if URL == "" {
+		return nil, ErrOff
+	}
+	window := strconv.FormatInt(time.Now().Unix()/int64(reuseFor.Seconds()), 10)
+	token, err := tokens.GetOrCreate(window, func() (any, error) {
+		return auth.Sign(auth.CustomClaims{}, server.Audience, tokenTTL)
+	})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, URL+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token.(string))
+	req.Header.Set(server.GrantHeader, grant)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		log.Printf("cellar: %s %s: %v", method, path, err)
+		return nil, ErrUnavailable
+	}
+	return resp, nil
 }
 
 // rows reads the cellar's Arrow stream, whose values arrive as strings;

@@ -227,6 +227,46 @@ func (q *Queries) DeleteDatasource(ctx context.Context, arg DeleteDatasourcePara
 	return err
 }
 
+const deleteDatasourcePermissions = `-- name: DeleteDatasourcePermissions :many
+UPDATE app.permission
+SET
+  deleted_at = now(),
+  updated_at = now()
+WHERE
+  workspace_id = $1
+  AND datasource_id = $2::text
+  AND deleted_at IS NULL
+RETURNING role_id
+`
+
+type DeleteDatasourcePermissionsParams struct {
+	WorkspaceID  uuid.UUID
+	DatasourceID string
+}
+
+func (q *Queries) DeleteDatasourcePermissions(ctx context.Context, arg DeleteDatasourcePermissionsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, deleteDatasourcePermissions, arg.WorkspaceID, arg.DatasourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var role_id uuid.UUID
+		if err := rows.Scan(&role_id); err != nil {
+			return nil, err
+		}
+		items = append(items, role_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteExpiredUserRefreshTokens = `-- name: DeleteExpiredUserRefreshTokens :exec
 DELETE FROM auth.refresh_token
 WHERE user_id = $1 AND expires_at < now()
@@ -435,7 +475,9 @@ SELECT
   d.max_idle_conns,
   d.conn_max_lifetime,
   d.conn_max_idle_time,
-  d.cellar_id
+  d.cellar_id,
+  d.state,
+  d.size_bytes
 FROM
   app.datasource d
   JOIN app.workspace w ON w.id = d.workspace_id
@@ -460,6 +502,8 @@ type GetDatasourceRow struct {
 	ConnMaxLifetime int32
 	ConnMaxIdleTime int32
 	CellarID        db_types.JSONNullString
+	State           db_types.JSONNullString
+	SizeBytes       db_types.JSONNullInt64
 }
 
 func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (GetDatasourceRow, error) {
@@ -475,6 +519,8 @@ func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (G
 		&i.ConnMaxLifetime,
 		&i.ConnMaxIdleTime,
 		&i.CellarID,
+		&i.State,
+		&i.SizeBytes,
 	)
 	return i, err
 }
@@ -613,6 +659,30 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 		return nil, err
 	}
 	return items, nil
+}
+
+const getManagedUsage = `-- name: GetManagedUsage :one
+SELECT
+  count(*) AS dbs,
+  COALESCE(sum(size_bytes), 0)::bigint AS total_bytes
+FROM
+  app.datasource
+WHERE
+  workspace_id = $1
+  AND cellar_id IS NOT NULL
+  AND state <> 'deleting'
+`
+
+type GetManagedUsageRow struct {
+	Dbs        int64
+	TotalBytes int64
+}
+
+func (q *Queries) GetManagedUsage(ctx context.Context, workspaceID uuid.UUID) (GetManagedUsageRow, error) {
+	row := q.db.QueryRowContext(ctx, getManagedUsage, workspaceID)
+	var i GetManagedUsageRow
+	err := row.Scan(&i.Dbs, &i.TotalBytes)
+	return i, err
 }
 
 const getPermissionByID = `-- name: GetPermissionByID :one
@@ -1459,6 +1529,32 @@ func (q *Queries) InsertDefaultWorkspace(ctx context.Context, arg InsertDefaultW
 	return err
 }
 
+const insertManagedDatasource = `-- name: InsertManagedDatasource :exec
+INSERT INTO
+  app.datasource (id, workspace_id, db_type, name, cellar_id, state, size_bytes, updated_at)
+VALUES
+  ($1, $2, 'sqlite', $3, $4, 'hot', $5, now())
+`
+
+type InsertManagedDatasourceParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Name        string
+	CellarID    db_types.JSONNullString
+	SizeBytes   db_types.JSONNullInt64
+}
+
+func (q *Queries) InsertManagedDatasource(ctx context.Context, arg InsertManagedDatasourceParams) error {
+	_, err := q.db.ExecContext(ctx, insertManagedDatasource,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.CellarID,
+		arg.SizeBytes,
+	)
+	return err
+}
+
 const insertUserPlaceholder = `-- name: InsertUserPlaceholder :one
 INSERT INTO app."user" (email, name)
 VALUES ($1, $2)
@@ -1512,6 +1608,26 @@ func (q *Queries) InsertWorkspaceToUserForAdd(ctx context.Context, arg InsertWor
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const isWorkspaceMember = `-- name: IsWorkspaceMember :one
+SELECT
+  EXISTS (
+    SELECT 1 FROM app.workspace_to_user
+    WHERE workspace_id = $1 AND user_id = $2 AND deleted_at IS NULL
+  )
+`
+
+type IsWorkspaceMemberParams struct {
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
+}
+
+func (q *Queries) IsWorkspaceMember(ctx context.Context, arg IsWorkspaceMemberParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, isWorkspaceMember, arg.WorkspaceID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listAPIKeyRolesByWorkspace = `-- name: ListAPIKeyRolesByWorkspace :many
@@ -1610,6 +1726,7 @@ FROM
 WHERE
   d.workspace_id = $1
   AND w.deleted_at IS NULL
+  AND d.state IS DISTINCT FROM 'deleting'
 ORDER BY
   d.name,
   d.id
@@ -1644,6 +1761,93 @@ func (q *Queries) ListDatasourcesByWorkspace(ctx context.Context, workspaceID uu
 	return items, nil
 }
 
+const listRolesScopedToDatasource = `-- name: ListRolesScopedToDatasource :many
+SELECT
+  r.id
+FROM
+  app.role r
+WHERE
+  r.workspace_id = $1
+  AND r.deleted_at IS NULL
+  AND EXISTS (
+    SELECT 1 FROM app.permission p
+    WHERE p.role_id = r.id AND p.deleted_at IS NULL AND p.datasource_id = $2::text
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM app.permission p
+    WHERE p.role_id = r.id AND p.deleted_at IS NULL AND p.datasource_id IS DISTINCT FROM $2::text
+  )
+`
+
+type ListRolesScopedToDatasourceParams struct {
+	WorkspaceID  uuid.UUID
+	DatasourceID string
+}
+
+// Roles whose every live rule is on this datasource: they mean nothing once it is gone.
+func (q *Queries) ListRolesScopedToDatasource(ctx context.Context, arg ListRolesScopedToDatasourceParams) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, listRolesScopedToDatasource, arg.WorkspaceID, arg.DatasourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockWorkspacePlan = `-- name: LockWorkspacePlan :one
+SELECT
+  plan
+FROM
+  app.workspace
+WHERE
+  id = $1
+  AND deleted_at IS NULL
+FOR UPDATE
+`
+
+// Taken for the whole of a create or fork, so two cannot both pass the quota.
+func (q *Queries) LockWorkspacePlan(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockWorkspacePlan, id)
+	var plan string
+	err := row.Scan(&plan)
+	return plan, err
+}
+
+const markDatasourceDeleting = `-- name: MarkDatasourceDeleting :exec
+UPDATE app.datasource
+SET
+  state = 'deleting',
+  updated_at = now()
+WHERE
+  id = $1
+  AND workspace_id = $2
+  AND cellar_id IS NOT NULL
+`
+
+type MarkDatasourceDeletingParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+func (q *Queries) MarkDatasourceDeleting(ctx context.Context, arg MarkDatasourceDeletingParams) error {
+	_, err := q.db.ExecContext(ctx, markDatasourceDeleting, arg.ID, arg.WorkspaceID)
+	return err
+}
+
 const reactivateWorkspaceToUser = `-- name: ReactivateWorkspaceToUser :one
 UPDATE app.workspace_to_user
 SET deleted_at = NULL, updated_at = NOW()
@@ -1675,6 +1879,27 @@ type RenameAPIKeyParams struct {
 
 func (q *Queries) RenameAPIKey(ctx context.Context, arg RenameAPIKeyParams) error {
 	_, err := q.db.ExecContext(ctx, renameAPIKey, arg.ID, arg.Name)
+	return err
+}
+
+const renameDatasource = `-- name: RenameDatasource :exec
+UPDATE app.datasource
+SET
+  name = $3,
+  updated_at = now()
+WHERE
+  id = $1
+  AND workspace_id = $2
+`
+
+type RenameDatasourceParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Name        string
+}
+
+func (q *Queries) RenameDatasource(ctx context.Context, arg RenameDatasourceParams) error {
+	_, err := q.db.ExecContext(ctx, renameDatasource, arg.ID, arg.WorkspaceID, arg.Name)
 	return err
 }
 

@@ -9,6 +9,7 @@ FROM
 WHERE
   d.workspace_id = $1
   AND w.deleted_at IS NULL
+  AND d.state IS DISTINCT FROM 'deleting'
 ORDER BY
   d.name,
   d.id;

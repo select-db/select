@@ -28,6 +28,7 @@ func startCellar() {
 		return
 	}
 	log.Printf("cellar: %s", v)
+	managed.ID = cellarID(v)
 	if v == localCellar {
 		v, err = serveLocalCellar()
 		if err != nil {
@@ -67,6 +68,21 @@ func serveLocalCellar() (string, error) {
 // localCellar is the CELLAR value, and the cellar id, of a cellar run in the
 // backend's own process.
 const localCellar = "local"
+
+// cellarID names a cellar in the rows it holds: "local", or the host of its
+// URL in lowercase letters, digits and hyphens.
+func cellarID(v string) string {
+	if v == localCellar {
+		return v
+	}
+	u, _ := url.Parse(v)
+	return strings.Trim(strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '-'
+	}, strings.ToLower(u.Hostname())), "-")
+}
 
 // parseCellar checks a CELLAR value and returns it normalized: "" (managed
 // databases off), localCellar, or an http(s) URL. Anything else is an error, so a typo cannot
