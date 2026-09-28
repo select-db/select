@@ -211,10 +211,17 @@ func (q *Queries) DeleteAuditOutbox(ctx context.Context, dollar_1 []int64) error
 }
 
 const deleteDatasource = `-- name: DeleteDatasource :exec
-DELETE FROM app.datasource
+WITH marked AS (
+  UPDATE app.datasource managed
+  SET state = 'deleting', updated_at = now()
+  WHERE managed.id = $1 AND managed.workspace_id = $2 AND managed.cellar_id IS NOT NULL
+  RETURNING managed.id
+)
+DELETE FROM app.datasource unmanaged
 WHERE
-  id = $1
-  AND workspace_id = $2
+  unmanaged.id = $1
+  AND unmanaged.workspace_id = $2
+  AND unmanaged.cellar_id IS NULL
 `
 
 type DeleteDatasourceParams struct {
@@ -222,41 +229,68 @@ type DeleteDatasourceParams struct {
 	WorkspaceID uuid.UUID
 }
 
+// A managed database is only marked: its file stays until the reconciler purges it.
 func (q *Queries) DeleteDatasource(ctx context.Context, arg DeleteDatasourceParams) error {
 	_, err := q.db.ExecContext(ctx, deleteDatasource, arg.ID, arg.WorkspaceID)
 	return err
 }
 
-const deleteDatasourcePermissions = `-- name: DeleteDatasourcePermissions :many
-UPDATE app.permission
-SET
-  deleted_at = now(),
-  updated_at = now()
-WHERE
-  workspace_id = $1
-  AND datasource_id = $2::text
-  AND deleted_at IS NULL
-RETURNING role_id
+const deleteDatasourceRules = `-- name: DeleteDatasourceRules :many
+WITH stripped AS (
+  UPDATE app.permission rule
+  SET deleted_at = now(), updated_at = now()
+  WHERE
+    rule.workspace_id = $1
+    AND rule.datasource_id = $2::text
+    AND rule.deleted_at IS NULL
+  RETURNING rule.role_id
+),
+dropped AS (
+  UPDATE app.role r
+  SET deleted_at = now(), updated_at = now()
+  WHERE
+    r.workspace_id = $1
+    AND r.deleted_at IS NULL
+    AND r.id IN (SELECT stripped.role_id FROM stripped)
+    AND NOT EXISTS (
+      SELECT 1 FROM app.permission other
+      WHERE other.role_id = r.id AND other.deleted_at IS NULL AND other.datasource_id IS DISTINCT FROM $2::text
+    )
+  RETURNING r.id
+)
+SELECT DISTINCT
+  stripped.role_id,
+  (dropped.id IS NOT NULL)::boolean AS dropped
+FROM
+  stripped
+  LEFT JOIN dropped ON dropped.id = stripped.role_id
 `
 
-type DeleteDatasourcePermissionsParams struct {
+type DeleteDatasourceRulesParams struct {
 	WorkspaceID  uuid.UUID
 	DatasourceID string
 }
 
-func (q *Queries) DeleteDatasourcePermissions(ctx context.Context, arg DeleteDatasourcePermissionsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, deleteDatasourcePermissions, arg.WorkspaceID, arg.DatasourceID)
+type DeleteDatasourceRulesRow struct {
+	RoleID  uuid.UUID
+	Dropped bool
+}
+
+// Removes every rule on a datasource, and the roles left with no rule anywhere
+// else. Returns each role that lost a rule, and whether the role went too.
+func (q *Queries) DeleteDatasourceRules(ctx context.Context, arg DeleteDatasourceRulesParams) ([]DeleteDatasourceRulesRow, error) {
+	rows, err := q.db.QueryContext(ctx, deleteDatasourceRules, arg.WorkspaceID, arg.DatasourceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []uuid.UUID
+	var items []DeleteDatasourceRulesRow
 	for rows.Next() {
-		var role_id uuid.UUID
-		if err := rows.Scan(&role_id); err != nil {
+		var i DeleteDatasourceRulesRow
+		if err := rows.Scan(&i.RoleID, &i.Dropped); err != nil {
 			return nil, err
 		}
-		items = append(items, role_id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -659,30 +693,6 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 		return nil, err
 	}
 	return items, nil
-}
-
-const getManagedUsage = `-- name: GetManagedUsage :one
-SELECT
-  count(*) AS database_count,
-  COALESCE(sum(size_bytes), 0)::bigint AS total_bytes
-FROM
-  app.datasource
-WHERE
-  workspace_id = $1
-  AND cellar_id IS NOT NULL
-  AND state <> 'deleting'
-`
-
-type GetManagedUsageRow struct {
-	DatabaseCount int64
-	TotalBytes    int64
-}
-
-func (q *Queries) GetManagedUsage(ctx context.Context, workspaceID uuid.UUID) (GetManagedUsageRow, error) {
-	row := q.db.QueryRowContext(ctx, getManagedUsage, workspaceID)
-	var i GetManagedUsageRow
-	err := row.Scan(&i.DatabaseCount, &i.TotalBytes)
-	return i, err
 }
 
 const getPermissionByID = `-- name: GetPermissionByID :one
@@ -1761,91 +1771,39 @@ func (q *Queries) ListDatasourcesByWorkspace(ctx context.Context, workspaceID uu
 	return items, nil
 }
 
-const listRolesScopedToDatasource = `-- name: ListRolesScopedToDatasource :many
+const lockManagedUsage = `-- name: LockManagedUsage :one
 SELECT
-  r.id
+  w.plan,
+  (
+    SELECT count(*)
+    FROM app.datasource d
+    WHERE d.workspace_id = w.id AND d.cellar_id IS NOT NULL AND d.state IS DISTINCT FROM 'deleting'
+  ) AS database_count,
+  (
+    SELECT COALESCE(sum(d.size_bytes), 0)
+    FROM app.datasource d
+    WHERE d.workspace_id = w.id AND d.cellar_id IS NOT NULL AND d.state IS DISTINCT FROM 'deleting'
+  )::bigint AS total_bytes
 FROM
-  app.role r
+  app.workspace w
 WHERE
-  r.workspace_id = $1
-  AND r.deleted_at IS NULL
-  AND EXISTS (
-    SELECT 1 FROM app.permission p
-    WHERE p.role_id = r.id AND p.deleted_at IS NULL AND p.datasource_id = $2::text
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM app.permission p
-    WHERE p.role_id = r.id AND p.deleted_at IS NULL AND p.datasource_id IS DISTINCT FROM $2::text
-  )
+  w.id = $1
+  AND w.deleted_at IS NULL
+FOR UPDATE OF w
 `
 
-type ListRolesScopedToDatasourceParams struct {
-	WorkspaceID  uuid.UUID
-	DatasourceID string
+type LockManagedUsageRow struct {
+	Plan          string
+	DatabaseCount int64
+	TotalBytes    int64
 }
 
-// Roles whose every live rule is on this datasource: they mean nothing once it is gone.
-func (q *Queries) ListRolesScopedToDatasource(ctx context.Context, arg ListRolesScopedToDatasourceParams) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, listRolesScopedToDatasource, arg.WorkspaceID, arg.DatasourceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const lockWorkspacePlan = `-- name: LockWorkspacePlan :one
-SELECT
-  plan
-FROM
-  app.workspace
-WHERE
-  id = $1
-  AND deleted_at IS NULL
-FOR UPDATE
-`
-
-// Taken for the whole of a create or fork, so two cannot both pass the quota.
-func (q *Queries) LockWorkspacePlan(ctx context.Context, id uuid.UUID) (string, error) {
-	row := q.db.QueryRowContext(ctx, lockWorkspacePlan, id)
-	var plan string
-	err := row.Scan(&plan)
-	return plan, err
-}
-
-const markDatasourceDeleting = `-- name: MarkDatasourceDeleting :exec
-UPDATE app.datasource
-SET
-  state = 'deleting',
-  updated_at = now()
-WHERE
-  id = $1
-  AND workspace_id = $2
-  AND cellar_id IS NOT NULL
-`
-
-type MarkDatasourceDeletingParams struct {
-	ID          uuid.UUID
-	WorkspaceID uuid.UUID
-}
-
-func (q *Queries) MarkDatasourceDeleting(ctx context.Context, arg MarkDatasourceDeletingParams) error {
-	_, err := q.db.ExecContext(ctx, markDatasourceDeleting, arg.ID, arg.WorkspaceID)
-	return err
+// Locks the workspace row for the whole of a create or fork, so two cannot both pass the quota.
+func (q *Queries) LockManagedUsage(ctx context.Context, id uuid.UUID) (LockManagedUsageRow, error) {
+	row := q.db.QueryRowContext(ctx, lockManagedUsage, id)
+	var i LockManagedUsageRow
+	err := row.Scan(&i.Plan, &i.DatabaseCount, &i.TotalBytes)
+	return i, err
 }
 
 const reactivateWorkspaceToUser = `-- name: ReactivateWorkspaceToUser :one

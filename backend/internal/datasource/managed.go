@@ -130,15 +130,12 @@ func provisionManaged(ctx context.Context, actor authz.Actor, database newManage
 	defer func() { _ = tx.Rollback() }()
 	queries := db.Queries.WithTx(tx)
 
-	plan, err := queries.LockWorkspacePlan(ctx, workspaceID)
+	usage, err := queries.LockManagedUsage(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
+	plan := usage.Plan
 	limits := cellarclient.Plans[plan]
-	usage, err := queries.GetManagedUsage(ctx, workspaceID)
-	if err != nil {
-		return err
-	}
 	if err := checkPointInTime(database.PointInTime, limits.PointInTimeDays); err != nil {
 		return err
 	}
