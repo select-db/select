@@ -4,15 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"slices"
 
-	"backend/internal/authz"
 	"backend/internal/datasource"
 )
 
 var grantToProp = map[string]any{
 	"type":        "object",
-	"description": "Who else gets full access to the new database: workspace user ids and API key ids. The caller always gets it.",
+	"description": "Who else gets full access to the new database: workspace user ids and API key ids. The calling key always gets it.",
 	"properties": map[string]any{
 		"users":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		"api_keys": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
@@ -40,7 +38,11 @@ func toolCreateDatasource() Tool {
 			if args.Name == "" {
 				return nil, errBadArgument("name is required")
 			}
-			return createManaged(r, args.Name, "", "", args.GrantTo)
+			id, err := datasource.CreateManaged(r, args.Name, "", "", args.GrantTo)
+			if err != nil {
+				return nil, err
+			}
+			return created{ID: id, DBType: "sqlite"}, nil
 		},
 	}
 }
@@ -70,25 +72,17 @@ func toolForkDatasource() Tool {
 			if args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			return createManaged(r, args.Name, args.DatasourceID, args.At, args.GrantTo)
+			id, err := datasource.CreateManaged(r, args.Name, args.DatasourceID, args.At, args.GrantTo)
+			if err != nil {
+				return nil, err
+			}
+			return created{ID: id, DBType: "sqlite"}, nil
 		},
 	}
 }
 
-// createManaged adds the caller to grants: an agent cannot use a database its
-// own key holds no role on.
-func createManaged(r *http.Request, name, source, at string, grants datasource.GrantTo) (any, error) {
-	a := authz.ActorOf(r)
-	self := &grants.Users
-	if a.IsAPIKey {
-		self = &grants.APIKeys
-	}
-	if !slices.Contains(*self, a.UserID) {
-		*self = append(*self, a.UserID)
-	}
-	id, err := datasource.CreateManaged(r, name, source, at, grants)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]string{"id": id, "db_type": "sqlite"}, nil
+// created is what both tools answer: the id to query the new database by.
+type created struct {
+	ID     string `json:"id"`
+	DBType string `json:"db_type"`
 }

@@ -75,7 +75,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	}
 	// A managed database's DSN is built here and never read from the row.
 	if cellarID := row.CellarID.ValueOrEmpty(); cellarID != "" {
-		if row.State.ValueOrEmpty() == "deleting" {
+		if row.State.ValueOrEmpty() == stateDeleting {
 			return nil, ErrNotFound
 		}
 		workspace, err := db.Queries.GetWorkspacePlan(ctx, parsedWorkspaceID)

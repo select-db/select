@@ -81,7 +81,7 @@ func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
 
 	// A managed database has no connection settings: its name is all there is to change.
 	if existErr == nil && existing.CellarID.ValueOrEmpty() != "" {
-		if _, err := managedRow(r.Context(), req.ID, workspaceID); err != nil {
+		if err := servable(existing); err != nil {
 			OpenError(w, err, "managed rename", workspaceID, req.ID)
 			return false
 		}

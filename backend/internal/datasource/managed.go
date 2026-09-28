@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/sqlite"
 )
 
 // GrantTo names who gets a new managed database's dedicated role. Empty means
@@ -57,6 +59,10 @@ type createResponse struct {
 }
 
 // fullAccess is every action the dedicated role of a managed database allows.
+// stateDeleting marks a managed database that stopped serving and waits for
+// the reconciler to purge its file.
+const stateDeleting = "deleting"
+
 var fullAccess = []string{core.ActionSee, core.ActionSelect, core.ActionInsert, core.ActionUpdate, core.ActionDelete, core.ActionManage}
 
 // Refusal is a request the caller can correct, answered with its HTTP status.
@@ -78,8 +84,8 @@ func CreateHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		req.ID = uuid.NewString()
 		if req.DBType != "sqlite" || req.DSN != "" {
+			req.ID = uuid.NewString()
 			if store(w, r, req.upsertRequest) {
 				writeCreated(w, req.ID, req.DBType)
 			}
@@ -123,50 +129,60 @@ func DownloadHandler() http.HandlerFunc {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		row, err := managedRow(r.Context(), id, a.WorkspaceID)
+		ds, err := GetOrLoadDatasource(r.Context(), id, a.WorkspaceID)
+		if err == nil && !sqlite.IsCellarDSN(ds.DSN) {
+			err = ErrNotFound
+		}
 		if err != nil {
 			OpenError(w, err, "managed download", a.WorkspaceID, id)
 			return
 		}
-		plan, err := db.Queries.GetWorkspacePlan(r.Context(), uuid.MustParse(a.WorkspaceID))
-		if err != nil {
-			OpenError(w, err, "managed download", a.WorkspaceID, id)
-			return
-		}
-		file, err := managed.Download(r.Context(), managed.DSN(row.CellarID.ValueOrEmpty(), id, a.WorkspaceID, plan.Plan, int(plan.Members)))
+		file, err := managed.Download(r.Context(), ds.DSN)
 		if err != nil {
 			OpenError(w, err, "managed download", a.WorkspaceID, id)
 			return
 		}
 		defer func() { _ = file.Close() }()
 		w.Header().Set("Content-Type", "application/vnd.sqlite3")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName(row.Name)+".db"))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName(ds.Name)+".db"))
 		_, _ = io.Copy(w, file)
 	}
 }
 
-// managedRow is a managed database the workspace still serves. Anything else
-// is ErrNotFound, and while CELLAR is unset every managed route is off.
+// managedRow is a managed database the workspace still serves; anything else
+// is ErrNotFound.
 func managedRow(ctx context.Context, id, workspaceID string) (generated.GetDatasourceRow, error) {
-	if managed.URL == "" {
-		return generated.GetDatasourceRow{}, managed.ErrOff
-	}
 	parsed, err := uuid.Parse(id)
 	if err != nil {
 		return generated.GetDatasourceRow{}, ErrNotFound
 	}
 	row, err := db.Queries.GetDatasource(ctx, generated.GetDatasourceParams{ID: parsed, WorkspaceID: uuid.MustParse(workspaceID)})
-	if err != nil || row.CellarID.ValueOrEmpty() == "" || row.State.ValueOrEmpty() == "deleting" {
+	if err != nil || row.CellarID.ValueOrEmpty() == "" {
 		return generated.GetDatasourceRow{}, ErrNotFound
 	}
-	return row, nil
+	return row, servable(row)
 }
 
-// CreateManaged makes a managed database for r's caller, empty or a fork of
-// source as it was at, and returns its id. REST and MCP both create through it.
+// servable refuses a managed row that no longer serves. While CELLAR is unset
+// every managed route is off.
+func servable(row generated.GetDatasourceRow) error {
+	if managed.URL == "" {
+		return managed.ErrOff
+	}
+	if row.State.ValueOrEmpty() == stateDeleting {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CreateManaged makes a managed database, empty or a fork of source as it was
+// at, and returns its id. The caller is always granted it, as well as grants.
 func CreateManaged(r *http.Request, name, source, at string, grants GrantTo) (string, error) {
 	a := authz.ActorOf(r)
 	id := uuid.NewString()
+	if managed.URL == "" {
+		return id, managed.ErrOff
+	}
 	// Creating takes the right to add datasources; forking hands over all the
 	// source's data, so it takes manage on the source.
 	allowed := a.IsOwner() || (source == "" && a.Can(core.ActionManage)) || (source != "" && a.CanManage(source))
@@ -174,6 +190,7 @@ func CreateManaged(r *http.Request, name, source, at string, grants GrantTo) (st
 		audit.EmitDenied(r.Context(), audit.DatasourceCreated, a.WorkspaceID, id)
 		return id, errForbidden
 	}
+	var sourceBytes int64
 	if source != "" {
 		row, err := managedRow(r.Context(), source, a.WorkspaceID)
 		if err != nil {
@@ -182,18 +199,23 @@ func CreateManaged(r *http.Request, name, source, at string, grants GrantTo) (st
 		if name == "" {
 			name = row.Name + " (fork)"
 		}
+		sourceBytes = row.SizeBytes.Int64
 	}
-	return id, createManaged(r, a, id, name, source, at, grants)
+	self := &grants.Users
+	if a.IsAPIKey {
+		self = &grants.APIKeys
+	}
+	if !slices.Contains(*self, a.UserID) {
+		*self = append(*self, a.UserID)
+	}
+	return id, createManaged(r, a, id, name, source, at, sourceBytes, grants)
 }
 
 // createManaged makes managed database id, empty or a fork of source at a
 // point in time, with its dedicated role. The workspace row stays locked from
 // the quota check to the insert, so two creates cannot both take the last slot.
-func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, grants GrantTo) error {
+func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, sourceBytes int64, grants GrantTo) error {
 	ctx := r.Context()
-	if managed.URL == "" {
-		return managed.ErrOff
-	}
 	workspaceID := uuid.MustParse(a.WorkspaceID)
 	users, keys, err := checkGrants(ctx, a, workspaceID, grants)
 	if err != nil {
@@ -215,14 +237,6 @@ func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, 
 	usage, err := q.GetManagedUsage(ctx, workspaceID)
 	if err != nil {
 		return err
-	}
-	var sourceBytes int64
-	if source != "" {
-		row, err := q.GetDatasource(ctx, generated.GetDatasourceParams{ID: uuid.MustParse(source), WorkspaceID: workspaceID})
-		if err != nil {
-			return err
-		}
-		sourceBytes = row.SizeBytes.Int64
 	}
 	if err := checkAt(at, limits.PITRDays); err != nil {
 		return err
@@ -256,6 +270,7 @@ func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, 
 		return err
 	}
 
+	audit.EmitChange(ctx, audit.RoleCreated, a.WorkspaceID, roleID.String(), nil, map[string]any{"name": name, "datasource_id": id})
 	payload := map[string]any{"db_type": "sqlite", "managed": true, "role_id": roleID.String(), "grant_to": grants}
 	if source != "" {
 		payload["from"] = source
@@ -388,6 +403,9 @@ func deleteManaged(ctx context.Context, workspaceID uuid.UUID, id string) error 
 	}
 	if err := tx.Commit(); err != nil {
 		return err
+	}
+	for _, roleID := range scoped {
+		audit.EmitChange(ctx, audit.RoleDeleted, workspaceID.String(), roleID.String(), nil, nil)
 	}
 	for _, roleID := range touched {
 		authz.Invalidate(roleID.String())

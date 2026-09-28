@@ -37,9 +37,6 @@ var (
 	errNoPITR  = &arrowstream.Error{Code: CodeDisabled, Message: "point-in-time fork is not available yet"}
 )
 
-// lifecycleStatus is the HTTP status of each failure a lifecycle route answers.
-var lifecycleStatus = map[error]int{errExists: http.StatusConflict, errMissing: http.StatusNotFound, errNoPITR: http.StatusNotImplemented}
-
 // CreateHandler writes a new database, empty or copied, under a temporary name
 // and renames it into place: a failed copy never leaves a half database.
 func CreateHandler(dir string) http.HandlerFunc {
@@ -52,7 +49,7 @@ func CreateHandler(dir string) http.HandlerFunc {
 		id := GetGrant(r).DatasourceID
 		err := create(r.Context(), dir, id, req)
 		if err != nil {
-			writeLifecycleError(w, id, err)
+			writeLifecycleError(w, r, err)
 			return
 		}
 		size, _ := fileSize(filepath.Join(dir, id+".db"))
@@ -98,28 +95,17 @@ func DownloadHandler(dir string) http.HandlerFunc {
 		id := GetGrant(r).DatasourceID
 		source, err := existingPath(dir, id)
 		if err != nil {
-			writeLifecycleError(w, id, err)
+			writeLifecycleError(w, r, err)
 			return
 		}
 		tmp := filepath.Join(dir, ".tmp-"+uuid.NewString()+".db")
 		defer func() { _ = os.Remove(tmp) }()
 		if err := trusted(r.Context(), source, "rw", "VACUUM INTO ?", tmp); err != nil {
-			writeLifecycleError(w, id, err)
-			return
-		}
-		f, err := os.Open(tmp)
-		if err != nil {
-			writeLifecycleError(w, id, err)
-			return
-		}
-		defer func() { _ = f.Close() }()
-		info, err := f.Stat()
-		if err != nil {
-			writeLifecycleError(w, id, err)
+			writeLifecycleError(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.sqlite3")
-		http.ServeContent(w, r, id+".db", info.ModTime(), f)
+		http.ServeFile(w, r, tmp)
 	}
 }
 
@@ -130,13 +116,13 @@ func DeleteHandler(dir string) http.HandlerFunc {
 		id := GetGrant(r).DatasourceID
 		target, err := checkedPath(dir, id)
 		if err != nil {
-			writeLifecycleError(w, id, err)
+			writeLifecycleError(w, r, err)
 			return
 		}
 		connect.DeleteConnsByAddr(target)
 		for _, suffix := range []string{"", "-wal", "-shm"} {
 			if err := os.Remove(target + suffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				writeLifecycleError(w, id, err)
+				writeLifecycleError(w, r, err)
 				return
 			}
 		}
@@ -149,7 +135,7 @@ func InventoryHandler(dir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			writeLifecycleError(w, "", err)
+			writeLifecycleError(w, r, err)
 			return
 		}
 		stored := []Stored{}
@@ -170,18 +156,22 @@ func InventoryHandler(dir string) http.HandlerFunc {
 }
 
 // writeLifecycleError answers with the failure's code and message as JSON; an
-// unplaced failure becomes an internal error that names only its ref.
-func writeLifecycleError(w http.ResponseWriter, id string, err error) {
+// unplaced failure is classified as a statement's would be.
+func writeLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
 	var coded *arrowstream.Error
 	if !errors.As(err, &coded) {
-		coded = InternalError(fmt.Sprintf("cellar: datasource %s: %v", id, err))
+		coded = classify(r.Context(), err, GetGrant(r))
 	}
-	status := lifecycleStatus[coded]
-	if status == 0 {
-		status = http.StatusBadRequest
-		if coded.Code == CodeInternal {
-			status = http.StatusInternalServerError
-		}
+	status := http.StatusBadRequest
+	switch {
+	case coded == errExists:
+		status = http.StatusConflict
+	case coded == errMissing:
+		status = http.StatusNotFound
+	case coded == errNoPITR:
+		status = http.StatusNotImplemented
+	case coded.Code == CodeInternal:
+		status = http.StatusInternalServerError
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
