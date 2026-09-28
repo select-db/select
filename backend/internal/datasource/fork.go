@@ -30,7 +30,9 @@ func ForkHandler() http.HandlerFunc {
 			OpenError(w, err, "managed fork", authz.ActorOf(r).WorkspaceID, sourceID)
 			return
 		}
-		writeCreated(w, id, "sqlite")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(createResponse{ID: id, Config: datasourceConfig{ID: id, DBType: "sqlite", Proxified: true}})
 	}
 }
 

@@ -37,27 +37,22 @@ func CreateHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if req.DBType != "sqlite" || req.DSN != "" {
-			req.ID = uuid.NewString()
-			if saveDatasource(w, r, req.upsertRequest) {
-				writeCreated(w, req.ID, req.DBType)
+		id, dbType := uuid.NewString(), req.DBType
+		if dbType == "sqlite" && req.DSN == "" {
+			var err error
+			id, err = CreateManaged(r, req.Name, "", "", req.GrantTo)
+			if err != nil {
+				OpenError(w, err, "managed create", authz.ActorOf(r).WorkspaceID, id)
+				return
 			}
-			return
+		} else {
+			req.ID = id
+			if !saveDatasource(w, r, req.upsertRequest) {
+				return
+			}
 		}
-		id, err := CreateManaged(r, req.Name, "", "", req.GrantTo)
-		if err != nil {
-			OpenError(w, err, "managed create", authz.ActorOf(r).WorkspaceID, id)
-			return
-		}
-		writeCreated(w, id, "sqlite")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(createResponse{ID: id, Config: datasourceConfig{ID: id, DBType: dbType, Proxified: true}})
 	}
-}
-
-func writeCreated(w http.ResponseWriter, id, dbType string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(createResponse{
-		ID:     id,
-		Config: datasourceConfig{ID: id, DBType: dbType, Proxified: true},
-	})
 }
