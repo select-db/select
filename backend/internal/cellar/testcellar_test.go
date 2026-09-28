@@ -72,13 +72,8 @@ func (cellar testCellar) exec(t *testing.T, id, statement string) {
 // sync waits until the replica holds every write to database id.
 func (cellar testCellar) sync(t *testing.T, id string) {
 	t.Helper()
-	db := cellar.databases.store.FindDB(filepath.Join(cellar.dir, id+".db"))
-	require.NotNil(t, db, "not replicating")
-	require.NoError(t, db.SyncAndWait(context.Background()))
-}
-
-func (cellar testCellar) replicating(id string) bool {
-	return cellar.databases.store.FindDB(filepath.Join(cellar.dir, id+".db")) != nil
+	_, err := cellar.databases.store.SyncDB(context.Background(), filepath.Join(cellar.dir, id+".db"), true)
+	require.NoError(t, err)
 }
 
 func (cellar testCellar) countNotes(t *testing.T, id string) int {

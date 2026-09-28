@@ -26,14 +26,14 @@ func TestWakeRestoresAnEvictedDatabase(t *testing.T) {
 	cellar.evictAll(t)
 	require.NoFileExists(t, cellar.dir+"/"+id+".db")
 
-	_, err := cellar.databases.Use(context.Background(), id)
+	_, err := cellar.databases.use(context.Background(), id)
 	require.NoError(t, err)
 	require.Equal(t, 3, cellar.countNotes(t, id))
-	require.True(t, cellar.replicating(id))
+	require.NotNil(t, cellar.databases.onDisk[id].replicating)
 
 	cellar.exec(t, id, "INSERT INTO note VALUES ('d')")
 	cellar.evictAll(t)
-	_, err = cellar.databases.Use(context.Background(), id)
+	_, err = cellar.databases.use(context.Background(), id)
 	require.NoError(t, err)
 	require.Equal(t, 4, cellar.countNotes(t, id), "a woken database replicates again")
 }
@@ -49,7 +49,7 @@ func TestWakeIsSharedByConcurrentCallers(t *testing.T) {
 	errs := make([]error, 8)
 	for caller := range errs {
 		callers.Go(func() {
-			_, errs[caller] = cellar.databases.Use(context.Background(), id)
+			_, errs[caller] = cellar.databases.use(context.Background(), id)
 		})
 	}
 	callers.Wait()
@@ -62,8 +62,8 @@ func TestWakeIsSharedByConcurrentCallers(t *testing.T) {
 func TestUseMissingDatabase(t *testing.T) {
 	cellar := newTestCellar(t)
 
-	_, err := cellar.databases.Use(context.Background(), uuid.NewString())
+	_, err := cellar.databases.use(context.Background(), uuid.NewString())
 	require.ErrorIs(t, err, errNotFound)
-	_, err = cellar.databases.Use(context.Background(), "../escape")
+	_, err = cellar.databases.use(context.Background(), "../escape")
 	require.Error(t, err, "an id that is not a uuid")
 }

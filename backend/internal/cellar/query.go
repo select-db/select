@@ -32,7 +32,7 @@ func QueryHandler(databases *Databases) http.HandlerFunc {
 			stream.SetDownstreamFlusher(f.Flush)
 		}
 		sink := classifiedSink{Sink: stream, ctx: r.Context(), grant: grant}
-		path, err := databases.Use(r.Context(), grant.DatasourceID)
+		path, err := databases.use(r.Context(), grant.DatasourceID)
 		if err != nil {
 			sink.OnError(err)
 			return

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,21 +14,30 @@ import (
 	_ "github.com/benbjohnson/litestream/file"
 	_ "github.com/benbjohnson/litestream/s3"
 	"github.com/selectDb/dialect/engine/connect"
+	"golang.org/x/sync/singleflight"
 )
 
 // Databases are the database files of a cellar and their replica. Each one is
 //   - replicating: used within restAfter, every write streams to the replica;
 //   - resting: on disk, and the replica holds all of it;
-//   - cold: in the replica only, restored by its next Use.
+//   - cold: in the replica only, restored by its next use.
 type Databases struct {
 	dir         string
 	replicasURL string // a database's replica is replicasURL + its id
 	store       *litestream.Store
 	stopTidy    context.CancelFunc
+	restores    singleflight.Group // one restore per cold database, shared by its callers
 
-	mu       sync.Mutex
-	lastUsed map[string]time.Time // every database on disk, by id
-	waking   map[string]*wake
+	mu     sync.Mutex
+	onDisk map[string]*database // by id
+}
+
+// database is one database file on disk.
+type database struct {
+	id          string
+	path        string
+	lastUsed    time.Time
+	replicating *litestream.DB // nil while resting
 }
 
 // OpenDatabases replicates the databases in dir to replica, a directory or a
@@ -55,27 +65,32 @@ func OpenDatabases(dir, replica string) (*Databases, error) {
 		replicasURL: replica + "/dbs/",
 		store:       store,
 		stopTidy:    stopTidy,
-		lastUsed:    map[string]time.Time{},
-		waking:      map[string]*wake{},
+		onDisk:      map[string]*database{},
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 	for _, entry := range entries {
-		id, isDatabase := databaseID(entry.Name())
-		info, err := entry.Info()
+		// Only <uuid>.db is a database, not its WAL files or a temporary copy.
+		id, isDatabase := strings.CutSuffix(entry.Name(), ".db")
+		path, err := databasePath(dir, id)
 		if !isDatabase || err != nil {
 			continue
 		}
-		// Replicated once at start, so writes the last run had not sent reach
-		// the replica before the database can rest.
-		if err := databases.replicate(id); err != nil {
+		info, err := entry.Info()
+		if err != nil {
 			return nil, err
 		}
-		databases.lastUsed[id] = info.ModTime()
+		// Replicated once at start, so writes the last run had not sent reach
+		// the replica before the database can rest.
+		database := &database{id: id, path: path, lastUsed: info.ModTime()}
+		if err := databases.replicate(database); err != nil {
+			return nil, err
+		}
+		databases.onDisk[id] = database
 	}
-	go databases.tidyEvery(ctx, time.Minute)
+	go databases.tidyEvery(ctx)
 	return databases, nil
 }
 
@@ -85,74 +100,99 @@ func (d *Databases) Close(ctx context.Context) error {
 	return d.store.Close(ctx)
 }
 
-// Use readies database id for a statement: restored if cold, replicating, its
+// use readies database id for a statement: restored if cold, replicating, its
 // idle time reset. It returns the file's path.
-func (d *Databases) Use(ctx context.Context, id string) (string, error) {
+func (d *Databases) use(ctx context.Context, id string) (string, error) {
 	path, err := databasePath(d.dir, id)
 	if err != nil {
 		return "", err
 	}
-	if err := d.wake(ctx, id); err != nil {
+	if err := d.wake(ctx, id, path); err != nil {
 		return "", err
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if _, onDisk := d.lastUsed[id]; !onDisk {
+	database, onDisk := d.onDisk[id]
+	if !onDisk {
 		// Evicted between its wake and now.
 		return "", errWaking
 	}
-	if err := d.replicate(id); err != nil {
+	if err := d.replicate(database); err != nil {
 		return "", err
 	}
-	d.lastUsed[id] = time.Now()
+	database.lastUsed = time.Now()
 	return path, nil
 }
 
-// add moves a new database file into place and replicates it.
-func (d *Databases) add(id, tempPath string) error {
+// add moves a new database file into place, unless id is taken, and
+// replicates it. It returns the file's path.
+func (d *Databases) add(id, tempPath string) (string, error) {
+	path, err := databasePath(d.dir, id)
+	if err != nil {
+		return "", err
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if err := os.Rename(tempPath, filepath.Join(d.dir, id+".db")); err != nil {
-		return err
+	if _, onDisk := d.onDisk[id]; onDisk {
+		return "", errAlreadyExists
 	}
-	d.lastUsed[id] = time.Now()
-	return d.replicate(id)
+	if err := os.Rename(tempPath, path); err != nil {
+		return "", err
+	}
+	database := &database{id: id, path: path, lastUsed: time.Now()}
+	if err := d.replicate(database); err != nil {
+		return "", err
+	}
+	d.onDisk[id] = database
+	return path, nil
 }
 
-// Delete removes database id from disk and from the replica.
-func (d *Databases) Delete(ctx context.Context, id string) error {
+// remove deletes database id from disk and from the replica.
+func (d *Databases) remove(ctx context.Context, id string) error {
 	path, err := databasePath(d.dir, id)
 	if err != nil {
 		return err
 	}
-	client, err := litestream.NewReplicaClientFromURL(d.replicasURL + id)
+	client, err := d.replicaClient(id)
 	if err != nil {
 		return err
 	}
 	d.mu.Lock()
-	defer d.mu.Unlock()
+	delete(d.onDisk, id)
 	connect.DeleteConnsByAddr(path)
 	// A failed last sync does not matter: the replica goes next.
 	_ = d.store.UnregisterDB(ctx, path)
-	delete(d.lastUsed, id)
-	if err := removeDatabaseFiles(d.dir, id); err != nil {
+	err = removeDatabaseFiles(path)
+	d.mu.Unlock()
+	if err != nil {
 		return err
 	}
 	return client.DeleteAll(ctx)
 }
 
-// replicate starts streaming database id to its replica, unless it already
-// does. Callers hold d.mu.
-func (d *Databases) replicate(id string) error {
-	path := filepath.Join(d.dir, id+".db")
-	if d.store.FindDB(path) != nil {
+// replicate starts streaming database to its replica, unless it already does.
+// Callers hold d.mu.
+func (d *Databases) replicate(database *database) error {
+	if database.replicating != nil {
 		return nil
 	}
-	client, err := litestream.NewReplicaClientFromURL(d.replicasURL + id)
+	client, err := d.replicaClient(database.id)
 	if err != nil {
 		return err
 	}
-	db := litestream.NewDB(path)
-	db.Replica = litestream.NewReplicaWithClient(db, client)
-	return d.store.RegisterDB(db)
+	replicating := litestream.NewDB(database.path)
+	replicating.Replica = litestream.NewReplicaWithClient(replicating, client)
+	if err := d.store.RegisterDB(replicating); err != nil {
+		return err
+	}
+	database.replicating = replicating
+	return nil
+}
+
+// replicaClient checks id as databasePath does: it names a folder of the bucket.
+func (d *Databases) replicaClient(id string) (litestream.ReplicaClient, error) {
+	if _, err := databasePath(d.dir, id); err != nil {
+		return nil, err
+	}
+	return litestream.NewReplicaClientFromURL(d.replicasURL + id)
 }

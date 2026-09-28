@@ -28,24 +28,26 @@ func CreateHandler(databases *Databases) http.HandlerFunc {
 			return
 		}
 		id := GetGrant(r).DatasourceID
-		if err := createDatabase(r.Context(), databases, id, req); err != nil {
+		path, err := createDatabase(r.Context(), databases, id, req)
+		if err != nil {
 			writeLifecycleError(w, r, err)
 			return
 		}
-		size, _ := databaseSize(filepath.Join(databases.dir, id+".db"))
+		size, _ := databaseSize(path)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(StoredDatabase{ID: id, SizeBytes: size})
 	}
 }
 
-func createDatabase(ctx context.Context, databases *Databases, id string, req CreateRequest) error {
-	// Use wakes the id when it is cold, so an id kept only in the replica is taken too.
-	_, err := databases.Use(ctx, id)
+// createDatabase returns the new database's path.
+func createDatabase(ctx context.Context, databases *Databases, id string, req CreateRequest) (string, error) {
+	// use wakes the id when it is cold, so an id kept only in the replica is taken too.
+	_, err := databases.use(ctx, id)
 	switch {
 	case err == nil:
-		return errAlreadyExists
+		return "", errAlreadyExists
 	case err != errNotFound:
-		return err
+		return "", err
 	}
 	tempPath := filepath.Join(databases.dir, ".tmp-"+uuid.NewString()+".db")
 	defer func() { _ = os.Remove(tempPath) }()
@@ -54,23 +56,23 @@ func createDatabase(ctx context.Context, databases *Databases, id string, req Cr
 	case req.PointInTime != "":
 		at, err := time.Parse(time.RFC3339, req.PointInTime)
 		if err != nil {
-			return err
+			return "", err
 		}
-		if err := databases.RestoreAt(ctx, req.SourceID, at, tempPath); err != nil {
-			return err
+		if err := databases.restoreAt(ctx, req.SourceID, at, tempPath); err != nil {
+			return "", err
 		}
 	case req.SourceID != "":
-		sourcePath, err := databases.Use(ctx, req.SourceID)
+		sourcePath, err := databases.use(ctx, req.SourceID)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := execTrusted(ctx, sourcePath, "rw", "VACUUM INTO ?", tempPath); err != nil {
-			return err
+			return "", err
 		}
 	}
 	// WAL is a property of the file: set once here, every open keeps it.
 	if err := execTrusted(ctx, tempPath, "rwc", "PRAGMA journal_mode = WAL"); err != nil {
-		return err
+		return "", err
 	}
 	return databases.add(id, tempPath)
 }

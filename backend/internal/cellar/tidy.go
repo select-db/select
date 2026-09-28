@@ -3,23 +3,25 @@ package cellar
 import (
 	"context"
 	"log"
-	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/benbjohnson/litestream"
 	"github.com/selectDb/dialect/engine/connect"
 )
 
-// restAfter is how long a database replicates after its last use.
-const restAfter = 15 * time.Minute
-
-// minFreeShare is the share of the disk evict keeps free.
-const minFreeShare = 0.2
+const (
+	// restAfter is how long a database replicates after its last use.
+	restAfter = 15 * time.Minute
+	// minFreeShare is the share of the disk evict keeps free.
+	minFreeShare = 0.2
+	tidyInterval = time.Minute
+)
 
 // tidyEvery rests idle databases and evicts resting ones while the disk is
 // short, until ctx ends.
-func (d *Databases) tidyEvery(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
+func (d *Databases) tidyEvery(ctx context.Context) {
+	ticker := time.NewTicker(tidyInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -36,66 +38,61 @@ func (d *Databases) tidyEvery(ctx context.Context, interval time.Duration) {
 // holds every write: a resting database is whole in its replica.
 func (d *Databases) rest(ctx context.Context, now time.Time) {
 	d.mu.Lock()
-	idleIDs := []string{}
-	for id, lastUsed := range d.lastUsed {
-		if now.Sub(lastUsed) >= restAfter && d.store.FindDB(filepath.Join(d.dir, id+".db")) != nil {
-			idleIDs = append(idleIDs, id)
+	idle := map[*database]*litestream.DB{}
+	for _, database := range d.onDisk {
+		if database.replicating != nil && now.Sub(database.lastUsed) >= restAfter {
+			idle[database] = database.replicating
 		}
 	}
 	d.mu.Unlock()
-	for _, id := range idleIDs {
-		d.restOne(ctx, id, now)
+	for database, replicating := range idle {
+		d.restOne(ctx, database, replicating, now)
 	}
 }
 
-// restOne syncs outside the lock, which a sync to the bucket would hold for a
-// round trip, then unregisters unless a Use came meanwhile.
-func (d *Databases) restOne(ctx context.Context, id string, now time.Time) {
-	path := filepath.Join(d.dir, id+".db")
-	db := d.store.FindDB(path)
-	if db == nil {
-		return
-	}
+// restOne syncs without the lock, as a sync to the bucket is a round trip,
+// then unregisters unless the database was used or removed meanwhile.
+func (d *Databases) restOne(ctx context.Context, database *database, replicating *litestream.DB, now time.Time) {
 	// Unregistering syncs only a database Litestream has opened; this opens it.
-	if err := db.SyncAndWait(ctx); err != nil {
-		log.Printf("cellar: rest %s: %v", id, err)
+	if err := replicating.SyncAndWait(ctx); err != nil {
+		log.Printf("cellar: rest %s: %v", database.id, err)
 		return
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if now.Sub(d.lastUsed[id]) < restAfter {
+	if d.onDisk[database.id] != database || now.Sub(database.lastUsed) < restAfter {
 		return
 	}
-	connect.DeleteConnsByAddr(path)
-	if err := d.store.UnregisterDB(ctx, path); err != nil {
+	connect.DeleteConnsByAddr(database.path)
+	database.replicating = nil
+	if err := d.store.UnregisterDB(ctx, database.path); err != nil {
 		// Not in sync, so not safe to evict: replicate again, retry next time.
-		log.Printf("cellar: rest %s: %v", id, err)
-		_ = d.replicate(id)
+		log.Printf("cellar: rest %s: %v", database.id, err)
+		_ = d.replicate(database)
 	}
 }
 
 // evict deletes resting databases, least recently used first, while
-// diskShort holds. Their replica holds them; the next Use restores them.
+// diskShort holds. Their replica holds them; the next use restores them.
 func (d *Databases) evict(diskShort func() bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for diskShort() {
-		oldestID := ""
-		for id, lastUsed := range d.lastUsed {
-			resting := d.store.FindDB(filepath.Join(d.dir, id+".db")) == nil
-			if resting && (oldestID == "" || lastUsed.Before(d.lastUsed[oldestID])) {
-				oldestID = id
+		var oldest *database
+		for _, database := range d.onDisk {
+			if database.replicating == nil && (oldest == nil || database.lastUsed.Before(oldest.lastUsed)) {
+				oldest = database
 			}
 		}
-		if oldestID == "" {
+		if oldest == nil {
 			log.Printf("cellar: disk short and no resting database to evict")
 			return
 		}
-		if err := removeDatabaseFiles(d.dir, oldestID); err != nil {
-			log.Printf("cellar: evict %s: %v", oldestID, err)
+		if err := removeDatabaseFiles(oldest.path); err != nil {
+			log.Printf("cellar: evict %s: %v", oldest.id, err)
 			return
 		}
-		delete(d.lastUsed, oldestID)
+		delete(d.onDisk, oldest.id)
 	}
 }
 

@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/benbjohnson/litestream"
 	"github.com/google/uuid"
 )
 
@@ -34,19 +34,11 @@ func databasePath(dir, id string) (string, error) {
 	return filepath.Join(dir, id+".db"), nil
 }
 
-// databaseID is the id of the database file named fileName, if it is one:
-// temporary copies, WAL files and Litestream's folders are not.
-func databaseID(fileName string) (string, bool) {
-	id, isDatabase := strings.CutSuffix(fileName, ".db")
-	_, err := uuid.Parse(id)
-	return id, isDatabase && err == nil
-}
-
-// removeDatabaseFiles removes database id and everything next to it: its WAL
-// files and Litestream's working folder.
-func removeDatabaseFiles(dir, id string) error {
-	path := filepath.Join(dir, id+".db")
-	for _, file := range []string{path, path + "-wal", path + "-shm", filepath.Join(dir, "."+id+".db-litestream")} {
+// removeDatabaseFiles removes the database at path and everything next to it:
+// its WAL files and Litestream's working folder.
+func removeDatabaseFiles(path string) error {
+	metaPath := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+litestream.MetaDirSuffix)
+	for _, file := range []string{path, path + "-wal", path + "-shm", metaPath} {
 		if err := os.RemoveAll(file); err != nil {
 			return err
 		}
