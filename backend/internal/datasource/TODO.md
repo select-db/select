@@ -255,9 +255,9 @@ Needs 1.
 
 ### 3. Bucket: replicate, evict, wake
 Needs 1. Can run alongside 2. Start with the spikes.
-- [ ] Spike: Litestream v0.5 as a library. Per-db replica with retention,
+- [x] Spike: Litestream v0.5 as a library. Per-db replica with retention,
       read the replicated position, restore at a timestamp, `file` replica.
-      One page of findings before building on it.
+      Findings and numbers: `litestream-spike.md`.
 - [ ] Spike: OVH bucket supports `NoncurrentVersionExpiration`; restore speed
       from the bucket to a d2-4.
 - [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr_days`.
