@@ -165,10 +165,10 @@ func dropDeclaredTables(stmts []InspectStatement, declared map[string]bool, norm
 	}
 }
 
-// DropVirtualRefs keeps the refs a subquery's own FROM clause named that still
-// mean something outside it. The rule and the bare-name limit are the ones
-// DropVirtualTables states, one step earlier: on relations, not on tables.
-// virtual arrives normalized.
+// DropVirtualRefs keeps the relations that name something a permission check
+// can be held on: not an alias the statement bound, and not one of virtual,
+// whose names arrive normalized. It is the rule DropVirtualTables states, one
+// step earlier, and Tables applies it to every relation it reads.
 func DropVirtualRefs(refs []RelationRef, virtual map[string]bool, normalize func(string) string) []RelationRef {
 	kept := make([]RelationRef, 0, len(refs))
 	for _, ref := range refs {

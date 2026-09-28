@@ -370,9 +370,9 @@ func (i *Inspector) inspectSelectPrimary(
 
 	where, whereSubqueries := i.extractWhereFieldsFromPrimary(primary, relationRefs, scope)
 
-	// One slice, so that dropping the CTE names reaches every copy of a
-	// statement: a derived table reading a CTE reports it as a table of its
-	// own, and it is not one out here.
+	// A derived table reading a CTE reports it as a table of its own, and it is
+	// not one out here. The drop mutates what it is given, so the subqueries go
+	// in one slice and the from ones are read back as its prefix.
 	fromSubqueries := i.extractFromSubqueriesFromPrimary(primary)
 	subqueries := slices.Concat(fromSubqueries, whereSubqueries,
 		i.extractSelectListSubqueries(primary), i.extractBranchClauseSubqueries(primary))
@@ -1851,7 +1851,11 @@ func (fw *fromWalker) inside(names []string) *fromWalker {
 	declared := make(map[string]bool, len(fw.declared)+len(names))
 	maps.Copy(declared, fw.declared)
 	for _, name := range names {
-		declared[name] = true
+		// cteNames pads an element the parser gave no name, and the empty name
+		// would then drop every relation the metadata does not know.
+		if name != "" {
+			declared[name] = true
+		}
 	}
 	return &fromWalker{dialect: fw.dialect, meta: fw.meta, declared: declared}
 }

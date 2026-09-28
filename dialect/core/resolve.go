@@ -50,11 +50,8 @@ func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 	var tables []InspectTable
 	seen := make(map[string]bool)
 
-	for _, ref := range refs {
+	for _, ref := range DropVirtualRefs(refs, virtual, r.Dialect.NormalizeIdentifier) {
 		if ref.Schema == "" && ref.Table == "" {
-			continue
-		}
-		if !ref.Qualified && (ref.IsVirtual || virtual[r.Dialect.NormalizeIdentifier(ref.Table)]) {
 			continue
 		}
 

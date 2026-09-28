@@ -374,9 +374,9 @@ func (i *Inspector) inspectQueryPrimary(
 
 	where, whereSubqueries := i.extractWhereFields(spec, relationRefs, scope)
 
-	// One slice, so that dropping the CTE names reaches every copy of a
-	// statement: a derived table reading a CTE reports it as a table of its
-	// own, and it is not one out here.
+	// A derived table reading a CTE reports it as a table of its own, and it is
+	// not one out here. The drop mutates what it is given, so the subqueries go
+	// in one slice and the from ones are read back as its prefix.
 	fromSubqueries := i.extractFromSubqueries(core.TreeOrNil(spec.FromClause()))
 	subqueries := slices.Concat(fromSubqueries, whereSubqueries,
 		i.extractSelectListSubqueries(spec), i.extractBranchClauseSubqueries(spec))
