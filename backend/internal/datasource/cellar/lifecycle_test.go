@@ -165,16 +165,9 @@ func TestManagedGrantToOthersNeedsTheRight(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rec.Code, "granting another member needs users.manage: %s", rec.Body.String())
 	rec = e2e.Do(t, f.H, http.MethodPost, "/datasources", token, body(creator))
 	require.Equal(t, http.StatusCreated, rec.Code, "the caller can always grant itself: %s", rec.Body.String())
-	rec = e2e.Do(t, f.H, http.MethodPost, "/datasources", token, body())
-	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
-	var created struct {
-		ID string `json:"id"`
-	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
-	var held bool
-	require.NoError(t, f.Conn.QueryRow(`SELECT EXISTS (SELECT 1 FROM app.user_to_role ur
-		JOIN app.permission p ON p.role_id = ur.role_id WHERE ur.user_id = $1 AND p.datasource_id = $2)`, creator, created.ID).Scan(&held))
-	require.True(t, held, "the creator is granted the database without naming itself")
+	rec = e2e.Do(t, f.H, http.MethodPost, "/datasources", token, map[string]any{"workspace_id": f.Actor.WorkspaceID,
+		"db_type": "postgresql", "name": "remote", "dsn": e2e.TargetDSN(t, f.Conn)})
+	require.Equal(t, http.StatusCreated, rec.Code, "managed or not, adding a datasource takes manage on *: %s", rec.Body.String())
 	rec = e2e.Do(t, f.H, http.MethodPost, "/datasources", f.Actor.Token, body(uuid.NewString()))
 	require.Equal(t, http.StatusBadRequest, rec.Code, "a user outside the workspace: %s", rec.Body.String())
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 
+	"backend/internal/authz"
 	"backend/internal/datasource"
 )
 
@@ -35,10 +37,7 @@ func toolCreateDatasource() Tool {
 			if err := json.Unmarshal(raw, &args); err != nil {
 				return nil, errBadArgument("invalid arguments")
 			}
-			if args.Name == "" {
-				return nil, errBadArgument("name is required")
-			}
-			id, err := datasource.CreateManaged(r, args.Name, "", "", args.GrantTo)
+			id, err := datasource.CreateManaged(r, args.Name, "", "", selfGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
@@ -72,7 +71,7 @@ func toolForkDatasource() Tool {
 			if args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			id, err := datasource.CreateManaged(r, args.Name, args.DatasourceID, args.At, args.GrantTo)
+			id, err := datasource.CreateManaged(r, args.Name, args.DatasourceID, args.At, selfGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
@@ -85,4 +84,14 @@ func toolForkDatasource() Tool {
 type created struct {
 	ID     string `json:"id"`
 	DBType string `json:"db_type"`
+}
+
+// selfGranted adds the calling key to grants: an API key is never an owner, so
+// it could not use a database its own role does not cover.
+func selfGranted(r *http.Request, grants datasource.GrantTo) datasource.GrantTo {
+	a := authz.ActorOf(r)
+	if !slices.Contains(grants.APIKeys, a.UserID) {
+		grants.APIKeys = append(grants.APIKeys, a.UserID)
+	}
+	return grants
 }

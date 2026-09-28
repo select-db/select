@@ -10,6 +10,7 @@ import (
 	"backend/internal/authz"
 
 	"github.com/google/uuid"
+	"github.com/selectDb/dialect/core"
 )
 
 type upsertRequest struct {
@@ -73,7 +74,9 @@ func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
 		spec = audit.DatasourceUpdated
 	}
 
-	if !a.IsOwner() && !a.CanManage(req.ID) {
+	// Adding a datasource takes manage on "*"; changing one, manage on it.
+	creating := existErr != nil
+	if !a.IsOwner() && !a.CanManage(req.ID) && !(creating && a.Can(core.ActionManage)) {
 		audit.EmitDenied(r.Context(), spec, workspaceID, req.ID)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false

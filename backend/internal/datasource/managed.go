@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -176,7 +175,7 @@ func servable(row generated.GetDatasourceRow) error {
 }
 
 // CreateManaged makes a managed database, empty or a fork of source as it was
-// at, and returns its id. The caller is always granted it, as well as grants.
+// at, and returns its id. REST and MCP both create through it.
 func CreateManaged(r *http.Request, name, source, at string, grants GrantTo) (string, error) {
 	a := authz.ActorOf(r)
 	id := uuid.NewString()
@@ -201,12 +200,8 @@ func CreateManaged(r *http.Request, name, source, at string, grants GrantTo) (st
 		}
 		sourceBytes = row.SizeBytes.Int64
 	}
-	self := &grants.Users
-	if a.IsAPIKey {
-		self = &grants.APIKeys
-	}
-	if !slices.Contains(*self, a.UserID) {
-		*self = append(*self, a.UserID)
+	if name == "" {
+		return id, &Refusal{http.StatusBadRequest, "name is required"}
 	}
 	return id, createManaged(r, a, id, name, source, at, sourceBytes, grants)
 }
@@ -251,6 +246,11 @@ func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, 
 	size, err := managed.Create(ctx, managed.DSN(managed.ID, id, a.WorkspaceID, plan, 0), source, at)
 	if err != nil {
 		return err
+	}
+	// The source's recorded size can lag its file; the copy's is exact. A refused
+	// copy is an orphan file the reconciler purges.
+	if usage.TotalBytes+size > limits.TotalBytes {
+		return &arrowstream.Error{Code: cellar.CodeQuotaExceeded, Message: fmt.Sprintf("the workspace's managed databases would exceed %d MB", limits.TotalBytes>>20)}
 	}
 	if err := q.InsertManagedDatasource(ctx, generated.InsertManagedDatasourceParams{
 		ID:          uuid.MustParse(id),
