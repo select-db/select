@@ -751,9 +751,9 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 			i.upsertSetFields(upsert, schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -844,9 +844,9 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -949,9 +949,9 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -1789,6 +1789,9 @@ func (l *subqueryExtractorListener) EnterTable_or_subquery(ctx *sqlite.Table_or_
 // addReturningFields records the columns a RETURNING clause hands back. They
 // are read from the target table and reach the caller's rows, so a rule hiding
 // one has to find it here as it would in a select.
+//
+// It runs before the caller drops the CTE names, because a returning subquery
+// reading a CTE resolves to no schema once they are gone.
 func (i *Inspector) addReturningFields(
 	result *core.InspectStatement,
 	ret sqlite.IReturning_clauseContext,
@@ -1797,6 +1800,10 @@ func (i *Inspector) addReturningFields(
 	if ret == nil {
 		return
 	}
+	// RETURNING is the write's select list, so a relation named inside one of
+	// its expressions is read exactly as it is in a select list: the value
+	// reaches the caller's row whether or not the write touches that table.
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(ret)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	var returned []core.InspectField
 	for _, column := range ret.AllResult_column() {

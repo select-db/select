@@ -617,9 +617,9 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 			i.assignedFields(conflict.Set_clause_list(), schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -703,6 +703,9 @@ func (i *Inspector) inspectExplainable(stmt pg.IExplainablestmtContext) *core.In
 // addReturningFields records the columns a RETURNING clause hands back. They
 // are read from the target table and reach the caller's rows, so a rule hiding
 // one has to find it here as it would in a select.
+//
+// It runs before the caller drops the CTE names, because a returning subquery
+// reading a CTE resolves to no schema once they are gone.
 func (i *Inspector) addReturningFields(
 	result *core.InspectStatement,
 	ret pg.IReturning_clauseContext,
@@ -715,6 +718,10 @@ func (i *Inspector) addReturningFields(
 	if targetList == nil {
 		return
 	}
+	// RETURNING is the write's select list, so a relation named inside one of
+	// its expressions is read exactly as it is in a select list: the value
+	// reaches the caller's row whether or not the write touches that table.
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(targetList)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	columns := core.TableFields(i.meta, schema, table, i.dialect)
 	var returned []core.InspectField
@@ -1059,9 +1066,9 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -1125,9 +1132,9 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
