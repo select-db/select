@@ -165,6 +165,29 @@ func dropDeclaredTables(stmts []InspectStatement, declared map[string]bool, norm
 	}
 }
 
+// DropVirtualRefs is DropVirtualTables one step earlier, on the relations a
+// subquery named before they become tables: it keeps the refs that mean
+// something outside the subquery that read them. A derived alias and a name the
+// subquery's own WITH declared are both in scope only inside it, and carried
+// outward resolve to no schema, which is refused for every role.
+//
+// Only a name the SQL wrote without a schema is dropped, for the reason
+// DropVirtualTables gives.
+func DropVirtualRefs(refs []RelationRef, virtual map[string]bool, normalize func(string) string) []RelationRef {
+	declared := make(map[string]bool, len(virtual))
+	for name := range virtual {
+		declared[normalize(name)] = true
+	}
+	kept := make([]RelationRef, 0, len(refs))
+	for _, ref := range refs {
+		if ref.IsVirtual || (!ref.Qualified && declared[normalize(ref.Table)]) {
+			continue
+		}
+		kept = append(kept, ref)
+	}
+	return kept
+}
+
 // CTEScope returns the CTE names the body at idx can refer to. A plain WITH
 // exposes only the CTEs declared before this one, so a name declared later is
 // still the real table: PostgreSQL runs "WITH a AS (SELECT c1 FROM b), b AS

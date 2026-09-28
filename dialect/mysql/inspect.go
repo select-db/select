@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"slices"
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
@@ -368,34 +369,33 @@ func (i *Inspector) inspectQueryPrimary(
 	}
 
 	relationRefs, subqueryColumns := i.extractRelationRefs(spec)
-	fromSubqueries := i.extractFromSubqueries(core.TreeOrNil(spec.FromClause()))
 
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
-	tables := i.resolver.Tables(relationRefs, scope)
-	for _, sub := range cteSubqueries {
-		tables = core.MergeInspectTables(tables, sub.Tables)
-	}
-	for _, sub := range fromSubqueries {
-		tables = core.MergeInspectTables(tables, sub.Tables)
-	}
 
-	allSubqueries := append([]core.InspectStatement{}, cteSubqueries...)
-	allSubqueries = append(allSubqueries, fromSubqueries...)
+	where, whereSubqueries := i.extractWhereFields(spec, relationRefs, scope)
+
+	// One slice, so that dropping the CTE names reaches every copy of a
+	// statement: a derived table reading a CTE reports it as a table of its
+	// own, and it is not one out here.
+	fromSubqueries := i.extractFromSubqueries(core.TreeOrNil(spec.FromClause()))
+	subqueries := slices.Concat(fromSubqueries, whereSubqueries,
+		i.extractSelectListSubqueries(spec), i.extractBranchClauseSubqueries(spec))
+	i.resolver.DropCTETables(subqueries, ctes)
+	fromSubqueries = subqueries[:len(fromSubqueries)]
+
+	allSubqueries := slices.Concat(cteSubqueries, fromSubqueries)
 
 	fields := i.extractSelectFieldsWithResolution(spec, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
-	where, whereSubqueries := i.extractWhereFields(spec, relationRefs, scope)
+	tables := i.resolver.Tables(relationRefs, scope)
+	for _, sub := range allSubqueries {
+		tables = core.MergeInspectTables(tables, sub.Tables)
+	}
+
 	where = core.MergeInspectFields(where, i.branchClauseFields(spec, relationRefs, scope, fields))
 	where = core.MergeInspectFields(where, i.joinFields(core.TreeOrNil(spec.FromClause()), relationRefs, scope))
 	where = core.MergeInspectFields(where, i.tailClauseFields(tail, relationRefs, scope))
 	where = i.resolver.ThroughVirtual(where, relationRefs, scope, allSubqueries)
-	selectSubqueries := i.extractSelectListSubqueries(spec)
-
-	subqueries := append([]core.InspectStatement{}, fromSubqueries...)
-	subqueries = append(subqueries, whereSubqueries...)
-	subqueries = append(subqueries, selectSubqueries...)
-	subqueries = append(subqueries, i.extractBranchClauseSubqueries(spec)...)
-	i.resolver.DropCTETables(subqueries, ctes)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
