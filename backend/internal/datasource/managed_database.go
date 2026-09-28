@@ -18,6 +18,21 @@ import (
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
 
+// managedPlan is what a workspace plan allows its managed databases.
+type managedPlan struct {
+	DatabaseMaxBytes  int64
+	WorkspaceMaxBytes int64 // all its managed databases together
+	MaxDatabases      int64
+	PointInTimeDays   int // how far back a fork may reach
+}
+
+// managedPlans by workspace.plan. An unknown plan has no size cap, which the
+// cellar refuses, and room for no database.
+var managedPlans = map[string]managedPlan{
+	"solo":  {DatabaseMaxBytes: 250 << 20, WorkspaceMaxBytes: 1 << 30, MaxDatabases: 10, PointInTimeDays: 1},
+	"teams": {DatabaseMaxBytes: 1 << 30, WorkspaceMaxBytes: 20 << 30, MaxDatabases: 100, PointInTimeDays: 7},
+}
+
 // stateDeleting marks a managed database that stopped serving and waits for
 // the reconciler to purge its file.
 const stateDeleting = "deleting"
@@ -112,8 +127,7 @@ func provisionManaged(ctx context.Context, actor authz.Actor, database newManage
 	if err != nil {
 		return err
 	}
-	plan := usage.Plan
-	limits := cellarclient.Plans[plan]
+	limits := managedPlans[usage.Plan]
 	if err := checkPointInTime(database.PointInTime, limits.PointInTimeDays); err != nil {
 		return err
 	}
@@ -125,7 +139,7 @@ func provisionManaged(ctx context.Context, actor authz.Actor, database newManage
 		return workspaceFull
 	}
 
-	dsn := cellarclient.DSN(cellarclient.CellarID, database.ID, actor.WorkspaceID, plan, 0)
+	dsn := cellarclient.DSN(cellarclient.CellarID, database.ID, actor.WorkspaceID, limits.DatabaseMaxBytes, 0)
 	createdBytes, err := cellarclient.Create(ctx, dsn, database.SourceID, database.PointInTime)
 	if err != nil {
 		return err

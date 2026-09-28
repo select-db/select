@@ -7,10 +7,16 @@ $0.01 per GB-month.
 
 ## Words
 
+- **managed database**: a SQLite database SELECT hosts for a workspace. The
+  word users see: the API, MCP, error messages and the `datasource` package
+  (`managed_database.go`, `managed_access.go`).
 - **backend**: the existing API server. Owns auth, permissions, plans, quotas
   and every row in Postgres.
 - **cellar**: the same binary in cellar mode. Owns SQLite files and nothing
-  else. Never reads Postgres, never knows a user.
+  else. Never reads Postgres, never knows a user. The word for the service
+  only: packages `cellar` and `cellarclient`, `CELLAR`, `cellar_id` and the
+  `cellar://` driver. A managed database lives on a cellar; a user never sees
+  the word.
 - **hot / cold**: a db with a local file on the cellar / a db that lives only
   in the bucket.
 - **wake**: restore a cold db from the bucket before running a query.

@@ -82,7 +82,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 		if err != nil {
 			return nil, err
 		}
-		dsn = cellarclient.DSN(cellarID, id, workspaceID, workspace.Plan, int(workspace.Members))
+		dsn = cellarclient.DSN(cellarID, id, workspaceID, managedPlans[workspace.Plan].DatabaseMaxBytes, int(workspace.Members))
 	} else if sqlite.IsCellarDSN(dsn) {
 		// It would open another workspace's database.
 		return nil, errors.New("datasource DSN uses a reserved scheme")

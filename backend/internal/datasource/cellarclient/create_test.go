@@ -18,7 +18,7 @@ func newDSN(t *testing.T) string {
 	t.Helper()
 	fixture := e2e.Setup(t)
 	e2e.ServeCellar(t)
-	return cellarclient.DSN(cellarclient.CellarID, uuid.NewString(), fixture.Actor.WorkspaceID, "solo", 0)
+	return cellarclient.DSN(cellarclient.CellarID, uuid.NewString(), fixture.Actor.WorkspaceID, 1<<20, 0)
 }
 
 func TestCreate(t *testing.T) {
