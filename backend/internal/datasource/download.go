@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"backend/internal/authz"
 	"backend/internal/datasource/cellarclient"
 
 	"github.com/selectDb/dialect/sqlite"
+	"github.com/selectDb/toolkit"
 )
 
 // DownloadHandler sends a managed database's file. It hands over all the
@@ -37,21 +37,7 @@ func DownloadHandler() http.HandlerFunc {
 		}
 		defer func() { _ = databaseFile.Close() }()
 		w.Header().Set("Content-Type", "application/vnd.sqlite3")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeFileName(resolved.Name)+".db"))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", toolkit.SafeFileName(resolved.Name, "database")+".db"))
 		_, _ = io.Copy(w, databaseFile)
 	}
-}
-
-// safeFileName keeps a download's name to characters every file system accepts.
-func safeFileName(name string) string {
-	cleaned := strings.Map(func(char rune) rune {
-		if char < 0x20 || strings.ContainsRune(`/\:*?"<>|`, char) {
-			return '_'
-		}
-		return char
-	}, strings.TrimSpace(name))
-	if cleaned == "" {
-		return "database"
-	}
-	return cleaned
 }
