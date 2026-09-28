@@ -7,6 +7,7 @@ import (
 	"backend/internal/cellar"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/sqlite"
 )
 
 // ErrOff answers any use of a managed database while CELLAR is unset.
@@ -39,5 +40,5 @@ func DSN(cellarID, id, workspaceID, plan string, members int) string {
 		"max_bytes":     {strconv.FormatInt(Plans[plan].DatabaseMaxBytes, 10)},
 		"max_in_flight": {strconv.Itoa(max(4, 2*members))},
 	}
-	return (&url.URL{Scheme: Scheme, Host: cellarID, Path: "/" + id, RawQuery: params.Encode()}).String()
+	return (&url.URL{Scheme: sqlite.CellarDriver, Host: cellarID, Path: "/" + id, RawQuery: params.Encode()}).String()
 }

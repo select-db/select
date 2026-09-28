@@ -19,14 +19,10 @@ import (
 	"github.com/selectDb/dialect/sqlite"
 )
 
-// Scheme is the scheme of a managed database's DSN, and the name of the
-// database/sql driver that opens it: connect.GetOrOpen opens it like any
-// other datasource.
-const Scheme = "cellar"
-
+// The SQLite dialect opens a managed database's DSN with this driver, which
+// sends each statement to the cellar instead of opening a file.
 func init() {
-	sql.Register(Scheme, sqlDriver{})
-	sqlite.CellarDriver = Scheme
+	sql.Register(sqlite.CellarDriver, sqlDriver{})
 }
 
 // ErrUnavailable is a cellar the backend could not reach. The cause, which
@@ -44,18 +40,7 @@ type sqlDriver struct{}
 // never resent as an exec.
 func (sqlDriver) QueryRunsAll() {}
 
-func (d sqlDriver) Open(dsn string) (driver.Conn, error) {
-	c, err := d.OpenConnector(dsn)
-	if err != nil {
-		return nil, err
-	}
-	return c.Connect(context.Background())
-}
-
-func (sqlDriver) OpenConnector(dsn string) (driver.Connector, error) {
-	if URL == "" {
-		return nil, ErrOff
-	}
+func (sqlDriver) Open(dsn string) (driver.Conn, error) {
 	id, grant, err := parseDSN(dsn)
 	if err != nil {
 		return nil, err
@@ -87,11 +72,9 @@ type conn struct {
 	path, grant string
 }
 
-func (c conn) Connect(context.Context) (driver.Conn, error) { return c, nil }
-func (conn) Driver() driver.Driver                          { return sqlDriver{} }
-func (conn) Prepare(string) (driver.Stmt, error)            { return nil, errNoPrepare }
-func (conn) Begin() (driver.Tx, error)                      { return nil, errNoTx }
-func (conn) Close() error                                   { return nil }
+func (conn) Prepare(string) (driver.Stmt, error) { return nil, errNoPrepare }
+func (conn) Begin() (driver.Tx, error)           { return nil, errNoTx }
+func (conn) Close() error                        { return nil }
 
 // CheckNamedValue keeps arguments to strings, which JSON carries unchanged.
 func (conn) CheckNamedValue(nv *driver.NamedValue) error {

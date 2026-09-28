@@ -38,6 +38,10 @@ type Opened struct {
 // OpenError or, in MCP, asToolError.
 func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
+	var coded *arrowstream.Error
+	if errors.As(err, &coded) {
+		return Opened{}, err
+	}
 	if err != nil {
 		return Opened{}, ErrNotFound
 	}
