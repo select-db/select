@@ -1950,13 +1950,13 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 				if len(simpleSelectPrimaries) > 0 {
 					simpleSelectPrimary := simpleSelectPrimaries[0]
 
-					// Get FROM clause from the subquery
+					// Walked once: the walk recurses through the derived tables
+					// below, so walking it twice is exponential in the nesting.
+					var subqueryRelationRefs []core.RelationRef
 					var nestedSubqueryColumns map[string][]core.Column
 					if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
-						// Recursively parse the FROM clause
-						subqueryRefs, nestedSubqueryCols := body.walk(fromClause.From_list())
-						refs = append(refs, core.DropVirtualRefs(subqueryRefs, body.declared, fw.dialect.NormalizeIdentifier)...)
-						nestedSubqueryColumns = nestedSubqueryCols
+						subqueryRelationRefs, nestedSubqueryColumns = body.walk(fromClause.From_list())
+						refs = append(refs, core.DropVirtualRefs(subqueryRelationRefs, body.declared, fw.dialect.NormalizeIdentifier)...)
 					}
 
 					// Get SELECT clause from the subquery to extract columns
@@ -1970,12 +1970,6 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 					if targetList != nil {
 						// Extract columns from the target list
 						targetElements := targetList.AllTarget_el()
-
-						// Get table references from the subquery for SELECT * expansion
-						var subqueryRelationRefs []core.RelationRef
-						if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
-							subqueryRelationRefs, nestedSubqueryColumns = body.walk(fromClause.From_list())
-						}
 
 						for _, targetEl := range targetElements {
 							// Handle SELECT * specially

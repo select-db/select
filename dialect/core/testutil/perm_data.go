@@ -241,6 +241,13 @@ func permCases() []PermCase {
 			Why:   "the CTE shadows t1 inside the derived table, so nothing reads the table t1",
 		},
 		{
+			Name:  "a derived table reading a CTE",
+			SQL:   "WITH c AS (SELECT c1 FROM t2) SELECT x.c1 FROM (SELECT c1 FROM c) AS x",
+			Needs: []Right{mainT2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a CTE is in scope inside the derived table that reads it, and what it reads is t2",
+		},
+		{
 			Name:  "a CTE of constants inside a derived table",
 			SQL:   "SELECT l.c1 FROM (WITH c AS (SELECT 1 AS c1) SELECT c.c1 FROM c) AS l",
 			Needs: nil,
