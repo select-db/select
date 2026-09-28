@@ -274,12 +274,28 @@ func checkDatasource(stmt InspectStatement, datasourceID string, compiledPermiss
 // table, so each right is the connection-wide one.
 func checkUnreadable(datasourceID string, compiledPermissions CompiledPermissions) error {
 	for _, action := range []string{ActionManage, ActionSelect, ActionInsert, ActionUpdate, ActionDelete} {
+		if denied, role := compiledPermissions.deniedAnywhere(datasourceID, action); denied {
+			return &PermissionDeniedError{Action: action, RoleName: role}
+		}
 		allowed, role := compiledPermissions.isAllowed(datasourceID, "", "", "", action)
 		if !allowed {
 			return &PermissionDeniedError{Action: action, RoleName: role}
 		}
 	}
 	return nil
+}
+
+// deniedAnywhere reports whether any rule denies action, at whatever scope, and
+// the role that decided it. A connection-wide lookup reads the wildcard rules
+// alone, so a deny on one column would not be seen: a statement that may touch
+// anything is refused by a deny on anything.
+func (idx CompiledPermissions) deniedAnywhere(datasourceID, action string) (bool, string) {
+	for key, role := range idx.deny {
+		if key.action == action && (key.datasourceID == "" || key.datasourceID == datasourceID) {
+			return true, role
+		}
+	}
+	return false, ""
 }
 
 // checkTables asks for a right on every table the statement names, per column

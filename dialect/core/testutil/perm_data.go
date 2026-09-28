@@ -47,7 +47,7 @@ var rowRights = []Right{
 }
 
 // unreadable is what text the parser could not read requires: manage, and every
-// row action on every table, since nothing says which rows the statement
+// row action on the connection, since nothing says which rows the statement
 // touches. Manage alone would let a principal who may not read rows run what
 // could be a read.
 var unreadable = slices.Concat([]Right{Manage}, rowRights)
