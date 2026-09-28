@@ -17,18 +17,7 @@ When you connect to a database, SELECT fetches its full schema. This metadata is
 - **Types**: enums, composite types, custom types
 - **Statistics**: table and index size stats
 
-## How the schema is loaded
-
-SELECT reads the whole schema in a single query on a single connection. The database returns every schema, table, column, key, index, trigger, type, function and setting in one round trip, so a load takes about the same time however many schemas or tables it holds. This matters most on a remote or proxied server, where each round trip costs the network latency.
-
-A few extras run as their own small queries:
-
-- **SQLite**: one more query reads the statistics, only when an `ANALYZE` has left them.
-- **MySQL**: one query reads the server variables and one reads the built-in function help. Either is skipped when your account cannot read it.
-
-The DDL shown for a MySQL table or view is rebuilt from `information_schema`. It is equivalent to the output of `SHOW CREATE TABLE`, though not always byte for byte identical.
-
-## How the DDL dump works
+## How it works
 
 SELECT uses two strategies to retrieve schema information, depending on what is available:
 
