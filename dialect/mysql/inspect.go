@@ -584,18 +584,11 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 				Schema: schema,
 			})
 		}
-	} else if stmt.SET_SYMBOL() != nil {
-		if ul := stmt.UpdateList(); ul != nil {
-			for _, el := range ul.AllUpdateElement() {
-				if name := i.columnRefName(el.ColumnRef()); name != "" {
-					result.Fields = append(result.Fields, core.InspectField{
-						Name:   name,
-						Table:  tableName,
-						Schema: schema,
-					})
-				}
-			}
-		}
+	} else if ul := stmt.UpdateList(); ul != nil {
+		// The SET form names the columns it writes on the left of each
+		// assignment, and reads whatever the right of it names.
+		result.Fields = i.updateListFields(ul, schema, tableName)
+		i.chargeSetReads(result, ul, schema, tableName)
 	} else {
 		// No column list: expand to all columns from metadata.
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
@@ -617,9 +610,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 	// clause also rewrites the row it conflicts with, so the row that was
 	// there does not survive and insert alone is not the right it needs.
 	if iul := stmt.InsertUpdateList(); iul != nil {
-		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(iul)...)
-		result.Where = core.MergeInspectFields(result.Where,
-			i.updateListReads(iul.UpdateList(), schema, tableName))
+		i.chargeSetReads(result, iul.UpdateList(), schema, tableName)
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.updateListFields(iul.UpdateList(), schema, tableName))
 	}
@@ -658,16 +649,9 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 				Name: name, Table: tableName, Schema: schema,
 			})
 		}
-	} else if stmt.SET_SYMBOL() != nil {
-		if ul := stmt.UpdateList(); ul != nil {
-			for _, el := range ul.AllUpdateElement() {
-				if name := i.columnRefName(el.ColumnRef()); name != "" {
-					result.Fields = append(result.Fields, core.InspectField{
-						Name: name, Table: tableName, Schema: schema,
-					})
-				}
-			}
-		}
+	} else if ul := stmt.UpdateList(); ul != nil {
+		result.Fields = i.updateListFields(ul, schema, tableName)
+		i.chargeSetReads(result, ul, schema, tableName)
 	} else {
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
@@ -701,6 +685,17 @@ func (i *Inspector) updateListFields(
 		}
 	}
 	return fields
+}
+
+// chargeSetReads adds what the right of each assignment in a SET list reads:
+// the columns whose values it stores, and the subqueries nested under it.
+func (i *Inspector) chargeSetReads(
+	result *core.InspectStatement,
+	list mysql.IUpdateListContext,
+	schema, table string,
+) {
+	result.Where = core.MergeInspectFields(result.Where, i.updateListReads(list, schema, table))
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(list)...)
 }
 
 // updateListReads are the columns the right of a SET list reads, whose values
@@ -1091,18 +1086,26 @@ func (i *Inspector) loadTarget(stmt mysql.ILoadStatementContext) core.InspectSta
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
 	}
 	tail := stmt.LoadDataFileTail()
-	if tail == nil || tail.LoadDataFileTargetList() == nil {
+	if tail == nil {
 		return read
 	}
-	list := tail.LoadDataFileTargetList().FieldOrVariableList()
-	if list == nil {
+	set := tail.UpdateList()
+	i.chargeSetReads(&read, set, schema, table)
+	var columns mysql.IFieldOrVariableListContext
+	if targets := tail.LoadDataFileTargetList(); targets != nil {
+		columns = targets.FieldOrVariableList()
+	}
+	if columns == nil {
+		// The file fills every column, which naming none asks the right on, so
+		// a column the SET list also fills is already covered.
 		return read
 	}
-	for _, col := range list.AllColumnRef() {
+	for _, col := range columns.AllColumnRef() {
 		if name := i.columnRefName(col); name != "" {
 			read.Fields = append(read.Fields, core.InspectField{Name: name, Table: table, Schema: schema})
 		}
 	}
+	read.Fields = core.MergeInspectFields(read.Fields, i.updateListFields(set, schema, table))
 	return read
 }
 
