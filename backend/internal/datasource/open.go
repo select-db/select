@@ -26,6 +26,16 @@ const genericConnErr = "could not connect to the datasource"
 // ErrNotFound is a datasource the caller's workspace does not have.
 var ErrNotFound = errors.New("datasource not found")
 
+// Refusal is a request the caller can correct, answered with its HTTP status.
+type Refusal struct {
+	Status  int
+	Message string
+}
+
+func (refusal *Refusal) Error() string { return refusal.Message }
+
+var errForbidden = &Refusal{http.StatusForbidden, "forbidden"}
+
 // Opened is a datasource ready for one request, with the caller's permissions.
 type Opened struct {
 	ID, WorkspaceID string
