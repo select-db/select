@@ -104,6 +104,7 @@ var codeStatus = map[string]int{
 	cellar.CodeForbiddenStatement: http.StatusBadRequest,
 	cellar.CodeQuotaExceeded:      http.StatusForbidden,
 	cellar.CodeTimeout:            http.StatusRequestTimeout,
+	cellar.CodeWaking:             http.StatusServiceUnavailable,
 	cellar.CodeUnavailable:        http.StatusServiceUnavailable,
 	cellar.CodeDisabled:           http.StatusNotImplemented,
 	cellar.CodeInternal:           http.StatusInternalServerError,

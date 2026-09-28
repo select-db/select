@@ -65,8 +65,8 @@ func statementConn(t *testing.T, conn query.Conn) *sql.Conn {
 }
 
 func TestIsolationCapsTheSize(t *testing.T) {
-	dir, id := newFile(t)
-	conn, err := Open(dir, Grant{DatasourceID: id, MaxBytes: 256 << 10})
+	path, id := newFile(t)
+	conn, err := Open(path, Grant{DatasourceID: id, MaxBytes: 256 << 10})
 	require.NoError(t, err)
 
 	c := statementConn(t, conn)
@@ -78,8 +78,8 @@ func TestIsolationCapsTheSize(t *testing.T) {
 }
 
 func TestIsolationRefusesForbiddenStatements(t *testing.T) {
-	dir, id := newFile(t)
-	conn, err := Open(dir, Grant{DatasourceID: id, MaxBytes: 1 << 20})
+	path, id := newFile(t)
+	conn, err := Open(path, Grant{DatasourceID: id, MaxBytes: 1 << 20})
 	require.NoError(t, err)
 	c, err := conn.DB.Conn(context.Background())
 	require.NoError(t, err)

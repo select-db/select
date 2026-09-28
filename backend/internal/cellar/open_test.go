@@ -9,30 +9,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newFile creates a managed database in a temp dir and returns the dir and its id.
+// newFile creates a managed database in a temp dir and returns its path and id.
 func newFile(t *testing.T) (string, string) {
 	t.Helper()
-	dir, id := t.TempDir(), uuid.NewString()
-	db, err := sql.Open("sqlite", filepath.Join(dir, id+".db"))
+	id := uuid.NewString()
+	path := filepath.Join(t.TempDir(), id+".db")
+	db, err := sql.Open("sqlite", path)
 	require.NoError(t, err)
 	_, err = db.Exec("CREATE TABLE blob (b BLOB)")
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
-	return dir, id
+	return path, id
 }
 
 func TestOpenRefuses(t *testing.T) {
-	dir, id := newFile(t)
+	path, id := newFile(t)
 
-	_, err := Open(dir, Grant{DatasourceID: id})
+	_, err := Open(path, Grant{DatasourceID: id})
 	require.Error(t, err, "a grant without a size cap")
 
-	_, err = Open(dir, Grant{DatasourceID: "../" + id, MaxBytes: 1 << 20})
-	require.Error(t, err, "an id that is not a uuid")
-
-	missing := uuid.NewString()
-	conn, err := Open(dir, Grant{DatasourceID: missing, MaxBytes: 1 << 20})
+	missingPath := filepath.Join(t.TempDir(), uuid.NewString()+".db")
+	conn, err := Open(missingPath, Grant{DatasourceID: id, MaxBytes: 1 << 20})
 	require.NoError(t, err)
 	require.Error(t, conn.DB.Ping(), "a database that does not exist")
-	require.NoFileExists(t, filepath.Join(dir, missing+".db"))
+	require.NoFileExists(t, missingPath)
 }

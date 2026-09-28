@@ -5,9 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"github.com/google/uuid"
 )
 
 // StoredDatabase is one entry of GET /datasources, the list the reconciler checks.
@@ -16,28 +13,27 @@ type StoredDatabase struct {
 	SizeBytes int64  `json:"size_bytes"`
 }
 
-// InventoryHandler lists every database this cellar holds, with its size.
-func InventoryHandler(dir string) http.HandlerFunc {
+// InventoryHandler lists every database on this cellar's disk, with its size.
+func InventoryHandler(databases *Databases) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		entries, err := os.ReadDir(dir)
+		entries, err := os.ReadDir(databases.dir)
 		if err != nil {
 			writeLifecycleError(w, r, err)
 			return
 		}
-		databases := []StoredDatabase{}
+		stored := []StoredDatabase{}
 		for _, entry := range entries {
-			// Only <uuid>.db is a database: this skips WAL files and temporary copies.
-			id, isDatabase := strings.CutSuffix(entry.Name(), ".db")
-			if _, err := uuid.Parse(id); !isDatabase || err != nil {
+			id, isDatabase := databaseID(entry.Name())
+			if !isDatabase {
 				continue
 			}
-			size, err := databaseSize(filepath.Join(dir, entry.Name()))
+			size, err := databaseSize(filepath.Join(databases.dir, entry.Name()))
 			if err != nil {
 				continue
 			}
-			databases = append(databases, StoredDatabase{ID: id, SizeBytes: size})
+			stored = append(stored, StoredDatabase{ID: id, SizeBytes: size})
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(databases)
+		_ = json.NewEncoder(w).Encode(stored)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -47,14 +48,33 @@ func TestCreateForkOfMissingSource(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(cellar.dir, id+".db"), "a failed fork leaves no file")
 }
 
-func TestCreatePointInTimeIsNotAvailableYet(t *testing.T) {
+func TestCreatePointInTime(t *testing.T) {
+	cellar := newTestCellar(t)
+	sourceID, forkID := uuid.NewString(), uuid.NewString()
+	cellar.createNotes(t, sourceID)
+	cellar.sync(t, sourceID)
+	// at has whole seconds: wait for one to pass after the writes it must hold.
+	time.Sleep(time.Second)
+	at := time.Now().UTC().Format(time.RFC3339)
+	cellar.exec(t, sourceID, "INSERT INTO note VALUES ('c')")
+	cellar.sync(t, sourceID)
+
+	rec := cellar.call("PUT", "/datasources/"+forkID, CreateRequest{SourceID: sourceID, PointInTime: at})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, 2, cellar.countNotes(t, forkID), "the fork has the rows written before at")
+	require.Equal(t, 3, cellar.countNotes(t, sourceID))
+}
+
+func TestCreatePointInTimeBeforeAnyCopy(t *testing.T) {
 	cellar := newTestCellar(t)
 	sourceID := uuid.NewString()
 	cellar.createNotes(t, sourceID)
+	cellar.sync(t, sourceID)
 
-	rec := cellar.call("PUT", "/datasources/"+uuid.NewString(), CreateRequest{SourceID: sourceID, PointInTime: "2026-09-28T00:00:00Z"})
-	require.Equal(t, http.StatusNotImplemented, rec.Code)
-	require.Equal(t, CodeDisabled, errorCode(t, rec))
+	at := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	rec := cellar.call("PUT", "/datasources/"+uuid.NewString(), CreateRequest{SourceID: sourceID, PointInTime: at})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, CodeSQLError, errorCode(t, rec), "the caller's mistake, not the cellar's")
 }
 
 func TestCreateRefusesAnIDThatIsNotAUUID(t *testing.T) {

@@ -10,14 +10,14 @@ import (
 
 // DownloadHandler sends a consistent copy of the database, taken with VACUUM
 // INTO so writes may go on while it streams.
-func DownloadHandler(dir string) http.HandlerFunc {
+func DownloadHandler(databases *Databases) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sourcePath, err := existingDatabasePath(dir, GetGrant(r).DatasourceID)
+		sourcePath, err := databases.Use(r.Context(), GetGrant(r).DatasourceID)
 		if err != nil {
 			writeLifecycleError(w, r, err)
 			return
 		}
-		tempPath := filepath.Join(dir, ".tmp-"+uuid.NewString()+".db")
+		tempPath := filepath.Join(databases.dir, ".tmp-"+uuid.NewString()+".db")
 		defer func() { _ = os.Remove(tempPath) }()
 		if err := execTrusted(r.Context(), sourcePath, "rw", "VACUUM INTO ?", tempPath); err != nil {
 			writeLifecycleError(w, r, err)

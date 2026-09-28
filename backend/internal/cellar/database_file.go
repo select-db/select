@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -33,16 +34,24 @@ func databasePath(dir, id string) (string, error) {
 	return filepath.Join(dir, id+".db"), nil
 }
 
-// existingDatabasePath is databasePath for a database that must already exist.
-func existingDatabasePath(dir, id string) (string, error) {
-	path, err := databasePath(dir, id)
-	if err != nil {
-		return "", err
+// databaseID is the id of the database file named fileName, if it is one:
+// temporary copies, WAL files and Litestream's folders are not.
+func databaseID(fileName string) (string, bool) {
+	id, isDatabase := strings.CutSuffix(fileName, ".db")
+	_, err := uuid.Parse(id)
+	return id, isDatabase && err == nil
+}
+
+// removeDatabaseFiles removes database id and everything next to it: its WAL
+// files and Litestream's working folder.
+func removeDatabaseFiles(dir, id string) error {
+	path := filepath.Join(dir, id+".db")
+	for _, file := range []string{path, path + "-wal", path + "-shm", filepath.Join(dir, "."+id+".db-litestream")} {
+		if err := os.RemoveAll(file); err != nil {
+			return err
+		}
 	}
-	if _, err := os.Stat(path); err != nil {
-		return "", errNotFound
-	}
-	return path, nil
+	return nil
 }
 
 // databaseSize counts the WAL too: until a checkpoint, recent writes live there.
