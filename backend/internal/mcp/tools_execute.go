@@ -122,9 +122,6 @@ func toolExecuteStatement() Tool {
 // errors come back wrapped, for asToolError to redact.
 func openDatasource(r *http.Request, datasourceID, workspaceID string) (datasource.Opened, error) {
 	o, err := datasource.Open(r, datasourceID, workspaceID)
-	if errors.Is(err, datasource.ErrNotFound) {
-		return o, errNotFound("datasource not found")
-	}
 	if err != nil {
 		return o, fmt.Errorf("open datasource %s: %w", datasourceID, err)
 	}

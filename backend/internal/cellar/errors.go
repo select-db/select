@@ -2,8 +2,10 @@ package cellar
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"backend/internal/utils"
 
@@ -64,4 +66,34 @@ type classifiedSink struct {
 
 func (s classifiedSink) OnError(err error) {
 	s.Sink.OnError(classify(s.ctx, err, s.grant))
+}
+
+// The failures of the lifecycle routes that answer with their own status.
+var (
+	errAlreadyExists       = &arrowstream.Error{Code: CodeSQLError, Message: "a managed database with this id already exists"}
+	errNotFound            = &arrowstream.Error{Code: CodeSQLError, Message: "managed database not found"}
+	errPointInTimeDisabled = &arrowstream.Error{Code: CodeDisabled, Message: "point-in-time fork is not available yet"}
+)
+
+// writeLifecycleError answers with the failure's code and message as JSON; any
+// other error is classified as a statement's would be.
+func writeLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
+	var coded *arrowstream.Error
+	if !errors.As(err, &coded) {
+		coded = classify(r.Context(), err, GetGrant(r))
+	}
+	status := http.StatusBadRequest
+	switch {
+	case coded == errAlreadyExists:
+		status = http.StatusConflict
+	case coded == errNotFound:
+		status = http.StatusNotFound
+	case coded == errPointInTimeDisabled:
+		status = http.StatusNotImplemented
+	case coded.Code == CodeInternal:
+		status = http.StatusInternalServerError
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(coded)
 }

@@ -120,6 +120,13 @@ func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 	}
 }
 
+// SystemSchema implements the core.SQLDialect interface. MySQL keeps its
+// catalog in information_schema, mysql and performance_schema, none of which a
+// bare name reaches: the session's database answers for it instead.
+func (d *Dialect) SystemSchema(string) string {
+	return ""
+}
+
 func (d *Dialect) NormalizeIdentifier(raw string) string {
 	if len(raw) >= 2 && raw[0] == '`' && raw[len(raw)-1] == '`' {
 		return normalizeMySQLQuotedIdentifier(raw)

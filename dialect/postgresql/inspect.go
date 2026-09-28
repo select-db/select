@@ -1,6 +1,8 @@
 package postgresql
 
 import (
+	"maps"
+	"slices"
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
@@ -364,27 +366,26 @@ func (i *Inspector) inspectSelectPrimary(
 
 	relationRefs, subqueryColumns := i.extractRelationRefsFromPrimary(primary)
 
-	fromSubqueries := i.extractFromSubqueriesFromPrimary(primary)
-
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
-	tables := i.resolver.Tables(relationRefs, scope)
-	for _, subq := range cteSubqueries {
-		tables = core.MergeInspectTables(tables, subq.Tables)
-	}
-	for _, subq := range fromSubqueries {
-		tables = core.MergeInspectTables(tables, subq.Tables)
-	}
-
-	allSubqueries := append(cteSubqueries, fromSubqueries...)
-	fields := i.extractSelectFieldsWithResolution(primary, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
 	where, whereSubqueries := i.extractWhereFieldsFromPrimary(primary, relationRefs, scope)
-	selectSubqueries := i.extractSelectListSubqueries(primary)
 
-	subqueries := append(fromSubqueries, whereSubqueries...)
-	subqueries = append(subqueries, selectSubqueries...)
-	subqueries = append(subqueries, i.extractBranchClauseSubqueries(primary)...)
+	// A derived table reading a CTE reports it as a table of its own, and it is
+	// not one out here. The drop mutates what it is given, so the subqueries go
+	// in one slice and the from ones are read back as its prefix.
+	fromSubqueries := i.extractFromSubqueriesFromPrimary(primary)
+	subqueries := slices.Concat(fromSubqueries, whereSubqueries,
+		i.extractSelectListSubqueries(primary), i.extractBranchClauseSubqueries(primary))
 	i.resolver.DropCTETables(subqueries, ctes)
+	fromSubqueries = subqueries[:len(fromSubqueries)]
+
+	allSubqueries := slices.Concat(cteSubqueries, fromSubqueries)
+	fields := i.extractSelectFieldsWithResolution(primary, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
+
+	tables := i.resolver.Tables(relationRefs, scope)
+	for _, subq := range allSubqueries {
+		tables = core.MergeInspectTables(tables, subq.Tables)
+	}
 
 	tested := core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, scope, fields))
 	tested = core.MergeInspectFields(tested,
@@ -551,11 +552,7 @@ func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *co
 	}
 	// The columns are the statement, as they are for the SELECT * it stands
 	// for. Without them the see check has no field to find and hides nothing.
-	// No column means no such table, which resolves to no schema and is refused.
 	fields := core.TableFields(i.meta, schema, table, i.dialect)
-	if len(fields) == 0 {
-		schema = ""
-	}
 	return &core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
@@ -966,11 +963,12 @@ func (i *Inspector) resolveAnyName(anyName pg.IAny_nameContext) (schema, table s
 			return first, i.dialect.NormalizeIdentifier(attrNames[0].GetText())
 		}
 	}
-	return defaultSchema, first
+	return i.resolver.SchemaFor(defaultSchema, first), first
 }
 
-// resolveQualifiedName extracts (schema, table) from a qualified_name node.
-// Schema defaults to DefaultSchema when not specified.
+// resolveQualifiedName extracts (schema, table) from a qualified_name node. A
+// bare name resolves through the resolver, so a write target and a FROM
+// relation cannot answer differently for one name.
 func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, table string) {
 	if q == nil {
 		return "", ""
@@ -989,8 +987,8 @@ func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, t
 			}
 		}
 	} else {
-		schema = defaultSchema
 		table = i.dialect.NormalizeIdentifier(colId.GetText())
+		schema = i.resolver.SchemaFor(defaultSchema, table)
 	}
 	return schema, table
 }
@@ -1658,6 +1656,26 @@ func (i *Inspector) inspectWithClause(opt pg.IOpt_with_clauseContext) ([]core.Re
 	return i.extractCTEsWithSubqueries(opt.With_clause())
 }
 
+// cteNames returns the names a WITH clause declares, in the order it declares
+// them, which is the order CTEScope reads.
+func cteNames(withClause pg.IWith_clauseContext, normalize func(string) string) []string {
+	if withClause == nil || withClause.Cte_list() == nil {
+		return nil
+	}
+	cteElements := withClause.Cte_list().AllCommon_table_expr()
+	names := make([]string, 0, len(cteElements))
+	for _, cteEl := range cteElements {
+		name := ""
+		if cteEl != nil {
+			if nameCtx := cteEl.Name(); nameCtx != nil {
+				name = normalize(nameCtx.GetText())
+			}
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
 // extractCTEsWithSubqueries extracts CTE definitions and inspects their bodies
 func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext) ([]core.RelationRef, []core.InspectStatement) {
 	if withClause == nil {
@@ -1675,16 +1693,7 @@ func (i *Inspector) extractCTEsWithSubqueries(withClause pg.IWith_clauseContext)
 
 	// Names before bodies: a body cannot be walked until the clause it may refer
 	// to is known.
-	names := make([]string, 0, len(cteElements))
-	for _, cteEl := range cteElements {
-		name := ""
-		if cteEl != nil {
-			if nameCtx := cteEl.Name(); nameCtx != nil {
-				name = i.dialect.NormalizeIdentifier(nameCtx.GetText())
-			}
-		}
-		names = append(names, name)
-	}
+	names := cteNames(withClause, i.dialect.NormalizeIdentifier)
 	recursive := withClause.RECURSIVE() != nil
 
 	for idx, cteEl := range cteElements {
@@ -1820,9 +1829,32 @@ func (i *Inspector) inspectSelectWithParens(ctx pg.ISelect_with_parensContext) *
 
 // fromWalker extracts table references and subquery columns from a FROM clause.
 // Used by the Inspector to resolve table permissions.
+//
+// declared are the CTE names the subqueries above this FROM clause bound. They
+// reach any depth, since a derived table nested inside the body still reads the
+// body's CTEs, so the walker carries them down rather than the caller.
 type fromWalker struct {
-	dialect *Dialect
-	meta    core.Metadata
+	dialect  *Dialect
+	meta     core.Metadata
+	declared map[string]bool
+}
+
+// inside returns the walker for a subquery body whose WITH clause bound names,
+// which are relations there and nowhere outside it.
+func (fw *fromWalker) inside(names []string) *fromWalker {
+	if len(names) == 0 {
+		return fw
+	}
+	declared := make(map[string]bool, len(fw.declared)+len(names))
+	maps.Copy(declared, fw.declared)
+	for _, name := range names {
+		// cteNames pads an element the parser gave no name, and the empty name
+		// would then drop every relation the metadata does not know.
+		if name != "" {
+			declared[name] = true
+		}
+	}
+	return &fromWalker{dialect: fw.dialect, meta: fw.meta, declared: declared}
 }
 
 func (fw *fromWalker) walk(fromList pg.IFrom_listContext) ([]core.RelationRef, map[string][]core.Column) {
@@ -1900,27 +1932,16 @@ func (fw *fromWalker) walk(fromList pg.IFrom_listContext) ([]core.RelationRef, m
 	return refs, subqueryColumns
 }
 
-// physicalRefs drops the derived-table aliases among refs. A subquery's tables
-// are reported by the query around it, but the names it declares are in scope
-// only inside it: carried outward they resolve to no schema, and the permission
-// check refuses one of those whatever the role holds.
-func physicalRefs(refs []core.RelationRef) []core.RelationRef {
-	kept := make([]core.RelationRef, 0, len(refs))
-	for _, ref := range refs {
-		if ref.IsVirtual {
-			continue
-		}
-		kept = append(kept, ref)
-	}
-	return kept
-}
-
 func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContext) ([]core.RelationRef, []core.Column) {
 	var refs []core.RelationRef
 	var columns []core.Column
 
 	// Get the select statement from the subquery
 	if selectStmt := subquery.Select_no_parens(); selectStmt != nil {
+		// The FROM list sits after the whole WITH clause, so every name the
+		// clause declares is a relation there, and none of them is one here.
+		body := fw.inside(cteNames(selectStmt.With_clause(), fw.dialect.NormalizeIdentifier))
+
 		// Get the FROM clause from the subquery
 		selectClause := selectStmt.Select_clause()
 		if selectClause != nil {
@@ -1930,13 +1951,13 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 				if len(simpleSelectPrimaries) > 0 {
 					simpleSelectPrimary := simpleSelectPrimaries[0]
 
-					// Get FROM clause from the subquery
+					// Walked once: the walk recurses through the derived tables
+					// below, so walking it twice is exponential in the nesting.
+					var subqueryRelationRefs []core.RelationRef
 					var nestedSubqueryColumns map[string][]core.Column
 					if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
-						// Recursively parse the FROM clause
-						subqueryRefs, nestedSubqueryCols := fw.walk(fromClause.From_list())
-						refs = append(refs, physicalRefs(subqueryRefs)...)
-						nestedSubqueryColumns = nestedSubqueryCols
+						subqueryRelationRefs, nestedSubqueryColumns = body.walk(fromClause.From_list())
+						refs = append(refs, core.DropVirtualRefs(subqueryRelationRefs, body.declared, fw.dialect.NormalizeIdentifier)...)
 					}
 
 					// Get SELECT clause from the subquery to extract columns
@@ -1950,12 +1971,6 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 					if targetList != nil {
 						// Extract columns from the target list
 						targetElements := targetList.AllTarget_el()
-
-						// Get table references from the subquery for SELECT * expansion
-						var subqueryRelationRefs []core.RelationRef
-						if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
-							subqueryRelationRefs, nestedSubqueryColumns = fw.walk(fromClause.From_list())
-						}
 
 						for _, targetEl := range targetElements {
 							// Handle SELECT * specially

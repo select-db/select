@@ -1,7 +1,6 @@
-package cellar
+package cellarclient
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -9,50 +8,31 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
-	"backend/internal/auth"
-	server "backend/internal/cellar"
+	"backend/internal/cellar"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/selectDb/dialect/sqlite"
-	"github.com/selectDb/toolkit/cache"
 )
 
-// Scheme is the scheme of a managed database's DSN, and the name of the
-// database/sql driver that opens it: connect.GetOrOpen opens it like any
-// other datasource.
-const Scheme = "cellar"
-
+// The SQLite dialect opens a managed database's DSN with this driver, which
+// sends each statement to the cellar instead of opening a file.
 func init() {
-	sql.Register(Scheme, sqlDriver{})
-	sqlite.CellarDriver = Scheme
+	sql.Register(sqlite.CellarDriver, sqlDriver{})
 }
 
 // ErrUnavailable is a cellar the backend could not reach. The cause, which
 // names the cellar's address, is only logged.
-var ErrUnavailable error = &arrowstream.Error{Code: server.CodeUnavailable, Message: "managed database temporarily unavailable, retry"}
+var ErrUnavailable error = &arrowstream.Error{Code: cellar.CodeUnavailable, Message: "managed database temporarily unavailable, retry"}
 
 var (
 	errNoPrepare = errors.New("cellar: prepared statements are not supported")
 	errNoTx      = errors.New("cellar: transactions are not supported")
-
-	httpClient = &http.Client{}
 )
-
-// The service token lives tokenTTL and is reused for the 50s window it was
-// signed in, so it has 10s left when it reaches the cellar. Each sign is a KMS call.
-const (
-	tokenTTL = 60 * time.Second
-	reuseFor = 50 * time.Second
-)
-
-var tokens = cache.New(cache.Options{MaxEntries: 1})
 
 type sqlDriver struct{}
 
@@ -60,35 +40,31 @@ type sqlDriver struct{}
 // never resent as an exec.
 func (sqlDriver) QueryRunsAll() {}
 
-func (d sqlDriver) Open(dsn string) (driver.Conn, error) {
-	c, err := d.OpenConnector(dsn)
+func (sqlDriver) Open(dsn string) (driver.Conn, error) {
+	id, grant, err := parseDSN(dsn)
 	if err != nil {
 		return nil, err
 	}
-	return c.Connect(context.Background())
+	return conn{path: "/datasources/" + id + "/query", grant: grant}, nil
 }
 
-func (sqlDriver) OpenConnector(dsn string) (driver.Connector, error) {
-	if URL == "" {
-		return nil, ErrOff
-	}
-	u, err := url.Parse(dsn)
+// parseDSN reads a managed database's id, and the grant every request to its
+// cellar carries, from the DSN the backend built for it.
+func parseDSN(dsn string) (id string, grant string, err error) {
+	parsed, err := url.Parse(dsn)
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
-	q := u.Query()
-	maxBytes, _ := strconv.ParseInt(q.Get("max_bytes"), 10, 64)
-	maxInFlight, _ := strconv.Atoi(q.Get("max_in_flight"))
-	grant, err := server.Grant{
-		WorkspaceID: q.Get("workspace_id"),
-		CellarID:    u.Host,
+	params := parsed.Query()
+	maxBytes, _ := strconv.ParseInt(params.Get("max_bytes"), 10, 64)
+	maxInFlight, _ := strconv.Atoi(params.Get("max_in_flight"))
+	grant, err = cellar.Grant{
+		WorkspaceID: params.Get("workspace_id"),
+		CellarID:    parsed.Host,
 		MaxBytes:    maxBytes,
 		MaxInFlight: maxInFlight,
 	}.Encode()
-	if err != nil {
-		return nil, err
-	}
-	return conn{path: "/datasources" + u.Path + "/query", grant: grant}, nil
+	return strings.TrimPrefix(parsed.Path, "/"), grant, err
 }
 
 // conn sends each statement to the cellar; it holds no state between them.
@@ -96,11 +72,9 @@ type conn struct {
 	path, grant string
 }
 
-func (c conn) Connect(context.Context) (driver.Conn, error) { return c, nil }
-func (conn) Driver() driver.Driver                          { return sqlDriver{} }
-func (conn) Prepare(string) (driver.Stmt, error)            { return nil, errNoPrepare }
-func (conn) Begin() (driver.Tx, error)                      { return nil, errNoTx }
-func (conn) Close() error                                   { return nil }
+func (conn) Prepare(string) (driver.Stmt, error) { return nil, errNoPrepare }
+func (conn) Begin() (driver.Tx, error)           { return nil, errNoTx }
+func (conn) Close() error                        { return nil }
 
 // CheckNamedValue keeps arguments to strings, which JSON carries unchanged.
 func (conn) CheckNamedValue(nv *driver.NamedValue) error {
@@ -153,37 +127,17 @@ func (c conn) ExecContext(ctx context.Context, query string, args []driver.Named
 }
 
 func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) (io.ReadCloser, error) {
-	if URL == "" {
-		return nil, ErrOff
-	}
 	values := make([]any, len(args))
-	for i, a := range args {
-		values[i] = a.Value
+	for i, arg := range args {
+		values[i] = arg.Value
 	}
-	body, err := json.Marshal(server.Query{SQL: query, Args: values})
+	body, err := json.Marshal(cellar.Query{SQL: query, Args: values})
 	if err != nil {
 		return nil, err
 	}
-	window := strconv.FormatInt(time.Now().Unix()/int64(reuseFor.Seconds()), 10)
-	token, err := tokens.GetOrCreate(window, func() (any, error) {
-		return auth.Sign(auth.CustomClaims{}, server.Audience, tokenTTL)
-	})
+	resp, err := request(ctx, http.MethodPost, c.path, c.grant, body)
 	if err != nil {
 		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, URL+c.path, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token.(string))
-	req.Header.Set(server.GrantHeader, c.grant)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		log.Printf("cellar: %s: %v", c.path, err)
-		return nil, ErrUnavailable
 	}
 	if resp.StatusCode != http.StatusOK {
 		// Failures inside a query arrive in the stream, already classified;
@@ -191,10 +145,10 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 		defer func() { _ = resp.Body.Close() }()
 		// InFlight answers 408 when no slot freed up within the statement's time.
 		if resp.StatusCode == http.StatusRequestTimeout {
-			return nil, &arrowstream.Error{Code: server.CodeTimeout, Message: "managed database busy: no free slot within the time limit, retry"}
+			return nil, &arrowstream.Error{Code: cellar.CodeTimeout, Message: "managed database busy: no free slot within the time limit, retry"}
 		}
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, server.InternalError(fmt.Sprintf("cellar: %s: %d %s", c.path, resp.StatusCode, strings.TrimSpace(string(msg))))
+		errorBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, cellar.InternalError(fmt.Sprintf("cellar: %s: %d %s", c.path, resp.StatusCode, strings.TrimSpace(string(errorBody))))
 	}
 	return resp.Body, nil
 }

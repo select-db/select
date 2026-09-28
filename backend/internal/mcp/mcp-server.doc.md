@@ -49,6 +49,8 @@ Seven tools, no shell access, no file access. The model is bounded to the dataso
 | `execute_statement`           | Runs a write or DDL statement. Host prompts the user via the `destructiveHint` annotation. |
 | `plan_query`                  | Returns the planner's tree without executing the query.               |
 | `explain_query`               | Executes the query and returns its actual plan (EXPLAIN ANALYZE).     |
+| `create_datasource`           | Creates an empty managed SQLite database. The API key gets full access to it. |
+| `fork_datasource`             | Copies a managed database into a new one the API key gets full access to. Needs manage on the source. |
 
 ## Scope
 

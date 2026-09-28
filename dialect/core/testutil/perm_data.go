@@ -37,6 +37,14 @@ var (
 	mainV1  = func(action string) Right { return Right{Action: action, Schema: "main", Table: "v1"} }
 )
 
+// t9 and tmp1 are names GetInspectTestMetadata does not carry. They resolve to
+// the session's schema, which is where a CREATE of the same name would put
+// them, so the rights on them are ordinary rights on main.
+var (
+	mainT9   = func(action string) Right { return Right{Action: action, Schema: "main", Table: "t9"} }
+	mainTmp1 = func(action string) Right { return Right{Action: action, Schema: "main", Table: "tmp1"} }
+)
+
 // rowRights are the four row actions on every table. Denying them is how a case
 // says the statement takes more than rows, however many tables it reaches.
 var rowRights = []Right{
@@ -231,6 +239,49 @@ func permCases() []PermCase {
 			Needs: []Right{mainT2(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "the alias is not a table, and what it reads is t2",
+		},
+		{
+			Name:  "a CTE inside a derived table",
+			SQL:   "SELECT l.c1 FROM (WITH c AS (SELECT c1 FROM t2) SELECT c.c1 FROM c) AS l",
+			Needs: []Right{mainT2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "c is a name the derived table binds, and what it reads is t2",
+		},
+		{
+			Name:  "a CTE inside a derived table named after a real table",
+			SQL:   "SELECT l.c1 FROM (WITH t1 AS (SELECT c1 FROM t2) SELECT t1.c1 FROM t1) AS l",
+			Needs: []Right{mainT2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the CTE shadows t1 inside the derived table, so nothing reads the table t1",
+		},
+		{
+			Name:  "a derived table reading a CTE",
+			SQL:   "WITH c AS (SELECT c1 FROM t2) SELECT x.c1 FROM (SELECT c1 FROM c) AS x",
+			Needs: []Right{mainT2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a CTE is in scope inside the derived table that reads it, and what it reads is t2",
+		},
+		{
+			Name:  "a CTE of constants inside a derived table",
+			SQL:   "SELECT l.c1 FROM (WITH c AS (SELECT 1 AS c1) SELECT c.c1 FROM c) AS l",
+			Needs: nil,
+			Op:    core.InspectOpSelect,
+			Why:   "both names the statement binds stand for literals, and no grant can answer for either",
+		},
+		{
+			Name:  "a CTE inside a derived table in a scalar subquery",
+			SQL:   "SELECT c1 FROM t1 WHERE c1 = (SELECT max(x.c1) FROM (WITH c AS (SELECT c1 FROM t2) SELECT c.c1 FROM c) AS x)",
+			Needs: []Right{mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the predicate reads t2 through the derived table, and the rows come from t1",
+		},
+		{
+			On:    []string{"mysql", "postgresql"},
+			Name:  "a CTE inside a lateral derived table",
+			SQL:   "SELECT t.c3, l.c1 FROM t2 AS t JOIN LATERAL (WITH c AS (SELECT a.c1 FROM t1 AS a) SELECT c.c1 FROM c) AS l ON true",
+			Needs: []Right{mainT2(core.ActionSelect), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a CTE in a lateral body is bound there too, and the body reads t1",
 		},
 		{
 			Name:  "a derived table of constants",
@@ -718,6 +769,13 @@ func permCases() []PermCase {
 			},
 			Op:  core.InspectOpSelect,
 			Why: "t2 is reached through the predicate, and that predicate's column is what names it",
+		},
+		{
+			Name:  "a column a CTE inside a derived table reads",
+			SQL:   "SELECT l.c1 FROM (WITH c AS (SELECT c1 FROM t2) SELECT c.c1 FROM c) AS l",
+			Needs: []Right{mainT2(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "the right is on the column of t2 the CTE body reads, not on the name the derived table bound",
 		},
 		{
 			Name: "a column a CTE joins on",
@@ -2594,17 +2652,17 @@ func permCases() []PermCase {
 			On:    []string{"postgresql"},
 			Name:  "inserting into a table named pg_read_file",
 			SQL:   "INSERT INTO pg_read_file (c1) VALUES (1)",
-			Needs: []Right{{Action: core.ActionInsert, Schema: "main", Table: "pg_read_file"}},
+			Needs: []Right{{Action: core.ActionInsert, Schema: "pg_catalog", Table: "pg_read_file"}},
 			Op:    core.InspectOpInsert,
-			Why:   "the parenthesis after a table name is a column list, not a call",
+			Why:   "the parenthesis after a table name is a column list, not a call, and pg_ is the catalog's prefix",
 		},
 		{
 			On:    []string{"postgresql"},
 			Name:  "updating a table named pg_read_file",
 			SQL:   "UPDATE pg_read_file SET c1 = 1",
-			Needs: []Right{{Action: core.ActionUpdate, Schema: "main", Table: "pg_read_file"}},
+			Needs: []Right{{Action: core.ActionUpdate, Schema: "pg_catalog", Table: "pg_read_file"}},
 			Op:    core.InspectOpUpdate,
-			Why:   "a table may be named after a routine and still be a table",
+			Why:   "a table may be named after a routine and still be a table, and pg_ is the catalog's prefix",
 		},
 		{
 			On:    []string{"postgresql"},
@@ -2880,6 +2938,83 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "this parses, with the quoted text a string literal that reads no column of t1",
+		},
+
+		// --- a name the metadata does not carry. A database resolves it
+		// before it checks access, and so does this: every right below is one
+		// an administrator can grant, and the verb never moves the name.
+		{
+			Name:  "a read of an unqualified name the metadata is missing",
+			SQL:   "SELECT c1 FROM t9",
+			Needs: []Right{mainT9(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "t9 is unqualified, so it resolves where a CREATE of the same name would put it",
+		},
+		{
+			Name:  "an update of an unqualified name the metadata is missing",
+			SQL:   "UPDATE t9 SET c1 = 1",
+			Needs: []Right{mainT9(core.ActionUpdate).Only("c1")},
+			Op:    core.InspectOpUpdate,
+			Why:   "the verb in front of a name cannot change where the name resolves",
+		},
+		{
+			Name:  "a delete of an unqualified name the metadata is missing",
+			SQL:   "DELETE FROM t9",
+			Needs: []Right{mainT9(core.ActionDelete)},
+			Op:    core.InspectOpDelete,
+			Why:   "the verb in front of a name cannot change where the name resolves",
+		},
+		{
+			Name:  "a table the same script created",
+			SQL:   "CREATE TABLE t9 (c1 INTEGER); SELECT c1 FROM t9",
+			Needs: []Right{Manage, mainT9(core.ActionSelect).Only("c1")},
+			Why:   "the create put t9 in the session's schema and the read finds it there",
+		},
+		{
+			On:    []string{"postgresql", "sqlite"},
+			Name:  "a scratch table the same script created and read back",
+			SQL:   "CREATE TEMP TABLE tmp1 AS SELECT c1 FROM t1; SELECT c1 FROM tmp1",
+			Needs: []Right{Manage, mainT1(core.ActionSelect).Only("c1"), mainTmp1(core.ActionSelect).Only("c1")},
+			Why:   "an analyst writing a scratch query reads it back under the name the create gave it",
+		},
+		{
+			On:    []string{"postgresql", "mysql"},
+			Name:  "the TABLE shorthand on a name the metadata is missing",
+			SQL:   "TABLE t9",
+			Needs: []Right{mainT9(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "TABLE t9 is SELECT * FROM t9, and the shorthand resolves the name the same way",
+		},
+		{
+			On:    []string{"postgresql", "mysql"},
+			Name:  "the TABLE shorthand on a qualified name the metadata is missing",
+			SQL:   "TABLE other.t9",
+			Needs: []Right{{Action: core.ActionSelect, Schema: "other", Table: "t9"}},
+			Op:    core.InspectOpSelect,
+			Why:   "a qualified name keeps the schema it was written with, so the session's cannot take it over",
+		},
+		{
+			Name:  "an insert into an unqualified name the metadata is missing",
+			SQL:   "INSERT INTO t9 (c1) VALUES (1)",
+			Needs: []Right{mainT9(core.ActionInsert).Only("c1")},
+			Op:    core.InspectOpInsert,
+			Why:   "the verb in front of a name cannot change where the name resolves",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a PostgreSQL system catalog",
+			SQL:   "SELECT relname FROM pg_class",
+			Needs: []Right{{Action: core.ActionSelect, Schema: "pg_catalog", Table: "pg_class", Column: "relname"}},
+			Op:    core.InspectOpSelect,
+			Why:   "pg_catalog is implicitly first on the search path, so pg_class is granted like any other table",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a SQLite system catalog",
+			SQL:   "SELECT name FROM sqlite_master",
+			Needs: []Right{{Action: core.ActionSelect, Schema: "main", Table: "sqlite_master", Column: "name"}},
+			Op:    core.InspectOpSelect,
+			Why:   "sqlite_master lives in the database the connection opened",
 		},
 	}
 }

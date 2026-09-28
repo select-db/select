@@ -9,7 +9,7 @@ import (
 
 	"backend/db"
 	"backend/db/generated"
-	"backend/internal/datasource/cellar"
+	"backend/internal/datasource/cellarclient"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine/connect"
@@ -27,7 +27,7 @@ type ResolvedDatasource struct {
 	Pool   connect.PoolConfig
 }
 
-var dsCache = cache.New(cache.Options{
+var datasourceCache = cache.New(cache.Options{
 	MaxEntries: 20_000,
 	TTL:        20 * time.Minute,
 })
@@ -38,13 +38,13 @@ func cacheKey(workspaceID, id string) string {
 
 // InvalidateCache drops a cached datasource entry. Call on upsert/delete.
 func InvalidateCache(workspaceID, id string) {
-	dsCache.Delete(cacheKey(workspaceID, id))
+	datasourceCache.Delete(cacheKey(workspaceID, id))
 }
 
 // GetOrLoadDatasource returns a cached ResolvedDatasource, fetching from DB on miss.
 func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*ResolvedDatasource, error) {
 	key := cacheKey(workspaceID, id)
-	if v, ok := dsCache.Get(key); ok {
+	if v, ok := datasourceCache.Get(key); ok {
 		return v.(*ResolvedDatasource), nil
 	}
 
@@ -75,11 +75,14 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	}
 	// A managed database's DSN is built here and never read from the row.
 	if cellarID := row.CellarID.ValueOrEmpty(); cellarID != "" {
+		if err := checkManagedAvailable(row); err != nil {
+			return nil, err
+		}
 		workspace, err := db.Queries.GetWorkspacePlan(ctx, parsedWorkspaceID)
 		if err != nil {
 			return nil, err
 		}
-		dsn = cellar.DSN(cellarID, id, workspaceID, workspace.Plan, int(workspace.Members))
+		dsn = cellarclient.DSN(cellarID, id, workspaceID, managedPlans[workspace.Plan].DatabaseMaxBytes, int(workspace.Members))
 	} else if sqlite.IsCellarDSN(dsn) {
 		// It would open another workspace's database.
 		return nil, errors.New("datasource DSN uses a reserved scheme")
@@ -125,7 +128,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 		}
 	}
 
-	dsCache.Set(key, ds)
+	datasourceCache.Set(key, ds)
 	return ds, nil
 }
 
@@ -135,7 +138,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 // it otherwise stands for the rest of its TTL.
 func InvalidateWorkspaceCache(workspaceID string) {
 	prefix := cacheKey(workspaceID, "")
-	dsCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
+	datasourceCache.DeleteFunc(func(key string) bool { return strings.HasPrefix(key, prefix) })
 
 	connect.CloseWorkspaceTunnels(workspaceID)
 	connect.CloseWorkspaceConns(workspaceID)

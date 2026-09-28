@@ -26,6 +26,16 @@ const genericConnErr = "could not connect to the datasource"
 // ErrNotFound is a datasource the caller's workspace does not have.
 var ErrNotFound = errors.New("datasource not found")
 
+// Refusal is a request the caller can correct, answered with its HTTP status.
+type Refusal struct {
+	Status  int
+	Message string
+}
+
+func (refusal *Refusal) Error() string { return refusal.Message }
+
+var errForbidden = &Refusal{http.StatusForbidden, "forbidden"}
+
 // Opened is a datasource ready for one request, with the caller's permissions.
 type Opened struct {
 	ID, WorkspaceID string
@@ -38,6 +48,10 @@ type Opened struct {
 // OpenError or, in MCP, asToolError.
 func Open(r *http.Request, id, workspaceID string) (Opened, error) {
 	ds, err := GetOrLoadDatasource(r.Context(), id, workspaceID)
+	var coded *arrowstream.Error
+	if errors.As(err, &coded) {
+		return Opened{}, err
+	}
 	if err != nil {
 		return Opened{}, ErrNotFound
 	}
@@ -101,9 +115,12 @@ var codeStatus = map[string]int{
 func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, error) {
 	var coded *arrowstream.Error
 	var cfgErr *connect.ConfigError
+	var refused *Refusal
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return http.StatusNotFound, err
+	case errors.As(err, &refused):
+		return refused.Status, refused
 	case errors.As(err, &coded) && codeStatus[coded.Code] != 0:
 		return codeStatus[coded.Code], coded
 	case errors.As(err, &cfgErr):

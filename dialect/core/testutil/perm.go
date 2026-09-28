@@ -31,6 +31,10 @@ func (r Right) String() string {
 	switch {
 	case r.Table == "":
 		return r.Action
+	case r.Schema == "":
+		// Printing ".t9" would read as a right, and no entry can carry an
+		// empty schema. Say what is wrong with the name instead.
+		return fmt.Sprintf("%s on %q, which resolves to no schema", r.Action, r.Table)
 	case r.Column == "":
 		return fmt.Sprintf("%s on %s.%s", r.Action, r.Schema, r.Table)
 	default:

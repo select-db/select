@@ -154,13 +154,13 @@ func (d *Dialect) Name() string {
 	return "sqlite"
 }
 
-// CellarDriver, when set, is the database/sql driver of managed databases and
-// the scheme of their DSNs. Only the backend builds such a DSN, never a user.
-var CellarDriver string
+// CellarDriver names the database/sql driver of a managed database, and its DSNs
+// start with CellarDriver + "://". Only the backend registers it and builds them.
+const CellarDriver = "cellar"
 
 // IsCellarDSN reports whether dsn is a managed database, served by a cellar.
 func IsCellarDSN(dsn string) bool {
-	return CellarDriver != "" && strings.HasPrefix(dsn, CellarDriver+"://")
+	return strings.HasPrefix(dsn, CellarDriver+"://")
 }
 
 func (d *Dialect) OpenDB(dsn string) (*sql.DB, error) {
@@ -282,6 +282,16 @@ func (d *Dialect) NormalizeIdentifier(raw string) string {
 	// SQLite folds case for an identifier however it is written, so quoting
 	// changes how a name is spelled and never which object it names.
 	return strings.ToLower(raw)
+}
+
+// SystemSchema implements the core.SQLDialect interface. SQLite reserves the
+// sqlite_ prefix for its own tables, and they live in the database the
+// connection opened, which "main" names.
+func (d *Dialect) SystemSchema(table string) string {
+	if strings.HasPrefix(d.NormalizeIdentifier(table), "sqlite_") {
+		return "main"
+	}
+	return ""
 }
 
 // QuoteIdentifierIfNeeded quotes an identifier if it contains special characters or is a reserved keyword

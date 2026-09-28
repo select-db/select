@@ -71,14 +71,15 @@ func TestHandler_ToolsList(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	res, _ := resp.Result.(map[string]any)
 	tools, _ := res["tools"].([]any)
-	if len(tools) != 7 {
-		t.Fatalf("want 7 tools, got %d", len(tools))
+	if len(tools) != 9 {
+		t.Fatalf("want 9 tools, got %d", len(tools))
 	}
 	wantSet := map[string]bool{
 		"list_datasources":       true,
 		"get_datasource_schemas": true, "get_datasource_table_detail": true,
 		"execute_query": true, "execute_statement": true,
 		"explain_query": true, "plan_query": true,
+		"create_datasource": true, "fork_datasource": true,
 	}
 	seen := map[string]bool{}
 	for _, ti := range tools {
@@ -124,6 +125,8 @@ func TestHandler_ToolsListEmitsAnnotations(t *testing.T) {
 		{"plan_query", true, false, true},
 		{"explain_query", true, false, true},
 		{"execute_statement", false, true, true},
+		{"create_datasource", false, false, true},
+		{"fork_datasource", false, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

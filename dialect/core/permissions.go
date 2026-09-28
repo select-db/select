@@ -60,6 +60,11 @@ func (e *PermissionDeniedError) Error() string {
 		// A statement we could not resolve names nothing to blame; the
 		// connection is what the manage rule is granted on anyway.
 		target = "this connection"
+	case e.Schema == "":
+		// No entry can carry an empty schema, so naming a right on one would
+		// name a right nobody can grant. The refusal says the name is the
+		// problem instead.
+		target = fmt.Sprintf("%q, which resolves to no schema this connection describes", e.Table)
 	case e.Column != "":
 		target = fmt.Sprintf("%s.%s.%s", e.Schema, e.Table, e.Column)
 	default:

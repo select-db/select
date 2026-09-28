@@ -3,7 +3,9 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
+	"backend/internal/datasource"
 	"backend/internal/utils"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
@@ -46,6 +48,16 @@ func asToolError(err error) *toolError {
 	var te *toolError
 	if errors.As(err, &te) {
 		return te
+	}
+	var refused *datasource.Refusal
+	if errors.As(err, &refused) {
+		if refused.Status == http.StatusForbidden {
+			return &toolError{Code: "forbidden", Message: refused.Message}
+		}
+		return errBadArgument(refused.Message)
+	}
+	if errors.Is(err, datasource.ErrNotFound) {
+		return errNotFound(err.Error())
 	}
 	var cfgErr *connect.ConfigError
 	if errors.As(err, &cfgErr) {

@@ -33,6 +33,8 @@ func defaultTools() []Tool {
 		toolPlanQuery(),
 		toolExplainQuery(),
 		toolExecuteStatement(),
+		toolCreateDatasource(),
+		toolForkDatasource(),
 	}
 }
 

@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"slices"
 	"strings"
 
 	core "github.com/selectDb/dialect/core"
@@ -368,34 +369,33 @@ func (i *Inspector) inspectQueryPrimary(
 	}
 
 	relationRefs, subqueryColumns := i.extractRelationRefs(spec)
-	fromSubqueries := i.extractFromSubqueries(core.TreeOrNil(spec.FromClause()))
 
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}
-	tables := i.resolver.Tables(relationRefs, scope)
-	for _, sub := range cteSubqueries {
-		tables = core.MergeInspectTables(tables, sub.Tables)
-	}
-	for _, sub := range fromSubqueries {
-		tables = core.MergeInspectTables(tables, sub.Tables)
-	}
 
-	allSubqueries := append([]core.InspectStatement{}, cteSubqueries...)
-	allSubqueries = append(allSubqueries, fromSubqueries...)
+	where, whereSubqueries := i.extractWhereFields(spec, relationRefs, scope)
+
+	// A derived table reading a CTE reports it as a table of its own, and it is
+	// not one out here. The drop mutates what it is given, so the subqueries go
+	// in one slice and the from ones are read back as its prefix.
+	fromSubqueries := i.extractFromSubqueries(core.TreeOrNil(spec.FromClause()))
+	subqueries := slices.Concat(fromSubqueries, whereSubqueries,
+		i.extractSelectListSubqueries(spec), i.extractBranchClauseSubqueries(spec))
+	i.resolver.DropCTETables(subqueries, ctes)
+	fromSubqueries = subqueries[:len(fromSubqueries)]
+
+	allSubqueries := slices.Concat(cteSubqueries, fromSubqueries)
 
 	fields := i.extractSelectFieldsWithResolution(spec, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
-	where, whereSubqueries := i.extractWhereFields(spec, relationRefs, scope)
+	tables := i.resolver.Tables(relationRefs, scope)
+	for _, sub := range allSubqueries {
+		tables = core.MergeInspectTables(tables, sub.Tables)
+	}
+
 	where = core.MergeInspectFields(where, i.branchClauseFields(spec, relationRefs, scope, fields))
 	where = core.MergeInspectFields(where, i.joinFields(core.TreeOrNil(spec.FromClause()), relationRefs, scope))
 	where = core.MergeInspectFields(where, i.tailClauseFields(tail, relationRefs, scope))
 	where = i.resolver.ThroughVirtual(where, relationRefs, scope, allSubqueries)
-	selectSubqueries := i.extractSelectListSubqueries(spec)
-
-	subqueries := append([]core.InspectStatement{}, fromSubqueries...)
-	subqueries = append(subqueries, whereSubqueries...)
-	subqueries = append(subqueries, selectSubqueries...)
-	subqueries = append(subqueries, i.extractBranchClauseSubqueries(spec)...)
-	i.resolver.DropCTETables(subqueries, ctes)
 
 	return &core.InspectStatement{
 		Operation:  core.InspectOpSelect,
@@ -542,11 +542,7 @@ func (i *Inspector) inspectTableShorthand(ref mysql.ITableRefContext) *core.Insp
 	}
 	// The columns are the statement, as they are for the SELECT * it stands
 	// for. Without them the see check has no field to find and hides nothing.
-	// No column means no such table, which resolves to no schema and is refused.
 	fields := core.TableFields(i.meta, schema, table, i.dialect)
-	if len(fields) == 0 {
-		schema = ""
-	}
 	return &core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
@@ -906,8 +902,7 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	// DELETE alias_list FROM list, resolve each alias against sourceRefs.
 	if ar := stmt.TableAliasRefList(); ar != nil {
 		for _, tw := range ar.AllTableRefWithWildcard() {
-			text := strings.TrimSuffix(tw.GetText(), ".*")
-			schema, name := splitQualifiedName(i.dialect, text, core.GetDefaultSchema(i.meta))
+			schema, name := i.resolveName(strings.TrimSuffix(tw.GetText(), ".*"))
 			if name == "" {
 				continue
 			}
@@ -1187,13 +1182,14 @@ func (i *Inspector) sourceQuery(source mysql.IQueryExpressionOrParensContext) []
 // HELPERS: name resolution
 // ============================================
 
-// resolveTableRef extracts (schema, table) from a TableRef. Schema falls back
-// to the configured default when the name is unqualified.
+// resolveTableRef extracts (schema, table) from a TableRef. A bare name
+// resolves through the resolver, so a write target and a FROM relation cannot
+// answer differently for one name.
 func (i *Inspector) resolveTableRef(tr mysql.ITableRefContext) (schema, table string) {
 	if tr == nil {
 		return "", ""
 	}
-	return splitQualifiedName(i.dialect, tr.GetText(), core.GetDefaultSchema(i.meta))
+	return i.resolveName(tr.GetText())
 }
 
 // resolveViewName mirrors resolveTableRef for ViewName nodes.
@@ -1201,7 +1197,7 @@ func (i *Inspector) resolveViewName(vn mysql.IViewNameContext) (schema, view str
 	if vn == nil {
 		return "", ""
 	}
-	return splitQualifiedName(i.dialect, vn.GetText(), core.GetDefaultSchema(i.meta))
+	return i.resolveName(vn.GetText())
 }
 
 // resolveTableName mirrors resolveTableRef for TableName nodes (used by CREATE TABLE).
@@ -1209,14 +1205,15 @@ func (i *Inspector) resolveTableName(tn mysql.ITableNameContext) (schema, table 
 	if tn == nil {
 		return "", ""
 	}
-	return splitQualifiedName(i.dialect, tn.GetText(), core.GetDefaultSchema(i.meta))
+	return i.resolveName(tn.GetText())
 }
 
-// splitQualifiedName parses "db.table" or "table" and applies the default schema.
-// Backtick-quoted segments are normalized.
-func splitQualifiedName(d *Dialect, raw, defaultSchema string) (schema, table string) {
-	schema, table, _ = splitQualifiedNameParts(d, raw, defaultSchema)
-	return schema, table
+func (i *Inspector) resolveName(raw string) (schema, table string) {
+	schema, table, qualified := splitQualifiedNameParts(i.dialect, raw, core.GetDefaultSchema(i.meta))
+	if qualified || table == "" {
+		return schema, table
+	}
+	return i.resolver.SchemaFor(schema, table), table
 }
 
 // splitQualifiedNameParts also reports whether raw carried the schema. The
