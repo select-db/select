@@ -551,10 +551,11 @@ func (i *Inspector) inspectTableShorthand(relation pg.IRelation_exprContext) *co
 	}
 	// The columns are the statement, as they are for the SELECT * it stands
 	// for. Without them the see check has no field to find and hides nothing.
-	// No column means no such table, which resolves to no schema and is refused.
+	// A name the metadata does not carry resolves the way a FROM relation
+	// resolves it, and the right is then on the whole table.
 	fields := core.TableFields(i.meta, schema, table, i.dialect)
 	if len(fields) == 0 {
-		schema = ""
+		schema = i.resolver.SchemaFor(schema, table)
 	}
 	return &core.InspectStatement{
 		Operation: core.InspectOpSelect,

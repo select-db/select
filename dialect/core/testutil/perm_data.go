@@ -2840,6 +2840,14 @@ func permCases() []PermCase {
 			Why:   "an analyst writing a scratch query reads it back under the name the create gave it",
 		},
 		{
+			On:    []string{"postgresql", "mysql"},
+			Name:  "the TABLE shorthand on a name the metadata is missing",
+			SQL:   "TABLE t9",
+			Needs: []Right{mainT9(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "TABLE t9 is SELECT * FROM t9, and the shorthand resolves the name the same way",
+		},
+		{
 			On:    []string{"postgresql"},
 			Name:  "a PostgreSQL system catalog",
 			SQL:   "SELECT relname FROM pg_class",
