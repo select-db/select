@@ -7,10 +7,16 @@ $0.01 per GB-month.
 
 ## Words
 
+- **managed database**: a SQLite database SELECT hosts for a workspace. The
+  word users see: the API, MCP, error messages and the `datasource` package
+  (`managed_database.go`, `managed_access.go`).
 - **backend**: the existing API server. Owns auth, permissions, plans, quotas
   and every row in Postgres.
 - **cellar**: the same binary in cellar mode. Owns SQLite files and nothing
-  else. Never reads Postgres, never knows a user.
+  else. Never reads Postgres, never knows a user. The word for the service
+  only: packages `cellar` and `cellarclient`, `CELLAR`, `cellar_id` and the
+  `cellar://` driver. A managed database lives on a cellar; a user never sees
+  the word.
 - **hot / cold**: a db with a local file on the cellar / a db that lives only
   in the bucket.
 - **wake**: restore a cold db from the bucket before running a query.
@@ -37,7 +43,7 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
 
 Code follows the process it runs in. `internal/cellar` is only what runs on
 the cellar, plus the grant and query it accepts. The backend's side, the
-driver, is in `internal/datasource/cellar`; startup is in
+driver, is in `internal/datasource/cellarclient`; startup is in
 `cmd/server/cellar.go`.
 
 ## Rules
@@ -215,7 +221,7 @@ Needs 0.
       files, reached through the `cellar` database/sql driver, so REST and
       MCP open a managed datasource like any other. `CELLAR=local` starts it
       in-process.
-- [x] Service token signed and reused by the backend (`datasource/cellar`),
+- [x] Service token signed and reused by the backend (`datasource/cellarclient`),
       and checked with the grant header by the cellar (`cellar.Authenticated`
       middleware, which puts the grant in the context for `InFlight` to key
       on).
@@ -238,14 +244,14 @@ Needs 0.
 
 ### 2. Create, fork, download, delete
 Needs 1.
-- [ ] Cellar: `PUT /cellar/dbs/{id}` with optional `{from, at}` (create,
-      fork, point-in-time fork), `GET /cellar/dbs/{id}/download`,
-      `GET /cellar/inventory`, `DELETE /cellar/dbs/{id}`.
-- [ ] Backend: `POST /datasources`, fork, download, rename-only `PUT`,
+- [x] Cellar: `PUT /datasources/{id}` with optional `{from, at}` (create,
+      fork), `GET /datasources/{id}/download`, `GET /datasources` (inventory),
+      `DELETE /datasources/{id}`. `at` answers `disabled` until 3.
+- [x] Backend: `POST /datasources`, fork, download, rename-only `PUT`,
       delete marking `deleting`; quota checks; dedicated role and `grant_to`.
-- [ ] `disabled` on each of these entry points when `CELLAR` is unset.
-- [ ] MCP `create_datasource`, `fork_datasource`.
-- [ ] Audit: reuse `datasource.lifecycle.*`.
+- [x] `disabled` on each of these entry points when `CELLAR` is unset.
+- [x] MCP `create_datasource`, `fork_datasource`.
+- [x] Audit: reuse `datasource.lifecycle.*`.
 
 ### 3. Bucket: replicate, evict, wake
 Needs 1. Can run alongside 2. Start with the spikes.

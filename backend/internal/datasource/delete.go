@@ -1,6 +1,7 @@
 package datasource
 
 import (
+	"context"
 	"net/http"
 
 	"backend/db"
@@ -19,10 +20,10 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		a := authz.ActorOf(r)
-		workspaceID := a.WorkspaceID
+		actor := authz.ActorOf(r)
+		workspaceID := actor.WorkspaceID
 
-		if !a.IsOwner() && !a.CanManage(idStr) {
+		if !actor.IsOwner() && !actor.CanManage(idStr) {
 			audit.EmitDenied(r.Context(), audit.DatasourceDeleted, workspaceID, idStr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
@@ -39,10 +40,15 @@ func DeleteHandler() http.HandlerFunc {
 			return
 		}
 
-		if err := db.Queries.DeleteDatasource(r.Context(), generated.DeleteDatasourceParams{
-			ID:          id,
-			WorkspaceID: parsedWorkspaceID,
-		}); err != nil {
+		existing, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID})
+		isManaged := err == nil && existing.CellarID.ValueOrEmpty() != ""
+		if isManaged {
+			if err := checkManagedAvailable(existing); err != nil {
+				OpenError(w, err, "managed delete", workspaceID, idStr)
+				return
+			}
+		}
+		if err := deleteDatasource(r.Context(), parsedWorkspaceID, id); err != nil {
 			http.Error(w, "failed to delete datasource", http.StatusInternalServerError)
 			return
 		}
@@ -53,7 +59,37 @@ func DeleteHandler() http.HandlerFunc {
 			WorkspaceID: workspaceID,
 			TargetID:    idStr,
 			Status:      audit.StatusSuccess,
+			Payload:     map[string]any{"managed": isManaged},
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// deleteDatasource removes a datasource, its rules from every role, and the
+// roles left with no rule anywhere else, all or nothing.
+func deleteDatasource(ctx context.Context, workspaceID, datasourceID uuid.UUID) error {
+	tx, err := db.GetDB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	queries := db.Queries.WithTx(tx)
+
+	if err := queries.DeleteDatasource(ctx, generated.DeleteDatasourceParams{ID: datasourceID, WorkspaceID: workspaceID}); err != nil {
+		return err
+	}
+	changedRoles, err := queries.DeleteDatasourceRules(ctx, generated.DeleteDatasourceRulesParams{WorkspaceID: workspaceID, DatasourceID: datasourceID.String()})
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, role := range changedRoles {
+		authz.Invalidate(role.RoleID.String())
+		if role.Dropped {
+			audit.EmitChange(ctx, audit.RoleDeleted, workspaceID.String(), role.RoleID.String(), nil, nil)
+		}
+	}
+	return nil
 }

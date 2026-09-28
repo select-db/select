@@ -154,13 +154,13 @@ func (d *Dialect) Name() string {
 	return "sqlite"
 }
 
-// CellarDriver, when set, is the database/sql driver of managed databases and
-// the scheme of their DSNs. Only the backend builds such a DSN, never a user.
-var CellarDriver string
+// CellarDriver names the database/sql driver of a managed database, and its DSNs
+// start with CellarDriver + "://". Only the backend registers it and builds them.
+const CellarDriver = "cellar"
 
 // IsCellarDSN reports whether dsn is a managed database, served by a cellar.
 func IsCellarDSN(dsn string) bool {
-	return CellarDriver != "" && strings.HasPrefix(dsn, CellarDriver+"://")
+	return strings.HasPrefix(dsn, CellarDriver+"://")
 }
 
 func (d *Dialect) OpenDB(dsn string) (*sql.DB, error) {

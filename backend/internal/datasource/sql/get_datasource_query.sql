@@ -8,7 +8,9 @@ SELECT
   d.max_idle_conns,
   d.conn_max_lifetime,
   d.conn_max_idle_time,
-  d.cellar_id
+  d.cellar_id,
+  d.state,
+  d.size_bytes
 FROM
   app.datasource d
   JOIN app.workspace w ON w.id = d.workspace_id

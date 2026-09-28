@@ -23,4 +23,9 @@ func Register(mux *http.ServeMux, dir string, pub *rsa.PublicKey, cellarID strin
 	})
 
 	mux.Handle("POST /datasources/{id}/query", authenticated(timeout(inFlight(QueryHandler(dir)))))
+	// A copy or a download takes as long as the file is big, not a statement's 60s.
+	mux.Handle("PUT /datasources/{id}", authenticated(CreateHandler(dir)))
+	mux.Handle("GET /datasources/{id}/download", authenticated(DownloadHandler(dir)))
+	mux.Handle("DELETE /datasources/{id}", authenticated(DeleteHandler(dir)))
+	mux.Handle("GET /datasources", authenticated(InventoryHandler(dir)))
 }

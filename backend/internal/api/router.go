@@ -67,7 +67,10 @@ func Register(mux *http.ServeMux) {
 
 	mux.Handle("GET /datasources", authenticated(member(limited(120, datasourcehandler.ListHandler()))))
 	mux.Handle("GET /datasources/{id}", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
+	mux.Handle("POST /datasources", authenticated(member(limited(30, datasourcehandler.CreateHandler()))))
 	mux.Handle("PUT /datasources/{id}", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
+	mux.Handle("POST /datasources/{id}/fork", authenticated(member(limited(30, datasourcehandler.ForkHandler()))))
+	mux.Handle("GET /datasources/{id}/download", authenticated(member(limited(30, datasourcehandler.DownloadHandler()))))
 	mux.Handle("DELETE /datasources/{id}", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))
 
 	mux.Handle("POST /datasources/{id}/ping", authenticated(member(limited(60, datasourcehandler.PingHandler()))))

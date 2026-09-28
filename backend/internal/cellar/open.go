@@ -4,9 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"path/filepath"
 
-	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine/connect"
 	"github.com/selectDb/dialect/engine/query"
 	"modernc.org/sqlite"
@@ -34,13 +32,14 @@ func Open(dir string, grant Grant) (query.Conn, error) {
 		return query.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)
 	}
 
-	if _, err := uuid.Parse(grant.DatasourceID); err != nil {
-		return query.Conn{}, fmt.Errorf("datasource id %q is not a uuid", grant.DatasourceID)
+	path, err := databasePath(dir, grant.DatasourceID)
+	if err != nil {
+		return query.Conn{}, err
 	}
 
 	// mode=rw: a missing file is an error, never a new empty database. WAL lets
 	// readers run beside a writer.
-	dsn := (&url.URL{Scheme: "file", Path: filepath.Join(dir, grant.DatasourceID+".db"), RawQuery: "mode=rw&_defensive=1" +
+	dsn := (&url.URL{Scheme: "file", Path: path, RawQuery: "mode=rw&_defensive=1" +
 		"&_busy_timeout=5000&_foreign_keys=1&_pragma=trusted_schema(0)&_pragma=journal_mode(WAL)"}).String()
 	db, err := connect.GetOrOpenTrusted(grant.WorkspaceID, dbType, dsn)
 
