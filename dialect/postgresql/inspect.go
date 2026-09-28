@@ -43,7 +43,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 }
 
 // inspectScript is Inspect, also reporting whether the parser read the script
-// whole, which is what readBody tells one fragment of a body from another by.
+// whole, which is what bodyFragment tells SQL from PL/pgSQL by.
 func (i *Inspector) inspectScript(sql string) ([]core.InspectStatement, bool) {
 	if strings.TrimSpace(sql) == "" {
 		return nil, true
@@ -884,54 +884,37 @@ var opensAStatement = map[int]bool{
 	pg.PostgreSQLLexerLOOP:    true,
 }
 
-// bodyAttempts bounds the starts one run between two terminators is parsed
-// from. A statement follows at most a handful of block openers, and each start
-// costs a parse of the rest of the run.
-const bodyAttempts = 8
-
 // readBody is what the SQL statements of a procedural body require. PL/pgSQL is
 // not SQL, so a body handed to the grammar whole stops at the first construct
 // the grammar does not know and reports the statements before it as all there
-// were. Each position a statement can start at is read on its own instead, up
-// to the next terminator, so a construct nothing reads costs only itself.
-//
-// MySQL and SQLite need no such scan: their grammars carry their own procedural
-// language, so a body there is parse nodes rather than text to read again.
+// were. Each run between two terminators is read on its own instead, from the
+// innermost start outwards: the statement is the shortest fragment that parses,
+// and a longer one carries the construct wrapped around it.
 func (i *Inspector) readBody(text string) []core.InspectStatement {
 	stream := antlr.NewCommonTokenStream(i.dialect.CreateLexer(text), antlr.TokenDefaultChannel)
 	stream.Fill()
-	all := stream.GetAllTokens()
-	tokens := make([]antlr.Token, 0, len(all))
-	for _, token := range all {
-		if token.GetChannel() == antlr.TokenDefaultChannel && token.GetTokenType() != antlr.TokenEOF {
-			tokens = append(tokens, token)
-		}
-	}
+	tokens := core.DefaultChannelTokens(stream)
 
 	var reads []core.InspectStatement
-	attempts := 0
-	for idx := 0; idx < len(tokens); idx++ {
-		switch {
-		case tokens[idx].GetTokenType() == pg.PostgreSQLLexerSEMI:
-			attempts = 0
-			continue
-		case idx > 0 && !opensAStatement[tokens[idx-1].GetTokenType()]:
-			continue
-		case attempts >= bodyAttempts:
-			continue
-		}
-		attempts++
-
+	for idx := 0; idx <= len(tokens); idx++ {
 		end := idx
 		for end < len(tokens) && tokens[end].GetTokenType() != pg.PostgreSQLLexerSEMI {
 			end++
 		}
-		fragment := i.bodyFragment(stream.GetTextFromTokens(tokens[idx], tokens[end-1]))
-		if fragment == nil {
-			continue
+		var starts []int
+		for at := idx; at < end; at++ {
+			if at == idx || opensAStatement[tokens[at-1].GetTokenType()] {
+				starts = append(starts, at)
+			}
 		}
-		reads = append(reads, fragment...)
-		idx, attempts = end, 0
+		for at := len(starts) - 1; at >= 0; at-- {
+			fragment := i.bodyFragment(stream.GetTextFromTokens(tokens[starts[at]], tokens[end-1]))
+			if fragment != nil {
+				reads = append(reads, fragment...)
+				break
+			}
+		}
+		idx = end
 	}
 	return reads
 }

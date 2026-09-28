@@ -2319,11 +2319,36 @@ func permCases() []PermCase {
 		},
 		{
 			On:     []string{"postgresql"},
+			Name:   "a code block whose write follows a diagnostic",
+			SQL:    "DO $$ BEGIN RAISE NOTICE 'starting'; DELETE FROM t1; END $$",
+			Needs:  []Right{Manage, mainT1(core.ActionDelete)},
+			Denied: rowRights,
+			Why:    "RAISE is the statement bodies open with, and what it prints does not change what the DELETE takes",
+		},
+		{
+			On:     []string{"postgresql"},
 			Name:   "a code block whose write is under a condition",
 			SQL:    "DO $$ BEGIN IF true THEN DELETE FROM t1; END IF; END $$",
 			Needs:  []Right{Manage, mainT1(core.ActionDelete)},
 			Denied: rowRights,
 			Why:    "a branch that can run is a write that can happen, and IF is the shape every body a person writes has",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a code block whose write is under eight conditions",
+			SQL: "DO $$ BEGIN IF a THEN IF b THEN IF c THEN IF d THEN IF e THEN IF f THEN IF g THEN IF h THEN " +
+				"DELETE FROM t1; END IF; END IF; END IF; END IF; END IF; END IF; END IF; END IF; END $$",
+			Needs:  []Right{Manage, mainT1(core.ActionDelete)},
+			Denied: rowRights,
+			Why:    "nesting costs the reader, not the rows, so how deep the DELETE sits cannot change what it takes",
+		},
+		{
+			On:     []string{"postgresql"},
+			Name:   "a code block whose write reads another schema",
+			SQL:    "DO $$ BEGIN PERFORM 1; INSERT INTO main.t2 (c1) SELECT c1 FROM other.t3; END $$",
+			Needs:  []Right{Manage, mainT2(core.ActionInsert).Only("c1"), otherT3(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "the insert is priced on both sides inside a body as it is outside one",
 		},
 		{
 			On:     []string{"postgresql"},
