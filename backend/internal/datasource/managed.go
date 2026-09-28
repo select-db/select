@@ -58,11 +58,11 @@ type createResponse struct {
 	Config datasourceConfig `json:"config"`
 }
 
-// fullAccess is every action the dedicated role of a managed database allows.
 // stateDeleting marks a managed database that stopped serving and waits for
 // the reconciler to purge its file.
 const stateDeleting = "deleting"
 
+// fullAccess is every action the dedicated role of a managed database allows.
 var fullAccess = []string{core.ActionSee, core.ActionSelect, core.ActionInsert, core.ActionUpdate, core.ActionDelete, core.ActionManage}
 
 // Refusal is a request the caller can correct, answered with its HTTP status.
