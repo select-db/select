@@ -902,8 +902,7 @@ func (i *Inspector) inspectDelete(stmt mysql.IDeleteStatementContext) *core.Insp
 	// DELETE alias_list FROM list, resolve each alias against sourceRefs.
 	if ar := stmt.TableAliasRefList(); ar != nil {
 		for _, tw := range ar.AllTableRefWithWildcard() {
-			text := strings.TrimSuffix(tw.GetText(), ".*")
-			schema, name := splitQualifiedName(i.dialect, text, core.GetDefaultSchema(i.meta))
+			schema, name := i.resolveName(strings.TrimSuffix(tw.GetText(), ".*"))
 			if name == "" {
 				continue
 			}
@@ -1215,13 +1214,6 @@ func (i *Inspector) resolveName(raw string) (schema, table string) {
 		return schema, table
 	}
 	return i.resolver.SchemaFor(schema, table), table
-}
-
-// splitQualifiedName parses "db.table" or "table" and applies the default schema.
-// Backtick-quoted segments are normalized.
-func splitQualifiedName(d *Dialect, raw, defaultSchema string) (schema, table string) {
-	schema, table, _ = splitQualifiedNameParts(d, raw, defaultSchema)
-	return schema, table
 }
 
 // splitQualifiedNameParts also reports whether raw carried the schema. The

@@ -962,7 +962,7 @@ func (i *Inspector) resolveAnyName(anyName pg.IAny_nameContext) (schema, table s
 			return first, i.dialect.NormalizeIdentifier(attrNames[0].GetText())
 		}
 	}
-	return defaultSchema, first
+	return i.resolver.SchemaFor(defaultSchema, first), first
 }
 
 // resolveQualifiedName extracts (schema, table) from a qualified_name node. A

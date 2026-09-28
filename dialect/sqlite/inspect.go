@@ -668,26 +668,29 @@ func (i *Inspector) resolveQualifiedTableName(qtname sqlite.IQualified_table_nam
 	if qtname == nil {
 		return "", ""
 	}
-	if qtname.Table_name() != nil {
-		table = i.dialect.NormalizeIdentifier(qtname.Table_name().Any_name().GetText())
+	if qtname.Table_name() == nil {
+		return "", ""
 	}
-	if qtname.Schema_name() != nil {
-		return i.dialect.NormalizeIdentifier(qtname.Schema_name().GetText()), table
+	return i.resolveName(qtname.Schema_name(), qtname.Table_name().Any_name().GetText())
+}
+
+// resolveName is where a name resolves and the name itself. A written schema is
+// kept; a bare name goes through the resolver, so no two statements of this
+// dialect resolve one name differently.
+func (i *Inspector) resolveName(written sqlite.ISchema_nameContext, raw string) (schema, table string) {
+	table = i.dialect.NormalizeIdentifier(raw)
+	if written != nil {
+		return i.dialect.NormalizeIdentifier(written.GetText()), table
 	}
-	// A write target written bare resolves the way the resolver resolves a FROM
-	// relation, so the two cannot answer differently for one name.
 	return i.resolver.SchemaFor(i.effectiveSchema(), table), table
 }
 
 // resolveInsertTarget extracts schema and table name from an INSERT statement.
 func (i *Inspector) resolveInsertTarget(stmt sqlite.IInsert_stmtContext) (schema, table string) {
-	if stmt.Table_name() != nil {
-		table = i.dialect.NormalizeIdentifier(stmt.Table_name().Any_name().GetText())
+	if stmt.Table_name() == nil {
+		return "", ""
 	}
-	if stmt.Schema_name() != nil {
-		return i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText()), table
-	}
-	return i.resolver.SchemaFor(i.effectiveSchema(), table), table
+	return i.resolveName(stmt.Schema_name(), stmt.Table_name().Any_name().GetText())
 }
 
 // inspectInsert analyzes an INSERT statement.
@@ -959,12 +962,8 @@ func (i *Inspector) inspectDrop(stmt sqlite.IDrop_stmtContext) *core.InspectStat
 		return nil
 	}
 	result := &core.InspectStatement{Operation: core.InspectOpDrop}
-	schema := i.effectiveSchema()
-	if stmt.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
-	}
 	if stmt.Any_name() != nil {
-		table := i.dialect.NormalizeIdentifier(stmt.Any_name().GetText())
+		schema, table := i.resolveName(stmt.Schema_name(), stmt.Any_name().GetText())
 		result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 	}
 	return result
@@ -973,12 +972,8 @@ func (i *Inspector) inspectDrop(stmt sqlite.IDrop_stmtContext) *core.InspectStat
 // inspectCreate analyzes a CREATE TABLE statement.
 func (i *Inspector) inspectCreate(stmt sqlite.ICreate_table_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpCreate}
-	schema := i.effectiveSchema()
-	if stmt.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
-	}
 	if stmt.Table_name() != nil {
-		table := i.dialect.NormalizeIdentifier(stmt.Table_name().Any_name().GetText())
+		schema, table := i.resolveName(stmt.Schema_name(), stmt.Table_name().Any_name().GetText())
 		result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 	}
 	result.Subqueries = i.sourceQuery(stmt.Select_stmt())
@@ -990,12 +985,8 @@ func (i *Inspector) inspectCreate(stmt sqlite.ICreate_table_stmtContext) *core.I
 // in for.
 func (i *Inspector) inspectCreateView(stmt sqlite.ICreate_view_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpCreate}
-	schema := i.effectiveSchema()
-	if stmt.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
-	}
 	if stmt.View_name() != nil {
-		view := i.dialect.NormalizeIdentifier(stmt.View_name().GetText())
+		schema, view := i.resolveName(stmt.Schema_name(), stmt.View_name().GetText())
 		result.Tables = []core.InspectTable{{Name: view, Schema: schema}}
 	}
 	result.Subqueries = i.sourceQuery(stmt.Select_stmt())
@@ -1014,13 +1005,8 @@ func (i *Inspector) sourceQuery(selectStmt sqlite.ISelect_stmtContext) []core.In
 // inspectAlterTable analyzes an ALTER TABLE statement.
 func (i *Inspector) inspectAlterTable(stmt sqlite.IAlter_table_stmtContext) *core.InspectStatement {
 	result := &core.InspectStatement{Operation: core.InspectOpAlter}
-	schema := i.effectiveSchema()
-	if stmt.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
-	}
-	tableNames := stmt.AllTable_name()
-	if len(tableNames) > 0 {
-		table := i.dialect.NormalizeIdentifier(tableNames[0].Any_name().GetText())
+	if tableNames := stmt.AllTable_name(); len(tableNames) > 0 {
+		schema, table := i.resolveName(stmt.Schema_name(), tableNames[0].Any_name().GetText())
 		result.Tables = []core.InspectTable{{Name: table, Schema: schema}}
 	}
 	return result

@@ -48,7 +48,14 @@ func TestUnknownNameInUndescribedSchema(t *testing.T) {
 	for _, name := range permDialects {
 		dialect := dialectOrFail(t, name)
 		t.Run(name, func(t *testing.T) {
-			for _, sql := range []string{"SELECT c1 FROM t9", "UPDATE t9 SET c1 = 1", "DELETE FROM t9"} {
+			for _, sql := range []string{
+				"SELECT c1 FROM t9",
+				"UPDATE t9 SET c1 = 1",
+				"DELETE FROM t9",
+				"INSERT INTO t9 (c1) VALUES (1)",
+				"CREATE TABLE t9 (c1 INTEGER)",
+				"DROP TABLE t9",
+			} {
 				statements := Inspect(dialect, &meta, sql)
 				err := core.CheckQueryPermissions(statements, testutil.TestDatasourceID, testutil.PermGranting(
 					testutil.Right{Action: core.ActionSelect, Schema: "undescribed", Table: "t9"},
