@@ -2,7 +2,6 @@ package cellarclient_test
 
 import (
 	"database/sql"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,12 +9,10 @@ import (
 	"testing"
 
 	"backend/e2e"
-	"backend/internal/auth"
 	"backend/internal/cellar"
 	"backend/internal/datasource/cellarclient"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,76 +39,32 @@ func newManagedDB(t *testing.T) managedDB {
 		require.NoError(t, err)
 	}
 
-	dir := t.TempDir()
+	dir := e2e.ServeCellar(t)
 	seedConn, err := sql.Open("sqlite", filepath.Join(dir, id+".db"))
 	require.NoError(t, err)
 	_, err = seedConn.Exec(`CREATE TABLE note (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO note (body) VALUES ('hello')`)
 	require.NoError(t, err)
 	require.NoError(t, seedConn.Close())
-
-	publicKey, err := auth.PublicKey()
-	require.NoError(t, err)
-	mux := http.NewServeMux()
-	cellar.Register(mux, dir, publicKey, "local")
-	cellarServer := httptest.NewServer(mux)
-	t.Cleanup(cellarServer.Close)
-	cellarclient.URL, cellarclient.CellarID = cellarServer.URL, "local"
-	t.Cleanup(func() { cellarclient.URL, cellarclient.CellarID = "", "" })
 	return managedDB{fixture: fixture, id: id, dir: dir}
-}
-
-// run executes stmt through the backend's REST route and returns its rows, or
-// the error the caller sees, with its code.
-func (database managedDB) run(t *testing.T, stmt string) ([][]any, *arrowstream.Error) {
-	t.Helper()
-	rec := e2e.Do(t, database.fixture.H, http.MethodPost, "/datasources/"+database.id+"/execute", database.fixture.Actor.Token,
-		map[string]any{"workspace_id": database.fixture.Actor.WorkspaceID, "sql": stmt})
-	require.Equalf(t, http.StatusOK, rec.Code, "execute: %s", rec.Body.String())
-	stream, err := arrowstream.NewStream(io.NopCloser(rec.Body))
-	require.NoError(t, err)
-	defer func() { _ = stream.Close() }()
-	failed := func(err error) *arrowstream.Error {
-		var coded *arrowstream.Error
-		require.ErrorAs(t, err, &coded)
-		return coded
-	}
-	if _, err := stream.Columns(); err != nil {
-		return nil, failed(err)
-	}
-	var rows [][]any
-	for {
-		row, ok, err := stream.Next()
-		if err != nil {
-			return nil, failed(err)
-		}
-		if !ok {
-			break
-		}
-		rows = append(rows, row)
-	}
-	if _, _, _, err := stream.Summary(); err != nil {
-		return nil, failed(err)
-	}
-	return rows, nil
 }
 
 func TestManagedDatasourceRunsOnTheCellar(t *testing.T) {
 	database := newManagedDB(t)
 
-	rows, failure := database.run(t, "SELECT body FROM note")
+	rows, failure := e2e.Execute(t, database.fixture, database.id, "SELECT body FROM note")
 	require.Nil(t, failure)
 	require.Equal(t, [][]any{{"hello"}}, rows)
 
-	_, failure = database.run(t, "INSERT INTO note (body) VALUES ('again')")
+	_, failure = e2e.Execute(t, database.fixture, database.id, "INSERT INTO note (body) VALUES ('again')")
 	require.Nil(t, failure)
 
-	_, failure = database.run(t, "INSERT INTO note (body) VALUES ('once'); INSERT INTO note (id, body) VALUES (1, 'taken')")
+	_, failure = e2e.Execute(t, database.fixture, database.id, "INSERT INTO note (body) VALUES ('once'); INSERT INTO note (id, body) VALUES (1, 'taken')")
 	require.Equal(t, cellar.CodeSQLError, failure.Code)
 	require.Contains(t, failure.Message, "UNIQUE constraint failed", "SQLite's message reaches the caller as it is")
-	rows, _ = database.run(t, "SELECT count(*) FROM note WHERE body = 'once'")
+	rows, _ = e2e.Execute(t, database.fixture, database.id, "SELECT count(*) FROM note WHERE body = 'once'")
 	require.Equal(t, [][]any{{"1"}}, rows, "a failed script is never run twice")
 
-	_, failure = database.run(t, "DELETE FROM note")
+	_, failure = e2e.Execute(t, database.fixture, database.id, "DELETE FROM note")
 	require.Contains(t, failure.Message, "permission", "the backend answers permissions")
 
 	e2e.RequireEvent(t, database.fixture.Conn, "query", "executed")
@@ -142,7 +95,7 @@ func TestManagedDatasourceRefusesHostileSQL(t *testing.T) {
 		"SELECT * FROM \"PRAGMA_compile_options\"",
 	} {
 		t.Run(stmt, func(t *testing.T) {
-			_, failure := database.run(t, stmt)
+			_, failure := e2e.Execute(t, database.fixture, database.id, stmt)
 			// Refused by the backend's permission check (no code) or by the cellar.
 			require.NotNil(t, failure)
 			require.Contains(t, []string{"", cellar.CodeForbiddenStatement, cellar.CodeSQLError}, failure.Code)
@@ -151,7 +104,7 @@ func TestManagedDatasourceRefusesHostileSQL(t *testing.T) {
 	}
 	require.NoFileExists(t, outside)
 
-	_, failure := database.run(t, "PRAGMA table_info(note)")
+	_, failure := e2e.Execute(t, database.fixture, database.id, "PRAGMA table_info(note)")
 	require.Nil(t, failure, "introspection PRAGMAs are allowed")
 }
 
@@ -170,7 +123,7 @@ func TestManagedDatasourceWithCellarDown(t *testing.T) {
 	down.Close()
 	cellarclient.URL = down.URL
 
-	_, failure := database.run(t, "SELECT 1")
+	_, failure := e2e.Execute(t, database.fixture, database.id, "SELECT 1")
 	require.Equal(t, cellar.CodeUnavailable, failure.Code)
 	require.NotContains(t, failure.Message, strings.TrimPrefix(down.URL, "http://"), "errors never name the cellar")
 

@@ -1,6 +1,7 @@
 package datasource
 
 import (
+	"context"
 	"net/http"
 
 	"backend/db"
@@ -68,4 +69,43 @@ func DeleteHandler() http.HandlerFunc {
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// deleteManaged stops serving a managed database at once and leaves its file
+// to the reconciler. Its rules go from every role, and a role left with no
+// rule anywhere else goes with them.
+func deleteManaged(ctx context.Context, workspaceID uuid.UUID, datasourceID string) error {
+	tx, err := db.GetDB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	queries := db.Queries.WithTx(tx)
+
+	if err := queries.MarkDatasourceDeleting(ctx, generated.MarkDatasourceDeletingParams{ID: uuid.MustParse(datasourceID), WorkspaceID: workspaceID}); err != nil {
+		return err
+	}
+	dedicatedRoleIDs, err := queries.ListRolesScopedToDatasource(ctx, generated.ListRolesScopedToDatasourceParams{WorkspaceID: workspaceID, DatasourceID: datasourceID})
+	if err != nil {
+		return err
+	}
+	for _, roleID := range dedicatedRoleIDs {
+		if err := queries.SetRoleDeletedAt(ctx, generated.SetRoleDeletedAtParams{ID: roleID, WorkspaceID: workspaceID}); err != nil {
+			return err
+		}
+	}
+	changedRoleIDs, err := queries.DeleteDatasourcePermissions(ctx, generated.DeleteDatasourcePermissionsParams{WorkspaceID: workspaceID, DatasourceID: datasourceID})
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, roleID := range dedicatedRoleIDs {
+		audit.EmitChange(ctx, audit.RoleDeleted, workspaceID.String(), roleID.String(), nil, nil)
+	}
+	for _, roleID := range changedRoleIDs {
+		authz.Invalidate(roleID.String())
+	}
+	return nil
 }
