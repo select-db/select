@@ -668,26 +668,26 @@ func (i *Inspector) resolveQualifiedTableName(qtname sqlite.IQualified_table_nam
 	if qtname == nil {
 		return "", ""
 	}
-	schema = i.effectiveSchema()
-	if qtname.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(qtname.Schema_name().GetText())
-	}
 	if qtname.Table_name() != nil {
 		table = i.dialect.NormalizeIdentifier(qtname.Table_name().Any_name().GetText())
 	}
-	return schema, table
+	if qtname.Schema_name() != nil {
+		return i.dialect.NormalizeIdentifier(qtname.Schema_name().GetText()), table
+	}
+	// A write target written bare resolves the way the resolver resolves a FROM
+	// relation, so the two cannot answer differently for one name.
+	return i.resolver.SchemaFor(i.effectiveSchema(), table), table
 }
 
 // resolveInsertTarget extracts schema and table name from an INSERT statement.
 func (i *Inspector) resolveInsertTarget(stmt sqlite.IInsert_stmtContext) (schema, table string) {
-	schema = i.effectiveSchema()
-	if stmt.Schema_name() != nil {
-		schema = i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText())
-	}
 	if stmt.Table_name() != nil {
 		table = i.dialect.NormalizeIdentifier(stmt.Table_name().Any_name().GetText())
 	}
-	return schema, table
+	if stmt.Schema_name() != nil {
+		return i.dialect.NormalizeIdentifier(stmt.Schema_name().GetText()), table
+	}
+	return i.resolver.SchemaFor(i.effectiveSchema(), table), table
 }
 
 // inspectInsert analyzes an INSERT statement.

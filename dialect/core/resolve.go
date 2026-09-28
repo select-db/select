@@ -37,11 +37,41 @@ func (r Resolver) virtualNames(s Scope) map[string]bool {
 	return names
 }
 
+// SchemaFor is the schema an unqualified name resolves in. A database resolves
+// a name before it checks access, so this runs first: a name the metadata
+// carries keeps the schema it was found in, a built-in catalog name takes the
+// dialect's catalog schema, and everything else takes the session's schema,
+// which is where a CREATE of that name would have put it.
+//
+// It returns "" where the session's schema is one the metadata does not
+// describe. The name may live in it and nothing here can say what it holds,
+// which is the one case that still has to refuse.
+func (r Resolver) SchemaFor(schema, table string) string {
+	if TableExistsInMetadata(r.Meta, schema, table, r.Dialect) {
+		return schema
+	}
+	if catalog := r.Dialect.SystemSchema(table); catalog != "" {
+		return catalog
+	}
+	session := r.Meta.CurrentSchema
+	if session == "" {
+		session = GetDefaultSchema(r.Meta)
+	}
+	wanted := r.Dialect.NormalizeIdentifier(session)
+	for _, described := range r.Meta.Schemas {
+		if r.Dialect.NormalizeIdentifier(described.Name) == wanted {
+			return session
+		}
+	}
+	return ""
+}
+
 // Tables turns the relations a statement named into the tables a permission
-// check reads. An unqualified name the metadata does not know resolves to no
-// schema, which is refused for every role. Only such a name can be virtual:
-// dropping a qualified one would be a read nobody checks, so a qualified name
-// keeps the schema it was written with whether or not the metadata has it.
+// check reads. An unqualified name the metadata does not know resolves through
+// SchemaFor, so a read and a write of the same name ask for a right on the same
+// table. Only such a name can be virtual: dropping a qualified one would be a
+// read nobody checks, so a qualified name keeps the schema it was written with
+// whether or not the metadata has it.
 //
 // IsVirtual is the walker saying the statement bound the name, which a derived
 // relation returning no column, such as a VALUES list, cannot say through Scope.
@@ -59,8 +89,8 @@ func (r Resolver) Tables(refs []RelationRef, s Scope) []InspectTable {
 		}
 
 		schema := ref.Schema
-		if !ref.Qualified && !TableExistsInMetadata(r.Meta, schema, ref.Table, r.Dialect) {
-			schema = ""
+		if !ref.Qualified {
+			schema = r.SchemaFor(schema, ref.Table)
 		}
 
 		key := schema + "." + ref.Table
@@ -547,10 +577,15 @@ func (r Resolver) soleRelationColumn(name string, alias *string, refs []Relation
 		return nil
 	}
 	field := InspectField{Name: name, Alias: alias, Table: real[0].Table, Schema: real[0].Schema}
-	// A table the metadata does not describe keeps an empty schema, which is
-	// what refuses the statement rather than checking it against nothing.
+	// An unqualified name resolves the way Tables resolved it, so the column is
+	// checked on the table the statement reads. A qualified name the metadata
+	// is missing keeps an empty schema, which asks for the table as a whole
+	// rather than for a column the metadata cannot confirm.
 	if !TableExistsInMetadata(r.Meta, real[0].Schema, real[0].Table, r.Dialect) {
 		field.Schema = ""
+		if !real[0].Qualified {
+			field.Schema = r.SchemaFor(real[0].Schema, real[0].Table)
+		}
 	}
 	return &field
 }

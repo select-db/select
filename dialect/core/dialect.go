@@ -77,6 +77,11 @@ type SQLDialect interface {
 	KeywordsOutsideGroup() map[string][]string
 	SupportsFeature(feature Feature) bool
 
+	// SystemSchema is the schema this dialect's built-in catalog holds a bare
+	// name in, "pg_catalog" for PostgreSQL's pg_class. It returns "" for a name
+	// that is not one of them, which leaves it to the session's schema.
+	SystemSchema(table string) string
+
 	// Identifier handling
 	NormalizeIdentifier(raw string) string
 	QuoteIdentifierIfNeeded(name string, caretQuoted bool, reserved map[string]bool) string

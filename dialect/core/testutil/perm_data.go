@@ -37,6 +37,14 @@ var (
 	mainV1  = func(action string) Right { return Right{Action: action, Schema: "main", Table: "v1"} }
 )
 
+// t9 and tmp1 are names GetInspectTestMetadata does not carry. They resolve to
+// the session's schema, which is where a CREATE of the same name would put
+// them, so the rights on them are ordinary rights on main.
+var (
+	mainT9   = func(action string) Right { return Right{Action: action, Schema: "main", Table: "t9"} }
+	mainTmp1 = func(action string) Right { return Right{Action: action, Schema: "main", Table: "tmp1"} }
+)
+
 // rowRights are the four row actions on every table. Denying them is how a case
 // says the statement takes more than rows, however many tables it reaches.
 var rowRights = []Right{
@@ -2570,17 +2578,17 @@ func permCases() []PermCase {
 			On:    []string{"postgresql"},
 			Name:  "inserting into a table named pg_read_file",
 			SQL:   "INSERT INTO pg_read_file (c1) VALUES (1)",
-			Needs: []Right{{Action: core.ActionInsert, Schema: "main", Table: "pg_read_file"}},
+			Needs: []Right{{Action: core.ActionInsert, Schema: "pg_catalog", Table: "pg_read_file"}},
 			Op:    core.InspectOpInsert,
-			Why:   "the parenthesis after a table name is a column list, not a call",
+			Why:   "the parenthesis after a table name is a column list, not a call, and pg_ is the catalog's prefix",
 		},
 		{
 			On:    []string{"postgresql"},
 			Name:  "updating a table named pg_read_file",
 			SQL:   "UPDATE pg_read_file SET c1 = 1",
-			Needs: []Right{{Action: core.ActionUpdate, Schema: "main", Table: "pg_read_file"}},
+			Needs: []Right{{Action: core.ActionUpdate, Schema: "pg_catalog", Table: "pg_read_file"}},
 			Op:    core.InspectOpUpdate,
-			Why:   "a table may be named after a routine and still be a table",
+			Why:   "a table may be named after a routine and still be a table, and pg_ is the catalog's prefix",
 		},
 		{
 			On:    []string{"postgresql"},
@@ -2792,6 +2800,60 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "refusing it would hold ordinary work",
+		},
+
+		// --- a name the metadata does not carry. A database resolves it
+		// before it checks access, and so does this: every right below is one
+		// an administrator can grant, and the verb never moves the name.
+		{
+			Name:  "a read of an unqualified name the metadata is missing",
+			SQL:   "SELECT c1 FROM t9",
+			Needs: []Right{mainT9(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpSelect,
+			Why:   "t9 is unqualified, so it resolves where a CREATE of the same name would put it",
+		},
+		{
+			Name:  "an update of an unqualified name the metadata is missing",
+			SQL:   "UPDATE t9 SET c1 = 1",
+			Needs: []Right{mainT9(core.ActionUpdate).Only("c1")},
+			Op:    core.InspectOpUpdate,
+			Why:   "the verb in front of a name cannot change where the name resolves",
+		},
+		{
+			Name:  "a delete of an unqualified name the metadata is missing",
+			SQL:   "DELETE FROM t9",
+			Needs: []Right{mainT9(core.ActionDelete)},
+			Op:    core.InspectOpDelete,
+			Why:   "the verb in front of a name cannot change where the name resolves",
+		},
+		{
+			Name:  "a table the same script created",
+			SQL:   "CREATE TABLE t9 (c1 INTEGER); SELECT c1 FROM t9",
+			Needs: []Right{Manage, mainT9(core.ActionSelect).Only("c1")},
+			Why:   "the create put t9 in the session's schema and the read finds it there",
+		},
+		{
+			On:    []string{"postgresql", "sqlite"},
+			Name:  "a scratch table the same script created and read back",
+			SQL:   "CREATE TEMP TABLE tmp1 AS SELECT c1 FROM t1; SELECT c1 FROM tmp1",
+			Needs: []Right{Manage, mainT1(core.ActionSelect).Only("c1"), mainTmp1(core.ActionSelect).Only("c1")},
+			Why:   "an analyst writing a scratch query reads it back under the name the create gave it",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a PostgreSQL system catalog",
+			SQL:   "SELECT relname FROM pg_class",
+			Needs: []Right{{Action: core.ActionSelect, Schema: "pg_catalog", Table: "pg_class", Column: "relname"}},
+			Op:    core.InspectOpSelect,
+			Why:   "pg_catalog is implicitly first on the search path, so pg_class is granted like any other table",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a SQLite system catalog",
+			SQL:   "SELECT name FROM sqlite_master",
+			Needs: []Right{{Action: core.ActionSelect, Schema: "main", Table: "sqlite_master", Column: "name"}},
+			Op:    core.InspectOpSelect,
+			Why:   "sqlite_master lives in the database the connection opened",
 		},
 	}
 }

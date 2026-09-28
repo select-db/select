@@ -262,6 +262,16 @@ func (d *Dialect) SupportsFeature(feature core.Feature) bool {
 
 // NormalizeIdentifier normalizes an identifier according to SQLite rules.
 //
+// SystemSchema implements the core.SQLDialect interface. SQLite reserves the
+// sqlite_ prefix for its own tables, and they live in the database the
+// connection opened, which "main" names.
+func (d *Dialect) SystemSchema(table string) string {
+	if strings.HasPrefix(strings.ToLower(d.NormalizeIdentifier(table)), "sqlite_") {
+		return "main"
+	}
+	return ""
+}
+
 // SQLite takes an identifier in double quotes, in backticks or in square
 // brackets, the last two for compatibility with MySQL and SQL Server. A name
 // left wearing its quotes matches no column of the metadata, so a rule naming

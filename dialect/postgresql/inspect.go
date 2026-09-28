@@ -989,8 +989,10 @@ func (i *Inspector) resolveQualifiedName(q pg.IQualified_nameContext) (schema, t
 			}
 		}
 	} else {
-		schema = defaultSchema
+		// A write target written bare resolves the way the resolver resolves a
+		// FROM relation, so the two cannot answer differently for one name.
 		table = i.dialect.NormalizeIdentifier(colId.GetText())
+		schema = i.resolver.SchemaFor(defaultSchema, table)
 	}
 	return schema, table
 }
