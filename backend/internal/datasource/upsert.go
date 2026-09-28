@@ -166,7 +166,7 @@ func saveDatasource(w http.ResponseWriter, r *http.Request, req upsertRequest) b
 // and reports whether it did; on false it has answered the request.
 func renameManaged(w http.ResponseWriter, r *http.Request, existing generated.GetDatasourceRow, rename generated.RenameDatasourceParams, spec audit.Spec) bool {
 	workspaceID, id := rename.WorkspaceID.String(), rename.ID.String()
-	if err := checkServing(existing); err != nil {
+	if err := checkManagedAvailable(existing); err != nil {
 		OpenError(w, err, "managed rename", workspaceID, id)
 		return false
 	}

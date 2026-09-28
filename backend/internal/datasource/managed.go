@@ -55,12 +55,12 @@ func getManagedRow(ctx context.Context, id, workspaceID string) (generated.GetDa
 	if err != nil || row.CellarID.ValueOrEmpty() == "" {
 		return generated.GetDatasourceRow{}, ErrNotFound
 	}
-	return row, checkServing(row)
+	return row, checkManagedAvailable(row)
 }
 
-// checkServing refuses a managed row that no longer serves. While CELLAR is
-// unset every managed route is off.
-func checkServing(row generated.GetDatasourceRow) error {
+// checkManagedAvailable refuses a managed database while managed databases are
+// off (CELLAR unset), or once it is being deleted.
+func checkManagedAvailable(row generated.GetDatasourceRow) error {
 	if cellarclient.URL == "" {
 		return cellarclient.ErrOff
 	}
