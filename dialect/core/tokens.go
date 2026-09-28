@@ -37,61 +37,6 @@ func TokenSpan[T interface{ GetStart() antlr.Token }](
 	return from, to
 }
 
-// opensAStatement are the tokens a statement of a procedural body can follow:
-// the terminator and the keywords that open a block. Every other position is
-// inside a construct, where a parse that happens to succeed reads something
-// the body does not say.
-var opensAStatement = map[string]bool{
-	";":     true,
-	"begin": true,
-	"then":  true,
-	"else":  true,
-	"loop":  true,
-}
-
-// ReadBody is what the SQL statements of a procedural body require. A body is
-// written in a procedural language rather than in SQL, so handing one to a SQL
-// grammar whole stops at the first construct the grammar does not know and
-// reports the statements before it as all there were. Each position a statement
-// can start at is read on its own instead, up to the next terminator, so a
-// construct nothing reads costs only itself.
-//
-// read returns the statements of one fragment, and nil for a fragment it could
-// not read whole: the salvage error recovery leaves behind names tables the
-// body never touched, so a fragment that does not parse reports nothing and
-// the caller's floor stands.
-func ReadBody(lexer antlr.Lexer, text string, read func(string) []InspectStatement) []InspectStatement {
-	stream := antlr.NewCommonTokenStream(lexer, 0)
-	stream.Fill()
-	var tokens []antlr.Token
-	for _, token := range stream.GetAllTokens() {
-		if token.GetChannel() == antlr.TokenDefaultChannel && token.GetTokenType() != antlr.TokenEOF {
-			tokens = append(tokens, token)
-		}
-	}
-
-	var reads []InspectStatement
-	for idx := 0; idx < len(tokens); idx++ {
-		if tokens[idx].GetText() == ";" {
-			continue
-		}
-		if idx > 0 && !opensAStatement[strings.ToLower(tokens[idx-1].GetText())] {
-			continue
-		}
-		end := idx
-		for end < len(tokens) && tokens[end].GetText() != ";" {
-			end++
-		}
-		fragment := read(text[tokens[idx].GetStart() : tokens[end-1].GetStop()+1])
-		if fragment == nil {
-			continue
-		}
-		reads = append(reads, fragment...)
-		idx = end
-	}
-	return reads
-}
-
 // namesARelation are the keywords a table name follows. A parenthesis after
 // the name is then the column list or the alias list, not a call, so "INSERT
 // INTO readfile (c1) VALUES (1)" is the ordinary insert it looks like. FROM and

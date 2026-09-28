@@ -42,10 +42,8 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	return reads
 }
 
-// inspectScript is Inspect, also reporting whether the parser stumbled over the
-// script. A procedural body is SQL only in parts, so whoever reads one has to
-// tell a fragment this inspector read from a fragment error recovery salvaged
-// something out of.
+// inspectScript is Inspect, also reporting whether the parser read the script
+// whole, which is what readBody tells one fragment of a body from another by.
 func (i *Inspector) inspectScript(sql string) ([]core.InspectStatement, bool) {
 	if strings.TrimSpace(sql) == "" {
 		return nil, true
@@ -862,26 +860,85 @@ func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.Inspe
 }
 
 // bodyStatements is what the statements of a procedural body require, read out
-// of the string constants carrying it. A body is PL/pgSQL rather than SQL, so
-// it is read fragment by fragment: a construct this inspector does not speak
-// keeps manage and nothing more, and the SQL beside it is still priced.
+// of the string constants carrying it.
 func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectStatement {
 	if i.inBody {
 		return nil
 	}
 	var reads []core.InspectStatement
 	for _, body := range bodies {
-		text := bodyText(body)
-		if strings.TrimSpace(text) == "" {
-			continue
-		}
-		reads = append(reads, core.ReadBody(i.dialect.CreateLexer(text), text, i.bodyFragment)...)
+		reads = append(reads, i.readBody(bodyText(body))...)
 	}
 	return reads
 }
 
-// bodyFragment is what one fragment of a procedural body requires, and nil for
-// a fragment the parser could not read whole.
+// opensAStatement are the token types a statement of a body can follow: the
+// terminator and the keywords that open a block. Anywhere else is the middle of
+// a construct, where a parse that happens to succeed reads something the body
+// does not say.
+var opensAStatement = map[int]bool{
+	pg.PostgreSQLLexerSEMI:    true,
+	pg.PostgreSQLLexerBEGIN_P: true,
+	pg.PostgreSQLLexerTHEN:    true,
+	pg.PostgreSQLLexerELSE:    true,
+	pg.PostgreSQLLexerLOOP:    true,
+}
+
+// bodyAttempts bounds the starts one run between two terminators is parsed
+// from. A statement follows at most a handful of block openers, and each start
+// costs a parse of the rest of the run.
+const bodyAttempts = 8
+
+// readBody is what the SQL statements of a procedural body require. PL/pgSQL is
+// not SQL, so a body handed to the grammar whole stops at the first construct
+// the grammar does not know and reports the statements before it as all there
+// were. Each position a statement can start at is read on its own instead, up
+// to the next terminator, so a construct nothing reads costs only itself.
+//
+// MySQL and SQLite need no such scan: their grammars carry their own procedural
+// language, so a body there is parse nodes rather than text to read again.
+func (i *Inspector) readBody(text string) []core.InspectStatement {
+	stream := antlr.NewCommonTokenStream(i.dialect.CreateLexer(text), antlr.TokenDefaultChannel)
+	stream.Fill()
+	all := stream.GetAllTokens()
+	tokens := make([]antlr.Token, 0, len(all))
+	for _, token := range all {
+		if token.GetChannel() == antlr.TokenDefaultChannel && token.GetTokenType() != antlr.TokenEOF {
+			tokens = append(tokens, token)
+		}
+	}
+
+	var reads []core.InspectStatement
+	attempts := 0
+	for idx := 0; idx < len(tokens); idx++ {
+		switch {
+		case tokens[idx].GetTokenType() == pg.PostgreSQLLexerSEMI:
+			attempts = 0
+			continue
+		case idx > 0 && !opensAStatement[tokens[idx-1].GetTokenType()]:
+			continue
+		case attempts >= bodyAttempts:
+			continue
+		}
+		attempts++
+
+		end := idx
+		for end < len(tokens) && tokens[end].GetTokenType() != pg.PostgreSQLLexerSEMI {
+			end++
+		}
+		fragment := i.bodyFragment(stream.GetTextFromTokens(tokens[idx], tokens[end-1]))
+		if fragment == nil {
+			continue
+		}
+		reads = append(reads, fragment...)
+		idx, attempts = end, 0
+	}
+	return reads
+}
+
+// bodyFragment is what one fragment of a body requires, and nil for a fragment
+// the parser could not read whole: what error recovery salvages out of PL/pgSQL
+// names tables the fragment never read, so the caller's floor stands instead.
 func (i *Inspector) bodyFragment(sql string) []core.InspectStatement {
 	inner := NewInspector(i.dialect, i.meta)
 	inner.inBody = true
