@@ -24,22 +24,22 @@ import (
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
 
-// grantTo names who gets a new managed database's dedicated role. Empty means
+// GrantTo names who gets a new managed database's dedicated role. Empty means
 // nobody, as for any datasource.
-type grantTo struct {
+type GrantTo struct {
 	Users   []string `json:"users"`
 	APIKeys []string `json:"api_keys"`
 }
 
 type createRequest struct {
 	upsertRequest
-	GrantTo grantTo `json:"grant_to"`
+	GrantTo GrantTo `json:"grant_to"`
 }
 
 type forkRequest struct {
 	Name    string  `json:"name"`
 	At      string  `json:"at"`
-	GrantTo grantTo `json:"grant_to"`
+	GrantTo GrantTo `json:"grant_to"`
 }
 
 // datasourceConfig is the datasource.config.json that adds a datasource to a
@@ -59,15 +59,15 @@ type createResponse struct {
 // fullAccess is every action the dedicated role of a managed database allows.
 var fullAccess = []string{core.ActionSee, core.ActionSelect, core.ActionInsert, core.ActionUpdate, core.ActionDelete, core.ActionManage}
 
-// requestError is a refusal the caller can act on, answered with its status.
-type requestError struct {
-	status int
-	msg    string
+// Refusal is a request the caller can correct, answered with its HTTP status.
+type Refusal struct {
+	Status  int
+	Message string
 }
 
-func (e *requestError) Error() string { return e.msg }
+func (e *Refusal) Error() string { return e.Message }
 
-var errForbidden = &requestError{http.StatusForbidden, "forbidden"}
+var errForbidden = &Refusal{http.StatusForbidden, "forbidden"}
 
 // CreateHandler adds a datasource under an id the server picks. A SQLite
 // datasource without a DSN is a managed database, made on the cellar.
@@ -85,17 +85,12 @@ func CreateHandler() http.HandlerFunc {
 			}
 			return
 		}
-		a := authz.ActorOf(r)
-		if !a.IsOwner() && !a.Can(core.ActionManage) {
-			audit.EmitDenied(r.Context(), audit.DatasourceCreated, a.WorkspaceID, req.ID)
-			http.Error(w, "forbidden", http.StatusForbidden)
+		id, err := CreateManaged(r, req.Name, "", "", req.GrantTo)
+		if err != nil {
+			OpenError(w, err, "managed create", authz.ActorOf(r).WorkspaceID, id)
 			return
 		}
-		if err := createManaged(r, a, req.ID, req.Name, "", "", req.GrantTo); err != nil {
-			OpenError(w, err, "managed create", a.WorkspaceID, req.ID)
-			return
-		}
-		writeCreated(w, req.ID, "sqlite")
+		writeCreated(w, id, "sqlite")
 	}
 }
 
@@ -108,24 +103,10 @@ func ForkHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		a := authz.ActorOf(r)
 		source := r.PathValue("id")
-		id := uuid.NewString()
-		if !a.IsOwner() && !a.CanManage(source) {
-			audit.EmitDenied(r.Context(), audit.DatasourceCreated, a.WorkspaceID, id)
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		row, err := managedRow(r.Context(), source, a.WorkspaceID)
+		id, err := CreateManaged(r, req.Name, source, req.At, req.GrantTo)
 		if err != nil {
-			OpenError(w, err, "managed fork", a.WorkspaceID, source)
-			return
-		}
-		if req.Name == "" {
-			req.Name = row.Name + " (fork)"
-		}
-		if err := createManaged(r, a, id, req.Name, source, req.At, req.GrantTo); err != nil {
-			OpenError(w, err, "managed fork", a.WorkspaceID, source)
+			OpenError(w, err, "managed fork", authz.ActorOf(r).WorkspaceID, source)
 			return
 		}
 		writeCreated(w, id, "sqlite")
@@ -181,10 +162,34 @@ func managedRow(ctx context.Context, id, workspaceID string) (generated.GetDatas
 	return row, nil
 }
 
+// CreateManaged makes a managed database for r's caller, empty or a fork of
+// source as it was at, and returns its id. REST and MCP both create through it.
+func CreateManaged(r *http.Request, name, source, at string, grants GrantTo) (string, error) {
+	a := authz.ActorOf(r)
+	id := uuid.NewString()
+	// Creating takes the right to add datasources; forking hands over all the
+	// source's data, so it takes manage on the source.
+	allowed := a.IsOwner() || (source == "" && a.Can(core.ActionManage)) || (source != "" && a.CanManage(source))
+	if !allowed {
+		audit.EmitDenied(r.Context(), audit.DatasourceCreated, a.WorkspaceID, id)
+		return id, errForbidden
+	}
+	if source != "" {
+		row, err := managedRow(r.Context(), source, a.WorkspaceID)
+		if err != nil {
+			return id, err
+		}
+		if name == "" {
+			name = row.Name + " (fork)"
+		}
+	}
+	return id, createManaged(r, a, id, name, source, at, grants)
+}
+
 // createManaged makes managed database id, empty or a fork of source at a
 // point in time, with its dedicated role. The workspace row stays locked from
 // the quota check to the insert, so two creates cannot both take the last slot.
-func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, grants grantTo) error {
+func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, grants GrantTo) error {
 	ctx := r.Context()
 	if managed.URL == "" {
 		return managed.ErrOff
@@ -267,12 +272,12 @@ func createManaged(r *http.Request, a authz.Actor, id, name, source, at string, 
 
 // checkGrants parses who gets the new role. The caller may always grant itself;
 // granting anyone else takes the right to manage users or API keys.
-func checkGrants(ctx context.Context, a authz.Actor, workspaceID uuid.UUID, grants grantTo) ([]uuid.UUID, []uuid.UUID, error) {
+func checkGrants(ctx context.Context, a authz.Actor, workspaceID uuid.UUID, grants GrantTo) ([]uuid.UUID, []uuid.UUID, error) {
 	var users, keys []uuid.UUID
 	for _, s := range grants.Users {
 		id, err := uuid.Parse(s)
 		if err != nil {
-			return nil, nil, &requestError{http.StatusBadRequest, "invalid user id in grant_to"}
+			return nil, nil, &Refusal{http.StatusBadRequest, "invalid user id in grant_to"}
 		}
 		self := !a.IsAPIKey && s == a.UserID
 		if !self && !a.IsOwner() && !a.Can(core.ActionWorkspaceUsersManage) {
@@ -283,14 +288,14 @@ func checkGrants(ctx context.Context, a authz.Actor, workspaceID uuid.UUID, gran
 			return nil, nil, err
 		}
 		if !member {
-			return nil, nil, &requestError{http.StatusBadRequest, "grant_to names a user who is not a member of this workspace"}
+			return nil, nil, &Refusal{http.StatusBadRequest, "grant_to names a user who is not a member of this workspace"}
 		}
 		users = append(users, id)
 	}
 	for _, s := range grants.APIKeys {
 		id, err := uuid.Parse(s)
 		if err != nil {
-			return nil, nil, &requestError{http.StatusBadRequest, "invalid api key id in grant_to"}
+			return nil, nil, &Refusal{http.StatusBadRequest, "invalid api key id in grant_to"}
 		}
 		self := a.IsAPIKey && s == a.UserID
 		if !self && !a.IsOwner() && !a.Can(core.ActionWorkspaceApiKeysManage) {
@@ -298,7 +303,7 @@ func checkGrants(ctx context.Context, a authz.Actor, workspaceID uuid.UUID, gran
 		}
 		if _, err := db.Queries.GetAPIKeyForWorkspace(ctx, generated.GetAPIKeyForWorkspaceParams{ID: id, WorkspaceID: workspaceID}); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, nil, &requestError{http.StatusBadRequest, "grant_to names an api key of another workspace"}
+				return nil, nil, &Refusal{http.StatusBadRequest, "grant_to names an api key of another workspace"}
 			}
 			return nil, nil, err
 		}
@@ -314,10 +319,10 @@ func checkAt(at string, days int) error {
 	}
 	t, err := time.Parse(time.RFC3339, at)
 	if err != nil {
-		return &requestError{http.StatusBadRequest, "at must be an RFC 3339 time"}
+		return &Refusal{http.StatusBadRequest, "at must be an RFC 3339 time"}
 	}
 	if t.After(time.Now()) || t.Before(time.Now().AddDate(0, 0, -days)) {
-		return &requestError{http.StatusBadRequest, fmt.Sprintf("at must be within the last %d days", days)}
+		return &Refusal{http.StatusBadRequest, fmt.Sprintf("at must be within the last %d days", days)}
 	}
 	return nil
 }

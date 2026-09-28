@@ -101,12 +101,12 @@ var codeStatus = map[string]int{
 func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, error) {
 	var coded *arrowstream.Error
 	var cfgErr *connect.ConfigError
-	var refused *requestError
+	var refused *Refusal
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return http.StatusNotFound, err
 	case errors.As(err, &refused):
-		return refused.status, refused
+		return refused.Status, refused
 	case errors.As(err, &coded) && codeStatus[coded.Code] != 0:
 		return codeStatus[coded.Code], coded
 	case errors.As(err, &cfgErr):

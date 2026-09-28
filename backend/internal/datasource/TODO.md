@@ -238,14 +238,14 @@ Needs 0.
 
 ### 2. Create, fork, download, delete
 Needs 1.
-- [ ] Cellar: `PUT /cellar/dbs/{id}` with optional `{from, at}` (create,
-      fork, point-in-time fork), `GET /cellar/dbs/{id}/download`,
-      `GET /cellar/inventory`, `DELETE /cellar/dbs/{id}`.
-- [ ] Backend: `POST /datasources`, fork, download, rename-only `PUT`,
+- [x] Cellar: `PUT /datasources/{id}` with optional `{from, at}` (create,
+      fork), `GET /datasources/{id}/download`, `GET /datasources` (inventory),
+      `DELETE /datasources/{id}`. `at` answers `disabled` until 3.
+- [x] Backend: `POST /datasources`, fork, download, rename-only `PUT`,
       delete marking `deleting`; quota checks; dedicated role and `grant_to`.
-- [ ] `disabled` on each of these entry points when `CELLAR` is unset.
-- [ ] MCP `create_datasource`, `fork_datasource`.
-- [ ] Audit: reuse `datasource.lifecycle.*`.
+- [x] `disabled` on each of these entry points when `CELLAR` is unset.
+- [x] MCP `create_datasource`, `fork_datasource`.
+- [x] Audit: reuse `datasource.lifecycle.*`.
 
 ### 3. Bucket: replicate, evict, wake
 Needs 1. Can run alongside 2. Start with the spikes.

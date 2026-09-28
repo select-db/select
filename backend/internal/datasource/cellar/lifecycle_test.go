@@ -168,3 +168,45 @@ func TestManagedGrantToOthersNeedsTheRight(t *testing.T) {
 	rec = e2e.Do(t, f.H, http.MethodPost, "/datasources", f.Actor.Token, body(uuid.NewString()))
 	require.Equal(t, http.StatusBadRequest, rec.Code, "a user outside the workspace: %s", rec.Body.String())
 }
+
+// An agent's key creates and forks through MCP, and can use what it made
+// without anyone granting it.
+func TestManagedThroughMCP(t *testing.T) {
+	l := newLifecycle(t)
+	f := l.m.f
+	role := e2e.SeedRoleWithPermission(t, f.Conn, f.Actor.WorkspaceID, "agent", "manage")
+	rec := e2e.CreateAPIKey(t, f.H, f.Actor.Token, f.Actor.WorkspaceID, role, "agent")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var key struct {
+		Key string `json:"key"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &key))
+
+	call := func(tool string, args map[string]any) map[string]any {
+		t.Helper()
+		rec := e2e.Do(t, f.H, http.MethodPost, "/mcp", key.Key, map[string]any{"jsonrpc": "2.0", "id": 1,
+			"method": "tools/call", "params": map[string]any{"name": tool, "arguments": args}})
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var resp struct {
+			Result struct {
+				IsError bool `json:"isError"`
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"result"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		require.False(t, resp.Result.IsError, "%s: %s", tool, rec.Body.String())
+		var out map[string]any
+		require.NoError(t, json.Unmarshal([]byte(resp.Result.Content[0].Text), &out))
+		require.Nil(t, out["error"], "%s: %s", tool, resp.Result.Content[0].Text)
+		return out
+	}
+
+	id, _ := call("create_datasource", map[string]any{"name": "scratch"})["id"].(string)
+	require.NotEmpty(t, id)
+	call("execute_statement", map[string]any{"datasource_id": id, "statement": "CREATE TABLE t (x INTEGER)"})
+	fork, _ := call("fork_datasource", map[string]any{"datasource_id": id})["id"].(string)
+	require.NotEmpty(t, fork)
+	call("execute_statement", map[string]any{"datasource_id": fork, "statement": "INSERT INTO t VALUES (1)"})
+}
