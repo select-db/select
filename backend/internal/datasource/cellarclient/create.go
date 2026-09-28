@@ -19,7 +19,7 @@ func Create(ctx context.Context, dsn, sourceID, pointInTime string) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	resp, err := lifecycleRequest(ctx, http.MethodPut, "/datasources/"+id, grant, body)
+	resp, err := callCellar(ctx, http.MethodPut, "/datasources/"+id, grant, body)
 	if err != nil {
 		return 0, err
 	}

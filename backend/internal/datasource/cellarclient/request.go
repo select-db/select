@@ -60,9 +60,9 @@ func request(ctx context.Context, method, path, grant string, body []byte) (*htt
 	return resp, nil
 }
 
-// lifecycleRequest is a request to a lifecycle route, which answers a failure
-// with a coded JSON error rather than a stream.
-func lifecycleRequest(ctx context.Context, method, path, grant string, body []byte) (*http.Response, error) {
+// callCellar sends a request and returns the response only when the cellar
+// succeeded; a failure comes back as the cellar's coded error.
+func callCellar(ctx context.Context, method, path, grant string, body []byte) (*http.Response, error) {
 	resp, err := request(ctx, method, path, grant, body)
 	if err != nil || resp.StatusCode < 300 {
 		return resp, err

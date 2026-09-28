@@ -12,7 +12,7 @@ func Download(ctx context.Context, dsn string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := lifecycleRequest(ctx, http.MethodGet, "/datasources/"+id+"/download", grant, nil)
+	resp, err := callCellar(ctx, http.MethodGet, "/datasources/"+id+"/download", grant, nil)
 	if err != nil {
 		return nil, err
 	}
