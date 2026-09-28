@@ -38,8 +38,17 @@ func (d *Dialect) Inspect(meta core.Metadata, sql string) []core.InspectStatemen
 
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
+	reads, _ := i.inspectScript(sql)
+	return reads
+}
+
+// inspectScript is Inspect, also reporting whether the parser stumbled over the
+// script. A procedural body is SQL only in parts, so whoever reads one has to
+// tell a fragment this inspector read from a fragment error recovery salvaged
+// something out of.
+func (i *Inspector) inspectScript(sql string) ([]core.InspectStatement, bool) {
 	if strings.TrimSpace(sql) == "" {
-		return nil
+		return nil, true
 	}
 
 	lexer := i.dialect.CreateLexer(sql)
@@ -51,7 +60,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 	statements := topLevelStatements(parser)
 	if len(statements) == 0 {
-		return []core.InspectStatement{core.UnknownStatement()}
+		return []core.InspectStatement{core.UnknownStatement()}, false
 	}
 
 	results := make([]core.InspectStatement, 0, len(statements))
@@ -79,7 +88,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	// relations are in scope here.
 	i.resolver.ResolveCorrelated(results, nil)
 
-	return results
+	return results, !syntax.Any()
 }
 
 // topLevelStatements returns the statement nodes the parser produced, or nil.
@@ -853,9 +862,9 @@ func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.Inspe
 }
 
 // bodyStatements is what the statements of a procedural body require, read out
-// of the string constants carrying it, which are SQL of this dialect. A body
-// the parser cannot read reports its own floor, so a language this inspector
-// does not speak keeps manage and nothing more.
+// of the string constants carrying it. A body is PL/pgSQL rather than SQL, so
+// it is read fragment by fragment: a construct this inspector does not speak
+// keeps manage and nothing more, and the SQL beside it is still priced.
 func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectStatement {
 	if i.inBody {
 		return nil
@@ -866,9 +875,19 @@ func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectSta
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
-		inner := NewInspector(i.dialect, i.meta)
-		inner.inBody = true
-		reads = append(reads, inner.Inspect(text)...)
+		reads = append(reads, core.ReadBody(i.dialect.CreateLexer(text), text, i.bodyFragment)...)
+	}
+	return reads
+}
+
+// bodyFragment is what one fragment of a procedural body requires, and nil for
+// a fragment the parser could not read whole.
+func (i *Inspector) bodyFragment(sql string) []core.InspectStatement {
+	inner := NewInspector(i.dialect, i.meta)
+	inner.inBody = true
+	reads, whole := inner.inspectScript(sql)
+	if !whole {
+		return nil
 	}
 	return reads
 }

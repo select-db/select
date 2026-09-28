@@ -33,6 +33,14 @@ func (s *SyntaxErrors) SyntaxError(
 	s.at = append(s.at, 0)
 }
 
+// Any reports whether the parser stumbled anywhere in its input. A caller
+// asking a SQL grammar to read text that is only partly SQL needs this rather
+// than a span: it tells a fragment the grammar read from one error recovery
+// salvaged something out of.
+func (s *SyntaxErrors) Any() bool {
+	return len(s.at) > 0
+}
+
 // In reports whether an error falls in the half-open token span [from, to).
 func (s *SyntaxErrors) In(from, to int) bool {
 	for _, at := range s.at {
