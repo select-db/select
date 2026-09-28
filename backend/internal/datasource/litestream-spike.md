@@ -120,9 +120,10 @@ snapshot, about 3,700 writes an hour. An idle db uploads nothing.
 1. **One `Store`, 7 days kept for every plan.** Retention cannot be per db, and
    the backend already refuses an `at` outside the plan's window. Solo keeps
    history it cannot use; that costs storage, not code.
-2. **Replicate only what is in use.** A db idle for 15 minutes and `InSync` is
-   evicted: pool closed, unregistered, local files deleted. Disk pressure uses
-   the same routine, least recently used first. One mechanism, no warm tier.
+2. **Replicate only what is in use, evict only when the disk is short.** A db
+   idle for 15 minutes rests: synced, pool closed, unregistered, file kept.
+   Disk pressure deletes resting files, least recently used first. Keeping
+   the day's files turns about 24k wakes a day into about 500 at Growth.
 3. **Snapshot interval is the storage lever.** Daily gives a fast restore and
    3.5x storage; weekly gives 1x and replays up to 7 days of changes on
    restore. Start daily, measure bucket cost, move to weekly if it matters.

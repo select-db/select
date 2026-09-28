@@ -2,6 +2,7 @@ package cellar
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"database/sql"
@@ -18,21 +19,26 @@ import (
 
 // testCellar is a cellar over a temp dir, called the way the backend calls it.
 type testCellar struct {
-	dir  string
-	call func(method, path string, body any) *httptest.ResponseRecorder
+	dir        string
+	replicaDir string
+	databases  *Databases
+	call       func(method, path string, body any) *httptest.ResponseRecorder
 }
 
 func newTestCellar(t *testing.T) testCellar {
 	t.Helper()
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	dir := t.TempDir()
+	dir, replicaDir := t.TempDir(), t.TempDir()
+	databases, err := OpenDatabases(dir, replicaDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = databases.Close(context.Background()) })
 	mux := http.NewServeMux()
-	Register(mux, dir, &privateKey.PublicKey, "local")
+	Register(mux, databases, &privateKey.PublicKey, "local")
 	grant, err := Grant{WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20, MaxInFlight: 4}.Encode()
 	require.NoError(t, err)
 	token := signWith(t, privateKey)
-	return testCellar{dir: dir, call: func(method, path string, body any) *httptest.ResponseRecorder {
+	return testCellar{dir: dir, replicaDir: replicaDir, databases: databases, call: func(method, path string, body any) *httptest.ResponseRecorder {
 		var encoded bytes.Buffer
 		if body != nil {
 			require.NoError(t, json.NewEncoder(&encoded).Encode(body))
@@ -61,6 +67,18 @@ func (cellar testCellar) exec(t *testing.T, id, statement string) {
 	defer conn.Close()
 	_, err = conn.Exec(statement)
 	require.NoError(t, err)
+}
+
+// sync waits until the replica holds every write to database id.
+func (cellar testCellar) sync(t *testing.T, id string) {
+	t.Helper()
+	db := cellar.databases.store.FindDB(filepath.Join(cellar.dir, id+".db"))
+	require.NotNil(t, db, "not replicating")
+	require.NoError(t, db.SyncAndWait(context.Background()))
+}
+
+func (cellar testCellar) replicating(id string) bool {
+	return cellar.databases.store.FindDB(filepath.Join(cellar.dir, id+".db")) != nil
 }
 
 func (cellar testCellar) countNotes(t *testing.T, id string) int {

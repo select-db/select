@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,8 +20,13 @@ func ServeCellar(t *testing.T) string {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
+	databases, err := cellar.OpenDatabases(dir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = databases.Close(context.Background()) })
 	mux := http.NewServeMux()
-	cellar.Register(mux, dir, publicKey, "local")
+	cellar.Register(mux, databases, publicKey, "local")
 	cellarServer := httptest.NewServer(mux)
 	t.Cleanup(cellarServer.Close)
 	cellarclient.URL, cellarclient.CellarID = cellarServer.URL, "local"

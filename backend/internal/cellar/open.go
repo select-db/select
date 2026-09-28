@@ -25,16 +25,11 @@ func (sqliteDriver) QueryRunsAll() {}
 // dbType is the engine dialect of every database a cellar holds.
 const dbType = "sqlite"
 
-// Open returns the grant's datasource, the file named after its id in dir, set
-// up so every statement runs under the isolation rules.
-func Open(dir string, grant Grant) (query.Conn, error) {
+// Open returns the grant's datasource, the file at path, set up so every
+// statement runs under the isolation rules.
+func Open(path string, grant Grant) (query.Conn, error) {
 	if grant.MaxBytes <= 0 {
 		return query.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)
-	}
-
-	path, err := databasePath(dir, grant.DatasourceID)
-	if err != nil {
-		return query.Conn{}, err
 	}
 
 	// mode=rw: a missing file is an error, never a new empty database. WAL lets

@@ -17,10 +17,13 @@ $0.01 per GB-month.
   only: packages `cellar` and `cellarclient`, `CELLAR`, `cellar_id` and the
   `cellar://` driver. A managed database lives on a cellar; a user never sees
   the word.
-- **hot / cold**: a db with a local file on the cellar / a db that lives only
-  in the bucket.
+- **replicating / resting / cold**: a db used in the last 15 minutes, every
+  write streamed to the bucket / a db on the cellar's disk whose replica holds
+  all of it / a db that lives only in the bucket.
 - **wake**: restore a cold db from the bucket before running a query.
-- **evict**: drop the local file of a hot db whose replica is complete.
+- **rest**: stop replicating a db idle for 15 minutes, once the bucket holds
+  every write.
+- **evict**: drop the local file of a resting db.
 - **reconciler**: the backend job that tells the cellar what to purge.
 
 ## How it works
@@ -135,10 +138,15 @@ Settled. Reopen with a reason, not a preference.
 - Replicas live at `dbs/{db_id}/`, never under a cellar, so moving or
   recovering a db is a row update.
 - Litestream is embedded as a pinned Go library: the code that evicts and the
-  code that replicates share one process and one lock per db.
-- Evict under disk pressure, least recently used first: lock, checkpoint,
-  sync, check the replica is complete, delete the local file.
-- Wake on first query: one restore shared by all waiting callers. Wait up to
+  code that replicates share one process and one lock (`cellar.Databases`).
+- One Litestream store for every plan: daily snapshots kept 7 days. Retention
+  cannot be per db; the backend refuses an `at` outside the plan's window.
+- Rest after 15 minutes idle: sync, close the pool, unregister. Every db on
+  disk replicates once at startup, so a resting db is always whole in the
+  bucket.
+- Evict only resting dbs, least recently used first, while under 20% of the
+  disk is free.
+- Wake on first use: one restore shared by all waiting callers. Wait up to
   15s, then answer `waking` while the restore continues.
 - Bucket: S3 with versioning and a 7-day expiry of old versions, so a wrong
   purge is recoverable for a week. Without S3 (dev, on-prem) Litestream writes
@@ -193,7 +201,8 @@ errors are the backend's, before the cellar sees the statement.
 ### Environments
 - Dev: `./dev.sh backend start` as today, with `CELLAR=local`: the cellar
   runs in-process on a loopback port over `CELLAR_DIR` (default `.dev/cellar`),
-  with a directory replica in `backend/.dev/`. No MinIO. A local cellar that
+  replicated to `CELLAR_REPLICA`, a directory or an `s3://` URL (default
+  `CELLAR_DIR` plus `-replica`). No MinIO. A local cellar that
   cannot start stops the server, as a bad `CELLAR` does: it is a config error.
   One that stops later, or a remote one down, makes managed routes answer
   `unavailable`.
@@ -260,16 +269,20 @@ Needs 1. Can run alongside 2. Start with the spikes.
       Findings and numbers: `litestream-spike.md`.
 - [ ] Spike: OVH bucket supports `NoncurrentVersionExpiration`; restore speed
       from the bucket to a d2-4.
-- [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr_days`.
-- [ ] Directory replica when no S3, with the startup preflight.
-- [ ] LRU eviction on disk pressure; wake with shared restore and 15s wait.
+- [x] Embedded Litestream per db at `dbs/{db_id}/`, one 7-day window.
+- [x] Directory replica when no S3, with the startup preflight.
+- [x] Rest when idle, LRU eviction on disk pressure; wake with shared restore
+      and 15s wait.
 - [ ] `size_bytes`, `state`, `last_used_at` reported back to the row.
-- [ ] Point-in-time fork reads from the replica.
-- [ ] Tests: evict, wake, verify, against MinIO and against a directory.
+- [x] Point-in-time fork reads from the replica.
+- [x] Tests: rest, evict, wake, point-in-time fork, against a directory.
+- [ ] Tests against the OVH bucket (keys pending).
 
 ### 4. Cleanup
 Needs 2 and 3.
 - [ ] Reconciler with advisory lock, 24h orphan age, 50-per-run cap.
+- [ ] Inventory lists cold dbs too: today it lists the disk, so a cold orphan
+      is never purged.
 - [ ] Workspace delete marks its managed dbs `deleting`.
 - [ ] Tests: a failed or empty Postgres query purges nothing; the cap stops
       the run.

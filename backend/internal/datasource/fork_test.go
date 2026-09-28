@@ -31,7 +31,7 @@ func TestForkAtAPointInTime(t *testing.T) {
 
 	anHourAgo := time.Now().Add(-time.Hour).Format(time.RFC3339)
 	status, responseBody := callAsOwner(t, fixture, http.MethodPost, forkPath, map[string]any{"at": anHourAgo})
-	require.Equal(t, http.StatusNotImplemented, status, "a point-in-time fork waits for the bucket: %s", responseBody)
+	require.Equal(t, http.StatusBadRequest, status, "the source did not exist an hour ago: %s", responseBody)
 
 	aMonthAgo := time.Now().AddDate(0, 0, -30).Format(time.RFC3339)
 	status, _ = callAsOwner(t, fixture, http.MethodPost, forkPath, map[string]any{"at": aMonthAgo})
