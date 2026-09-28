@@ -3,6 +3,7 @@ package cellar
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -39,14 +40,13 @@ func CreateHandler(databases *Databases) http.HandlerFunc {
 	}
 }
 
-// createDatabase returns the new database's path.
 func createDatabase(ctx context.Context, databases *Databases, id string, req CreateRequest) (string, error) {
 	// use wakes the id when it is cold, so an id kept only in the replica is taken too.
 	_, err := databases.use(ctx, id)
 	switch {
 	case err == nil:
 		return "", errAlreadyExists
-	case err != errNotFound:
+	case !errors.Is(err, errNotFound):
 		return "", err
 	}
 	tempPath := filepath.Join(databases.dir, ".tmp-"+uuid.NewString()+".db")

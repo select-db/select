@@ -35,10 +35,11 @@ func databasePath(dir, id string) (string, error) {
 }
 
 // removeDatabaseFiles removes the database at path and everything next to it:
-// its WAL files and Litestream's working folder.
+// its WAL files and Litestream's working folder. The file goes last, so a
+// failure never leaves a stale WAL for a restored file to replay.
 func removeDatabaseFiles(path string) error {
 	metaPath := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+litestream.MetaDirSuffix)
-	for _, file := range []string{path, path + "-wal", path + "-shm", metaPath} {
+	for _, file := range []string{path + "-wal", path + "-shm", metaPath, path} {
 		if err := os.RemoveAll(file); err != nil {
 			return err
 		}
