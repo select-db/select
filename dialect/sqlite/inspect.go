@@ -320,12 +320,11 @@ func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.Inspect
 	return &read
 }
 
-// bodyStatements is what the statements carried inside node require: the body
-// of a trigger, which SQLite writes as parse nodes. Only the outermost of them
-// is inspected, since one nested deeper is part of a statement already read.
-// MySQL has the same function over one node type, because its grammar puts
-// every statement of a body under simpleStatement; SQLite has no such node, so
-// the four kinds share one depth here.
+// bodyStatements is what the reads carried inside node require: the body of a
+// trigger and the WHEN it fires under, which SQLite writes as parse nodes. Only
+// the outermost of them is inspected, since one nested deeper is part of a
+// statement already read, so the node kinds share one depth. MySQL has the same
+// function over the node kinds its grammar uses for the same thing.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
 	listener := &bodyStatementListener{
 		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},

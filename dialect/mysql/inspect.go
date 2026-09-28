@@ -1067,32 +1067,27 @@ type bodyStatementListener struct {
 	depth     int
 }
 
+func (l *bodyStatementListener) collect(read *core.InspectStatement) {
+	if l.depth == 0 {
+		l.results = append(l.results, core.OrUnknown(read))
+	}
+	l.depth++
+}
+
 func (l *bodyStatementListener) EnterSimpleStatement(ctx *mysql.SimpleStatementContext) {
-	if l.depth == 0 {
-		if read := l.inspector.inspectStatement(ctx); read != nil {
-			l.results = append(l.results, *read)
-		}
-	}
-	l.depth++
+	l.collect(l.inspector.inspectStatement(ctx))
 }
 
-func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementContext) {
-	l.depth--
-}
+func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementContext) { l.depth-- }
 
-// A body also reads where it carries a query rather than a statement: RETURN,
-// the IF, WHILE, REPEAT and CASE conditions, a DECLARE default, a cursor.
-// queryExpression is the node all of those reach, so none has to be named.
+// A body also reads where its grammar carries a query rather than a statement,
+// a RETURN and a cursor declaration among them. queryExpression is the node
+// every one of those reaches, so the carriers do not have to be enumerated.
 func (l *bodyStatementListener) EnterQueryExpression(ctx *mysql.QueryExpressionContext) {
-	if l.depth == 0 {
-		l.results = append(l.results, core.OrUnknown(l.inspector.inspectQueryExpression(ctx)))
-	}
-	l.depth++
+	l.collect(l.inspector.inspectQueryExpression(ctx))
 }
 
-func (l *bodyStatementListener) ExitQueryExpression(_ *mysql.QueryExpressionContext) {
-	l.depth--
-}
+func (l *bodyStatementListener) ExitQueryExpression(_ *mysql.QueryExpressionContext) { l.depth-- }
 
 // loadTarget is the insert a LOAD DATA performs. A file with no column list
 // fills every column, which is what naming none asks the right on.
