@@ -1047,10 +1047,10 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 }
 
 // bodyStatements is what the statements carried inside node require, together
-// with the queries its control flow reads outside any of them. Only the
-// outermost of either is inspected: a statement nested deeper is part of one
-// already read, which reports it itself. SQLite has the same function over the
-// four statement kinds its trigger bodies hold.
+// with the queries it reads outside any of them. Only the outermost of either
+// is inspected: one nested deeper is part of a statement already read, which
+// reports it itself. SQLite has the same function over the four statement
+// kinds its trigger bodies hold.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
 	listener := &bodyStatementListener{
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
@@ -1062,14 +1062,13 @@ func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement
 
 type bodyStatementListener struct {
 	*mysql.BaseMySQLParserListener
-	inspector     *Inspector
-	results       []core.InspectStatement
-	depth         int
-	subqueryDepth int
+	inspector *Inspector
+	results   []core.InspectStatement
+	depth     int
 }
 
 func (l *bodyStatementListener) EnterSimpleStatement(ctx *mysql.SimpleStatementContext) {
-	if l.depth == 0 && l.subqueryDepth == 0 {
+	if l.depth == 0 {
 		if read := l.inspector.inspectStatement(ctx); read != nil {
 			l.results = append(l.results, *read)
 		}
@@ -1081,19 +1080,18 @@ func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementCont
 	l.depth--
 }
 
-// A body reads rows from its control flow as well as from its statements:
-// RETURN, the IF, WHILE, REPEAT and CASE conditions, a DECLARE default. Those
-// rows reach a caller whenever the routine runs, so they take the same rights
-// a statement of the body would.
-func (l *bodyStatementListener) EnterSubquery(ctx *mysql.SubqueryContext) {
-	if l.depth == 0 && l.subqueryDepth == 0 {
-		l.results = append(l.results, core.OrUnknown(l.inspector.inspectSubquery(ctx)))
+// A body also reads where it carries a query rather than a statement: RETURN,
+// the IF, WHILE, REPEAT and CASE conditions, a DECLARE default, a cursor.
+// queryExpression is the node all of those reach, so none has to be named.
+func (l *bodyStatementListener) EnterQueryExpression(ctx *mysql.QueryExpressionContext) {
+	if l.depth == 0 {
+		l.results = append(l.results, core.OrUnknown(l.inspector.inspectQueryExpression(ctx)))
 	}
-	l.subqueryDepth++
+	l.depth++
 }
 
-func (l *bodyStatementListener) ExitSubquery(_ *mysql.SubqueryContext) {
-	l.subqueryDepth--
+func (l *bodyStatementListener) ExitQueryExpression(_ *mysql.QueryExpressionContext) {
+	l.depth--
 }
 
 // loadTarget is the insert a LOAD DATA performs. A file with no column list

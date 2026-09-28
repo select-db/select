@@ -2262,6 +2262,14 @@ func permCases() []PermCase {
 			Why:    "the loop condition reads t1 on every turn, as the IF condition reads it once",
 		},
 		{
+			On:     []string{"mysql"},
+			Name:   "a routine body declaring a cursor",
+			SQL:    "CREATE PROCEDURE p9() BEGIN DECLARE cur CURSOR FOR SELECT c1 FROM t1; OPEN cur; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "a cursor is how a routine reads a table row by row, and the grammar carries the query bare rather than parenthesised",
+		},
+		{
 			On:     []string{"sqlite"},
 			Name:   "a trigger body guarded by a query",
 			SQL:    "CREATE TRIGGER tr AFTER INSERT ON t1 WHEN (SELECT c3 FROM t2) > 0 BEGIN DELETE FROM t1; END",
