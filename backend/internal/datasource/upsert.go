@@ -76,7 +76,8 @@ func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
 
 	// Adding a datasource takes manage on "*"; changing one, manage on it.
 	creating := existErr != nil
-	if !a.IsOwner() && !a.CanManage(req.ID) && !(creating && a.Can(core.ActionManage)) {
+	allowed := a.IsOwner() || a.CanManage(req.ID) || (creating && a.Can(core.ActionManage))
+	if !allowed {
 		audit.EmitDenied(r.Context(), spec, workspaceID, req.ID)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false
