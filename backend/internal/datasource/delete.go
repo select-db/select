@@ -40,9 +40,9 @@ func DeleteHandler() http.HandlerFunc {
 		}
 
 		existing, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID})
-		managedDB := err == nil && existing.CellarID.ValueOrEmpty() != ""
-		if managedDB {
-			if err := servable(existing); err != nil {
+		isManaged := err == nil && existing.CellarID.ValueOrEmpty() != ""
+		if isManaged {
+			if err := checkServing(existing); err != nil {
 				OpenError(w, err, "managed delete", workspaceID, idStr)
 				return
 			}
@@ -64,7 +64,7 @@ func DeleteHandler() http.HandlerFunc {
 			WorkspaceID: workspaceID,
 			TargetID:    idStr,
 			Status:      audit.StatusSuccess,
-			Payload:     map[string]any{"managed": managedDB},
+			Payload:     map[string]any{"managed": isManaged},
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}

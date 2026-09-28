@@ -37,7 +37,7 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
 
 Code follows the process it runs in. `internal/cellar` is only what runs on
 the cellar, plus the grant and query it accepts. The backend's side, the
-driver, is in `internal/datasource/cellar`; startup is in
+driver, is in `internal/datasource/cellarclient`; startup is in
 `cmd/server/cellar.go`.
 
 ## Rules
@@ -215,7 +215,7 @@ Needs 0.
       files, reached through the `cellar` database/sql driver, so REST and
       MCP open a managed datasource like any other. `CELLAR=local` starts it
       in-process.
-- [x] Service token signed and reused by the backend (`datasource/cellar`),
+- [x] Service token signed and reused by the backend (`datasource/cellarclient`),
       and checked with the grant header by the cellar (`cellar.Authenticated`
       middleware, which puts the grant in the context for `InFlight` to key
       on).

@@ -1,6 +1,6 @@
 -- name: GetManagedUsage :one
 SELECT
-  count(*) AS dbs,
+  count(*) AS database_count,
   COALESCE(sum(size_bytes), 0)::bigint AS total_bytes
 FROM
   app.datasource

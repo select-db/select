@@ -19,130 +19,129 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// lifecycleCellar is a cellar over a temp dir and a way to call its routes as
-// the backend would.
-type lifecycleCellar struct {
+// testCellar is a cellar over a temp dir, called the way the backend calls it.
+type testCellar struct {
 	dir  string
 	call func(method, path string, body any) *httptest.ResponseRecorder
 }
 
-func newLifecycleCellar(t *testing.T) lifecycleCellar {
+func newTestCellar(t *testing.T) testCellar {
 	t.Helper()
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	dir := t.TempDir()
 	mux := http.NewServeMux()
-	Register(mux, dir, &priv.PublicKey, "local")
+	Register(mux, dir, &privateKey.PublicKey, "local")
 	grant, err := Grant{WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20, MaxInFlight: 4}.Encode()
 	require.NoError(t, err)
-	token := signWith(t, priv)
-	return lifecycleCellar{dir: dir, call: func(method, path string, body any) *httptest.ResponseRecorder {
-		var b bytes.Buffer
+	token := signWith(t, privateKey)
+	return testCellar{dir: dir, call: func(method, path string, body any) *httptest.ResponseRecorder {
+		var encoded bytes.Buffer
 		if body != nil {
-			require.NoError(t, json.NewEncoder(&b).Encode(body))
+			require.NoError(t, json.NewEncoder(&encoded).Encode(body))
 		}
-		r := httptest.NewRequest(method, path, &b)
-		r.Header.Set("Authorization", "Bearer "+token)
-		r.Header.Set(GrantHeader, grant)
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, r)
-		return w
+		req := httptest.NewRequest(method, path, &encoded)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set(GrantHeader, grant)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
 	}}
 }
 
-func (c lifecycleCellar) exec(t *testing.T, id, statement string) {
+func (cellar testCellar) exec(t *testing.T, id, statement string) {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(c.dir, id+".db"))
+	conn, err := sql.Open("sqlite", filepath.Join(cellar.dir, id+".db"))
 	require.NoError(t, err)
-	defer db.Close()
-	_, err = db.Exec(statement)
+	defer conn.Close()
+	_, err = conn.Exec(statement)
 	require.NoError(t, err)
 }
 
-func (c lifecycleCellar) count(t *testing.T, id string) int {
+func (cellar testCellar) countNotes(t *testing.T, id string) int {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(c.dir, id+".db")+"?mode=ro")
+	conn, err := sql.Open("sqlite", "file:"+filepath.Join(cellar.dir, id+".db")+"?mode=ro")
 	require.NoError(t, err)
-	defer db.Close()
-	var n int
-	require.NoError(t, db.QueryRow("SELECT count(*) FROM note").Scan(&n))
-	return n
+	defer conn.Close()
+	var count int
+	require.NoError(t, conn.QueryRow("SELECT count(*) FROM note").Scan(&count))
+	return count
 }
 
-func codeOf(t *testing.T, w *httptest.ResponseRecorder) string {
+func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
-	var e arrowstream.Error
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&e), w.Body.String())
-	return e.Code
+	var coded arrowstream.Error
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&coded), rec.Body.String())
+	return coded.Code
 }
 
 func TestCreateForkDownloadDelete(t *testing.T) {
-	c := newLifecycleCellar(t)
-	id, fork := uuid.NewString(), uuid.NewString()
+	cellar := newTestCellar(t)
+	id, forkID := uuid.NewString(), uuid.NewString()
 
-	w := c.call("PUT", "/datasources/"+id, Create{})
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	c.exec(t, id, "CREATE TABLE note (body TEXT); INSERT INTO note VALUES ('a'), ('b')")
+	rec := cellar.call("PUT", "/datasources/"+id, CreateRequest{})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	cellar.exec(t, id, "CREATE TABLE note (body TEXT); INSERT INTO note VALUES ('a'), ('b')")
 
-	w = c.call("PUT", "/datasources/"+id, Create{})
-	require.Equal(t, http.StatusConflict, w.Code, "an id that exists is never overwritten")
+	rec = cellar.call("PUT", "/datasources/"+id, CreateRequest{})
+	require.Equal(t, http.StatusConflict, rec.Code, "an id that exists is never overwritten")
 
-	w = c.call("PUT", "/datasources/"+fork, Create{From: id})
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var stored Stored
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&stored))
-	require.Equal(t, fork, stored.ID)
+	rec = cellar.call("PUT", "/datasources/"+forkID, CreateRequest{SourceID: id})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var stored StoredDatabase
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&stored))
+	require.Equal(t, forkID, stored.ID)
 	require.Positive(t, stored.SizeBytes)
-	c.exec(t, fork, "INSERT INTO note VALUES ('c')")
-	require.Equal(t, 2, c.count(t, id), "a fork never touches its source")
-	require.Equal(t, 3, c.count(t, fork))
+	cellar.exec(t, forkID, "INSERT INTO note VALUES ('c')")
+	require.Equal(t, 2, cellar.countNotes(t, id), "a fork never touches its source")
+	require.Equal(t, 3, cellar.countNotes(t, forkID))
 
-	w = c.call("GET", "/datasources/"+id+"/download", nil)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	downloaded := filepath.Join(t.TempDir(), "copy.db")
-	require.NoError(t, os.WriteFile(downloaded, w.Body.Bytes(), 0o600))
-	db, err := sql.Open("sqlite", downloaded)
+	rec = cellar.call("GET", "/datasources/"+id+"/download", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	downloadPath := filepath.Join(t.TempDir(), "copy.db")
+	require.NoError(t, os.WriteFile(downloadPath, rec.Body.Bytes(), 0o600))
+	downloaded, err := sql.Open("sqlite", downloadPath)
 	require.NoError(t, err)
-	var n int
-	require.NoError(t, db.QueryRow("SELECT count(*) FROM note").Scan(&n))
-	require.NoError(t, db.Close())
-	require.Equal(t, 2, n)
+	var count int
+	require.NoError(t, downloaded.QueryRow("SELECT count(*) FROM note").Scan(&count))
+	require.NoError(t, downloaded.Close())
+	require.Equal(t, 2, count)
 
-	w = c.call("GET", "/datasources", nil)
-	require.Equal(t, http.StatusOK, w.Code)
-	var inventory []Stored
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&inventory))
-	require.ElementsMatch(t, []string{id, fork}, []string{inventory[0].ID, inventory[1].ID}, "no temporary copy is listed")
+	rec = cellar.call("GET", "/datasources", nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var inventory []StoredDatabase
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&inventory))
+	require.ElementsMatch(t, []string{id, forkID}, []string{inventory[0].ID, inventory[1].ID}, "no temporary copy is listed")
 
-	w = c.call("DELETE", "/datasources/"+id, nil)
-	require.Equal(t, http.StatusNoContent, w.Code)
-	entries, err := os.ReadDir(c.dir)
+	rec = cellar.call("DELETE", "/datasources/"+id, nil)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	entries, err := os.ReadDir(cellar.dir)
 	require.NoError(t, err)
-	for _, e := range entries {
-		require.False(t, strings.HasPrefix(e.Name(), id), "%s left behind", e.Name())
-		require.False(t, strings.HasPrefix(e.Name(), ".tmp-"), "%s left behind", e.Name())
+	for _, entry := range entries {
+		require.False(t, strings.HasPrefix(entry.Name(), id), "%s left behind", entry.Name())
+		require.False(t, strings.HasPrefix(entry.Name(), ".tmp-"), "%s left behind", entry.Name())
 	}
-	w = c.call("DELETE", "/datasources/"+id, nil)
-	require.Equal(t, http.StatusNoContent, w.Code, "deleting twice is not an error")
+	rec = cellar.call("DELETE", "/datasources/"+id, nil)
+	require.Equal(t, http.StatusNoContent, rec.Code, "deleting twice is not an error")
 }
 
 func TestLifecycleRefusals(t *testing.T) {
-	c := newLifecycleCellar(t)
+	cellar := newTestCellar(t)
 	id := uuid.NewString()
 
-	w := c.call("PUT", "/datasources/"+id, Create{From: uuid.NewString()})
-	require.Equal(t, http.StatusNotFound, w.Code)
-	require.NoFileExists(t, filepath.Join(c.dir, id+".db"), "a failed fork leaves no file")
+	rec := cellar.call("PUT", "/datasources/"+id, CreateRequest{SourceID: uuid.NewString()})
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	require.NoFileExists(t, filepath.Join(cellar.dir, id+".db"), "a failed fork leaves no file")
 
-	w = c.call("PUT", "/datasources/"+id, Create{From: id, At: "2026-09-28T00:00:00Z"})
-	require.Equal(t, http.StatusNotImplemented, w.Code)
-	require.Equal(t, CodeDisabled, codeOf(t, w))
+	rec = cellar.call("PUT", "/datasources/"+id, CreateRequest{SourceID: id, PointInTime: "2026-09-28T00:00:00Z"})
+	require.Equal(t, http.StatusNotImplemented, rec.Code)
+	require.Equal(t, CodeDisabled, errorCode(t, rec))
 
-	w = c.call("GET", "/datasources/"+id+"/download", nil)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	rec = cellar.call("GET", "/datasources/"+id+"/download", nil)
+	require.Equal(t, http.StatusNotFound, rec.Code)
 
-	w = c.call("PUT", "/datasources/..%2Fescape", Create{})
-	require.Equal(t, http.StatusInternalServerError, w.Code)
-	body, _ := io.ReadAll(w.Body)
-	require.NotContains(t, string(body), c.dir, "an error never names a path")
+	rec = cellar.call("PUT", "/datasources/..%2Fescape", CreateRequest{})
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	body, _ := io.ReadAll(rec.Body)
+	require.NotContains(t, string(body), cellar.dir, "an error never names a path")
 }

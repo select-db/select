@@ -10,7 +10,7 @@ import (
 	"backend/internal/datasource"
 )
 
-var grantToProp = map[string]any{
+var grantToSchema = map[string]any{
 	"type":        "object",
 	"description": "Who else gets full access to the new database: workspace user ids and API key ids. The calling key always gets it.",
 	"properties": map[string]any{
@@ -26,22 +26,22 @@ func toolCreateDatasource() Tool {
 			"The caller gets full access to it; use execute_statement to create its tables.",
 		InputSchema: jsonObjectSchema(map[string]any{
 			"name":     stringProp("Display name of the database (required)."),
-			"grant_to": grantToProp,
+			"grant_to": grantToSchema,
 		}, []string{"name"}),
 		Annotations: &ToolAnnotations{ReadOnlyHint: boolPtr(false), DestructiveHint: boolPtr(false)},
-		Run: func(_ context.Context, r *http.Request, _ string, raw json.RawMessage) (any, error) {
+		Run: func(_ context.Context, r *http.Request, _ string, rawArgs json.RawMessage) (any, error) {
 			var args struct {
 				Name    string             `json:"name"`
 				GrantTo datasource.GrantTo `json:"grant_to"`
 			}
-			if err := json.Unmarshal(raw, &args); err != nil {
+			if err := json.Unmarshal(rawArgs, &args); err != nil {
 				return nil, errBadArgument("invalid arguments")
 			}
-			id, err := datasource.CreateManaged(r, args.Name, "", "", selfGranted(r, args.GrantTo))
+			id, err := datasource.CreateManaged(r, args.Name, "", "", withCallerGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
-			return created{ID: id, DBType: "sqlite"}, nil
+			return createdDatabase{ID: id, DBType: "sqlite"}, nil
 		},
 	}
 }
@@ -55,43 +55,44 @@ func toolForkDatasource() Tool {
 			"datasource_id": stringProp("Managed database to copy (required)."),
 			"name":          stringProp("Display name of the copy. Defaults to the source's name followed by (fork)."),
 			"at":            stringProp("RFC 3339 time to copy the source as it was then, within the plan's retention. Omit for now."),
-			"grant_to":      grantToProp,
+			"grant_to":      grantToSchema,
 		}, []string{"datasource_id"}),
 		Annotations: &ToolAnnotations{ReadOnlyHint: boolPtr(false), DestructiveHint: boolPtr(false)},
-		Run: func(_ context.Context, r *http.Request, _ string, raw json.RawMessage) (any, error) {
+		Run: func(_ context.Context, r *http.Request, _ string, rawArgs json.RawMessage) (any, error) {
 			var args struct {
 				DatasourceID string             `json:"datasource_id"`
 				Name         string             `json:"name"`
 				At           string             `json:"at"`
 				GrantTo      datasource.GrantTo `json:"grant_to"`
 			}
-			if err := json.Unmarshal(raw, &args); err != nil {
+			if err := json.Unmarshal(rawArgs, &args); err != nil {
 				return nil, errBadArgument("invalid arguments")
 			}
 			if args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			id, err := datasource.CreateManaged(r, args.Name, args.DatasourceID, args.At, selfGranted(r, args.GrantTo))
+			id, err := datasource.CreateManaged(r, args.Name, args.DatasourceID, args.At, withCallerGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
-			return created{ID: id, DBType: "sqlite"}, nil
+			return createdDatabase{ID: id, DBType: "sqlite"}, nil
 		},
 	}
 }
 
-// created is what both tools answer: the id to query the new database by.
-type created struct {
+// createdDatabase is what both tools answer: the id to query the new database by.
+type createdDatabase struct {
 	ID     string `json:"id"`
 	DBType string `json:"db_type"`
 }
 
-// selfGranted adds the calling key to grants: an API key is never an owner, so
-// it could not use a database its own role does not cover.
-func selfGranted(r *http.Request, grants datasource.GrantTo) datasource.GrantTo {
-	a := authz.ActorOf(r)
-	if !slices.Contains(grants.APIKeys, a.UserID) {
-		grants.APIKeys = append(grants.APIKeys, a.UserID)
+// withCallerGranted adds the calling key to grants: an API key is never an
+// owner, so it could not use a database its own role does not cover.
+func withCallerGranted(r *http.Request, grants datasource.GrantTo) datasource.GrantTo {
+	// An API key caller's UserID is its key id.
+	callerKeyID := authz.ActorOf(r).UserID
+	if !slices.Contains(grants.APIKeys, callerKeyID) {
+		grants.APIKeys = append(grants.APIKeys, callerKeyID)
 	}
 	return grants
 }

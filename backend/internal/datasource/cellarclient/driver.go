@@ -1,4 +1,4 @@
-package cellar
+package cellarclient
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"backend/internal/auth"
-	server "backend/internal/cellar"
+	"backend/internal/cellar"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/selectDb/dialect/sqlite"
@@ -36,7 +36,7 @@ func init() {
 
 // ErrUnavailable is a cellar the backend could not reach. The cause, which
 // names the cellar's address, is only logged.
-var ErrUnavailable error = &arrowstream.Error{Code: server.CodeUnavailable, Message: "managed database temporarily unavailable, retry"}
+var ErrUnavailable error = &arrowstream.Error{Code: cellar.CodeUnavailable, Message: "managed database temporarily unavailable, retry"}
 
 var (
 	errNoPrepare = errors.New("cellar: prepared statements are not supported")
@@ -72,30 +72,30 @@ func (sqlDriver) OpenConnector(dsn string) (driver.Connector, error) {
 	if URL == "" {
 		return nil, ErrOff
 	}
-	id, grant, err := grantOf(dsn)
+	id, grant, err := parseDSN(dsn)
 	if err != nil {
 		return nil, err
 	}
 	return conn{path: "/datasources/" + id + "/query", grant: grant}, nil
 }
 
-// grantOf reads a managed database's id and the grant its cellar requests
-// carry from the DSN the backend built for it.
-func grantOf(dsn string) (string, string, error) {
-	u, err := url.Parse(dsn)
+// parseDSN reads a managed database's id, and the grant every request to its
+// cellar carries, from the DSN the backend built for it.
+func parseDSN(dsn string) (id string, grant string, err error) {
+	parsed, err := url.Parse(dsn)
 	if err != nil {
 		return "", "", err
 	}
-	q := u.Query()
-	maxBytes, _ := strconv.ParseInt(q.Get("max_bytes"), 10, 64)
-	maxInFlight, _ := strconv.Atoi(q.Get("max_in_flight"))
-	grant, err := server.Grant{
-		WorkspaceID: q.Get("workspace_id"),
-		CellarID:    u.Host,
+	params := parsed.Query()
+	maxBytes, _ := strconv.ParseInt(params.Get("max_bytes"), 10, 64)
+	maxInFlight, _ := strconv.Atoi(params.Get("max_in_flight"))
+	grant, err = cellar.Grant{
+		WorkspaceID: params.Get("workspace_id"),
+		CellarID:    parsed.Host,
 		MaxBytes:    maxBytes,
 		MaxInFlight: maxInFlight,
 	}.Encode()
-	return strings.TrimPrefix(u.Path, "/"), grant, err
+	return strings.TrimPrefix(parsed.Path, "/"), grant, err
 }
 
 // conn sends each statement to the cellar; it holds no state between them.
@@ -161,10 +161,10 @@ func (c conn) ExecContext(ctx context.Context, query string, args []driver.Named
 
 func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) (io.ReadCloser, error) {
 	values := make([]any, len(args))
-	for i, a := range args {
-		values[i] = a.Value
+	for i, arg := range args {
+		values[i] = arg.Value
 	}
-	body, err := json.Marshal(server.Query{SQL: query, Args: values})
+	body, err := json.Marshal(cellar.Query{SQL: query, Args: values})
 	if err != nil {
 		return nil, err
 	}
@@ -178,10 +178,10 @@ func (c conn) send(ctx context.Context, query string, args []driver.NamedValue) 
 		defer func() { _ = resp.Body.Close() }()
 		// InFlight answers 408 when no slot freed up within the statement's time.
 		if resp.StatusCode == http.StatusRequestTimeout {
-			return nil, &arrowstream.Error{Code: server.CodeTimeout, Message: "managed database busy: no free slot within the time limit, retry"}
+			return nil, &arrowstream.Error{Code: cellar.CodeTimeout, Message: "managed database busy: no free slot within the time limit, retry"}
 		}
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, server.InternalError(fmt.Sprintf("cellar: %s: %d %s", c.path, resp.StatusCode, strings.TrimSpace(string(msg))))
+		errorBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, cellar.InternalError(fmt.Sprintf("cellar: %s: %d %s", c.path, resp.StatusCode, strings.TrimSpace(string(errorBody))))
 	}
 	return resp.Body, nil
 }
@@ -194,7 +194,7 @@ func request(ctx context.Context, method, path, grant string, body []byte) (*htt
 	}
 	window := strconv.FormatInt(time.Now().Unix()/int64(reuseFor.Seconds()), 10)
 	token, err := tokens.GetOrCreate(window, func() (any, error) {
-		return auth.Sign(auth.CustomClaims{}, server.Audience, tokenTTL)
+		return auth.Sign(auth.CustomClaims{}, cellar.Audience, tokenTTL)
 	})
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func request(ctx context.Context, method, path, grant string, body []byte) (*htt
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token.(string))
-	req.Header.Set(server.GrantHeader, grant)
+	req.Header.Set(cellar.GrantHeader, grant)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {

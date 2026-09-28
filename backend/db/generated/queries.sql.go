@@ -663,7 +663,7 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 
 const getManagedUsage = `-- name: GetManagedUsage :one
 SELECT
-  count(*) AS dbs,
+  count(*) AS database_count,
   COALESCE(sum(size_bytes), 0)::bigint AS total_bytes
 FROM
   app.datasource
@@ -674,14 +674,14 @@ WHERE
 `
 
 type GetManagedUsageRow struct {
-	Dbs        int64
-	TotalBytes int64
+	DatabaseCount int64
+	TotalBytes    int64
 }
 
 func (q *Queries) GetManagedUsage(ctx context.Context, workspaceID uuid.UUID) (GetManagedUsageRow, error) {
 	row := q.db.QueryRowContext(ctx, getManagedUsage, workspaceID)
 	var i GetManagedUsageRow
-	err := row.Scan(&i.Dbs, &i.TotalBytes)
+	err := row.Scan(&i.DatabaseCount, &i.TotalBytes)
 	return i, err
 }
 

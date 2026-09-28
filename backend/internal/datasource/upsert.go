@@ -37,17 +37,17 @@ func UpsertHandler() http.HandlerFunc {
 			http.Error(w, "id is required", http.StatusBadRequest)
 			return
 		}
-		if store(w, r, req) {
+		if saveDatasource(w, r, req) {
 			w.WriteHeader(http.StatusNoContent)
 		}
 	}
 }
 
-// store writes req, or on a managed database only its name, and reports
-// whether it did; on false it has answered the request.
-func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
-	a := authz.ActorOf(r)
-	workspaceID := a.WorkspaceID
+// saveDatasource writes req, or on a managed database only its name, and
+// reports whether it did; on false it has answered the request.
+func saveDatasource(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
+	actor := authz.ActorOf(r)
+	workspaceID := actor.WorkspaceID
 
 	id, err := uuid.Parse(req.ID)
 	if err != nil {
@@ -65,43 +65,27 @@ func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
 	// update for the audit event, including a denied attempt, so a block is
 	// attributed to the change it would have made, and it feeds the
 	// write-only secret merge below.
-	existing, existErr := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
+	existing, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{
 		ID:          id,
 		WorkspaceID: parsedWorkspaceID,
 	})
+	exists := err == nil
 	spec := audit.DatasourceCreated
-	if existErr == nil {
+	if exists {
 		spec = audit.DatasourceUpdated
 	}
 
 	// Adding a datasource takes manage on "*"; changing one, manage on it.
-	creating := existErr != nil
-	allowed := a.IsOwner() || a.CanManage(req.ID) || (creating && a.Can(core.ActionManage))
+	allowed := actor.IsOwner() || actor.CanManage(req.ID) || (!exists && actor.Can(core.ActionManage))
 	if !allowed {
 		audit.EmitDenied(r.Context(), spec, workspaceID, req.ID)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false
 	}
 
-	// A managed database has no connection settings: its name is all there is to change.
-	if existErr == nil && existing.CellarID.ValueOrEmpty() != "" {
-		if err := servable(existing); err != nil {
-			OpenError(w, err, "managed rename", workspaceID, req.ID)
-			return false
-		}
-		if err := db.Queries.RenameDatasource(r.Context(), generated.RenameDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID, Name: req.Name}); err != nil {
-			http.Error(w, "failed to rename datasource", http.StatusInternalServerError)
-			return false
-		}
-		InvalidateCache(workspaceID, req.ID)
-		audit.EmitAction(r.Context(), spec, audit.Record{
-			WorkspaceID: workspaceID,
-			TargetID:    req.ID,
-			TargetLabel: req.Name,
-			Status:      audit.StatusSuccess,
-			Payload:     map[string]any{"db_type": existing.DbType, "managed": true},
-		})
-		return true
+	if exists && existing.CellarID.ValueOrEmpty() != "" {
+		rename := generated.RenameDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID, Name: req.Name}
+		return renameManaged(w, r, existing, rename, spec)
 	}
 
 	// Proxified datasources are dialed by this multi-tenant server, so only
@@ -112,7 +96,7 @@ func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
 		return false
 	}
 
-	enc, err := getWrapper()
+	encryptor, err := getWrapper()
 	if err != nil {
 		http.Error(w, "server misconfigured", http.StatusInternalServerError)
 		return false
@@ -127,10 +111,10 @@ func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
 	// clobber a stored credential.
 	dsnToStore := req.DSN
 	sshToStore := req.SSH
-	if existErr == nil {
-		existingDSN, derr := decryptField(r.Context(), enc, existing.EncryptedDsn, dsnAAD)
-		existingSSH, serr := decryptField(r.Context(), enc, existing.EncryptedSsh, sshAAD)
-		if derr == nil && serr == nil {
+	if exists {
+		existingDSN, dsnErr := decryptField(r.Context(), encryptor, existing.EncryptedDsn, dsnAAD)
+		existingSSH, sshErr := decryptField(r.Context(), encryptor, existing.EncryptedSsh, sshAAD)
+		if dsnErr == nil && sshErr == nil {
 			if existing.DbType == req.DBType || existing.DbType == "" {
 				dsnToStore = mergeDSN(req.DBType, req.DSN, existingDSN)
 			}
@@ -138,12 +122,12 @@ func store(w http.ResponseWriter, r *http.Request, req upsertRequest) bool {
 		}
 	}
 
-	encryptedDSN, err := encryptField(r.Context(), enc, dsnToStore, dsnAAD)
+	encryptedDSN, err := encryptField(r.Context(), encryptor, dsnToStore, dsnAAD)
 	if err != nil {
 		http.Error(w, "failed to store credentials", http.StatusInternalServerError)
 		return false
 	}
-	encryptedSSH, err := encryptField(r.Context(), enc, sshToStore, sshAAD)
+	encryptedSSH, err := encryptField(r.Context(), encryptor, sshToStore, sshAAD)
 	if err != nil {
 		http.Error(w, "failed to store credentials", http.StatusInternalServerError)
 		return false
