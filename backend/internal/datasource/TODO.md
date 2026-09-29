@@ -205,8 +205,8 @@ errors are the backend's, before the cellar sees the statement.
 ### Environments
 - Dev: `./dev.sh backend start` as today, with `CELLAR=local`: the cellar
   runs in-process on a loopback port over `CELLAR_DIR` (default `.dev/cellar`),
-  replicated to `CELLAR_REPLICA`, a directory or an `s3://` URL (default
-  `CELLAR_DIR` plus `-replica`). No MinIO. A local cellar that
+  copied to `CELLAR_BUCKET`, an `s3://` URL or a directory (default
+  `CELLAR_DIR` plus `-bucket`). No MinIO. A local cellar that
   cannot start stops the server, as a bad `CELLAR` does: it is a config error.
   One that stops later, or a remote one down, makes managed routes answer
   `unavailable`.

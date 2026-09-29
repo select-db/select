@@ -59,7 +59,7 @@ func (databases *Databases) restoreLatest(id, path string) error {
 // restoreAt writes database id as it was at the given time, or its latest
 // state when at is zero, to a new file at path.
 func (databases *Databases) restoreAt(ctx context.Context, id string, at time.Time, path string) error {
-	client, err := databases.replicaClient(id)
+	client, err := databases.bucketClient(id)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (databases *Databases) restoreAt(ctx context.Context, id string, at time.Ti
 	options.OutputPath = path
 	options.Timestamp = at
 	err = litestream.NewReplicaWithClient(nil, client).Restore(ctx, options)
-	// The replica answers the same for no copy that old and for no database.
+	// The bucket answers the same for no copy that old and for no database.
 	if errors.Is(err, litestream.ErrTxNotAvailable) {
 		return errNoCopyAtTime
 	}
