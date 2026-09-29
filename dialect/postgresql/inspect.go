@@ -587,10 +587,10 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	// INSERT ... SELECT: the grammar always wraps the source as a Selectstmt.
-	// When it's a real SELECT (has tables), attach as subquery.
-	// When it's VALUES, the Selectstmt has no FROM, so Tables is empty, skip.
+	// When the source reads anything, attach it as a subquery. A VALUES list
+	// reads nothing of its own, so its rows are walked for subqueries instead.
 	if selectStmt := rest.Selectstmt(); selectStmt != nil {
-		if sub := i.inspectSelect(selectStmt); sub != nil && len(sub.Tables) > 0 {
+		if sub := i.inspectSelect(selectStmt); core.CarriesRead(sub) {
 			result.Subqueries = append(result.Subqueries, *sub)
 		} else {
 			// VALUES form: walk the expression tree for embedded subqueries.
@@ -1495,7 +1495,7 @@ func (l *embeddedSubqueryListener) EnterSelect_with_parens(ctx *pg.Select_with_p
 	// Only collect direct subqueries (depth 0). Nested ones are captured recursively
 	// inside each collected subquery's own inspection.
 	if l.subqueryDepth == 0 {
-		if sub := l.inspector.inspectSelectWithParens(ctx); sub != nil && len(sub.Tables) > 0 {
+		if sub := l.inspector.inspectSelectWithParens(ctx); core.CarriesRead(sub) {
 			l.results = append(l.results, *sub)
 		}
 	}

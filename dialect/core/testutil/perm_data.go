@@ -290,6 +290,80 @@ func permCases() []PermCase {
 			Op:    core.InspectOpSelect,
 			Why:   "l is a name the statement binds, and the rows behind it are literal",
 		},
+		// A block over a constant relation owes nothing for itself, and the
+		// reads nested under it are owed all the same.
+		{
+			Name:  "a scalar subquery inside a derived table of constants",
+			SQL:   "SELECT d.x FROM (SELECT (SELECT c1 FROM other.t3 LIMIT 1) AS x) AS d",
+			Needs: []Right{otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the statement hands back the contents of other.t3.c1, whatever relation the block around it binds",
+		},
+		{
+			Name:  "an aggregate subquery inside a derived table of constants",
+			SQL:   "SELECT d.x FROM (SELECT (SELECT max(c1) FROM other.t3) AS x) AS d",
+			Needs: []Right{otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "an aggregate of a column is read from the column, so the read is on other.t3 as surely as a bare one",
+		},
+		{
+			Name:  "a predicate under a derived table of constants",
+			SQL:   "SELECT c1 FROM t1 WHERE c1 IN (SELECT d.x FROM (SELECT 1 AS x) AS d WHERE d.x IN (SELECT c1 FROM v1))",
+			Needs: []Right{mainT1(core.ActionSelect), mainV1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the rows come from t1 and the predicate tests v1, through a block that binds neither",
+		},
+		{
+			// MySQL takes no WHERE without a FROM.
+			On:    []string{"postgresql", "sqlite"},
+			Name:  "a predicate under a select with no FROM",
+			SQL:   "SELECT c1 FROM t1 WHERE EXISTS (SELECT 1 WHERE 1 IN (SELECT c1 FROM v1))",
+			Needs: []Right{mainT1(core.ActionSelect), mainV1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a block with no FROM reads no relation of its own, and the predicate inside it still tests v1",
+		},
+		{
+			Name:  "a predicate under a derived table of constants in a scalar subquery",
+			SQL:   "SELECT (SELECT max(h.y) FROM (SELECT 2 AS y) AS h WHERE h.y IN (SELECT c1 FROM other.t3)) AS v FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect), otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the scalar subquery tests other.t3 two blocks down, and the rows come from t1",
+		},
+		{
+			Name:  "a write whose source is a derived table of constants",
+			SQL:   "INSERT INTO t1 (c1) SELECT d.x FROM (SELECT 1 AS x) AS d WHERE d.x IN (SELECT c1 FROM other.t3)",
+			Needs: []Right{mainT1(core.ActionInsert), otherT3(core.ActionSelect)},
+			Op:    core.InspectOpInsert,
+			Why:   "the source filters on other.t3, so a policy holding the write actions alone must not run it",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a read under a VALUES ROW constructor",
+			SQL:   "DELETE FROM t1 WHERE c1 IN (SELECT d.x FROM (VALUES ROW(1), ROW(2)) AS d (x) GROUP BY d.x, (SELECT MAX(c1) FROM v1))",
+			Needs: []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect), mainV1(core.ActionSelect)},
+			Op:    core.InspectOpDelete,
+			Why:   "a VALUES constructor binds a relation of literals, and the subquery grouping it reads v1",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a read under a VALUES ROW constructor in a multi-table delete",
+			SQL: "DELETE a, b FROM t1 AS a JOIN t2 AS b ON a.c1 = b.c1 " +
+				"WHERE a.c1 IN (SELECT d.x FROM (VALUES ROW(1), ROW(2)) AS d (x) GROUP BY d.x, (SELECT MAX(c1) FROM v1))",
+			Needs: []Right{
+				mainT1(core.ActionDelete), mainT1(core.ActionSelect),
+				mainT2(core.ActionDelete), mainT2(core.ActionSelect),
+				mainV1(core.ActionSelect),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "deleting from both sides of the join changes nothing about the v1 the predicate reads",
+		},
+		{
+			Name:  "a derived table of constants at the top level",
+			SQL:   "SELECT d.x FROM (SELECT 1 AS x) AS d WHERE d.x IN (SELECT c1 FROM other.t3)",
+			Needs: []Right{otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "this block is charged for the read it makes, and is charged the same once another block encloses it",
+		},
 		{
 			Name:  "a table joined to a derived table of constants",
 			SQL:   "SELECT t.c3 FROM t2 AS t JOIN (SELECT 1 AS x) AS l ON l.x = t.c1",
