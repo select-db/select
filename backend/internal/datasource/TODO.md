@@ -25,6 +25,8 @@ $0.01 per GB-month.
   every write.
 - **evict**: drop the local file of a resting db.
 - **reconciler**: the backend job that tells the cellar what to purge.
+- **session**: one cellar connection pinned across requests, so a transaction
+  can span several statements. Short-lived: it rolls back when idle.
 
 ## How it works
 
@@ -58,8 +60,11 @@ Settled. Reopen with a reason, not a preference.
   `cellar_id`; `cellar_id` and `state` are set together or not at all. A
   sqlite datasource with a DSN is still rejected: the server never opens a
   path a user gave it.
-- Access goes through the backend only. No direct client endpoint in v1, so
-  plain SQLite files (`modernc.org/sqlite`) rather than `sqld`.
+- Access goes through the backend only, which checks every statement. App
+  code reaches it over the libSQL protocol (Hrana over HTTP, milestone 8), so
+  `@libsql/client` and its ORM adapters work unchanged. The backend speaks the
+  protocol; the cellar stays plain SQLite files (`modernc.org/sqlite`), not
+  `sqld`.
 - The server owns the list of managed dbs. The app shows them in Settings and
   "Add to workspace" shows a `datasource.config.json` to paste; removing the folder
   removes a bookmark, not the db.
@@ -276,6 +281,9 @@ Needs 1. Can run alongside 2. Start with the spikes.
 - [x] Point-in-time fork reads from the replica.
 - [x] Tests: rest, evict, wake, point-in-time fork, against a directory.
 - [ ] Tests against the OVH bucket (keys pending).
+- [ ] Tune with the bucket numbers: one S3 transport shared by every replica
+      client, rest in parallel with a bound, a lighter first sync at startup.
+- [ ] Server shutdown closes `cellar.Databases`, for a last sync.
 
 ### 4. Cleanup
 Needs 2 and 3.
@@ -303,10 +311,60 @@ Needs 3 for staging, all for prod.
       reconciler cap hit.
 - [ ] Staging, then prod behind the sign-in allowlist, then everyone.
 
+### 7. Sessions, batch, engine enforcement
+Needs 3. The ground app access stands on.
+- [ ] Cellar sessions: `POST /datasources/{id}/sessions` pins a connection,
+      `DELETE .../sessions/{sid}` rolls back and releases it; statements carry
+      `X-Cellar-Session`. Rolled back when idle 5s or older than 30s; a cap per
+      workspace, like `max_in_flight`.
+- [ ] Atomic batch: a session opened, run under `BEGIN IMMEDIATE` and closed in
+      one request.
+- [ ] Isolation: `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT` only inside a
+      session, so a pooled connection never holds the write lock.
+- [ ] `cellarclient.WithSession(ctx, sid)`: the header rides the context, so
+      `connect` and the engine are unchanged.
+- [ ] Permission check: transaction control statements touch no table
+      (dialect-fixer).
+- [ ] SQLite authorizer on every cellar connection: tables and columns are
+      checked by the engine after name resolution, not only by the parser.
+- [ ] Single-writer lease in the bucket (Litestream's S3 leaser): a cellar
+      writes a db only while it holds the lease, so a split never gives a
+      replica two writers.
+- [ ] Tests: batch rolls back as a whole, an idle session rolls back, a
+      session cap, transaction control refused outside a session, the
+      authorizer refuses what the parser misses.
+
+### 8. App access over libSQL
+Needs 7. Start with the spike.
+- [ ] Spike: read the Hrana spec in `tursodatabase/libsql`; record which
+      requests `@libsql/client` and `libsql-client-go` send (`execute`,
+      `batch`, `sequence`, `close`, `get_autocommit`?), whether they use
+      `/v3/cursor` on their own, and whether they keep a URL path.
+- [ ] `internal/hrana`: `POST /v2/pipeline` and `/v3/pipeline` with `execute`,
+      `batch` (with conditions), `sequence`, `close`, each through `Open` and
+      `Stream`, so permissions, masking and audit apply as for every
+      datasource.
+- [ ] `hranaSink`: a `query.RowSink` writing Hrana results; a 10 MB cap on a
+      buffered result, answered with an error that suggests `LIMIT`.
+- [ ] Signed baton `{datasource, principal, cellar session, expiry}`: the
+      session lives on the cellar only, so any backend serves the next request.
+- [ ] Routing: one hostname per db (`<id>.db.<domain>`, wildcard DNS and TLS),
+      unless the spike shows the clients keep a URL path.
+- [ ] Auth: `authToken` is an API key. `issue_key` on create: a key bound to
+      the db's role, shown once.
+- [ ] Rate limits per plan for app traffic; errors carry our codes, `waking`
+      included.
+- [ ] Tests: `libsql-client-go` against a test server (execute, batch,
+      interactive transaction, expiry, refused statement, masked column), and
+      the TypeScript example in the docs run against the dev server.
+- [ ] `.doc.md`: connecting from app code with `@libsql/client` and Drizzle.
+
+Open decisions: one hostname per db; transaction limits (5s idle, 30s total);
+interactive transactions for app code or batch only; MCP stays batch only.
+
 ## Later
 - Global compute budget and billing; cellar query-seconds must count.
 - Policy for abandoned dbs (`last_used_at` is recorded from v1).
-- `issue_key` on create: an API key bound to the db role.
 - Upload of an existing `.db`, with untrusted-file hardening.
 - In-place restore with an automatic backup fork, if changing ids hurts.
 - Delete protection or a recovery window as a Teams perk.
@@ -315,6 +373,23 @@ Needs 3 for staging, all for prod.
 - Second cellar: an `app.cellar` table for placement data (with a foreign key
   from `cellar_id`), `move`, dead-cellar runbook.
 - Keep Teams dbs hot; evict small idle dbs first.
-- Authorizer upstream in modernc, to replace the PRAGMA allowlist.
-- Direct libSQL endpoint; per-region backend and cellar pairs.
+- Per-region backend and cellar pairs.
+- Hrana `/v3/cursor`: stream large results row by row instead of the 10 MB
+  cap. Sooner if the clients use it on their own.
+- Hrana `describe` (and `store_sql`): statement metadata without running it,
+  behind the permission check so it names no hidden column. When a client we
+  support calls it.
+- Hrana over WebSocket: lower latency in transactions, but a stateful backend.
+  Only if measured latency asks for it.
+- SQL editor transactions: `BEGIN` and `COMMIT` across runs on a session, with
+  an "open transaction" indicator and auto-rollback.
+- Copy-on-write fork: a new prefix pointing at the source's snapshot, instead
+  of `VACUUM INTO`. Instant forks for agents.
+- Read followers replaying the bucket in other regions, with a bookmark for
+  read-your-writes; embedded replicas in user apps after that, for keys that
+  may read the whole db.
+- Opt-in durable commit: a write returns once the bucket has it, for plans
+  that cannot lose the last second.
+- Single-writer limits in the docs: about 1,700 writes/s and tens of GB per
+  db; beyond that, Postgres.
 - Workspace affinity for backends.
