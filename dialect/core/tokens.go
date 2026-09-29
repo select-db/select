@@ -148,22 +148,12 @@ func nodeSpan(node interface {
 // or a name list no accessor that reaches through the nesting between it and
 // the clause that holds it.
 func CollectNodes[T any](tree antlr.Tree) []T {
-	var found []T
-	var walk func(antlr.Tree)
-	walk = func(node antlr.Tree) {
-		if node == nil {
-			return
-		}
-		if hit, ok := node.(T); ok {
-			found = append(found, hit)
-		}
-		for idx := 0; idx < node.GetChildCount(); idx++ {
-			walk(node.GetChild(idx))
-		}
-	}
-	walk(tree)
-	return found
+	return CollectOutside[T, noBoundary](tree)
 }
+
+// noBoundary is a type no parse tree node has, so a walk stopping at it stops
+// nowhere.
+type noBoundary struct{}
 
 // CollectOutside returns every node of type T under tree that no node of type
 // Stop encloses. A nested query is inspected in its own right, so a walk that
