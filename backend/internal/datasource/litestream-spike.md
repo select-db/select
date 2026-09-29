@@ -100,6 +100,23 @@ Derived from the intervals, not counted: a db written continuously uploads
 one change file per second, plus compactions (every 30s, 5m, 1h) and a daily
 snapshot, about 3,700 writes an hour. An idle db uploads nothing.
 
+### Against the OVH bucket (VA), from a laptop in France
+
+`TestBucketBenchmark`, over the internet: it bounds the prod path from above,
+it does not measure it.
+
+| size | first upload | wake (restore latest) | restore at a time | remove |
+| --- | --- | --- | --- | --- |
+| 9 MB | 2.3 s | 5.4 s | 4.4 s | 0.5 s |
+| 109 MB | 6.0 s | 7.2 s | 5.6 s | 5.4 s |
+| 257 MB | 13.8 s | 12.6 s | 12.6 s | 15.7 s |
+
+Wake is about 5 s fixed plus about 20 MB/s. The fixed part is request round
+trips across the Atlantic and a new TLS connection per client; inside the
+datacenter both shrink, so the box's own run decides the 15 s wait for
+Teams-sized dbs. `TestAgainstTheBucket` passed: rest, evict, wake and remove
+work on the real bucket.
+
 ## What a d2-4 carries (2 vCPU, 4 GB RAM, 50 GB disk)
 
 - Dbs kept replicating: a few hundred. 300 idle cost about 11% of a core,
