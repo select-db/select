@@ -70,7 +70,7 @@ func (i *Inspector) inspectScript(sql string) ([]core.InspectStatement, bool) {
 
 		// A call that reaches the server itself is not covered by the four row
 		// actions, and neither is a statement we could not read.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
@@ -594,10 +594,10 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	result.Subqueries = append(result.Subqueries, cteBodies...)
 
 	// INSERT ... SELECT: the grammar always wraps the source as a Selectstmt.
-	// When it's a real SELECT (has tables), attach as subquery.
-	// When it's VALUES, the Selectstmt has no FROM, so Tables is empty, skip.
+	// When the source reads anything, attach it as a subquery. A VALUES list
+	// reads nothing of its own, so its rows are walked for subqueries instead.
 	if selectStmt := rest.Selectstmt(); selectStmt != nil {
-		if sub := i.inspectSelect(selectStmt); sub != nil && len(sub.Tables) > 0 {
+		if sub := i.inspectSelect(selectStmt); core.CarriesRead(sub) {
 			result.Subqueries = append(result.Subqueries, *sub)
 		} else {
 			// VALUES form: walk the expression tree for embedded subqueries.
@@ -624,9 +624,9 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 			i.assignedFields(conflict.Set_clause_list(), schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -722,6 +722,9 @@ func (i *Inspector) addReturningFields(
 	if targetList == nil {
 		return
 	}
+	// A relation named inside a returning expression is read, the same way one
+	// in a select list is, whether or not the write touches it.
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(targetList)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	columns := core.TableFields(i.meta, schema, table, i.dialect)
 	var returned []core.InspectField
@@ -910,9 +913,14 @@ func (i *Inspector) readBody(text string) []core.InspectStatement {
 			}
 		}
 		for at := len(starts) - 1; at >= 0; at-- {
+			text := stream.GetTextFromTokens(tokens[starts[at]], tokens[end-1])
+			// PERFORM is a SELECT whose rows are discarded, and it reads what the SELECT reads.
+			if tokens[starts[at]].GetTokenType() == pg.PostgreSQLLexerPERFORM && starts[at]+1 < end {
+				text = "SELECT " + stream.GetTextFromTokens(tokens[starts[at]+1], tokens[end-1])
+			}
 			inner := NewInspector(i.dialect, i.meta)
 			inner.inBody = true
-			fragment, whole := inner.inspectScript(stream.GetTextFromTokens(tokens[starts[at]], tokens[end-1]))
+			fragment, whole := inner.inspectScript(text)
 			if whole {
 				reads = append(reads, fragment...)
 				break
@@ -1109,9 +1117,9 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -1175,9 +1183,9 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -1545,7 +1553,7 @@ func (l *embeddedSubqueryListener) EnterSelect_with_parens(ctx *pg.Select_with_p
 	// Only collect direct subqueries (depth 0). Nested ones are captured recursively
 	// inside each collected subquery's own inspection.
 	if l.subqueryDepth == 0 {
-		if sub := l.inspector.inspectSelectWithParens(ctx); sub != nil && len(sub.Tables) > 0 {
+		if sub := l.inspector.inspectSelectWithParens(ctx); core.CarriesRead(sub) {
 			l.results = append(l.results, *sub)
 		}
 	}

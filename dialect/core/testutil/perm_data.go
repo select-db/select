@@ -54,6 +54,12 @@ var rowRights = []Right{
 	{Action: core.ActionDelete},
 }
 
+// unreadable is what text the parser could not read requires: manage, and every
+// row action on the connection, since nothing says which rows the statement
+// touches. Manage alone would let a principal who may not read rows run what
+// could be a read.
+var unreadable = slices.Concat([]Right{Manage}, rowRights)
+
 // PermCasesFor are the cases a dialect parses.
 func PermCasesFor(dialect string) []PermCase {
 	var cases []PermCase
@@ -283,6 +289,80 @@ func permCases() []PermCase {
 			Needs: nil,
 			Op:    core.InspectOpSelect,
 			Why:   "l is a name the statement binds, and the rows behind it are literal",
+		},
+		// A block over a constant relation owes nothing for itself, and the
+		// reads nested under it are owed all the same.
+		{
+			Name:  "a scalar subquery inside a derived table of constants",
+			SQL:   "SELECT d.x FROM (SELECT (SELECT c1 FROM other.t3 LIMIT 1) AS x) AS d",
+			Needs: []Right{otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the statement hands back the contents of other.t3.c1, whatever relation the block around it binds",
+		},
+		{
+			Name:  "an aggregate subquery inside a derived table of constants",
+			SQL:   "SELECT d.x FROM (SELECT (SELECT max(c1) FROM other.t3) AS x) AS d",
+			Needs: []Right{otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "an aggregate of a column is read from the column, so the read is on other.t3 as surely as a bare one",
+		},
+		{
+			Name:  "a predicate under a derived table of constants",
+			SQL:   "SELECT c1 FROM t1 WHERE c1 IN (SELECT d.x FROM (SELECT 1 AS x) AS d WHERE d.x IN (SELECT c1 FROM v1))",
+			Needs: []Right{mainT1(core.ActionSelect), mainV1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the rows come from t1 and the predicate tests v1, through a block that binds neither",
+		},
+		{
+			// MySQL takes no WHERE without a FROM.
+			On:    []string{"postgresql", "sqlite"},
+			Name:  "a predicate under a select with no FROM",
+			SQL:   "SELECT c1 FROM t1 WHERE EXISTS (SELECT 1 WHERE 1 IN (SELECT c1 FROM v1))",
+			Needs: []Right{mainT1(core.ActionSelect), mainV1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a block with no FROM reads no relation of its own, and the predicate inside it still tests v1",
+		},
+		{
+			Name:  "a predicate under a derived table of constants in a scalar subquery",
+			SQL:   "SELECT (SELECT max(h.y) FROM (SELECT 2 AS y) AS h WHERE h.y IN (SELECT c1 FROM other.t3)) AS v FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect), otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the scalar subquery tests other.t3 two blocks down, and the rows come from t1",
+		},
+		{
+			Name:  "a write whose source is a derived table of constants",
+			SQL:   "INSERT INTO t1 (c1) SELECT d.x FROM (SELECT 1 AS x) AS d WHERE d.x IN (SELECT c1 FROM other.t3)",
+			Needs: []Right{mainT1(core.ActionInsert), otherT3(core.ActionSelect)},
+			Op:    core.InspectOpInsert,
+			Why:   "the source filters on other.t3, so a policy holding the write actions alone must not run it",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a read under a VALUES ROW constructor",
+			SQL:   "DELETE FROM t1 WHERE c1 IN (SELECT d.x FROM (VALUES ROW(1), ROW(2)) AS d (x) GROUP BY d.x, (SELECT MAX(c1) FROM v1))",
+			Needs: []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect), mainV1(core.ActionSelect)},
+			Op:    core.InspectOpDelete,
+			Why:   "a VALUES constructor binds a relation of literals, and the subquery grouping it reads v1",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a read under a VALUES ROW constructor in a multi-table delete",
+			SQL: "DELETE a, b FROM t1 AS a JOIN t2 AS b ON a.c1 = b.c1 " +
+				"WHERE a.c1 IN (SELECT d.x FROM (VALUES ROW(1), ROW(2)) AS d (x) GROUP BY d.x, (SELECT MAX(c1) FROM v1))",
+			Needs: []Right{
+				mainT1(core.ActionDelete), mainT1(core.ActionSelect),
+				mainT2(core.ActionDelete), mainT2(core.ActionSelect),
+				mainV1(core.ActionSelect),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "deleting from both sides of the join changes nothing about the v1 the predicate reads",
+		},
+		{
+			Name:  "a derived table of constants at the top level",
+			SQL:   "SELECT d.x FROM (SELECT 1 AS x) AS d WHERE d.x IN (SELECT c1 FROM other.t3)",
+			Needs: []Right{otherT3(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "this block is charged for the read it makes, and is charged the same once another block encloses it",
 		},
 		{
 			Name:  "a table joined to a derived table of constants",
@@ -1442,8 +1522,7 @@ func permCases() []PermCase {
 
 		// --- rights and session statements
 		{
-			// SQLite has no GRANT, so its parser salvages a bare select, and
-			// the floor is what refuses it.
+			On:     []string{"postgresql", "mysql"},
 			Name:   "granting a right is administration",
 			SQL:    "GRANT SELECT ON t1 TO bob",
 			Needs:  []Right{Manage},
@@ -1451,10 +1530,25 @@ func permCases() []PermCase {
 			Why:    "it hands a right to somebody else",
 		},
 		{
+			On:    []string{"postgresql", "mysql"},
 			Name:  "revoking a right is administration",
 			SQL:   "REVOKE SELECT ON t1 FROM bob",
 			Needs: []Right{Manage},
 			Why:   "it takes a right away from somebody else",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "granting a right, which SQLite has not got",
+			SQL:   "GRANT SELECT ON t1 TO bob",
+			Needs: unreadable,
+			Why:   "the grammar has no GRANT, so the text comes apart and nothing left says what it would have done",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "revoking a right, which SQLite has not got",
+			SQL:   "REVOKE SELECT ON t1 FROM bob",
+			Needs: unreadable,
+			Why:   "the grammar has no REVOKE, and what recovery salvages from it is a select on a table named bob",
 		},
 
 		// --- transaction control, which names no object and so needs no right
@@ -1614,6 +1708,104 @@ func permCases() []PermCase {
 		},
 		{
 			On:   []string{"postgresql", "sqlite"},
+			Name: "a correlated subquery in RETURNING reads the table it names",
+			SQL:  "UPDATE t1 SET c2 = 'x' WHERE c1 = 1 RETURNING (SELECT c3 FROM t2 WHERE t2.c1 = t1.c1)",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c3"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "RETURNING is the write's select list, and a row of t2 comes back per row written",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a subquery in RETURNING reads the table it names",
+			SQL:  "DELETE FROM t1 WHERE c1 = 1 RETURNING c1, (SELECT max(c1) FROM t2)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "the value the caller gets back is read out of t2, which the delete never touches",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery reaching another schema",
+			SQL:  "INSERT INTO t1 (c1) VALUES (1) RETURNING (SELECT max(c1) FROM other.t3)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionSelect),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "insert on t1 would otherwise read a table in a schema the role holds nothing on",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery on an insert reading its rows from a query",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 RETURNING (SELECT max(c1) FROM other.t3)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the rows written come from t2 and the row handed back is read out of other.t3",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery over a view",
+			SQL:  "DELETE FROM t1 RETURNING (SELECT count(*) FROM v1)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect),
+				mainV1(core.ActionSelect),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "a view is a right on the view itself wherever it is read",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery over a CTE the statement declares",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) DELETE FROM t1 RETURNING (SELECT max(c1) FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "x is the statement's own name for the read of t2, and charging a right on the name itself would refuse the statement for every role",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery over a CTE an update declares",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) UPDATE t1 SET c2 = 'x' RETURNING (SELECT max(c1) FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "each write path drops the CTE names for itself, so each needs a case saying it drops them after the returning clause is read",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "a RETURNING subquery over a CTE an insert declares",
+			SQL:  "WITH x AS (SELECT c1 FROM t2) INSERT INTO t1 (c1) VALUES (1) RETURNING (SELECT max(c1) FROM x)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionSelect),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "each write path drops the CTE names for itself, so each needs a case saying it drops them after the returning clause is read",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
 			Name: "UPDATE ... FROM reads the table it joins against",
 			SQL:  "UPDATE t1 SET c1 = 2 FROM t2 WHERE t1.c1 = t2.c1",
 			Needs: []Right{
@@ -1643,6 +1835,19 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionInsert), mainT1(core.ActionUpdate), mainT2(core.ActionSelect)},
 			Op:    core.InspectOpInsert,
 			Why:   "it inserts, it rewrites what was there, and it reads t2 to do it",
+		},
+		{
+			On:   []string{"postgresql", "sqlite"},
+			Name: "an upsert assigning from another table, on a select source",
+			SQL:  "INSERT INTO t1 (c1) SELECT c1 FROM t2 ON CONFLICT (c1) DO UPDATE SET c2 = (SELECT c3 FROM other.t3)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect).Only("c3"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the value stored in c2 is read out of other.t3 whichever form the insert's source takes",
 		},
 		{
 			On:    []string{"postgresql"},
@@ -1750,6 +1955,30 @@ func permCases() []PermCase {
 			Why:    "the statement names the column it fills, so insert on c1 is enough",
 		},
 		{
+			On:     []string{"mysql"},
+			Name:   "loading a file and setting a column from a subquery",
+			SQL:    "LOAD DATA INFILE '/tmp/x.csv' INTO TABLE t1 (c1) SET c2 = (SELECT c4 FROM other.t3)",
+			Needs:  []Right{Manage, mainT1(core.ActionInsert).Only("c1"), mainT1(core.ActionInsert).Only("c2"), otherT3(core.ActionSelect).Only("c4")},
+			Denied: rowRights,
+			Why:    "the SET list fills c2 as well as the file fills c1, and the value it fills it with is read out of other.t3",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "loading a file and setting a column from a literal",
+			SQL:    "LOAD DATA INFILE '/tmp/x.csv' INTO TABLE t1 (c1) SET c2 = 5",
+			Needs:  []Right{Manage, mainT1(core.ActionInsert).Only("c1"), mainT1(core.ActionInsert).Only("c2")},
+			Denied: rowRights,
+			Why:    "a grant scoped to c1 must not write c2",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "loading a file into no named column but setting one",
+			SQL:    "LOAD DATA INFILE '/tmp/x.csv' INTO TABLE t1 SET c2 = 5",
+			Needs:  []Right{Manage, mainT1(core.ActionInsert)},
+			Denied: []Right{Manage, mainT1(core.ActionInsert).Only("c2")},
+			Why:    "the file fills every column, so naming c2 in the SET list must not narrow the right to c2",
+		},
+		{
 			On:    []string{"mysql"},
 			Name:  "locking a table",
 			SQL:   "LOCK TABLES t1 WRITE",
@@ -1763,6 +1992,74 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionInsert), mainT1(core.ActionUpdate)},
 			Op:    core.InspectOpInsert,
 			Why:   "a role holding insert alone would rewrite a row it may not update",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "the SET form of an insert reads its subquery",
+			SQL:  "INSERT INTO t1 SET c1 = (SELECT c1 FROM t2)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "the value stored in t1.c1 comes out of t2.c1, which the VALUES form of the same read is charged for",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "the SET form of an insert reads across schemas",
+			SQL:  "INSERT INTO t1 SET c2 = (SELECT GROUP_CONCAT(c4) FROM other.t3)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c2"),
+				otherT3(core.ActionSelect).Only("c4"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "a whole column of other.t3 lands in a row of t1, so insert on t1 alone is not the right it needs",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "the SET form of an insert reading a view",
+			SQL:  "INSERT INTO t1 SET c1 = (SELECT c1 FROM v1)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainV1(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "a view is a right on the view itself, and writing its rows elsewhere does not reach through it unpriced",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "the SET form of an insert nesting a CTE",
+			SQL:  "INSERT INTO t1 SET c2 = (WITH w AS (SELECT c1 FROM t2) SELECT MAX(c1) FROM w)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c2"),
+				mainT2(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "w is the name of the CTE body, and the body reads t2",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "the SET form of an insert nesting an EXISTS",
+			SQL:  "INSERT INTO t1 SET c1 = (SELECT 1 FROM t2 WHERE EXISTS (SELECT 1 FROM other.t3))",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c1"),
+				mainT2(core.ActionSelect),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "whether the row exists decides what is stored, so the table the EXISTS tests is read",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "the SET form of a replace reads its subquery",
+			SQL:  "REPLACE INTO t1 SET c2 = (SELECT c4 FROM other.t3)",
+			Needs: []Right{
+				mainT1(core.ActionInsert).Only("c2"),
+				mainT1(core.ActionDelete),
+				otherT3(core.ActionSelect).Only("c4"),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "REPLACE assigns the same way INSERT does, and it deletes the row it conflicts with as well",
 		},
 		{
 			On:   []string{"mysql"},
@@ -2225,6 +2522,66 @@ func permCases() []PermCase {
 			Denied: rowRights,
 			Why:    "the body is statements of this dialect, as it is on PostgreSQL",
 		},
+
+		// --- a body reads from its control flow as well as from its
+		// statements. There is no right on a routine, so nothing prices the
+		// read at call time and creation is the only moment it can be charged.
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body that is one RETURN expression",
+			SQL:    "CREATE FUNCTION f9() RETURNS int DETERMINISTIC RETURN (SELECT c1 FROM t1)",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "calling the function hands back the c1 of t1, and the body holds no statement to charge it to",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body returning a query from a branch",
+			SQL:    "CREATE FUNCTION f9() RETURNS int DETERMINISTIC BEGIN IF TRUE THEN RETURN (SELECT c1 FROM t1); END IF; RETURN 0; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "a RETURN nested in a branch returns the same rows the one-line body does",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body branching on a query",
+			SQL:    "CREATE PROCEDURE p9() BEGIN IF (SELECT c1 FROM t1) > 0 THEN SET @x = 1; END IF; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "which branch runs is the c1 of t1, so calling the procedure tells its caller the value",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body looping on a query",
+			SQL:    "CREATE PROCEDURE p9() BEGIN WHILE (SELECT c1 FROM t1) > 0 DO SET @x = 1; END WHILE; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "the loop condition reads t1 on every turn, as the IF condition reads it once",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body declaring a cursor",
+			SQL:    "CREATE PROCEDURE p9() BEGIN DECLARE cur CURSOR FOR SELECT c1 FROM t1; OPEN cur; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "a cursor is how a routine reads a table row by row, and the grammar carries the query bare rather than parenthesised",
+		},
+		{
+			On:     []string{"sqlite"},
+			Name:   "a trigger body guarded by a query",
+			SQL:    "CREATE TRIGGER tr AFTER INSERT ON t1 WHEN (SELECT c3 FROM t2) > 0 BEGIN DELETE FROM t1; END",
+			Needs:  []Right{Manage, mainT2(core.ActionSelect).Only("c3"), mainT1(core.ActionDelete)},
+			Denied: rowRights,
+			Why:    "whether the delete happens is the c3 of t2, which is the condition case MySQL spells as IF",
+		},
+		{
+			On:     []string{"postgresql"},
+			Name:   "a routine body that is one RETURN expression",
+			SQL:    "CREATE FUNCTION f9() RETURNS int LANGUAGE sql BEGIN ATOMIC RETURN (SELECT c1 FROM t1); END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "the standard body spelling returns the same rows the quoted one does",
+		},
 		{
 			On:     []string{"postgresql"},
 			Name:   "a CREATE SCHEMA element carrying a view body",
@@ -2303,11 +2660,11 @@ func permCases() []PermCase {
 		},
 		{
 			On:     []string{"postgresql"},
-			Name:   "a code block no SQL parser reads",
+			Name:   "a code block whose PERFORM reads a table",
 			SQL:    "DO $$ BEGIN PERFORM c1 FROM t1; END $$",
-			Needs:  []Right{Manage},
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
 			Denied: rowRights,
-			Why:    "PERFORM belongs to the procedural language, not to SQL, so the floor is all there is to report",
+			Why:    "PERFORM is a SELECT whose rows are discarded, so it reads c1 of t1 as the SELECT would",
 		},
 		{
 			On:     []string{"postgresql"},
@@ -2383,11 +2740,19 @@ func permCases() []PermCase {
 			Why:    "a routine body is priced like a block's, since calling the routine deletes the rows it names",
 		},
 		{
+			On:     []string{"postgresql", "sqlite"},
 			Name:   "revoking every right is administration",
 			SQL:    "REVOKE ALL ON t1 FROM bob",
 			Needs:  []Right{Manage},
 			Denied: rowRights,
-			Why:    "it takes rights away from somebody else, and SQLite, which has no REVOKE, floors it",
+			Why:    "it takes rights away from somebody else",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "revoking every right, which this grammar cannot read",
+			SQL:   "REVOKE ALL ON t1 FROM bob",
+			Needs: unreadable,
+			Why:   "MySQL accepts it and the grammar does not, so the text comes apart and nothing left says what it would have done",
 		},
 		{
 			On:     []string{"postgresql"},
@@ -2604,31 +2969,28 @@ func permCases() []PermCase {
 			Why:    "the branches are one statement, so the call classifies all of it, and t1 is still read",
 		},
 
-		// --- a statement the parser stumbled over. Where what error recovery
-		// salvaged names no table, a per-table check has nothing to ask about.
+		// --- a statement the parser stumbled over, which is text nothing says
+		// the meaning of, so it takes the right to do anything.
 		{
-			On:     []string{"postgresql", "mysql", "sqlite"},
-			Name:   "a select cut off after FROM",
-			SQL:    "SELECT c1 FROM",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "the fragment names no table, so only the floor refuses it",
+			On:    []string{"postgresql", "mysql", "sqlite"},
+			Name:  "a select cut off after FROM",
+			SQL:   "SELECT c1 FROM",
+			Needs: unreadable,
+			Why:   "the fragment names no table, so nothing says which table it would have read",
 		},
 		{
-			On:     []string{"postgresql"},
-			Name:   "a select with no list before FROM",
-			SQL:    "SELECT FROM",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "the fragment names no table, so only the floor refuses it",
+			On:    []string{"postgresql"},
+			Name:  "a select with no list before FROM",
+			SQL:   "SELECT FROM",
+			Needs: unreadable,
+			Why:   "the fragment names no table, so nothing says which table it would have read",
 		},
 		{
-			On:     []string{"mysql", "sqlite"},
-			Name:   "a bare SELECT",
-			SQL:    "SELECT",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "the fragment names no table, so only the floor refuses it",
+			On:    []string{"mysql", "sqlite"},
+			Name:  "a bare SELECT",
+			SQL:   "SELECT",
+			Needs: unreadable,
+			Why:   "the fragment names no table, so nothing says which table it would have read",
 		},
 
 		// --- a name spelled like a host routine is not a call, so it stays
@@ -2863,8 +3225,8 @@ func permCases() []PermCase {
 			On:    []string{"sqlite"},
 			Name:  "a compound branch on a statement that reads nothing",
 			SQL:   "DROP TABLE t1 UNION SELECT c1 FROM other.t3",
-			Needs: []Right{Manage, otherT3(core.ActionSelect)},
-			Why:   "no DROP reads a query, so what the branch names is read by a statement nobody can name",
+			Needs: unreadable,
+			Why:   "no DROP reads a query, so the text comes apart and the read of t3 goes with it",
 		},
 		{
 			On:    []string{"sqlite"},
@@ -2923,6 +3285,70 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "refusing it would hold ordinary work",
+		},
+
+		// --- text the parser could not read. An identifier in ANSI double
+		// quotes is one on a MySQL server whose sql_mode carries ANSI_QUOTES,
+		// and a string literal to this grammar, so a name written that way
+		// where a table has to go does not parse. What the statement does is
+		// then unknown, and every case here asks for the right to do anything.
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted table name in a read",
+			SQL:   `SELECT "c1" FROM "main"."t1"`,
+			Needs: unreadable,
+			Why:   "on an ANSI_QUOTES server it reads main.t1, so manage, which does not carry select, must not run it",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "double-quoted table names in a join",
+			SQL:   `SELECT t."c1" FROM "main"."t2" AS t JOIN "main"."t1" AS u ON t."c1" = u."c1"`,
+			Needs: unreadable,
+			Why:   "the reads of t1 and t2 are both lost with the parse",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted CTE name",
+			SQL:   `WITH "a" AS (SELECT "c1" FROM "main"."t1") SELECT "c1" FROM "a"`,
+			Needs: unreadable,
+			Why:   "the fragments recovery leaves name no table, so a per-table check has nothing to ask about",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted insert over a double-quoted source",
+			SQL:   `INSERT INTO "main"."t1" ("c1") SELECT "c1" FROM "main"."t2"`,
+			Needs: unreadable,
+			Why:   `recovery salvages insert on "main"."t1", which a wildcard insert grant answers while the read of t2 it lost is never checked`,
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted update",
+			SQL:   `UPDATE "main"."t1" SET "c2" = 'x' WHERE "c1" = 1`,
+			Needs: unreadable,
+			Why:   `recovery keeps the quotes and drops the schema, and update on ."t1" is a right no grant can express`,
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted delete",
+			SQL:   `DELETE FROM "main"."t1" WHERE "c1" = 1`,
+			Needs: unreadable,
+			Why:   `recovery keeps the quotes and drops the schema, and delete on ."t1" is a right no grant can express`,
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a backquoted insert over a backquoted source",
+			SQL:   "INSERT INTO `main`.`t1` (`c1`) SELECT `c1` FROM `main`.`t2`",
+			Needs: []Right{mainT1(core.ActionInsert).Only("c1"), mainT2(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpInsert,
+			Why:   "MySQL quoting parses, so the write and the read it feeds on are both named",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted column in a read of an unquoted table",
+			SQL:   `SELECT "c1" FROM main.t1`,
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "this parses, with the quoted text a string literal that reads no column of t1",
 		},
 
 		// --- a name the metadata does not carry. A database resolves it

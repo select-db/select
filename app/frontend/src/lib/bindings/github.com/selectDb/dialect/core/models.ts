@@ -577,6 +577,14 @@ export class InspectStatement {
     "Also": InspectStatement[];
 
     /**
+     * Unreadable marks a statement whose text the parser could not read, which
+     * is not the same as one it read and cannot classify: CREATE ROLE names
+     * nothing a row right covers, while an unreadable statement may be any
+     * statement at all. See UnreadableStatement.
+     */
+    "Unreadable": boolean;
+
+    /**
      * Filter marks a subquery the server runs to choose or order rows rather
      * than to return them: a WHERE, HAVING, GROUP BY, ORDER BY or window
      * clause. Unmarked means its value reaches the row, which is the answer
@@ -603,6 +611,9 @@ export class InspectStatement {
         }
         if (!("Also" in $$source)) {
             this["Also"] = [];
+        }
+        if (!("Unreadable" in $$source)) {
+            this["Unreadable"] = false;
         }
         if (!("Filter" in $$source)) {
             this["Filter"] = false;

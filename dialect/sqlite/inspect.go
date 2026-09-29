@@ -92,10 +92,9 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		}
 
 		// A call that reaches the filesystem is not covered by the four row
-		// actions, and neither is a statement the parser stumbled over that
-		// named no table: a per-table check has nothing to ask about, so what
-		// error recovery salvaged would run on a policy granting nothing.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		// actions, and neither is a statement the parser stumbled over: what
+		// error recovery salvaged from one is no account of what it does.
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
@@ -320,12 +319,11 @@ func (i *Inspector) inspectStatement(stmt sqlite.ISql_stmtContext) *core.Inspect
 	return &read
 }
 
-// bodyStatements is what the statements carried inside node require: the body
-// of a trigger, which SQLite writes as parse nodes. Only the outermost of them
-// is inspected, since one nested deeper is part of a statement already read.
-// MySQL has the same function over one node type, because its grammar puts
-// every statement of a body under simpleStatement; SQLite has no such node, so
-// the four kinds share one depth here.
+// bodyStatements is what the reads carried inside node require: the body of a
+// trigger and the WHEN it fires under, which SQLite writes as parse nodes. Only
+// the outermost of them is inspected, since one nested deeper is part of a
+// statement already read, so the node kinds share one depth. MySQL has the same
+// function over the node kinds its grammar uses for the same thing.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
 	listener := &bodyStatementListener{
 		BaseSQLiteParserListener: &sqlite.BaseSQLiteParserListener{},
@@ -343,7 +341,7 @@ type bodyStatementListener struct {
 }
 
 func (l *bodyStatementListener) collect(read *core.InspectStatement) {
-	if l.depth == 0 && read != nil && len(read.Tables) > 0 {
+	if l.depth == 0 && core.CarriesRead(read) {
 		l.results = append(l.results, *read)
 	}
 	l.depth++
@@ -723,21 +721,28 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
-	// INSERT ... SELECT: attach source as subquery when it has real tables.
+	// INSERT ... SELECT: attach the source as a subquery when it reads anything.
 	if selectStmt := stmt.Select_stmt(); selectStmt != nil {
-		if sub := i.inspectSelect(selectStmt); sub != nil && len(sub.Tables) > 0 {
+		if sub := i.inspectSelect(selectStmt); core.CarriesRead(sub) {
 			result.Subqueries = append(result.Subqueries, *sub)
 		}
-	} else {
-		// VALUES form: walk expressions for embedded subqueries.
-		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(stmt)...)
+	} else if values := stmt.Values_clause(); values != nil {
+		// VALUES form: walk expressions for embedded subqueries. The clause and
+		// not the statement, or the walk reaches the CTE bodies and the
+		// returning clause the other paths already report.
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(values)...)
 	}
 
 	// An ON CONFLICT clause chooses which rows it updates and reads values into
-	// them, both against the target table, so what it names is tested.
+	// them, both against the target table, so what it names is tested, and a
+	// subquery in either is a read of its own.
+	upsert := stmt.Upsert_clause()
 	result.Where = core.MergeInspectFields(result.Where,
-		i.testedFields(core.TreeOrNil(stmt.Upsert_clause()),
+		i.testedFields(core.TreeOrNil(upsert),
 			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
+	if upsert != nil {
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(upsert)...)
+	}
 
 	// REPLACE, and its INSERT OR REPLACE spelling, delete whatever conflicts
 	// before inserting, and an upsert rewrites it. Either way the row that was
@@ -746,14 +751,14 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 	if stmt.REPLACE_() != nil {
 		core.AlsoPerforms(result, core.InspectOpDelete, nil)
 	}
-	if upsert := stmt.Upsert_clause(); upsert != nil && upsert.UPDATE_() != nil {
+	if upsert != nil && upsert.UPDATE_() != nil {
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.upsertSetFields(upsert, schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -844,9 +849,9 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -949,9 +954,9 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -1610,7 +1615,7 @@ type embeddedSubqueryListener struct {
 
 func (l *embeddedSubqueryListener) EnterSelect_stmt(ctx *sqlite.Select_stmtContext) {
 	if l.subqueryDepth == 0 {
-		if sub := l.inspector.inspectSelect(ctx); sub != nil && len(sub.Tables) > 0 {
+		if sub := l.inspector.inspectSelect(ctx); core.CarriesRead(sub) {
 			l.results = append(l.results, *sub)
 		}
 	}
@@ -1797,6 +1802,9 @@ func (i *Inspector) addReturningFields(
 	if ret == nil {
 		return
 	}
+	// A relation named inside a returning expression is read, the same way one
+	// in a select list is, whether or not the write touches it.
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(ret)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	var returned []core.InspectField
 	for _, column := range ret.AllResult_column() {

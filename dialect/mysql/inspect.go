@@ -87,7 +87,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// actions do not cover. The clause is read off the tokens rather than
 		// the tree because the spellings that follow a locking clause raise a
 		// syntax error here, and error recovery drops the tail with the node.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
@@ -584,18 +584,11 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 				Schema: schema,
 			})
 		}
-	} else if stmt.SET_SYMBOL() != nil {
-		if ul := stmt.UpdateList(); ul != nil {
-			for _, el := range ul.AllUpdateElement() {
-				if name := i.columnRefName(el.ColumnRef()); name != "" {
-					result.Fields = append(result.Fields, core.InspectField{
-						Name:   name,
-						Table:  tableName,
-						Schema: schema,
-					})
-				}
-			}
-		}
+	} else if ul := stmt.UpdateList(); ul != nil {
+		// The SET form names the columns it writes on the left of each
+		// assignment, and reads whatever the right of it names.
+		result.Fields = i.updateListFields(ul, schema, tableName)
+		i.chargeSetReads(result, ul, schema, tableName)
 	} else {
 		// No column list: expand to all columns from metadata.
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
@@ -604,7 +597,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 	// INSERT ... SELECT: source SELECT becomes a subquery.
 	if iqe := stmt.InsertQueryExpression(); iqe != nil {
 		if qop := iqe.QueryExpressionOrParens(); qop != nil {
-			if sub := i.inspectQueryExpressionOrParens(qop); sub != nil && len(sub.Tables) > 0 {
+			if sub := i.inspectQueryExpressionOrParens(qop); core.CarriesRead(sub) {
 				result.Subqueries = append(result.Subqueries, *sub)
 			}
 		}
@@ -617,9 +610,7 @@ func (i *Inspector) inspectInsert(stmt mysql.IInsertStatementContext) *core.Insp
 	// clause also rewrites the row it conflicts with, so the row that was
 	// there does not survive and insert alone is not the right it needs.
 	if iul := stmt.InsertUpdateList(); iul != nil {
-		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(iul)...)
-		result.Where = core.MergeInspectFields(result.Where,
-			i.updateListReads(iul.UpdateList(), schema, tableName))
+		i.chargeSetReads(result, iul.UpdateList(), schema, tableName)
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.updateListFields(iul.UpdateList(), schema, tableName))
 	}
@@ -658,23 +649,16 @@ func (i *Inspector) inspectReplace(stmt mysql.IReplaceStatementContext) *core.In
 				Name: name, Table: tableName, Schema: schema,
 			})
 		}
-	} else if stmt.SET_SYMBOL() != nil {
-		if ul := stmt.UpdateList(); ul != nil {
-			for _, el := range ul.AllUpdateElement() {
-				if name := i.columnRefName(el.ColumnRef()); name != "" {
-					result.Fields = append(result.Fields, core.InspectField{
-						Name: name, Table: tableName, Schema: schema,
-					})
-				}
-			}
-		}
+	} else if ul := stmt.UpdateList(); ul != nil {
+		result.Fields = i.updateListFields(ul, schema, tableName)
+		i.chargeSetReads(result, ul, schema, tableName)
 	} else {
 		result.Fields = core.TableFields(i.meta, schema, tableName, i.dialect)
 	}
 
 	if iqe := stmt.InsertQueryExpression(); iqe != nil {
 		if qop := iqe.QueryExpressionOrParens(); qop != nil {
-			if sub := i.inspectQueryExpressionOrParens(qop); sub != nil && len(sub.Tables) > 0 {
+			if sub := i.inspectQueryExpressionOrParens(qop); core.CarriesRead(sub) {
 				result.Subqueries = append(result.Subqueries, *sub)
 			}
 		}
@@ -701,6 +685,17 @@ func (i *Inspector) updateListFields(
 		}
 	}
 	return fields
+}
+
+// chargeSetReads adds what the right of each assignment in a SET list reads:
+// the columns whose values it stores, and the subqueries nested under it.
+func (i *Inspector) chargeSetReads(
+	result *core.InspectStatement,
+	list mysql.IUpdateListContext,
+	schema, table string,
+) {
+	result.Where = core.MergeInspectFields(result.Where, i.updateListReads(list, schema, table))
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(list)...)
 }
 
 // updateListReads are the columns the right of a SET list reads, whose values
@@ -1046,10 +1041,11 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 	return result
 }
 
-// bodyStatements is what the statements carried inside node require. Only the
-// outermost of them is inspected: a statement nested deeper is part of one
-// already read, which reports it itself. SQLite has the same function over the
-// four statement kinds its trigger bodies hold.
+// bodyStatements is what the statements carried inside node require, together
+// with the queries it reads outside any of them. Only the outermost of either
+// is inspected: one nested deeper is part of a statement already read, which
+// reports it itself. SQLite has the same function over the four statement
+// kinds its trigger bodies hold.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
 	listener := &bodyStatementListener{
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
@@ -1066,18 +1062,27 @@ type bodyStatementListener struct {
 	depth     int
 }
 
-func (l *bodyStatementListener) EnterSimpleStatement(ctx *mysql.SimpleStatementContext) {
+func (l *bodyStatementListener) collect(read *core.InspectStatement) {
 	if l.depth == 0 {
-		if read := l.inspector.inspectStatement(ctx); read != nil {
-			l.results = append(l.results, *read)
-		}
+		l.results = append(l.results, core.OrUnknown(read))
 	}
 	l.depth++
 }
 
-func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementContext) {
-	l.depth--
+func (l *bodyStatementListener) EnterSimpleStatement(ctx *mysql.SimpleStatementContext) {
+	l.collect(l.inspector.inspectStatement(ctx))
 }
+
+func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementContext) { l.depth-- }
+
+// A body also reads where its grammar carries a query rather than a statement,
+// a RETURN and a cursor declaration among them. queryExpression is the node
+// every one of those reaches, so the carriers do not have to be enumerated.
+func (l *bodyStatementListener) EnterQueryExpression(ctx *mysql.QueryExpressionContext) {
+	l.collect(l.inspector.inspectQueryExpression(ctx))
+}
+
+func (l *bodyStatementListener) ExitQueryExpression(_ *mysql.QueryExpressionContext) { l.depth-- }
 
 // loadTarget is the insert a LOAD DATA performs. A file with no column list
 // fills every column, which is what naming none asks the right on.
@@ -1091,18 +1096,26 @@ func (i *Inspector) loadTarget(stmt mysql.ILoadStatementContext) core.InspectSta
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
 	}
 	tail := stmt.LoadDataFileTail()
-	if tail == nil || tail.LoadDataFileTargetList() == nil {
+	if tail == nil {
 		return read
 	}
-	list := tail.LoadDataFileTargetList().FieldOrVariableList()
-	if list == nil {
+	set := tail.UpdateList()
+	i.chargeSetReads(&read, set, schema, table)
+	var columns mysql.IFieldOrVariableListContext
+	if targets := tail.LoadDataFileTargetList(); targets != nil {
+		columns = targets.FieldOrVariableList()
+	}
+	if columns == nil {
+		// The file fills every column, which naming none asks the right on, so
+		// a column the SET list also fills is already covered.
 		return read
 	}
-	for _, col := range list.AllColumnRef() {
+	for _, col := range columns.AllColumnRef() {
 		if name := i.columnRefName(col); name != "" {
 			read.Fields = append(read.Fields, core.InspectField{Name: name, Table: table, Schema: schema})
 		}
 	}
+	read.Fields = core.MergeInspectFields(read.Fields, i.updateListFields(set, schema, table))
 	return read
 }
 
@@ -1805,7 +1818,7 @@ type embeddedSubqueryListener struct {
 
 func (l *embeddedSubqueryListener) EnterSubquery(ctx *mysql.SubqueryContext) {
 	if l.subqueryDepth == 0 && ctx != nil {
-		if sub := l.inspector.inspectSubquery(ctx); sub != nil && len(sub.Tables) > 0 {
+		if sub := l.inspector.inspectSubquery(ctx); core.CarriesRead(sub) {
 			l.results = append(l.results, *sub)
 		}
 	}
@@ -1860,7 +1873,7 @@ func (l *fromSubqueryListener) EnterSubquery(ctx *mysql.SubqueryContext) {
 		// an expression-level subquery (those are picked up by extractSelectListSubqueries
 		// and extractWhereFields).
 		if isDerivedTableSubquery(ctx) {
-			if sub := l.inspector.inspectSubquery(ctx); sub != nil && len(sub.Tables) > 0 {
+			if sub := l.inspector.inspectSubquery(ctx); core.CarriesRead(sub) {
 				l.results = append(l.results, *sub)
 			}
 		}
