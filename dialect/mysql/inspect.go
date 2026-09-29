@@ -430,9 +430,6 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, 
 // nested statement of its own. A derived table is inspected in its own right,
 // so the walk stops at one rather than charging its names out here.
 func fromCallArgs(tree antlr.Tree) []antlr.ParseTree {
-	if tree == nil {
-		return nil
-	}
 	var args []antlr.ParseTree
 	for _, call := range core.CollectOutside[mysql.ITableFunctionContext, mysql.ISubqueryContext](tree) {
 		if expr := core.TreeOrNil(call.Expr()); expr != nil {

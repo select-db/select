@@ -488,9 +488,6 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, 
 // nested statement of its own. A derived table is inspected in its own right,
 // so the walk stops at one rather than charging its names out here.
 func fromCallArgs(tree antlr.Tree) []antlr.ParseTree {
-	if tree == nil {
-		return nil
-	}
 	var args []antlr.ParseTree
 	for _, item := range core.CollectOutside[sqlite.ITable_or_subqueryContext, sqlite.ISelect_stmtContext](tree) {
 		if item.Table_function_name() == nil {
