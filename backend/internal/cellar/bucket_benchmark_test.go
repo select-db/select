@@ -68,8 +68,12 @@ func TestBucketBenchmark(t *testing.T) {
 		databases.evict(shortFor(1))
 		require.NoFileExists(t, path)
 		start = time.Now()
-		_, err = databases.use(ctx, id)
-		require.NoError(t, err)
+		// use answers errWaking after wakeWait while the restore goes on, so
+		// time what a client sees: retry until the database is on disk.
+		require.Eventually(t, func() bool {
+			_, err := databases.use(ctx, id)
+			return err == nil
+		}, 20*time.Minute, time.Second)
 		wake := time.Since(start)
 
 		traceRestore(t, id)
@@ -92,7 +96,9 @@ func TestBucketBenchmark(t *testing.T) {
 // file reaches megabytes.
 func fillWithSales(t *testing.T, path string, megabytes int) {
 	t.Helper()
-	conn, err := sql.Open("sqlite", path)
+	// The cellar replicates the same file while this writes, so wait it out
+	// rather than failing on SQLITE_BUSY.
+	conn, err := sql.Open("sqlite", "file:"+path+"?_busy_timeout=30000")
 	require.NoError(t, err)
 	defer conn.Close()
 	_, err = conn.Exec("CREATE TABLE sale (id INTEGER PRIMARY KEY, note TEXT)")
@@ -114,7 +120,7 @@ func fillWithSales(t *testing.T, path string, megabytes int) {
 
 func execOn(t *testing.T, path, statement string) {
 	t.Helper()
-	conn, err := sql.Open("sqlite", path)
+	conn, err := sql.Open("sqlite", "file:"+path+"?_busy_timeout=30000")
 	require.NoError(t, err)
 	defer conn.Close()
 	_, err = conn.Exec(statement)
