@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ import (
 //   - cold: in the bucket only, restored by its next use.
 type Databases struct {
 	dir         string
-	bucketURL   string
+	bucket      url.URL
 	store       *litestream.Store
 	stopTidy    context.CancelFunc
 	tidyStopped chan struct{}
@@ -60,6 +61,10 @@ func OpenDatabases(dir, bucket string) error {
 		log.Printf("cellar: bucket is the directory %s: a lost machine loses it with the databases", absolute)
 		bucket = "file://" + absolute
 	}
+	bucketURL, err := url.Parse(bucket)
+	if err != nil {
+		return err
+	}
 	store := litestream.NewStore(nil, litestream.DefaultCompactionLevels)
 	// One window for every plan: the backend refuses a point in time outside the plan's own.
 	store.SnapshotInterval = 24 * time.Hour
@@ -71,7 +76,7 @@ func OpenDatabases(dir, bucket string) error {
 	ctx, stopTidy := context.WithCancel(context.Background())
 	opened := &Databases{
 		dir:         dir,
-		bucketURL:   bucket,
+		bucket:      *bucketURL,
 		store:       store,
 		stopTidy:    stopTidy,
 		tidyStopped: make(chan struct{}),
@@ -219,5 +224,8 @@ func (databases *Databases) bucketClient(id string) (litestream.ReplicaClient, e
 	if _, err := databasePath(databases.dir, id); err != nil {
 		return nil, err
 	}
-	return litestream.NewReplicaClientFromURL(databases.bucketURL + "/dbs/" + id)
+	// Joined on the path: an s3:// URL carries its endpoint and region in the query.
+	location := databases.bucket
+	location.Path = strings.TrimSuffix(location.Path, "/") + "/dbs/" + id
+	return litestream.NewReplicaClientFromURL(location.String())
 }
