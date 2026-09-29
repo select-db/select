@@ -1165,6 +1165,88 @@ func permCases() []PermCase {
 			Why:   "a column inside a call is read whether or not it comes back under its own name",
 		},
 
+		// --- a column handed to a function called in the FROM clause. The
+		// function expands the value into a relation the query returns, so the
+		// argument is read harder than one a WHERE tests, and every dialect has
+		// a function in this position.
+		{
+			On:   []string{"sqlite"},
+			Name: "a column a SQLite FROM-clause function expands",
+			SQL:  "SELECT t1.c1 FROM t1, json_each(t1.c2) AS j WHERE j.value = 'secret'",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "which rows come back is an answer about c2, the same answer the refused WHERE gives",
+		},
+		{
+			On:   []string{"sqlite"},
+			Name: "the expansion of that column returned",
+			SQL:  "SELECT t1.c1, j.value FROM t1, json_each(t1.c2) AS j",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "j.value is the contents of c2, handed back one element per row",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a column a PostgreSQL FROM-clause function expands",
+			SQL:  "SELECT t1.c1, u.n FROM t1, unnest(string_to_array(t1.c2, ',')) AS u(n)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "u.n is the contents of c2, and a nested call does not hide the column it reads",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "the same function marked LATERAL",
+			SQL:  "SELECT t1.c1 FROM t1, LATERAL unnest(string_to_array(t1.c2, ',')) AS u(n)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "LATERAL spells out the per-row evaluation the argument already had",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a column JSON_TABLE expands",
+			SQL:  "SELECT t1.c1, jt.n FROM t1, JSON_TABLE(t1.c2, '$[*]' COLUMNS (n VARCHAR(50) PATH '$')) AS jt",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "jt.n is the contents of c2, and the COLUMNS list names no column of t1",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a subquery in a FROM-clause function argument",
+			SQL:  "SELECT t1.c1 FROM t1, generate_series(1, (SELECT max(c1) FROM other.t3)) AS g(n)",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "the same subquery inside a WHERE is checked, and moving it left does not unread other.t3",
+		},
+		{
+			On:   []string{"sqlite"},
+			Name: "the same subquery on SQLite",
+			SQL:  "SELECT t1.c1 FROM t1, json_each((SELECT c3 FROM t2 LIMIT 1)) AS j",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT2(core.ActionSelect).Only("c3"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "a nested statement is checked wherever it sits, the argument list included",
+		},
+
 		// --- a CTE a write reads. The name is not a relation, so a right on
 		// it is a right nobody can hold: what the case asks for is the right
 		// on what the body reads.
