@@ -45,6 +45,9 @@ type database struct {
 	path        string
 	lastUsed    time.Time
 	replicating *litestream.DB // nil while resting
+	// bucket is kept for the record's life: each client opens its own
+	// connections, so a new one per rest and wake would redo the TLS handshake.
+	bucket litestream.ReplicaClient
 }
 
 // OpenDatabases replicates the databases in dir to bucket, an s3:// URL or,
@@ -205,12 +208,15 @@ func (databases *Databases) replicate(database *database) error {
 	if database.replicating != nil {
 		return nil
 	}
-	client, err := databases.bucketClient(database.id)
-	if err != nil {
-		return err
+	if database.bucket == nil {
+		client, err := databases.bucketClient(database.id)
+		if err != nil {
+			return err
+		}
+		database.bucket = client
 	}
 	replicating := litestream.NewDB(database.path)
-	replicating.Replica = litestream.NewReplicaWithClient(replicating, client)
+	replicating.Replica = litestream.NewReplicaWithClient(replicating, database.bucket)
 	if err := databases.store.RegisterDB(replicating); err != nil {
 		return err
 	}
