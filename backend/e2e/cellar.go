@@ -20,13 +20,12 @@ func ServeCellar(t *testing.T) string {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	databases, err := cellar.OpenDatabases(dir, t.TempDir())
-	if err != nil {
+	if err := cellar.OpenDatabases(dir, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = databases.Close(context.Background()) })
+	t.Cleanup(func() { _ = cellar.CloseDatabases(context.Background()) })
 	mux := http.NewServeMux()
-	cellar.Register(mux, databases, publicKey, "local")
+	cellar.Register(mux, publicKey, "local")
 	cellarServer := httptest.NewServer(mux)
 	t.Cleanup(cellarServer.Close)
 	cellarclient.URL, cellarclient.CellarID = cellarServer.URL, "local"

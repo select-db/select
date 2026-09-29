@@ -35,6 +35,9 @@ type Databases struct {
 	onDisk map[string]*database // by id
 }
 
+// databases is this process's cellar, set by OpenDatabases.
+var databases *Databases
+
 // database is one database file on disk.
 type database struct {
 	id          string
@@ -44,12 +47,15 @@ type database struct {
 }
 
 // OpenDatabases replicates the databases in dir to bucket, an s3:// URL or,
-// without S3, a directory.
-func OpenDatabases(dir, bucket string) (*Databases, error) {
+// without S3, a directory. The routes serve them until CloseDatabases.
+func OpenDatabases(dir, bucket string) error {
+	if databases != nil {
+		return errors.New("cellar: databases already open")
+	}
 	if !litestream.IsURL(bucket) {
 		absolute, err := filepath.Abs(bucket)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		log.Printf("cellar: bucket is the directory %s: a lost machine loses it with the databases", absolute)
 		bucket = "file://" + absolute
@@ -60,7 +66,7 @@ func OpenDatabases(dir, bucket string) (*Databases, error) {
 	store.SnapshotRetention = 7 * 24 * time.Hour
 	store.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	if err := store.Open(context.Background()); err != nil {
-		return nil, err
+		return err
 	}
 	ctx, stopTidy := context.WithCancel(context.Background())
 	opened := &Databases{
@@ -73,7 +79,7 @@ func OpenDatabases(dir, bucket string) (*Databases, error) {
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, entry := range entries {
 		// Only <uuid>.db is a database, not its WAL files or a temporary copy.
@@ -84,22 +90,28 @@ func OpenDatabases(dir, bucket string) (*Databases, error) {
 		}
 		info, err := entry.Info()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		// Replicated once at start, so writes the last run had not sent reach
 		// the bucket before the database can rest.
 		database := &database{id: id, path: path, lastUsed: info.ModTime()}
 		if err := opened.replicate(database); err != nil {
-			return nil, err
+			return err
 		}
 		opened.onDisk[id] = database
 	}
 	go opened.tidyEvery(ctx)
-	return opened, nil
+	databases = opened
+	return nil
 }
 
-// Close stops replicating, after a last sync of every replicating database.
-func (databases *Databases) Close(ctx context.Context) error {
+// CloseDatabases stops replicating, after a last sync of every replicating
+// database.
+func CloseDatabases(ctx context.Context) error {
+	if databases == nil {
+		return nil
+	}
+	defer func() { databases = nil }()
 	databases.stopTidy()
 	<-databases.tidyStopped
 	// Litestream's close syncs only a database it has opened; this opens it.

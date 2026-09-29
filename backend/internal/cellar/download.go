@@ -10,7 +10,7 @@ import (
 
 // DownloadHandler sends a consistent copy of the database, taken with VACUUM
 // INTO so writes may go on while it streams.
-func DownloadHandler(databases *Databases) http.HandlerFunc {
+func DownloadHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sourcePath, err := databases.use(r.Context(), GetGrant(r).DatasourceID)
 		if err != nil {

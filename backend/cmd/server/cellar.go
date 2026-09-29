@@ -58,8 +58,7 @@ func serveLocalCellar() (string, error) {
 	if bucket == "" {
 		bucket = dir + "-bucket"
 	}
-	databases, err := cellar.OpenDatabases(dir, bucket)
-	if err != nil {
+	if err := cellar.OpenDatabases(dir, bucket); err != nil {
 		return "", err
 	}
 	publicKey, err := auth.PublicKey()
@@ -71,7 +70,7 @@ func serveLocalCellar() (string, error) {
 		return "", err
 	}
 	mux := http.NewServeMux()
-	cellar.Register(mux, databases, publicKey, localCellar)
+	cellar.Register(mux, publicKey, localCellar)
 	server := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,

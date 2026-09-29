@@ -12,7 +12,7 @@ type StoredDatabase struct {
 }
 
 // InventoryHandler lists every database on this cellar's disk, with its size.
-func InventoryHandler(databases *Databases) http.HandlerFunc {
+func InventoryHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stored := []StoredDatabase{}
 		databases.mu.Lock()
