@@ -1204,6 +1204,17 @@ func permCases() []PermCase {
 		},
 		{
 			On:   []string{"postgresql"},
+			Name: "a PostgreSQL FROM-clause function a predicate reads back",
+			SQL:  "SELECT t1.c1 FROM t1, unnest(string_to_array(t1.c2, ',')) AS u(n) WHERE u.n = 'secret'",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "the predicate on the expansion is a predicate on c2, one value at a time",
+		},
+		{
+			On:   []string{"postgresql"},
 			Name: "the same function marked LATERAL",
 			SQL:  "SELECT t1.c1 FROM t1, LATERAL unnest(string_to_array(t1.c2, ',')) AS u(n)",
 			Needs: []Right{
@@ -1212,6 +1223,17 @@ func permCases() []PermCase {
 			},
 			Op:  core.InspectOpSelect,
 			Why: "LATERAL spells out the per-row evaluation the argument already had",
+		},
+		{
+			On:   []string{"postgresql"},
+			Name: "a column XMLTABLE is passed",
+			SQL:  "SELECT t1.c1 FROM t1, xmltable('/r' PASSING t1.c2 COLUMNS a text PATH 'a')",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "PASSING hands c2 to the function, which is the same read under another keyword",
 		},
 		{
 			On:   []string{"mysql"},
@@ -1223,6 +1245,17 @@ func permCases() []PermCase {
 			},
 			Op:  core.InspectOpSelect,
 			Why: "jt.n is the contents of c2, and the COLUMNS list names no column of t1",
+		},
+		{
+			On:   []string{"mysql"},
+			Name: "a JSON_TABLE expansion a predicate reads back",
+			SQL:  "SELECT t1.c1 FROM t1, JSON_TABLE(t1.c2, '$[*]' COLUMNS (n INT PATH '$')) AS jt WHERE jt.n = 1",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "the predicate on the expansion is a predicate on c2, one value at a time",
 		},
 		{
 			On:   []string{"postgresql"},

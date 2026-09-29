@@ -425,10 +425,14 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, 
 }
 
 // fromCallArgs are the argument lists of the functions a FROM clause calls.
-// `json_each(t1.c2)` reads c2 once per row and returns it expanded, so the
-// argument is a read the statement is scoped by, and a subquery in it is a
-// nested statement of its own. A derived table is inspected in its own right,
-// so the walk stops at one rather than charging its names out here.
+// `unnest(t1.c2)` reads c2 once per row and returns it expanded, so the argument
+// is a read the statement is scoped by, and a subquery in it is a nested
+// statement of its own. A derived table is inspected in its own right, so the
+// walk stops at one rather than charging its names out here.
+//
+// The whole call node stands for its arguments: func_table is a
+// func_expr_windowless, which the grammar gives no accessor to reach inside of,
+// and the alias that names the call's columns is a sibling of it.
 func fromCallArgs(tree antlr.Tree) []antlr.ParseTree {
 	var args []antlr.ParseTree
 	for _, call := range core.CollectOutside[pg.IFunc_tableContext, pg.ISelect_with_parensContext](tree) {
