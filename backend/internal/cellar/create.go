@@ -21,7 +21,7 @@ type CreateRequest struct {
 
 // CreateHandler writes a new database, empty or copied, under a temporary name
 // and renames it into place: a failed copy never leaves a half database.
-func CreateHandler(databases *Databases) http.HandlerFunc {
+func CreateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req CreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -29,7 +29,7 @@ func CreateHandler(databases *Databases) http.HandlerFunc {
 			return
 		}
 		id := GetGrant(r).DatasourceID
-		path, err := createDatabase(r.Context(), databases, id, req)
+		path, err := createDatabase(r.Context(), id, req)
 		if err != nil {
 			writeLifecycleError(w, r, err)
 			return
@@ -40,7 +40,7 @@ func CreateHandler(databases *Databases) http.HandlerFunc {
 	}
 }
 
-func createDatabase(ctx context.Context, databases *Databases, id string, req CreateRequest) (string, error) {
+func createDatabase(ctx context.Context, id string, req CreateRequest) (string, error) {
 	// use wakes the id when it is cold, so an id kept only in the bucket is taken too.
 	_, err := databases.use(ctx, id)
 	switch {

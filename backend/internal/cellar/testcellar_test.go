@@ -21,7 +21,6 @@ import (
 type testCellar struct {
 	dir       string
 	bucketDir string
-	databases *Databases
 	call      func(method, path string, body any) *httptest.ResponseRecorder
 }
 
@@ -30,15 +29,14 @@ func newTestCellar(t *testing.T) testCellar {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	dir, bucketDir := t.TempDir(), t.TempDir()
-	databases, err := OpenDatabases(dir, bucketDir)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = databases.Close(context.Background()) })
+	require.NoError(t, OpenDatabases(dir, bucketDir))
+	t.Cleanup(func() { _ = CloseDatabases(context.Background()) })
 	mux := http.NewServeMux()
-	Register(mux, databases, &privateKey.PublicKey, "local")
+	Register(mux, &privateKey.PublicKey, "local")
 	grant, err := Grant{WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20, MaxInFlight: 4}.Encode()
 	require.NoError(t, err)
 	token := signWith(t, privateKey)
-	return testCellar{dir: dir, bucketDir: bucketDir, databases: databases, call: func(method, path string, body any) *httptest.ResponseRecorder {
+	return testCellar{dir: dir, bucketDir: bucketDir, call: func(method, path string, body any) *httptest.ResponseRecorder {
 		var encoded bytes.Buffer
 		if body != nil {
 			require.NoError(t, json.NewEncoder(&encoded).Encode(body))
@@ -72,7 +70,7 @@ func (cellar testCellar) exec(t *testing.T, id, statement string) {
 // sync waits until the bucket holds every write to database id.
 func (cellar testCellar) sync(t *testing.T, id string) {
 	t.Helper()
-	_, err := cellar.databases.store.SyncDB(context.Background(), filepath.Join(cellar.dir, id+".db"), true)
+	_, err := databases.store.SyncDB(context.Background(), filepath.Join(cellar.dir, id+".db"), true)
 	require.NoError(t, err)
 }
 
