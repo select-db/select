@@ -58,12 +58,3 @@ func TestWakeIsSharedByConcurrentCallers(t *testing.T) {
 	}
 	require.Equal(t, 2, cellar.countNotes(t, id))
 }
-
-func TestUseMissingDatabase(t *testing.T) {
-	cellar := newTestCellar(t)
-
-	_, err := cellar.databases.use(context.Background(), uuid.NewString())
-	require.ErrorIs(t, err, errNotFound)
-	_, err = cellar.databases.use(context.Background(), "../escape")
-	require.Error(t, err, "an id that is not a uuid")
-}

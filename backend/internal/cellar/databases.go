@@ -2,6 +2,7 @@ package cellar
 
 import (
 	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"os"
@@ -101,7 +102,12 @@ func OpenDatabases(dir, bucket string) (*Databases, error) {
 func (databases *Databases) Close(ctx context.Context) error {
 	databases.stopTidy()
 	<-databases.tidyStopped
-	return databases.store.Close(ctx)
+	// Litestream's close syncs only a database it has opened; this opens it.
+	var syncErrors []error
+	for _, replicating := range databases.store.DBs() {
+		syncErrors = append(syncErrors, replicating.SyncAndWait(ctx))
+	}
+	return errors.Join(append(syncErrors, databases.store.Close(ctx))...)
 }
 
 // use readies database id for a statement: restored if cold, replicating, its
