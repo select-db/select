@@ -280,7 +280,10 @@ Needs 1. Can run alongside 2. Start with the spikes.
 - [ ] `size_bytes`, `state`, `last_used_at` reported back to the row.
 - [x] Point-in-time fork reads from the replica.
 - [x] Tests: rest, evict, wake, point-in-time fork, against a directory.
-- [ ] Tests against the OVH bucket (keys pending).
+- [x] Tests against the OVH bucket: `TestAgainstTheBucket` passes on
+      `select-staging-cellar`; laptop numbers in `litestream-spike.md`.
+- [ ] Benchmark from the staging box, then delete `bucket_benchmark_test.go`.
+- [ ] 7-day expiry of old versions on both buckets (`NoncurrentVersionExpiration`).
 - [ ] Tune with the bucket numbers: one S3 transport shared by every replica
       client, rest in parallel with a bound, a lighter first sync at startup.
 - [ ] Server shutdown closes `cellar.Databases`, for a last sync.
