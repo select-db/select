@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benbjohnson/litestream"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/superfly/ltx"
 )
 
 // TestBucketBenchmark times the bucket path for databases of CELLAR_BENCH_MB
@@ -69,6 +72,8 @@ func TestBucketBenchmark(t *testing.T) {
 		require.NoError(t, err)
 		wake := time.Since(start)
 
+		traceRestore(t, id)
+
 		start = time.Now()
 		require.NoError(t, databases.restoreAt(ctx, id, mark, filepath.Join(t.TempDir(), "at.db")))
 		restoreAt := time.Since(start)
@@ -114,4 +119,61 @@ func execOn(t *testing.T, path, statement string) {
 	defer conn.Close()
 	_, err = conn.Exec(statement)
 	require.NoError(t, err)
+}
+
+// traceRestore restores database id again through a client that logs each
+// bucket call, to show where a wake spends its time.
+func traceRestore(t *testing.T, id string) {
+	t.Helper()
+	client, err := databases.bucketClient(id)
+	require.NoError(t, err)
+	traced := &tracedClient{ReplicaClient: client, t: t, start: time.Now()}
+	options := litestream.NewRestoreOptions()
+	options.OutputPath = filepath.Join(t.TempDir(), "traced.db")
+	require.NoError(t, litestream.NewReplicaWithClient(nil, traced).Restore(context.Background(), options))
+	t.Logf("traced restore of %s: %v in all", id, time.Since(traced.start))
+}
+
+type tracedClient struct {
+	litestream.ReplicaClient
+	t     *testing.T
+	start time.Time
+}
+
+func (client *tracedClient) LTXFiles(ctx context.Context, level int, seek ltx.TXID, useMetadata bool) (ltx.FileIterator, error) {
+	start := time.Now()
+	files, err := client.ReplicaClient.LTXFiles(ctx, level, seek, useMetadata)
+	client.t.Logf("  %6dms list level %d took %v", time.Since(client.start).Milliseconds(), level, time.Since(start))
+	return files, err
+}
+
+func (client *tracedClient) OpenLTXFile(ctx context.Context, level int, minTXID, maxTXID ltx.TXID, offset, size int64) (io.ReadCloser, error) {
+	start := time.Now()
+	reader, err := client.ReplicaClient.OpenLTXFile(ctx, level, minTXID, maxTXID, offset, size)
+	client.t.Logf("  %6dms open level %d file %s-%s took %v", time.Since(client.start).Milliseconds(), level, minTXID, maxTXID, time.Since(start))
+	if err != nil {
+		return nil, err
+	}
+	return &tracedReader{ReadCloser: reader, client: client, name: fmt.Sprintf("level %d file %s-%s", level, minTXID, maxTXID), start: time.Now()}, nil
+}
+
+type tracedReader struct {
+	io.ReadCloser
+	client *tracedClient
+	name   string
+	start  time.Time
+	bytes  int64
+}
+
+func (reader *tracedReader) Read(buffer []byte) (int, error) {
+	count, err := reader.ReadCloser.Read(buffer)
+	reader.bytes += int64(count)
+	return count, err
+}
+
+func (reader *tracedReader) Close() error {
+	elapsed := time.Since(reader.start)
+	reader.client.t.Logf("  %6dms read %s: %.1f MB in %v (%.0f MB/s)", time.Since(reader.client.start).Milliseconds(), reader.name,
+		float64(reader.bytes)/(1<<20), elapsed, float64(reader.bytes)/(1<<20)/elapsed.Seconds())
+	return reader.ReadCloser.Close()
 }
