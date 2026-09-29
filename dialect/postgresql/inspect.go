@@ -389,7 +389,7 @@ func (i *Inspector) inspectSelectPrimary(
 
 	tested := core.MergeInspectFields(where, i.branchClauseFields(primary, relationRefs, scope, fields))
 	tested = core.MergeInspectFields(tested,
-		i.joinFields(core.TreeOrNil(primary.From_clause()), relationRefs, scope))
+		i.fromFields(core.TreeOrNil(primary.From_clause()), relationRefs, scope))
 	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs, scope))
 
 	return &core.InspectStatement{
@@ -420,15 +420,40 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, 
 	return listener.fields
 }
 
-// joinFields are the columns a join pairs rows on, wherever the join is: the
-// FROM list of a select, or the relations an UPDATE or a DELETE reads. ON
-// names an expression, USING gives bare column names that belong to every
-// relation carrying them, and NATURAL names nothing at all.
-func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+// fromCallArgs are the argument lists of the functions a FROM clause calls.
+// `unnest(t1.c2)` reads c2 once per row and returns it expanded, so the argument
+// is a read the statement is scoped by, and a subquery in it is a nested
+// statement of its own. A derived table is inspected in its own right, so the
+// walk stops at one rather than charging its names out here.
+//
+// The whole call node stands for its arguments: func_table is a
+// func_expr_windowless, which the grammar gives no accessor to reach inside of,
+// and the alias that names the call's columns is a sibling of it.
+func fromCallArgs(tree antlr.Tree) []antlr.ParseTree {
+	var args []antlr.ParseTree
+	for _, call := range core.CollectOutside[pg.IFunc_tableContext, pg.ISelect_with_parensContext](tree) {
+		args = append(args, call)
+	}
+	for _, call := range core.CollectOutside[pg.IXmltableContext, pg.ISelect_with_parensContext](tree) {
+		args = append(args, call)
+	}
+	return args
+}
+
+// fromFields are the columns a FROM clause names without returning them,
+// wherever the clause is: the FROM list of a select, or the relations an UPDATE
+// or a DELETE reads. A join pairs rows on them, ON naming an expression, USING
+// giving bare column names that belong to every relation carrying them and
+// NATURAL naming nothing at all; a function called in the clause takes them as
+// arguments.
+func (i *Inspector) fromFields(tree antlr.ParseTree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if tree == nil {
 		return nil
 	}
 	var fields []core.InspectField
+	for _, args := range fromCallArgs(tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(args, refs, scope))
+	}
 	for _, qual := range core.CollectNodes[pg.IJoin_qualContext](tree) {
 		if list := qual.Name_list(); list != nil {
 			names := make([]string, 0, len(list.AllName()))
@@ -1057,7 +1082,7 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	}
 
 	result.Where = core.MergeInspectFields(result.Where,
-		i.joinFields(core.TreeOrNil(fromClause), whereRefs, core.Scope{CTEs: ctes}))
+		i.fromFields(core.TreeOrNil(fromClause), whereRefs, core.Scope{CTEs: ctes}))
 	// A column on the right of an assignment is read and its value stored, so
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
@@ -1126,7 +1151,7 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	}
 
 	result.Where = core.MergeInspectFields(result.Where,
-		i.joinFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
+		i.fromFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
 
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
 
@@ -1776,6 +1801,9 @@ func (i *Inspector) extractSubqueriesFromFromList(fromList pg.IFrom_listContext)
 	relationRefs := fromList.AllTable_ref()
 	for _, relationRef := range relationRefs {
 		subqueries = append(subqueries, i.extractSubqueriesFromRelationRef(relationRef)...)
+	}
+	for _, args := range fromCallArgs(fromList) {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(args)...)
 	}
 
 	return subqueries

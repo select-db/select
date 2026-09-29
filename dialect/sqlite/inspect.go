@@ -482,15 +482,37 @@ func (i *Inspector) testedFields(tree antlr.ParseTree, refs []core.RelationRef, 
 	return listener.fields
 }
 
-// joinFields are the columns a join pairs rows on, wherever the join is: the
-// FROM list of a select, or the relations an UPDATE reads. ON names an
-// expression, USING gives bare column names that belong to every relation
-// carrying them, and NATURAL names nothing at all.
-func (i *Inspector) joinFields(tree antlr.Tree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
+// fromCallArgs are the argument lists of the functions a FROM clause calls.
+// `json_each(t1.c2)` reads c2 once per row and returns it expanded, so the
+// argument is a read the statement is scoped by, and a subquery in it is a
+// nested statement of its own. A derived table is inspected in its own right,
+// so the walk stops at one rather than charging its names out here.
+func fromCallArgs(tree antlr.Tree) []antlr.ParseTree {
+	var args []antlr.ParseTree
+	for _, item := range core.CollectOutside[sqlite.ITable_or_subqueryContext, sqlite.ISelect_stmtContext](tree) {
+		if item.Table_function_name() == nil {
+			continue
+		}
+		for _, expr := range item.AllExpr() {
+			args = append(args, expr)
+		}
+	}
+	return args
+}
+
+// fromFields are the columns a FROM clause names without returning them,
+// wherever the clause is: the FROM list of a select, or the relations an UPDATE
+// reads. A join pairs rows on them, ON naming an expression, USING giving bare
+// column names that belong to every relation carrying them and NATURAL naming
+// nothing at all; a function called in the clause takes them as arguments.
+func (i *Inspector) fromFields(tree antlr.ParseTree, refs []core.RelationRef, scope core.Scope) []core.InspectField {
 	if tree == nil {
 		return nil
 	}
 	var fields []core.InspectField
+	for _, args := range fromCallArgs(tree) {
+		fields = core.MergeInspectFields(fields, i.testedFields(args, refs, scope))
+	}
 	for _, constraint := range core.CollectNodes[sqlite.IJoin_constraintContext](tree) {
 		columns := constraint.AllColumn_name()
 		if len(columns) == 0 {
@@ -606,7 +628,7 @@ func (i *Inspector) inspectSelectCore(
 	fields := i.extractSelectFieldsWithResolution(selectCore, relationRefs, ctes, subqueryColumns, allSubqueries, cteToSubqueryMap)
 
 	tested := core.MergeInspectFields(where, i.branchClauseFields(selectCore, relationRefs, scope, fields))
-	tested = core.MergeInspectFields(tested, i.joinFields(selectCore, relationRefs, scope))
+	tested = core.MergeInspectFields(tested, i.fromFields(selectCore, relationRefs, scope))
 	tested = core.MergeInspectFields(tested, i.tailClauseFields(tail, relationRefs, scope))
 
 	return core.InspectStatement{
@@ -844,7 +866,7 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	}
 
 	result.Where = core.MergeInspectFields(result.Where,
-		i.joinFields(stmt, whereRefs, core.Scope{CTEs: ctes}))
+		i.fromFields(stmt, whereRefs, core.Scope{CTEs: ctes}))
 	// A column on the right of an assignment is read and its value stored, so
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
@@ -1767,7 +1789,11 @@ func (i *Inspector) extractFromSubqueries(tree antlr.ParseTree, cteToSubqueryMap
 
 	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
 
-	return listener.subqueries
+	subqueries := listener.subqueries
+	for _, args := range fromCallArgs(tree) {
+		subqueries = append(subqueries, i.extractEmbeddedSubqueries(args)...)
+	}
+	return subqueries
 }
 
 // subqueryExtractorListener extracts subqueries from FROM clause
