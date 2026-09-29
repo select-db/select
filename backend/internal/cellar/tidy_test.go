@@ -107,6 +107,18 @@ func TestRestKeepsReplicatingWhenTheBucketFails(t *testing.T) {
 	require.FileExists(t, filepath.Join(cellar.dir, id+".db"), "and never evicted")
 }
 
+func TestRestAndUseKeepOneBucketClient(t *testing.T) {
+	cellar := newTestCellar(t)
+	id := uuid.NewString()
+	cellar.createNotes(t, id)
+	client := databases.onDisk[id].bucket
+
+	databases.rest(context.Background(), time.Now().Add(restAfter))
+	_, err := databases.use(context.Background(), id)
+	require.NoError(t, err)
+	require.Same(t, client, databases.onDisk[id].bucket, "replicating again reuses the database's connections")
+}
+
 func TestEvictRemovesEveryFileOfTheDatabase(t *testing.T) {
 	cellar := newTestCellar(t)
 	evictedID, keptID := uuid.NewString(), uuid.NewString()

@@ -68,13 +68,18 @@ func TestBucketBenchmark(t *testing.T) {
 		databases.evict(shortFor(1))
 		require.NoFileExists(t, path)
 		start = time.Now()
-		// use answers errWaking after wakeWait while the restore goes on, so
+		// wake answers errWaking after wakeWait while the restore goes on, so
 		// time what a client sees: retry until the database is on disk.
 		require.Eventually(t, func() bool {
-			_, err := databases.use(ctx, id)
-			return err == nil
+			return databases.wake(ctx, id, path) == nil
 		}, 20*time.Minute, time.Second)
-		wake := time.Since(start)
+		restore := time.Since(start)
+		start = time.Now()
+		_, err = databases.use(ctx, id)
+		require.NoError(t, err)
+		register := time.Since(start)
+		wake := restore + register
+		t.Logf("%s wake: restore %v, then register %v", id, restore, register)
 
 		traceRestore(t, id)
 
