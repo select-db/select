@@ -2319,6 +2319,66 @@ func permCases() []PermCase {
 			Denied: rowRights,
 			Why:    "the body is statements of this dialect, as it is on PostgreSQL",
 		},
+
+		// --- a body reads from its control flow as well as from its
+		// statements. There is no right on a routine, so nothing prices the
+		// read at call time and creation is the only moment it can be charged.
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body that is one RETURN expression",
+			SQL:    "CREATE FUNCTION f9() RETURNS int DETERMINISTIC RETURN (SELECT c1 FROM t1)",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "calling the function hands back the c1 of t1, and the body holds no statement to charge it to",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body returning a query from a branch",
+			SQL:    "CREATE FUNCTION f9() RETURNS int DETERMINISTIC BEGIN IF TRUE THEN RETURN (SELECT c1 FROM t1); END IF; RETURN 0; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "a RETURN nested in a branch returns the same rows the one-line body does",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body branching on a query",
+			SQL:    "CREATE PROCEDURE p9() BEGIN IF (SELECT c1 FROM t1) > 0 THEN SET @x = 1; END IF; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "which branch runs is the c1 of t1, so calling the procedure tells its caller the value",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body looping on a query",
+			SQL:    "CREATE PROCEDURE p9() BEGIN WHILE (SELECT c1 FROM t1) > 0 DO SET @x = 1; END WHILE; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "the loop condition reads t1 on every turn, as the IF condition reads it once",
+		},
+		{
+			On:     []string{"mysql"},
+			Name:   "a routine body declaring a cursor",
+			SQL:    "CREATE PROCEDURE p9() BEGIN DECLARE cur CURSOR FOR SELECT c1 FROM t1; OPEN cur; END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "a cursor is how a routine reads a table row by row, and the grammar carries the query bare rather than parenthesised",
+		},
+		{
+			On:     []string{"sqlite"},
+			Name:   "a trigger body guarded by a query",
+			SQL:    "CREATE TRIGGER tr AFTER INSERT ON t1 WHEN (SELECT c3 FROM t2) > 0 BEGIN DELETE FROM t1; END",
+			Needs:  []Right{Manage, mainT2(core.ActionSelect).Only("c3"), mainT1(core.ActionDelete)},
+			Denied: rowRights,
+			Why:    "whether the delete happens is the c3 of t2, which is the condition case MySQL spells as IF",
+		},
+		{
+			On:     []string{"postgresql"},
+			Name:   "a routine body that is one RETURN expression",
+			SQL:    "CREATE FUNCTION f9() RETURNS int LANGUAGE sql BEGIN ATOMIC RETURN (SELECT c1 FROM t1); END",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "the standard body spelling returns the same rows the quoted one does",
+		},
 		{
 			On:     []string{"postgresql"},
 			Name:   "a CREATE SCHEMA element carrying a view body",

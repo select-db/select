@@ -1046,10 +1046,11 @@ func (i *Inspector) inspectCreate(stmt mysql.ICreateStatementContext) *core.Insp
 	return result
 }
 
-// bodyStatements is what the statements carried inside node require. Only the
-// outermost of them is inspected: a statement nested deeper is part of one
-// already read, which reports it itself. SQLite has the same function over the
-// four statement kinds its trigger bodies hold.
+// bodyStatements is what the statements carried inside node require, together
+// with the queries it reads outside any of them. Only the outermost of either
+// is inspected: one nested deeper is part of a statement already read, which
+// reports it itself. SQLite has the same function over the four statement
+// kinds its trigger bodies hold.
 func (i *Inspector) bodyStatements(node antlr.ParseTree) []core.InspectStatement {
 	listener := &bodyStatementListener{
 		BaseMySQLParserListener: &mysql.BaseMySQLParserListener{},
@@ -1066,18 +1067,27 @@ type bodyStatementListener struct {
 	depth     int
 }
 
-func (l *bodyStatementListener) EnterSimpleStatement(ctx *mysql.SimpleStatementContext) {
+func (l *bodyStatementListener) collect(read *core.InspectStatement) {
 	if l.depth == 0 {
-		if read := l.inspector.inspectStatement(ctx); read != nil {
-			l.results = append(l.results, *read)
-		}
+		l.results = append(l.results, core.OrUnknown(read))
 	}
 	l.depth++
 }
 
-func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementContext) {
-	l.depth--
+func (l *bodyStatementListener) EnterSimpleStatement(ctx *mysql.SimpleStatementContext) {
+	l.collect(l.inspector.inspectStatement(ctx))
 }
+
+func (l *bodyStatementListener) ExitSimpleStatement(_ *mysql.SimpleStatementContext) { l.depth-- }
+
+// A body also reads where its grammar carries a query rather than a statement,
+// a RETURN and a cursor declaration among them. queryExpression is the node
+// every one of those reaches, so the carriers do not have to be enumerated.
+func (l *bodyStatementListener) EnterQueryExpression(ctx *mysql.QueryExpressionContext) {
+	l.collect(l.inspector.inspectQueryExpression(ctx))
+}
+
+func (l *bodyStatementListener) ExitQueryExpression(_ *mysql.QueryExpressionContext) { l.depth-- }
 
 // loadTarget is the insert a LOAD DATA performs. A file with no column list
 // fills every column, which is what naming none asks the right on.
