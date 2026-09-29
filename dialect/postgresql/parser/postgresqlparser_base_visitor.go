@@ -1339,6 +1339,10 @@ func (v *BasePostgreSQLParserVisitor) VisitCreatefunc_opt_item(ctx *Createfunc_o
 	return v.VisitChildren(ctx)
 }
 
+func (v *BasePostgreSQLParserVisitor) VisitRoutine_body_stmt(ctx *Routine_body_stmtContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BasePostgreSQLParserVisitor) VisitFunc_as(ctx *Func_asContext) interface{} {
 	return v.VisitChildren(ctx)
 }

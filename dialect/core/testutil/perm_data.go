@@ -2584,6 +2584,14 @@ func permCases() []PermCase {
 		},
 		{
 			On:     []string{"postgresql"},
+			Name:   "a routine body that is one standard statement",
+			SQL:    "CREATE PROCEDURE p8() LANGUAGE sql BEGIN ATOMIC DELETE FROM t1; END",
+			Needs:  []Right{Manage, mainT1(core.ActionDelete)},
+			Denied: rowRights,
+			Why:    "calling the procedure deletes the rows, and the standard body spelling holds the statement as a parse node",
+		},
+		{
+			On:     []string{"postgresql"},
 			Name:   "a CREATE SCHEMA element carrying a view body",
 			SQL:    "CREATE SCHEMA s9 CREATE VIEW v9 AS SELECT c1 FROM t1",
 			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1")},

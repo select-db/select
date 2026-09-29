@@ -192,7 +192,8 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 	}
 
 	if funcStmt := stmt.Createfunctionstmt(); funcStmt != nil {
-		read := core.NestUnderUnknown(i.bodyStatements(routineBodies(funcStmt.Createfunc_opt_list()))...)
+		reads := i.bodyStatements(routineBodies(funcStmt.Createfunc_opt_list()))
+		read := core.NestUnderUnknown(append(reads, i.atomicBodyReads(funcStmt.Createfunc_opt_list())...)...)
 		return &read
 	}
 
@@ -983,6 +984,29 @@ func routineBodies(list pg.ICreatefunc_opt_listContext) []pg.ISconstContext {
 		}
 	}
 	return bodies
+}
+
+// atomicBodyReads is what a BEGIN ATOMIC body requires. It is parsed with the
+// statement rather than carried as text, and a RETURN reads what its expression does.
+func (i *Inspector) atomicBodyReads(list pg.ICreatefunc_opt_listContext) []core.InspectStatement {
+	if list == nil {
+		return nil
+	}
+	var reads []core.InspectStatement
+	for _, item := range list.AllCreatefunc_opt_item() {
+		for _, body := range item.AllRoutine_body_stmt() {
+			if stmt := body.Stmt(); stmt != nil {
+				if read := i.inspectStatement(stmt); read != nil {
+					reads = append(reads, *read)
+				}
+				continue
+			}
+			if expr := body.A_expr(); expr != nil {
+				reads = append(reads, i.extractEmbeddedSubqueries(expr)...)
+			}
+		}
+	}
+	return reads
 }
 
 // schemaElementReads is what the elements of a CREATE SCHEMA require. A view is

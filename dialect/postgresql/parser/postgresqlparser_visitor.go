@@ -1006,6 +1006,9 @@ type PostgreSQLParserVisitor interface {
 	// Visit a parse tree produced by PostgreSQLParser#createfunc_opt_item.
 	VisitCreatefunc_opt_item(ctx *Createfunc_opt_itemContext) interface{}
 
+	// Visit a parse tree produced by PostgreSQLParser#routine_body_stmt.
+	VisitRoutine_body_stmt(ctx *Routine_body_stmtContext) interface{}
+
 	// Visit a parse tree produced by PostgreSQLParser#func_as.
 	VisitFunc_as(ctx *Func_asContext) interface{}
 
