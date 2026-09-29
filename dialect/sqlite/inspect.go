@@ -726,16 +726,23 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 		if sub := i.inspectSelect(selectStmt); core.CarriesRead(sub) {
 			result.Subqueries = append(result.Subqueries, *sub)
 		}
-	} else {
-		// VALUES form: walk expressions for embedded subqueries.
-		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(stmt)...)
+	} else if values := stmt.Values_clause(); values != nil {
+		// VALUES form: walk expressions for embedded subqueries. The clause and
+		// not the statement, or the walk reaches the CTE bodies and the
+		// returning clause the other paths already report.
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(values)...)
 	}
 
 	// An ON CONFLICT clause chooses which rows it updates and reads values into
-	// them, both against the target table, so what it names is tested.
+	// them, both against the target table, so what it names is tested, and a
+	// subquery in either is a read of its own.
+	upsert := stmt.Upsert_clause()
 	result.Where = core.MergeInspectFields(result.Where,
-		i.testedFields(core.TreeOrNil(stmt.Upsert_clause()),
+		i.testedFields(core.TreeOrNil(upsert),
 			[]core.RelationRef{{Table: tableName, Schema: schema}}, core.Scope{}))
+	if upsert != nil {
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(upsert)...)
+	}
 
 	// REPLACE, and its INSERT OR REPLACE spelling, delete whatever conflicts
 	// before inserting, and an upsert rewrites it. Either way the row that was
@@ -744,14 +751,14 @@ func (i *Inspector) inspectInsert(stmt sqlite.IInsert_stmtContext) *core.Inspect
 	if stmt.REPLACE_() != nil {
 		core.AlsoPerforms(result, core.InspectOpDelete, nil)
 	}
-	if upsert := stmt.Upsert_clause(); upsert != nil && upsert.UPDATE_() != nil {
+	if upsert != nil && upsert.UPDATE_() != nil {
 		core.AlsoPerforms(result, core.InspectOpUpdate,
 			i.upsertSetFields(upsert, schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -842,9 +849,9 @@ func (i *Inspector) inspectUpdate(stmt sqlite.IUpdate_stmtContext) *core.Inspect
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -947,9 +954,9 @@ func (i *Inspector) inspectDelete(stmt sqlite.IDelete_stmtContext) *core.Inspect
 		result.Subqueries = append(result.Subqueries, whereSubqueries...)
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -1795,6 +1802,9 @@ func (i *Inspector) addReturningFields(
 	if ret == nil {
 		return
 	}
+	// A relation named inside a returning expression is read, the same way one
+	// in a select list is, whether or not the write touches it.
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(ret)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	var returned []core.InspectField
 	for _, column := range ret.AllResult_column() {

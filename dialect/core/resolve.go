@@ -203,7 +203,8 @@ func (r Resolver) DropVirtual(stmts []InspectStatement, virtual map[string]bool)
 // declared. Only the CTE names travel: a subquery alias is not a relation
 // outside the statement that declared it. A name left standing asks for a
 // right on a relation nobody holds one on, so every statement carrying a WITH
-// calls this.
+// calls this. It strips only what is in the slice when it runs, so a caller
+// that reports a subquery afterwards has to add it to the slice first.
 func (r Resolver) DropCTETables(stmts []InspectStatement, ctes []RelationRef) {
 	r.DropVirtual(stmts, r.virtualNames(Scope{CTEs: ctes}))
 }

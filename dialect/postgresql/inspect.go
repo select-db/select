@@ -617,9 +617,9 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 			i.assignedFields(conflict.Set_clause_list(), schema, tableName))
 	}
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -715,6 +715,9 @@ func (i *Inspector) addReturningFields(
 	if targetList == nil {
 		return
 	}
+	// A relation named inside a returning expression is read, the same way one
+	// in a select list is, whether or not the write touches it.
+	result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(targetList)...)
 	refs := []core.RelationRef{{Table: table, Schema: schema}}
 	columns := core.TableFields(i.meta, schema, table, i.dialect)
 	var returned []core.InspectField
@@ -1059,9 +1062,9 @@ func (i *Inspector) inspectUpdate(stmt pg.IUpdatestmtContext) *core.InspectState
 	// it belongs with what the statement reads without returning it.
 	result.Where = core.MergeInspectFields(result.Where, stored)
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
@@ -1125,9 +1128,9 @@ func (i *Inspector) inspectDelete(stmt pg.IDeletestmtContext) *core.InspectState
 	result.Where = core.MergeInspectFields(result.Where,
 		i.joinFields(core.TreeOrNil(usingClause), whereRefs, core.Scope{CTEs: ctes}))
 
-	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
-
 	i.addReturningFields(result, stmt.Returning_clause(), schema, tableName)
+
+	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
