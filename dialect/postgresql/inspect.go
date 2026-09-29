@@ -63,7 +63,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 		// A call that reaches the server itself is not covered by the four row
 		// actions, and neither is a statement we could not read.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}

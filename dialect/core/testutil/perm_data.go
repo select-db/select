@@ -54,6 +54,12 @@ var rowRights = []Right{
 	{Action: core.ActionDelete},
 }
 
+// unreadable is what text the parser could not read requires: manage, and every
+// row action on the connection, since nothing says which rows the statement
+// touches. Manage alone would let a principal who may not read rows run what
+// could be a read.
+var unreadable = slices.Concat([]Right{Manage}, rowRights)
+
 // PermCasesFor are the cases a dialect parses.
 func PermCasesFor(dialect string) []PermCase {
 	var cases []PermCase
@@ -1442,8 +1448,7 @@ func permCases() []PermCase {
 
 		// --- rights and session statements
 		{
-			// SQLite has no GRANT, so its parser salvages a bare select, and
-			// the floor is what refuses it.
+			On:     []string{"postgresql", "mysql"},
 			Name:   "granting a right is administration",
 			SQL:    "GRANT SELECT ON t1 TO bob",
 			Needs:  []Right{Manage},
@@ -1451,10 +1456,25 @@ func permCases() []PermCase {
 			Why:    "it hands a right to somebody else",
 		},
 		{
+			On:    []string{"postgresql", "mysql"},
 			Name:  "revoking a right is administration",
 			SQL:   "REVOKE SELECT ON t1 FROM bob",
 			Needs: []Right{Manage},
 			Why:   "it takes a right away from somebody else",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "granting a right, which SQLite has not got",
+			SQL:   "GRANT SELECT ON t1 TO bob",
+			Needs: unreadable,
+			Why:   "the grammar has no GRANT, so the text comes apart and nothing left says what it would have done",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "revoking a right, which SQLite has not got",
+			SQL:   "REVOKE SELECT ON t1 FROM bob",
+			Needs: unreadable,
+			Why:   "the grammar has no REVOKE, and what recovery salvages from it is a select on a table named bob",
 		},
 
 		// --- transaction control, which names no object and so needs no right
@@ -2302,19 +2322,26 @@ func permCases() []PermCase {
 			Why:    "the block runs its body as part of running the statement, so the rows go when it does",
 		},
 		{
-			On:     []string{"postgresql"},
-			Name:   "a code block no SQL parser reads",
-			SQL:    "DO $$ BEGIN PERFORM c1 FROM t1; END $$",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "PERFORM belongs to the procedural language, not to SQL, so the floor is all there is to report",
+			On:    []string{"postgresql"},
+			Name:  "a code block no SQL parser reads",
+			SQL:   "DO $$ BEGIN PERFORM c1 FROM t1; END $$",
+			Needs: unreadable,
+			Why:   "PERFORM belongs to the procedural language, not to SQL, and the body it hides still reads c1 of t1",
 		},
 		{
+			On:     []string{"postgresql", "sqlite"},
 			Name:   "revoking every right is administration",
 			SQL:    "REVOKE ALL ON t1 FROM bob",
 			Needs:  []Right{Manage},
 			Denied: rowRights,
-			Why:    "it takes rights away from somebody else, and SQLite, which has no REVOKE, floors it",
+			Why:    "it takes rights away from somebody else",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "revoking every right, which this grammar cannot read",
+			SQL:   "REVOKE ALL ON t1 FROM bob",
+			Needs: unreadable,
+			Why:   "MySQL accepts it and the grammar does not, so the text comes apart and nothing left says what it would have done",
 		},
 		{
 			On:     []string{"postgresql"},
@@ -2531,31 +2558,28 @@ func permCases() []PermCase {
 			Why:    "the branches are one statement, so the call classifies all of it, and t1 is still read",
 		},
 
-		// --- a statement the parser stumbled over. Where what error recovery
-		// salvaged names no table, a per-table check has nothing to ask about.
+		// --- a statement the parser stumbled over, which is text nothing says
+		// the meaning of, so it takes the right to do anything.
 		{
-			On:     []string{"postgresql", "mysql", "sqlite"},
-			Name:   "a select cut off after FROM",
-			SQL:    "SELECT c1 FROM",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "the fragment names no table, so only the floor refuses it",
+			On:    []string{"postgresql", "mysql", "sqlite"},
+			Name:  "a select cut off after FROM",
+			SQL:   "SELECT c1 FROM",
+			Needs: unreadable,
+			Why:   "the fragment names no table, so nothing says which table it would have read",
 		},
 		{
-			On:     []string{"postgresql"},
-			Name:   "a select with no list before FROM",
-			SQL:    "SELECT FROM",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "the fragment names no table, so only the floor refuses it",
+			On:    []string{"postgresql"},
+			Name:  "a select with no list before FROM",
+			SQL:   "SELECT FROM",
+			Needs: unreadable,
+			Why:   "the fragment names no table, so nothing says which table it would have read",
 		},
 		{
-			On:     []string{"mysql", "sqlite"},
-			Name:   "a bare SELECT",
-			SQL:    "SELECT",
-			Needs:  []Right{Manage},
-			Denied: rowRights,
-			Why:    "the fragment names no table, so only the floor refuses it",
+			On:    []string{"mysql", "sqlite"},
+			Name:  "a bare SELECT",
+			SQL:   "SELECT",
+			Needs: unreadable,
+			Why:   "the fragment names no table, so nothing says which table it would have read",
 		},
 
 		// --- a name spelled like a host routine is not a call, so it stays
@@ -2790,8 +2814,8 @@ func permCases() []PermCase {
 			On:    []string{"sqlite"},
 			Name:  "a compound branch on a statement that reads nothing",
 			SQL:   "DROP TABLE t1 UNION SELECT c1 FROM other.t3",
-			Needs: []Right{Manage, otherT3(core.ActionSelect)},
-			Why:   "no DROP reads a query, so what the branch names is read by a statement nobody can name",
+			Needs: unreadable,
+			Why:   "no DROP reads a query, so the text comes apart and the read of t3 goes with it",
 		},
 		{
 			On:    []string{"sqlite"},
@@ -2850,6 +2874,70 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionSelect)},
 			Op:    core.InspectOpSelect,
 			Why:   "refusing it would hold ordinary work",
+		},
+
+		// --- text the parser could not read. An identifier in ANSI double
+		// quotes is one on a MySQL server whose sql_mode carries ANSI_QUOTES,
+		// and a string literal to this grammar, so a name written that way
+		// where a table has to go does not parse. What the statement does is
+		// then unknown, and every case here asks for the right to do anything.
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted table name in a read",
+			SQL:   `SELECT "c1" FROM "main"."t1"`,
+			Needs: unreadable,
+			Why:   "on an ANSI_QUOTES server it reads main.t1, so manage, which does not carry select, must not run it",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "double-quoted table names in a join",
+			SQL:   `SELECT t."c1" FROM "main"."t2" AS t JOIN "main"."t1" AS u ON t."c1" = u."c1"`,
+			Needs: unreadable,
+			Why:   "the reads of t1 and t2 are both lost with the parse",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted CTE name",
+			SQL:   `WITH "a" AS (SELECT "c1" FROM "main"."t1") SELECT "c1" FROM "a"`,
+			Needs: unreadable,
+			Why:   "the fragments recovery leaves name no table, so a per-table check has nothing to ask about",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted insert over a double-quoted source",
+			SQL:   `INSERT INTO "main"."t1" ("c1") SELECT "c1" FROM "main"."t2"`,
+			Needs: unreadable,
+			Why:   `recovery salvages insert on "main"."t1", which a wildcard insert grant answers while the read of t2 it lost is never checked`,
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted update",
+			SQL:   `UPDATE "main"."t1" SET "c2" = 'x' WHERE "c1" = 1`,
+			Needs: unreadable,
+			Why:   `recovery keeps the quotes and drops the schema, and update on ."t1" is a right no grant can express`,
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted delete",
+			SQL:   `DELETE FROM "main"."t1" WHERE "c1" = 1`,
+			Needs: unreadable,
+			Why:   `recovery keeps the quotes and drops the schema, and delete on ."t1" is a right no grant can express`,
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a backquoted insert over a backquoted source",
+			SQL:   "INSERT INTO `main`.`t1` (`c1`) SELECT `c1` FROM `main`.`t2`",
+			Needs: []Right{mainT1(core.ActionInsert).Only("c1"), mainT2(core.ActionSelect).Only("c1")},
+			Op:    core.InspectOpInsert,
+			Why:   "MySQL quoting parses, so the write and the read it feeds on are both named",
+		},
+		{
+			On:    []string{"mysql"},
+			Name:  "a double-quoted column in a read of an unquoted table",
+			SQL:   `SELECT "c1" FROM main.t1`,
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "this parses, with the quoted text a string literal that reads no column of t1",
 		},
 
 		// --- a name the metadata does not carry. A database resolves it

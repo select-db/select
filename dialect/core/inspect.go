@@ -1,10 +1,20 @@
 package core
 
+import "strings"
+
 // UnknownStatement is what an inspector returns for a statement it parsed but
 // cannot classify. Permission checks read it as manage, so a statement nobody
 // has taught us to read is refused rather than waved through as nothing.
 func UnknownStatement() InspectStatement {
 	return InspectStatement{Operation: InspectOpUnknown}
+}
+
+// UnreadableStatement is what an inspector returns for text its parser could
+// not read. Permission checks read it as manage and every row action on the
+// connection: nothing says which rows such a statement touches, so the only
+// requirement that covers it is the right to do anything.
+func UnreadableStatement() InspectStatement {
+	return InspectStatement{Operation: InspectOpUnknown, Unreadable: true}
 }
 
 // TransactionStatement is what an inspector returns for a boundary of the
@@ -108,26 +118,52 @@ func AsFilter(stmts []InspectStatement) []InspectStatement {
 	return stmts
 }
 
-// SalvageOrUnknown decides how much of what error recovery salvaged to trust.
+// SalvageOrUnreadable decides how much of what error recovery salvaged to trust.
 //
 // An error on the span's first token means the statement never began, so the
 // salvage belongs to some other fragment: SQLite has no REVOKE, and
 // "REVOKE SELECT ON t1 FROM bob" leaves a select on a table named bob. A
-// salvage naming no table leaves a per-table check nothing to ask about, so it
-// takes manage instead. An error anywhere else is a clause the grammar does
-// not carry, such as SQLite's standalone WINDOW, and what the statement named
-// still stands.
-func SalvageOrUnknown(read InspectStatement, syntax *SyntaxErrors, from, to int) InspectStatement {
-	switch {
-	case !syntax.In(from, to):
+// salvage naming no table, or naming one no inspector could have resolved,
+// leaves a per-table check nothing to ask about or something nobody can grant.
+// An error anywhere else is a clause the grammar does not carry, such as
+// SQLite's standalone WINDOW, and what the statement named still stands.
+func SalvageOrUnreadable(read InspectStatement, syntax *SyntaxErrors, from, to int) InspectStatement {
+	if !syntax.In(from, to) {
 		return read
-	case syntax.At(from):
-		return UnknownStatement()
-	case len(read.Tables) > 0:
-		return read
-	default:
-		return NestUnderUnknown(read)
 	}
+	if syntax.At(from) || len(read.Tables) == 0 || !resolvedNames(read) {
+		return UnreadableStatement()
+	}
+	return read
+}
+
+// quoteChars delimit an identifier or a string in the dialects this package
+// reads. A resolved name has had them taken off, so one left in is debris.
+const quoteChars = "\"'`"
+
+// resolvedNames reports whether every table a statement names looks like one an
+// inspector resolved rather than debris error recovery kept. A name still
+// carrying its quote characters, or one left without a schema, is proof the
+// parse came apart: the right built from it asks for something no grant
+// expresses, or something a wildcard grant answers while the rest of the
+// statement goes unchecked.
+func resolvedNames(stmt InspectStatement) bool {
+	for _, table := range stmt.Tables {
+		if table.Schema == "" || strings.ContainsAny(table.Name, quoteChars) || strings.ContainsAny(table.Schema, quoteChars) {
+			return false
+		}
+	}
+	for _, nested := range stmt.Subqueries {
+		if !resolvedNames(nested) {
+			return false
+		}
+	}
+	for _, also := range stmt.Also {
+		if !resolvedNames(also) {
+			return false
+		}
+	}
+	return true
 }
 
 // DropVirtualTables strips, in place and throughout the tree, the tables naming

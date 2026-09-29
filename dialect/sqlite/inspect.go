@@ -92,10 +92,9 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		}
 
 		// A call that reaches the filesystem is not covered by the four row
-		// actions, and neither is a statement the parser stumbled over that
-		// named no table: a per-table check has nothing to ask about, so what
-		// error recovery salvaged would run on a policy granting nothing.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		// actions, and neither is a statement the parser stumbled over: what
+		// error recovery salvaged from one is no account of what it does.
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}

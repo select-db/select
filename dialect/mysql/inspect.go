@@ -87,7 +87,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 		// actions do not cover. The clause is read off the tokens rather than
 		// the tree because the spellings that follow a locking clause raise a
 		// syntax error here, and error recovery drops the tail with the node.
-		read = core.SalvageOrUnknown(read, syntax, from, to)
+		read = core.SalvageOrUnreadable(read, syntax, from, to)
 		if writesAFile(tokenStream, from, to) || callsHostFunction(tokenStream, from, to) {
 			read = core.NestUnderUnknown(read)
 		}
