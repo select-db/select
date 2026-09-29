@@ -26,8 +26,8 @@ func TestDelete(t *testing.T) {
 	for _, entry := range entries {
 		require.False(t, strings.HasPrefix(entry.Name(), id), "%s left behind", entry.Name())
 	}
-	require.NoDirExists(t, filepath.Join(cellar.replicaDir, "dbs", id), "the replica goes too")
-	require.DirExists(t, filepath.Join(cellar.replicaDir, "dbs", keptID))
+	require.NoDirExists(t, filepath.Join(cellar.bucketDir, "dbs", id), "its bucket copy goes too")
+	require.DirExists(t, filepath.Join(cellar.bucketDir, "dbs", keptID))
 	require.Equal(t, 2, cellar.countNotes(t, keptID), "only the named database goes")
 
 	rec = cellar.call("DELETE", "/datasources/"+id, nil)

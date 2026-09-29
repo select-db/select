@@ -17,13 +17,14 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// Databases are the database files of a cellar and their replica. Each one is
-//   - replicating: used within restAfter, every write streams to the replica;
-//   - resting: on disk, and the replica holds all of it;
-//   - cold: in the replica only, restored by its next use.
+// Databases are the database files of a cellar and their copy in the bucket.
+// Each one is
+//   - replicating: used within restAfter, every write streams to the bucket;
+//   - resting: on disk, and the bucket holds all of it;
+//   - cold: in the bucket only, restored by its next use.
 type Databases struct {
 	dir         string
-	replicasURL string // a database's replica is replicasURL + its id
+	bucketURL   string
 	store       *litestream.Store
 	stopTidy    context.CancelFunc
 	tidyStopped chan struct{}
@@ -41,16 +42,16 @@ type database struct {
 	replicating *litestream.DB // nil while resting
 }
 
-// OpenDatabases replicates the databases in dir to replica, a directory or a
-// Litestream replica URL such as s3://bucket/path.
-func OpenDatabases(dir, replica string) (*Databases, error) {
-	if !litestream.IsURL(replica) {
-		absolute, err := filepath.Abs(replica)
+// OpenDatabases replicates the databases in dir to bucket, an s3:// URL or,
+// without S3, a directory.
+func OpenDatabases(dir, bucket string) (*Databases, error) {
+	if !litestream.IsURL(bucket) {
+		absolute, err := filepath.Abs(bucket)
 		if err != nil {
 			return nil, err
 		}
-		log.Printf("cellar: replica in the directory %s: a lost machine loses it with the databases", absolute)
-		replica = "file://" + absolute
+		log.Printf("cellar: bucket is the directory %s: a lost machine loses it with the databases", absolute)
+		bucket = "file://" + absolute
 	}
 	store := litestream.NewStore(nil, litestream.DefaultCompactionLevels)
 	// One window for every plan: the backend refuses a point in time outside the plan's own.
@@ -63,7 +64,7 @@ func OpenDatabases(dir, replica string) (*Databases, error) {
 	ctx, stopTidy := context.WithCancel(context.Background())
 	opened := &Databases{
 		dir:         dir,
-		replicasURL: replica + "/dbs/",
+		bucketURL:   bucket,
 		store:       store,
 		stopTidy:    stopTidy,
 		tidyStopped: make(chan struct{}),
@@ -85,7 +86,7 @@ func OpenDatabases(dir, replica string) (*Databases, error) {
 			return nil, err
 		}
 		// Replicated once at start, so writes the last run had not sent reach
-		// the replica before the database can rest.
+		// the bucket before the database can rest.
 		database := &database{id: id, path: path, lastUsed: info.ModTime()}
 		if err := opened.replicate(database); err != nil {
 			return nil, err
@@ -150,13 +151,13 @@ func (databases *Databases) add(id, tempPath string) (string, error) {
 	return path, nil
 }
 
-// remove deletes database id from disk and from the replica.
+// remove deletes database id from disk and from the bucket.
 func (databases *Databases) remove(ctx context.Context, id string) error {
 	path, err := databasePath(databases.dir, id)
 	if err != nil {
 		return err
 	}
-	client, err := databases.replicaClient(id)
+	client, err := databases.bucketClient(id)
 	if err != nil {
 		return err
 	}
@@ -165,7 +166,7 @@ func (databases *Databases) remove(ctx context.Context, id string) error {
 	databases.mu.Lock()
 	delete(databases.onDisk, id)
 	connect.DeleteConnsByAddr(path)
-	// A failed last sync does not matter: the replica goes next.
+	// A failed last sync does not matter: the bucket copy goes next.
 	_ = databases.store.UnregisterDB(ctx, path)
 	err = removeDatabaseFiles(path)
 	databases.mu.Unlock()
@@ -175,13 +176,13 @@ func (databases *Databases) remove(ctx context.Context, id string) error {
 	return client.DeleteAll(ctx)
 }
 
-// replicate starts streaming database to its replica, unless it already does.
+// replicate starts streaming database to the bucket, unless it already does.
 // Callers hold databases.mu.
 func (databases *Databases) replicate(database *database) error {
 	if database.replicating != nil {
 		return nil
 	}
-	client, err := databases.replicaClient(database.id)
+	client, err := databases.bucketClient(database.id)
 	if err != nil {
 		return err
 	}
@@ -194,10 +195,11 @@ func (databases *Databases) replicate(database *database) error {
 	return nil
 }
 
-// replicaClient checks id as databasePath does: it names a folder of the bucket.
-func (databases *Databases) replicaClient(id string) (litestream.ReplicaClient, error) {
+// bucketClient reaches database id's copy at dbs/{id}/ in the bucket. It checks
+// id as databasePath does: the id names a folder there.
+func (databases *Databases) bucketClient(id string) (litestream.ReplicaClient, error) {
 	if _, err := databasePath(databases.dir, id); err != nil {
 		return nil, err
 	}
-	return litestream.NewReplicaClientFromURL(databases.replicasURL + id)
+	return litestream.NewReplicaClientFromURL(databases.bucketURL + "/dbs/" + id)
 }

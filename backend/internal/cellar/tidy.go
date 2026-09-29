@@ -34,8 +34,8 @@ func (databases *Databases) tidyEvery(ctx context.Context) {
 	}
 }
 
-// rest stops replicating the databases idle for restAfter, once the replica
-// holds every write: a resting database is whole in its replica.
+// rest stops replicating the databases idle for restAfter, once the bucket
+// holds every write: a resting database is whole in the bucket.
 func (databases *Databases) rest(ctx context.Context, now time.Time) {
 	databases.mu.Lock()
 	idle := map[*database]*litestream.DB{}
@@ -74,7 +74,7 @@ func (databases *Databases) restOne(ctx context.Context, database *database, rep
 }
 
 // evict deletes resting databases, least recently used first, while
-// diskShort holds. Their replica holds them; the next use restores them.
+// diskShort holds. The bucket holds them; the next use restores them.
 func (databases *Databases) evict(diskShort func() bool) {
 	databases.mu.Lock()
 	defer databases.mu.Unlock()

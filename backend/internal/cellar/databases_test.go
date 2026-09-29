@@ -14,9 +14,9 @@ func TestOpenDatabasesReplicatesWhatIsOnDisk(t *testing.T) {
 	cellar.createNotes(t, id)
 	require.NoError(t, cellar.databases.Close(context.Background()))
 
-	reopened, err := OpenDatabases(cellar.dir, cellar.replicaDir)
+	reopened, err := OpenDatabases(cellar.dir, cellar.bucketDir)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = reopened.Close(context.Background()) })
 	require.Contains(t, reopened.onDisk, id)
-	require.NotNil(t, reopened.onDisk[id].replicating, "a write the last run had not sent reaches the replica")
+	require.NotNil(t, reopened.onDisk[id].replicating, "a write the last run had not sent reaches the bucket")
 }

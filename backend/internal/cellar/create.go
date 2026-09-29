@@ -41,7 +41,7 @@ func CreateHandler(databases *Databases) http.HandlerFunc {
 }
 
 func createDatabase(ctx context.Context, databases *Databases, id string, req CreateRequest) (string, error) {
-	// use wakes the id when it is cold, so an id kept only in the replica is taken too.
+	// use wakes the id when it is cold, so an id kept only in the bucket is taken too.
 	_, err := databases.use(ctx, id)
 	switch {
 	case err == nil:

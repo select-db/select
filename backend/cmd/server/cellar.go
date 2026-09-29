@@ -21,7 +21,7 @@ const localCellar = "local"
 
 // startCellar stops the server on a CELLAR it cannot parse, and sends managed
 // databases to the cellar it names. local serves one from this process on a
-// loopback port, over the files in CELLAR_DIR replicated to CELLAR_REPLICA.
+// loopback port, over the files in CELLAR_DIR, copied to CELLAR_BUCKET.
 func startCellar() {
 	setting, err := parseCellar(os.Getenv("CELLAR"))
 	if err != nil {
@@ -54,11 +54,11 @@ func serveLocalCellar() (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	replica := os.Getenv("CELLAR_REPLICA")
-	if replica == "" {
-		replica = dir + "-replica"
+	bucket := os.Getenv("CELLAR_BUCKET")
+	if bucket == "" {
+		bucket = dir + "-bucket"
 	}
-	databases, err := cellar.OpenDatabases(dir, replica)
+	databases, err := cellar.OpenDatabases(dir, bucket)
 	if err != nil {
 		return "", err
 	}
