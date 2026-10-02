@@ -271,8 +271,9 @@ Needs 1. Can run alongside 2. Start with the spikes.
 - [x] Spike: Litestream v0.5 as a library. Per-db replica with retention,
       read the replicated position, restore at a timestamp, `file` replica.
       Findings and numbers: `litestream-spike.md`.
-- [ ] Spike: OVH bucket supports `NoncurrentVersionExpiration`; restore speed
-      from the bucket to a d2-4.
+- [x] Spike: restore speed from the bucket. 257 MB wakes in 4.9 s on the prod
+      b3-8 (staging's 100 Mbit/s downlink makes it 20 s); see
+      `litestream-spike.md`.
 - [x] Embedded Litestream per db at `dbs/{db_id}/`, one 7-day window.
 - [x] Directory replica when no S3, with the startup preflight.
 - [x] Rest when idle, LRU eviction on disk pressure; wake with shared restore
@@ -282,7 +283,10 @@ Needs 1. Can run alongside 2. Start with the spikes.
 - [x] Tests: rest, evict, wake, point-in-time fork, against a directory.
 - [x] Tests against the OVH bucket: `TestAgainstTheBucket` passes on
       `select-staging-cellar`; laptop numbers in `litestream-spike.md`.
-- [ ] Benchmark from the staging box, then delete `bucket_benchmark_test.go`.
+- [x] Benchmark from the staging and prod boxes; `bucket_benchmark_test.go`
+      deleted.
+- [ ] Prod cellar disk sized to hold the dbs used each week (a Classic block
+      volume at `CELLAR_DIR`), so large dbs are rarely evicted.
 - [ ] 7-day expiry of old versions on both buckets (`NoncurrentVersionExpiration`).
 - [ ] Tune with the bucket numbers: one S3 transport shared by every replica
       client, rest in parallel with a bound, a lighter first sync at startup.

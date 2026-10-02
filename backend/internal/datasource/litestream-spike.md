@@ -152,6 +152,28 @@ Parallel range downloads would lift a wake from 7 to at most 12 MB/s, so
 they do not bring 257 MB (167 MB to read, 14 s at best) inside the 15 s wait
 on this box. The cellar needs a box with a faster downlink.
 
+### Against the OVH bucket, from the prod box (b3-8, 2 vCPU, 8 GB)
+
+No downlink cap: the same bucket serves one connection at 56 MB/s.
+
+| measure | staging box | prod box |
+| --- | --- | --- |
+| first upload, 257 MB | 4.5 s (57 MB/s) | 4.0 s (64 MB/s) |
+| wake (restore latest), 257 MB | 20.3 s | 4.9 s |
+| restore at a time, 257 MB | 9.3 s | 3.5 s |
+| restore CPU | 33% of one core | 80% of one core |
+| largest file, one connection | 7 MB/s | 56 MB/s |
+| largest file, 8 ranges at once | 10 MB/s | 57 MB/s |
+| internet download, one connection | 11 to 12 MB/s | 35 to 53 MB/s |
+
+- A 257 MB wake fits the 15 s wait with room. A 1.1 GB one is estimated at
+  15 to 20 s from the ratio, not measured.
+- Parallel range downloads gain nothing (57 against 56 MB/s): not built.
+- On this box a wake is bounded by Litestream's decompress and merge (80% of
+  a core) as much as by the network.
+- So large dbs rely on being evicted rarely: a cellar disk sized to hold the
+  dbs used each week, and the "waking" answer for the rest.
+
 ## What a d2-4 carries (2 vCPU, 4 GB RAM, 50 GB disk)
 
 - Dbs kept replicating: a few hundred. 300 idle cost about 11% of a core,
