@@ -210,8 +210,13 @@ errors are the backend's, before the cellar sees the statement.
   cannot start stops the server, as a bad `CELLAR` does: it is a config error.
   One that stops later, or a remote one down, makes managed routes answer
   `unavailable`.
-- Staging: a second systemd unit on the staging box, own data dir and bucket.
-- Prod: a d2-4 VM on the private network, same region as the backend.
+- Staging and prod: `select-backend cellar` runs the cellar alone, as a second
+  systemd unit on the backend's box, capped by `CPUQuota` and `MemoryMax` so
+  SQLite work never starves the backend. It listens on `CELLAR_LISTEN`
+  (default `127.0.0.1:8081`), never opens Postgres, and the backend reaches it
+  with `CELLAR=http://127.0.0.1:8081`. Its files live on a block volume at
+  `CELLAR_DIR`. Moving it to its own server later is a new `CELLAR` URL: the
+  new cellar starts empty and wakes dbs from the bucket.
 
 ## v1 milestones
 
