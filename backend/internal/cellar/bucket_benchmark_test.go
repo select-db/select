@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/superfly/ltx"
+	"golang.org/x/sync/errgroup"
 )
 
 // TestBucketBenchmark times the bucket path for databases of CELLAR_BENCH_MB
@@ -157,6 +158,29 @@ func traceRestore(t *testing.T, id string) {
 	require.NoError(t, err)
 	_ = reader.Close()
 	t.Logf("largest file alone: %.1f MB in %v (%.0f MB/s)", float64(read)/(1<<20), time.Since(start),
+		float64(read)/(1<<20)/time.Since(start).Seconds())
+
+	// The same file in 8 ranges at once: a cap per connection or for the whole box.
+	const ranges = 8
+	start = time.Now()
+	var downloads errgroup.Group
+	for part := range int64(ranges) {
+		offset, size := part*read/ranges, read/ranges
+		if part == ranges-1 {
+			size = read - offset
+		}
+		downloads.Go(func() error {
+			reader, err := client.OpenLTXFile(context.Background(), largest.level, largest.minTXID, largest.maxTXID, offset, size)
+			if err != nil {
+				return err
+			}
+			defer reader.Close()
+			_, err = io.Copy(io.Discard, reader)
+			return err
+		})
+	}
+	require.NoError(t, downloads.Wait())
+	t.Logf("largest file in %d ranges at once: %v (%.0f MB/s)", ranges, time.Since(start),
 		float64(read)/(1<<20)/time.Since(start).Seconds())
 }
 
