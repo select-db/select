@@ -121,6 +121,22 @@ datacenter both shrink, so the box's own run decides the 15 s wait for
 Teams-sized dbs. `TestAgainstTheBucket` passed: rest, evict, wake and remove
 work on the real bucket.
 
+### Against the OVH bucket, from the staging box in VA
+
+| size | first upload | wake (restore latest) | restore at a time | remove |
+| --- | --- | --- | --- | --- |
+| 9 MB | 0.5 s | 1.2 s | 1.8 s | 0.1 s |
+| 257 MB | 4.2 s (62 MB/s) | 17.2 s | 10.8 s | 0.6 s |
+| 1126 MB | 33.4 s | 62 s | 56 s | 1.9 s |
+
+Inside the datacenter is not faster than the laptop for wakes. Listing and
+opening cost under 1 s; each file then downloads at 0.5 to 3 MB/s and all of
+them together at 5 to 10 MB/s, while uploads reach 62 MB/s. The bucket
+answered one `503 Service Unavailable` under this load. A 1.1 GB restore
+reads about 650 MB: Litestream replays every change since its daily snapshot,
+some of it twice. Not yet known: whether the bucket's per-connection speed
+or the box's CPU (restore decompresses and merges) is the limit.
+
 ## What a d2-4 carries (2 vCPU, 4 GB RAM, 50 GB disk)
 
 - Dbs kept replicating: a few hundred. 300 idle cost about 11% of a core,
