@@ -134,8 +134,23 @@ opening cost under 1 s; each file then downloads at 0.5 to 3 MB/s and all of
 them together at 5 to 10 MB/s, while uploads reach 62 MB/s. The bucket
 answered one `503 Service Unavailable` under this load. A 1.1 GB restore
 reads about 650 MB: Litestream replays every change since its daily snapshot,
-some of it twice. Not yet known: whether the bucket's per-connection speed
-or the box's CPU (restore decompresses and merges) is the limit.
+some of it twice.
+
+The limit is the box's downlink, about 12 MB/s (100 Mbit/s) in all, whatever
+the source and however many connections. It is not the bucket's speed per
+connection and not the CPU. Measured on a 258 MB db (wake 20.3 s):
+
+| measure | result |
+| --- | --- |
+| CPU during the restore | 33% of the single core |
+| largest file (84 MB) from the bucket, one connection | 7 MB/s |
+| same file in 8 ranges at once | 10 MB/s |
+| 50 to 100 MB from Cloudflare, Hetzner Ashburn, OVH, one connection | 11 to 12 MB/s |
+| 4 Cloudflare downloads at once | 3 MB/s each, 12 MB/s in all |
+
+Parallel range downloads would lift a wake from 7 to at most 12 MB/s, so
+they do not bring 257 MB (167 MB to read, 14 s at best) inside the 15 s wait
+on this box. The cellar needs a box with a faster downlink.
 
 ## What a d2-4 carries (2 vCPU, 4 GB RAM, 50 GB disk)
 
