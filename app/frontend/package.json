@@ -51,7 +51,7 @@
     "katex": "^0.18.7",
     "marked": "^18.0.14",
     "marked-katex-extension": "^5.1.12",
-    "monaco-editor": "^0.56.0",
+    "monaco-editor": "^0.57.0",
     "sql-formatter": "^15.8.2",
     "zod": "^4.6.5"
   }
