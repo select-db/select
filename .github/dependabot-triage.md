@@ -1,6 +1,6 @@
 # Dependabot PR triage
 
-Last refreshed 2026-09-20 against `dev` @ `9e3a7e7`.
+Last refreshed 2026-10-02 against `dev` @ `7bc388e`.
 
 Working notes from a sweep of the open Dependabot queue: what each PR carries,
 what blocks it, and the ordering constraints this monorepo imposes.
@@ -71,11 +71,37 @@ had been broken when they were opened. Refreshing them against a known-good
 `dev` left them just as red: the failure was the `replace` coupling above, and
 it was in the log the whole time. Read the failing job before rerunning it.
 
+**A test red on `dev` blocks every PR that runs its leg.** Branch protection
+wants `CI OK`, and a PR that touches `dialect` or `.github` runs
+`Dialect / Tests`. The 2026-10-02 sweep found that leg already red on `dev`:
+#380 added the PostgreSQL case `a routine body that is one RETURN expression`
+without the inspector change that makes it pass; #381 landed that change on
+2026-10-03. Nothing touching those paths can merge until the fix lands, however
+green the bump itself is.
+
+**typescript-eslint is three packages at one version.** `@typescript-eslint/eslint-plugin`
+peers on `@typescript-eslint/parser` at the same minor, and the `typescript-eslint`
+meta package pins both exactly. Dependabot opens one PR per package, so the plugin
+PR alone fails `npm ci` with a peer conflict (#406 on 2026-10-02), and the meta
+package often gets no PR at all because the npm queue is capped at five open
+PRs. Bump the three together in one commit.
+
 ## Remaining queue
 
-Empty. Every PR from the 2026-09-20 sweep is merged or superseded.
+Empty once #414 lands. It folds every PR of the 2026-10-02 sweep.
 
 ## Merged
+
+**2026-10-02** (superseded by #414, which bumps every pin at once) - #399, #405
+and #407 (sqlite 1.60.1, dialect, backend and app), #400, #401 and #403
+(compress 1.20.1, app, backend and dialect), #404 (wails/v3 beta.26, app),
+#402 (katex 0.18.9, landed as 0.18.10), #406 and #408 (@typescript-eslint
+plugin and parser 8.71.0), #409 (monaco-editor 0.57.0), #410
+(marked-katex-extension 5.1.13), #411 and #413 (github/codeql-action init and
+analyze 4.38.2), #412 (anthropics/claude-code-action 1.0.237). #414 also moves
+the `@wailsio/runtime` and `WAILS_VERSION` pins to beta.26, the
+`typescript-eslint` meta package to 8.71.0, and libc 1.77.1 across the three
+modules that use sqlite.
 
 **2026-09-20** (direct) - #258 (typescript-eslint 8.70.0), #260
 (@typescript-eslint/eslint-plugin 8.70.0), #261 (marked 18.0.13), #262
