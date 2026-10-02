@@ -111,7 +111,11 @@ it does not measure it.
 | 109 MB | 6.0 s | 7.2 s | 5.6 s | 5.4 s |
 | 257 MB | 13.8 s | 12.6 s | 12.6 s | 15.7 s |
 
-Wake is about 5 s fixed plus about 20 MB/s. The fixed part is request round
+A traced 257 MB wake took 10.3 s (an earlier run's 39 s was the home
+connection, not the code): 0.3 s to connect, 1.3 s opening 4 files one after
+the other, then 9 s streaming 167 MB (the files are compressed) at about
+18 MB/s, the laptop's bandwidth. Registering the restored db took 56 us.
+Earlier estimate: wake is about 5 s fixed plus about 20 MB/s. The fixed part is request round
 trips across the Atlantic and a new TLS connection per client; inside the
 datacenter both shrink, so the box's own run decides the 15 s wait for
 Teams-sized dbs. `TestAgainstTheBucket` passed: rest, evict, wake and remove
