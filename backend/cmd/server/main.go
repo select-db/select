@@ -58,6 +58,13 @@ func main() {
 	// so enforce the SSRF guard. The desktop app must never set this.
 	connect.EnforceOutboundGuard = true
 
+	// A cellar owns SQLite files only and never reads Postgres, so it starts
+	// before the database does.
+	if len(os.Args) > 1 && os.Args[1] == "cellar" {
+		serveCellar()
+		return
+	}
+
 	if err := db.Init(); err != nil {
 		log.Fatalf("DB init failed: %v", err)
 	}
