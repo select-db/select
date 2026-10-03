@@ -578,6 +578,11 @@ func (i *Inspector) inspectSelectCore(
 	cteSubqueries []core.InspectStatement,
 	cteToSubqueryMap map[string]*core.InspectStatement,
 ) core.InspectStatement {
+	// A VALUES list reads no table of its own, but the server evaluates every
+	// subquery in its rows.
+	if values := selectCore.Values_clause(); values != nil {
+		return core.InspectStatement{Subqueries: i.extractEmbeddedSubqueries(values)}
+	}
 	relationRefs, subqueryColumns := i.extractRelationRefs(selectCore)
 
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns, CTEResults: cteToSubqueryMap}

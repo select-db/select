@@ -367,6 +367,11 @@ func (i *Inspector) inspectSelectPrimary(
 	if primary.TABLE() != nil {
 		return i.inspectTableShorthand(primary.Relation_expr())
 	}
+	// A VALUES list reads no table of its own, but the server evaluates every
+	// subquery in its rows.
+	if values := primary.Values_clause(); values != nil {
+		return &core.InspectStatement{Operation: core.InspectOpSelect, Subqueries: i.extractEmbeddedSubqueries(values)}
+	}
 
 	relationRefs, subqueryColumns := i.extractRelationRefsFromPrimary(primary)
 
@@ -592,13 +597,12 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 
 	// INSERT ... SELECT: the grammar always wraps the source as a Selectstmt.
 	// When the source reads anything, attach it as a subquery. A VALUES list
-	// reads nothing of its own, so its rows are walked for subqueries instead.
+	// reads nothing of its own, so the reads in its rows stand under the insert.
 	if selectStmt := rest.Selectstmt(); selectStmt != nil {
-		if sub := i.inspectSelect(selectStmt); core.CarriesRead(sub) {
+		if sub := i.inspectSelect(selectStmt); sub != nil && len(sub.Tables) == 0 && len(sub.Fields) == 0 {
+			result.Subqueries = append(result.Subqueries, sub.Subqueries...)
+		} else if core.CarriesRead(sub) {
 			result.Subqueries = append(result.Subqueries, *sub)
-		} else {
-			// VALUES form: walk the expression tree for embedded subqueries.
-			result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(rest)...)
 		}
 	}
 
