@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Stop hook: pushes claude/fix-$FIXER_ISSUE and opens the draft from .fixer-work/pr.md,
 # outside the sandbox. Asks the agent back once when something is missing.
+# After a blocked note it still pushes what is committed, so finished work is
+# not lost with the runner, but opens no pull request and asks nothing.
 set -uo pipefail
 
 [ -n "${FIXER_ISSUE:-}" ] || exit 0
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 input=$(cat)
 again=$(jq -r '.stop_hook_active // false' <<<"$input" 2>/dev/null)
-[ -s .fixer-work/blocked.md ] && exit 0
+blocked=false
+[ -s .fixer-work/blocked.md ] && blocked=true
 
 ask() {
-	[ "$again" = true ] && { echo "publish.sh: $1" >&2; exit 0; }
+	{ $blocked || [ "$again" = true ]; } && { echo "publish.sh: $1" >&2; exit 0; }
 	jq -n --arg why "$1" '{decision: "block", reason: ("Not published yet: " + $why)}'
 	exit 0
 }
@@ -20,7 +23,7 @@ gate=$AGENT_TOOLS/pr-review-gate.sh
 
 branch="claude/fix-$FIXER_ISSUE"
 [ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" = "$branch" ] || exit 0
-[ -z "$(git status --porcelain --untracked-files=no -- dialect)" ] ||
+[ -z "$(git status --porcelain --untracked-files=no -- dialect)" ] || $blocked ||
 	ask "commit your changes to $branch, then end the run."
 
 # A fresh dev, since the agent can move its own origin/dev.
@@ -35,7 +38,7 @@ outside=$(git diff --name-only "$base...HEAD" | awk '
 	ask "the branch changes files the fixer may not touch: $(paste -sd' ' <<<"$outside"). Undo those changes, commit, then end the run."
 
 pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
-if [ -z "$pr" ]; then
+if [ -z "$pr" ] && ! $blocked; then
 	# Everything at once: the agent is asked back only once.
 	todo=()
 	transcript=$(jq -r '.transcript_path // empty' <<<"$input")
@@ -61,7 +64,12 @@ for delay in 2 4 8 0; do
 	sleep "$delay"
 done
 
-if [ -z "$pr" ]; then
+if $blocked; then
+	at="\`$branch\`"
+	[ -z "${GITHUB_REPOSITORY:-}" ] ||
+		at="[$branch](${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY/compare/dev...$branch)"
+	printf '\nThe commits so far are on %s.\n' "$at" >>.fixer-work/blocked.md
+elif [ -z "$pr" ]; then
 	body=$(mktemp)
 	tail -n +2 .fixer-work/pr.md | sed '/./,$!d' >"$body"
 	gh pr create --draft --base dev --head "$branch" \
