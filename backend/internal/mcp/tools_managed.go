@@ -7,7 +7,7 @@ import (
 	"slices"
 
 	"backend/internal/authz"
-	"backend/internal/datasource"
+	"backend/internal/datasource/managed"
 )
 
 var grantToSchema = map[string]any{
@@ -31,13 +31,13 @@ func toolCreateDatasource() Tool {
 		Annotations: &ToolAnnotations{ReadOnlyHint: boolPtr(false), DestructiveHint: boolPtr(false)},
 		Run: func(_ context.Context, r *http.Request, _ string, rawArgs json.RawMessage) (any, error) {
 			var args struct {
-				Name    string             `json:"name"`
-				GrantTo datasource.GrantTo `json:"grant_to"`
+				Name    string          `json:"name"`
+				GrantTo managed.GrantTo `json:"grant_to"`
 			}
 			if err := json.Unmarshal(rawArgs, &args); err != nil {
 				return nil, errBadArgument("invalid arguments")
 			}
-			id, err := datasource.CreateManaged(r, args.Name, "", "", withCallerGranted(r, args.GrantTo))
+			id, err := managed.Create(r.Context(), authz.ActorOf(r), args.Name, "", "", withCallerGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
@@ -60,10 +60,10 @@ func toolForkDatasource() Tool {
 		Annotations: &ToolAnnotations{ReadOnlyHint: boolPtr(false), DestructiveHint: boolPtr(false)},
 		Run: func(_ context.Context, r *http.Request, _ string, rawArgs json.RawMessage) (any, error) {
 			var args struct {
-				DatasourceID string             `json:"datasource_id"`
-				Name         string             `json:"name"`
-				At           string             `json:"at"`
-				GrantTo      datasource.GrantTo `json:"grant_to"`
+				DatasourceID string          `json:"datasource_id"`
+				Name         string          `json:"name"`
+				At           string          `json:"at"`
+				GrantTo      managed.GrantTo `json:"grant_to"`
 			}
 			if err := json.Unmarshal(rawArgs, &args); err != nil {
 				return nil, errBadArgument("invalid arguments")
@@ -71,7 +71,7 @@ func toolForkDatasource() Tool {
 			if args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			id, err := datasource.CreateManaged(r, args.Name, args.DatasourceID, args.At, withCallerGranted(r, args.GrantTo))
+			id, err := managed.Create(r.Context(), authz.ActorOf(r), args.Name, args.DatasourceID, args.At, withCallerGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
@@ -88,7 +88,7 @@ type createdDatabase struct {
 
 // withCallerGranted adds the calling key to grants: an API key is never an
 // owner, so it could not use a database its own role does not cover.
-func withCallerGranted(r *http.Request, grants datasource.GrantTo) datasource.GrantTo {
+func withCallerGranted(r *http.Request, grants managed.GrantTo) managed.GrantTo {
 	// An API key caller's UserID is its key id.
 	callerKeyID := authz.ActorOf(r).UserID
 	if !slices.Contains(grants.APIKeys, callerKeyID) {

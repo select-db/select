@@ -8,7 +8,7 @@ import (
 
 	"backend/internal/auth"
 	"backend/internal/cellar"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 )
 
 // ServeCellar turns managed databases on for the test: a cellar over a temp

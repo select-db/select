@@ -9,7 +9,7 @@ import (
 
 	"backend/db"
 	"backend/db/generated"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine/connect"
@@ -74,15 +74,11 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 		return nil, err
 	}
 	// A managed database's DSN is built here and never read from the row.
-	if cellarID := row.CellarID.ValueOrEmpty(); cellarID != "" {
-		if err := checkManagedAvailable(row); err != nil {
-			return nil, err
-		}
-		workspace, err := db.Queries.GetWorkspacePlan(ctx, parsedWorkspaceID)
+	if row.CellarID.ValueOrEmpty() != "" {
+		dsn, err = managed.DSN(ctx, row, id, workspaceID)
 		if err != nil {
 			return nil, err
 		}
-		dsn = cellarclient.DSN(cellarID, id, workspaceID, managedPlans[workspace.Plan].DatabaseMaxBytes, int(workspace.Members))
 	} else if sqlite.IsCellarDSN(dsn) {
 		// It would open another workspace's database.
 		return nil, errors.New("datasource DSN uses a reserved scheme")

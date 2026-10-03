@@ -9,6 +9,7 @@ import (
 
 	"backend/internal/authz"
 	"backend/internal/cellar"
+	"backend/internal/datasource/managed"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
@@ -25,16 +26,6 @@ const genericConnErr = "could not connect to the datasource"
 
 // ErrNotFound is a datasource the caller's workspace does not have.
 var ErrNotFound = errors.New("datasource not found")
-
-// Refusal is a request the caller can correct, answered with its HTTP status.
-type Refusal struct {
-	Status  int
-	Message string
-}
-
-func (refusal *Refusal) Error() string { return refusal.Message }
-
-var errForbidden = &Refusal{http.StatusForbidden, "forbidden"}
 
 // Opened is a datasource ready for one request, with the caller's permissions.
 type Opened struct {
@@ -119,7 +110,7 @@ var codeStatus = map[string]int{
 func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, error) {
 	var coded *arrowstream.Error
 	var cfgErr *connect.ConfigError
-	var refused *Refusal
+	var refused *managed.Refusal
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return http.StatusNotFound, err

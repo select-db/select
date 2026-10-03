@@ -11,7 +11,7 @@ import (
 
 	"backend/e2e"
 	"backend/internal/cellar"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

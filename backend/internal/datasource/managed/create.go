@@ -1,9 +1,10 @@
-package datasource
+package managed
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"backend/db"
 	"backend/db/db_types"
@@ -11,61 +12,31 @@ import (
 	"backend/internal/audit"
 	"backend/internal/authz"
 	"backend/internal/cellar"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
 
-// managedPlan is what a workspace plan allows its managed databases.
-type managedPlan struct {
+// plan is what a workspace plan allows its managed databases.
+type plan struct {
 	DatabaseMaxBytes  int64
 	WorkspaceMaxBytes int64 // all its managed databases together
 	MaxDatabases      int64
 	PointInTimeDays   int // how far back a fork may reach
 }
 
-// managedPlans by workspace.plan. An unknown plan has no size cap, which the
-// cellar refuses, and room for no database.
-var managedPlans = map[string]managedPlan{
+// plans by workspace.plan. An unknown plan has no size cap, which the cellar
+// refuses, and room for no database.
+var plans = map[string]plan{
 	"solo":  {DatabaseMaxBytes: 250 << 20, WorkspaceMaxBytes: 1 << 30, MaxDatabases: 10, PointInTimeDays: 1},
 	"teams": {DatabaseMaxBytes: 1 << 30, WorkspaceMaxBytes: 20 << 30, MaxDatabases: 100, PointInTimeDays: 7},
 }
 
-// stateDeleting marks a managed database that stopped serving and waits for
-// the reconciler to purge its file.
-const stateDeleting = "deleting"
-
-// getManagedRow is a managed database the workspace still serves; anything
-// else is ErrNotFound.
-func getManagedRow(ctx context.Context, id, workspaceID string) (generated.GetDatasourceRow, error) {
-	parsedID, err := uuid.Parse(id)
-	if err != nil {
-		return generated.GetDatasourceRow{}, ErrNotFound
-	}
-	row, err := db.Queries.GetDatasource(ctx, generated.GetDatasourceParams{ID: parsedID, WorkspaceID: uuid.MustParse(workspaceID)})
-	if err != nil || row.CellarID.ValueOrEmpty() == "" {
-		return generated.GetDatasourceRow{}, ErrNotFound
-	}
-	return row, checkManagedAvailable(row)
-}
-
-// checkManagedAvailable refuses a managed database while managed databases are
-// off (CELLAR unset), or once it is being deleted.
-func checkManagedAvailable(row generated.GetDatasourceRow) error {
-	if cellarclient.URL == "" {
-		return cellarclient.ErrOff
-	}
-	if row.State.ValueOrEmpty() == stateDeleting {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// newManagedDatabase is a managed database about to be made: empty, or a copy
+// newDatabase is a managed database about to be made: empty, or a copy
 // of SourceID as it was at PointInTime ("" for now).
-type newManagedDatabase struct {
+type newDatabase struct {
 	ID          string
 	Name        string
 	SourceID    string
@@ -74,11 +45,10 @@ type newManagedDatabase struct {
 	Grants      GrantTo
 }
 
-// CreateManaged makes a managed database, empty or a copy of sourceID as it
-// was at pointInTime, and returns its id. REST and MCP both create through it.
-func CreateManaged(r *http.Request, name, sourceID, pointInTime string, grants GrantTo) (string, error) {
-	actor := authz.ActorOf(r)
-	database := newManagedDatabase{ID: uuid.NewString(), Name: name, SourceID: sourceID, PointInTime: pointInTime, Grants: grants}
+// Create makes a managed database for actor, empty or a copy of sourceID as
+// it was at pointInTime, and returns its id. REST and MCP both create through it.
+func Create(ctx context.Context, actor authz.Actor, name, sourceID, pointInTime string, grants GrantTo) (string, error) {
+	database := newDatabase{ID: uuid.NewString(), Name: name, SourceID: sourceID, PointInTime: pointInTime, Grants: grants}
 	if cellarclient.URL == "" {
 		return database.ID, cellarclient.ErrOff
 	}
@@ -87,11 +57,11 @@ func CreateManaged(r *http.Request, name, sourceID, pointInTime string, grants G
 	isFork := sourceID != ""
 	allowed := actor.IsOwner() || (!isFork && actor.Can(core.ActionManage)) || (isFork && actor.CanManage(sourceID))
 	if !allowed {
-		audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, database.ID)
-		return database.ID, errForbidden
+		audit.EmitDenied(ctx, audit.DatasourceCreated, actor.WorkspaceID, database.ID)
+		return database.ID, ErrForbidden
 	}
 	if isFork {
-		source, err := getManagedRow(r.Context(), sourceID, actor.WorkspaceID)
+		source, err := getRow(ctx, sourceID, actor.WorkspaceID)
 		if err != nil {
 			return database.ID, err
 		}
@@ -103,13 +73,13 @@ func CreateManaged(r *http.Request, name, sourceID, pointInTime string, grants G
 	if database.Name == "" {
 		return database.ID, &Refusal{http.StatusBadRequest, "name is required"}
 	}
-	return database.ID, provisionManaged(r.Context(), actor, database)
+	return database.ID, provision(ctx, actor, database)
 }
 
-// provisionManaged checks the quota, has the cellar write the file, then adds
+// provision checks the quota, has the cellar write the file, then adds
 // the datasource row and its dedicated role. The workspace row stays locked
 // from the quota check to the insert, so two creates cannot both take the last slot.
-func provisionManaged(ctx context.Context, actor authz.Actor, database newManagedDatabase) error {
+func provision(ctx context.Context, actor authz.Actor, database newDatabase) error {
 	workspaceID := uuid.MustParse(actor.WorkspaceID)
 	userIDs, apiKeyIDs, err := resolveGrants(ctx, actor, workspaceID, database.Grants)
 	if err != nil {
@@ -127,7 +97,7 @@ func provisionManaged(ctx context.Context, actor authz.Actor, database newManage
 	if err != nil {
 		return err
 	}
-	limits := managedPlans[usage.Plan]
+	limits := plans[usage.Plan]
 	if err := checkPointInTime(database.PointInTime, limits.PointInTimeDays); err != nil {
 		return err
 	}
@@ -179,5 +149,20 @@ func provisionManaged(ctx context.Context, actor authz.Actor, database newManage
 		Status:      audit.StatusSuccess,
 		Payload:     payload,
 	})
+	return nil
+}
+
+// checkPointInTime refuses a fork time outside the plan's window, or in the future.
+func checkPointInTime(pointInTime string, retentionDays int) error {
+	if pointInTime == "" {
+		return nil
+	}
+	forkTime, err := time.Parse(time.RFC3339, pointInTime)
+	if err != nil {
+		return &Refusal{http.StatusBadRequest, "at must be an RFC 3339 time"}
+	}
+	if forkTime.After(time.Now()) || forkTime.Before(time.Now().AddDate(0, 0, -retentionDays)) {
+		return &Refusal{http.StatusBadRequest, fmt.Sprintf("at must be within the last %d days", retentionDays)}
+	}
 	return nil
 }

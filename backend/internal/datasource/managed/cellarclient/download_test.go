@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/stretchr/testify/require"

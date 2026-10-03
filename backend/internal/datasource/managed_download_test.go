@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"backend/e2e"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/stretchr/testify/require"
 )
