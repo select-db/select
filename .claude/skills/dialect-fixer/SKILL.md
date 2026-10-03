@@ -205,7 +205,8 @@ it rather than estimate.
    the ones that widen it or are wrong, rerun the checks and commit. The
    reviews are part of the fix: start them with at least 20 minutes left. With
    less, write where the work stands to `.fixer-work/blocked.md` instead of
-   publishing it unreviewed.
+   publishing it unreviewed: the hook still pushes your commits, without a
+   pull request.
 5. Write `.fixer-work/pr.md`: the title on the first line, then the body:
    `Closes #$FIXER_ISSUE`, what was wrong, what changed, the failing count
    against the old code, how each maintainer decision was followed, and, after
