@@ -159,6 +159,21 @@ func (d *Dialect) SystemSchema(table string) string {
 	return ""
 }
 
+// pseudoColumns are the system columns every PostgreSQL table carries without
+// declaring them. oid is there for a table created WITH OIDS, which older
+// databases upgraded in place still have.
+var pseudoColumns = map[string]bool{
+	"ctid": true, "oid": true, "tableoid": true,
+	"xmin": true, "xmax": true, "cmin": true, "cmax": true,
+}
+
+// IsPseudoColumn implements the core.SQLDialect interface. A quoted "CTID" is
+// not one of them, which NormalizeIdentifier is what decides: it folds an
+// unquoted name and leaves a quoted one as written.
+func (d *Dialect) IsPseudoColumn(name string) bool {
+	return pseudoColumns[d.NormalizeIdentifier(name)]
+}
+
 func (d *Dialect) NormalizeIdentifier(raw string) string {
 	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
 		return normalizePostgreSQLQuotedIdentifier(raw)

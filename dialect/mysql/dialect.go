@@ -127,6 +127,13 @@ func (d *Dialect) SystemSchema(string) string {
 	return ""
 }
 
+// IsPseudoColumn implements the core.SQLDialect interface. MySQL has no column
+// a table answers for without declaring it: InnoDB's internal row id is not
+// reachable from SQL.
+func (d *Dialect) IsPseudoColumn(string) bool {
+	return false
+}
+
 func (d *Dialect) NormalizeIdentifier(raw string) string {
 	if len(raw) >= 2 && raw[0] == '`' && raw[len(raw)-1] == '`' {
 		return normalizeMySQLQuotedIdentifier(raw)

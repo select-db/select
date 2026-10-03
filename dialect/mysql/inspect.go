@@ -15,10 +15,6 @@ type Inspector struct {
 	dialect  *Dialect
 	meta     core.Metadata
 	resolver core.Resolver
-
-	// inBody stops a statement read out of another's text from nesting again,
-	// which MySQL refuses too.
-	inBody bool
 }
 
 // NewInspector creates a new MySQL statement inspector.
@@ -1135,11 +1131,12 @@ func (i *Inspector) preparedBody(stmt mysql.IPreparedStatementContext) []core.In
 	// arriving through a user variable is session state too. Neither is
 	// statically visible, so the caller is left with the floor alone.
 	lit := stmt.TextLiteral()
-	if lit == nil || i.inBody {
+	// A body carried inside a body is not read again, which MySQL refuses too.
+	if lit == nil || i.resolver.InBody {
 		return nil
 	}
 	body := NewInspector(i.dialect, i.meta)
-	body.inBody = true
+	body.resolver.InBody = true
 	return body.Inspect(textLiteralValue(lit))
 }
 
@@ -1777,10 +1774,6 @@ func (l *whereColumnListener) EnterColumnRef(ctx *mysql.ColumnRefContext) {
 		resolved = l.inspector.resolver.Column(cr.tablePrefix, cr.name, l.relationRefs)
 	} else {
 		resolved = l.inspector.resolver.UnqualifiedColumn(cr.name, l.relationRefs, l.scope)
-		if resolved == nil && len(l.relationRefs) == 1 {
-			ref := l.relationRefs[0]
-			resolved = &core.InspectField{Name: cr.name, Table: ref.Table, Schema: ref.Schema}
-		}
 	}
 	if resolved == nil {
 		return

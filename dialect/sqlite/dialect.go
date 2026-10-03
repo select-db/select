@@ -294,6 +294,15 @@ func (d *Dialect) SystemSchema(table string) string {
 	return ""
 }
 
+// pseudoColumns are the names an ordinary SQLite table answers for without
+// declaring them. All three spell the same row identifier.
+var pseudoColumns = map[string]bool{"rowid": true, "oid": true, "_rowid_": true}
+
+// IsPseudoColumn implements the core.SQLDialect interface.
+func (d *Dialect) IsPseudoColumn(name string) bool {
+	return pseudoColumns[d.NormalizeIdentifier(name)]
+}
+
 // QuoteIdentifierIfNeeded quotes an identifier if it contains special characters or is a reserved keyword
 func (d *Dialect) QuoteIdentifierIfNeeded(name string, caretQuoted bool, reserved map[string]bool) string {
 	if name == "" {

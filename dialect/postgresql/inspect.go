@@ -16,10 +16,6 @@ type Inspector struct {
 	dialect  *Dialect
 	meta     core.Metadata
 	resolver core.Resolver
-
-	// inBody stops a statement read out of another's body from nesting again,
-	// which bounds the recursion on a body that carries a body.
-	inBody bool
 }
 
 // NewInspector creates a new PostgreSQL statement inspector
@@ -866,7 +862,8 @@ func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.Inspe
 // bodyStatements is what the statements of a procedural body require, read out
 // of the string constants carrying it.
 func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectStatement {
-	if i.inBody {
+	// A body carried inside a body is not read again, which bounds the recursion.
+	if i.resolver.InBody {
 		return nil
 	}
 	var reads []core.InspectStatement
@@ -920,7 +917,7 @@ func (i *Inspector) readBody(text string) []core.InspectStatement {
 				text = "SELECT " + stream.GetTextFromTokens(tokens[starts[at]+1], tokens[end-1])
 			}
 			inner := NewInspector(i.dialect, i.meta)
-			inner.inBody = true
+			inner.resolver.InBody = true
 			fragment, whole := inner.inspectScript(text)
 			if whole {
 				reads = append(reads, fragment...)
