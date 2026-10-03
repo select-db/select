@@ -40,7 +40,7 @@ func getRow(ctx context.Context, id, workspaceID string) (generated.GetDatasourc
 	return row, CheckAvailable(row)
 }
 
-// DSN is how the backend reaches managed database row on its cellar, capped
+// DSN is how the backend reaches the managed database row on its cellar, capped
 // by the workspace's plan.
 func DSN(ctx context.Context, row generated.GetDatasourceRow, id, workspaceID string) (string, error) {
 	if err := CheckAvailable(row); err != nil {
