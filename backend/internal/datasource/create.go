@@ -5,13 +5,14 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
+	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
 )
 
 type createRequest struct {
 	upsertRequest
-	GrantTo GrantTo `json:"grant_to"`
+	GrantTo managed.GrantTo `json:"grant_to"`
 }
 
 // datasourceConfig is the datasource.config.json that adds a datasource to a
@@ -40,7 +41,7 @@ func CreateHandler() http.HandlerFunc {
 		id, dbType := uuid.NewString(), req.DBType
 		if dbType == "sqlite" && req.DSN == "" {
 			var err error
-			id, err = CreateManaged(r, req.Name, "", "", req.GrantTo)
+			id, err = managed.Create(r.Context(), authz.ActorOf(r), req.Name, "", "", req.GrantTo)
 			if err != nil {
 				OpenError(w, err, "managed create", authz.ActorOf(r).WorkspaceID, id)
 				return

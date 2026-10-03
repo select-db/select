@@ -8,8 +8,9 @@ $0.01 per GB-month.
 ## Words
 
 - **managed database**: a SQLite database SELECT hosts for a workspace. The
-  word users see: the API, MCP, error messages and the `datasource` package
-  (`managed_database.go`, `managed_access.go`).
+  word users see: the API, MCP, error messages and the package
+  `internal/datasource/managed`; its routes are the `managed_*.go` files of
+  `internal/datasource`.
 - **backend**: the existing API server. Owns auth, permissions, plans, quotas
   and every row in Postgres.
 - **cellar**: the same binary in cellar mode. Owns SQLite files and nothing
@@ -47,8 +48,8 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
    cellar disk is a cache.
 
 Code follows the process it runs in. `internal/cellar` is only what runs on
-the cellar, plus the grant and query it accepts. The backend's side, the
-driver, is in `internal/datasource/cellarclient`; startup is in
+the cellar, plus the grant and query it accepts. The backend's side is
+`internal/datasource/managed`, its driver in `managed/cellarclient`; startup is in
 `cmd/server/cellar.go`.
 
 ## Rules
@@ -239,7 +240,7 @@ Needs 0.
       files, reached through the `cellar` database/sql driver, so REST and
       MCP open a managed datasource like any other. `CELLAR=local` starts it
       in-process.
-- [x] Service token signed and reused by the backend (`datasource/cellarclient`),
+- [x] Service token signed and reused by the backend (`datasource/managed/cellarclient`),
       and checked with the grant header by the cellar (`cellar.Authenticated`
       middleware, which puts the grant in the context for `InFlight` to key
       on).

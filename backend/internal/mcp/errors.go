@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"backend/internal/datasource"
+	"backend/internal/datasource/managed"
 	"backend/internal/utils"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
@@ -49,10 +50,13 @@ func asToolError(err error) *toolError {
 	if errors.As(err, &te) {
 		return te
 	}
-	var refused *datasource.Refusal
+	var refused *managed.Refusal
 	if errors.As(err, &refused) {
-		if refused.Status == http.StatusForbidden {
+		switch refused.Status {
+		case http.StatusForbidden:
 			return &toolError{Code: "forbidden", Message: refused.Message}
+		case http.StatusNotFound:
+			return errNotFound(refused.Message)
 		}
 		return errBadArgument(refused.Message)
 	}

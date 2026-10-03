@@ -15,7 +15,7 @@ import (
 
 	"backend/internal/auth"
 	"backend/internal/cellar"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 )
 
 // localCellar is the CELLAR setting, and the cellar id, of a cellar run in the

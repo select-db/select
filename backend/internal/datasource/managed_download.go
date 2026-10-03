@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/selectDb/dialect/sqlite"
 	"github.com/selectDb/toolkit"
