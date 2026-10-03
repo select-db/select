@@ -40,10 +40,11 @@ func CreateHandler() http.HandlerFunc {
 		}
 		id, dbType := uuid.NewString(), req.DBType
 		if dbType == "sqlite" && req.DSN == "" {
+			actor := authz.ActorOf(r)
 			var err error
-			id, err = managed.Create(r.Context(), authz.ActorOf(r), req.Name, "", "", req.GrantTo)
+			id, err = managed.Create(r.Context(), actor, req.Name, "", "", req.GrantTo)
 			if err != nil {
-				OpenError(w, err, "managed create", authz.ActorOf(r).WorkspaceID, id)
+				OpenError(w, err, "managed create", actor.WorkspaceID, id)
 				return
 			}
 		} else {

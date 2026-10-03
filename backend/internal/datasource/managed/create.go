@@ -58,7 +58,7 @@ func Create(ctx context.Context, actor authz.Actor, name, sourceID, pointInTime 
 	allowed := actor.IsOwner() || (!isFork && actor.Can(core.ActionManage)) || (isFork && actor.CanManage(sourceID))
 	if !allowed {
 		audit.EmitDenied(ctx, audit.DatasourceCreated, actor.WorkspaceID, database.ID)
-		return database.ID, ErrForbidden
+		return database.ID, errForbidden
 	}
 	if isFork {
 		source, err := getRow(ctx, sourceID, actor.WorkspaceID)
