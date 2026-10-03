@@ -19,8 +19,9 @@ type CreateRequest struct {
 	PointInTime string `json:"at,omitempty"`
 }
 
-// CreateHandler writes a new database, empty or copied, under a temporary name
-// and renames it into place: a failed copy never leaves a half database.
+// CreateHandler writes a new database on the cellar, empty or copied, under a
+// temporary name and renames it into place: a failed copy never leaves a half
+// database.
 func CreateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req CreateRequest

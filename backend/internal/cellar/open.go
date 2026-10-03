@@ -25,8 +25,8 @@ func (sqliteDriver) QueryRunsAll() {}
 // dbType is the engine dialect of every database a cellar holds.
 const dbType = "sqlite"
 
-// Open returns the grant's datasource, the file at path, set up so every
-// statement runs under the isolation rules.
+// Open returns the grant's database on this cellar, the file at path, set up
+// so every statement runs under the isolation rules.
 func Open(path string, grant Grant) (query.Conn, error) {
 	if grant.MaxBytes <= 0 {
 		return query.Conn{}, fmt.Errorf("grant for datasource %s has no size cap", grant.DatasourceID)

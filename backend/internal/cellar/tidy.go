@@ -12,13 +12,13 @@ import (
 
 const (
 	restAfter = 15 * time.Minute
-	// minFreeShare is the share of the disk evict keeps free.
+	// minFreeShare is the share of the cellar's disk evict keeps free.
 	minFreeShare = 0.2
 	tidyInterval = time.Minute
 )
 
-// tidyEvery rests idle databases and evicts resting ones while the disk is
-// short, until ctx ends.
+// tidyEvery is the cellar's housekeeping: it rests idle databases and evicts
+// resting ones while the cellar's disk is short, until ctx ends.
 func (databases *Databases) tidyEvery(ctx context.Context) {
 	defer close(databases.tidyStopped)
 	ticker := time.NewTicker(tidyInterval)
@@ -73,8 +73,9 @@ func (databases *Databases) restOne(ctx context.Context, database *database, rep
 	}
 }
 
-// evict deletes resting databases, least recently used first, while
-// diskShort holds. The bucket holds them; the next use restores them.
+// evict deletes resting databases from the cellar's disk, least recently used
+// first, while diskShort holds. The bucket holds them; the next use restores
+// them.
 func (databases *Databases) evict(diskShort func() bool) {
 	databases.mu.Lock()
 	defer databases.mu.Unlock()

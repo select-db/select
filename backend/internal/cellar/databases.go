@@ -19,8 +19,8 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// Databases are the database files of a cellar and their copy in the bucket.
-// Each one is
+// Databases are the managed databases on this cellar: their files on the
+// cellar's disk and their copy in the bucket. Each one is
 //   - replicating: used within restAfter, every write streams to the bucket;
 //   - resting: on disk, and the bucket holds all of it;
 //   - cold: in the bucket only, restored by its next use.
@@ -36,10 +36,10 @@ type Databases struct {
 	onDisk map[string]*database // by id
 }
 
-// databases is this process's cellar, set by OpenDatabases.
+// databases is the cellar this process runs, set by OpenDatabases.
 var databases *Databases
 
-// database is one database file on disk.
+// database is one database file on the cellar's disk.
 type database struct {
 	id          string
 	path        string
@@ -50,8 +50,9 @@ type database struct {
 	bucket litestream.ReplicaClient
 }
 
-// OpenDatabases replicates the databases in dir to bucket, an s3:// URL or,
-// without S3, a directory. The routes serve them until CloseDatabases.
+// OpenDatabases starts the cellar's storage: it replicates the databases in
+// dir to bucket, an s3:// URL or, without S3, a directory. The cellar's routes
+// serve them until CloseDatabases.
 func OpenDatabases(dir, bucket string) error {
 	if databases != nil {
 		return errors.New("cellar: databases already open")
@@ -113,8 +114,8 @@ func OpenDatabases(dir, bucket string) error {
 	return nil
 }
 
-// CloseDatabases stops replicating, after a last sync of every replicating
-// database.
+// CloseDatabases stops the cellar's replication, after a last sync of every
+// replicating database.
 func CloseDatabases(ctx context.Context) error {
 	if databases == nil {
 		return nil
@@ -130,8 +131,8 @@ func CloseDatabases(ctx context.Context) error {
 	return errors.Join(append(syncErrors, databases.store.Close(ctx))...)
 }
 
-// use readies database id for a statement: restored if cold, replicating, its
-// idle time reset. It returns the file's path.
+// use readies database id on this cellar for a statement: restored from the
+// bucket if cold, replicating, its idle time reset. It returns the file's path.
 func (databases *Databases) use(ctx context.Context, id string) (string, error) {
 	path, err := databasePath(databases.dir, id)
 	if err != nil {
@@ -154,8 +155,8 @@ func (databases *Databases) use(ctx context.Context, id string) (string, error) 
 	return path, nil
 }
 
-// add moves a new database file into place, unless id is taken, and
-// replicates it. It returns the file's path.
+// add moves a new database file into the cellar's directory, unless id is
+// taken, and replicates it. It returns the file's path.
 func (databases *Databases) add(id, tempPath string) (string, error) {
 	path, err := databasePath(databases.dir, id)
 	if err != nil {
@@ -177,7 +178,7 @@ func (databases *Databases) add(id, tempPath string) (string, error) {
 	return path, nil
 }
 
-// remove deletes database id from disk and from the bucket.
+// remove deletes database id from the cellar's disk and from the bucket.
 func (databases *Databases) remove(ctx context.Context, id string) error {
 	path, err := databasePath(databases.dir, id)
 	if err != nil {
