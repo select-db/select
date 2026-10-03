@@ -9,6 +9,7 @@ import (
 
 	"backend/internal/authz"
 	"backend/internal/cellar"
+	"backend/internal/datasource/managed"
 
 	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/dialects"
@@ -23,18 +24,8 @@ import (
 // internal network topology and turns this endpoint into an SSRF oracle.
 const genericConnErr = "could not connect to the datasource"
 
-// ErrNotFound is a datasource the caller's workspace does not have.
-var ErrNotFound = errors.New("datasource not found")
-
-// Refusal is a request the caller can correct, answered with its HTTP status.
-type Refusal struct {
-	Status  int
-	Message string
-}
-
-func (refusal *Refusal) Error() string { return refusal.Message }
-
-var errForbidden = &Refusal{http.StatusForbidden, "forbidden"}
+// ErrNotFound is a datasource the caller's workspace does not have, managed or not.
+var ErrNotFound = managed.ErrNotFound
 
 // Opened is a datasource ready for one request, with the caller's permissions.
 type Opened struct {
@@ -95,6 +86,9 @@ func (o *Opened) Stream(ctx context.Context, sql string, opts query.Options, sin
 // OpenError answers a request whose datasource could not be opened or reached.
 func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, datasourceID string) {
 	status, shown := openFailure(err, logPrefix, workspaceID, datasourceID)
+	if status == http.StatusServiceUnavailable {
+		w.Header().Set("Retry-After", "5")
+	}
 	http.Error(w, shown.Error(), status)
 }
 
@@ -104,6 +98,7 @@ var codeStatus = map[string]int{
 	cellar.CodeForbiddenStatement: http.StatusBadRequest,
 	cellar.CodeQuotaExceeded:      http.StatusForbidden,
 	cellar.CodeTimeout:            http.StatusRequestTimeout,
+	cellar.CodeWaking:             http.StatusServiceUnavailable,
 	cellar.CodeUnavailable:        http.StatusServiceUnavailable,
 	cellar.CodeDisabled:           http.StatusNotImplemented,
 	cellar.CodeInternal:           http.StatusInternalServerError,
@@ -115,10 +110,8 @@ var codeStatus = map[string]int{
 func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, error) {
 	var coded *arrowstream.Error
 	var cfgErr *connect.ConfigError
-	var refused *Refusal
+	var refused *managed.Refusal
 	switch {
-	case errors.Is(err, ErrNotFound):
-		return http.StatusNotFound, err
 	case errors.As(err, &refused):
 		return refused.Status, refused
 	case errors.As(err, &coded) && codeStatus[coded.Code] != 0:

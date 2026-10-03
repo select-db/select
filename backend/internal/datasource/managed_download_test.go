@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"backend/e2e"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/stretchr/testify/require"
 )
@@ -38,4 +38,16 @@ func TestDownloadManagedFileName(t *testing.T) {
 		map[string]any{"workspace_id": fixture.Actor.WorkspaceID})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, `attachment; filename="q3_q4_ sales.db"`, rec.Header().Get("Content-Disposition"))
+}
+
+func TestDownloadNeedsManage(t *testing.T) {
+	fixture := newManagedFixture(t)
+	id := createNotes(t, fixture)
+	downloadPath := "/datasources/" + id + "/download"
+
+	rec := e2e.Do(t, fixture.H, http.MethodGet, downloadPath, memberToken(t, fixture, id, "select"), nil)
+	require.Equal(t, http.StatusForbidden, rec.Code, "the file is all the data: %s", rec.Body.String())
+
+	rec = e2e.Do(t, fixture.H, http.MethodGet, downloadPath, memberToken(t, fixture, id, "manage"), nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }

@@ -14,7 +14,7 @@ const statementTimeout = 60 * time.Second
 
 // Register adds the cellar's routes to mux. The backend's driver sends every
 // statement here, and checks permissions before it does.
-func Register(mux *http.ServeMux, dir string, pub *rsa.PublicKey, cellarID string) {
+func Register(mux *http.ServeMux, pub *rsa.PublicKey, cellarID string) {
 	authenticated := Authenticated(pub, cellarID)
 	timeout := middlewares.Timeout(statementTimeout)
 	inFlight := middlewares.InFlight(func(r *http.Request) (string, int) {
@@ -22,10 +22,10 @@ func Register(mux *http.ServeMux, dir string, pub *rsa.PublicKey, cellarID strin
 		return grant.WorkspaceID, grant.MaxInFlight
 	})
 
-	mux.Handle("POST /datasources/{id}/query", authenticated(timeout(inFlight(QueryHandler(dir)))))
+	mux.Handle("POST /datasources/{id}/query", authenticated(timeout(inFlight(QueryHandler()))))
 	// A copy or a download takes as long as the file is big, not a statement's 60s.
-	mux.Handle("PUT /datasources/{id}", authenticated(CreateHandler(dir)))
-	mux.Handle("GET /datasources/{id}/download", authenticated(DownloadHandler(dir)))
-	mux.Handle("DELETE /datasources/{id}", authenticated(DeleteHandler(dir)))
-	mux.Handle("GET /datasources", authenticated(InventoryHandler(dir)))
+	mux.Handle("PUT /datasources/{id}", authenticated(CreateHandler()))
+	mux.Handle("GET /datasources/{id}/download", authenticated(DownloadHandler()))
+	mux.Handle("DELETE /datasources/{id}", authenticated(DeleteHandler()))
+	mux.Handle("GET /datasources", authenticated(InventoryHandler()))
 }

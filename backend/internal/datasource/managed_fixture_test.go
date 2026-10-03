@@ -7,6 +7,7 @@ import (
 
 	"backend/e2e"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,4 +70,19 @@ func requireDisabled(t *testing.T, fixture e2e.Fixture, method, path string) {
 	status, responseBody := callAsOwner(t, fixture, method, path, map[string]any{"db_type": "sqlite", "name": "off"})
 	require.Equalf(t, http.StatusNotImplemented, status, "%s %s: %s", method, path, responseBody)
 	require.Contains(t, string(responseBody), "not enabled")
+}
+
+// memberToken mints a token for a new workspace member whose one role allows
+// action on datasourceID only.
+func memberToken(t *testing.T, fixture e2e.Fixture, datasourceID, action string) string {
+	t.Helper()
+	workspaceID, memberID, roleID := fixture.Actor.WorkspaceID, uuid.NewString(), uuid.NewString()
+	e2e.SeedUser(t, fixture.Conn, memberID)
+	e2e.SeedMembership(t, fixture.Conn, workspaceID, memberID)
+	e2e.SeedRole(t, fixture.Conn, roleID, workspaceID, action+" on one database")
+	_, err := fixture.Conn.Exec(`INSERT INTO app.permission (id, role_id, workspace_id, datasource_id, action, effect)
+		VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, 'allow')`, uuid.NewString(), roleID, workspaceID, datasourceID, action)
+	require.NoError(t, err)
+	e2e.SeedUserRole(t, fixture.Conn, memberID, roleID, workspaceID)
+	return e2e.MintJWT(t, memberID)
 }

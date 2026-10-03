@@ -8,6 +8,7 @@ import (
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/authz"
+	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/core"
@@ -85,7 +86,16 @@ func saveDatasource(w http.ResponseWriter, r *http.Request, req upsertRequest) b
 
 	if exists && existing.CellarID.ValueOrEmpty() != "" {
 		rename := generated.RenameDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID, Name: req.Name}
-		return renameManaged(w, r, existing, rename, spec)
+		if err := managed.CheckAvailable(existing); err != nil {
+			OpenError(w, err, "managed rename", workspaceID, req.ID)
+			return false
+		}
+		if err := managed.Rename(r.Context(), existing, rename); err != nil {
+			http.Error(w, "failed to rename datasource", http.StatusInternalServerError)
+			return false
+		}
+		InvalidateCache(workspaceID, req.ID)
+		return true
 	}
 
 	// Proxified datasources are dialed by this multi-tenant server, so only
@@ -158,29 +168,6 @@ func saveDatasource(w http.ResponseWriter, r *http.Request, req upsertRequest) b
 		TargetLabel: req.Name,
 		Status:      audit.StatusSuccess,
 		Payload:     map[string]any{"db_type": req.DBType},
-	})
-	return true
-}
-
-// renameManaged gives a managed database a new name, the only setting it has,
-// and reports whether it did; on false it has answered the request.
-func renameManaged(w http.ResponseWriter, r *http.Request, existing generated.GetDatasourceRow, rename generated.RenameDatasourceParams, spec audit.Spec) bool {
-	workspaceID, id := rename.WorkspaceID.String(), rename.ID.String()
-	if err := checkManagedAvailable(existing); err != nil {
-		OpenError(w, err, "managed rename", workspaceID, id)
-		return false
-	}
-	if err := db.Queries.RenameDatasource(r.Context(), rename); err != nil {
-		http.Error(w, "failed to rename datasource", http.StatusInternalServerError)
-		return false
-	}
-	InvalidateCache(workspaceID, id)
-	audit.EmitAction(r.Context(), spec, audit.Record{
-		WorkspaceID: workspaceID,
-		TargetID:    id,
-		TargetLabel: rename.Name,
-		Status:      audit.StatusSuccess,
-		Payload:     map[string]any{"db_type": existing.DbType, "managed": true},
 	})
 	return true
 }

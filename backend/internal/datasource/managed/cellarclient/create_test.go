@@ -6,7 +6,7 @@ import (
 
 	"backend/e2e"
 	"backend/internal/cellar"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/google/uuid"
 	"github.com/selectDb/dialect/engine/arrowstream"
@@ -42,11 +42,12 @@ func TestCreateWithoutCellar(t *testing.T) {
 	require.ErrorIs(t, err, cellarclient.ErrOff)
 }
 
-func TestCreatePointInTimeIsNotAvailableYet(t *testing.T) {
+func TestCreatePointInTimeReachesTheCellar(t *testing.T) {
 	dsn := newDSN(t)
 
 	_, err := cellarclient.Create(context.Background(), dsn, uuid.NewString(), "2026-09-28T00:00:00Z")
 	var coded *arrowstream.Error
 	require.ErrorAs(t, err, &coded)
-	require.Equal(t, cellar.CodeDisabled, coded.Code)
+	require.Equal(t, cellar.CodeSQLError, coded.Code)
+	require.Contains(t, coded.Message, "no copy", "the cellar looked in the replica at that time")
 }

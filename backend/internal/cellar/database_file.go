@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/benbjohnson/litestream"
 	"github.com/google/uuid"
 )
 
@@ -24,8 +25,8 @@ func execTrusted(ctx context.Context, path, mode, statement string, args ...any)
 	return err
 }
 
-// databasePath is the file of database id. The id must be a uuid, so it cannot
-// name a file outside dir.
+// databasePath is the file of database id in the cellar's directory. The id
+// must be a uuid, so it cannot name a file outside dir.
 func databasePath(dir, id string) (string, error) {
 	if _, err := uuid.Parse(id); err != nil {
 		return "", fmt.Errorf("datasource id %q is not a uuid", id)
@@ -33,16 +34,17 @@ func databasePath(dir, id string) (string, error) {
 	return filepath.Join(dir, id+".db"), nil
 }
 
-// existingDatabasePath is databasePath for a database that must already exist.
-func existingDatabasePath(dir, id string) (string, error) {
-	path, err := databasePath(dir, id)
-	if err != nil {
-		return "", err
+// removeDatabaseFiles removes the database at path and everything next to it:
+// its WAL files and Litestream's working folder. The file goes last, so a
+// failure never leaves a stale WAL for a restored file to replay.
+func removeDatabaseFiles(path string) error {
+	metaPath := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+litestream.MetaDirSuffix)
+	for _, file := range []string{path + "-wal", path + "-shm", metaPath, path} {
+		if err := os.RemoveAll(file); err != nil {
+			return err
+		}
 	}
-	if _, err := os.Stat(path); err != nil {
-		return "", errNotFound
-	}
-	return path, nil
+	return nil
 }
 
 // databaseSize counts the WAL too: until a checkpoint, recent writes live there.

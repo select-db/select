@@ -1,4 +1,4 @@
-package datasource
+package managed
 
 import (
 	"context"

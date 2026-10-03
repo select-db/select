@@ -1,6 +1,7 @@
 package cellarclient_test
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,7 @@ import (
 
 	"backend/e2e"
 	"backend/internal/cellar"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,8 @@ func newManagedDB(t *testing.T) managedDB {
 	}
 
 	dir := e2e.ServeCellar(t)
+	_, err = cellarclient.Create(context.Background(), cellarclient.DSN(cellarclient.CellarID, id, fixture.Actor.WorkspaceID, 1<<20, 0), "", "")
+	require.NoError(t, err)
 	seedConn, err := sql.Open("sqlite", filepath.Join(dir, id+".db"))
 	require.NoError(t, err)
 	_, err = seedConn.Exec(`CREATE TABLE note (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO note (body) VALUES ('hello')`)
