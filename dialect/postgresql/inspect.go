@@ -598,9 +598,10 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	// INSERT ... SELECT: the grammar always wraps the source as a Selectstmt.
 	// When the source reads anything, attach it as a subquery. A VALUES list
 	// reads nothing of its own, so the reads in its rows stand under the insert.
-	if values := soleValuesClause(rest.Selectstmt()); values != nil {
+	source := rest.Selectstmt()
+	if values := soleValuesClause(source); values != nil {
 		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(values)...)
-	} else if sub := i.inspectSelect(rest.Selectstmt()); core.CarriesRead(sub) {
+	} else if sub := i.inspectSelect(source); core.CarriesRead(sub) {
 		result.Subqueries = append(result.Subqueries, *sub)
 	}
 
