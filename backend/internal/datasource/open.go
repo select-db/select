@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"backend/internal/authz"
+	"backend/internal/cellar"
 	"backend/internal/datasource/managed"
 
 	"github.com/selectDb/dialect/core"
@@ -91,6 +92,18 @@ func OpenError(w http.ResponseWriter, err error, logPrefix, workspaceID, datasou
 	http.Error(w, shown.Error(), status)
 }
 
+// codeStatus is the HTTP status of each code a managed database's failure carries.
+var codeStatus = map[string]int{
+	cellar.CodeSQLError:           http.StatusBadRequest,
+	cellar.CodeForbiddenStatement: http.StatusBadRequest,
+	cellar.CodeQuotaExceeded:      http.StatusForbidden,
+	cellar.CodeTimeout:            http.StatusRequestTimeout,
+	cellar.CodeWaking:             http.StatusServiceUnavailable,
+	cellar.CodeUnavailable:        http.StatusServiceUnavailable,
+	cellar.CodeDisabled:           http.StatusNotImplemented,
+	cellar.CodeInternal:           http.StatusInternalServerError,
+}
+
 // openFailure returns the status and the error a caller may see. A managed
 // database's failure is already classified; of the rest, only config errors
 // are shown, since a raw dial error maps the internal network. The rest is logged.
@@ -101,8 +114,8 @@ func openFailure(err error, logPrefix, workspaceID, datasourceID string) (int, e
 	switch {
 	case errors.As(err, &refused):
 		return refused.Status, refused
-	case errors.As(err, &coded) && managed.CodeStatus[coded.Code] != 0:
-		return managed.CodeStatus[coded.Code], coded
+	case errors.As(err, &coded) && codeStatus[coded.Code] != 0:
+		return codeStatus[coded.Code], coded
 	case errors.As(err, &cfgErr):
 		return http.StatusBadGateway, cfgErr
 	}
