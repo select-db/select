@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"backend/internal/datasource"
 	"backend/internal/datasource/managed"
 	"backend/internal/utils"
 
@@ -59,9 +58,6 @@ func asToolError(err error) *toolError {
 			return errNotFound(refused.Message)
 		}
 		return errBadArgument(refused.Message)
-	}
-	if errors.Is(err, datasource.ErrNotFound) {
-		return errNotFound(err.Error())
 	}
 	var cfgErr *connect.ConfigError
 	if errors.As(err, &cfgErr) {

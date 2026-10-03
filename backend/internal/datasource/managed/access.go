@@ -35,7 +35,7 @@ func resolveGrants(ctx context.Context, actor authz.Actor, workspaceID uuid.UUID
 		}
 		isCaller := !actor.IsAPIKey && rawID == actor.UserID
 		if !isCaller && !actor.IsOwner() && !actor.Can(core.ActionWorkspaceUsersManage) {
-			return nil, nil, ErrForbidden
+			return nil, nil, errForbidden
 		}
 		isMember, err := db.Queries.IsWorkspaceMember(ctx, generated.IsWorkspaceMemberParams{WorkspaceID: workspaceID, UserID: userID})
 		if err != nil {
@@ -54,7 +54,7 @@ func resolveGrants(ctx context.Context, actor authz.Actor, workspaceID uuid.UUID
 		// An API key caller's UserID is its key id.
 		isCaller := actor.IsAPIKey && rawID == actor.UserID
 		if !isCaller && !actor.IsOwner() && !actor.Can(core.ActionWorkspaceApiKeysManage) {
-			return nil, nil, ErrForbidden
+			return nil, nil, errForbidden
 		}
 		_, err = db.Queries.GetAPIKeyForWorkspace(ctx, generated.GetAPIKeyForWorkspaceParams{ID: apiKeyID, WorkspaceID: workspaceID})
 		if errors.Is(err, sql.ErrNoRows) {
