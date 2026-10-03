@@ -1,6 +1,7 @@
 package datasource_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"backend/e2e"
 	"backend/internal/datasource/managed/cellarclient"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,4 +46,42 @@ func TestForkManagedWithoutCellar(t *testing.T) {
 	cellarclient.URL = ""
 
 	requireDisabled(t, fixture, http.MethodPost, "/datasources/"+sourceID+"/fork")
+}
+
+func TestForkNeedsManageOnTheSource(t *testing.T) {
+	fixture := newManagedFixture(t)
+	sourceID := createNotes(t, fixture)
+	forkPath := "/datasources/" + sourceID + "/fork"
+	body := map[string]any{"workspace_id": fixture.Actor.WorkspaceID}
+
+	rec := e2e.Do(t, fixture.H, http.MethodPost, forkPath, memberToken(t, fixture, sourceID, "select"), body)
+	require.Equal(t, http.StatusForbidden, rec.Code, "reading the source is not enough: %s", rec.Body.String())
+	e2e.RequireEventStatus(t, fixture.Conn, "datasource", "lifecycle.create", "denied")
+
+	otherID := createNotes(t, fixture)
+	rec = e2e.Do(t, fixture.H, http.MethodPost, forkPath, memberToken(t, fixture, otherID, "manage"), body)
+	require.Equal(t, http.StatusForbidden, rec.Code, "manage on another database: %s", rec.Body.String())
+
+	rec = e2e.Do(t, fixture.H, http.MethodPost, forkPath, memberToken(t, fixture, sourceID, "manage"), body)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+}
+
+func TestForkUnknownSource(t *testing.T) {
+	fixture := newManagedFixture(t)
+
+	status, responseBody := callAsOwner(t, fixture, http.MethodPost, "/datasources/"+uuid.NewString()+"/fork", nil)
+	require.Equal(t, http.StatusNotFound, status, string(responseBody))
+}
+
+func TestForkClassicDatasource(t *testing.T) {
+	fixture := newManagedFixture(t)
+	status, responseBody := callAsOwner(t, fixture, http.MethodPost, "/datasources", map[string]any{"db_type": "postgresql", "name": "remote", "dsn": e2e.TargetDSN(t, fixture.Conn)})
+	require.Equal(t, http.StatusCreated, status, string(responseBody))
+	var created struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(responseBody, &created))
+
+	status, responseBody = callAsOwner(t, fixture, http.MethodPost, "/datasources/"+created.ID+"/fork", nil)
+	require.Equal(t, http.StatusNotFound, status, "only a managed database forks: %s", responseBody)
 }
