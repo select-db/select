@@ -3435,5 +3435,92 @@ func permCases() []PermCase {
 			Op:    core.InspectOpSelect,
 			Why:   "sqlite_master lives in the database the connection opened",
 		},
+
+		// --- a column the metadata does not carry. The engine compares it
+		// whether or not our snapshot has caught up, so a predicate on it is a
+		// read, and the table the statement names is the only one it can be a
+		// read of.
+		{
+			Name:  "a returned column the metadata is missing",
+			SQL:   "SELECT c9 FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c9")},
+			Op:    core.InspectOpSelect,
+			Why:   "the one relation in scope is where c9 is read from, catalog or no catalog",
+		},
+		{
+			Name: "an update filtered by a column the metadata is missing",
+			SQL:  "UPDATE t1 SET c2 = 'x' WHERE c9 = 'secret'",
+			Needs: []Right{
+				mainT1(core.ActionUpdate).Only("c2"),
+				mainT1(core.ActionSelect).Only("c9"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "repeating it and watching the affected-row count reads c9",
+		},
+		{
+			Name: "a delete filtered by a column the metadata is missing",
+			SQL:  "DELETE FROM t1 WHERE c9 = 1",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c9"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "which rows go is an answer about c9, one predicate at a time",
+		},
+		{
+			Name: "a delete filtered by a known and an unknown column",
+			SQL:  "DELETE FROM t1 WHERE c9 = 1 AND c1 = 2",
+			Needs: []Right{
+				mainT1(core.ActionDelete),
+				mainT1(core.ActionSelect).Only("c1"),
+				mainT1(core.ActionSelect).Only("c9"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "a column the catalog confirms standing next to one it does not covers neither for the other",
+		},
+		{
+			Name: "a delete filtered by a column of a table the metadata is missing",
+			SQL:  "DELETE FROM t9 WHERE c1 = 1",
+			Needs: []Right{
+				mainT9(core.ActionDelete),
+				mainT9(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpDelete,
+			Why: "a predicate on the only relation in scope reads it whether the metadata holds the table or not",
+		},
+		{
+			Name: "an update filtered by a column of a table the metadata is missing",
+			SQL:  "UPDATE t9 SET c2 = 'x' WHERE c1 = 1",
+			Needs: []Right{
+				mainT9(core.ActionUpdate).Only("c2"),
+				mainT9(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpUpdate,
+			Why: "the unqualified c1 resolves onto t9 the same way the qualified t9.c1 does",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a delete filtered by PostgreSQL's ctid",
+			SQL:   "DELETE FROM t1 WHERE ctid = 'x'",
+			Needs: []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpDelete,
+			Why:   "ctid is a read of t1 no grant can name a column for, so the read is of the table",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a delete filtered by SQLite's rowid",
+			SQL:   "DELETE FROM t1 WHERE rowid = 5",
+			Needs: []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpDelete,
+			Why:   "rowid is a read of t1 no grant can name a column for, so the read is of the table",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a returned ctid",
+			SQL:   "SELECT ctid FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the same pseudo-column in the select list is the same right as in the predicate",
+		},
 	}
 }

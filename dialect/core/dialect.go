@@ -82,6 +82,11 @@ type SQLDialect interface {
 	// that is not one of them, which leaves it to the session's schema.
 	SystemSchema(table string) string
 
+	// IsPseudoColumn reports whether a name is one every table answers for
+	// without declaring it, PostgreSQL's ctid or SQLite's rowid. Reading one is
+	// a read of the table: it is in no column list, so no grant can name it.
+	IsPseudoColumn(name string) bool
+
 	// Identifier handling
 	NormalizeIdentifier(raw string) string
 	QuoteIdentifierIfNeeded(name string, caretQuoted bool, reserved map[string]bool) string
