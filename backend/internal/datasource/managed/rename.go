@@ -8,11 +8,9 @@ import (
 	"backend/internal/audit"
 )
 
-// Rename gives a managed database a new name, the only setting it has.
+// Rename gives a managed database a new name, the only setting it has. The
+// caller checks it is available first.
 func Rename(ctx context.Context, existing generated.GetDatasourceRow, rename generated.RenameDatasourceParams) error {
-	if err := CheckAvailable(existing); err != nil {
-		return err
-	}
 	if err := db.Queries.RenameDatasource(ctx, rename); err != nil {
 		return err
 	}
