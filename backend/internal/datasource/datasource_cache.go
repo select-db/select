@@ -73,7 +73,7 @@ func GetOrLoadDatasource(ctx context.Context, id, workspaceID string) (*Resolved
 	if err != nil {
 		return nil, err
 	}
-	// A managed database's DSN is built here and never read from the row.
+	// A managed database's DSN is never read from the row.
 	if row.CellarID.ValueOrEmpty() != "" {
 		dsn, err = managed.DSN(ctx, row, id, workspaceID)
 		if err != nil {
