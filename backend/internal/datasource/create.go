@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"backend/internal/audit"
 	"backend/internal/authz"
 	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
+	"github.com/selectDb/dialect/core"
 )
 
 type createRequest struct {
@@ -38,9 +40,14 @@ func CreateHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		id, dbType := uuid.NewString(), req.DBType
+		actor, id, dbType := authz.ActorOf(r), uuid.NewString(), req.DBType
+		// Adding a datasource, managed or not, takes manage on "*".
+		if !actor.IsOwner() && !actor.Can(core.ActionManage) {
+			audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, id)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		if dbType == "sqlite" && req.DSN == "" {
-			actor := authz.ActorOf(r)
 			var err error
 			id, err = managed.Create(r.Context(), actor, req.Name, "", "", req.GrantTo)
 			if err != nil {

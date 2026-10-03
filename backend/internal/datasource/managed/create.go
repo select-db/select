@@ -15,7 +15,6 @@ import (
 	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/core"
 	"github.com/selectDb/dialect/engine/arrowstream"
 )
 
@@ -46,21 +45,14 @@ type newDatabase struct {
 }
 
 // Create makes a managed database for actor, empty or a copy of sourceID as
-// it was at pointInTime, and returns its id. REST and MCP both create through it.
+// it was at pointInTime, and returns its id. The caller has checked actor may:
+// manage on "*" to create, manage on sourceID to fork.
 func Create(ctx context.Context, actor authz.Actor, name, sourceID, pointInTime string, grants GrantTo) (string, error) {
 	database := newDatabase{ID: uuid.NewString(), Name: name, SourceID: sourceID, PointInTime: pointInTime, Grants: grants}
 	if cellarclient.URL == "" {
 		return database.ID, cellarclient.ErrOff
 	}
-	// Creating takes the right to add datasources; forking hands over all the
-	// source's data, so it takes manage on the source.
-	isFork := sourceID != ""
-	allowed := actor.IsOwner() || (!isFork && actor.Can(core.ActionManage)) || (isFork && actor.CanManage(sourceID))
-	if !allowed {
-		audit.EmitDenied(ctx, audit.DatasourceCreated, actor.WorkspaceID, database.ID)
-		return database.ID, errForbidden
-	}
-	if isFork {
+	if sourceID != "" {
 		source, err := getRow(ctx, sourceID, actor.WorkspaceID)
 		if err != nil {
 			return database.ID, err

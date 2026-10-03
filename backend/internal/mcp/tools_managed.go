@@ -6,8 +6,12 @@ import (
 	"net/http"
 	"slices"
 
+	"backend/internal/audit"
 	"backend/internal/authz"
 	"backend/internal/datasource/managed"
+
+	"github.com/google/uuid"
+	"github.com/selectDb/dialect/core"
 )
 
 var grantToSchema = map[string]any{
@@ -37,7 +41,13 @@ func toolCreateDatasource() Tool {
 			if err := json.Unmarshal(rawArgs, &args); err != nil {
 				return nil, errBadArgument("invalid arguments")
 			}
-			id, err := managed.Create(r.Context(), authz.ActorOf(r), args.Name, "", "", withCallerGranted(r, args.GrantTo))
+			actor := authz.ActorOf(r)
+			// As POST /datasources: adding a datasource takes manage on "*".
+			if !actor.IsOwner() && !actor.Can(core.ActionManage) {
+				audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, uuid.NewString())
+				return nil, &toolError{Code: "forbidden", Message: "creating a datasource needs manage on the workspace"}
+			}
+			id, err := managed.Create(r.Context(), actor, args.Name, "", "", withCallerGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
@@ -71,7 +81,13 @@ func toolForkDatasource() Tool {
 			if args.DatasourceID == "" {
 				return nil, errBadArgument("datasource_id is required")
 			}
-			id, err := managed.Create(r.Context(), authz.ActorOf(r), args.Name, args.DatasourceID, args.At, withCallerGranted(r, args.GrantTo))
+			actor := authz.ActorOf(r)
+			// As POST /datasources/{id}/fork: a fork hands over all the source's data.
+			if !actor.IsOwner() && !actor.CanManage(args.DatasourceID) {
+				audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, args.DatasourceID)
+				return nil, &toolError{Code: "forbidden", Message: "forking needs manage on the source"}
+			}
+			id, err := managed.Create(r.Context(), actor, args.Name, args.DatasourceID, args.At, withCallerGranted(r, args.GrantTo))
 			if err != nil {
 				return nil, err
 			}
