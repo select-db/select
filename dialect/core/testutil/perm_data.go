@@ -3522,5 +3522,28 @@ func permCases() []PermCase {
 			Op:    core.InspectOpSelect,
 			Why:   "the same pseudo-column in the select list is the same right as in the predicate",
 		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a delete filtered by a qualified ctid",
+			SQL:   "DELETE FROM t1 AS a WHERE a.ctid = 'x'",
+			Needs: []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpDelete,
+			Why:   "writing the relation in front of a pseudo-column cannot make a column right grantable",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a delete filtered by a qualified rowid",
+			SQL:   "DELETE FROM t1 WHERE t1.rowid = 5",
+			Needs: []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpDelete,
+			Why:   "writing the relation in front of a pseudo-column cannot make a column right grantable",
+		},
+		{
+			On:    []string{"postgresql"},
+			Name:  "a code block filtering by a name the catalog has no column for",
+			SQL:   "DO $$ BEGIN DELETE FROM t1 WHERE c9 = 1; END $$",
+			Needs: []Right{Manage, mainT1(core.ActionDelete)},
+			Why:   "inside a body a bare name may be a variable the body declared, and the body already takes manage",
+		},
 	}
 }

@@ -483,7 +483,8 @@ func (r Resolver) Column(prefix, name string, refs []RelationRef) *InspectField 
 				return &InspectField{Name: column.Name, Table: ref.Table, Schema: ref.Schema}
 			}
 		}
-		return &InspectField{Name: name, Table: ref.Table, Schema: ref.Schema}
+		field := r.columnField(name, nil, ref)
+		return &field
 	}
 	// The prefix may name a relation of an enclosing statement, which is not in
 	// scope here. The field is kept under that name for ResolveCorrelated.
@@ -529,12 +530,8 @@ func (r Resolver) prefixedColumn(name, prefix string, alias *string, refs []Rela
 			}
 			return resolved
 		}
-		return &InspectField{
-			Name:   r.canonicalName(name, ref),
-			Alias:  alias,
-			Table:  ref.Table,
-			Schema: ref.Schema,
-		}
+		field := r.columnField(r.canonicalName(name, ref), alias, ref)
+		return &field
 	}
 	return nil
 }
@@ -569,14 +566,10 @@ func (r Resolver) columnOf(ref RelationRef, name string, alias *string, s Scope)
 	return nil
 }
 
-// soleRelationColumn attributes a name no relation holds to the only real
-// table in scope. A column the metadata has not caught up with is that table's,
+// soleRelationColumn attributes a name no relation holds to the only relation
+// in scope. A column the metadata has not caught up with is that relation's,
 // and there is nowhere else it could be from. Where more than one table could
 // hold it, it resolves to nothing, which refuses rather than picks one.
-//
-// A pseudo-column keeps the table and drops the name: no grant can name a
-// column the table never declares, so asking for one would make a legal
-// "DELETE FROM t WHERE rowid = 5" deniable to every role.
 func (r Resolver) soleRelationColumn(name string, alias *string, refs []RelationRef) *InspectField {
 	if r.InBody {
 		return nil
@@ -588,19 +581,14 @@ func (r Resolver) soleRelationColumn(name string, alias *string, refs []Relation
 		}
 	}
 	if len(real) == 0 && len(refs) == 1 {
-		// The one relation in scope is one the statement declared, so the name is
-		// a column it returns under a spelling the column inference missed. It
-		// keeps that relation's name for ThroughVirtual to rewrite, and no alias,
-		// which is the name ThroughVirtual matches on.
+		// A column the statement's own relation returns under a spelling the
+		// inference missed. ThroughVirtual matches it on the name, not an alias.
 		return &InspectField{Name: name, Table: refs[0].Table}
 	}
 	if len(real) != 1 {
 		return nil
 	}
-	if r.Dialect.IsPseudoColumn(name) {
-		name, alias = "", nil
-	}
-	field := InspectField{Name: name, Alias: alias, Table: real[0].Table, Schema: real[0].Schema}
+	field := r.columnField(name, alias, real[0])
 	// An unqualified name resolves the way Tables resolved it, so the column is
 	// checked on the table the statement reads. A qualified name the metadata
 	// is missing keeps an empty schema, which asks for the table as a whole
@@ -611,6 +599,19 @@ func (r Resolver) soleRelationColumn(name string, alias *string, refs []Relation
 		field.Schema = ""
 	}
 	return &field
+}
+
+// columnField is the read of a column the metadata does not confirm, on the
+// relation the name resolved to.
+//
+// A pseudo-column keeps the relation and drops the name: ctid and rowid are in
+// no column list, so no grant can name one, and asking for a right on one would
+// make a legal "DELETE FROM t WHERE rowid = 5" deniable to every role.
+func (r Resolver) columnField(name string, alias *string, ref RelationRef) InspectField {
+	if r.Dialect.IsPseudoColumn(name) {
+		return InspectField{Table: ref.Table, Schema: ref.Schema}
+	}
+	return InspectField{Name: name, Alias: alias, Table: ref.Table, Schema: ref.Schema}
 }
 
 // canonicalName is the column's name as the metadata spells it, which keeps
