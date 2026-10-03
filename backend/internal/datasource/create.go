@@ -4,14 +4,17 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"backend/internal/audit"
 	"backend/internal/authz"
+	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
+	"github.com/selectDb/dialect/core"
 )
 
 type createRequest struct {
 	upsertRequest
-	GrantTo GrantTo `json:"grant_to"`
+	GrantTo managed.GrantTo `json:"grant_to"`
 }
 
 // datasourceConfig is the datasource.config.json that adds a datasource to a
@@ -37,12 +40,18 @@ func CreateHandler() http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		id, dbType := uuid.NewString(), req.DBType
+		actor, id, dbType := authz.ActorOf(r), uuid.NewString(), req.DBType
+		// Adding a datasource, managed or not, takes manage on "*".
+		if !actor.IsOwner() && !actor.Can(core.ActionManage) {
+			audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, id)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		if dbType == "sqlite" && req.DSN == "" {
 			var err error
-			id, err = CreateManaged(r, req.Name, "", "", req.GrantTo)
+			id, err = managed.Create(r.Context(), actor, req.Name, "", "", req.GrantTo)
 			if err != nil {
-				OpenError(w, err, "managed create", authz.ActorOf(r).WorkspaceID, id)
+				OpenError(w, err, "managed create", actor.WorkspaceID, id)
 				return
 			}
 		} else {

@@ -8,8 +8,9 @@ $0.01 per GB-month.
 ## Words
 
 - **managed database**: a SQLite database SELECT hosts for a workspace. The
-  word users see: the API, MCP, error messages and the `datasource` package
-  (`managed_database.go`, `managed_access.go`).
+  word users see: the API, MCP, error messages and the package
+  `internal/datasource/managed`; its routes are the `managed_*.go` files of
+  `internal/datasource`.
 - **backend**: the existing API server. Owns auth, permissions, plans, quotas
   and every row in Postgres.
 - **cellar**: the same binary in cellar mode. Owns SQLite files and nothing
@@ -17,11 +18,16 @@ $0.01 per GB-month.
   only: packages `cellar` and `cellarclient`, `CELLAR`, `cellar_id` and the
   `cellar://` driver. A managed database lives on a cellar; a user never sees
   the word.
-- **hot / cold**: a db with a local file on the cellar / a db that lives only
-  in the bucket.
+- **replicating / resting / cold**: a db used in the last 15 minutes, every
+  write streamed to the bucket / a db on the cellar's disk whose replica holds
+  all of it / a db that lives only in the bucket.
 - **wake**: restore a cold db from the bucket before running a query.
-- **evict**: drop the local file of a hot db whose replica is complete.
+- **rest**: stop replicating a db idle for 15 minutes, once the bucket holds
+  every write.
+- **evict**: drop the local file of a resting db.
 - **reconciler**: the backend job that tells the cellar what to purge.
+- **session**: one cellar connection pinned across requests, so a transaction
+  can span several statements. Short-lived: it rolls back when idle.
 
 ## How it works
 
@@ -42,8 +48,8 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
    cellar disk is a cache.
 
 Code follows the process it runs in. `internal/cellar` is only what runs on
-the cellar, plus the grant and query it accepts. The backend's side, the
-driver, is in `internal/datasource/cellarclient`; startup is in
+the cellar, plus the grant and query it accepts. The backend's side is
+`internal/datasource/managed`, its driver in `managed/cellarclient`; startup is in
 `cmd/server/cellar.go`.
 
 ## Rules
@@ -55,8 +61,11 @@ Settled. Reopen with a reason, not a preference.
   `cellar_id`; `cellar_id` and `state` are set together or not at all. A
   sqlite datasource with a DSN is still rejected: the server never opens a
   path a user gave it.
-- Access goes through the backend only. No direct client endpoint in v1, so
-  plain SQLite files (`modernc.org/sqlite`) rather than `sqld`.
+- Access goes through the backend only, which checks every statement. App
+  code reaches it over the libSQL protocol (Hrana over HTTP, milestone 8), so
+  `@libsql/client` and its ORM adapters work unchanged. The backend speaks the
+  protocol; the cellar stays plain SQLite files (`modernc.org/sqlite`), not
+  `sqld`.
 - The server owns the list of managed dbs. The app shows them in Settings and
   "Add to workspace" shows a `datasource.config.json` to paste; removing the folder
   removes a bookmark, not the db.
@@ -135,15 +144,19 @@ Settled. Reopen with a reason, not a preference.
 - Replicas live at `dbs/{db_id}/`, never under a cellar, so moving or
   recovering a db is a row update.
 - Litestream is embedded as a pinned Go library: the code that evicts and the
-  code that replicates share one process and one lock per db.
-- Evict under disk pressure, least recently used first: lock, checkpoint,
-  sync, check the replica is complete, delete the local file.
-- Wake on first query: one restore shared by all waiting callers. Wait up to
+  code that replicates share one process and one lock (`cellar.Databases`).
+- One Litestream store for every plan: daily snapshots kept 7 days. Retention
+  cannot be per db; the backend refuses an `at` outside the plan's window.
+- Rest after 15 minutes idle: sync, close the pool, unregister. Every db on
+  disk replicates once at startup, so a resting db is always whole in the
+  bucket.
+- Evict only resting dbs, least recently used first, while under 20% of the
+  disk is free.
+- Wake on first use: one restore shared by all waiting callers. Wait up to
   15s, then answer `waking` while the restore continues.
 - Bucket: S3 with versioning and a 7-day expiry of old versions, so a wrong
   purge is recoverable for a week. Without S3 (dev, on-prem) Litestream writes
-  to a directory; a startup preflight logs the mode, as for pg_partman, and
-  warns when that directory shares the data disk.
+  to a directory, and startup warns that a lost machine loses it too.
 
 ### Isolation
 All required, none sufficient alone. Checked on `modernc.org/sqlite` v1.59.0.
@@ -193,12 +206,18 @@ errors are the backend's, before the cellar sees the statement.
 ### Environments
 - Dev: `./dev.sh backend start` as today, with `CELLAR=local`: the cellar
   runs in-process on a loopback port over `CELLAR_DIR` (default `.dev/cellar`),
-  with a directory replica in `backend/.dev/`. No MinIO. A local cellar that
+  copied to `CELLAR_BUCKET`, an `s3://` URL or a directory (default
+  `CELLAR_DIR` plus `-bucket`). No MinIO. A local cellar that
   cannot start stops the server, as a bad `CELLAR` does: it is a config error.
   One that stops later, or a remote one down, makes managed routes answer
   `unavailable`.
-- Staging: a second systemd unit on the staging box, own data dir and bucket.
-- Prod: a d2-4 VM on the private network, same region as the backend.
+- Staging and prod: `select-backend cellar` runs the cellar alone, as a second
+  systemd unit on the backend's box, capped by `CPUQuota` and `MemoryMax` so
+  SQLite work never starves the backend. It listens on `CELLAR_LISTEN`
+  (default `127.0.0.1:8081`), never opens Postgres, and the backend reaches it
+  with `CELLAR=http://127.0.0.1:8081`. Its files live on a block volume at
+  `CELLAR_DIR`. Moving it to its own server later is a new `CELLAR` URL: the
+  new cellar starts empty and wakes dbs from the bucket.
 
 ## v1 milestones
 
@@ -221,7 +240,7 @@ Needs 0.
       files, reached through the `cellar` database/sql driver, so REST and
       MCP open a managed datasource like any other. `CELLAR=local` starts it
       in-process.
-- [x] Service token signed and reused by the backend (`datasource/cellarclient`),
+- [x] Service token signed and reused by the backend (`datasource/managed/cellarclient`),
       and checked with the grant header by the cellar (`cellar.Authenticated`
       middleware, which puts the grant in the context for `InFlight` to key
       on).
@@ -255,21 +274,35 @@ Needs 1.
 
 ### 3. Bucket: replicate, evict, wake
 Needs 1. Can run alongside 2. Start with the spikes.
-- [ ] Spike: Litestream v0.5 as a library. Per-db replica with retention,
+- [x] Spike: Litestream v0.5 as a library. Per-db replica with retention,
       read the replicated position, restore at a timestamp, `file` replica.
-      One page of findings before building on it.
-- [ ] Spike: OVH bucket supports `NoncurrentVersionExpiration`; restore speed
-      from the bucket to a d2-4.
-- [ ] Embedded Litestream per db at `dbs/{db_id}/`, window from `pitr_days`.
-- [ ] Directory replica when no S3, with the startup preflight.
-- [ ] LRU eviction on disk pressure; wake with shared restore and 15s wait.
+      Findings and numbers: `litestream-spike.md`.
+- [x] Spike: restore speed from the bucket. 257 MB wakes in 4.9 s on the prod
+      b3-8 (staging's 100 Mbit/s downlink makes it 20 s); see
+      `litestream-spike.md`.
+- [x] Embedded Litestream per db at `dbs/{db_id}/`, one 7-day window.
+- [x] Directory replica when no S3, with the startup preflight.
+- [x] Rest when idle, LRU eviction on disk pressure; wake with shared restore
+      and 15s wait.
 - [ ] `size_bytes`, `state`, `last_used_at` reported back to the row.
-- [ ] Point-in-time fork reads from the replica.
-- [ ] Tests: evict, wake, verify, against MinIO and against a directory.
+- [x] Point-in-time fork reads from the replica.
+- [x] Tests: rest, evict, wake, point-in-time fork, against a directory.
+- [x] Tests against the OVH bucket: `TestAgainstTheBucket` passes on
+      `select-staging-cellar`; laptop numbers in `litestream-spike.md`.
+- [x] Benchmark from the staging and prod boxes; `bucket_benchmark_test.go`
+      deleted.
+- [ ] Prod cellar disk sized to hold the dbs used each week (a Classic block
+      volume at `CELLAR_DIR`), so large dbs are rarely evicted.
+- [ ] 7-day expiry of old versions on both buckets (`NoncurrentVersionExpiration`).
+- [ ] Tune with the bucket numbers: one S3 transport shared by every replica
+      client, rest in parallel with a bound, a lighter first sync at startup.
+- [ ] Server shutdown closes `cellar.Databases`, for a last sync.
 
 ### 4. Cleanup
 Needs 2 and 3.
 - [ ] Reconciler with advisory lock, 24h orphan age, 50-per-run cap.
+- [ ] Inventory lists cold dbs too: today it lists the disk, so a cold orphan
+      is never purged.
 - [ ] Workspace delete marks its managed dbs `deleting`.
 - [ ] Tests: a failed or empty Postgres query purges nothing; the cap stops
       the run.
@@ -291,10 +324,60 @@ Needs 3 for staging, all for prod.
       reconciler cap hit.
 - [ ] Staging, then prod behind the sign-in allowlist, then everyone.
 
+### 7. Sessions, batch, engine enforcement
+Needs 3. The ground app access stands on.
+- [ ] Cellar sessions: `POST /datasources/{id}/sessions` pins a connection,
+      `DELETE .../sessions/{sid}` rolls back and releases it; statements carry
+      `X-Cellar-Session`. Rolled back when idle 5s or older than 30s; a cap per
+      workspace, like `max_in_flight`.
+- [ ] Atomic batch: a session opened, run under `BEGIN IMMEDIATE` and closed in
+      one request.
+- [ ] Isolation: `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT` only inside a
+      session, so a pooled connection never holds the write lock.
+- [ ] `cellarclient.WithSession(ctx, sid)`: the header rides the context, so
+      `connect` and the engine are unchanged.
+- [ ] Permission check: transaction control statements touch no table
+      (dialect-fixer).
+- [ ] SQLite authorizer on every cellar connection: tables and columns are
+      checked by the engine after name resolution, not only by the parser.
+- [ ] Single-writer lease in the bucket (Litestream's S3 leaser): a cellar
+      writes a db only while it holds the lease, so a split never gives a
+      replica two writers.
+- [ ] Tests: batch rolls back as a whole, an idle session rolls back, a
+      session cap, transaction control refused outside a session, the
+      authorizer refuses what the parser misses.
+
+### 8. App access over libSQL
+Needs 7. Start with the spike.
+- [ ] Spike: read the Hrana spec in `tursodatabase/libsql`; record which
+      requests `@libsql/client` and `libsql-client-go` send (`execute`,
+      `batch`, `sequence`, `close`, `get_autocommit`?), whether they use
+      `/v3/cursor` on their own, and whether they keep a URL path.
+- [ ] `internal/hrana`: `POST /v2/pipeline` and `/v3/pipeline` with `execute`,
+      `batch` (with conditions), `sequence`, `close`, each through `Open` and
+      `Stream`, so permissions, masking and audit apply as for every
+      datasource.
+- [ ] `hranaSink`: a `query.RowSink` writing Hrana results; a 10 MB cap on a
+      buffered result, answered with an error that suggests `LIMIT`.
+- [ ] Signed baton `{datasource, principal, cellar session, expiry}`: the
+      session lives on the cellar only, so any backend serves the next request.
+- [ ] Routing: one hostname per db (`<id>.db.<domain>`, wildcard DNS and TLS),
+      unless the spike shows the clients keep a URL path.
+- [ ] Auth: `authToken` is an API key. `issue_key` on create: a key bound to
+      the db's role, shown once.
+- [ ] Rate limits per plan for app traffic; errors carry our codes, `waking`
+      included.
+- [ ] Tests: `libsql-client-go` against a test server (execute, batch,
+      interactive transaction, expiry, refused statement, masked column), and
+      the TypeScript example in the docs run against the dev server.
+- [ ] `.doc.md`: connecting from app code with `@libsql/client` and Drizzle.
+
+Open decisions: one hostname per db; transaction limits (5s idle, 30s total);
+interactive transactions for app code or batch only; MCP stays batch only.
+
 ## Later
 - Global compute budget and billing; cellar query-seconds must count.
 - Policy for abandoned dbs (`last_used_at` is recorded from v1).
-- `issue_key` on create: an API key bound to the db role.
 - Upload of an existing `.db`, with untrusted-file hardening.
 - In-place restore with an automatic backup fork, if changing ids hurts.
 - Delete protection or a recovery window as a Teams perk.
@@ -303,6 +386,23 @@ Needs 3 for staging, all for prod.
 - Second cellar: an `app.cellar` table for placement data (with a foreign key
   from `cellar_id`), `move`, dead-cellar runbook.
 - Keep Teams dbs hot; evict small idle dbs first.
-- Authorizer upstream in modernc, to replace the PRAGMA allowlist.
-- Direct libSQL endpoint; per-region backend and cellar pairs.
+- Per-region backend and cellar pairs.
+- Hrana `/v3/cursor`: stream large results row by row instead of the 10 MB
+  cap. Sooner if the clients use it on their own.
+- Hrana `describe` (and `store_sql`): statement metadata without running it,
+  behind the permission check so it names no hidden column. When a client we
+  support calls it.
+- Hrana over WebSocket: lower latency in transactions, but a stateful backend.
+  Only if measured latency asks for it.
+- SQL editor transactions: `BEGIN` and `COMMIT` across runs on a session, with
+  an "open transaction" indicator and auto-rollback.
+- Copy-on-write fork: a new prefix pointing at the source's snapshot, instead
+  of `VACUUM INTO`. Instant forks for agents.
+- Read followers replaying the bucket in other regions, with a bookmark for
+  read-your-writes; embedded replicas in user apps after that, for keys that
+  may read the whole db.
+- Opt-in durable commit: a write returns once the bucket has it, for plans
+  that cannot lose the last second.
+- Single-writer limits in the docs: about 1,700 writes/s and tens of GB per
+  db; beyond that, Postgres.
 - Workspace affinity for backends.

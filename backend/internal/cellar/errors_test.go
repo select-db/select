@@ -10,9 +10,9 @@ import (
 )
 
 func TestClassify(t *testing.T) {
-	dir, id := newFile(t)
+	path, id := newFile(t)
 	grant := Grant{DatasourceID: id, MaxBytes: 256 << 10}
-	conn, err := Open(dir, grant)
+	conn, err := Open(path, grant)
 	require.NoError(t, err)
 	c := statementConn(t, conn)
 	ctx := context.Background()
@@ -33,13 +33,13 @@ func TestClassify(t *testing.T) {
 		{"the size cap", ctx, fullErr, CodeQuotaExceeded, "over its"},
 		{"a forbidden statement", ctx, ErrForbiddenStatement, CodeForbiddenStatement, "not allowed"},
 		{"the statement timeout", expired, errors.New("interrupted"), CodeTimeout, "60s"},
-		{"anything else, by ref only", ctx, errors.New("open " + dir + ": denied"), CodeInternal, "ref "},
+		{"anything else, by ref only", ctx, errors.New("open " + path + ": denied"), CodeInternal, "ref "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := classify(tc.ctx, tc.err, grant)
 			require.Equal(t, tc.code, got.Code)
 			require.Contains(t, got.Message, tc.contains)
-			require.NotContains(t, got.Message, dir, "no message names a path")
+			require.NotContains(t, got.Message, path, "no message names a path")
 		})
 	}
 }

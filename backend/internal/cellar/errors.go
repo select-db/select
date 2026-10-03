@@ -21,6 +21,7 @@ const (
 	CodeForbiddenStatement = "forbidden_statement"
 	CodeQuotaExceeded      = "quota_exceeded"
 	CodeTimeout            = "timeout"
+	CodeWaking             = "waking"
 	CodeUnavailable        = "unavailable"
 	CodeDisabled           = "disabled"
 	CodeInternal           = "internal"
@@ -31,8 +32,11 @@ const (
 //     file, I/O or corruption errors, whose text can name a path
 //   - an internal error only as a ref; its detail goes to the log
 func classify(ctx context.Context, err error, grant Grant) *arrowstream.Error {
+	var coded *arrowstream.Error
 	var sqliteErr *sqlite.Error
 	switch {
+	case errors.As(err, &coded):
+		return coded
 	case errors.Is(err, ErrForbiddenStatement):
 		return &arrowstream.Error{Code: CodeForbiddenStatement, Message: err.Error()}
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
@@ -68,28 +72,25 @@ func (s classifiedSink) OnError(err error) {
 	s.Sink.OnError(classify(s.ctx, err, s.grant))
 }
 
-// The failures of the lifecycle routes that answer with their own status.
 var (
-	errAlreadyExists       = &arrowstream.Error{Code: CodeSQLError, Message: "a managed database with this id already exists"}
-	errNotFound            = &arrowstream.Error{Code: CodeSQLError, Message: "managed database not found"}
-	errPointInTimeDisabled = &arrowstream.Error{Code: CodeDisabled, Message: "point-in-time fork is not available yet"}
+	errAlreadyExists = &arrowstream.Error{Code: CodeSQLError, Message: "a managed database with this id already exists"}
+	errNotFound      = &arrowstream.Error{Code: CodeSQLError, Message: "managed database not found"}
+	errNoCopyAtTime  = &arrowstream.Error{Code: CodeSQLError, Message: "no copy of the managed database exists at that time"}
+	errWaking        = &arrowstream.Error{Code: CodeWaking, Message: "managed database is waking up, retry in a few seconds"}
 )
 
-// writeLifecycleError answers with the failure's code and message as JSON; any
-// other error is classified as a statement's would be.
+// writeLifecycleError answers with the failure's code and message as JSON.
 func writeLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
-	var coded *arrowstream.Error
-	if !errors.As(err, &coded) {
-		coded = classify(r.Context(), err, GetGrant(r))
-	}
+	coded := classify(r.Context(), err, GetGrant(r))
 	status := http.StatusBadRequest
 	switch {
 	case coded == errAlreadyExists:
 		status = http.StatusConflict
 	case coded == errNotFound:
 		status = http.StatusNotFound
-	case coded == errPointInTimeDisabled:
-		status = http.StatusNotImplemented
+	case coded == errWaking:
+		status = http.StatusServiceUnavailable
+		w.Header().Set("Retry-After", "5")
 	case coded.Code == CodeInternal:
 		status = http.StatusInternalServerError
 	}

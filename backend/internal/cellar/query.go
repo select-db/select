@@ -15,9 +15,9 @@ type Query struct {
 	Args []any  `json:"args,omitempty"`
 }
 
-// QueryHandler runs one statement on the grant's datasource, under the
-// isolation rules, and streams the rows back.
-func QueryHandler(dir string) http.HandlerFunc {
+// QueryHandler runs one statement from the backend's driver on the grant's
+// database, under the isolation rules, and streams the rows back.
+func QueryHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var q Query
 		if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
@@ -32,7 +32,12 @@ func QueryHandler(dir string) http.HandlerFunc {
 			stream.SetDownstreamFlusher(f.Flush)
 		}
 		sink := classifiedSink{Sink: stream, ctx: r.Context(), grant: grant}
-		conn, err := Open(dir, grant)
+		path, err := databases.use(r.Context(), grant.DatasourceID)
+		if err != nil {
+			sink.OnError(err)
+			return
+		}
+		conn, err := Open(path, grant)
 		if err != nil {
 			sink.OnError(err)
 			return

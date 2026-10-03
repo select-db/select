@@ -8,6 +8,7 @@ import (
 	"backend/db/generated"
 	"backend/internal/audit"
 	"backend/internal/authz"
+	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
 )
@@ -43,7 +44,7 @@ func DeleteHandler() http.HandlerFunc {
 		existing, err := db.Queries.GetDatasource(r.Context(), generated.GetDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID})
 		isManaged := err == nil && existing.CellarID.ValueOrEmpty() != ""
 		if isManaged {
-			if err := checkManagedAvailable(existing); err != nil {
+			if err := managed.CheckAvailable(existing); err != nil {
 				OpenError(w, err, "managed delete", workspaceID, idStr)
 				return
 			}

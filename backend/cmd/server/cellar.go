@@ -1,18 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"backend/internal/auth"
 	"backend/internal/cellar"
-	"backend/internal/datasource/cellarclient"
+	"backend/internal/datasource/managed/cellarclient"
 )
 
 // localCellar is the CELLAR setting, and the cellar id, of a cellar run in the
@@ -21,7 +24,7 @@ const localCellar = "local"
 
 // startCellar stops the server on a CELLAR it cannot parse, and sends managed
 // databases to the cellar it names. local serves one from this process on a
-// loopback port, over the files in CELLAR_DIR.
+// loopback port, over the files in CELLAR_DIR, copied to CELLAR_BUCKET.
 func startCellar() {
 	setting, err := parseCellar(os.Getenv("CELLAR"))
 	if err != nil {
@@ -47,14 +50,7 @@ func startCellar() {
 
 // serveLocalCellar starts a cellar in this process and returns its address.
 func serveLocalCellar() (string, error) {
-	dir := os.Getenv("CELLAR_DIR")
-	if dir == "" {
-		dir = ".dev/cellar"
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	publicKey, err := auth.PublicKey()
+	handler, err := cellarHandler(localCellar)
 	if err != nil {
 		return "", err
 	}
@@ -62,15 +58,80 @@ func serveLocalCellar() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	mux := http.NewServeMux()
-	cellar.Register(mux, dir, publicKey, localCellar)
 	server := &http.Server{
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	// Managed databases answer unavailable if it stops; the rest keeps serving.
 	go func() { log.Printf("cellar: stopped: %v", server.Serve(listener)) }()
 	return "http://" + listener.Addr().String(), nil
+}
+
+// serveCellar runs this process as a cellar only, on CELLAR_LISTEN, until it
+// is told to stop. It never opens Postgres. Its id is the listen host, which
+// the backend reads from the host of its CELLAR URL.
+func serveCellar() {
+	address := os.Getenv("CELLAR_LISTEN")
+	if address == "" {
+		address = "127.0.0.1:8081"
+	}
+	host, _, err := net.SplitHostPort(address)
+	if err != nil || host == "" {
+		log.Fatalf("cellar: CELLAR_LISTEN: want host:port, got %q", address)
+	}
+	handler, err := cellarHandler(strings.ToLower(host))
+	if err != nil {
+		log.Fatalf("cellar: %v", err)
+	}
+	server := &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		log.Printf("cellar: listening on %s", address)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("cellar: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	// Statements stop first, then the last sync sends every write to the bucket.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_ = server.Shutdown(ctx)
+	if err := cellar.CloseDatabases(ctx); err != nil {
+		log.Printf("cellar: close: %v", err)
+	}
+	log.Printf("cellar: stopped")
+}
+
+// cellarHandler opens the databases in CELLAR_DIR, copied to CELLAR_BUCKET,
+// and returns the cellar's routes for cellarID.
+func cellarHandler(cellarID string) (http.Handler, error) {
+	dir := os.Getenv("CELLAR_DIR")
+	if dir == "" {
+		dir = ".dev/cellar"
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	bucket := os.Getenv("CELLAR_BUCKET")
+	if bucket == "" {
+		bucket = dir + "-bucket"
+	}
+	if err := cellar.OpenDatabases(dir, bucket); err != nil {
+		return nil, err
+	}
+	publicKey, err := auth.PublicKey()
+	if err != nil {
+		return nil, err
+	}
+	mux := http.NewServeMux()
+	cellar.Register(mux, publicKey, cellarID)
+	return mux, nil
 }
 
 // parseCellar checks a CELLAR setting and returns it normalized: "" (managed

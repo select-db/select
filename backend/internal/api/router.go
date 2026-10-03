@@ -69,15 +69,16 @@ func Register(mux *http.ServeMux) {
 	mux.Handle("GET /datasources/{id}", authenticated(member(limited(120, datasourcehandler.GetHandler()))))
 	mux.Handle("POST /datasources", authenticated(member(limited(30, datasourcehandler.CreateHandler()))))
 	mux.Handle("PUT /datasources/{id}", authenticated(member(limited(120, datasourcehandler.UpsertHandler()))))
-	mux.Handle("POST /datasources/{id}/fork", authenticated(member(limited(30, datasourcehandler.ForkHandler()))))
-	mux.Handle("GET /datasources/{id}/download", authenticated(member(limited(30, datasourcehandler.DownloadHandler()))))
 	mux.Handle("DELETE /datasources/{id}", authenticated(member(limited(60, datasourcehandler.DeleteHandler()))))
-
+	
 	mux.Handle("POST /datasources/{id}/ping", authenticated(member(limited(60, datasourcehandler.PingHandler()))))
 	mux.Handle("GET /datasources/{id}/schema", authenticated(member(limited(120, datasourcehandler.SchemaHandler()))))
 	mux.Handle("POST /datasources/{id}/execute", authenticated(member(limited(240, datasourcehandler.ExecuteHandler()))))
 	mux.Handle("GET /datasources/{id}/dump", authenticated(member(limited(30, datasourcehandler.DumpHandler()))))
-
+	// Managed datasources only
+	mux.Handle("POST /datasources/{id}/fork", authenticated(member(limited(30, datasourcehandler.ForkHandler()))))
+	mux.Handle("GET /datasources/{id}/download", authenticated(member(limited(30, datasourcehandler.DownloadHandler()))))
+	
 	// Generated REST API (roles, permissions, groups, junctions, audit log).
 	// Shares the same auth + workspace-scoping + rate-limit chain; per-op
 	// required actions are enforced inside each handler.
