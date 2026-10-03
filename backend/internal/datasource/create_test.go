@@ -85,3 +85,23 @@ func TestCreateAnyDatasourceTakesManageOnAll(t *testing.T) {
 		"workspace_id": fixture.Actor.WorkspaceID, "db_type": "postgresql", "name": "remote", "dsn": e2e.TargetDSN(t, fixture.Conn)})
 	require.Equal(t, http.StatusCreated, rec.Code, "managed or not, adding a datasource takes manage on *: %s", rec.Body.String())
 }
+
+func TestCreateNeedsManageOnAll(t *testing.T) {
+	fixture := newManagedFixture(t)
+	notesID := createNotes(t, fixture)
+	// Manage on one database is not the right to add more.
+	token := memberToken(t, fixture, notesID, "manage")
+
+	for _, body := range []map[string]any{
+		{"db_type": "sqlite", "name": "managed"},
+		{"db_type": "postgresql", "name": "remote", "dsn": e2e.TargetDSN(t, fixture.Conn)},
+	} {
+		body["workspace_id"] = fixture.Actor.WorkspaceID
+		rec := e2e.Do(t, fixture.H, http.MethodPost, "/datasources", token, body)
+		require.Equal(t, http.StatusForbidden, rec.Code, "%s: %s", body["db_type"], rec.Body.String())
+	}
+	e2e.RequireEventStatus(t, fixture.Conn, "datasource", "lifecycle.create", "denied")
+	var count int
+	require.NoError(t, fixture.Conn.QueryRow(`SELECT count(*) FROM app.datasource WHERE workspace_id = $1::uuid`, fixture.Actor.WorkspaceID).Scan(&count))
+	require.Equal(t, 1, count, "only the notes database")
+}
