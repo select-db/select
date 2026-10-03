@@ -2128,6 +2128,12 @@ func (s *BasePostgreSQLParserListener) EnterCreatefunc_opt_item(ctx *Createfunc_
 // ExitCreatefunc_opt_item is called when production createfunc_opt_item is exited.
 func (s *BasePostgreSQLParserListener) ExitCreatefunc_opt_item(ctx *Createfunc_opt_itemContext) {}
 
+// EnterRoutine_body_stmt is called when production routine_body_stmt is entered.
+func (s *BasePostgreSQLParserListener) EnterRoutine_body_stmt(ctx *Routine_body_stmtContext) {}
+
+// ExitRoutine_body_stmt is called when production routine_body_stmt is exited.
+func (s *BasePostgreSQLParserListener) ExitRoutine_body_stmt(ctx *Routine_body_stmtContext) {}
+
 // EnterFunc_as is called when production func_as is entered.
 func (s *BasePostgreSQLParserListener) EnterFunc_as(ctx *Func_asContext) {}
 

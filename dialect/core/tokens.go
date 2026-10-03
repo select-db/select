@@ -37,6 +37,20 @@ func TokenSpan[T interface{ GetStart() antlr.Token }](
 	return from, to
 }
 
+// DefaultChannelTokens are the tokens of a filled stream that carry the
+// statement, which is every one the lexer did not put on a hidden channel.
+// GetAllTokens returns the hidden ones and the end marker too.
+func DefaultChannelTokens(stream *antlr.CommonTokenStream) []antlr.Token {
+	all := stream.GetAllTokens()
+	tokens := make([]antlr.Token, 0, len(all))
+	for _, token := range all {
+		if token.GetChannel() == antlr.TokenDefaultChannel && token.GetTokenType() != antlr.TokenEOF {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
+}
+
 // namesARelation are the keywords a table name follows. A parenthesis after
 // the name is then the column list or the alias list, not a call, so "INSERT
 // INTO readfile (c1) VALUES (1)" is the ordinary insert it looks like. FROM and

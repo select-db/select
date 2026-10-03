@@ -1931,11 +1931,16 @@ common_func_opt_item
 
 createfunc_opt_item
    : AS func_as
-   | BEGIN_P ATOMIC_P stmtmulti END_P
+   | BEGIN_P ATOMIC_P (routine_body_stmt SEMI?)* END_P
    | LANGUAGE nonreservedword_or_sconst
    | TRANSFORM transform_type_list
    | WINDOW
    | common_func_opt_item
+   ;
+
+routine_body_stmt
+   : stmt
+   | RETURN a_expr
    ;
    //https://www.postgresql.org/docs/9.1/sql-createfunction.html
 

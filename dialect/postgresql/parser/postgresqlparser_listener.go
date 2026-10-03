@@ -1006,6 +1006,9 @@ type PostgreSQLParserListener interface {
 	// EnterCreatefunc_opt_item is called when entering the createfunc_opt_item production.
 	EnterCreatefunc_opt_item(c *Createfunc_opt_itemContext)
 
+	// EnterRoutine_body_stmt is called when entering the routine_body_stmt production.
+	EnterRoutine_body_stmt(c *Routine_body_stmtContext)
+
 	// EnterFunc_as is called when entering the func_as production.
 	EnterFunc_as(c *Func_asContext)
 
@@ -3537,6 +3540,9 @@ type PostgreSQLParserListener interface {
 
 	// ExitCreatefunc_opt_item is called when exiting the createfunc_opt_item production.
 	ExitCreatefunc_opt_item(c *Createfunc_opt_itemContext)
+
+	// ExitRoutine_body_stmt is called when exiting the routine_body_stmt production.
+	ExitRoutine_body_stmt(c *Routine_body_stmtContext)
 
 	// ExitFunc_as is called when exiting the func_as production.
 	ExitFunc_as(c *Func_asContext)

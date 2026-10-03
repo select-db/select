@@ -33,6 +33,11 @@ func (s *SyntaxErrors) SyntaxError(
 	s.at = append(s.at, 0)
 }
 
+// Any reports whether the parser stumbled anywhere in its input.
+func (s *SyntaxErrors) Any() bool {
+	return len(s.at) > 0
+}
+
 // In reports whether an error falls in the half-open token span [from, to).
 func (s *SyntaxErrors) In(from, to int) bool {
 	for _, at := range s.at {

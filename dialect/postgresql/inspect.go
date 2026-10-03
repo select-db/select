@@ -38,8 +38,15 @@ func (d *Dialect) Inspect(meta core.Metadata, sql string) []core.InspectStatemen
 
 // Inspect analyzes SQL and returns structured results for each statement
 func (i *Inspector) Inspect(sql string) []core.InspectStatement {
+	reads, _ := i.inspectScript(sql)
+	return reads
+}
+
+// inspectScript is Inspect, also reporting whether the parser read the script
+// whole, which is what readBody tells SQL from PL/pgSQL by.
+func (i *Inspector) inspectScript(sql string) ([]core.InspectStatement, bool) {
 	if strings.TrimSpace(sql) == "" {
-		return nil
+		return nil, true
 	}
 
 	lexer := i.dialect.CreateLexer(sql)
@@ -51,7 +58,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 
 	statements := topLevelStatements(parser)
 	if len(statements) == 0 {
-		return []core.InspectStatement{core.UnknownStatement()}
+		return []core.InspectStatement{core.UnknownStatement()}, false
 	}
 
 	results := make([]core.InspectStatement, 0, len(statements))
@@ -79,7 +86,7 @@ func (i *Inspector) Inspect(sql string) []core.InspectStatement {
 	// relations are in scope here.
 	i.resolver.ResolveCorrelated(results, nil)
 
-	return results
+	return results, !syntax.Any()
 }
 
 // topLevelStatements returns the statement nodes the parser produced, or nil.
@@ -185,7 +192,8 @@ func (i *Inspector) inspectStatement(stmt pg.IStmtContext) *core.InspectStatemen
 	}
 
 	if funcStmt := stmt.Createfunctionstmt(); funcStmt != nil {
-		read := core.NestUnderUnknown(i.bodyStatements(routineBodies(funcStmt.Createfunc_opt_list()))...)
+		reads := i.bodyStatements(routineBodies(funcStmt.Createfunc_opt_list()))
+		read := core.NestUnderUnknown(append(reads, i.atomicBodyReads(funcStmt.Createfunc_opt_list())...)...)
 		return &read
 	}
 
@@ -856,22 +864,70 @@ func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.Inspe
 }
 
 // bodyStatements is what the statements of a procedural body require, read out
-// of the string constants carrying it, which are SQL of this dialect. A body
-// the parser cannot read reports its own floor, so a language this inspector
-// does not speak keeps manage and nothing more.
+// of the string constants carrying it.
 func (i *Inspector) bodyStatements(bodies []pg.ISconstContext) []core.InspectStatement {
 	if i.inBody {
 		return nil
 	}
 	var reads []core.InspectStatement
 	for _, body := range bodies {
-		text := bodyText(body)
-		if strings.TrimSpace(text) == "" {
-			continue
+		reads = append(reads, i.readBody(bodyText(body))...)
+	}
+	return reads
+}
+
+// opensAStatement are the token types a statement of a body can follow: the
+// terminator and the keywords that open a block. Anywhere else is the middle of
+// a construct, where a parse that happens to succeed reads something the body
+// does not say.
+var opensAStatement = map[int]bool{
+	pg.PostgreSQLLexerSEMI:    true,
+	pg.PostgreSQLLexerBEGIN_P: true,
+	pg.PostgreSQLLexerTHEN:    true,
+	pg.PostgreSQLLexerELSE:    true,
+	pg.PostgreSQLLexerLOOP:    true,
+}
+
+// readBody is what the SQL statements of a procedural body require. PL/pgSQL is
+// not SQL, so a body handed to the grammar whole stops at the first construct
+// the grammar does not know and reports the statements before it as all there
+// were. Each run between two terminators is read from its innermost start
+// outwards instead: the statement is the shortest fragment that parses, and a
+// longer one carries the construct wrapped around it. A run nothing parses
+// reports nothing, since what error recovery salvages out of PL/pgSQL names
+// tables the body never read.
+func (i *Inspector) readBody(text string) []core.InspectStatement {
+	stream := antlr.NewCommonTokenStream(i.dialect.CreateLexer(text), antlr.TokenDefaultChannel)
+	stream.Fill()
+	tokens := core.DefaultChannelTokens(stream)
+
+	var reads []core.InspectStatement
+	for idx := 0; idx <= len(tokens); idx++ {
+		end := idx
+		for end < len(tokens) && tokens[end].GetTokenType() != pg.PostgreSQLLexerSEMI {
+			end++
 		}
-		inner := NewInspector(i.dialect, i.meta)
-		inner.inBody = true
-		reads = append(reads, inner.Inspect(text)...)
+		var starts []int
+		for at := idx; at < end; at++ {
+			if at == idx || opensAStatement[tokens[at-1].GetTokenType()] {
+				starts = append(starts, at)
+			}
+		}
+		for at := len(starts) - 1; at >= 0; at-- {
+			text := stream.GetTextFromTokens(tokens[starts[at]], tokens[end-1])
+			// PERFORM is a SELECT whose rows are discarded, and it reads what the SELECT reads.
+			if tokens[starts[at]].GetTokenType() == pg.PostgreSQLLexerPERFORM && starts[at]+1 < end {
+				text = "SELECT " + stream.GetTextFromTokens(tokens[starts[at]+1], tokens[end-1])
+			}
+			inner := NewInspector(i.dialect, i.meta)
+			inner.inBody = true
+			fragment, whole := inner.inspectScript(text)
+			if whole {
+				reads = append(reads, fragment...)
+				break
+			}
+		}
+		idx = end
 	}
 	return reads
 }
@@ -928,6 +984,29 @@ func routineBodies(list pg.ICreatefunc_opt_listContext) []pg.ISconstContext {
 		}
 	}
 	return bodies
+}
+
+// atomicBodyReads is what a BEGIN ATOMIC body requires. It is parsed with the
+// statement rather than carried as text, and a RETURN reads what its expression does.
+func (i *Inspector) atomicBodyReads(list pg.ICreatefunc_opt_listContext) []core.InspectStatement {
+	if list == nil {
+		return nil
+	}
+	var reads []core.InspectStatement
+	for _, item := range list.AllCreatefunc_opt_item() {
+		for _, body := range item.AllRoutine_body_stmt() {
+			if stmt := body.Stmt(); stmt != nil {
+				if read := i.inspectStatement(stmt); read != nil {
+					reads = append(reads, *read)
+				}
+				continue
+			}
+			if expr := body.A_expr(); expr != nil {
+				reads = append(reads, i.extractEmbeddedSubqueries(expr)...)
+			}
+		}
+	}
+	return reads
 }
 
 // schemaElementReads is what the elements of a CREATE SCHEMA require. A view is
