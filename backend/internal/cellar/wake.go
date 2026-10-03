@@ -8,11 +8,12 @@ import (
 	"github.com/benbjohnson/litestream"
 )
 
-// wakeWait is how long a statement waits for its database to be restored
-// before it is answered errWaking; the restore goes on.
+// wakeWait is how long a statement waits on the cellar for its database to be
+// restored before it is answered errWaking; the restore goes on.
 const wakeWait = 15 * time.Second
 
-// wake returns once database id is on disk, restoring it if it is cold.
+// wake returns once database id is on the cellar's disk, restoring it from the
+// bucket if it is cold.
 func (databases *Databases) wake(ctx context.Context, id, path string) error {
 	databases.mu.Lock()
 	_, onDisk := databases.onDisk[id]

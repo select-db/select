@@ -25,8 +25,8 @@ func execTrusted(ctx context.Context, path, mode, statement string, args ...any)
 	return err
 }
 
-// databasePath is the file of database id. The id must be a uuid, so it cannot
-// name a file outside dir.
+// databasePath is the file of database id in the cellar's directory. The id
+// must be a uuid, so it cannot name a file outside dir.
 func databasePath(dir, id string) (string, error) {
 	if _, err := uuid.Parse(id); err != nil {
 		return "", fmt.Errorf("datasource id %q is not a uuid", id)
