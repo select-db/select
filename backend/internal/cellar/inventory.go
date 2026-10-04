@@ -41,17 +41,23 @@ func (databases *Databases) inventory(ctx context.Context) ([]StoredDatabase, er
 	if err != nil {
 		return nil, err
 	}
-	stored := []StoredDatabase{}
+	// Names under the lock, stats after it: a stat is a syscall per file, and
+	// opening or closing a database waits for the lock.
+	paths := map[string]string{}
 	databases.mu.Lock()
 	for id, database := range databases.onDisk {
-		size, err := databaseSize(database.path)
-		if err != nil {
-			continue
-		}
-		stored = append(stored, StoredDatabase{ID: id, SizeBytes: size, ModifiedAt: modifiedAt(database.path)})
-		delete(inBucket, id)
+		paths[id] = database.path
 	}
 	databases.mu.Unlock()
+	stored := []StoredDatabase{}
+	for id, path := range paths {
+		size, err := databaseSize(path)
+		if err != nil {
+			continue // removed since
+		}
+		stored = append(stored, StoredDatabase{ID: id, SizeBytes: size, ModifiedAt: modifiedAt(path)})
+		delete(inBucket, id)
+	}
 	for id, newest := range inBucket {
 		stored = append(stored, StoredDatabase{ID: id, ModifiedAt: newest, Cold: true})
 	}

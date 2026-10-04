@@ -73,9 +73,11 @@ func limit(c *sql.Conn, maxBytes int64) error {
 }
 
 // checkStatement refuses sql that names a PRAGMA outside readOnlyPragmas, or
-// anything of Litestream's. The litestream test reads the text, not the tokens:
-// a quoted name is the same name, and a false match costs a statement nobody
-// writes by accident.
+// anything of Litestream's. The litestream test reads the text, not the tokens,
+// so a quoted, bracketed or qualified name is caught like a bare one. The price is
+// a false match: a string, a comment or a table such as my_litestream_notes is
+// refused too. The driver exposes no authorizer, which would see the resolved
+// table name instead.
 func checkStatement(sql string) error {
 	if strings.Contains(strings.ToLower(sql), litestreamPrefix) {
 		return ErrForbiddenStatement

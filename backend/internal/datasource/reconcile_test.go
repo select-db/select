@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"backend/e2e"
+	"backend/internal/cellar"
 	"backend/internal/datasource/managed"
 	"backend/internal/datasource/managed/cellarclient"
 
@@ -240,4 +241,19 @@ func TestReconcileRecordsTheSizeOfALiveDatabase(t *testing.T) {
 	var after int64
 	require.NoError(t, f.Conn.QueryRow(`SELECT size_bytes FROM app.datasource WHERE id = $1`, id).Scan(&after))
 	require.GreaterOrEqual(t, after, int64(5_000_000))
+}
+
+// The cellar id is checked twice: by the database, when a managed row is
+// written, and by cellar.ValidID, at start. They must agree, or a bad id gets
+// past the start check and fails at the first create.
+func TestValidIDAgreesWithTheDatabaseConstraint(t *testing.T) {
+	fixture := e2e.Setup(t)
+	for _, id := range []string{
+		"staging", "prod", "a", "0", "cellar-1", "a-b-c", "9lives",
+		"", "-a", "A", "Staging", "a.b", "127.0.0.1", "a_b", "a b", "a/b", "é", "a\n",
+	} {
+		_, err := fixture.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, cellar_id, state)
+			VALUES ($1::uuid, $2::uuid, 'x', 'sqlite', $3, 'hot')`, uuid.NewString(), fixture.Actor.WorkspaceID, id)
+		require.Equalf(t, cellar.ValidID(id), err == nil, "cellar id %q: the database says %v", id, err)
+	}
 }

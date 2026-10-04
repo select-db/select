@@ -14,11 +14,8 @@ func serviceGrant() (string, error) {
 	return cellar.Grant{CellarID: CellarID}.Encode()
 }
 
-// StoredDatabase is one database of the cellar, as its inventory lists it.
-type StoredDatabase = cellar.StoredDatabase
-
 // Inventory lists every database of the cellar, on its disk or only in its bucket.
-func Inventory(ctx context.Context) ([]StoredDatabase, error) {
+func Inventory(ctx context.Context) ([]cellar.StoredDatabase, error) {
 	grant, err := serviceGrant()
 	if err != nil {
 		return nil, err
@@ -28,7 +25,7 @@ func Inventory(ctx context.Context) ([]StoredDatabase, error) {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	var stored []StoredDatabase
+	var stored []cellar.StoredDatabase
 	err = json.NewDecoder(resp.Body).Decode(&stored)
 	return stored, err
 }

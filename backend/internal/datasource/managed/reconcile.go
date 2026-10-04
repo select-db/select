@@ -13,6 +13,7 @@ import (
 	"backend/db"
 	"backend/db/db_types"
 	"backend/db/generated"
+	"backend/internal/cellar"
 	"backend/internal/datasource/managed/cellarclient"
 
 	"github.com/google/uuid"
@@ -31,8 +32,8 @@ const (
 	reconcileLockKey = 0x63656c6c5f726563 // "cell_rec"
 )
 
-// StartReconciler runs Reconcile every reconcileEvery until ctx ends. It does
-// nothing while managed databases are off.
+// StartReconciler runs Reconcile every reconcileEvery until ctx ends. It is
+// started once managed databases are on.
 func StartReconciler(ctx context.Context) {
 	go func() {
 		wait := reconcileFirst
@@ -43,9 +44,6 @@ func StartReconciler(ctx context.Context) {
 			case <-time.After(wait):
 			}
 			wait = reconcileEvery
-			if cellarclient.URL == "" {
-				continue
-			}
 			runCtx, cancel := context.WithTimeout(ctx, reconcileTimeout)
 			result, err := Reconcile(runCtx, time.Now())
 			cancel()
@@ -101,7 +99,7 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 		return result, fmt.Errorf("listing the cellar: %w", err)
 	}
 	// A stable order, so a run stopped by the cap resumes where it will not repeat.
-	slices.SortFunc(stored, func(a, b cellarclient.StoredDatabase) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(stored, func(a, b cellar.StoredDatabase) int { return strings.Compare(a.ID, b.ID) })
 	held := make(map[uuid.UUID]bool, len(stored))
 
 	for _, database := range stored {
@@ -173,7 +171,7 @@ const (
 )
 
 // decide judges one database of this cellar, and says why when it purges.
-func decide(ctx context.Context, id uuid.UUID, database cellarclient.StoredDatabase, now time.Time) (reason string, v verdict, err error) {
+func decide(ctx context.Context, id uuid.UUID, database cellar.StoredDatabase, now time.Time) (reason string, v verdict, err error) {
 	row, err := db.Queries.GetManagedDatasourceToReconcile(ctx, id)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
