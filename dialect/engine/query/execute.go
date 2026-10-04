@@ -94,6 +94,11 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 	}
 	hasTZ := makeHasTZ(colTypes)
 
+	cells := make([]cell, len(columns))
+	ptrs := make([]any, len(columns))
+	for i := range cells {
+		ptrs[i] = &cells[i]
+	}
 	maxBytes := effectiveMaxBytes(opts)
 	var rowCount, bytesScanned int64
 	for rows.Next() {
@@ -107,25 +112,24 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 			}
 			break
 		}
-		values := make([]any, len(columns))
-		ptrs := make([]any, len(columns))
-		for i := range values {
-			ptrs[i] = &values[i]
+		for i := range cells {
+			cells[i] = cell{max: opts.MaxValueBytes}
 		}
 		if err := rows.Scan(ptrs...); err != nil {
 			sink.OnError(fmt.Errorf("failed to scan row: %w", err))
 			return
 		}
-		for i, v := range values {
-			if size := estimateValueBytes(v); opts.MaxValueBytes > 0 && size > opts.MaxValueBytes {
-				sink.OnError(fmt.Errorf("column %q holds a value of %d MB, over the %d MB limit per value", columns[i], size>>20, opts.MaxValueBytes>>20))
+		values := make([]any, len(columns))
+		for i := range cells {
+			if cells[i].tooBig > 0 {
+				sink.OnError(fmt.Errorf("column %q holds a value of %.1f MB, over the %.1f MB limit per value", columns[i], float64(cells[i].tooBig)/(1<<20), float64(opts.MaxValueBytes)/(1<<20)))
 				return
 			}
-			switch val := v.(type) {
-			case []byte:
-				values[i] = string(val)
-			case time.Time:
-				values[i] = formatTime(val, hasTZ, i)
+			values[i] = cells[i].value
+		}
+		for i, v := range values {
+			if t, ok := v.(time.Time); ok {
+				values[i] = formatTime(t, hasTZ, i)
 			}
 			bytesScanned += estimateValueBytes(values[i])
 		}
@@ -147,6 +151,35 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 	if err := sink.OnDone(rowCount, 0, durationMs); err != nil {
 		sink.OnError(err)
 	}
+}
+
+// cell takes one column of a row. Scanning into an any makes database/sql copy a
+// []byte; this turns it into the string every sink gets, the one copy needed,
+// and refuses a value over max without copying it.
+type cell struct {
+	value  any
+	max    int64
+	tooBig int64
+}
+
+func (c *cell) Scan(src any) error {
+	var size int64
+	switch v := src.(type) {
+	case []byte:
+		size = int64(len(v))
+		if c.max <= 0 || size <= c.max {
+			c.value = string(v)
+		}
+	case string:
+		size = int64(len(v))
+		c.value = v
+	default:
+		c.value = src
+	}
+	if c.max > 0 && size > c.max {
+		c.value, c.tooBig = nil, size
+	}
+	return nil
 }
 
 // ResultSink collects a stream into a Result. A failed stream leaves its error
