@@ -192,7 +192,11 @@ func TestMemoryBudgetRefusesWhatItHasNoRoomFor(t *testing.T) {
 	require.Positive(t, limited.ok, "the rest finish")
 	require.Zero(t, limited.other, "every statement either finishes or is refused with the coded error")
 	require.Zero(t, used, "every lease is released")
-	require.Less(t, limitedPeak, freePeak/2, "the budget holds the heap well under what all of them would take")
+	// The driver's own copy of each value is made before a statement can ask for
+	// room: n values and nothing else, where all of them running would hold several
+	// copies each.
+	require.Less(t, limitedPeak, uint64(n*value+n*value/2), "the heap stays near one copy of each value")
+	require.LessOrEqual(t, limited.ok, 6, "only what the budget has room for runs")
 }
 
 // Wide statements fill the ceiling; a trivial one still starts.
