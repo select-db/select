@@ -163,3 +163,21 @@ func TestAgainstTheBucket(t *testing.T) {
 	err = databases.restoreAt(ctx, id, time.Time{}, filepath.Join(t.TempDir(), "gone.db"))
 	require.ErrorIs(t, err, errNoCopyAtTime, "remove deletes the bucket copy")
 }
+
+func TestBucketClientSignsWithTheBucketKeys(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	SetBucketKeys("key-id", "key-secret")
+	t.Cleanup(func() { SetBucketKeys("", "") })
+	bucket, err := url.Parse("s3://bucket?endpoint=https://s3.example.test&region=test")
+	require.NoError(t, err)
+	databases := &Databases{dir: t.TempDir(), bucket: *bucket}
+
+	client, err := databases.bucketClient(uuid.NewString())
+
+	require.NoError(t, err)
+	s3Client, isS3 := client.(*s3.ReplicaClient)
+	require.True(t, isS3)
+	require.Equal(t, "key-id", s3Client.AccessKeyID)
+	require.Equal(t, "key-secret", s3Client.SecretAccessKey)
+}
