@@ -92,7 +92,7 @@ func rateKey(r *http.Request) string {
 	return "ip:" + auth.GetIPAddress(r)
 }
 
-// RateLimit: per-caller perMinute cap, declared per route in main.go.
+// RateLimit: perMinute cap per rateKey, declared per route in the api package.
 // RATE_LIMIT_DISABLED=true bypasses (local dev / tests).
 func RateLimit(perMinute int) func(http.Handler) http.Handler {
 	if os.Getenv("RATE_LIMIT_DISABLED") == "true" {
