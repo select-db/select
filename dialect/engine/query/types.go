@@ -39,7 +39,16 @@ type Options struct {
 	// than this, before it is copied into the response. 0 = unlimited. A server
 	// sets ServerMaxValueBytes so one wide cell cannot exhaust its memory.
 	MaxValueBytes int64
+
+	// Reserve, when set, is asked for the memory a statement may hold as its rows
+	// turn out wide: rowFootprint times its widest row so far. An error ends the
+	// statement. A server passes a membudget lease's Grow.
+	Reserve func(footprint int64) error
 }
+
+// rowFootprint is how many times a row's bytes are alive between the scan and the
+// wire: the driver's value, its string, the builder, the encoded batch.
+const rowFootprint = 5
 
 // ServerMaxValueBytes is the largest single value a server-side execution
 // returns: a value is held several times over on its way out (scan, string,

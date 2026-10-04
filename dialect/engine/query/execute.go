@@ -100,7 +100,7 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 		ptrs[i] = &cells[i]
 	}
 	maxBytes := effectiveMaxBytes(opts)
-	var rowCount, bytesScanned int64
+	var rowCount, bytesScanned, widest, reserved int64
 	for rows.Next() {
 		if ctx.Err() != nil {
 			sink.OnError(toQueryError(ctx, ctx.Err()))
@@ -113,7 +113,7 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 			break
 		}
 		for i := range cells {
-			cells[i] = cell{max: opts.MaxValueBytes}
+			cells[i] = cell{max: opts.MaxValueBytes, reserve: opts.Reserve}
 		}
 		if err := rows.Scan(ptrs...); err != nil {
 			sink.OnError(fmt.Errorf("failed to scan row: %w", err))
@@ -121,17 +121,33 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 		}
 		values := make([]any, len(columns))
 		for i := range cells {
+			if cells[i].refused != nil {
+				sink.OnError(cells[i].refused)
+				return
+			}
 			if cells[i].tooBig > 0 {
 				sink.OnError(fmt.Errorf("column %q holds a value of %.1f MB, over the %.1f MB limit per value", columns[i], float64(cells[i].tooBig)/(1<<20), float64(opts.MaxValueBytes)/(1<<20)))
 				return
 			}
 			values[i] = cells[i].value
 		}
+		var rowBytes int64
 		for i, v := range values {
 			if t, ok := v.(time.Time); ok {
 				values[i] = formatTime(t, hasTZ, i)
 			}
-			bytesScanned += estimateValueBytes(values[i])
+			rowBytes += estimateValueBytes(values[i])
+		}
+		bytesScanned += rowBytes
+		if opts.Reserve != nil {
+			widest = max(widest, rowBytes)
+			if need := rowFootprint * widest; need > reserved {
+				if err := opts.Reserve(need); err != nil {
+					sink.OnError(err)
+					return
+				}
+				reserved = need
+			}
 		}
 		applyMask(values, maskPositions)
 		if bytesScanned > maxBytes {
@@ -157,27 +173,42 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 // []byte; this turns it into the string every sink gets, the one copy needed,
 // and refuses a value over max without copying it.
 type cell struct {
-	value  any
-	max    int64
-	tooBig int64
+	value   any
+	max     int64
+	tooBig  int64
+	reserve func(footprint int64) error
+	refused error
 }
+
+// earlyReserveBytes is the size from which a value asks for room before it is
+// copied: the statement cannot wait for the whole row to be scanned, because
+// the copy is most of what a wide row costs.
+const earlyReserveBytes = 256 << 10
 
 func (c *cell) Scan(src any) error {
 	var size int64
 	switch v := src.(type) {
 	case []byte:
 		size = int64(len(v))
-		if c.max <= 0 || size <= c.max {
-			c.value = string(v)
-		}
 	case string:
 		size = int64(len(v))
-		c.value = v
 	default:
 		c.value = src
+		return nil
 	}
 	if c.max > 0 && size > c.max {
-		c.value, c.tooBig = nil, size
+		c.tooBig = size
+		return nil
+	}
+	if c.reserve != nil && size >= earlyReserveBytes {
+		if c.refused = c.reserve(rowFootprint * size); c.refused != nil {
+			return nil
+		}
+	}
+	if b, ok := src.([]byte); ok {
+		c.value = string(b)
+	} else {
+		c.value = src
 	}
 	return nil
 }

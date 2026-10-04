@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"backend/internal/utils"
 
 	"github.com/selectDb/dialect/engine/arrowstream"
+	"github.com/selectDb/dialect/engine/membudget"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
@@ -37,6 +41,8 @@ func classify(ctx context.Context, err error, grant Grant) *arrowstream.Error {
 	switch {
 	case errors.As(err, &coded):
 		return coded
+	case errors.Is(err, membudget.ErrPressure):
+		return refusedForMemory(grant)
 	case errors.Is(err, ErrForbiddenStatement):
 		return &arrowstream.Error{Code: CodeForbiddenStatement, Message: err.Error()}
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
@@ -52,6 +58,22 @@ func classify(ctx context.Context, err error, grant Grant) *arrowstream.Error {
 		}
 	}
 	return InternalError(fmt.Sprintf("cellar: datasource %s: %v", grant.DatasourceID, err))
+}
+
+// errMemoryPressure is a statement the cellar's memory budget could not take.
+var errMemoryPressure = &arrowstream.Error{Code: CodeUnavailable, Message: "managed databases are busy with large results, retry"}
+
+var lastPressureLog atomic.Int64
+
+// refusedForMemory answers a statement the memory budget refused, and logs it
+// at most once a second.
+func refusedForMemory(grant Grant) *arrowstream.Error {
+	if now := time.Now().UnixNano(); now-lastPressureLog.Load() > int64(time.Second) {
+		lastPressureLog.Store(now)
+		used, total, refused := memoryBudget.Stats()
+		log.Printf("cellar: memory pressure: refused a statement of workspace %s; %d of %d MiB reserved, %d refused so far", grant.WorkspaceID, used>>20, total>>20, refused)
+	}
+	return errMemoryPressure
 }
 
 // InternalError logs detail under a ref and returns the error the caller sees,

@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -52,5 +53,63 @@ func TestStream_NoMaxValueBytesMeansNoLimit(t *testing.T) {
 
 	if sink.errored || sink.rows != 1 {
 		t.Fatalf("the desktop app sets no limit, got errored=%v rows=%d", sink.errored, sink.rows)
+	}
+}
+
+func TestStream_ReserveIsAskedAsRowsGetWider(t *testing.T) {
+	db := newDBWithRows(t, 0)
+	defer db.Close()
+	var asked []int64
+	sink := &valueSink{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	Stream(ctx, Conn{DB: db}, Datasource{ID: "x"},
+		"WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c LIMIT 4) SELECT zeroblob(x * 1000) AS b FROM c",
+		Options{Reserve: func(n int64) error { asked = append(asked, n); return nil }}, sink)
+
+	if sink.errored || sink.rows != 4 {
+		t.Fatalf("want 4 clean rows, got errored=%v rows=%d", sink.errored, sink.rows)
+	}
+	want := []int64{5 * 1000, 5 * 2000, 5 * 3000, 5 * 4000}
+	if len(asked) != len(want) {
+		t.Fatalf("asked %v, want %v", asked, want)
+	}
+	for i := range want {
+		if asked[i] != want[i] {
+			t.Fatalf("asked %v, want %v", asked, want)
+		}
+	}
+}
+
+func TestStream_AReservationThatFailsEndsTheStatement(t *testing.T) {
+	db := newDBWithRows(t, 0)
+	defer db.Close()
+	refused := errors.New("no room")
+	sink := &valueSink{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	Stream(ctx, Conn{DB: db}, Datasource{ID: "x"}, "SELECT zeroblob(4096) AS b",
+		Options{Reserve: func(int64) error { return refused }}, sink)
+
+	if !errors.Is(sink.err, refused) || sink.rows != 0 {
+		t.Fatalf("want the reservation's error and no row, got err=%v rows=%d", sink.err, sink.rows)
+	}
+}
+
+func TestStream_NarrowRowsAskForRoomOnlyWhenTheyGrow(t *testing.T) {
+	db := newDBWithRows(t, 200)
+	defer db.Close()
+	calls := 0
+	sink := &countingSink{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	Stream(ctx, Conn{DB: db}, Datasource{ID: "x"}, "SELECT id FROM t ORDER BY id",
+		Options{Reserve: func(int64) error { calls++; return nil }}, sink)
+
+	if calls > 2 {
+		t.Fatalf("200 rows of the same width asked %d times", calls)
 	}
 }

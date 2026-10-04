@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -13,6 +15,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/klauspost/compress/zstd"
+	"github.com/selectDb/dialect/engine/membudget"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,4 +106,121 @@ func TestAValueOverTheLimitIsRefusedBeforeItIsCopied(t *testing.T) {
 
 	peak := peakHeap(func() { streamQuery(t, id, "SELECT zeroblob(20000000) AS payload") })
 	require.Less(t, peak, uint64(48<<20), "a refused value is not held several times over")
+}
+
+// useBudget swaps the cellar's memory budget for a test.
+func useBudget(t *testing.T, total int64) {
+	t.Helper()
+	previous := memoryBudget
+	memoryBudget = membudget.New(total)
+	t.Cleanup(func() { memoryBudget = previous })
+}
+
+type outcome struct{ ok, refused, other int }
+
+// burst runs n statements at once, each returning one value of valueBytes, and
+// tells what became of them.
+func burst(t *testing.T, id string, n, valueBytes int) (outcome, uint64) {
+	t.Helper()
+	statement := fmt.Sprintf("SELECT zeroblob(%d) AS payload", valueBytes)
+	var (
+		mu  sync.Mutex
+		out outcome
+		wg  sync.WaitGroup
+	)
+	peak := peakHeap(func() {
+		for range n {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				body, err := json.Marshal(Query{SQL: statement})
+				require.NoError(t, err)
+				r := httptest.NewRequest(http.MethodPost, "/datasources/"+id+"/query", bytes.NewReader(body))
+				r = r.WithContext(context.WithValue(r.Context(), grantKey{}, Grant{DatasourceID: id, WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20}))
+				w := httptest.NewRecorder()
+				QueryHandler().ServeHTTP(w, r)
+				decoded, err := zstdDecode(w.Body.Bytes())
+				require.NoError(t, err)
+				mu.Lock()
+				defer mu.Unlock()
+				switch {
+				case bytes.Contains(decoded, []byte(CodeUnavailable)):
+					out.refused++
+				case bytes.Contains(decoded, []byte("executed_ms")):
+					out.ok++
+				default:
+					out.other++
+				}
+			}()
+		}
+		wg.Wait()
+	})
+	return out, peak
+}
+
+func zstdDecode(b []byte) ([]byte, error) {
+	reader, err := zstd.NewReader(bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
+}
+
+// Twenty-four statements at once, each returning a 15 MB value: with room for
+// all of them the heap follows their sum; with a budget the cellar refuses the
+// ones it has no room for and the rest finish.
+func TestMemoryBudgetRefusesWhatItHasNoRoomFor(t *testing.T) {
+	debug.SetGCPercent(50)
+	t.Cleanup(func() { debug.SetGCPercent(100) })
+	cellar := newTestCellar(t)
+	id := uuid.NewString()
+	cellar.createNotes(t, id)
+	const n, value = 24, 15_000_000
+
+	useBudget(t, 4<<30)
+	free, freePeak := burst(t, id, n, value)
+	t.Logf("no budget: %+v, peak live heap %d MiB", free, freePeak>>20)
+
+	useBudget(t, 160<<20)
+	limited, limitedPeak := burst(t, id, n, value)
+	used, total, refused := memoryBudget.Stats()
+	t.Logf("160 MiB budget: %+v, peak live heap %d MiB, budget used %d of %d MiB afterwards, %d refused", limited, limitedPeak>>20, used>>20, total>>20, refused)
+
+	require.Equal(t, n, free.ok, "with room for all of them, all of them run")
+	require.Positive(t, limited.refused, "a statement with no room is refused, not run")
+	require.Positive(t, limited.ok, "the rest finish")
+	require.Zero(t, limited.other, "every statement either finishes or is refused with the coded error")
+	require.Zero(t, used, "every lease is released")
+	require.Less(t, limitedPeak, freePeak/2, "the budget holds the heap well under what all of them would take")
+}
+
+// Wide statements fill the ceiling; a trivial one still starts.
+func TestSmallStatementsStartWhileWideOnesHaveTheBudget(t *testing.T) {
+	cellar := newTestCellar(t)
+	id := uuid.NewString()
+	cellar.createNotes(t, id)
+	useBudget(t, 100<<20)
+	wide, err := memoryBudget.Begin()
+	require.NoError(t, err)
+	t.Cleanup(wide.Release)
+	require.NoError(t, wide.Grow(90<<20))
+
+	response := streamQuery(t, id, "SELECT 1")
+	decoded, err := zstdDecode(responseBytes(t, id, "SELECT 1"))
+	require.NoError(t, err)
+	require.Positive(t, response.bytes)
+	require.Contains(t, string(decoded), "executed_ms")
+	require.NotContains(t, string(decoded), CodeUnavailable)
+}
+
+func responseBytes(t *testing.T, id, statement string) []byte {
+	t.Helper()
+	body, err := json.Marshal(Query{SQL: statement})
+	require.NoError(t, err)
+	r := httptest.NewRequest(http.MethodPost, "/datasources/"+id+"/query", bytes.NewReader(body))
+	r = r.WithContext(context.WithValue(r.Context(), grantKey{}, Grant{DatasourceID: id, WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20}))
+	w := httptest.NewRecorder()
+	QueryHandler().ServeHTTP(w, r)
+	return w.Body.Bytes()
 }
