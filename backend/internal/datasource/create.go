@@ -9,7 +9,6 @@ import (
 	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/core"
 )
 
 type createRequest struct {
@@ -41,8 +40,8 @@ func CreateHandler() http.HandlerFunc {
 			return
 		}
 		actor, id, dbType := authz.ActorOf(r), uuid.NewString(), req.DBType
-		// Adding a datasource, managed or not, takes manage on "*".
-		if !actor.IsOwner() && !actor.Can(core.ActionManage) {
+		// Adding a datasource, managed or not, takes workspace/datasources.manage.
+		if !actor.ManagesDatasources() {
 			audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, id)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

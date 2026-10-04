@@ -20,7 +20,7 @@ type forkRequest struct {
 func ForkHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, sourceID := authz.ActorOf(r), r.PathValue("id")
-		if !actor.IsOwner() && !actor.CanManage(sourceID) {
+		if !actor.ManagesDatasource(sourceID) {
 			audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, sourceID)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

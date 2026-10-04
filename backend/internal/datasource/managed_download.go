@@ -18,7 +18,7 @@ func DownloadHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor := authz.ActorOf(r)
 		id := r.PathValue("id")
-		if !actor.IsOwner() && !actor.CanManage(id) {
+		if !actor.ManagesDatasource(id) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

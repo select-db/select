@@ -14,7 +14,11 @@ const (
 	ActionWorkspaceRolesManage   = "workspace/roles.manage"
 	ActionWorkspaceGroupsManage  = "workspace/groups.manage"
 	ActionWorkspaceApiKeysManage = "workspace/api-keys.manage"
-	ActionWorkspaceAuditRead     = "workspace/audit.read"
+	// ActionWorkspaceDatasourcesManage adds a connection or a managed database to
+	// the workspace, and administers every datasource of it: fork, download, change
+	// and delete. Manage on one datasource grants the same for it alone.
+	ActionWorkspaceDatasourcesManage = "workspace/datasources.manage"
+	ActionWorkspaceAuditRead         = "workspace/audit.read"
 )
 
 const (

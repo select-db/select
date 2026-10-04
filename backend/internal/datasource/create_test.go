@@ -57,7 +57,7 @@ func TestCreateGrantToOthersNeedsTheRight(t *testing.T) {
 	creator := uuid.NewString()
 	e2e.SeedUser(t, fixture.Conn, creator)
 	e2e.SeedMembership(t, fixture.Conn, workspaceID, creator)
-	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, workspaceID, "creator", "manage")
+	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, workspaceID, "creator", "workspace/datasources.manage")
 	e2e.SeedUserRole(t, fixture.Conn, creator, creatorRole, workspaceID)
 	creatorToken := e2e.MintJWT(t, creator)
 
@@ -73,20 +73,20 @@ func TestCreateGrantToOthersNeedsTheRight(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code, "a user outside the workspace: %s", rec.Body.String())
 }
 
-func TestCreateAnyDatasourceTakesManageOnAll(t *testing.T) {
+func TestCreateAnyDatasourceTakesTheWorkspacePermission(t *testing.T) {
 	fixture := newManagedFixture(t)
 	creator := uuid.NewString()
 	e2e.SeedUser(t, fixture.Conn, creator)
 	e2e.SeedMembership(t, fixture.Conn, fixture.Actor.WorkspaceID, creator)
-	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, fixture.Actor.WorkspaceID, "creator", "manage")
+	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, fixture.Actor.WorkspaceID, "creator", "workspace/datasources.manage")
 	e2e.SeedUserRole(t, fixture.Conn, creator, creatorRole, fixture.Actor.WorkspaceID)
 
 	rec := e2e.Do(t, fixture.H, http.MethodPost, "/datasources", e2e.MintJWT(t, creator), map[string]any{
 		"workspace_id": fixture.Actor.WorkspaceID, "db_type": "postgresql", "name": "remote", "dsn": e2e.TargetDSN(t, fixture.Conn)})
-	require.Equal(t, http.StatusCreated, rec.Code, "managed or not, adding a datasource takes manage on *: %s", rec.Body.String())
+	require.Equal(t, http.StatusCreated, rec.Code, "managed or not, adding a datasource takes workspace/datasources.manage: %s", rec.Body.String())
 }
 
-func TestCreateNeedsManageOnAll(t *testing.T) {
+func TestCreateNeedsTheWorkspacePermission(t *testing.T) {
 	fixture := newManagedFixture(t)
 	notesID := createNotes(t, fixture)
 	// Manage on one database is not the right to add more.

@@ -32,7 +32,7 @@ func GetHandler() http.HandlerFunc {
 		a := authz.ActorOf(r)
 		workspaceID := a.WorkspaceID
 
-		if !a.IsOwner() && !a.CanManage(id) {
+		if !a.ManagesDatasource(id) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

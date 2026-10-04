@@ -25,10 +25,10 @@ type listedDatasource struct {
 // connection, let alone revoke it: the id needed to name it lived in the file
 // that was deleted.
 //
-// A row is returned on the same rule its siblings apply per id
-// (Actor.IsOwner() || Actor.CanManage(id)), so the list is what this actor could
-// already fetch one at a time, and revoking is offered exactly where it would be
-// allowed. A member who administrates nothing sees nothing.
+// A row is returned on the owner rule or manage on that datasource
+// (Actor.IsOwner() || Actor.CanManage(id)). It deliberately leaves out
+// workspace/datasources.manage, which its siblings accept. A member who
+// administrates nothing sees nothing.
 //
 // No secrets, and no DSNs. Administrating a connection does not require being
 // handed the credential behind it.

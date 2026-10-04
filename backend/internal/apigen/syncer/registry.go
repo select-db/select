@@ -30,12 +30,13 @@ var auditSpecs = map[string]auditDescriptor{
 // (rather than reconstructing the string) keeps the generated gate refactor-safe
 // and lets an unknown action fail generation instead of silently going ungated.
 var actionConst = map[string]string{
-	"settings.write":  "core.ActionWorkspaceSettingsWrite",
-	"users.manage":    "core.ActionWorkspaceUsersManage",
-	"roles.manage":    "core.ActionWorkspaceRolesManage",
-	"groups.manage":   "core.ActionWorkspaceGroupsManage",
-	"api-keys.manage": "core.ActionWorkspaceApiKeysManage",
-	"audit.read":      "core.ActionWorkspaceAuditRead",
+	"settings.write":     "core.ActionWorkspaceSettingsWrite",
+	"users.manage":       "core.ActionWorkspaceUsersManage",
+	"roles.manage":       "core.ActionWorkspaceRolesManage",
+	"groups.manage":      "core.ActionWorkspaceGroupsManage",
+	"api-keys.manage":    "core.ActionWorkspaceApiKeysManage",
+	"datasources.manage": "core.ActionWorkspaceDatasourcesManage",
+	"audit.read":         "core.ActionWorkspaceAuditRead",
 }
 
 // ActionConst resolves an @app.api `requires` value to the Go expression for its

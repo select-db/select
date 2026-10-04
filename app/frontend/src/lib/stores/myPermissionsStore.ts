@@ -41,6 +41,14 @@ export const myPermissions = derived(
 		const permMap: PermissionMap = buildPermissionMap($perms);
 		return {
 			isAllowed: (action: string) => isAppActionAllowed($perms, action, isOwner),
+
+			/**
+			 * Whether this person administers every connection of the workspace, the
+			 * question the backend asks before it adds one (`Actor.ManagesDatasources()`:
+			 * owner, or workspace/datasources.manage).
+			 */
+			canManageDatasources: () =>
+				isAppActionAllowed($perms, 'workspace/datasources.manage', isOwner),
 			canAccessDatasource: (datasourceId: string, isProxified?: boolean) =>
 				!isProxified ||
 				isOwner ||
@@ -49,11 +57,12 @@ export const myPermissions = derived(
 			/**
 			 * Whether this person administrates the connection, which is the same
 			 * question the backend asks before it will change or revoke one
-			 * (`Actor.IsOwner() || Actor.CanManage(id)`). Asking it here only
-			 * decides what the UI offers: the server refuses either way.
+			 * (`Actor.ManagesDatasource(id)`: workspace-wide, or manage on it). Asking
+			 * it here only decides what the UI offers: the server refuses either way.
 			 */
 			canManageDatasource: (datasourceId: string) =>
-				isOwner || resolve(permMap, datasourceId, '*', '*', '*', 'manage') === 'allow'
+				isAppActionAllowed($perms, 'workspace/datasources.manage', isOwner) ||
+				resolve(permMap, datasourceId, '*', '*', '*', 'manage') === 'allow'
 		};
 	}
 );
