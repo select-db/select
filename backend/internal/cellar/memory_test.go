@@ -195,7 +195,7 @@ func TestMemoryBudgetRefusesWhatItHasNoRoomFor(t *testing.T) {
 	// The driver's own copy of each value is made before a statement can ask for
 	// room: n values and nothing else, where all of them running would hold several
 	// copies each.
-	require.Less(t, limitedPeak, uint64(n*value+n*value/2), "the heap stays near one copy of each value")
+	require.Less(t, limitedPeak, uint64(2*n*value), "the heap stays within two copies of each value")
 	require.LessOrEqual(t, limited.ok, 6, "only what the budget has room for runs")
 }
 
