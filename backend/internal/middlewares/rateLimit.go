@@ -9,8 +9,8 @@ import (
 	auth "backend/internal/auth"
 )
 
-// Per-minute token bucket. Per-route limit declared in main.go. Keyed by
-// authenticated user when known, else client IP.
+// Per-minute token bucket. Per-route limit declared in the api package. Keyed by
+// the target workspace, else the authenticated user, else the client address.
 
 type tokenBucket struct {
 	tokens float64
@@ -72,8 +72,15 @@ func (s *limiterStore) sweep(now time.Time) {
 	s.lastSweep = now
 }
 
-// rateKey: auth context user, else verified-token user, else client IP.
+// rateKey is who a request is counted against: the workspace it targets, which
+// every user and API key of it shares, so a client cannot widen its allowance
+// by sending from more addresses, users or keys. A route that has no workspace
+// (sign-in, creating one) falls back to the authenticated user, then to the
+// client address.
 func rateKey(r *http.Request) string {
+	if workspaceID, ok := r.Context().Value(ctxWorkspaceID).(string); ok && workspaceID != "" {
+		return "w:" + workspaceID
+	}
 	if uid, ok := r.Context().Value(userIDKey).(string); ok && uid != "" {
 		return "u:" + uid
 	}

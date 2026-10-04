@@ -1,6 +1,9 @@
 package middlewares
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -51,5 +54,46 @@ func TestIdleBucketsAreSwept(t *testing.T) {
 	store.allow("fresh", start.Add(30*time.Minute))
 	if _, ok := store.buckets["stale"]; ok {
 		t.Fatal("stale bucket should have been swept")
+	}
+}
+
+func TestRateKeyPrefersTheWorkspace(t *testing.T) {
+	request := func(workspaceID, userID, forwardedFor string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = "5.6.7.8:1234"
+		if forwardedFor != "" {
+			r.Header.Set("X-Forwarded-For", forwardedFor)
+		}
+		ctx := r.Context()
+		if workspaceID != "" {
+			ctx = context.WithValue(ctx, ctxWorkspaceID, workspaceID)
+		}
+		if userID != "" {
+			ctx = context.WithValue(ctx, userIDKey, userID)
+		}
+		return r.WithContext(ctx)
+	}
+
+	inWorkspace := rateKey(request("ws-1", "alice", ""))
+	if inWorkspace != "w:ws-1" {
+		t.Fatalf("a request for a workspace is counted against it, got %q", inWorkspace)
+	}
+	for name, other := range map[string]*http.Request{
+		"another user":    request("ws-1", "bob", ""),
+		"another key":     request("ws-1", "api-key-7", ""),
+		"another address": request("ws-1", "alice", "9.9.9.9"),
+	} {
+		if got := rateKey(other); got != inWorkspace {
+			t.Errorf("%s must share the workspace's allowance, got %q", name, got)
+		}
+	}
+	if got := rateKey(request("ws-2", "alice", "")); got == inWorkspace {
+		t.Error("another workspace has an allowance of its own")
+	}
+	if got := rateKey(request("", "alice", "")); got != "u:alice" {
+		t.Errorf("without a workspace the user is counted, got %q", got)
+	}
+	if got := rateKey(request("", "", "")); got != "ip:5.6.7.8" {
+		t.Errorf("without a workspace or a user the address is counted, got %q", got)
 	}
 }
