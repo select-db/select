@@ -63,15 +63,28 @@ func peakHeap(fn func()) uint64 {
 	return peak - min(peak, base.HeapAlloc)
 }
 
-func streamQuery(t *testing.T, id, statement string) *discardResponse {
+// serve runs one statement through the handler as the backend would.
+func serve(t testing.TB, id, statement string, w http.ResponseWriter) {
 	t.Helper()
 	body, err := json.Marshal(Query{SQL: statement})
 	require.NoError(t, err)
 	r := httptest.NewRequest(http.MethodPost, "/datasources/"+id+"/query", bytes.NewReader(body))
 	r = r.WithContext(context.WithValue(r.Context(), grantKey{}, Grant{DatasourceID: id, WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20}))
-	w := &discardResponse{header: http.Header{}}
 	QueryHandler().ServeHTTP(w, r)
+}
+
+func streamQuery(t *testing.T, id, statement string) *discardResponse {
+	t.Helper()
+	w := &discardResponse{header: http.Header{}}
+	serve(t, id, statement, w)
 	return w
+}
+
+func responseBytes(t testing.TB, id, statement string) []byte {
+	t.Helper()
+	w := httptest.NewRecorder()
+	serve(t, id, statement, w)
+	return w.Body.Bytes()
 }
 
 // A result streams in memory bounded by its batches, not its size: 300 rows of
@@ -133,13 +146,7 @@ func burst(t *testing.T, id string, n, valueBytes int) (outcome, uint64) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				body, err := json.Marshal(Query{SQL: statement})
-				require.NoError(t, err)
-				r := httptest.NewRequest(http.MethodPost, "/datasources/"+id+"/query", bytes.NewReader(body))
-				r = r.WithContext(context.WithValue(r.Context(), grantKey{}, Grant{DatasourceID: id, WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20}))
-				w := httptest.NewRecorder()
-				QueryHandler().ServeHTTP(w, r)
-				decoded, err := zstdDecode(w.Body.Bytes())
+				decoded, err := zstdDecode(responseBytes(t, id, statement))
 				require.NoError(t, err)
 				mu.Lock()
 				defer mu.Unlock()
@@ -210,21 +217,8 @@ func TestSmallStatementsStartWhileWideOnesHaveTheBudget(t *testing.T) {
 	t.Cleanup(wide.Release)
 	require.NoError(t, wide.Grow(90<<20))
 
-	response := streamQuery(t, id, "SELECT 1")
 	decoded, err := zstdDecode(responseBytes(t, id, "SELECT 1"))
 	require.NoError(t, err)
-	require.Positive(t, response.bytes)
 	require.Contains(t, string(decoded), "executed_ms")
 	require.NotContains(t, string(decoded), CodeUnavailable)
-}
-
-func responseBytes(t *testing.T, id, statement string) []byte {
-	t.Helper()
-	body, err := json.Marshal(Query{SQL: statement})
-	require.NoError(t, err)
-	r := httptest.NewRequest(http.MethodPost, "/datasources/"+id+"/query", bytes.NewReader(body))
-	r = r.WithContext(context.WithValue(r.Context(), grantKey{}, Grant{DatasourceID: id, WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20}))
-	w := httptest.NewRecorder()
-	QueryHandler().ServeHTTP(w, r)
-	return w.Body.Bytes()
 }

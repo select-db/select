@@ -98,18 +98,18 @@ func TestStream_AReservationThatFailsEndsTheStatement(t *testing.T) {
 	}
 }
 
-func TestStream_NarrowRowsAskForRoomOnlyWhenTheyGrow(t *testing.T) {
+func TestStream_NarrowRowsAskForTheirOwnSize(t *testing.T) {
 	db := newDBWithRows(t, 200)
 	defer db.Close()
-	calls := 0
+	var widest int64
 	sink := &countingSink{}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	Stream(ctx, Conn{DB: db}, Datasource{ID: "x"}, "SELECT id FROM t ORDER BY id",
-		Options{Reserve: func(int64) error { calls++; return nil }}, sink)
+		Options{Reserve: func(n int64) error { widest = max(widest, n); return nil }}, sink)
 
-	if calls > 2 {
-		t.Fatalf("200 rows of the same width asked %d times", calls)
+	if widest != rowFootprint*8 {
+		t.Fatalf("a row of one integer should ask for %d bytes, widest ask was %d", rowFootprint*8, widest)
 	}
 }

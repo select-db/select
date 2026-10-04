@@ -97,10 +97,11 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 	cells := make([]cell, len(columns))
 	ptrs := make([]any, len(columns))
 	for i := range cells {
+		cells[i] = cell{max: opts.MaxValueBytes, reserve: opts.Reserve}
 		ptrs[i] = &cells[i]
 	}
 	maxBytes := effectiveMaxBytes(opts)
-	var rowCount, bytesScanned, widest, reserved int64
+	var rowCount, bytesScanned int64
 	for rows.Next() {
 		if ctx.Err() != nil {
 			sink.OnError(toQueryError(ctx, ctx.Err()))
@@ -112,23 +113,12 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 			}
 			break
 		}
-		for i := range cells {
-			cells[i] = cell{max: opts.MaxValueBytes, reserve: opts.Reserve}
-		}
 		if err := rows.Scan(ptrs...); err != nil {
 			sink.OnError(fmt.Errorf("failed to scan row: %w", err))
 			return
 		}
 		values := make([]any, len(columns))
 		for i := range cells {
-			if cells[i].refused != nil {
-				sink.OnError(cells[i].refused)
-				return
-			}
-			if cells[i].tooBig > 0 {
-				sink.OnError(fmt.Errorf("column %q holds a value of %.1f MB, over the %.1f MB limit per value", columns[i], float64(cells[i].tooBig)/(1<<20), float64(opts.MaxValueBytes)/(1<<20)))
-				return
-			}
 			values[i] = cells[i].value
 		}
 		var rowBytes int64
@@ -140,13 +130,9 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 		}
 		bytesScanned += rowBytes
 		if opts.Reserve != nil {
-			widest = max(widest, rowBytes)
-			if need := rowFootprint * widest; need > reserved {
-				if err := opts.Reserve(need); err != nil {
-					sink.OnError(err)
-					return
-				}
-				reserved = need
+			if err := opts.Reserve(rowFootprint * rowBytes); err != nil {
+				sink.OnError(err)
+				return
 			}
 		}
 		applyMask(values, maskPositions)
@@ -175,9 +161,7 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 type cell struct {
 	value   any
 	max     int64
-	tooBig  int64
 	reserve func(footprint int64) error
-	refused error
 }
 
 // earlyReserveBytes is the size from which a value asks for room before it is
@@ -185,30 +169,33 @@ type cell struct {
 // the copy is most of what a wide row costs.
 const earlyReserveBytes = 256 << 10
 
+// Scan fails with the error database/sql wraps in the column's name: a value over
+// the cap, or a reservation the budget refused.
 func (c *cell) Scan(src any) error {
-	var size int64
 	switch v := src.(type) {
 	case []byte:
-		size = int64(len(v))
+		if err := c.admit(int64(len(v))); err != nil {
+			return err
+		}
+		c.value = string(v)
 	case string:
-		size = int64(len(v))
+		if err := c.admit(int64(len(v))); err != nil {
+			return err
+		}
+		c.value = v
 	default:
 		c.value = src
-		return nil
 	}
+	return nil
+}
+
+// admit refuses a value over the cap, and asks the budget for room for a large one.
+func (c *cell) admit(size int64) error {
 	if c.max > 0 && size > c.max {
-		c.tooBig = size
-		return nil
+		return fmt.Errorf("a value of %.1f MB is over the %.1f MB limit per value", float64(size)/(1<<20), float64(c.max)/(1<<20))
 	}
 	if c.reserve != nil && size >= earlyReserveBytes {
-		if c.refused = c.reserve(rowFootprint * size); c.refused != nil {
-			return nil
-		}
-	}
-	if b, ok := src.([]byte); ok {
-		c.value = string(b)
-	} else {
-		c.value = src
+		return c.reserve(rowFootprint * size)
 	}
 	return nil
 }

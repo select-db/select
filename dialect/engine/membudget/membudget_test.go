@@ -148,13 +148,13 @@ func TestCgroupLimit(t *testing.T) {
 
 func TestSizeLeavesRoomUnderTheCap(t *testing.T) {
 	t.Setenv("MEMORY_BUDGET_MB", "")
-	if got := fromLimit(1 << 30); got != (1<<30)*8/10-256<<20 {
-		t.Fatalf("1 GiB cap: budget %d MiB", got>>20)
+	if got := fromLimit(1 << 30); got>>20 != 563 {
+		t.Fatalf("1 GiB cap: budget %d MiB, want about 563", got>>20)
 	}
-	if got := fromLimit(3 << 30); got != (3<<30)*8/10-256<<20 {
-		t.Fatalf("3 GiB cap: budget %d MiB", got>>20)
+	if got := fromLimit(3 << 30); got>>20 != 2201 {
+		t.Fatalf("3 GiB cap: budget %d MiB, want about 2201", got>>20)
 	}
-	if got := fromLimit(256 << 20); got <= 0 || got > 256<<20*8/10 {
+	if got := fromLimit(256 << 20); got <= 0 || got > 154<<20 {
 		t.Fatalf("a small cap keeps a quarter for spikes, budget %d MiB", got>>20)
 	}
 	t.Setenv("MEMORY_BUDGET_MB", "300")

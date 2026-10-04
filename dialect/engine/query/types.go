@@ -40,9 +40,9 @@ type Options struct {
 	// sets ServerMaxValueBytes so one wide cell cannot exhaust its memory.
 	MaxValueBytes int64
 
-	// Reserve, when set, is asked for the memory a statement may hold as its rows
-	// turn out wide: rowFootprint times its widest row so far. An error ends the
-	// statement. A server passes a membudget lease's Grow.
+	// Reserve, when set, is asked after every row for the memory a statement may
+	// hold: rowFootprint times that row's bytes, to be raised to at least that. An
+	// error ends the statement. A server passes a membudget lease's Grow.
 	Reserve func(footprint int64) error
 }
 

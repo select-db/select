@@ -10,7 +10,6 @@ package membudget
 import (
 	"errors"
 	"sync"
-	"sync/atomic"
 )
 
 const (
@@ -27,17 +26,16 @@ var ErrPressure = errors.New("memory budget exhausted")
 
 // Budget is a count of reserved bytes under a ceiling.
 type Budget struct {
-	mu          sync.Mutex
-	total       int64
-	growCeiling int64
-	used        int64
-	refused     atomic.Int64
+	mu      sync.Mutex
+	total   int64
+	used    int64
+	refused int64
 }
 
 // New returns a budget of total bytes. Top-ups stop at 90% of it, so the last
 // tenth is left for statements to start in.
 func New(total int64) *Budget {
-	return &Budget{total: total, growCeiling: total - total/10}
+	return &Budget{total: total}
 }
 
 // Begin starts a statement, reserving EntryCost.
@@ -45,7 +43,7 @@ func (b *Budget) Begin() (*Lease, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.used+EntryCost > b.total {
-		b.refused.Add(1)
+		b.refused++
 		return nil, ErrPressure
 	}
 	b.used += EntryCost
@@ -56,7 +54,7 @@ func (b *Budget) Begin() (*Lease, error) {
 func (b *Budget) Stats() (used, total, refused int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.used, b.total, b.refused.Load()
+	return b.used, b.total, b.refused
 }
 
 // Lease is one statement's reservation.
@@ -76,8 +74,8 @@ func (l *Lease) Grow(target int64) error {
 	b := l.budget
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.used+target-l.held > b.growCeiling {
-		b.refused.Add(1)
+	if b.used+target-l.held > b.total-b.total/10 {
+		b.refused++
 		return ErrPressure
 	}
 	b.used += target - l.held
