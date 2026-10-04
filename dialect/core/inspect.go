@@ -1,6 +1,9 @@
 package core
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // UnknownStatement is what an inspector returns for a statement it parsed but
 // cannot classify. Permission checks read it as manage, so a statement nobody
@@ -36,11 +39,19 @@ func OrUnknown(stmt *InspectStatement) InspectStatement {
 }
 
 // CarriesRead reports whether an inspected block still has a right to ask for:
-// a table of its own, or a read nested inside it. A block owes nothing for
-// itself when it names no table, and dropping it drops those nested reads with
-// it.
+// a table of its own, a read nested inside it, or a column of an enclosing
+// table. A block with no FROM still reads the outer columns it names, and
+// dropping it drops those reads with it.
 func CarriesRead(stmt *InspectStatement) bool {
-	return stmt != nil && (len(stmt.Tables) > 0 || len(stmt.Subqueries) > 0 || len(stmt.Also) > 0)
+	if stmt == nil {
+		return false
+	}
+	if len(stmt.Tables) > 0 || len(stmt.Subqueries) > 0 || len(stmt.Also) > 0 {
+		return true
+	}
+	return slices.ContainsFunc(slices.Concat(stmt.Fields, stmt.Where), func(field InspectField) bool {
+		return field.Schema == "" && field.Table != ""
+	})
 }
 
 // NestUnderUnknown reports reads as the nested statements of an unclassified

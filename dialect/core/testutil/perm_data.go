@@ -323,6 +323,56 @@ func permCases() []PermCase {
 			Why:   "a block with no FROM reads no relation of its own, and the predicate inside it still tests v1",
 		},
 		{
+			Name:  "an outer column read by a select with no FROM",
+			SQL:   "SELECT (SELECT t1.c2) AS n, t1.c1 FROM t1",
+			Needs: []Right{mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2")},
+			Op:    core.InspectOpSelect,
+			Why:   "(SELECT t1.c2) is the expression t1.c2, so c2 is returned as surely as when written flat",
+		},
+		{
+			Name: "an outer column read by a select with no FROM beside a join",
+			SQL:  "SELECT (SELECT upper(t1.c2)) AS n FROM t1 LEFT JOIN other.t3 ON t1.c1 = other.t3.c1",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "the join names t1 by c1, and the nested block still returns c2",
+		},
+		{
+			Name: "an outer column projected by a subquery over another table",
+			SQL:  "SELECT (SELECT t1.c2 FROM other.t3) AS n, t1.c1 FROM t1",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2"),
+				otherT3(core.ActionSelect),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "the subquery returns the correlated t1.c2 once per row of other.t3",
+		},
+		{
+			On:   []string{"mysql", "postgresql"},
+			Name: "an outer column read by a lateral select with no FROM",
+			SQL:  "SELECT l.n FROM t1 LEFT JOIN other.t3 ON t1.c1 = other.t3.c1, LATERAL (SELECT upper(t1.c2) AS n) AS l",
+			Needs: []Right{
+				mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpSelect,
+			Why: "l.n is upper(t1.c2), read through a block that binds no relation of its own",
+		},
+		{
+			On:   []string{"mysql", "postgresql"},
+			Name: "a table created from an outer column read by a lateral select with no FROM",
+			SQL:  "CREATE TABLE t9 AS SELECT l.n FROM t1 LEFT JOIN other.t3 ON t1.c1 = other.t3.c1, LATERAL (SELECT upper(t1.c2) AS n) AS l",
+			Needs: []Right{
+				Manage,
+				mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2"),
+				otherT3(core.ActionSelect).Only("c1"),
+			},
+			Op:  core.InspectOpCreate,
+			Why: "the new table is filled with upper(t1.c2), so c2 is read to build it",
+		},
+		{
 			Name:  "a predicate under a derived table of constants in a scalar subquery",
 			SQL:   "SELECT (SELECT max(h.y) FROM (SELECT 2 AS y) AS h WHERE h.y IN (SELECT c1 FROM other.t3)) AS v FROM t1",
 			Needs: []Right{mainT1(core.ActionSelect), otherT3(core.ActionSelect)},
