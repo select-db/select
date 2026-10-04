@@ -17,6 +17,14 @@ import (
 // ErrForbiddenStatement is a statement managed databases never run.
 var ErrForbiddenStatement = errors.New("statement not allowed on managed databases")
 
+// maxValueBytes caps one string, blob or row: SQLite builds a value whole and the
+// cellar copies it, so a statement peaks near three times it in memory.
+const maxValueBytes = 32 << 20
+
+// litestreamPrefix starts the names of the tables Litestream keeps in the
+// database; dropping one stops its replication.
+const litestreamPrefix = "_litestream"
+
 // readOnlyPragmas are the PRAGMAs a user may run, as statements or as pragma_*
 // table functions: they read the caller's own schema. The rest change
 // connection or process state; temp_store_directory is process-wide.
@@ -41,9 +49,13 @@ func isolate(c *sql.Conn, statement string, maxBytes int64) error {
 }
 
 // limit applies the settings SQLite keeps per connection, before each user
-// statement: no ATTACH (which VACUUM INTO also needs), and the size cap.
+// statement: no ATTACH (which VACUUM INTO also needs), the size of a value, and
+// the size cap.
 func limit(c *sql.Conn, maxBytes int64) error {
 	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_ATTACHED, 0); err != nil {
+		return err
+	}
+	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_LENGTH, maxValueBytes); err != nil {
 		return err
 	}
 
@@ -57,8 +69,13 @@ func limit(c *sql.Conn, maxBytes int64) error {
 	return err
 }
 
-// checkStatement refuses sql that names a PRAGMA outside readOnlyPragmas.
+// checkStatement refuses a PRAGMA outside readOnlyPragmas and any mention of
+// Litestream's tables. The text is matched, not the tokens, so every quoting of a
+// name is caught, and a string or table like my_litestream_notes is refused too.
 func checkStatement(sql string) error {
+	if strings.Contains(strings.ToLower(sql), litestreamPrefix) {
+		return ErrForbiddenStatement
+	}
 	lexer := parser.NewSQLiteLexer(antlr.NewInputStream(sql))
 	lexer.RemoveErrorListeners()
 	var toks []antlr.Token

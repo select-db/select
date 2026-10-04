@@ -215,9 +215,13 @@ errors are the backend's, before the cellar sees the statement.
   systemd unit on the backend's box, capped by `CPUQuota` and `MemoryMax` so
   SQLite work never starves the backend. It listens on `CELLAR_LISTEN`
   (default `127.0.0.1:8081`), never opens Postgres, and the backend reaches it
-  with `CELLAR=http://127.0.0.1:8081`. Its files live on a block volume at
-  `CELLAR_DIR`. Moving it to its own server later is a new `CELLAR` URL: the
-  new cellar starts empty and wakes dbs from the bucket.
+  with `CELLAR=http://127.0.0.1:8081`. Both set `CELLAR_ID`, the cellar's name in
+  grants and in each row's `cellar_id`: lower case letters, digits and hyphens,
+  as the database's check constraint wants. Without it the id is the host of the
+  address, so an IP address or a dotted name stops the server at start. Its
+  files live on a block volume at `CELLAR_DIR`. Moving it to its own server
+  later is a new `CELLAR` URL: the new cellar starts empty and wakes dbs from
+  the bucket.
 
 ## v1 milestones
 
@@ -300,12 +304,13 @@ Needs 1. Can run alongside 2. Start with the spikes.
 
 ### 4. Cleanup
 Needs 2 and 3.
-- [ ] Reconciler with advisory lock, 24h orphan age, 50-per-run cap.
-- [ ] Inventory lists cold dbs too: today it lists the disk, so a cold orphan
-      is never purged.
-- [ ] Workspace delete marks its managed dbs `deleting`.
-- [ ] Tests: a failed or empty Postgres query purges nothing; the cap stops
-      the run.
+- [x] Reconciler with advisory lock, 24h orphan age, 50-per-run cap
+      (`managed.Reconcile`, every 10 minutes from `startCellar`).
+- [x] Inventory lists cold dbs too, from one listing of the bucket's `dbs/`.
+- [x] A deleted workspace's managed dbs are purged: the reconciler reads
+      `workspace.deleted_at`, so deleting the workspace needs no marking.
+- [x] Tests: a failed Postgres query or cellar listing purges nothing; the cap
+      stops the run and the next one resumes.
 
 ### 5. App
 Needs 2. Waking UI needs 3.

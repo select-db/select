@@ -26,7 +26,7 @@ type listedDatasource struct {
 // that was deleted.
 //
 // A row is returned on the owner rule or manage on that datasource
-// (Actor.IsOwner() || Actor.CanManage(id)). It deliberately leaves out
+// (Actor.IsOwner() || manage on the id). It deliberately leaves out
 // workspace/datasources.manage, which its siblings accept. A member who
 // administrates nothing sees nothing.
 //

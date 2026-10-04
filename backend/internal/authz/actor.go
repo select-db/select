@@ -49,11 +49,10 @@ func (a Actor) ManagesDatasources() bool {
 // fork, download, change or delete it. That is ManagesDatasources, or manage on
 // that datasource alone.
 func (a Actor) ManagesDatasource(datasourceID string) bool {
-	return a.ManagesDatasources() || a.CanManage(datasourceID)
-}
-
-// CanManage reports whether the actor may manage a specific resource (a
-// datasource id).
-func (a Actor) CanManage(resourceID string) bool {
-	return Perms(a.r).CanManage(resourceID)
+	if a.IsOwner() {
+		return true
+	}
+	// Compiled once for both questions: Perms compiles the actor's rules.
+	perms := Perms(a.r)
+	return perms.IsAllowed(core.ActionWorkspaceDatasourcesManage) || perms.CanManage(datasourceID)
 }

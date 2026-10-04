@@ -311,6 +311,21 @@ func (q *Queries) DeleteExpiredUserRefreshTokens(ctx context.Context, userID uui
 	return err
 }
 
+const deleteManagedDatasourceRow = `-- name: DeleteManagedDatasourceRow :exec
+DELETE FROM app.datasource WHERE id = $1 AND cellar_id = $2
+`
+
+type DeleteManagedDatasourceRowParams struct {
+	ID       uuid.UUID
+	CellarID db_types.JSONNullString
+}
+
+// The row of a database the reconciler purged, or that the cellar never held.
+func (q *Queries) DeleteManagedDatasourceRow(ctx context.Context, arg DeleteManagedDatasourceRowParams) error {
+	_, err := q.db.ExecContext(ctx, deleteManagedDatasourceRow, arg.ID, arg.CellarID)
+	return err
+}
+
 const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
 DELETE FROM auth.refresh_token
 WHERE hashed_token = $1
@@ -693,6 +708,33 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 		return nil, err
 	}
 	return items, nil
+}
+
+const getManagedDatasourceToReconcile = `-- name: GetManagedDatasourceToReconcile :one
+SELECT
+  d.cellar_id,
+  d.state,
+  (w.deleted_at IS NOT NULL)::boolean AS workspace_deleted
+FROM
+  app.datasource d
+  JOIN app.workspace w ON w.id = d.workspace_id
+WHERE
+  d.id = $1
+  AND d.cellar_id IS NOT NULL
+`
+
+type GetManagedDatasourceToReconcileRow struct {
+	CellarID         db_types.JSONNullString
+	State            db_types.JSONNullString
+	WorkspaceDeleted bool
+}
+
+// Joins the workspace without its deleted_at filter: a deleted one is a reason to purge.
+func (q *Queries) GetManagedDatasourceToReconcile(ctx context.Context, id uuid.UUID) (GetManagedDatasourceToReconcileRow, error) {
+	row := q.db.QueryRowContext(ctx, getManagedDatasourceToReconcile, id)
+	var i GetManagedDatasourceToReconcileRow
+	err := row.Scan(&i.CellarID, &i.State, &i.WorkspaceDeleted)
+	return i, err
 }
 
 const getPermissionByID = `-- name: GetPermissionByID :one
@@ -1771,19 +1813,36 @@ func (q *Queries) ListDatasourcesByWorkspace(ctx context.Context, workspaceID uu
 	return items, nil
 }
 
-const lockManagedUsage = `-- name: LockManagedUsage :one
+const listDeletingManagedDatasources = `-- name: ListDeletingManagedDatasources :many
+SELECT d.id FROM app.datasource d WHERE d.cellar_id = $1 AND d.state = 'deleting'
+`
+
+func (q *Queries) ListDeletingManagedDatasources(ctx context.Context, cellarID db_types.JSONNullString) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, listDeletingManagedDatasources, cellarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockManagedWorkspace = `-- name: LockManagedWorkspace :one
 SELECT
-  w.plan,
-  (
-    SELECT count(*)
-    FROM app.datasource d
-    WHERE d.workspace_id = w.id AND d.cellar_id IS NOT NULL AND d.state IS DISTINCT FROM 'deleting'
-  ) AS database_count,
-  (
-    SELECT COALESCE(sum(d.size_bytes), 0)
-    FROM app.datasource d
-    WHERE d.workspace_id = w.id AND d.cellar_id IS NOT NULL AND d.state IS DISTINCT FROM 'deleting'
-  )::bigint AS total_bytes
+  w.plan
 FROM
   app.workspace w
 WHERE
@@ -1792,17 +1851,37 @@ WHERE
 FOR UPDATE OF w
 `
 
-type LockManagedUsageRow struct {
-	Plan          string
+// Locks the workspace row for the whole of a create or fork, so two cannot both pass the quota.
+// ManagedUsage counts in a statement of its own: one that waited for this lock
+// still reads the snapshot it started on.
+func (q *Queries) LockManagedWorkspace(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockManagedWorkspace, id)
+	var plan string
+	err := row.Scan(&plan)
+	return plan, err
+}
+
+const managedUsage = `-- name: ManagedUsage :one
+SELECT
+  count(*) AS database_count,
+  COALESCE(sum(d.size_bytes), 0)::bigint AS total_bytes
+FROM
+  app.datasource d
+WHERE
+  d.workspace_id = $1
+  AND d.cellar_id IS NOT NULL
+  AND d.state IS DISTINCT FROM 'deleting'
+`
+
+type ManagedUsageRow struct {
 	DatabaseCount int64
 	TotalBytes    int64
 }
 
-// Locks the workspace row for the whole of a create or fork, so two cannot both pass the quota.
-func (q *Queries) LockManagedUsage(ctx context.Context, id uuid.UUID) (LockManagedUsageRow, error) {
-	row := q.db.QueryRowContext(ctx, lockManagedUsage, id)
-	var i LockManagedUsageRow
-	err := row.Scan(&i.Plan, &i.DatabaseCount, &i.TotalBytes)
+func (q *Queries) ManagedUsage(ctx context.Context, workspaceID uuid.UUID) (ManagedUsageRow, error) {
+	row := q.db.QueryRowContext(ctx, managedUsage, workspaceID)
+	var i ManagedUsageRow
+	err := row.Scan(&i.DatabaseCount, &i.TotalBytes)
 	return i, err
 }
 
@@ -1900,6 +1979,27 @@ type SetGroupToRoleDeletedAtParams struct {
 
 func (q *Queries) SetGroupToRoleDeletedAt(ctx context.Context, arg SetGroupToRoleDeletedAtParams) error {
 	_, err := q.db.ExecContext(ctx, setGroupToRoleDeletedAt, arg.ID, arg.WorkspaceID)
+	return err
+}
+
+const setManagedDatasourceSize = `-- name: SetManagedDatasourceSize :exec
+UPDATE app.datasource
+SET size_bytes = $1
+WHERE id = $2
+  AND cellar_id = $3
+  AND state IS DISTINCT FROM 'deleting'
+  AND size_bytes IS DISTINCT FROM $1
+`
+
+type SetManagedDatasourceSizeParams struct {
+	SizeBytes db_types.JSONNullInt64
+	ID        uuid.UUID
+	CellarID  db_types.JSONNullString
+}
+
+// The size the cellar reports now, which the workspace quota sums.
+func (q *Queries) SetManagedDatasourceSize(ctx context.Context, arg SetManagedDatasourceSizeParams) error {
+	_, err := q.db.ExecContext(ctx, setManagedDatasourceSize, arg.SizeBytes, arg.ID, arg.CellarID)
 	return err
 }
 

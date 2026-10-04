@@ -89,38 +89,38 @@ func isTrustedProxy(remoteIP net.IP) bool {
 	return false
 }
 
-// remoteIPFromRequest returns the direct connection IP (no port).
-func remoteIPFromRequest(r *http.Request) net.IP {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return net.ParseIP(r.RemoteAddr)
+// GetIPAddress returns the client IP: the rightmost X-Forwarded-For hop that is
+// not a trusted proxy, since only hops our own proxies appended can be believed.
+func GetIPAddress(r *http.Request) string {
+	remoteIP := net.ParseIP(withoutPort(r.RemoteAddr))
+
+	if xf := r.Header.Get("X-Forwarded-For"); remoteIP != nil && isTrustedProxy(remoteIP) && strings.TrimSpace(xf) != "" {
+		hops := strings.Split(xf, ",")
+		var client string
+		for i := len(hops) - 1; i >= 0; i-- {
+			client = withoutPort(strings.TrimSpace(hops[i]))
+			ip := net.ParseIP(client)
+			if ip == nil {
+				// Not an address: nothing to the left of it can be believed.
+				return withoutPort(r.RemoteAddr)
+			}
+			if !isTrustedProxy(ip) {
+				return client
+			}
+		}
+		// Every hop is one of ours: the leftmost is the client.
+		return client
 	}
-	return net.ParseIP(host)
+
+	return withoutPort(r.RemoteAddr)
 }
 
-// GetIPAddress returns the client IP. X-Forwarded-For is used only when the
-// direct connection is from a trusted proxy (see TRUSTED_PROXY_CIDRS).
-// Otherwise only r.RemoteAddr is used to avoid spoofing.
-func GetIPAddress(r *http.Request) string {
-	remoteIP := remoteIPFromRequest(r)
-	xf := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-
-	if xf != "" && remoteIP != nil && isTrustedProxy(remoteIP) {
-		// Leftmost is the original client
-		if idx := strings.Index(xf, ","); idx != -1 {
-			xf = strings.TrimSpace(xf[:idx])
-		}
-		if host, _, err := net.SplitHostPort(xf); err == nil {
-			xf = host
-		}
-		return xf
+// withoutPort is host from a host:port, or the string itself without a port.
+func withoutPort(hostPort string) string {
+	if host, _, err := net.SplitHostPort(hostPort); err == nil {
+		return host
 	}
-
-	ip := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(ip); err == nil {
-		ip = host
-	}
-	return ip
+	return hostPort
 }
 
 // toPgInet converts IP string to pqtype.Inet for Postgres storage

@@ -69,7 +69,7 @@ func TestGetIPAddress(t *testing.T) {
 		t.Errorf("untrusted remote: expected 5.6.7.8 (ignore X-Forwarded-For), got %s", ip)
 	}
 
-	// Trusted remote: use first X-Forwarded-For value
+	// Trusted remote: use the X-Forwarded-For value
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("X-Forwarded-For", "1.2.3.4")
 	if ip := GetIPAddress(req); ip != "1.2.3.4" {
@@ -82,10 +82,33 @@ func TestGetIPAddress(t *testing.T) {
 		t.Errorf("no X-Forwarded-For: expected 127.0.0.1, got %s", ip)
 	}
 
-	// Multiple proxies: leftmost is client
-	req.Header.Set("X-Forwarded-For", " 192.168.1.1, 10.0.0.1 ")
+	// nginx appends the peer it saw to what the client sent: the client's own
+	// entries are on the left and are not believed.
+	req.Header.Set("X-Forwarded-For", "6.6.6.6, 192.168.1.1")
 	if ip := GetIPAddress(req); ip != "192.168.1.1" {
-		t.Errorf("multiple X-Forwarded-For: expected 192.168.1.1, got %s", ip)
+		t.Errorf("forged leftmost entry: expected the proxy's 192.168.1.1, got %s", ip)
+	}
+
+	// Trusted proxies in a chain are skipped, from the right.
+	req.Header.Set("X-Forwarded-For", "6.6.6.6, 192.168.1.1, 127.0.0.5")
+	if ip := GetIPAddress(req); ip != "192.168.1.1" {
+		t.Errorf("trusted hop on the right: expected 192.168.1.1, got %s", ip)
+	}
+
+	// Every hop trusted: the leftmost is the client.
+	req.Header.Set("X-Forwarded-For", "127.0.0.9, 127.0.0.5")
+	if ip := GetIPAddress(req); ip != "127.0.0.9" {
+		t.Errorf("all hops trusted: expected 127.0.0.9, got %s", ip)
+	}
+
+	// A port is dropped, and an entry that is not an address stops the walk.
+	req.Header.Set("X-Forwarded-For", "6.6.6.6, 192.168.1.1:5555")
+	if ip := GetIPAddress(req); ip != "192.168.1.1" {
+		t.Errorf("hop with a port: expected 192.168.1.1, got %s", ip)
+	}
+	req.Header.Set("X-Forwarded-For", "6.6.6.6, not-an-ip")
+	if ip := GetIPAddress(req); ip != "127.0.0.1" {
+		t.Errorf("garbage hop: expected the connection's 127.0.0.1, got %s", ip)
 	}
 }
 
