@@ -16,6 +16,9 @@ import (
 	"backend/internal/auth"
 	"backend/internal/cellar"
 	"backend/internal/datasource/managed/cellarclient"
+	"backend/internal/kms"
+
+	"github.com/benbjohnson/litestream"
 )
 
 // localCellar is the CELLAR setting, and the cellar id, of a cellar run in the
@@ -109,7 +112,8 @@ func serveCellar() {
 }
 
 // cellarHandler opens the databases in CELLAR_DIR, copied to CELLAR_BUCKET,
-// and returns the cellar's routes for cellarID.
+// and returns the cellar's routes for cellarID. The keys of an s3:// bucket
+// are the secrets CELLAR_S3_ACCESS_KEY_ID and CELLAR_S3_SECRET_ACCESS_KEY.
 func cellarHandler(cellarID string) (http.Handler, error) {
 	dir := os.Getenv("CELLAR_DIR")
 	if dir == "" {
@@ -121,6 +125,17 @@ func cellarHandler(cellarID string) (http.Handler, error) {
 	bucket := os.Getenv("CELLAR_BUCKET")
 	if bucket == "" {
 		bucket = dir + "-bucket"
+	}
+	if litestream.IsURL(bucket) {
+		accessKeyID, err := kms.Secret("CELLAR_S3_ACCESS_KEY_ID")
+		if err != nil {
+			return nil, err
+		}
+		secretAccessKey, err := kms.Secret("CELLAR_S3_SECRET_ACCESS_KEY")
+		if err != nil {
+			return nil, err
+		}
+		cellar.SetBucketKeys(accessKeyID, secretAccessKey)
 	}
 	if err := cellar.OpenDatabases(dir, bucket); err != nil {
 		return nil, err

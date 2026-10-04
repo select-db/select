@@ -14,7 +14,7 @@ import (
 
 	"github.com/benbjohnson/litestream"
 	_ "github.com/benbjohnson/litestream/file"
-	_ "github.com/benbjohnson/litestream/s3"
+	"github.com/benbjohnson/litestream/s3"
 	"github.com/selectDb/dialect/engine/connect"
 	"golang.org/x/sync/singleflight"
 )
@@ -48,6 +48,17 @@ type database struct {
 	// bucket is kept for the record's life: each client opens its own
 	// connections, so a new one per rest and wake would redo the TLS handshake.
 	bucket litestream.ReplicaClient
+}
+
+// bucketAccessKeyID and bucketSecretAccessKey are the keys of an s3:// bucket.
+// Both stay empty for a directory bucket.
+var bucketAccessKeyID, bucketSecretAccessKey string
+
+// SetBucketKeys sets the keys the cellar signs its s3:// bucket requests with.
+// It must run before OpenDatabases. Without it the S3 client falls back to the
+// AWS environment variables, which a deployed cellar does not carry.
+func SetBucketKeys(accessKeyID, secretAccessKey string) {
+	bucketAccessKeyID, bucketSecretAccessKey = accessKeyID, secretAccessKey
 }
 
 // OpenDatabases starts the cellar's storage: it replicates the databases in
@@ -234,5 +245,12 @@ func (databases *Databases) bucketClient(id string) (litestream.ReplicaClient, e
 	// Joined on the path: an s3:// URL carries its endpoint and region in the query.
 	location := databases.bucket
 	location.Path = strings.TrimSuffix(location.Path, "/") + "/dbs/" + id
-	return litestream.NewReplicaClientFromURL(location.String())
+	client, err := litestream.NewReplicaClientFromURL(location.String())
+	if err != nil {
+		return nil, err
+	}
+	if s3Client, isS3 := client.(*s3.ReplicaClient); isS3 && bucketAccessKeyID != "" {
+		s3Client.AccessKeyID, s3Client.SecretAccessKey = bucketAccessKeyID, bucketSecretAccessKey
+	}
+	return client, nil
 }
