@@ -1268,6 +1268,18 @@ func permCases() []PermCase {
 			Why: "a.c2 belongs to no relation the subquery names, and its value is what gets stored",
 		},
 		{
+			On:   []string{"postgresql"},
+			Name: "an outer column a scalar subquery returns into a merge source",
+			SQL:  "MERGE INTO t2 USING (SELECT (SELECT a.c2 FROM t2 g LIMIT 1) AS m FROM t1 a) s ON t2.c1 = s.m WHEN NOT MATCHED THEN INSERT (c1) VALUES (s.m)",
+			Needs: []Right{
+				mainT2(core.ActionInsert).Only("c1"),
+				mainT1(core.ActionSelect).Only("c2"),
+				mainT2(core.ActionSelect),
+			},
+			Op:  core.InspectOpInsert,
+			Why: "a.c2 belongs to no relation the subquery names, and its value is what the merge stores",
+		},
+		{
 			On:   []string{"mysql"},
 			Name: "a column a write orders itself by",
 			SQL:  "UPDATE t1 SET c1 = 1 ORDER BY c2 LIMIT 1",
