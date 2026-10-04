@@ -58,8 +58,9 @@ func ExecuteHandler() http.HandlerFunc {
 
 func (req executeRequest) options() query.Options {
 	return query.Options{
-		MaxBytes: req.MaxBytes,
-		Timeout:  time.Duration(req.TimeoutMs) * time.Millisecond,
+		MaxBytes:      req.MaxBytes,
+		MaxValueBytes: query.ServerMaxValueBytes,
+		Timeout:       time.Duration(req.TimeoutMs) * time.Millisecond,
 	}
 }
 

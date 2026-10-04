@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/selectDb/dialect/engine/query"
 	sqlitedialect "github.com/selectDb/dialect/sqlite"
 	parser "github.com/selectDb/dialect/sqlite/parser"
 	"modernc.org/sqlite"
@@ -19,7 +20,7 @@ var ErrForbiddenStatement = errors.New("statement not allowed on managed databas
 
 // maxValueBytes caps one string, blob or row: SQLite builds a value whole and the
 // cellar copies it, so a statement peaks near three times it in memory.
-const maxValueBytes = 32 << 20
+const maxValueBytes = query.ServerMaxValueBytes
 
 // litestreamPrefix starts the names of the tables Litestream keeps in the
 // database; dropping one stops its replication.

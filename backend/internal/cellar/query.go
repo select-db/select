@@ -42,6 +42,6 @@ func QueryHandler() http.HandlerFunc {
 			sink.OnError(err)
 			return
 		}
-		query.Stream(r.Context(), conn, query.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, query.Options{Args: q.Args}, sink)
+		query.Stream(r.Context(), conn, query.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, query.Options{Args: q.Args, MaxValueBytes: query.ServerMaxValueBytes}, sink)
 	}
 }

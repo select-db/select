@@ -34,7 +34,17 @@ type Options struct {
 	// 0 = unlimited. Converted from the workspace's max_result_size_mb setting.
 	// The engine enforces a hard ceiling of maxResultSizeHardCap regardless of this value.
 	MaxBytes int64
+
+	// MaxValueBytes refuses a result holding one value (a string, a blob) larger
+	// than this, before it is copied into the response. 0 = unlimited. A server
+	// sets ServerMaxValueBytes so one wide cell cannot exhaust its memory.
+	MaxValueBytes int64
 }
+
+// ServerMaxValueBytes is the largest single value a server-side execution
+// returns: a value is held several times over on its way out (scan, string,
+// builder, encoder), so this bounds a statement's memory near four times it.
+const ServerMaxValueBytes = 16 * 1024 * 1024
 
 // maxResultSizeHardCap is the absolute ceiling enforced by the engine
 // regardless of what callers pass in MaxBytes. Prevents accidental or

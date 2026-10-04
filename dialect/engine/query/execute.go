@@ -117,6 +117,10 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 			return
 		}
 		for i, v := range values {
+			if size := estimateValueBytes(v); opts.MaxValueBytes > 0 && size > opts.MaxValueBytes {
+				sink.OnError(fmt.Errorf("column %q holds a value of %d MB, over the %d MB limit per value", columns[i], size>>20, opts.MaxValueBytes>>20))
+				return
+			}
 			switch val := v.(type) {
 			case []byte:
 				values[i] = string(val)

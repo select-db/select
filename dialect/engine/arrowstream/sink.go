@@ -19,6 +19,11 @@ import (
 
 const defaultBatchSize = 500
 
+// maxBatchBytes flushes a batch before it reaches defaultBatchSize rows when its
+// values add up to this much: a batch of wide rows is held by the builders, the
+// IPC writer and the encoder at once, several times over.
+const maxBatchBytes = 1 << 20
+
 // compressionWindow caps how far back zstd may look for matches. The library
 // default is 8 MiB, which is live memory held for the whole life of a stream:
 // at 8 MiB an encoder costs ~18 MiB of live heap per in-flight query, against
@@ -61,6 +66,7 @@ type Sink struct {
 	schema          *arrow.Schema
 	alloc           memory.Allocator
 	rowsInBatch     int
+	bytesInBatch    int
 	batchSize       int
 	flushDownstream func()
 
@@ -127,12 +133,20 @@ func (s *Sink) OnRow(values []any) error {
 	for i, v := range values {
 		if v == nil {
 			s.builder.Field(i).AppendNull()
-		} else {
-			s.fieldEncoders[i](s.builder.Field(i), v)
+			continue
+		}
+		s.fieldEncoders[i](s.builder.Field(i), v)
+		switch val := v.(type) {
+		case string:
+			s.bytesInBatch += len(val)
+		case []byte:
+			s.bytesInBatch += len(val)
+		default:
+			s.bytesInBatch += 8
 		}
 	}
 	s.rowsInBatch++
-	if s.rowsInBatch >= s.batchSize {
+	if s.rowsInBatch >= s.batchSize || s.bytesInBatch >= maxBatchBytes {
 		return s.flushBatch()
 	}
 	return nil
@@ -321,7 +335,7 @@ func (s *Sink) flushBatch() error {
 	if err := s.writer.Write(rec); err != nil {
 		return err
 	}
-	s.rowsInBatch = 0
+	s.rowsInBatch, s.bytesInBatch = 0, 0
 	return s.flushThrough()
 }
 

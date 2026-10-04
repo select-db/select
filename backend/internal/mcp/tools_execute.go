@@ -146,6 +146,8 @@ func runQuery(ctx context.Context, o datasource.Opened, sql string, maxRows int,
 		Timeout:  30 * time.Second,
 		MaxRows:  maxRows,
 		MaxBytes: 8 * 1024 * 1024, // 8MB hard cap for MCP results
+
+		MaxValueBytes: query.ServerMaxValueBytes,
 	}, sink)
 	return sink.Result()
 }
