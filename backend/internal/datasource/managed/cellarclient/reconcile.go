@@ -8,15 +8,9 @@ import (
 	"backend/internal/cellar"
 )
 
-// serviceGrant is the grant of a request about the cellar as a whole, not about
-// one workspace's database.
-func serviceGrant() (string, error) {
-	return cellar.Grant{CellarID: CellarID}.Encode()
-}
-
 // Inventory lists every database of the cellar, on its disk or only in its bucket.
 func Inventory(ctx context.Context) ([]cellar.StoredDatabase, error) {
-	grant, err := serviceGrant()
+	grant, err := cellar.Grant{CellarID: CellarID}.Encode()
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +26,7 @@ func Inventory(ctx context.Context) ([]cellar.StoredDatabase, error) {
 
 // Purge removes database id from the cellar's disk and from its bucket.
 func Purge(ctx context.Context, id string) error {
-	grant, err := serviceGrant()
+	grant, err := cellar.Grant{CellarID: CellarID}.Encode()
 	if err != nil {
 		return err
 	}

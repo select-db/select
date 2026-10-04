@@ -1,8 +1,7 @@
 -- name: LockManagedWorkspace :one
 -- Locks the workspace row for the whole of a create or fork, so two cannot both pass the quota.
--- The usage is read by ManagedUsage, a statement of its own: in READ COMMITTED a
--- statement that waited for this lock still counts with the snapshot it started
--- on, so a count read here would miss the create that held the lock before.
+-- ManagedUsage counts in a statement of its own: one that waited for this lock
+-- still reads the snapshot it started on.
 SELECT
   w.plan
 FROM

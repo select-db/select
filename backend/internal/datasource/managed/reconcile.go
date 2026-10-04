@@ -28,6 +28,9 @@ const (
 	orphanAge = 24 * time.Hour
 	// maxPurges stops a run that wants to remove more, so a mistake cannot empty a cellar.
 	maxPurges = 50
+	// maxFailuresInARow ends a run whose purges keep failing, so a cellar that is
+	// down is not asked once per database.
+	maxFailuresInARow = 3
 	// reconcileLockKey serializes the run across backend instances.
 	reconcileLockKey = 0x63656c6c5f726563 // "cell_rec"
 )
@@ -68,14 +71,9 @@ type ReconcileResult struct {
 	CapHit bool
 }
 
-// Reconcile removes from the cellar the databases nothing serves any more: the
-// ones their row says are deleting, the ones of a deleted workspace, and the
-// ones with no row for over orphanAge. It then drops the rows of deleting
-// databases the cellar no longer holds.
-//
-// It decides one database at a time, from a row it has read. It never asks
-// "delete everything not in this list", so a query that fails or answers short
-// purges nothing: the run stops at the first error.
+// Reconcile purges the databases nothing serves: deleting, of a deleted workspace,
+// or with no row for orphanAge. It decides one at a time from a row it read, so
+// a failing query or listing purges nothing.
 func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 	var result ReconcileResult
 	conn, err := db.GetDB().Conn(ctx)
@@ -101,6 +99,7 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 	// A stable order, so a run stopped by the cap resumes where it will not repeat.
 	slices.SortFunc(stored, func(a, b cellar.StoredDatabase) int { return strings.Compare(a.ID, b.ID) })
 	held := make(map[uuid.UUID]bool, len(stored))
+	failedInARow := 0
 
 	for _, database := range stored {
 		id, err := uuid.Parse(database.ID)
@@ -124,7 +123,7 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 		if judgement != purge {
 			continue
 		}
-		if result.Purged+result.Failed >= maxPurges {
+		if result.Purged >= maxPurges {
 			result.CapHit = true
 			log.Printf("WARNING: reconciler: cap hit, %d purges in one run; the rest waits for the next", maxPurges)
 			break
@@ -132,11 +131,17 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 		if err := cellarclient.Purge(ctx, database.ID); err != nil {
 			log.Printf("reconciler: purge %s (%s): %v", id, reason, err)
 			result.Failed++
+			if failedInARow++; failedInARow >= maxFailuresInARow {
+				return result, fmt.Errorf("%d purges failed in a row, last: %w", failedInARow, err)
+			}
 			continue
 		}
+		failedInARow = 0
 		result.Purged++
 		log.Printf("reconciler: purged %s (%s)", id, reason)
-		if err := dropRow(ctx, id); err != nil {
+		if err := db.Queries.DeleteManagedDatasourceRow(ctx, generated.DeleteManagedDatasourceRowParams{
+			ID: id, CellarID: db_types.NewJSONNullString(cellarclient.CellarID),
+		}); err != nil {
 			return result, fmt.Errorf("dropping the row of %s: %w", id, err)
 		}
 	}
@@ -153,7 +158,9 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 		if held[id] {
 			continue
 		}
-		if err := dropRow(ctx, id); err != nil {
+		if err := db.Queries.DeleteManagedDatasourceRow(ctx, generated.DeleteManagedDatasourceRowParams{
+			ID: id, CellarID: db_types.NewJSONNullString(cellarclient.CellarID),
+		}); err != nil {
 			return result, fmt.Errorf("dropping the row of %s: %w", id, err)
 		}
 		result.RowsDropped++
@@ -191,11 +198,4 @@ func decide(ctx context.Context, id uuid.UUID, database cellar.StoredDatabase, n
 		return "its workspace is deleted", purge, nil
 	}
 	return "", live, nil
-}
-
-func dropRow(ctx context.Context, id uuid.UUID) error {
-	return db.Queries.DeleteManagedDatasourceRow(ctx, generated.DeleteManagedDatasourceRowParams{
-		ID:       id,
-		CellarID: db_types.NewJSONNullString(cellarclient.CellarID),
-	})
 }

@@ -729,8 +729,7 @@ type GetManagedDatasourceToReconcileRow struct {
 	WorkspaceDeleted bool
 }
 
-// What the reconciler needs to decide on a database the cellar holds. The workspace
-// is joined without its deleted_at filter: a deleted workspace is a reason to purge.
+// Joins the workspace without its deleted_at filter: a deleted one is a reason to purge.
 func (q *Queries) GetManagedDatasourceToReconcile(ctx context.Context, id uuid.UUID) (GetManagedDatasourceToReconcileRow, error) {
 	row := q.db.QueryRowContext(ctx, getManagedDatasourceToReconcile, id)
 	var i GetManagedDatasourceToReconcileRow
@@ -1853,9 +1852,8 @@ FOR UPDATE OF w
 `
 
 // Locks the workspace row for the whole of a create or fork, so two cannot both pass the quota.
-// The usage is read by ManagedUsage, a statement of its own: in READ COMMITTED a
-// statement that waited for this lock still counts with the snapshot it started
-// on, so a count read here would miss the create that held the lock before.
+// ManagedUsage counts in a statement of its own: one that waited for this lock
+// still reads the snapshot it started on.
 func (q *Queries) LockManagedWorkspace(ctx context.Context, id uuid.UUID) (string, error) {
 	row := q.db.QueryRowContext(ctx, lockManagedWorkspace, id)
 	var plan string
@@ -1999,9 +1997,7 @@ type SetManagedDatasourceSizeParams struct {
 	CellarID  db_types.JSONNullString
 }
 
-// The size the cellar reports now. The row is written once, at creation, and the
-// workspace's quota adds these up, so without this a database that grew counts
-// as the empty file it was.
+// The size the cellar reports now, which the workspace quota sums.
 func (q *Queries) SetManagedDatasourceSize(ctx context.Context, arg SetManagedDatasourceSizeParams) error {
 	_, err := q.db.ExecContext(ctx, setManagedDatasourceSize, arg.SizeBytes, arg.ID, arg.CellarID)
 	return err

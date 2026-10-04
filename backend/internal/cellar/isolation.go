@@ -17,15 +17,12 @@ import (
 // ErrForbiddenStatement is a statement managed databases never run.
 var ErrForbiddenStatement = errors.New("statement not allowed on managed databases")
 
-// maxValueBytes caps one string, blob or row. SQLite builds a value whole in
-// memory, then the cellar copies it into the response: a single
-// SELECT zeroblob(300000000) took the cellar past its 1 GB memory cap and killed
-// it for every workspace. At this size a statement peaks near three times it.
+// maxValueBytes caps one string, blob or row: SQLite builds a value whole and the
+// cellar copies it, so a statement peaks near three times it in memory.
 const maxValueBytes = 32 << 20
 
 // litestreamPrefix starts the names of the tables Litestream keeps in the
-// database to coordinate replication. A statement that dropped _litestream_seq
-// stopped the database's replication for good.
+// database; dropping one stops its replication.
 const litestreamPrefix = "_litestream"
 
 // readOnlyPragmas are the PRAGMAs a user may run, as statements or as pragma_*
@@ -72,12 +69,9 @@ func limit(c *sql.Conn, maxBytes int64) error {
 	return err
 }
 
-// checkStatement refuses sql that names a PRAGMA outside readOnlyPragmas, or
-// anything of Litestream's. The litestream test reads the text, not the tokens,
-// so a quoted, bracketed or qualified name is caught like a bare one. The price is
-// a false match: a string, a comment or a table such as my_litestream_notes is
-// refused too. The driver exposes no authorizer, which would see the resolved
-// table name instead.
+// checkStatement refuses a PRAGMA outside readOnlyPragmas and any mention of
+// Litestream's tables. The text is matched, not the tokens, so every quoting of a
+// name is caught, and a string or table like my_litestream_notes is refused too.
 func checkStatement(sql string) error {
 	if strings.Contains(strings.ToLower(sql), litestreamPrefix) {
 		return ErrForbiddenStatement

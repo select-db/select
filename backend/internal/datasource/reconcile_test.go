@@ -3,11 +3,14 @@ package datasource_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -256,4 +259,43 @@ func TestValidIDAgreesWithTheDatabaseConstraint(t *testing.T) {
 			VALUES ($1::uuid, $2::uuid, 'x', 'sqlite', $3, 'hot')`, uuid.NewString(), fixture.Actor.WorkspaceID, id)
 		require.Equalf(t, cellar.ValidID(id), err == nil, "cellar id %q: the database says %v", id, err)
 	}
+}
+
+func TestReconcileStopsWhenPurgesKeepFailing(t *testing.T) {
+	f := newReconcileFixture(t)
+	for range 6 {
+		f.orphan(t, 48*time.Hour)
+	}
+	// A cellar that lists its databases and refuses to remove any.
+	inventory, err := json.Marshal(func() []map[string]any {
+		entries, _ := os.ReadDir(f.cellarDir)
+		var listed []map[string]any
+		for _, entry := range entries {
+			if id, ok := strings.CutSuffix(entry.Name(), ".db"); ok {
+				listed = append(listed, map[string]any{"id": id, "size_bytes": 1, "modified_at": time.Now().Add(-48 * time.Hour)})
+			}
+		}
+		return listed
+	}())
+	require.NoError(t, err)
+	var purgeCalls atomic.Int32
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(inventory)
+			return
+		}
+		purgeCalls.Add(1)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}))
+	t.Cleanup(refusing.Close)
+	realURL := cellarclient.URL
+	cellarclient.URL = refusing.URL
+	t.Cleanup(func() { cellarclient.URL = realURL })
+
+	result, err := managed.Reconcile(context.Background(), time.Now())
+
+	require.Error(t, err)
+	require.Equal(t, 3, result.Failed)
+	require.EqualValues(t, 3, purgeCalls.Load(), "a cellar that refuses is not asked once per database")
 }

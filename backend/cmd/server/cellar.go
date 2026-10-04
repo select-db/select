@@ -57,11 +57,8 @@ func startCellar() {
 	log.Printf("cellar: %s (id %s)", setting, cellarclient.CellarID)
 }
 
-// cellarID is the name a cellar goes by in the grants the backend signs and in
-// the cellar_id of every managed database it holds. It is CELLAR_ID, or else the
-// host of the cellar's address, which the database accepts only without dots or
-// capitals: an IP address or a dotted name fails here, at start, rather than when
-// the first managed database is created.
+// cellarID is the cellar's name in grants and in each row's cellar_id: CELLAR_ID,
+// else the address host. It must pass the database's check, so a bad one fails at start.
 func cellarID(host string) (string, error) {
 	id := strings.ToLower(strings.TrimSpace(os.Getenv("CELLAR_ID")))
 	source := "CELLAR_ID"

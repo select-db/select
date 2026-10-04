@@ -19,10 +19,8 @@ type StoredDatabase struct {
 	Cold bool `json:"cold"`
 }
 
-// InventoryHandler lists every database of this cellar: the ones on its disk,
-// and the cold ones that live only in its bucket. A bucket it cannot list is an
-// error, never a short list: the reconciler purges what the list does not hold
-// back.
+// InventoryHandler lists the databases on this cellar's disk and the cold ones in
+// its bucket. An unlistable bucket is an error, never a short list.
 func InventoryHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stored, err := databases.inventory(r.Context())
