@@ -143,10 +143,9 @@ func runQuery(ctx context.Context, o datasource.Opened, sql string, maxRows int,
 	sink := newCollectSink(maxRows, rec)
 	o.Stream(ctx, sql, query.Options{
 		// Bound the work even when callers don't supply a timeout.
-		Timeout:  30 * time.Second,
-		MaxRows:  maxRows,
-		MaxBytes: 8 * 1024 * 1024, // 8MB hard cap for MCP results
-
+		Timeout:       30 * time.Second,
+		MaxRows:       maxRows,
+		MaxBytes:      8 * 1024 * 1024, // 8MB hard cap for MCP results
 		MaxValueBytes: query.ServerMaxValueBytes,
 	}, sink)
 	return sink.Result()

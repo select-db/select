@@ -9,7 +9,7 @@ import (
 )
 
 func TestBeginReservesTheEntryCostAndReleaseReturnsIt(t *testing.T) {
-	b := New(100 << 20)
+	b := &Budget{Total: 100 << 20}
 	lease, err := b.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -25,7 +25,7 @@ func TestBeginReservesTheEntryCostAndReleaseReturnsIt(t *testing.T) {
 }
 
 func TestGrowRaisesTheReservationInStepsAndNeverLowersIt(t *testing.T) {
-	b := New(100 << 20)
+	b := &Budget{Total: 100 << 20}
 	lease, _ := b.Begin()
 	if err := lease.Grow(5<<20 + 1); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestGrowRaisesTheReservationInStepsAndNeverLowersIt(t *testing.T) {
 }
 
 func TestGrowFailsAtOnceWhenTheBudgetCannotGrantIt(t *testing.T) {
-	b := New(100 << 20)
+	b := &Budget{Total: 100 << 20}
 	lease, _ := b.Begin()
 	defer lease.Release()
 	if err := lease.Grow(95 << 20); !errors.Is(err, ErrPressure) {
@@ -58,7 +58,7 @@ func TestGrowFailsAtOnceWhenTheBudgetCannotGrantIt(t *testing.T) {
 }
 
 func TestStatementsCanStartWhenWideOnesHaveTakenTheCeiling(t *testing.T) {
-	b := New(100 << 20)
+	b := &Budget{Total: 100 << 20}
 	wide, _ := b.Begin()
 	defer wide.Release()
 	if err := wide.Grow(90 << 20); err != nil {
@@ -72,7 +72,7 @@ func TestStatementsCanStartWhenWideOnesHaveTakenTheCeiling(t *testing.T) {
 }
 
 func TestBeginIsRefusedOnceTheBudgetIsFull(t *testing.T) {
-	b := New(3 * EntryCost)
+	b := &Budget{Total: 3 * EntryCost}
 	var leases []*Lease
 	for i := 0; i < 3; i++ {
 		l, err := b.Begin()
@@ -92,7 +92,7 @@ func TestBeginIsRefusedOnceTheBudgetIsFull(t *testing.T) {
 
 func TestTheBudgetIsNeverExceededUnderConcurrency(t *testing.T) {
 	const total = 64 << 20
-	b := New(total)
+	b := &Budget{Total: total}
 	var wg sync.WaitGroup
 	for i := 0; i < 200; i++ {
 		wg.Add(1)
@@ -148,17 +148,43 @@ func TestCgroupLimit(t *testing.T) {
 
 func TestSizeLeavesRoomUnderTheCap(t *testing.T) {
 	t.Setenv("MEMORY_BUDGET_MB", "")
-	if got := fromLimit(1 << 30); got>>20 != 563 {
-		t.Fatalf("1 GiB cap: budget %d MiB, want about 563", got>>20)
+	dir := t.TempDir()
+	proc := filepath.Join(dir, "cgroup")
+	if err := os.WriteFile(proc, []byte("0::/unit\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if got := fromLimit(3 << 30); got>>20 != 2201 {
-		t.Fatalf("3 GiB cap: budget %d MiB, want about 2201", got>>20)
+	if err := os.MkdirAll(filepath.Join(dir, "unit"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if got := fromLimit(256 << 20); got <= 0 || got > 154<<20 {
+	size := func(limit string) (int64, string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "unit", "memory.max"), []byte(limit), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return sizeFrom(proc, dir)
+	}
+	for limit, wantMiB := range map[string]int64{"1073741824": 563, "3221225472": 2201} {
+		if got, source := size(limit); got>>20 != wantMiB || source != "the cgroup memory limit" {
+			t.Fatalf("cap %s: budget %d MiB from %q, want %d MiB from the cgroup", limit, got>>20, source, wantMiB)
+		}
+	}
+	if got, _ := size("268435456"); got <= 0 || got > 154<<20 {
 		t.Fatalf("a small cap keeps a quarter for spikes, budget %d MiB", got>>20)
 	}
-	t.Setenv("MEMORY_BUDGET_MB", "300")
-	if Size() != 300<<20 {
-		t.Fatalf("the override wins, got %d MiB", Size()>>20)
+	if got, source := size("max"); got != defaultTotal || source == "the cgroup memory limit" {
+		t.Fatalf("no cap falls back to the default and says so, got %d MiB from %q", got>>20, source)
 	}
+	t.Setenv("MEMORY_BUDGET_MB", "300")
+	if got, source := size("1073741824"); got != 300<<20 || source != "MEMORY_BUDGET_MB" {
+		t.Fatalf("the override wins, got %d MiB from %q", got>>20, source)
+	}
+}
+
+func TestANilBudgetImposesNoLimit(t *testing.T) {
+	var b *Budget
+	lease, err := b.Begin()
+	if err != nil || lease.Grow(1<<40) != nil {
+		t.Fatalf("no budget, no limit: %v", err)
+	}
+	lease.Release()
 }

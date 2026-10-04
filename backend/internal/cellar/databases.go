@@ -85,9 +85,9 @@ func OpenDatabases(dir, bucket string) error {
 	if err != nil {
 		return err
 	}
-	budget := membudget.Size()
-	memoryBudget = membudget.New(budget)
-	log.Printf("cellar: memory budget %d MiB", budget>>20)
+	total, source := membudget.Size()
+	memoryBudget = &membudget.Budget{Total: total}
+	log.Printf("cellar: memory budget %d MiB, from %s", total>>20, source)
 	store := litestream.NewStore(nil, litestream.DefaultCompactionLevels)
 	// One window for every plan: the backend refuses a point in time outside the plan's own.
 	store.SnapshotInterval = 24 * time.Hour

@@ -155,9 +155,8 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 	}
 }
 
-// cell takes one column of a row. Scanning into an any makes database/sql copy a
-// []byte; this turns it into the string every sink gets, the one copy needed,
-// and refuses a value over max without copying it.
+// cell takes one column of a row without the []byte copy database/sql makes for
+// an any, and refuses a value over max before copying it.
 type cell struct {
 	value   any
 	max     int64
@@ -165,12 +164,10 @@ type cell struct {
 }
 
 // earlyReserveBytes is the size from which a value asks for room before it is
-// copied: the statement cannot wait for the whole row to be scanned, because
-// the copy is most of what a wide row costs.
+// copied, since the copy is most of what a wide row costs.
 const earlyReserveBytes = 256 << 10
 
-// Scan fails with the error database/sql wraps in the column's name: a value over
-// the cap, or a reservation the budget refused.
+// Scan fails with an error database/sql names the column in.
 func (c *cell) Scan(src any) error {
 	switch v := src.(type) {
 	case []byte:
@@ -189,10 +186,10 @@ func (c *cell) Scan(src any) error {
 	return nil
 }
 
-// admit refuses a value over the cap, and asks the budget for room for a large one.
+// admit refuses a value over the cap and reserves room for a large one.
 func (c *cell) admit(size int64) error {
 	if c.max > 0 && size > c.max {
-		return fmt.Errorf("a value of %.1f MB is over the %.1f MB limit per value", float64(size)/(1<<20), float64(c.max)/(1<<20))
+		return fmt.Errorf("%w: %.1f MB is over the %.1f MB limit per value", ErrValueTooLarge, float64(size)/(1<<20), float64(c.max)/(1<<20))
 	}
 	if c.reserve != nil && size >= earlyReserveBytes {
 		return c.reserve(rowFootprint * size)

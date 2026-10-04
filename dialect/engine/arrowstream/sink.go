@@ -19,9 +19,8 @@ import (
 
 const defaultBatchSize = 500
 
-// maxBatchBytes flushes a batch before it reaches defaultBatchSize rows when its
-// values add up to this much: a batch of wide rows is held by the builders, the
-// IPC writer and the encoder at once, several times over.
+// maxBatchBytes flushes a batch before defaultBatchSize rows when its values add
+// up to this much, since a batch is held several times over on its way out.
 const maxBatchBytes = 1 << 20
 
 // compressionWindow caps how far back zstd may look for matches. The library

@@ -125,7 +125,7 @@ func TestAValueOverTheLimitIsRefusedBeforeItIsCopied(t *testing.T) {
 func useBudget(t *testing.T, total int64) {
 	t.Helper()
 	previous := memoryBudget
-	memoryBudget = membudget.New(total)
+	memoryBudget = &membudget.Budget{Total: total}
 	t.Cleanup(func() { memoryBudget = previous })
 }
 

@@ -1,10 +1,6 @@
 // Package membudget bounds the memory a server spends on streaming results.
-//
-// A statement takes a Lease: a small entry cost to start, then top-ups as its
-// rows turn out wide. A top-up the budget cannot grant fails at once, so a
-// statement never waits while holding memory, which is how two of them
-// deadlock. Sized under the process's memory cap, the budget makes the cap a
-// limit the server enforces on itself instead of one the kernel enforces for it.
+// A statement takes a Lease and tops it up as its rows turn out wide; a top-up
+// the budget cannot grant fails at once, so a statement never waits while holding memory.
 package membudget
 
 import (
@@ -13,8 +9,7 @@ import (
 )
 
 const (
-	// EntryCost is what every statement reserves to start, so a trivial one is
-	// never held up by wide ones.
+	// EntryCost is what every statement reserves to start.
 	EntryCost = 2 << 20
 
 	// Step is the granularity of a top-up.
@@ -24,25 +19,24 @@ const (
 // ErrPressure is a statement refused, or ended, because the budget is spent.
 var ErrPressure = errors.New("memory budget exhausted")
 
-// Budget is a count of reserved bytes under a ceiling.
+// Budget is a count of reserved bytes under Total. Top-ups stop at 90% of it,
+// so the last tenth is left for statements to start in. A nil Budget has no limit.
 type Budget struct {
+	Total int64
+
 	mu      sync.Mutex
-	total   int64
 	used    int64
 	refused int64
 }
 
-// New returns a budget of total bytes. Top-ups stop at 90% of it, so the last
-// tenth is left for statements to start in.
-func New(total int64) *Budget {
-	return &Budget{total: total}
-}
-
 // Begin starts a statement, reserving EntryCost.
 func (b *Budget) Begin() (*Lease, error) {
+	if b == nil {
+		return nil, nil
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.used+EntryCost > b.total {
+	if b.used+EntryCost > b.Total {
 		b.refused++
 		return nil, ErrPressure
 	}
@@ -54,7 +48,7 @@ func (b *Budget) Begin() (*Lease, error) {
 func (b *Budget) Stats() (used, total, refused int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.used, b.total, b.refused
+	return b.used, b.Total, b.refused
 }
 
 // Lease is one statement's reservation.
@@ -63,18 +57,17 @@ type Lease struct {
 	held   int64
 }
 
-// Grow raises the reservation to at least target, rounded up to Step. It fails
-// at once with ErrPressure when the budget cannot grant it, and then holds what
-// it had. A lease is used by one goroutine.
+// Grow raises the reservation to at least target, rounded up to Step, or fails
+// at once with ErrPressure and keeps what it had. A lease belongs to one goroutine.
 func (l *Lease) Grow(target int64) error {
-	if target <= l.held {
+	if l == nil || target <= l.held {
 		return nil
 	}
 	target = (target + Step - 1) / Step * Step
 	b := l.budget
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.used+target-l.held > b.total-b.total/10 {
+	if b.used+target-l.held > b.Total-b.Total/10 {
 		b.refused++
 		return ErrPressure
 	}

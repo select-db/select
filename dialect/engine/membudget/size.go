@@ -8,30 +8,28 @@ import (
 )
 
 const (
-	// defaultTotal is the budget where no memory cap is known (a developer's machine).
+	// defaultTotal is the budget where no memory cap is known.
 	defaultTotal = 1 << 30
 
 	// spikeReserve is kept out of the budget for the driver's copy of a value,
-	// made before a statement can ask for room: about sixteen statements at the
-	// largest single value.
+	// made before a statement can ask for room: sixteen statements at 16 MiB.
 	spikeReserve = 16 * 16 << 20
 )
 
-// Size is the budget for this process: MEMORY_BUDGET_MB if set; else about 80% of
-// the memory cap its cgroup sets, less the spike reserve (never more than a
-// quarter of the cap); else a default.
-func Size() int64 {
-	if mb, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("MEMORY_BUDGET_MB")), 10, 64); err == nil && mb > 0 {
-		return mb << 20
-	}
-	if limit, ok := cgroupLimit("/proc/self/cgroup", "/sys/fs/cgroup"); ok {
-		return fromLimit(limit)
-	}
-	return defaultTotal
+// Size is the budget for this process and where it came from: MEMORY_BUDGET_MB,
+// else about 80% of the cgroup's memory cap less the spike reserve, else a default.
+func Size() (bytes int64, source string) {
+	return sizeFrom("/proc/self/cgroup", "/sys/fs/cgroup")
 }
 
-func fromLimit(limit int64) int64 {
-	return limit*8/10 - min(spikeReserve, limit/4)
+func sizeFrom(procCgroup, root string) (int64, string) {
+	if mb, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("MEMORY_BUDGET_MB")), 10, 64); err == nil && mb > 0 {
+		return mb << 20, "MEMORY_BUDGET_MB"
+	}
+	if limit, ok := cgroupLimit(procCgroup, root); ok {
+		return limit*8/10 - min(spikeReserve, limit/4), "the cgroup memory limit"
+	}
+	return defaultTotal, "the default, no memory limit found"
 }
 
 // cgroupLimit reads the memory cap of this process's cgroup (version 2). ok is

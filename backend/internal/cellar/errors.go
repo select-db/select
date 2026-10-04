@@ -14,6 +14,7 @@ import (
 
 	"github.com/selectDb/dialect/engine/arrowstream"
 	"github.com/selectDb/dialect/engine/membudget"
+	"github.com/selectDb/dialect/engine/query"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
@@ -43,6 +44,8 @@ func classify(ctx context.Context, err error, grant Grant) *arrowstream.Error {
 		return coded
 	case errors.Is(err, membudget.ErrPressure):
 		return refusedForMemory(grant)
+	case errors.Is(err, query.ErrValueTooLarge):
+		return &arrowstream.Error{Code: CodeSQLError, Message: err.Error()}
 	case errors.Is(err, ErrForbiddenStatement):
 		return &arrowstream.Error{Code: CodeForbiddenStatement, Message: err.Error()}
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
@@ -65,8 +68,7 @@ var errMemoryPressure = &arrowstream.Error{Code: CodeUnavailable, Message: "mana
 
 var lastPressureLog atomic.Int64
 
-// refusedForMemory answers a statement the memory budget refused, and logs it
-// at most once a second.
+// refusedForMemory answers a statement the budget refused.
 func refusedForMemory(grant Grant) *arrowstream.Error {
 	if now := time.Now().UnixNano(); now-lastPressureLog.Load() > int64(time.Second) {
 		lastPressureLog.Store(now)
