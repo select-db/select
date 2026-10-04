@@ -15,7 +15,7 @@ import (
 func TestCreateAndForkThroughMCP(t *testing.T) {
 	fixture := e2e.Setup(t)
 	e2e.ServeCellar(t)
-	agentRole := e2e.SeedRoleWithPermission(t, fixture.Conn, fixture.Actor.WorkspaceID, "agent", "manage")
+	agentRole := e2e.SeedRoleWithPermission(t, fixture.Conn, fixture.Actor.WorkspaceID, "agent", "workspace/datasources.create")
 	rec := e2e.CreateAPIKey(t, fixture.H, fixture.Actor.Token, fixture.Actor.WorkspaceID, agentRole, "agent")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var apiKey struct {
@@ -53,7 +53,7 @@ func TestCreateAndForkThroughMCP(t *testing.T) {
 	callTool("execute_statement", map[string]any{"datasource_id": forkID, "statement": "INSERT INTO t VALUES (1)"})
 }
 
-// A key without manage on "*" cannot create, and one without manage on the
+// A key without workspace/datasources.create cannot create, and one without manage on the
 // source cannot fork it, as over REST.
 func TestCreateAndForkThroughMCPNeedManage(t *testing.T) {
 	fixture := e2e.Setup(t)

@@ -42,10 +42,10 @@ func toolCreateDatasource() Tool {
 				return nil, errBadArgument("invalid arguments")
 			}
 			actor := authz.ActorOf(r)
-			// As POST /datasources: adding a datasource takes manage on "*".
-			if !actor.IsOwner() && !actor.Can(core.ActionManage) {
+			// As POST /datasources: adding a datasource takes workspace/datasources.create.
+			if !actor.IsOwner() && !actor.Can(core.ActionWorkspaceDatasourcesCreate) {
 				audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, uuid.NewString())
-				return nil, &toolError{Code: "forbidden", Message: "creating a datasource needs manage on the workspace"}
+				return nil, &toolError{Code: "forbidden", Message: "creating a datasource needs the workspace connections permission"}
 			}
 			id, err := managed.Create(r.Context(), actor, args.Name, "", "", withCallerGranted(r, args.GrantTo))
 			if err != nil {

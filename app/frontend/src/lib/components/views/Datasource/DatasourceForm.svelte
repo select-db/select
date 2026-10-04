@@ -23,6 +23,7 @@
 	import { notify, notifyError } from '$lib/system/Notifications/notificationsStore';
 	import { revokeConnections } from '$lib/components/views/shared/revokeConnections';
 	import { modalStore } from '$lib/system/Modal/ModalStore';
+	import { myPermissions } from '$lib/stores/myPermissionsStore';
 
 	import VariablePicker from '$lib/components/views/File/Header/VariablePicker.svelte';
 	import DatasourceFieldHelpModal from './help/DatasourceFieldHelpModal.svelte';
@@ -113,6 +114,11 @@
 
 		onSuccess
 	}: DatasourceFormProps = $props();
+
+	// Putting a connection on the server adds a datasource to the workspace, which
+	// takes the Workspace connections permission. One already there stays editable:
+	// the server decides that per connection.
+	const mayProxify = $derived(proxified || $myPermissions.canCreateDatasource());
 
 	// Local form state (simple primitives)
 	// keeps UI reactive and avoids nested mutations on $bindable objects.
@@ -515,7 +521,10 @@
 							sshPrivateKey = '';
 						}
 					}}
-					label="Proxified"
+					label={mayProxify
+						? 'Proxified'
+						: 'Proxified (needs the Workspace connections permission)'}
+					disabled={!mayProxify}
 					size="sm"
 				/>
 			</div>

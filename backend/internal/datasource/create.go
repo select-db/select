@@ -41,8 +41,8 @@ func CreateHandler() http.HandlerFunc {
 			return
 		}
 		actor, id, dbType := authz.ActorOf(r), uuid.NewString(), req.DBType
-		// Adding a datasource, managed or not, takes manage on "*".
-		if !actor.IsOwner() && !actor.Can(core.ActionManage) {
+		// Adding a datasource, managed or not, takes the workspace permission.
+		if !actor.IsOwner() && !actor.Can(core.ActionWorkspaceDatasourcesCreate) {
 			audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, id)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

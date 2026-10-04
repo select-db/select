@@ -76,8 +76,8 @@ func saveDatasource(w http.ResponseWriter, r *http.Request, req upsertRequest) b
 		spec = audit.DatasourceUpdated
 	}
 
-	// Adding a datasource takes manage on "*"; changing one, manage on it.
-	allowed := actor.IsOwner() || actor.CanManage(req.ID) || (!exists && actor.Can(core.ActionManage))
+	// Adding a datasource takes the workspace permission; changing one, manage on it.
+	allowed := actor.IsOwner() || actor.CanManage(req.ID) || (!exists && actor.Can(core.ActionWorkspaceDatasourcesCreate))
 	if !allowed {
 		audit.EmitDenied(r.Context(), spec, workspaceID, req.ID)
 		http.Error(w, "forbidden", http.StatusForbidden)

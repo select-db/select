@@ -41,6 +41,14 @@ export const myPermissions = derived(
 		const permMap: PermissionMap = buildPermissionMap($perms);
 		return {
 			isAllowed: (action: string) => isAppActionAllowed($perms, action, isOwner),
+
+			/**
+			 * Whether this person may add a connection to the workspace, the question
+			 * the backend asks on POST /datasources (`Actor.IsOwner() ||
+			 * Actor.Can(ActionWorkspaceDatasourcesCreate)`).
+			 */
+			canCreateDatasource: () =>
+				isAppActionAllowed($perms, 'workspace/datasources.create', isOwner),
 			canAccessDatasource: (datasourceId: string, isProxified?: boolean) =>
 				!isProxified ||
 				isOwner ||

@@ -46,7 +46,7 @@ type newDatabase struct {
 
 // Create makes a managed database for actor, empty or a copy of sourceID as
 // it was at pointInTime, and returns its id. The caller has checked actor may:
-// manage on "*" to create, manage on sourceID to fork.
+// workspace/datasources.create to create, manage on sourceID to fork.
 func Create(ctx context.Context, actor authz.Actor, name, sourceID, pointInTime string, grants GrantTo) (string, error) {
 	database := newDatabase{ID: uuid.NewString(), Name: name, SourceID: sourceID, PointInTime: pointInTime, Grants: grants}
 	if cellarclient.URL == "" {

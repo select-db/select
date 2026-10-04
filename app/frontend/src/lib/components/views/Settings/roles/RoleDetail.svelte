@@ -63,6 +63,12 @@
 			label: 'Workspace API keys',
 			action: 'workspace/api-keys.manage',
 			description: 'Allows creating, rotating, and revoking API keys for automated clients.'
+		},
+		{
+			label: 'Workspace connections',
+			action: 'workspace/datasources.create',
+			description:
+				'Allows adding connections and managed databases to the workspace. Changing or revoking one takes Manage on that database.'
 		}
 	];
 
