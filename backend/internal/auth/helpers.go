@@ -89,20 +89,10 @@ func isTrustedProxy(remoteIP net.IP) bool {
 	return false
 }
 
-// remoteIPFromRequest returns the direct connection IP (no port).
-func remoteIPFromRequest(r *http.Request) net.IP {
-	return net.ParseIP(withoutPort(r.RemoteAddr))
-}
-
-// GetIPAddress returns the client IP. X-Forwarded-For is used only when the
-// direct connection is from a trusted proxy (see TRUSTED_PROXY_CIDRS), and then
-// the address read is the rightmost one that is not itself a trusted proxy: each
-// proxy appends the peer it saw, so only the entries to the right of the first
-// untrusted hop were written by our own infrastructure. The leftmost entry is
-// whatever the client sent, and counting it let a forged header give every
-// request an address of its own. Otherwise only r.RemoteAddr is used.
+// GetIPAddress returns the client IP: the rightmost X-Forwarded-For hop that is
+// not a trusted proxy, since only hops our own proxies appended can be believed.
 func GetIPAddress(r *http.Request) string {
-	remoteIP := remoteIPFromRequest(r)
+	remoteIP := net.ParseIP(withoutPort(r.RemoteAddr))
 
 	if xf := r.Header.Get("X-Forwarded-For"); remoteIP != nil && isTrustedProxy(remoteIP) && strings.TrimSpace(xf) != "" {
 		hops := strings.Split(xf, ",")

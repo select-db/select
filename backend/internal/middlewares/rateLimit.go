@@ -72,11 +72,8 @@ func (s *limiterStore) sweep(now time.Time) {
 	s.lastSweep = now
 }
 
-// rateKey is who a request is counted against: the workspace it targets, which
-// every user and API key of it shares, so a client cannot widen its allowance
-// by sending from more addresses, users or keys. A route that has no workspace
-// (sign-in, creating one) falls back to the authenticated user, then to the
-// client address.
+// rateKey is the target workspace, shared by all its users and keys; routes
+// without one count the user, then the client address.
 func rateKey(r *http.Request) string {
 	if workspaceID, ok := r.Context().Value(ctxWorkspaceID).(string); ok && workspaceID != "" {
 		return "w:" + workspaceID

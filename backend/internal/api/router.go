@@ -28,7 +28,7 @@ func Register(mux *http.ServeMux) {
 	// a workspace_id in the body, validated against the caller's memberships.
 	member := middlewares.Membership()
 	// Per-endpoint rate limit (requests/minute, counted against the target workspace).
-	// Applied innermost so authenticated routes key by user.
+	// Applied innermost, after Membership, so it sees the workspace.
 	limited := func(perMinute int, h http.HandlerFunc) http.Handler {
 		return middlewares.RateLimit(perMinute)(h)
 	}
