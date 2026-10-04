@@ -85,11 +85,15 @@ func provision(ctx context.Context, actor authz.Actor, database newDatabase) err
 	defer func() { _ = tx.Rollback() }()
 	queries := db.Queries.WithTx(tx)
 
-	usage, err := queries.LockManagedUsage(ctx, workspaceID)
+	workspacePlan, err := queries.LockManagedWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
-	limits := plans[usage.Plan]
+	usage, err := queries.ManagedUsage(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	limits := plans[workspacePlan]
 	if err := checkPointInTime(database.PointInTime, limits.PointInTimeDays); err != nil {
 		return err
 	}

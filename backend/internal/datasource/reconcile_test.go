@@ -221,3 +221,23 @@ func TestReconcileRunsOnOneBackendAtATime(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, result.Purged, fmt.Sprintf("%+v", result))
 }
+
+// The row is written once, at creation. Without this, the workspace's byte quota
+// counts a database that grew to its cap as the empty file it was.
+func TestReconcileRecordsTheSizeOfALiveDatabase(t *testing.T) {
+	f := newReconcileFixture(t)
+	id := createNotes(t, f.Fixture)
+	_, failure := e2e.Execute(t, f.Fixture, id, "CREATE TABLE blobs (b BLOB); INSERT INTO blobs SELECT zeroblob(5000000)")
+	require.Nil(t, failure)
+	var before int64
+	require.NoError(t, f.Conn.QueryRow(`SELECT size_bytes FROM app.datasource WHERE id = $1`, id).Scan(&before))
+	require.Less(t, before, int64(1<<20), "recorded when it was empty")
+
+	result, err := managed.Reconcile(context.Background(), time.Now())
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Resized)
+	var after int64
+	require.NoError(t, f.Conn.QueryRow(`SELECT size_bytes FROM app.datasource WHERE id = $1`, id).Scan(&after))
+	require.GreaterOrEqual(t, after, int64(5_000_000))
+}

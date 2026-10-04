@@ -1841,19 +1841,9 @@ func (q *Queries) ListDeletingManagedDatasources(ctx context.Context, cellarID d
 	return items, nil
 }
 
-const lockManagedUsage = `-- name: LockManagedUsage :one
+const lockManagedWorkspace = `-- name: LockManagedWorkspace :one
 SELECT
-  w.plan,
-  (
-    SELECT count(*)
-    FROM app.datasource d
-    WHERE d.workspace_id = w.id AND d.cellar_id IS NOT NULL AND d.state IS DISTINCT FROM 'deleting'
-  ) AS database_count,
-  (
-    SELECT COALESCE(sum(d.size_bytes), 0)
-    FROM app.datasource d
-    WHERE d.workspace_id = w.id AND d.cellar_id IS NOT NULL AND d.state IS DISTINCT FROM 'deleting'
-  )::bigint AS total_bytes
+  w.plan
 FROM
   app.workspace w
 WHERE
@@ -1862,17 +1852,38 @@ WHERE
 FOR UPDATE OF w
 `
 
-type LockManagedUsageRow struct {
-	Plan          string
+// Locks the workspace row for the whole of a create or fork, so two cannot both pass the quota.
+// The usage is read by ManagedUsage, a statement of its own: in READ COMMITTED a
+// statement that waited for this lock still counts with the snapshot it started
+// on, so a count read here would miss the create that held the lock before.
+func (q *Queries) LockManagedWorkspace(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockManagedWorkspace, id)
+	var plan string
+	err := row.Scan(&plan)
+	return plan, err
+}
+
+const managedUsage = `-- name: ManagedUsage :one
+SELECT
+  count(*) AS database_count,
+  COALESCE(sum(d.size_bytes), 0)::bigint AS total_bytes
+FROM
+  app.datasource d
+WHERE
+  d.workspace_id = $1
+  AND d.cellar_id IS NOT NULL
+  AND d.state IS DISTINCT FROM 'deleting'
+`
+
+type ManagedUsageRow struct {
 	DatabaseCount int64
 	TotalBytes    int64
 }
 
-// Locks the workspace row for the whole of a create or fork, so two cannot both pass the quota.
-func (q *Queries) LockManagedUsage(ctx context.Context, id uuid.UUID) (LockManagedUsageRow, error) {
-	row := q.db.QueryRowContext(ctx, lockManagedUsage, id)
-	var i LockManagedUsageRow
-	err := row.Scan(&i.Plan, &i.DatabaseCount, &i.TotalBytes)
+func (q *Queries) ManagedUsage(ctx context.Context, workspaceID uuid.UUID) (ManagedUsageRow, error) {
+	row := q.db.QueryRowContext(ctx, managedUsage, workspaceID)
+	var i ManagedUsageRow
+	err := row.Scan(&i.DatabaseCount, &i.TotalBytes)
 	return i, err
 }
 
@@ -1970,6 +1981,29 @@ type SetGroupToRoleDeletedAtParams struct {
 
 func (q *Queries) SetGroupToRoleDeletedAt(ctx context.Context, arg SetGroupToRoleDeletedAtParams) error {
 	_, err := q.db.ExecContext(ctx, setGroupToRoleDeletedAt, arg.ID, arg.WorkspaceID)
+	return err
+}
+
+const setManagedDatasourceSize = `-- name: SetManagedDatasourceSize :exec
+UPDATE app.datasource
+SET size_bytes = $1
+WHERE id = $2
+  AND cellar_id = $3
+  AND state IS DISTINCT FROM 'deleting'
+  AND size_bytes IS DISTINCT FROM $1
+`
+
+type SetManagedDatasourceSizeParams struct {
+	SizeBytes db_types.JSONNullInt64
+	ID        uuid.UUID
+	CellarID  db_types.JSONNullString
+}
+
+// The size the cellar reports now. The row is written once, at creation, and the
+// workspace's quota adds these up, so without this a database that grew counts
+// as the empty file it was.
+func (q *Queries) SetManagedDatasourceSize(ctx context.Context, arg SetManagedDatasourceSizeParams) error {
+	_, err := q.db.ExecContext(ctx, setManagedDatasourceSize, arg.SizeBytes, arg.ID, arg.CellarID)
 	return err
 }
 

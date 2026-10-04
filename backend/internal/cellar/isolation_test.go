@@ -26,6 +26,11 @@ func TestCheckStatement(t *testing.T) {
 		"SELECT 1; PRAGMA main.max_page_count = 1",
 		"PRAGMA",
 		"SELECT * FROM pragma_function_list",
+		"SELECT * FROM _litestream_seq",
+		"DROP TABLE _litestream_seq",
+		`DROP TABLE "_LiteStream_seq"`,
+		"INSERT INTO [_litestream_lock] VALUES (1)",
+		"SELECT 1 FROM main._litestream_seq",
 	} {
 		require.ErrorIsf(t, checkStatement(sql), ErrForbiddenStatement, "%s", sql)
 	}
@@ -85,4 +90,20 @@ func TestIsolationRefusesForbiddenStatements(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close()
 	require.ErrorIs(t, conn.Prepare(c, "PRAGMA temp_store_directory = '/tmp'"), ErrForbiddenStatement)
+}
+
+func TestIsolationCapsTheSizeOfAValue(t *testing.T) {
+	path, id := newFile(t)
+	conn, err := Open(path, Grant{DatasourceID: id, MaxBytes: 256 << 20})
+	require.NoError(t, err)
+	c := statementConn(t, conn)
+	ctx := context.Background()
+
+	_, err = c.ExecContext(ctx, "INSERT INTO blob VALUES (zeroblob(8 * 1024 * 1024))")
+	require.NoError(t, err)
+	var length int
+	err = c.QueryRowContext(ctx, "SELECT length(zeroblob(300000000))").Scan(&length)
+	require.ErrorContains(t, err, "too big", "one value must not reach the cellar's memory cap")
+	_, err = c.ExecContext(ctx, "INSERT INTO blob VALUES (zeroblob(64 * 1024 * 1024))")
+	require.ErrorContains(t, err, "too big")
 }

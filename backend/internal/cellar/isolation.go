@@ -17,6 +17,17 @@ import (
 // ErrForbiddenStatement is a statement managed databases never run.
 var ErrForbiddenStatement = errors.New("statement not allowed on managed databases")
 
+// maxValueBytes caps one string, blob or row. SQLite builds a value whole in
+// memory, then the cellar copies it into the response: a single
+// SELECT zeroblob(300000000) took the cellar past its 1 GB memory cap and killed
+// it for every workspace. At this size a statement peaks near three times it.
+const maxValueBytes = 32 << 20
+
+// litestreamPrefix starts the names of the tables Litestream keeps in the
+// database to coordinate replication. A statement that dropped _litestream_seq
+// stopped the database's replication for good.
+const litestreamPrefix = "_litestream"
+
 // readOnlyPragmas are the PRAGMAs a user may run, as statements or as pragma_*
 // table functions: they read the caller's own schema. The rest change
 // connection or process state; temp_store_directory is process-wide.
@@ -41,9 +52,13 @@ func isolate(c *sql.Conn, statement string, maxBytes int64) error {
 }
 
 // limit applies the settings SQLite keeps per connection, before each user
-// statement: no ATTACH (which VACUUM INTO also needs), and the size cap.
+// statement: no ATTACH (which VACUUM INTO also needs), the size of a value, and
+// the size cap.
 func limit(c *sql.Conn, maxBytes int64) error {
 	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_ATTACHED, 0); err != nil {
+		return err
+	}
+	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_LENGTH, maxValueBytes); err != nil {
 		return err
 	}
 
@@ -57,8 +72,14 @@ func limit(c *sql.Conn, maxBytes int64) error {
 	return err
 }
 
-// checkStatement refuses sql that names a PRAGMA outside readOnlyPragmas.
+// checkStatement refuses sql that names a PRAGMA outside readOnlyPragmas, or
+// anything of Litestream's. The litestream test reads the text, not the tokens:
+// a quoted name is the same name, and a false match costs a statement nobody
+// writes by accident.
 func checkStatement(sql string) error {
+	if strings.Contains(strings.ToLower(sql), litestreamPrefix) {
+		return ErrForbiddenStatement
+	}
 	lexer := parser.NewSQLiteLexer(antlr.NewInputStream(sql))
 	lexer.RemoveErrorListeners()
 	var toks []antlr.Token

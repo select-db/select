@@ -3,6 +3,7 @@ package datasource_test
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -84,4 +85,34 @@ func TestForkClassicDatasource(t *testing.T) {
 
 	status, responseBody = callAsOwner(t, fixture, http.MethodPost, "/datasources/"+created.ID+"/fork", nil)
 	require.Equal(t, http.StatusNotFound, status, "only a managed database forks: %s", responseBody)
+}
+
+// Parallel creates cannot all take the last slots: the staging stress test
+// made twelve databases in a workspace that allows ten.
+func TestCreateInParallelStaysUnderTheQuota(t *testing.T) {
+	fixture := newManagedFixture(t)
+	const attempts, allowed = 16, 10
+	statuses := make(chan int, attempts)
+	var wg sync.WaitGroup
+	for range attempts {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			status, _ := callAsOwner(t, fixture, http.MethodPost, "/datasources", map[string]any{"db_type": "sqlite", "name": "parallel"})
+			statuses <- status
+		}()
+	}
+	wg.Wait()
+	close(statuses)
+
+	created := 0
+	for status := range statuses {
+		if status == http.StatusCreated {
+			created++
+		}
+	}
+	require.Equal(t, allowed, created, "the solo plan holds ten managed databases")
+	var rows int
+	require.NoError(t, fixture.Conn.QueryRow(`SELECT count(*) FROM app.datasource WHERE cellar_id IS NOT NULL`).Scan(&rows))
+	require.Equal(t, allowed, rows)
 }
