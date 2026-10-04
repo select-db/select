@@ -359,6 +359,11 @@ func (i *Inspector) inspectQueryPrimary(
 	if explicit := prim.ExplicitTable(); explicit != nil {
 		return i.inspectTableShorthand(explicit.TableRef())
 	}
+	// A VALUES list reads no table of its own, but the server evaluates every
+	// subquery in its rows.
+	if values := prim.TableValueConstructor(); values != nil {
+		return &core.InspectStatement{Operation: core.InspectOpSelect, Subqueries: i.extractEmbeddedSubqueries(values)}
+	}
 	spec := prim.QuerySpecification()
 	if spec == nil {
 		return nil

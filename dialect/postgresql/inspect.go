@@ -367,6 +367,11 @@ func (i *Inspector) inspectSelectPrimary(
 	if primary.TABLE() != nil {
 		return i.inspectTableShorthand(primary.Relation_expr())
 	}
+	// A VALUES list reads no table of its own, but the server evaluates every
+	// subquery in its rows.
+	if values := primary.Values_clause(); values != nil {
+		return &core.InspectStatement{Operation: core.InspectOpSelect, Subqueries: i.extractEmbeddedSubqueries(values)}
+	}
 
 	relationRefs, subqueryColumns := i.extractRelationRefsFromPrimary(primary)
 
@@ -617,14 +622,12 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 
 	// INSERT ... SELECT: the grammar always wraps the source as a Selectstmt.
 	// When the source reads anything, attach it as a subquery. A VALUES list
-	// reads nothing of its own, so its rows are walked for subqueries instead.
-	if selectStmt := rest.Selectstmt(); selectStmt != nil {
-		if sub := i.inspectSelect(selectStmt); core.CarriesRead(sub) {
-			result.Subqueries = append(result.Subqueries, *sub)
-		} else {
-			// VALUES form: walk the expression tree for embedded subqueries.
-			result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(rest)...)
-		}
+	// reads nothing of its own, so the reads in its rows stand under the insert.
+	source := rest.Selectstmt()
+	if values := soleValuesClause(source); values != nil {
+		result.Subqueries = append(result.Subqueries, i.extractEmbeddedSubqueries(values)...)
+	} else if sub := i.inspectSelect(source); core.CarriesRead(sub) {
+		result.Subqueries = append(result.Subqueries, *sub)
 	}
 
 	// An ON CONFLICT clause chooses which rows it updates and reads values into
@@ -651,6 +654,28 @@ func (i *Inspector) inspectInsert(stmt pg.IInsertstmtContext) *core.InspectState
 	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
+}
+
+// soleValuesClause returns the VALUES list a query is, or nil when the query
+// is anything more: a CTE, a set operation or a tail clause.
+func soleValuesClause(stmt pg.ISelectstmtContext) pg.IValues_clauseContext {
+	if stmt == nil {
+		return nil
+	}
+	query := stmt.Select_no_parens()
+	if query == nil || query.With_clause() != nil || query.Opt_sort_clause() != nil ||
+		query.Select_limit() != nil || query.For_locking_clause() != nil || query.Select_clause() == nil {
+		return nil
+	}
+	intersects := query.Select_clause().AllSimple_select_intersect()
+	if len(intersects) != 1 {
+		return nil
+	}
+	primaries := intersects[0].AllSimple_select_pramary()
+	if len(primaries) != 1 {
+		return nil
+	}
+	return primaries[0].Values_clause()
 }
 
 // insertedColumns are the columns an insert list names, or every column of the
