@@ -49,9 +49,8 @@ func CarriesRead(stmt *InspectStatement) bool {
 	if len(stmt.Tables) > 0 || len(stmt.Subqueries) > 0 || len(stmt.Also) > 0 {
 		return true
 	}
-	return slices.ContainsFunc(slices.Concat(stmt.Fields, stmt.Where), func(field InspectField) bool {
-		return field.Schema == "" && field.Table != ""
-	})
+	outer := func(field InspectField) bool { return field.Schema == "" && field.Table != "" }
+	return slices.ContainsFunc(stmt.Fields, outer) || slices.ContainsFunc(stmt.Where, outer)
 }
 
 // NestUnderUnknown reports reads as the nested statements of an unclassified

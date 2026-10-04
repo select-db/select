@@ -310,7 +310,6 @@ func (r Resolver) ResolveCorrelated(stmts []InspectStatement, outer []RelationRe
 		inScope := append(append([]RelationRef{}, outer...), RelationRefsOf(stmt)...)
 		stmt.Fields = r.resolveEach(stmt.Fields, outer)
 		stmt.Where = r.resolveEach(stmt.Where, outer)
-		stmt.Fields = r.resolveEach(stmt.Fields, outer)
 		r.ResolveCorrelated(stmt.Subqueries, inScope)
 	}
 }
