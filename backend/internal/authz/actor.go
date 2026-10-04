@@ -56,9 +56,3 @@ func (a Actor) ManagesDatasource(datasourceID string) bool {
 	perms := Perms(a.r)
 	return perms.IsAllowed(core.ActionWorkspaceDatasourcesManage) || perms.CanManage(datasourceID)
 }
-
-// CanManage reports whether the actor may manage a specific resource (a
-// datasource id).
-func (a Actor) CanManage(resourceID string) bool {
-	return Perms(a.r).CanManage(resourceID)
-}
