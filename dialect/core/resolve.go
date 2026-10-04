@@ -308,6 +308,7 @@ func (r Resolver) ResolveCorrelated(stmts []InspectStatement, outer []RelationRe
 	for idx := range stmts {
 		stmt := &stmts[idx]
 		inScope := append(append([]RelationRef{}, outer...), RelationRefsOf(stmt)...)
+		stmt.Fields = r.resolveEach(stmt.Fields, outer)
 		stmt.Where = r.resolveEach(stmt.Where, outer)
 		r.ResolveCorrelated(stmt.Subqueries, inScope)
 	}
@@ -323,6 +324,7 @@ func (r Resolver) resolveEach(fields []InspectField, refs []RelationRef) []Inspe
 			continue
 		}
 		if resolved := r.Column(field.Table, field.Name, refs); resolved != nil && resolved.Schema != "" {
+			resolved.Alias = field.Alias
 			kept = append(kept, *resolved)
 		}
 	}
@@ -533,7 +535,8 @@ func (r Resolver) prefixedColumn(name, prefix string, alias *string, refs []Rela
 		field := r.columnField(r.canonicalName(name, ref), alias, ref)
 		return &field
 	}
-	return nil
+	// As in Column: the prefix may name a relation of an enclosing statement.
+	return &InspectField{Name: name, Alias: alias, Table: prefix}
 }
 
 // columnOf reports the field where ref holds a column of that name, whether
