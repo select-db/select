@@ -66,9 +66,9 @@
 		},
 		{
 			label: 'Workspace connections',
-			action: 'workspace/datasources.create',
+			action: 'workspace/datasources.manage',
 			description:
-				'Allows adding connections and managed databases to the workspace. Changing or revoking one takes Manage on that database.'
+				'Allows adding connections and managed databases to the workspace, and changing, forking, downloading, and deleting any of them.'
 		}
 	];
 

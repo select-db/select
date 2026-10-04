@@ -11,7 +11,6 @@ import (
 	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/core"
 )
 
 var grantToSchema = map[string]any{
@@ -42,8 +41,8 @@ func toolCreateDatasource() Tool {
 				return nil, errBadArgument("invalid arguments")
 			}
 			actor := authz.ActorOf(r)
-			// As POST /datasources: adding a datasource takes workspace/datasources.create.
-			if !actor.IsOwner() && !actor.Can(core.ActionWorkspaceDatasourcesCreate) {
+			// As POST /datasources: adding a datasource takes workspace/datasources.manage.
+			if !actor.ManagesDatasources() {
 				audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, uuid.NewString())
 				return nil, &toolError{Code: "forbidden", Message: "creating a datasource needs the workspace connections permission"}
 			}
@@ -83,7 +82,7 @@ func toolForkDatasource() Tool {
 			}
 			actor := authz.ActorOf(r)
 			// As POST /datasources/{id}/fork: a fork hands over all the source's data.
-			if !actor.IsOwner() && !actor.CanManage(args.DatasourceID) {
+			if !actor.ManagesDatasource(args.DatasourceID) {
 				audit.EmitDenied(r.Context(), audit.DatasourceCreated, actor.WorkspaceID, args.DatasourceID)
 				return nil, &toolError{Code: "forbidden", Message: "forking needs manage on the source"}
 			}

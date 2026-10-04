@@ -57,7 +57,7 @@ func TestCreateGrantToOthersNeedsTheRight(t *testing.T) {
 	creator := uuid.NewString()
 	e2e.SeedUser(t, fixture.Conn, creator)
 	e2e.SeedMembership(t, fixture.Conn, workspaceID, creator)
-	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, workspaceID, "creator", "workspace/datasources.create")
+	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, workspaceID, "creator", "workspace/datasources.manage")
 	e2e.SeedUserRole(t, fixture.Conn, creator, creatorRole, workspaceID)
 	creatorToken := e2e.MintJWT(t, creator)
 
@@ -78,12 +78,12 @@ func TestCreateAnyDatasourceTakesTheWorkspacePermission(t *testing.T) {
 	creator := uuid.NewString()
 	e2e.SeedUser(t, fixture.Conn, creator)
 	e2e.SeedMembership(t, fixture.Conn, fixture.Actor.WorkspaceID, creator)
-	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, fixture.Actor.WorkspaceID, "creator", "workspace/datasources.create")
+	creatorRole := e2e.SeedRoleWithPermission(t, fixture.Conn, fixture.Actor.WorkspaceID, "creator", "workspace/datasources.manage")
 	e2e.SeedUserRole(t, fixture.Conn, creator, creatorRole, fixture.Actor.WorkspaceID)
 
 	rec := e2e.Do(t, fixture.H, http.MethodPost, "/datasources", e2e.MintJWT(t, creator), map[string]any{
 		"workspace_id": fixture.Actor.WorkspaceID, "db_type": "postgresql", "name": "remote", "dsn": e2e.TargetDSN(t, fixture.Conn)})
-	require.Equal(t, http.StatusCreated, rec.Code, "managed or not, adding a datasource takes workspace/datasources.create: %s", rec.Body.String())
+	require.Equal(t, http.StatusCreated, rec.Code, "managed or not, adding a datasource takes workspace/datasources.manage: %s", rec.Body.String())
 }
 
 func TestCreateNeedsTheWorkspacePermission(t *testing.T) {

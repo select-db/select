@@ -11,7 +11,6 @@ import (
 	"backend/internal/datasource/managed"
 
 	"github.com/google/uuid"
-	"github.com/selectDb/dialect/core"
 )
 
 type upsertRequest struct {
@@ -76,8 +75,8 @@ func saveDatasource(w http.ResponseWriter, r *http.Request, req upsertRequest) b
 		spec = audit.DatasourceUpdated
 	}
 
-	// Adding a datasource takes the workspace permission; changing one, manage on it.
-	allowed := actor.IsOwner() || actor.CanManage(req.ID) || (!exists && actor.Can(core.ActionWorkspaceDatasourcesCreate))
+	// Adding a datasource takes workspace/datasources.manage; changing one, that or manage on it.
+	allowed := actor.ManagesDatasource(req.ID)
 	if !allowed {
 		audit.EmitDenied(r.Context(), spec, workspaceID, req.ID)
 		http.Error(w, "forbidden", http.StatusForbidden)

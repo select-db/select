@@ -118,7 +118,7 @@
 	// Putting a connection on the server adds a datasource to the workspace, which
 	// takes the Workspace connections permission. One already there stays editable:
 	// the server decides that per connection.
-	const mayProxify = $derived(proxified || $myPermissions.canCreateDatasource());
+	const mayProxify = $derived(proxified || $myPermissions.canManageDatasources());
 
 	// Local form state (simple primitives)
 	// keeps UI reactive and avoids nested mutations on $bindable objects.

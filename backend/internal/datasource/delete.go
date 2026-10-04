@@ -24,7 +24,7 @@ func DeleteHandler() http.HandlerFunc {
 		actor := authz.ActorOf(r)
 		workspaceID := actor.WorkspaceID
 
-		if !actor.IsOwner() && !actor.CanManage(idStr) {
+		if !actor.ManagesDatasource(idStr) {
 			audit.EmitDenied(r.Context(), audit.DatasourceDeleted, workspaceID, idStr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

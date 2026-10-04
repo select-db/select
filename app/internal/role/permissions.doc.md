@@ -40,7 +40,7 @@ App-level actions cover workspace administration:
 | **Workspace roles**       | Create, edit, and delete roles and permissions   |
 | **Workspace groups**      | Create groups and manage members; attaching a role to a group also requires Workspace roles |
 | **Workspace API keys**    | Create, rotate, and revoke API keys              |
-| **Workspace connections** | Add connections and managed databases to the workspace. Changing or revoking one takes **MANAGE** on that database |
+| **Workspace connections** | Add connections and managed databases to the workspace, and change, fork, download, or delete any of them. **MANAGE** on one database grants the same for that database alone |
 
 API keys let automated clients authenticate with the roles bound to the key, so every query they run passes through this same permission model.
 
