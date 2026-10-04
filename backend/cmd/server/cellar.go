@@ -15,6 +15,7 @@ import (
 
 	"backend/internal/auth"
 	"backend/internal/cellar"
+	"backend/internal/datasource/managed"
 	"backend/internal/datasource/managed/cellarclient"
 	"backend/internal/kms"
 
@@ -46,9 +47,31 @@ func startCellar() {
 	default:
 		// parseCellar has already refused a setting that is not a URL.
 		cellarURL, _ := url.Parse(setting)
-		cellarclient.CellarID, cellarclient.URL = strings.ToLower(cellarURL.Hostname()), setting
+		id, err := cellarID(cellarURL.Hostname())
+		if err != nil {
+			log.Fatalf("cellar: %v", err)
+		}
+		cellarclient.CellarID, cellarclient.URL = id, setting
 	}
-	log.Printf("cellar: %s", setting)
+	managed.StartReconciler(context.Background())
+	log.Printf("cellar: %s (id %s)", setting, cellarclient.CellarID)
+}
+
+// cellarID is the name a cellar goes by in the grants the backend signs and in
+// the cellar_id of every managed database it holds. It is CELLAR_ID, or else the
+// host of the cellar's address, which the database accepts only without dots or
+// capitals: an IP address or a dotted name fails here, at start, rather than when
+// the first managed database is created.
+func cellarID(host string) (string, error) {
+	id := strings.ToLower(strings.TrimSpace(os.Getenv("CELLAR_ID")))
+	source := "CELLAR_ID"
+	if id == "" {
+		id, source = strings.ToLower(host), "the host of its address"
+	}
+	if !cellar.ValidID(id) {
+		return "", fmt.Errorf("the cellar id %q (%s) is not valid: lower case letters, digits and hyphens only; set CELLAR_ID", id, source)
+	}
+	return id, nil
 }
 
 // serveLocalCellar starts a cellar in this process and returns its address.
@@ -71,8 +94,8 @@ func serveLocalCellar() (string, error) {
 }
 
 // serveCellar runs this process as a cellar only, on CELLAR_LISTEN, until it
-// is told to stop. It never opens Postgres. Its id is the listen host, which
-// the backend reads from the host of its CELLAR URL.
+// is told to stop. It never opens Postgres. Its id is CELLAR_ID, the same value
+// the backend has, or else the listen host.
 func serveCellar() {
 	address := os.Getenv("CELLAR_LISTEN")
 	if address == "" {
@@ -82,7 +105,11 @@ func serveCellar() {
 	if err != nil || host == "" {
 		log.Fatalf("cellar: CELLAR_LISTEN: want host:port, got %q", address)
 	}
-	handler, err := cellarHandler(strings.ToLower(host))
+	id, err := cellarID(host)
+	if err != nil {
+		log.Fatalf("cellar: %v", err)
+	}
+	handler, err := cellarHandler(id)
 	if err != nil {
 		log.Fatalf("cellar: %v", err)
 	}

@@ -311,6 +311,21 @@ func (q *Queries) DeleteExpiredUserRefreshTokens(ctx context.Context, userID uui
 	return err
 }
 
+const deleteManagedDatasourceRow = `-- name: DeleteManagedDatasourceRow :exec
+DELETE FROM app.datasource WHERE id = $1 AND cellar_id = $2
+`
+
+type DeleteManagedDatasourceRowParams struct {
+	ID       uuid.UUID
+	CellarID db_types.JSONNullString
+}
+
+// The row of a database the reconciler purged, or that the cellar never held.
+func (q *Queries) DeleteManagedDatasourceRow(ctx context.Context, arg DeleteManagedDatasourceRowParams) error {
+	_, err := q.db.ExecContext(ctx, deleteManagedDatasourceRow, arg.ID, arg.CellarID)
+	return err
+}
+
 const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
 DELETE FROM auth.refresh_token
 WHERE hashed_token = $1
@@ -693,6 +708,34 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 		return nil, err
 	}
 	return items, nil
+}
+
+const getManagedDatasourceToReconcile = `-- name: GetManagedDatasourceToReconcile :one
+SELECT
+  d.cellar_id,
+  d.state,
+  (w.deleted_at IS NOT NULL)::boolean AS workspace_deleted
+FROM
+  app.datasource d
+  JOIN app.workspace w ON w.id = d.workspace_id
+WHERE
+  d.id = $1
+  AND d.cellar_id IS NOT NULL
+`
+
+type GetManagedDatasourceToReconcileRow struct {
+	CellarID         db_types.JSONNullString
+	State            db_types.JSONNullString
+	WorkspaceDeleted bool
+}
+
+// What the reconciler needs to decide on a database the cellar holds. The workspace
+// is joined without its deleted_at filter: a deleted workspace is a reason to purge.
+func (q *Queries) GetManagedDatasourceToReconcile(ctx context.Context, id uuid.UUID) (GetManagedDatasourceToReconcileRow, error) {
+	row := q.db.QueryRowContext(ctx, getManagedDatasourceToReconcile, id)
+	var i GetManagedDatasourceToReconcileRow
+	err := row.Scan(&i.CellarID, &i.State, &i.WorkspaceDeleted)
+	return i, err
 }
 
 const getPermissionByID = `-- name: GetPermissionByID :one
@@ -1761,6 +1804,33 @@ func (q *Queries) ListDatasourcesByWorkspace(ctx context.Context, workspaceID uu
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeletingManagedDatasources = `-- name: ListDeletingManagedDatasources :many
+SELECT d.id FROM app.datasource d WHERE d.cellar_id = $1 AND d.state = 'deleting'
+`
+
+func (q *Queries) ListDeletingManagedDatasources(ctx context.Context, cellarID db_types.JSONNullString) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, listDeletingManagedDatasources, cellarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
