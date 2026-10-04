@@ -39,6 +39,8 @@ export const myPermissions = derived(
 	([$perms, $graph]) => {
 		const isOwner = $graph?.is_owner ?? false;
 		const permMap: PermissionMap = buildPermissionMap($perms);
+		const canManageDatasources = () =>
+			isAppActionAllowed($perms, 'workspace/datasources.manage', isOwner);
 		return {
 			isAllowed: (action: string) => isAppActionAllowed($perms, action, isOwner),
 
@@ -47,8 +49,7 @@ export const myPermissions = derived(
 			 * question the backend asks before it adds one (`Actor.ManagesDatasources()`:
 			 * owner, or workspace/datasources.manage).
 			 */
-			canManageDatasources: () =>
-				isAppActionAllowed($perms, 'workspace/datasources.manage', isOwner),
+			canManageDatasources,
 			canAccessDatasource: (datasourceId: string, isProxified?: boolean) =>
 				!isProxified ||
 				isOwner ||
@@ -61,7 +62,7 @@ export const myPermissions = derived(
 			 * it here only decides what the UI offers: the server refuses either way.
 			 */
 			canManageDatasource: (datasourceId: string) =>
-				isAppActionAllowed($perms, 'workspace/datasources.manage', isOwner) ||
+				canManageDatasources() ||
 				resolve(permMap, datasourceId, '*', '*', '*', 'manage') === 'allow'
 		};
 	}

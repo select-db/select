@@ -91,7 +91,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// Per-endpoint rate limit (requests/minute, keyed by user else IP).
+	// Per-endpoint rate limit (requests/minute, counted against the target workspace).
 	limited := func(perMinute int, h http.HandlerFunc) http.Handler {
 		return middlewares.RateLimit(perMinute)(h)
 	}
