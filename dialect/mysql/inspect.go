@@ -172,6 +172,9 @@ func (i *Inspector) inspectStatement(stmt mysql.ISimpleStatementContext) *core.I
 		read := core.NestUnderUnknown(i.loadTarget(load))
 		return &read
 	}
+	if handler := stmt.HandlerStatement(); handler != nil {
+		return i.inspectHandler(handler)
+	}
 	// A boundary of this session's own transaction. LOCK TABLES and the XA
 	// forms share the grammar rule and are not that: a lock blocks other
 	// sessions, and an XA transaction can be ended by a session that did not
@@ -1138,6 +1141,37 @@ func (i *Inspector) loadTarget(stmt mysql.ILoadStatementContext) core.InspectSta
 	}
 	read.Fields = core.MergeInspectFields(read.Fields, i.updateListFields(set, schema, table))
 	return read
+}
+
+// inspectHandler reads HANDLER, which walks a table's rows past the optimizer:
+// manage for that, and select on the rows it opens or returns.
+func (i *Inspector) inspectHandler(stmt mysql.IHandlerStatementContext) *core.InspectStatement {
+	if stmt.OPEN_SYMBOL() != nil {
+		schema, table := i.resolveTableRef(stmt.TableRef())
+		read := core.NestUnderUnknown(core.InspectStatement{
+			Operation: core.InspectOpSelect,
+			Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+		})
+		return &read
+	}
+	if stmt.READ_SYMBOL() == nil {
+		unknown := core.UnknownStatement()
+		return &unknown
+	}
+	// READ names the handler, which is the table's name unless the OPEN gave
+	// an alias. A name the catalog does not hold may stand for any table.
+	schema, table := i.resolveName(stmt.Identifier().GetText())
+	fields := core.TableFields(i.meta, schema, table, i.dialect)
+	if len(fields) == 0 {
+		unreadable := core.UnreadableStatement()
+		return &unreadable
+	}
+	read := core.NestUnderUnknown(append([]core.InspectStatement{{
+		Operation: core.InspectOpSelect,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+		Fields:    fields,
+	}}, i.extractEmbeddedSubqueries(stmt.WhereClause())...)...)
+	return &read
 }
 
 // viewBody is the query a view is defined as, shared by CREATE VIEW and the
