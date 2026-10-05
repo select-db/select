@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/selectDb/dialect/engine/query"
 	sqlitedialect "github.com/selectDb/dialect/sqlite"
 	parser "github.com/selectDb/dialect/sqlite/parser"
 	"modernc.org/sqlite"
@@ -16,10 +17,6 @@ import (
 
 // ErrForbiddenStatement is a statement managed databases never run.
 var ErrForbiddenStatement = errors.New("statement not allowed on managed databases")
-
-// maxValueBytes caps one string, blob or row: SQLite builds a value whole and the
-// cellar copies it, so a statement peaks near three times it in memory.
-const maxValueBytes = 32 << 20
 
 // litestreamPrefix starts the names of the tables Litestream keeps in the
 // database; dropping one stops its replication.
@@ -55,7 +52,7 @@ func limit(c *sql.Conn, maxBytes int64) error {
 	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_ATTACHED, 0); err != nil {
 		return err
 	}
-	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_LENGTH, maxValueBytes); err != nil {
+	if _, err := sqlite.Limit(c, sqlite3.SQLITE_LIMIT_LENGTH, query.ServerMaxValueBytes); err != nil {
 		return err
 	}
 

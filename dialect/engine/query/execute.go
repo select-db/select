@@ -94,6 +94,12 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 	}
 	hasTZ := makeHasTZ(colTypes)
 
+	cells := make([]cell, len(columns))
+	ptrs := make([]any, len(columns))
+	for i := range cells {
+		cells[i] = cell{max: opts.MaxValueBytes, reserve: opts.Reserve}
+		ptrs[i] = &cells[i]
+	}
 	maxBytes := effectiveMaxBytes(opts)
 	var rowCount, bytesScanned int64
 	for rows.Next() {
@@ -107,23 +113,27 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 			}
 			break
 		}
-		values := make([]any, len(columns))
-		ptrs := make([]any, len(columns))
-		for i := range values {
-			ptrs[i] = &values[i]
-		}
 		if err := rows.Scan(ptrs...); err != nil {
 			sink.OnError(fmt.Errorf("failed to scan row: %w", err))
 			return
 		}
+		values := make([]any, len(columns))
+		for i := range cells {
+			values[i] = cells[i].value
+		}
+		var rowBytes int64
 		for i, v := range values {
-			switch val := v.(type) {
-			case []byte:
-				values[i] = string(val)
-			case time.Time:
-				values[i] = formatTime(val, hasTZ, i)
+			if t, ok := v.(time.Time); ok {
+				values[i] = formatTime(t, hasTZ, i)
 			}
-			bytesScanned += estimateValueBytes(values[i])
+			rowBytes += estimateValueBytes(values[i])
+		}
+		bytesScanned += rowBytes
+		if opts.Reserve != nil {
+			if err := opts.Reserve(rowFootprint * rowBytes); err != nil {
+				sink.OnError(err)
+				return
+			}
 		}
 		applyMask(values, maskPositions)
 		if bytesScanned > maxBytes {
@@ -143,6 +153,48 @@ func Stream(ctx context.Context, conn Conn, inst Datasource, sql string, opts Op
 	if err := sink.OnDone(rowCount, 0, durationMs); err != nil {
 		sink.OnError(err)
 	}
+}
+
+// cell takes one column of a row without the []byte copy database/sql makes for
+// an any, and refuses a value over max before copying it.
+type cell struct {
+	value   any
+	max     int64
+	reserve func(footprint int64) error
+}
+
+// earlyReserveBytes is the size from which a value asks for room before it is
+// copied, since the copy is most of what a wide row costs.
+const earlyReserveBytes = 256 << 10
+
+// Scan fails with an error database/sql names the column in.
+func (c *cell) Scan(src any) error {
+	switch v := src.(type) {
+	case []byte:
+		if err := c.admit(int64(len(v))); err != nil {
+			return err
+		}
+		c.value = string(v)
+	case string:
+		if err := c.admit(int64(len(v))); err != nil {
+			return err
+		}
+		c.value = v
+	default:
+		c.value = src
+	}
+	return nil
+}
+
+// admit refuses a value over the cap and reserves room for a large one.
+func (c *cell) admit(size int64) error {
+	if c.max > 0 && size > c.max {
+		return fmt.Errorf("%w: %.1f MB is over the %.1f MB limit per value", ErrValueTooLarge, float64(size)/(1<<20), float64(c.max)/(1<<20))
+	}
+	if c.reserve != nil && size >= earlyReserveBytes {
+		return c.reserve(rowFootprint * size)
+	}
+	return nil
 }
 
 // ResultSink collects a stream into a Result. A failed stream leaves its error

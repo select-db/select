@@ -32,6 +32,12 @@ func QueryHandler() http.HandlerFunc {
 			stream.SetDownstreamFlusher(f.Flush)
 		}
 		sink := classifiedSink{Sink: stream, ctx: r.Context(), grant: grant}
+		lease, err := memoryBudget.Begin()
+		if err != nil {
+			sink.OnError(err)
+			return
+		}
+		defer lease.Release()
 		path, err := databases.use(r.Context(), grant.DatasourceID)
 		if err != nil {
 			sink.OnError(err)
@@ -42,6 +48,6 @@ func QueryHandler() http.HandlerFunc {
 			sink.OnError(err)
 			return
 		}
-		query.Stream(r.Context(), conn, query.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, query.Options{Args: q.Args}, sink)
+		query.Stream(r.Context(), conn, query.Datasource{ID: grant.DatasourceID, DBType: dbType}, q.SQL, query.Options{Args: q.Args, MaxValueBytes: query.ServerMaxValueBytes, Reserve: lease.Grow}, sink)
 	}
 }

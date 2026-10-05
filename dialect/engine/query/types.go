@@ -1,6 +1,9 @@
 package query
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 // Datasource describes a query target. Proxified routes through Transport.
 type Datasource struct {
@@ -34,7 +37,25 @@ type Options struct {
 	// 0 = unlimited. Converted from the workspace's max_result_size_mb setting.
 	// The engine enforces a hard ceiling of maxResultSizeHardCap regardless of this value.
 	MaxBytes int64
+
+	// MaxValueBytes refuses a result holding a value larger than this, before it
+	// is copied. 0 = unlimited. A server sets ServerMaxValueBytes.
+	MaxValueBytes int64
+
+	// Reserve is asked after every row for rowFootprint times its bytes, to be
+	// raised to at least that; an error ends the statement. A server passes Lease.Grow.
+	Reserve func(footprint int64) error
 }
+
+// rowFootprint is how many copies of a row are alive between the scan and the wire.
+const rowFootprint = 5
+
+// ServerMaxValueBytes is the largest single value a server returns: a statement
+// holds it about rowFootprint times over.
+const ServerMaxValueBytes = 16 * 1024 * 1024
+
+// ErrValueTooLarge is a value over Options.MaxValueBytes.
+var ErrValueTooLarge = errors.New("value too large")
 
 // maxResultSizeHardCap is the absolute ceiling enforced by the engine
 // regardless of what callers pass in MaxBytes. Prevents accidental or

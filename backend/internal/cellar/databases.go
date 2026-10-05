@@ -16,6 +16,7 @@ import (
 	_ "github.com/benbjohnson/litestream/file"
 	"github.com/benbjohnson/litestream/s3"
 	"github.com/selectDb/dialect/engine/connect"
+	"github.com/selectDb/dialect/engine/membudget"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -38,6 +39,10 @@ type Databases struct {
 
 // databases is the cellar this process runs, set by OpenDatabases.
 var databases *Databases
+
+// memoryBudget bounds the memory of the results being streamed, under the
+// process's cap. OpenDatabases sizes it.
+var memoryBudget *membudget.Budget
 
 // database is one database file on the cellar's disk.
 type database struct {
@@ -80,6 +85,9 @@ func OpenDatabases(dir, bucket string) error {
 	if err != nil {
 		return err
 	}
+	total, source := membudget.Size()
+	memoryBudget = &membudget.Budget{Total: total}
+	log.Printf("cellar: memory budget %d MiB, from %s", total>>20, source)
 	store := litestream.NewStore(nil, litestream.DefaultCompactionLevels)
 	// One window for every plan: the backend refuses a point in time outside the plan's own.
 	store.SnapshotInterval = 24 * time.Hour
