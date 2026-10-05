@@ -188,3 +188,41 @@ func TestANilBudgetImposesNoLimit(t *testing.T) {
 	}
 	lease.Release()
 }
+
+func TestLimitHeapIsAShareOfTheCgroupCapAndYieldsToGOMEMLIMIT(t *testing.T) {
+	dir := t.TempDir()
+	proc := filepath.Join(dir, "cgroup")
+	if err := os.WriteFile(proc, []byte("0::/unit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "unit"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cap := filepath.Join(dir, "unit", "memory.max")
+	var set int64
+	record := func(n int64) int64 { set = n; return 0 }
+
+	t.Setenv("GOMEMLIMIT", "")
+	if err := os.WriteFile(cap, []byte("1073741824\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := limitHeapFrom(proc, dir, record); got != 1<<30*85/100 || set != got {
+		t.Fatalf("1 GiB cap: set %d MiB, returned %d MiB, want 85%%", set>>20, got>>20)
+	}
+
+	set = 0
+	if err := os.WriteFile(cap, []byte("max\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := limitHeapFrom(proc, dir, record); got != 0 || set != 0 {
+		t.Fatalf("no cap, no limit: got %d, set %d", got, set)
+	}
+
+	if err := os.WriteFile(cap, []byte("1073741824\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOMEMLIMIT", "500MiB")
+	if got := limitHeapFrom(proc, dir, record); got != 0 || set != 0 {
+		t.Fatalf("GOMEMLIMIT wins: got %d, set %d", got, set)
+	}
+}

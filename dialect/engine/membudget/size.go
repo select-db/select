@@ -3,6 +3,7 @@ package membudget
 import (
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 )
@@ -30,6 +31,26 @@ func sizeFrom(procCgroup, root string) (int64, string) {
 		return limit*8/10 - min(spikeReserve, limit/4), "the cgroup memory limit"
 	}
 	return defaultTotal, "the default, no memory limit found"
+}
+
+// LimitHeap sets the Go runtime's soft memory limit to 85% of the cgroup's cap, so
+// the collector works harder near it instead of letting garbage double the heap
+// past the cap. A GOMEMLIMIT already set wins. It returns the limit set, or 0.
+func LimitHeap() int64 {
+	return limitHeapFrom("/proc/self/cgroup", "/sys/fs/cgroup", debug.SetMemoryLimit)
+}
+
+func limitHeapFrom(procCgroup, root string, set func(int64) int64) int64 {
+	if os.Getenv("GOMEMLIMIT") != "" {
+		return 0
+	}
+	limit, ok := cgroupLimit(procCgroup, root)
+	if !ok {
+		return 0
+	}
+	limit = limit * 85 / 100
+	set(limit)
+	return limit
 }
 
 // cgroupLimit reads the memory cap of this process's cgroup (version 2). ok is
