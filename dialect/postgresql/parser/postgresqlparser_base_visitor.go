@@ -1871,6 +1871,10 @@ func (v *BasePostgreSQLParserVisitor) VisitMergestmt(ctx *MergestmtContext) inte
 	return v.VisitChildren(ctx)
 }
 
+func (v *BasePostgreSQLParserVisitor) VisitMerge_when_clause(ctx *Merge_when_clauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BasePostgreSQLParserVisitor) VisitMerge_insert_clause(ctx *Merge_insert_clauseContext) interface{} {
 	return v.VisitChildren(ctx)
 }
