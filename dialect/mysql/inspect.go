@@ -1160,8 +1160,12 @@ func (i *Inspector) inspectHandler(stmt mysql.IHandlerStatementContext) *core.In
 	}
 	// READ names the handler, which is the table's name unless the OPEN gave
 	// an alias. A name the catalog does not hold may stand for any table.
-	schema, table := i.resolveName(stmt.Identifier().GetText())
-	fields := core.TableFields(i.meta, schema, table, i.dialect)
+	var fields []core.InspectField
+	schema, table := "", ""
+	if id := stmt.Identifier(); id != nil {
+		schema, table = i.resolveName(id.GetText())
+		fields = core.TableFields(i.meta, schema, table, i.dialect)
+	}
 	if len(fields) == 0 {
 		unreadable := core.UnreadableStatement()
 		return &unreadable

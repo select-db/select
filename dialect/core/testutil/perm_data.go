@@ -2363,7 +2363,7 @@ func permCases() []PermCase {
 			Name:  "reading through a handler with an alias",
 			SQL:   "HANDLER h READ NEXT",
 			Needs: unreadable,
-			Why:   "the table behind an alias is set by an OPEN this statement does not carry, so it may be any table",
+			Why:   "the table behind an alias is set by an OPEN this statement does not carry, so it may be any table, and no requirement asks for select alone on the whole connection",
 		},
 		{
 			On:    []string{"mysql"},
