@@ -684,12 +684,12 @@ func (i *Inspector) insertedColumns(list pg.IInsert_column_listContext, schema, 
 	if list == nil {
 		return core.TableFields(i.meta, schema, table, i.dialect)
 	}
-	return namedColumns(i, list.AllInsert_column_item(), schema, table)
+	return namedColumns(i.dialect, list.AllInsert_column_item(), schema, table)
 }
 
 // namedColumns are the columns a list of names spells out. INSERT and COPY
 // reach a column name through different grammar nodes.
-func namedColumns[T interface{ Colid() pg.IColidContext }](i *Inspector, items []T, schema, table string) []core.InspectField {
+func namedColumns[T interface{ Colid() pg.IColidContext }](dialect *Dialect, items []T, schema, table string) []core.InspectField {
 	var fields []core.InspectField
 	for _, item := range items {
 		colID := item.Colid()
@@ -697,7 +697,7 @@ func namedColumns[T interface{ Colid() pg.IColidContext }](i *Inspector, items [
 			continue
 		}
 		fields = append(fields, core.InspectField{
-			Name:   i.dialect.NormalizeIdentifier(colID.GetText()),
+			Name:   dialect.NormalizeIdentifier(colID.GetText()),
 			Table:  table,
 			Schema: schema,
 		})
@@ -886,9 +886,8 @@ func (i *Inspector) inspectCreateFrom(name pg.IQualified_nameContext, source pg.
 	return result
 }
 
-// inspectCopy analyzes COPY, which moves rows over a channel the see check does
-// not mediate, so it needs manage. Manage is not a right on rows: the table it
-// reads or fills still takes select or insert on the columns it moves.
+// inspectCopy analyzes COPY, which moves rows over a channel see does not mediate,
+// so it needs manage, and still select or insert on the columns it moves.
 func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement {
 	if source := stmt.Preparablestmt(); source != nil {
 		result := core.NestUnderUnknown(i.inspectPreparable(source))
@@ -905,7 +904,7 @@ func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement
 	}
 	var fields []core.InspectField
 	if list := stmt.Opt_column_list(); list != nil && list.Columnlist() != nil {
-		fields = namedColumns(i, list.Columnlist().AllColumnElem(), schema, table)
+		fields = namedColumns(i.dialect, list.Columnlist().AllColumnElem(), schema, table)
 	} else {
 		// A COPY without a column list moves every column, as an insert without one does.
 		fields = core.TableFields(i.meta, schema, table, i.dialect)
