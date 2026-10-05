@@ -20,6 +20,7 @@ import (
 	"backend/internal/kms"
 
 	"github.com/benbjohnson/litestream"
+	"github.com/selectDb/dialect/engine/membudget"
 )
 
 // localCellar is the CELLAR setting, and the cellar id, of a cellar run in the
@@ -105,6 +106,9 @@ func serveCellar() {
 	id, err := cellarID(host)
 	if err != nil {
 		log.Fatalf("cellar: %v", err)
+	}
+	if limit := membudget.LimitHeap(); limit > 0 {
+		log.Printf("cellar: Go memory limit %d MiB", limit>>20)
 	}
 	handler, err := cellarHandler(id)
 	if err != nil {
