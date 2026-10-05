@@ -880,13 +880,40 @@ func (i *Inspector) inspectCreateFrom(name pg.IQualified_nameContext, source pg.
 	return result
 }
 
-// inspectCopy analyzes COPY, which moves rows between a table and the server's
-// own filesystem. It stays unclassified, so it needs manage.
+// inspectCopy analyzes COPY, which moves rows over a channel the see check does
+// not mediate, so it needs manage. Manage is not a right on rows: the table it
+// reads or fills still takes select or insert on the columns it moves.
 func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement {
-	result := core.UnknownStatement()
 	if source := stmt.Preparablestmt(); source != nil {
-		result.Subqueries = append(result.Subqueries, i.inspectPreparable(source))
+		result := core.NestUnderUnknown(i.inspectPreparable(source))
+		return &result
 	}
+	schema, table := i.resolveQualifiedName(stmt.Qualified_name())
+	if table == "" {
+		result := core.UnknownStatement()
+		return &result
+	}
+	moved := core.InspectStatement{
+		Operation: core.InspectOpSelect,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+	}
+	if from := stmt.Copy_from(); from != nil && from.FROM() != nil {
+		moved.Operation = core.InspectOpInsert
+	}
+	if list := stmt.Opt_column_list(); list != nil && list.Columnlist() != nil {
+		for _, col := range list.Columnlist().AllColumnElem() {
+			if col.Colid() != nil {
+				moved.Fields = append(moved.Fields, core.InspectField{
+					Name:   i.dialect.NormalizeIdentifier(col.Colid().GetText()),
+					Table:  table,
+					Schema: schema,
+				})
+			}
+		}
+	} else {
+		moved.Fields = core.TableFields(i.meta, schema, table, i.dialect)
+	}
+	result := core.NestUnderUnknown(moved)
 	return &result
 }
 
