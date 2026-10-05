@@ -1166,11 +1166,16 @@ func (i *Inspector) inspectHandler(stmt mysql.IHandlerStatementContext) *core.In
 		unreadable := core.UnreadableStatement()
 		return &unreadable
 	}
-	read := core.NestUnderUnknown(append([]core.InspectStatement{{
+	row := core.InspectStatement{
 		Operation: core.InspectOpSelect,
 		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
 		Fields:    fields,
-	}}, i.extractEmbeddedSubqueries(stmt.WhereClause())...)...)
+	}
+	if wc := stmt.WhereClause(); wc != nil {
+		refs := []core.RelationRef{{Schema: schema, Table: table}}
+		row.Where, row.Subqueries = i.extractWhereFieldsFromExpr(wc.Expr(), refs, core.Scope{})
+	}
+	read := core.NestUnderUnknown(row)
 	return &read
 }
 

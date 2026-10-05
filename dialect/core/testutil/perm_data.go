@@ -2351,6 +2351,14 @@ func permCases() []PermCase {
 			Why:    "the key and the filter choose the row, and the row still comes back whole",
 		},
 		{
+			On:     []string{"mysql"},
+			Name:   "reading through a handler filtered by a subquery",
+			SQL:    "HANDLER t1 READ FIRST WHERE c1 IN (SELECT c4 FROM other.t3)",
+			Needs:  []Right{Manage, mainT1(core.ActionSelect).Only("c1"), mainT1(core.ActionSelect).Only("c2"), otherT3(core.ActionSelect).Only("c4")},
+			Denied: rowRights,
+			Why:    "the filter reads other.t3 to choose the row",
+		},
+		{
 			On:    []string{"mysql"},
 			Name:  "reading through a handler with an alias",
 			SQL:   "HANDLER h READ NEXT",
