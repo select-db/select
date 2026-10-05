@@ -684,8 +684,14 @@ func (i *Inspector) insertedColumns(list pg.IInsert_column_listContext, schema, 
 	if list == nil {
 		return core.TableFields(i.meta, schema, table, i.dialect)
 	}
+	return namedColumns(i, list.AllInsert_column_item(), schema, table)
+}
+
+// namedColumns are the columns a list of names spells out. INSERT and COPY
+// reach a column name through different grammar nodes.
+func namedColumns[T interface{ Colid() pg.IColidContext }](i *Inspector, items []T, schema, table string) []core.InspectField {
 	var fields []core.InspectField
-	for _, item := range list.AllInsert_column_item() {
+	for _, item := range items {
 		colID := item.Colid()
 		if colID == nil {
 			continue
@@ -893,27 +899,22 @@ func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement
 		result := core.UnknownStatement()
 		return &result
 	}
-	moved := core.InspectStatement{
-		Operation: core.InspectOpSelect,
-		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
-	}
+	op := core.InspectOpSelect
 	if from := stmt.Copy_from(); from != nil && from.FROM() != nil {
-		moved.Operation = core.InspectOpInsert
+		op = core.InspectOpInsert
 	}
+	var fields []core.InspectField
 	if list := stmt.Opt_column_list(); list != nil && list.Columnlist() != nil {
-		for _, col := range list.Columnlist().AllColumnElem() {
-			if col.Colid() != nil {
-				moved.Fields = append(moved.Fields, core.InspectField{
-					Name:   i.dialect.NormalizeIdentifier(col.Colid().GetText()),
-					Table:  table,
-					Schema: schema,
-				})
-			}
-		}
+		fields = namedColumns(i, list.Columnlist().AllColumnElem(), schema, table)
 	} else {
-		moved.Fields = core.TableFields(i.meta, schema, table, i.dialect)
+		// A COPY without a column list moves every column, as an insert without one does.
+		fields = core.TableFields(i.meta, schema, table, i.dialect)
 	}
-	result := core.NestUnderUnknown(moved)
+	result := core.NestUnderUnknown(core.InspectStatement{
+		Operation: op,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+		Fields:    fields,
+	})
 	return &result
 }
 
