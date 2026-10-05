@@ -143,8 +143,8 @@ func AsFilter(stmts []InspectStatement) []InspectStatement {
 // "REVOKE SELECT ON t1 FROM bob" leaves a select on a table named bob. A
 // salvage naming no table, or naming one no inspector could have resolved,
 // leaves a per-table check nothing to ask about or something nobody can grant.
-// An error anywhere else is a clause the grammar does not carry, such as
-// SQLite's standalone WINDOW, and what the statement named still stands.
+// An error anywhere else is a clause the grammar does not carry, and what the
+// statement named still stands.
 func SalvageOrUnreadable(read InspectStatement, syntax *SyntaxErrors, from, to int) InspectStatement {
 	if !syntax.In(from, to) {
 		return read

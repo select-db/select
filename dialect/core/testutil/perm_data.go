@@ -686,6 +686,66 @@ func permCases() []PermCase {
 			Why:   "how the rows are partitioned is an answer about t2",
 		},
 		{
+			// A named window whose definition has no ORDER BY. Where the grammar
+			// required one, a WINDOW clause below the top level split the
+			// statement and lost its write (#394).
+			On:    []string{"sqlite"},
+			Name:  "a named window with no ORDER BY",
+			SQL:   "SELECT count(*) OVER w AS n FROM t1 WINDOW w AS (PARTITION BY c1)",
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a window definition names a partition and reads nothing else",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a named window in a derived table",
+			SQL:   "SELECT n FROM (SELECT count(*) OVER w AS n FROM t1 WINDOW w AS (PARTITION BY c1)) AS d",
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the derived table reads t1 and nothing else",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a named window in the SET of an update",
+			SQL:   "UPDATE t2 SET c3 = (SELECT count(*) OVER w FROM t1 WINDOW w AS (PARTITION BY c1) LIMIT 1)",
+			Needs: []Right{mainT2(core.ActionUpdate), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpUpdate,
+			Why:   "it writes t2 from a count over t1",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a named window in the WHERE of a delete",
+			SQL:   "DELETE FROM t2 WHERE c1 > (SELECT count(*) OVER w FROM t1 WINDOW w AS (PARTITION BY c1) LIMIT 1)",
+			Needs: []Right{mainT2(core.ActionDelete), mainT2(core.ActionSelect), mainT1(core.ActionSelect)},
+			Op:    core.InspectOpDelete,
+			Why:   "it deletes rows of t2 chosen by reading t2 and a count over t1",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a named window in a CTE body",
+			SQL:   "WITH a AS (SELECT count(*) OVER w AS n FROM t1 WINDOW w AS (PARTITION BY c1)) SELECT n FROM a",
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "a is the statement's own name for a count over t1",
+		},
+		{
+			On:    []string{"sqlite"},
+			Name:  "a named window in a scalar subquery with no FROM around it",
+			SQL:   "SELECT (SELECT count(*) OVER w FROM t1 WINDOW w AS (PARTITION BY c1) LIMIT 1) AS n",
+			Needs: []Right{mainT1(core.ActionSelect)},
+			Op:    core.InspectOpSelect,
+			Why:   "the only relation read is t1",
+		},
+		{
+			On:   []string{"sqlite"},
+			Name: "a named window in the predicate of an upsert",
+			SQL: "INSERT INTO t1 (c1) VALUES (1) ON CONFLICT (c1) DO UPDATE SET c2 = 'x' WHERE t1.c1 > " +
+				"(SELECT count(*) FILTER (WHERE c4 <> '') OVER w FROM other.t3 WINDOW w AS (PARTITION BY c1) LIMIT 1)",
+			Needs: []Right{mainT1(core.ActionInsert), mainT1(core.ActionUpdate), mainT1(core.ActionSelect), otherT3(core.ActionSelect)},
+			Op:    core.InspectOpInsert,
+			Why:   "it inserts into t1, updates t1 on a conflict chosen by reading t1 and a count over t3",
+		},
+		{
 			Name:  "a derived table joined first",
 			SQL:   "SELECT * FROM (SELECT c1 FROM t1) x JOIN t2 ON x.c1 = t2.c1",
 			Needs: []Right{mainT1(core.ActionSelect), mainT2(core.ActionSelect)},
@@ -3598,17 +3658,6 @@ func permCases() []PermCase {
 			Needs: []Right{mainT1(core.ActionInsert)},
 			Op:    core.InspectOpInsert,
 			Why:   "the conflicting row is left exactly as it was",
-		},
-		{
-			// This grammar does not model every spelling SQLite accepts, and a
-			// statement it stumbles over while still naming its tables is
-			// checked against those tables rather than floored.
-			On:    []string{"sqlite"},
-			Name:  "a named window the grammar misses",
-			SQL:   "SELECT c1 FROM t1 WINDOW w AS (PARTITION BY c1)",
-			Needs: []Right{mainT1(core.ActionSelect)},
-			Op:    core.InspectOpSelect,
-			Why:   "refusing it would hold ordinary work",
 		},
 		{
 			On:    []string{"sqlite"},
