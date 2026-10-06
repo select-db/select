@@ -23,6 +23,7 @@ import (
 //	PPROF_ADDR=127.0.0.1:6060 ./server
 //	go tool pprof http://127.0.0.1:6060/debug/pprof/heap
 //	go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
+//	curl http://127.0.0.1:6060/debug/stats  # what the program registered with RegisterStats
 func StartPprofServer() {
 	addr := os.Getenv("PPROF_ADDR")
 	if addr == "" {
@@ -41,6 +42,7 @@ func StartPprofServer() {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.HandleFunc("/debug/stats", serveStats)
 
 	srv := &http.Server{
 		Addr:              addr,

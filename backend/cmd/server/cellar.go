@@ -96,6 +96,8 @@ func serveLocalCellar() (string, error) {
 // is told to stop. It never opens Postgres. Its id is CELLAR_ID, the same value
 // the backend has, or else the listen host.
 func serveCellar() {
+	// what the cellar says about its databases, read only when /debug/stats is
+	toolkit.RegisterStats("cellar", cellar.Stats)
 	toolkit.StartPprofServer()
 	address := os.Getenv("CELLAR_LISTEN")
 	if address == "" {

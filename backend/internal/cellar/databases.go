@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/benbjohnson/litestream"
@@ -32,6 +33,8 @@ type Databases struct {
 	stopTidy    context.CancelFunc
 	tidyStopped chan struct{}
 	restores    singleflight.Group // one restore per cold database, shared by its callers
+	wakes       atomic.Int64       // restores from the bucket, since the start
+	evictions   atomic.Int64       // databases removed from the disk, since the start
 
 	mu     sync.Mutex
 	onDisk map[string]*database // by id
