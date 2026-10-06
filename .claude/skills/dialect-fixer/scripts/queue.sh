@@ -18,12 +18,18 @@ issues=$(gh issue list --label agent:finder --state open --limit 1000 --json num
 		# The order of the sev: labels in labels.sh.
 		rank: ([$l[] as $x | ["sev:bypass", "sev:wrong-right", "sev:unchecked-read", "sev:false-denial", "sev:quality"] | index($x) | values] | min // 99)})')
 # Every open claude/fix-N pull request, labelled or not, holds its issue's slot.
-prs=$(gh pr list --state open --limit 100 --json number,headRefName,isDraft,mergeable,body,statusCheckRollup --jq '
-	map(select(.headRefName | test("^claude/fix-[0-9]+$")) | {number, isDraft, mergeable,
-		issue: (.headRefName | ltrimstr("claude/fix-") | tonumber),
-		# dialect-fixer.yml appends one per repair run.
-		repairs: (.body | [scan("<!-- fixer-repair -->")] | length),
-		ci: ([.statusCheckRollup[] | select(.name == "CI OK") | .conclusion] | first // "")})')
+# A push to dev resets every pull request's mergeability to UNKNOWN while
+# GitHub recomputes it, and the push is what starts this run, so wait it out.
+for attempt in 1 2 3 4 5 6 7 8; do
+	prs=$(gh pr list --state open --limit 100 --json number,headRefName,isDraft,mergeable,body,statusCheckRollup --jq '
+		map(select(.headRefName | test("^claude/fix-[0-9]+$")) | {number, isDraft, mergeable,
+			issue: (.headRefName | ltrimstr("claude/fix-") | tonumber),
+			# dialect-fixer.yml appends one per repair run.
+			repairs: (.body | [scan("<!-- fixer-repair -->")] | length),
+			ci: ([.statusCheckRollup[] | select(.name == "CI OK") | .conclusion] | first // "")})')
+	jq -e 'any(.mergeable == "UNKNOWN")' <<<"$prs" >/dev/null || break
+	[ "$attempt" = 8 ] || sleep 15
+done
 
 runs='[]'
 start() {
