@@ -69,5 +69,6 @@ labels: agent:finder,bug,area:permission,dialect:postgresql,sev:wrong-right,orac
 ...
 ```
 
-Only the labels above are accepted. The workflow adds the mention, the run
-link and the closing instructions, and assigns every `sev:bypass`.
+Only the labels above are accepted. The workflow adds the run link and the
+closing instructions. It mentions and assigns nobody: the fixer queue picks the
+issue up, and a maintainer hears of it when its pull request is ready.

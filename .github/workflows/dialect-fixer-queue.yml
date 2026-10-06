@@ -1,0 +1,67 @@
+name: Dialect fixer queue
+
+# Works the agent:finder issues the way dependabot works dependencies;
+# .claude/skills/dialect-fixer/scripts/queue.sh decides. The review request on a
+# green pull request is the only notification. fix:skip keeps an issue out.
+
+on:
+  push:
+    branches: [dev]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: ['claude/fix-*']
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    # One plan at a time, so two cannot start the same issue; the runs it
+    # starts are another job and do not hold this.
+    concurrency:
+      group: dialect-fixer-queue
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    outputs:
+      runs: ${{ steps.queue.outputs.runs }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      FIXER_REVIEWER: Arthur-Mesplede
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .claude/skills/dialect-fixer/scripts
+      - id: queue
+        run: |
+          runs=$(.claude/skills/dialect-fixer/scripts/queue.sh)
+          echo "runs=$runs" >> "$GITHUB_OUTPUT"
+          echo "Starting: $runs" >> "$GITHUB_STEP_SUMMARY"
+
+  fix:
+    name: "${{ matrix.mode }} #${{ matrix.issue }}"
+    needs: plan
+    if: needs.plan.outputs.runs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.runs) }}
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
+      id-token: write
+    uses: ./.github/workflows/dialect-fixer.yml
+    with:
+      issue: ${{ matrix.issue }}
+      mode: ${{ matrix.mode }}
+    secrets: inherit

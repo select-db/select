@@ -36,8 +36,6 @@ jobs:
       contents: read
       issues: write
     env:
-      # Assigned and mentioned on what the finder files.
-      FINDER_NOTIFY: Arthur-Mesplede
       FINDER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
       FINDER_MINUTES: ${{ inputs.minutes || 60 }}
       FINDER_MAX_ISSUES: "5"
@@ -81,10 +79,10 @@ jobs:
           github_token: ${{ github.token }}
           settings: .github/agent-sandbox.json
           # Any value keeps the token out of .git/config, behind a credential helper.
-          allowed_non_write_users: ${{ env.FINDER_NOTIFY }}
+          allowed_non_write_users: ${{ github.repository_owner }}
           prompt: |
             This is a dialect finder run in ${{ github.repository }}. Follow .claude/skills/dialect-finder/SKILL.md.
-            FINDER_NOTIFY=${{ env.FINDER_NOTIFY }} FINDER_DRY_RUN=${{ env.FINDER_DRY_RUN }}
+            FINDER_DRY_RUN=${{ env.FINDER_DRY_RUN }}
             FINDER_MAX_ISSUES=${{ env.FINDER_MAX_ISSUES }} FINDER_DEADLINE=${{ env.FINDER_DEADLINE }}
             FINDER_CASES=${{ env.FINDER_CASES }}
           claude_args: >-
