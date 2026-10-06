@@ -89,6 +89,8 @@ func serveLocalCellar() (string, error) {
 	}
 	// Managed databases answer unavailable if it stops; the rest keeps serving.
 	go func() { log.Printf("cellar: stopped: %v", server.Serve(listener)) }()
+	// the cellar runs inside this process: its numbers are in this process's /debug/stats
+	toolkit.RegisterStats("cellar", cellar.Stats)
 	return "http://" + listener.Addr().String(), nil
 }
 
