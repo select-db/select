@@ -89,6 +89,7 @@ func serveLocalCellar() (string, error) {
 	}
 	// Managed databases answer unavailable if it stops; the rest keeps serving.
 	go func() { log.Printf("cellar: stopped: %v", server.Serve(listener)) }()
+	toolkit.RegisterStats("cellar", cellar.Stats)
 	return "http://" + listener.Addr().String(), nil
 }
 
@@ -96,6 +97,7 @@ func serveLocalCellar() (string, error) {
 // is told to stop. It never opens Postgres. Its id is CELLAR_ID, the same value
 // the backend has, or else the listen host.
 func serveCellar() {
+	toolkit.RegisterStats("cellar", cellar.Stats)
 	toolkit.StartPprofServer()
 	address := os.Getenv("CELLAR_LISTEN")
 	if address == "" {

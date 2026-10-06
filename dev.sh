@@ -231,7 +231,8 @@ app_e2e() {
 app() {
   local sub="${1:-}"; shift || true
   case "$sub" in
-    start)    app_task dev "$@" ;;
+    # pprof and /debug/stats on loopback, for the select-ops console
+    start)    PPROF_ADDR="${PPROF_ADDR:-127.0.0.1:6061}" app_task dev "$@" ;;
     build)    app_task build "$@" ;;
     package)  app_task package "$@" ;;
     bindings) app_task generate:bindings "$@" ;;
@@ -334,7 +335,8 @@ backend_start() {
   migrate up
   generate
   step "Starting backend server"
-  (cd "$ROOT/backend" && go run ./cmd/server)
+  # pprof and /debug/stats on loopback, for the select-ops console
+  (cd "$ROOT/backend" && PPROF_ADDR="${PPROF_ADDR:-127.0.0.1:6060}" go run ./cmd/server)
 }
 
 # The suite talks to a real Postgres -- partitioning and pg_partman are most of

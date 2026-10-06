@@ -96,6 +96,7 @@ func (databases *Databases) evict(diskShort func() bool) {
 			log.Printf("cellar: evict %s: %v", oldest.id, err)
 			return
 		}
+		databases.evictions.Add(1)
 	}
 }
 

@@ -1,7 +1,12 @@
 package main
 
-import "github.com/selectDb/toolkit"
+import (
+	"backend/db"
+
+	"github.com/selectDb/toolkit"
+)
 
 func startPprofServer() {
+	toolkit.RegisterStats("db", db.Stats)
 	toolkit.StartPprofServer()
 }

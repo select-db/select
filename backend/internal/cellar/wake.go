@@ -22,6 +22,7 @@ func (databases *Databases) wake(ctx context.Context, id, path string) error {
 		return nil
 	}
 	restore := databases.restores.DoChan(id, func() (any, error) {
+		databases.wakes.Add(1)
 		return nil, databases.restoreLatest(id, path)
 	})
 	select {
