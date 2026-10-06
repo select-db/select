@@ -175,7 +175,7 @@ You never talk to GitHub. Commands run in a sandbox with no token and no
 network, so any shell spelling works; the issue is in `.fixer-work/issue.md`,
 and `origin/dev`, the Go modules and build cache, the linter and the analyzer's
 packages are already there. When you stop, a hook pushes your branch and opens
-the draft pull request. You may edit `dialect/` and `.fixer-work/`, except
+the pull request. You may edit `dialect/` and `.fixer-work/`, except
 `dialect/parsergen.sh` and dependency files; the hook refuses anything else. A
 grammar change is in reach: edit the `.g4`, run `dialect/parsergen.sh
 <dialect>` (the ANTLR jars are cached) and commit the regenerated files with it.
