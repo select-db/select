@@ -36,6 +36,12 @@ func TestStatsCountTheStatesTheCountersAndTheBytes(t *testing.T) {
 	if report.Replicating != 1 || report.Resting != 2 || report.Wakes != 3 || report.Evictions != 1 || report.Bytes != 1750 {
 		t.Fatalf("%+v", report)
 	}
+	if len(report.Largest) != 3 || report.Largest[0].ID != "a" || report.Largest[0].State != "replicating" || report.Largest[2].ID != "c" {
+		t.Fatalf("the largest first: %+v", report.Largest)
+	}
+	if report.NeverSynced != 1 {
+		t.Fatalf("a database that has not synced is counted: %+v", report)
+	}
 
 	// a file that grows is not seen until the size is read again
 	if err := os.WriteFile(filepath.Join(dir, "b.db"), make([]byte, 5000), 0o600); err != nil {
@@ -49,11 +55,33 @@ func TestStatsCountTheStatesTheCountersAndTheBytes(t *testing.T) {
 	}
 }
 
+func TestStatsKeepOnlyTheLargestDatabases(t *testing.T) {
+	dir := t.TempDir()
+	databases := &Databases{onDisk: map[string]*database{}}
+	for i := 0; i < largestCount+5; i++ {
+		path := filepath.Join(dir, "d"+string(rune('a'+i))+".db")
+		if err := os.WriteFile(path, make([]byte, 100+i), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		id := "d" + string(rune('a'+i))
+		databases.onDisk[id] = &database{id: id, path: path}
+	}
+	sizeMu.Lock()
+	sizeAt = time.Time{}
+	sizeMu.Unlock()
+
+	report := databases.stats(time.Now())
+
+	if len(report.Largest) != largestCount || report.Largest[0].Bytes != int64(100+largestCount+4) {
+		t.Fatalf("%d kept, first %+v", len(report.Largest), report.Largest[0])
+	}
+}
+
 func TestStatsOfACellarThatIsNotOpen(t *testing.T) {
 	saved := databases
 	databases = nil
 	defer func() { databases = saved }()
-	if report := Stats().(StatsReport); report != (StatsReport{}) {
+	if report := Stats().(StatsReport); report.Replicating+report.Resting != 0 || report.Bytes != 0 || report.Largest != nil {
 		t.Fatalf("%+v", report)
 	}
 }
