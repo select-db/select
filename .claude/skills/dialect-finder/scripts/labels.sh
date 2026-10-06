@@ -18,6 +18,7 @@ label dialect:postgresql   c5def5 "Reproduces on PostgreSQL"
 label dialect:mysql        c5def5 "Reproduces on MySQL"
 label dialect:sqlite       c5def5 "Reproduces on SQLite"
 
+# Most severe first: the fixer queue (dialect-fixer/scripts/queue.sh) works them in this order.
 label sev:bypass           b60205 "Ran with no grant"
 label sev:wrong-right      d93f0b "Ran under the wrong permission"
 label sev:unchecked-read   e99695 "The write was checked, a read inside it was not"
@@ -32,5 +33,8 @@ label verdict:not-a-bug    0e8a16 "Closed: the expectation was wrong; the reason
 label verdict:duplicate    0e8a16 "Closed: duplicates another issue"
 label verdict:wontfix      0e8a16 "Closed: real, not worth changing"
 
-label fix:go               0052cc "Approved for the dialect fixer; only a writer's label counts"
-label fix:blocked          d93f0b "The dialect fixer disagrees or cannot fix this; see its comment"
+label agent:fixer          5319e7 "Opened by the dialect fixer agent"
+label fix:go               0052cc "Run the dialect fixer on this now, outside the queue"
+label fix:running          0052cc "A dialect fixer run is working on this"
+label fix:skip             cfd3d7 "Kept out of the dialect fixer queue"
+label fix:blocked          d93f0b "The dialect fixer disagrees or cannot fix this; see its comment. Remove to retry"

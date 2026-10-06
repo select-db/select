@@ -134,7 +134,8 @@ they win. Two have a specific shape in this package:
   already floors an unrecognised statement. Reach for those before inventing a
   guard.
 - Never hand-edit the generated parser files under `*/parser/`. A grammar fix
-  is a regeneration, not an edit.
+  is an edit to the `.g4` and `dialect/parsergen.sh <dialect>`; CI regenerates
+  every parser and fails on any difference.
 
 ## Cleanup
 
@@ -164,16 +165,20 @@ the diff for a helper that lost its last caller before pushing.
 
 ## Unattended runs
 
-`.github/workflows/dialect-fixer.yml` runs this skill when a maintainer labels
-an issue `fix:go`. It sets `FIXER_ISSUE`, `FIXER_DEADLINE` (Unix time to stop
-starting work; the run is killed 10 minutes later) and `FIXER_NOTIFY`.
+`.github/workflows/dialect-fixer.yml` runs this skill for each issue the queue
+(`dialect-fixer-queue.yml`) starts, or that a maintainer labels `fix:go`. It
+sets `FIXER_ISSUE`, `FIXER_MODE` (`fix`, or `repair`: see below) and
+`FIXER_DEADLINE` (Unix time to stop starting work; the run is killed 10 minutes
+later).
 
 You never talk to GitHub. Commands run in a sandbox with no token and no
 network, so any shell spelling works; the issue is in `.fixer-work/issue.md`,
 and `origin/dev`, the Go modules and build cache, the linter and the analyzer's
 packages are already there. When you stop, a hook pushes your branch and opens
-the draft pull request. You may edit `dialect/` and `.fixer-work/`, except the
-generated parsers and dependency files; the hook refuses anything else.
+the draft pull request. You may edit `dialect/` and `.fixer-work/`, except
+`dialect/parsergen.sh` and dependency files; the hook refuses anything else. A
+grammar change is in reach: edit the `.g4`, run `dialect/parsergen.sh
+<dialect>` (the ANTLR jars are cached) and commit the regenerated files with it.
 
 The checks: `golangci-lint run ./...` in `dialect/`, `go -C dialect test ./...`,
 `gofmt -l` on the files you touched and `go -C dialect run ./cmd/seesweep`.
@@ -190,9 +195,8 @@ it rather than estimate.
    `dialect/agentprobe`, and check the expectation against method step 1 and
    against every maintainer decision in its comments.
 2. If you disagree with the expectation or a maintainer's decision, or the fix
-   needs something out of reach (a grammar change, a dependency, a product
-   decision), write the reasoning and the measurements
-   to `.fixer-work/blocked.md`, starting with `@$FIXER_NOTIFY`, and stop.
+   needs something out of reach (a dependency, a product decision), write the
+   reasoning and the measurements to `.fixer-work/blocked.md` and stop.
 3. `git switch -c claude/fix-$FIXER_ISSUE`. Case first, failing count against
    the old code, fix, checks, commit. Rebuild the probe after changing what it
    runs (`go -C dialect build -o agentprobe ./cmd/agentprobe`).
@@ -215,3 +219,19 @@ it rather than estimate.
 
 Past `$FIXER_DEADLINE`, commit what is sound, write where the work stands to
 `.fixer-work/blocked.md` if it is not ready, and stop.
+
+### Repair
+
+With `FIXER_MODE=repair` the open pull request for the issue is checked out on
+`claude/fix-$FIXER_ISSUE`, and `.fixer-work/repair.md` says why it came back:
+it conflicts with dev, its CI failed (the failed jobs' logs follow), or both.
+The hook replaces the branch, so rewrite it freely.
+
+1. `git rebase origin/dev`. In a conflict, keep both sides' intent: both
+   sides' cases in a case table, both sides' rules in a `.g4`. Resolve a
+   generated parser by running `dialect/parsergen.sh` on the resolved grammar,
+   never by picking a side.
+2. Reproduce each CI failure locally and fix it in this branch. A failure the
+   change did not cause and cannot fix goes to `.fixer-work/blocked.md`.
+3. Run the checks, commit, and stop. No `pr.md`, no reviews: the pull request
+   already has both.

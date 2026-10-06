@@ -18,12 +18,9 @@ for file in .finder-work/file/*.md; do
 	[[ ,$labels, == *,agent:finder,* ]] || labels="agent:finder,$labels"
 	body=$(mktemp)
 	{
-		printf '@%s\n\n' "$FINDER_NOTIFY"
 		sed '1,/^$/d' "$file"
 		printf '\n---\nFiled by the dialect finder, run %s. Close with one `verdict:` label and a one-line reason: the finder reads both.\n' "$FINDER_RUN_URL"
 	} >"$body"
-	args=(--title "$title" --label "$labels" --body-file "$body")
-	[[ ,$labels, == *,sev:bypass,* ]] && args+=(--assignee "$FINDER_NOTIFY")
-	gh issue create "${args[@]}" && filed=$((filed + 1)) || failed=1
+	gh issue create --title "$title" --label "$labels" --body-file "$body" && filed=$((filed + 1)) || failed=1
 done
 exit "$failed"

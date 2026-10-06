@@ -45,6 +45,21 @@ jobs:
           # linting, so an outage there fails a build for reasons unrelated to
           # the code, as it did on #174.
           verify: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/antlr
+          key: antlr-${{ hashFiles('dialect/parsergen.sh') }}
+      # A hand edit to a generated parser, or a grammar committed without
+      # regenerating, leaves a diff here.
+      - name: Parsers match their grammars
+        working-directory: dialect
+        run: |
+          ./parsergen.sh mysql postgresql sqlite
+          if [ -n "$(git status --porcelain -- .)" ]; then
+            git status --short -- .
+            echo "::error::Generated parsers differ from their grammars. Run dialect/parsergen.sh <dialect> and commit the result."
+            exit 1
+          fi
 
   tests:
     name: Tests

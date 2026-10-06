@@ -1,36 +1,48 @@
 name: Dialect fixer
 
-# A maintainer labels an agent:finder issue fix:go. The agent fixes it in
+# dialect-fixer-queue.yml calls this for each issue it starts, and a maintainer
+# can label an agent:finder issue fix:go to run it now. The agent fixes it in
 # Claude Code's sandbox, with no token and no network; its Stop hook
 # (.claude/skills/dialect-fixer/scripts/publish.sh) pushes claude/fix-N and
 # opens the draft pull request with the Claude App's token, whose pushes run CI.
+# In repair mode it rebases that branch onto dev and fixes its CI instead.
 #
 # Needs the secret CLAUDE_CODE_OAUTH_TOKEN and the Claude GitHub App installed.
 
 on:
   issues:
     types: [labeled]
+  workflow_call:
+    inputs:
+      issue:
+        type: number
+        required: true
+      mode:
+        description: fix, or repair to rebase and fix CI on the open pull request
+        type: string
+        default: fix
 
 permissions: {}
 
 jobs:
   fix:
     name: Fix
-    if: github.event.label.name == 'fix:go'
+    if: inputs.issue || github.event.label.name == 'fix:go'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     concurrency:
-      group: dialect-fixer-${{ github.event.issue.number }}
-    # The workflow token only reads and comments; the App token pushes.
+      group: dialect-fixer-${{ inputs.issue || github.event.issue.number }}
+    # The workflow token only reads, labels and comments; the App token pushes.
     permissions:
+      actions: read
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
       id-token: write
     env:
-      FIXER_ISSUE: ${{ github.event.issue.number }}
-      # Mentioned on blocked notes and failures.
-      FIXER_NOTIFY: Arthur-Mesplede
+      FIXER_ISSUE: ${{ inputs.issue || github.event.issue.number }}
+      FIXER_MODE: ${{ inputs.mode || 'fix' }}
+      FIXER_BRANCH: claude/fix-${{ inputs.issue || github.event.issue.number }}
       # The analyzer-backed tests fail rather than skip, as in CI.
       SELECT_REQUIRE_ANALYZER: "1"
       GH_TOKEN: ${{ github.token }}
@@ -38,6 +50,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ env.FIXER_MODE == 'repair' && env.FIXER_BRANCH || '' }}
           # A stored workflow token outranks the App's, and CI then waits for approval.
           persist-credentials: false
 
@@ -56,6 +69,24 @@ jobs:
           } > .fixer-work/issue.md
           echo "FIXER_DEADLINE=$(( $(date +%s) + 60 * 60 ))" >> "$GITHUB_ENV"
 
+      # What the repair has to answer: the conflict, and the failed CI jobs' logs.
+      - name: Read the pull request
+        if: env.FIXER_MODE == 'repair'
+        run: |
+          head=$(git rev-parse HEAD)
+          echo "FIXER_HEAD=$head" >> "$GITHUB_ENV"
+          pr=$(gh pr list --head "$FIXER_BRANCH" --state open --json number,mergeable --jq '.[0]')
+          {
+            echo "# Repair of #$(jq -r .number <<<"$pr"), on $FIXER_BRANCH"
+            echo; echo "Mergeable with dev: $(jq -r .mergeable <<<"$pr")"
+            run=$(gh run list --workflow ci.yml --commit "$head" --status failure --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [ -n "$run" ]; then
+              echo; echo "## Failed CI jobs"; echo; echo '```'
+              gh run view "$run" --log-failed | cut -c1-400 | tail -n 400
+              echo '```'
+            fi
+          } > .fixer-work/repair.md
+
       - uses: ./.github/actions/dialect-agent-env
         with:
           fixer: true
@@ -69,12 +100,12 @@ jobs:
           settings: .github/agent-sandbox.json
           # Any value keeps the action's token out of .git/config, behind a
           # credential helper; it admits nobody else without github_token.
-          allowed_non_write_users: ${{ env.FIXER_NOTIFY }}
+          allowed_non_write_users: ${{ github.repository_owner }}
           prompt: |
-            Fix issue #${{ env.FIXER_ISSUE }} in ${{ github.repository }}.
+            ${{ env.FIXER_MODE == 'repair' && 'Repair the pull request' || 'Fix issue' }} for #${{ env.FIXER_ISSUE }} in ${{ github.repository }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md.
-            FIXER_ISSUE=${{ env.FIXER_ISSUE }} FIXER_DEADLINE=${{ env.FIXER_DEADLINE }}
-            FIXER_NOTIFY=${{ env.FIXER_NOTIFY }}; these are also in the environment.
+            FIXER_ISSUE=${{ env.FIXER_ISSUE }} FIXER_MODE=${{ env.FIXER_MODE }} FIXER_DEADLINE=${{ env.FIXER_DEADLINE }};
+            these are also in the environment.
           claude_args: >-
             --model ${{ vars.FIXER_MODEL || 'opus' }}
             --max-turns 250
@@ -92,18 +123,30 @@ jobs:
         if: always()
         env:
           EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        # Nobody is mentioned: a blocked or failed run waits under fix:blocked,
+        # and the queue tells a maintainer only of a pull request ready to review.
         run: |
-          gh issue edit "$FIXER_ISSUE" --remove-label fix:go
-          pr=$(gh pr list --head "claude/fix-$FIXER_ISSUE" --state open --json url --jq '.[0].url // empty')
+          gh issue edit "$FIXER_ISSUE" --remove-label fix:go --remove-label fix:running
+          pr=$(gh pr list --head "$FIXER_BRANCH" --state open --json number --jq '.[0].number // empty')
           final=$(jq -r '.. | objects | select(.type? == "result") | .result // empty' "${EXECUTION_FILE:-/dev/null}" 2>/dev/null | tail -c 1500)
           printf '### Final message\n\n%s\n' "${final:-None.}" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$pr" ]; then
-            echo "Pull request: $pr" >> "$GITHUB_STEP_SUMMARY"
-          elif [ -s .fixer-work/blocked.md ]; then
+          if [ "$FIXER_MODE" = repair ] && [ -n "$pr" ]; then
+            # queue.sh counts these to stop a repair loop.
+            gh pr view "$pr" --json body --jq '.body + "\n<!-- fixer-repair -->"' > "$RUNNER_TEMP/body.md"
+            gh pr edit "$pr" --body-file "$RUNNER_TEMP/body.md"
+            # A repair that pushed nothing would only be started again.
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$FIXER_BRANCH" --jq .object.sha)" != "$FIXER_HEAD" ] ||
+              [ -s .fixer-work/blocked.md ] ||
+              echo "The repair run changed nothing: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > .fixer-work/blocked.md
+          fi
+          if [ -s .fixer-work/blocked.md ]; then
             gh issue comment "$FIXER_ISSUE" --body-file .fixer-work/blocked.md
-            gh issue edit "$FIXER_ISSUE" --add-label fix:blocked --add-assignee "$FIXER_NOTIFY"
+            gh issue edit "$FIXER_ISSUE" --add-label fix:blocked
+          elif [ -n "$pr" ]; then
+            echo "Pull request: #$pr" >> "$GITHUB_STEP_SUMMARY"
           else
-            printf '@%s the fixer run ended without a pull request or a blocked note: %s. Add fix:go again to retry.\n\nIts last words:\n\n%s\n' \
-              "$FIXER_NOTIFY" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "$(sed 's/^/> /' <<<"${final:-(none)}")" > "$RUNNER_TEMP/comment.md"
+            printf 'The fixer run ended without a pull request or a blocked note: %s. Remove fix:blocked to retry.\n\nIts last words:\n\n%s\n' \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "$(sed 's/^/> /' <<<"${final:-(none)}")" > "$RUNNER_TEMP/comment.md"
             gh issue comment "$FIXER_ISSUE" --body-file "$RUNNER_TEMP/comment.md"
+            gh issue edit "$FIXER_ISSUE" --add-label fix:blocked
           fi

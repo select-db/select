@@ -45663,7 +45663,7 @@ type ITableReferenceListContext interface {
 
 	// Getter signatures
 	AllTableReference() []ITableReferenceContext
-	RelationRef(i int) ITableReferenceContext
+	TableReference(i int) ITableReferenceContext
 	AllCOMMA_SYMBOL() []antlr.TerminalNode
 	COMMA_SYMBOL(i int) antlr.TerminalNode
 
@@ -45724,7 +45724,7 @@ func (s *TableReferenceListContext) AllTableReference() []ITableReferenceContext
 	return tst
 }
 
-func (s *TableReferenceListContext) RelationRef(i int) ITableReferenceContext {
+func (s *TableReferenceListContext) TableReference(i int) ITableReferenceContext {
 	var t antlr.RuleContext
 	j := 0
 	for _, ctx := range s.GetChildren() {
@@ -45790,7 +45790,7 @@ func (p *MySQLParser) TableReferenceList() (localctx ITableReferenceListContext)
 	p.EnterOuterAlt(localctx, 1)
 	{
 		p.SetState(3202)
-		p.RelationRef()
+		p.TableReference()
 	}
 	p.SetState(3207)
 	p.GetErrorHandler().Sync(p)
@@ -45810,7 +45810,7 @@ func (p *MySQLParser) TableReferenceList() (localctx ITableReferenceListContext)
 		}
 		{
 			p.SetState(3204)
-			p.RelationRef()
+			p.TableReference()
 		}
 
 		p.SetState(3209)
@@ -48095,7 +48095,7 @@ func (s *TableReferenceContext) Accept(visitor antlr.ParseTreeVisitor) interface
 	}
 }
 
-func (p *MySQLParser) RelationRef() (localctx ITableReferenceContext) {
+func (p *MySQLParser) TableReference() (localctx ITableReferenceContext) {
 	localctx = NewTableReferenceContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 368, MySQLParserRULE_tableReference)
 	var _alt int
@@ -48395,7 +48395,7 @@ type IJoinedTableContext interface {
 
 	// Getter signatures
 	InnerJoinType() IInnerJoinTypeContext
-	RelationRef() ITableReferenceContext
+	TableReference() ITableReferenceContext
 	ON_SYMBOL() antlr.TerminalNode
 	Expr() IExprContext
 	USING_SYMBOL() antlr.TerminalNode
@@ -48456,7 +48456,7 @@ func (s *JoinedTableContext) InnerJoinType() IInnerJoinTypeContext {
 	return t.(IInnerJoinTypeContext)
 }
 
-func (s *JoinedTableContext) RelationRef() ITableReferenceContext {
+func (s *JoinedTableContext) TableReference() ITableReferenceContext {
 	var t antlr.RuleContext
 	for _, ctx := range s.GetChildren() {
 		if _, ok := ctx.(ITableReferenceContext); ok {
@@ -48608,7 +48608,7 @@ func (p *MySQLParser) JoinedTable() (localctx IJoinedTableContext) {
 		}
 		{
 			p.SetState(3317)
-			p.RelationRef()
+			p.TableReference()
 		}
 		p.SetState(3322)
 		p.GetErrorHandler().Sync(p)
@@ -48655,7 +48655,7 @@ func (p *MySQLParser) JoinedTable() (localctx IJoinedTableContext) {
 		}
 		{
 			p.SetState(3325)
-			p.RelationRef()
+			p.TableReference()
 		}
 		p.SetState(3330)
 		p.GetErrorHandler().Sync(p)
