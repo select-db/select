@@ -3,10 +3,10 @@ package cellar
 import (
 	"os"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/benbjohnson/litestream"
+	"github.com/selectDb/toolkit/cache"
 )
 
 // DatabaseStat is one of the databases that take the most room on the cellar's disk.
@@ -24,30 +24,28 @@ type StatsReport struct {
 	Bytes       int64 `json:"bytes"`       // what they take on the cellar's disk
 	Wakes       int64 `json:"wakes"`       // databases restored from the bucket since the start
 	Evictions   int64 `json:"evictions"`   // databases removed from the disk since the start
-	// OldestSyncSeconds is how long ago the replicating database that synced least
-	// recently did, and NeverSynced how many have not yet: a growing age is a
-	// replication that is stuck, a database whose writes the bucket does not have.
+	// OldestSyncSeconds is the age of the last sync pass of the replicating database
+	// that synced least recently; a growing age is a stuck replication.
 	OldestSyncSeconds int64          `json:"oldestSyncSeconds"`
-	NeverSynced       int            `json:"neverSynced"`
+	NeverSynced       int            `json:"neverSynced"` // replicating, and no sync pass yet
 	Largest           []DatabaseStat `json:"largest,omitempty"`
 }
 
-// statsTTL is how long the size of the files is reused: it takes a stat per database.
 const (
-	statsTTL     = 30 * time.Second
 	largestCount = 10
+	// sizesTTL is how long the size of the files is reused: it takes a stat each.
+	sizesTTL = 30 * time.Second
 )
 
-var (
-	sizeMu      sync.Mutex
-	sizeAt      time.Time
-	sizeBytes   int64
-	sizeLargest []DatabaseStat
-)
+var sizes = cache.New(cache.Options{TTL: sizesTTL})
 
-// Stats is read only when /debug/stats is, so nothing is counted while nobody looks.
-// The states, the counters and the age of the syncs cost a pass over a map; the size
-// of the files, a stat each, is read at most every statsTTL.
+// sized is what the files of the databases take, and the largest of them.
+type sized struct {
+	bytes   int64
+	largest []DatabaseStat
+}
+
+// Stats is read only when /debug/stats is: nothing is counted or measured otherwise.
 func Stats() any {
 	if databases == nil {
 		return StatsReport{}
@@ -55,55 +53,57 @@ func Stats() any {
 	return databases.stats(time.Now())
 }
 
+// stored is a database of the cellar as it was when the stats were taken.
+type stored struct {
+	id, path    string
+	replicating *litestream.DB
+	lastUsed    time.Time
+}
+
 func (databases *Databases) stats(now time.Time) StatsReport {
 	report := StatsReport{Wakes: databases.wakes.Load(), Evictions: databases.evictions.Load()}
-	type seen struct {
-		id, path    string
-		replicating *litestream.DB
-		lastUsed    time.Time
-	}
-	var all []seen
+	var all []stored
 	databases.mu.Lock()
 	for _, database := range databases.onDisk {
-		all = append(all, seen{database.id, database.path, database.replicating, database.lastUsed})
+		all = append(all, stored{database.id, database.path, database.replicating, database.lastUsed})
 	}
 	databases.mu.Unlock()
 
-	for _, d := range all {
-		if d.replicating == nil {
+	for _, database := range all {
+		if database.replicating == nil {
 			report.Resting++
 			continue
 		}
 		report.Replicating++
-		if synced := d.replicating.LastSuccessfulSyncAt(); synced.IsZero() {
+		if synced := database.replicating.LastSuccessfulSyncAt(); synced.IsZero() {
 			report.NeverSynced++
 		} else if age := int64(now.Sub(synced).Seconds()); age > report.OldestSyncSeconds {
 			report.OldestSyncSeconds = age
 		}
 	}
 
-	sizeMu.Lock()
-	defer sizeMu.Unlock()
-	if now.Sub(sizeAt) >= statsTTL {
-		sizeBytes, sizeLargest = 0, nil
-		var sized []DatabaseStat
-		for _, d := range all {
-			info, err := os.Stat(d.path)
-			if err != nil {
-				continue
-			}
-			state := "resting"
-			if d.replicating != nil {
-				state = "replicating"
-			}
-			sizeBytes += info.Size()
-			sized = append(sized, DatabaseStat{ID: d.id, Bytes: info.Size(), State: state, IdleSeconds: int64(now.Sub(d.lastUsed).Seconds())})
-		}
-		sort.Slice(sized, func(a, b int) bool { return sized[a].Bytes > sized[b].Bytes })
-		sizeLargest = sized[:min(len(sized), largestCount)]
-		sizeAt = now
-	}
-	report.Bytes = sizeBytes
-	report.Largest = sizeLargest
+	value, _ := sizes.GetOrCreate("sizes", func() (any, error) { return measure(all, now), nil })
+	files := value.(sized)
+	report.Bytes, report.Largest = files.bytes, files.largest
 	return report
+}
+
+func measure(all []stored, now time.Time) sized {
+	var files sized
+	var each []DatabaseStat
+	for _, database := range all {
+		info, err := os.Stat(database.path)
+		if err != nil {
+			continue
+		}
+		state := "resting"
+		if database.replicating != nil {
+			state = "replicating"
+		}
+		files.bytes += info.Size()
+		each = append(each, DatabaseStat{ID: database.id, Bytes: info.Size(), State: state, IdleSeconds: int64(now.Sub(database.lastUsed).Seconds())})
+	}
+	sort.Slice(each, func(a, b int) bool { return each[a].Bytes > each[b].Bytes })
+	files.largest = each[:min(len(each), largestCount)]
+	return files
 }

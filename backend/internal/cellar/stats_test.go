@@ -26,10 +26,7 @@ func TestStatsCountTheStatesTheCountersAndTheBytes(t *testing.T) {
 	databases.wakes.Add(3)
 	databases.evictions.Add(1)
 
-	// the size is read once and reused, so reset it as the first read of a test
-	sizeMu.Lock()
-	sizeAt = time.Time{}
-	sizeMu.Unlock()
+	sizes.Delete("sizes")
 	now := time.Now()
 
 	report := databases.stats(now)
@@ -43,15 +40,16 @@ func TestStatsCountTheStatesTheCountersAndTheBytes(t *testing.T) {
 		t.Fatalf("a database that has not synced is counted: %+v", report)
 	}
 
-	// a file that grows is not seen until the size is read again
+	// a file that grows is not seen while the size is reused
 	if err := os.WriteFile(filepath.Join(dir, "b.db"), make([]byte, 5000), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := databases.stats(now.Add(10 * time.Second)).Bytes; got != 1750 {
+	if got := databases.stats(now).Bytes; got != 1750 {
 		t.Fatalf("within the ttl the size is reused: %d", got)
 	}
-	if got := databases.stats(now.Add(31 * time.Second)).Bytes; got != 6250 {
-		t.Fatalf("after the ttl it is read again: %d", got)
+	sizes.Delete("sizes")
+	if got := databases.stats(now).Bytes; got != 6250 {
+		t.Fatalf("read again, it is current: %d", got)
 	}
 }
 
@@ -66,9 +64,7 @@ func TestStatsKeepOnlyTheLargestDatabases(t *testing.T) {
 		id := "d" + string(rune('a'+i))
 		databases.onDisk[id] = &database{id: id, path: path}
 	}
-	sizeMu.Lock()
-	sizeAt = time.Time{}
-	sizeMu.Unlock()
+	sizes.Delete("sizes")
 
 	report := databases.stats(time.Now())
 

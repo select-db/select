@@ -2,8 +2,9 @@ package db
 
 import (
 	"context"
-	"sync"
 	"time"
+
+	"github.com/selectDb/toolkit/cache"
 )
 
 // PoolStats is the backend's pool of connections, as database/sql counts it.
@@ -32,12 +33,12 @@ type PostgresStats struct {
 // LockStats is the sessions of this database waiting for a lock.
 type LockStats struct {
 	Waiting       int    `json:"waiting"`
-	LongestWaitMs int64  `json:"longestWaitMs"`
+	LongestWaitMs int64  `json:"longestWaitMs"` // since the session's last state change
 	Error         string `json:"error,omitempty"`
 }
 
-// TableStats is a table, among the largest of the database. DeadTuples against
-// LiveTuples is the sign of bloat: autovacuum is behind when it grows.
+// TableStats is a table among the largest. Dead against live tuples is the bloat:
+// autovacuum is behind when it grows.
 type TableStats struct {
 	Name           string `json:"name"`
 	Bytes          int64  `json:"bytes"` // with its indexes and its toast
@@ -48,14 +49,20 @@ type TableStats struct {
 	LastAutovacuum int64  `json:"lastAutovacuum,omitempty"` // unix seconds
 }
 
-// ReplicationStats is the standbys of this database, if it has any.
+// TablesStats is the largest tables, or why they could not be read.
+type TablesStats struct {
+	Largest []TableStats `json:"largest,omitempty"`
+	Error   string       `json:"error,omitempty"`
+}
+
+// ReplicationStats is the standbys this role can see: without pg_read_all_stats, none.
 type ReplicationStats struct {
 	Replicas int    `json:"replicas"`
 	MaxLagMs int64  `json:"maxLagMs"`
 	Error    string `json:"error,omitempty"`
 }
 
-// Statement is a normalised query of pg_stat_statements: no values, the placeholders.
+// Statement is a normalised query of pg_stat_statements: placeholders, no values.
 type Statement struct {
 	Query   string  `json:"query"`
 	Calls   int64   `json:"calls"`
@@ -76,59 +83,55 @@ type StatsReport struct {
 	Pool        *PoolStats        `json:"pool,omitempty"`
 	Postgres    *PostgresStats    `json:"postgres,omitempty"`
 	Locks       *LockStats        `json:"locks,omitempty"`
-	Tables      []TableStats      `json:"tables,omitempty"`
+	Tables      *TablesStats      `json:"tables,omitempty"`
 	Replication *ReplicationStats `json:"replication,omitempty"`
 	Statements  *StatementsStats  `json:"statements,omitempty"`
 }
 
-// statsTTL is how long the database's own counters are reused: the page that reads
-// them asks every few seconds, and they need one query, not one per ask.
-const statsTTL = 15 * time.Second
-
-// slowStatsTTL is for what is read from larger views: the tables, the locks, the
-// standbys and the statements change slowly, and cost a little more than a counter.
-const slowStatsTTL = time.Minute
-
-var (
-	postgresStats    cache[PostgresStats]
-	lockStats        cache[LockStats]
-	tableStats       cache[[]TableStats]
-	replicationStats cache[ReplicationStats]
-	statementStats   cache[StatementsStats]
+const (
+	// statsTTL is how long a reading is reused, however many ask.
+	statsTTL = 15 * time.Second
+	// statsDeadline bounds all the reads of one scrape, so a slow database cannot hold it.
+	statsDeadline = 4 * time.Second
 )
 
-// Stats is read only when /debug/stats is, so the pool is counted and the database
-// asked (one query on a catalog view, at most every statsTTL) only while somebody
-// is looking.
+var readings = cache.New(cache.Options{TTL: statsTTL})
+
+// reading is read(ctx) kept under key for statsTTL.
+func reading[T any](ctx context.Context, key string, read func(context.Context) T) T {
+	value, _ := readings.GetOrCreate(key, func() (any, error) { return read(ctx), nil })
+	return value.(T)
+}
+
+// Stats is read only when /debug/stats is: nothing is counted or queried otherwise.
 func Stats() any {
 	if conn == nil {
 		return StatsReport{}
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), statsDeadline)
+	defer cancel()
 	pool := conn.Stats()
-	report := StatsReport{Pool: &PoolStats{
-		Max:    pool.MaxOpenConnections,
-		Open:   pool.OpenConnections,
-		InUse:  pool.InUse,
-		Idle:   pool.Idle,
-		Waits:  pool.WaitCount,
-		WaitMs: pool.WaitDuration.Milliseconds(),
-	}}
-	now := time.Now()
-	pg := postgresStats.get(now, statsTTL, readPostgresStats)
-	report.Postgres = &pg
-	locks := lockStats.get(now, statsTTL, readLockStats)
-	report.Locks = &locks
-	report.Tables = tableStats.get(now, slowStatsTTL, readTableStats)
-	replication := replicationStats.get(now, slowStatsTTL, readReplicationStats)
-	report.Replication = &replication
-	statements := statementStats.get(now, slowStatsTTL, readStatementStats)
-	report.Statements = &statements
-	return report
+	postgres, locks := reading(ctx, "postgres", readPostgres), reading(ctx, "locks", readLocks)
+	tables, replication := reading(ctx, "tables", readTables), reading(ctx, "replication", readReplication)
+	statements := reading(ctx, "statements", readStatements)
+	return StatsReport{
+		Pool: &PoolStats{
+			Max:    pool.MaxOpenConnections,
+			Open:   pool.OpenConnections,
+			InUse:  pool.InUse,
+			Idle:   pool.Idle,
+			Waits:  pool.WaitCount,
+			WaitMs: pool.WaitDuration.Milliseconds(),
+		},
+		Postgres:    &postgres,
+		Locks:       &locks,
+		Tables:      &tables,
+		Replication: &replication,
+		Statements:  &statements,
+	}
 }
 
-func readPostgresStats() PostgresStats {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+func readPostgres(ctx context.Context) PostgresStats {
 	var s PostgresStats
 	err := conn.QueryRowContext(ctx, `
 		SELECT numbackends, xact_commit, xact_rollback, blks_read, blks_hit, deadlocks, temp_bytes,
@@ -141,14 +144,7 @@ func readPostgresStats() PostgresStats {
 	return s
 }
 
-// each read has its own two seconds and its own connection from the pool, one at a time
-func queryContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 2*time.Second)
-}
-
-func readLockStats() LockStats {
-	ctx, cancel := queryContext()
-	defer cancel()
+func readLocks(ctx context.Context) LockStats {
 	var l LockStats
 	err := conn.QueryRowContext(ctx, `
 		SELECT count(*) FILTER (WHERE wait_event_type = 'Lock'),
@@ -161,31 +157,31 @@ func readLockStats() LockStats {
 	return l
 }
 
-func readTableStats() []TableStats {
-	ctx, cancel := queryContext()
-	defer cancel()
+func readTables(ctx context.Context) TablesStats {
 	rows, err := conn.QueryContext(ctx, `
 		SELECT relname, pg_total_relation_size(relid), n_live_tup, n_dead_tup,
 		       coalesce(seq_scan, 0), coalesce(idx_scan, 0),
 		       coalesce(extract(epoch FROM last_autovacuum)::bigint, 0)
 		FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 8`)
 	if err != nil {
-		return nil
+		return TablesStats{Error: err.Error()}
 	}
 	defer func() { _ = rows.Close() }()
-	var tables []TableStats
+	var out TablesStats
 	for rows.Next() {
 		var t TableStats
-		if rows.Scan(&t.Name, &t.Bytes, &t.LiveTuples, &t.DeadTuples, &t.SeqScans, &t.IdxScans, &t.LastAutovacuum) == nil {
-			tables = append(tables, t)
+		if err := rows.Scan(&t.Name, &t.Bytes, &t.LiveTuples, &t.DeadTuples, &t.SeqScans, &t.IdxScans, &t.LastAutovacuum); err != nil {
+			return TablesStats{Error: err.Error()}
 		}
+		out.Largest = append(out.Largest, t)
 	}
-	return tables
+	if err := rows.Err(); err != nil {
+		return TablesStats{Error: err.Error()}
+	}
+	return out
 }
 
-func readReplicationStats() ReplicationStats {
-	ctx, cancel := queryContext()
-	defer cancel()
+func readReplication(ctx context.Context) ReplicationStats {
 	var r ReplicationStats
 	err := conn.QueryRowContext(ctx, `
 		SELECT count(*), coalesce(max(extract(epoch FROM replay_lag) * 1000), 0)::bigint
@@ -196,11 +192,8 @@ func readReplicationStats() ReplicationStats {
 	return r
 }
 
-// readStatementStats reads pg_stat_statements when it is installed in this database,
-// and says so when it is not. The queries it holds are normalised, with no values.
-func readStatementStats() StatementsStats {
-	ctx, cancel := queryContext()
-	defer cancel()
+// readStatements reads pg_stat_statements when it is installed in this database.
+func readStatements(ctx context.Context) StatementsStats {
 	var installed bool
 	if err := conn.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements')`).Scan(&installed); err != nil {
 		return StatementsStats{Error: err.Error()}
@@ -220,26 +213,10 @@ func readStatementStats() StatementsStats {
 	out := StatementsStats{Installed: true}
 	for rows.Next() {
 		var st Statement
-		if rows.Scan(&st.Query, &st.Calls, &st.TotalMs, &st.MeanMs, &st.Rows) == nil {
-			out.Top = append(out.Top, st)
+		if err := rows.Scan(&st.Query, &st.Calls, &st.TotalMs, &st.MeanMs, &st.Rows); err != nil {
+			return StatementsStats{Installed: true, Error: err.Error()}
 		}
+		out.Top = append(out.Top, st)
 	}
 	return out
-}
-
-// cache keeps one value for a time. Concurrent readers share the one fetch.
-type cache[T any] struct {
-	mu    sync.Mutex
-	at    time.Time
-	value T
-	has   bool
-}
-
-func (c *cache[T]) get(now time.Time, ttl time.Duration, fetch func() T) T {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.has || now.Sub(c.at) >= ttl {
-		c.value, c.at, c.has = fetch(), now, true
-	}
-	return c.value
 }

@@ -46,12 +46,8 @@ func runtimeStats() any {
 	}
 }
 
-// RegisterStats adds a named section to /debug/stats, on the pprof server.
-//
-// fn runs only when somebody reads /debug/stats, never otherwise, so a section
-// costs nothing while nobody looks: it can read counters the program keeps anyway
-// or run a cheap query, and should cache what is not free for a few seconds.
-// The section is the JSON of what fn returns.
+// RegisterStats adds a named section to /debug/stats. fn runs only when the route is read,
+// so a section costs nothing while nobody looks; cache what is not cheap.
 func RegisterStats(name string, fn func() any) {
 	statsMu.Lock()
 	defer statsMu.Unlock()

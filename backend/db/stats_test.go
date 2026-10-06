@@ -1,27 +1,25 @@
 package db
 
 import (
+	"context"
 	"testing"
-	"time"
 )
 
-func TestCacheFetchesOnceWithinItsTime(t *testing.T) {
-	var c cache[int]
-	fetches := 0
-	fetch := func() int {
-		fetches++
-		return fetches
+func TestReadingIsKeptWithinItsTimeAndSharedByKey(t *testing.T) {
+	reads := 0
+	read := func(context.Context) int {
+		reads++
+		return reads
 	}
-	start := time.Now()
 
-	if got := c.get(start, 15*time.Second, fetch); got != 1 {
-		t.Fatalf("first read: %d", got)
+	first := reading(context.Background(), "test-key", read)
+	again := reading(context.Background(), "test-key", read)
+
+	if first != 1 || again != 1 || reads != 1 {
+		t.Fatalf("a second ask within the ttl must not read: %d %d after %d reads", first, again, reads)
 	}
-	if got := c.get(start.Add(14*time.Second), 15*time.Second, fetch); got != 1 || fetches != 1 {
-		t.Fatalf("a read within the ttl must not fetch: %d after %d fetches", got, fetches)
-	}
-	if got := c.get(start.Add(15*time.Second), 15*time.Second, fetch); got != 2 {
-		t.Fatalf("a read after the ttl fetches again: %d", got)
+	if other := reading(context.Background(), "other-key", read); other != 2 {
+		t.Fatalf("another key reads for itself: %d", other)
 	}
 }
 

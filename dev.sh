@@ -231,7 +231,7 @@ app_e2e() {
 app() {
   local sub="${1:-}"; shift || true
   case "$sub" in
-    # pprof and /debug/stats on loopback, for the select-ops console (./dev.sh admin -local)
+    # pprof and /debug/stats on loopback, for the select-ops console
     start)    PPROF_ADDR="${PPROF_ADDR:-127.0.0.1:6061}" app_task dev "$@" ;;
     build)    app_task build "$@" ;;
     package)  app_task package "$@" ;;
@@ -335,7 +335,7 @@ backend_start() {
   migrate up
   generate
   step "Starting backend server"
-  # pprof and /debug/stats on loopback, for the select-ops console (./dev.sh admin -local)
+  # pprof and /debug/stats on loopback, for the select-ops console
   (cd "$ROOT/backend" && PPROF_ADDR="${PPROF_ADDR:-127.0.0.1:6060}" go run ./cmd/server)
 }
 
