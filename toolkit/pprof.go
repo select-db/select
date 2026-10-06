@@ -10,28 +10,21 @@ import (
 	"time"
 )
 
-// StartPprofServer starts a pprof HTTP server on loopback.
+// StartPprofServer starts a pprof HTTP server on the address in PPROF_ADDR, in
+// any environment, and does nothing when it is unset: on or off, and where, is
+// the deployment's setting, not the program's.
 //
-// PPROF_ADDR turns it on in any environment ("127.0.0.1:6060"). Without it the
-// server starts on defaultAddr only when APP_ENV=dev, and is off otherwise.
 // The address must be a loopback one: the profiles describe the process and
 // must never be reachable from the network, so any other address is refused
 // and nothing is started.
 //
-// Suggested default addrs:
-//   - backend server: "localhost:6060"
-//   - desktop app:    "localhost:6061"
-//   - cellar:         "localhost:6062"
-//
 // Usage:
 //
-//	go tool pprof http://<addr>/debug/pprof/heap
-//	go tool pprof http://<addr>/debug/pprof/profile?seconds=30
-func StartPprofServer(defaultAddr string) {
+//	PPROF_ADDR=127.0.0.1:6060 ./server
+//	go tool pprof http://127.0.0.1:6060/debug/pprof/heap
+//	go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
+func StartPprofServer() {
 	addr := os.Getenv("PPROF_ADDR")
-	if addr == "" && os.Getenv("APP_ENV") == "dev" {
-		addr = defaultAddr
-	}
 	if addr == "" {
 		return
 	}

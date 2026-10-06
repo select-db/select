@@ -31,7 +31,7 @@ func main() {
 	_ = os.Setenv("APP_VERSION", appVersion)
 	_ = os.Setenv("APP_ENV", appEnv)
 
-	toolkit.StartPprofServer("localhost:6061")
+	toolkit.StartPprofServer()
 
 	// Create an instance of the app structure
 	app := appcore.NewApp()
