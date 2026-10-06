@@ -52,7 +52,9 @@ func peakHeap(fn func()) uint64 {
 // otherwise sit in the builders, then in the IPC buffer, then in the encoder,
 // before the first byte leaves.
 func TestSinkMemoryIsBoundedByBatchBytes(t *testing.T) {
-	debug.SetGCPercent(50)
+	// HeapAlloc counts garbage the collector has not swept, so a lazy collector
+	// reads as a big heap: a tight one reads as what is live.
+	debug.SetGCPercent(10)
 	t.Cleanup(func() { debug.SetGCPercent(100) })
 	const rows, cell = 300, 1 << 20
 	value := strings.Repeat("x", cell)
