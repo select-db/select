@@ -21,6 +21,7 @@ import (
 
 	"github.com/benbjohnson/litestream"
 	"github.com/selectDb/dialect/engine/membudget"
+	"github.com/selectDb/toolkit"
 )
 
 // localCellar is the CELLAR setting, and the cellar id, of a cellar run in the
@@ -95,6 +96,7 @@ func serveLocalCellar() (string, error) {
 // is told to stop. It never opens Postgres. Its id is CELLAR_ID, the same value
 // the backend has, or else the listen host.
 func serveCellar() {
+	toolkit.StartPprofServer("localhost:6062")
 	address := os.Getenv("CELLAR_LISTEN")
 	if address == "" {
 		address = "127.0.0.1:8081"
