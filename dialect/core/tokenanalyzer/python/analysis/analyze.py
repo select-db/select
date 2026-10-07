@@ -45,14 +45,16 @@ _MISSING_ARG_RE = re.compile(r"Required keyword: '\w+' missing")
 _SELECTDB_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 
 
-def _parse_sql(sql: str, sg_dialect: str) -> tuple[list, list[dict], list[dict]]:
-    """Parse sql, returning (statements, parse_errors, arity_diagnostics).
+def _parse_sql(sql: str, sg_dialect: str) -> tuple[list, list[dict], list[dict], set[int]]:
+    """Parse sql, returning (statements, parse_errors, arity_diagnostics, unparsed).
 
     Missing-argument errors are separated into arity_diagnostics so T006
-    surfaces as a lint diagnostic rather than a parse error.
+    surfaces as a lint diagnostic rather than a parse error. unparsed holds
+    the indexes of the statements a parse error fell in.
     """
     parse_errors: list[dict] = []
     arity_diags: list[dict] = []
+    unparsed: set[int] = set()
 
     try:
         d = SqlglotDialect.get_or_raise(sg_dialect)
@@ -60,10 +62,14 @@ def _parse_sql(sql: str, sg_dialect: str) -> tuple[list, list[dict], list[dict]]
         statements = p.parse(d.tokenize(sql), sql)
     except SqlglotError as e:
         parse_errors.append({"message": str(e), "line": 1, "col": 0})
-        return [], parse_errors, arity_diags
+        return [], parse_errors, arity_diags, unparsed
     except Exception as e:
         parse_errors.append({"message": f"Unexpected parse error: {e}", "line": 1, "col": 0})
-        return [], parse_errors, arity_diags
+        return [], parse_errors, arity_diags, unparsed
+
+    # The parser makes one statement per chunk of tokens between semicolons;
+    # a token's col, like an error's, is where it ends.
+    chunk_ends = [(c[-1].line, c[-1].col) if c else (0, 0) for c in p._chunks]
 
     for exc in p.errors:
         if not isinstance(exc, ParseError):
@@ -88,8 +94,12 @@ def _parse_sql(sql: str, sg_dialect: str) -> tuple[list, list[dict], list[dict]]
                 })
             else:
                 parse_errors.append({"message": desc or str(exc), "line": line, "col": col})
+                unparsed.add(next(
+                    (i for i, end in enumerate(chunk_ends) if (line, col) <= end),
+                    len(chunk_ends) - 1,
+                ))
 
-    return statements, parse_errors, arity_diags
+    return statements, parse_errors, arity_diags, unparsed
 
 
 def _undrawable(diag: dict, sql: str) -> str | None:
@@ -160,7 +170,7 @@ def analyze(
     sg_dialect  = sqlglot_dialect_name(dialect)
     schema      = build_schema(schema_dict, sg_dialect)
 
-    statements, parse_errors, arity_diags = _parse_sql(sql, sg_dialect)
+    statements, parse_errors, arity_diags, unparsed = _parse_sql(sql, sg_dialect)
     result["parse_errors"].extend(parse_errors)
 
     # Deduplicate by (rule_id, start_line, start_col), the parser and AST scan
@@ -186,8 +196,13 @@ def analyze(
     # R001 needs the names they added and removed.
     buffer_names: dict[tuple[str, str], bool] = {}
 
-    for stmt in statements:
+    for index, stmt in enumerate(statements):
         if stmt is None:
+            continue
+        # A tree the parser gave up on describes its guess, not the user's
+        # SQL: a word it skipped becomes a table or a function name.
+        if index in unparsed:
+            buffer_names.update(names_changed(stmt, default_schema))
             continue
 
         try:

@@ -46,3 +46,17 @@ class TestR009UnknownFunction:
     def test_position_reported(self):
         diags = _diags(_r("SELECT totally_unknown_fn(id) FROM users"))
         assert diags[0]["start_line"] >= 1
+
+    # An unquoted reserved word is never a user function, so a call sqlglot
+    # cannot type is the dialect's own syntax, e.g. a MySQL row constructor.
+    def test_mysql_reserved_word_no_trigger(self):
+        for sql in (
+            "SELECT d.x FROM (VALUES ROW(1), ROW(2)) AS d (x)",
+            "SELECT id FROM users WHERE ROW(id, name) = (SELECT 1, 'a')",
+        ):
+            r = analyze(sql, dialect="mysql", schema_dict={}, default_schema="public")
+            assert _diags(r) == [], sql
+
+    def test_mysql_unknown_function_triggers(self):
+        r = analyze("SELECT row_fn(1)", dialect="mysql", schema_dict={}, default_schema="public")
+        assert len(_diags(r)) == 1

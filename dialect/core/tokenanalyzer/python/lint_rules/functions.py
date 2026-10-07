@@ -5,6 +5,7 @@ Function catalog lint rule:
 from __future__ import annotations
 
 from sqlglot import exp
+from sqlglot.dialects.dialect import Dialect
 
 from analysis.schema import span
 
@@ -23,7 +24,9 @@ def analyze_unknown_functions(
     is not in the user-provided catalog.
     """
     results = []
-    seen: set[str] = set()
+    # An unquoted reserved word is never a user function: a call sqlglot left
+    # untyped there is the dialect's own syntax, such as MySQL's ROW(...).
+    seen: set[str] = set(Dialect.get_or_raise(sg_dialect).generator_class.RESERVED_KEYWORDS)
 
     for func in stmt.find_all(exp.Anonymous):
         name = func.name.lower() if func.name else ""
