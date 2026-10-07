@@ -259,15 +259,42 @@ def analyze_unknown_columns(
 
     results = []
     seen: set[tuple] = set()
+    by_scope: dict[int, tuple[set[str], dict[str, set[str]] | None]] = {}
+
+    def _names_and_visible(scope):
+        if id(scope) not in by_scope:
+            visible = _scope_visible_columns(scope, schema_dict, default_schema)
+            names = {k.lower() for k in scope.sources} | set(visible or {})
+            by_scope[id(scope)] = (names, visible)
+        return by_scope[id(scope)]
 
     for scope in scopes:
-        visible = _scope_visible_columns(scope, schema_dict, default_schema)
+        names, visible = _names_and_visible(scope)
         if visible is None:
             continue
+
+        # A subquery sees its own tables, then those of each enclosing query.
+        chain = [(names, visible)]
+        outer = scope
+        while outer.is_subquery and outer.parent is not None:
+            outer = outer.parent
+            outer_names, outer_visible = _names_and_visible(outer)
+            chain.append((outer_names, outer_visible or {}))
+
+        # sqlglot lists a subquery's unresolved columns on the enclosing scope
+        # too; the subquery's own pass checks them against the whole chain.
+        from_children = {
+            id(c)
+            for child in scope.subquery_scopes + scope.udtf_scopes + scope.derived_table_scopes
+            for c in child.external_columns
+        }
 
         select_aliases = _scope_select_aliases(scope)
 
         for col in scope.columns:
+            if id(col) in from_children:
+                continue
+
             quoted    = col.this.quoted if isinstance(col.this, exp.Expression) else False
             qualifier = col.table.lower() if col.table else ""
 
@@ -284,18 +311,15 @@ def analyze_unknown_columns(
                 return col.name.lower() in orig_cols
 
             if qualifier:
-                orig_cols = visible.get(qualifier)
-                if orig_cols is None:
-                    # qualifier not in visible, two cases:
-                    # (a) alias IS in scope.sources but table absent from schema_dict → skip
-                    # (b) alias is NOT defined in FROM at all → fall through to emit diagnostic
-                    if qualifier in {k.lower() for k in scope.sources}:
-                        continue  # can't validate columns for unknown table
-                    # else: undefined alias, fall through to emit diagnostic
-                elif _col_found(orig_cols):
-                    continue
+                # The nearest query naming the qualifier owns it; an alias of
+                # a table absent from schema_dict cannot be validated.
+                owner = next((v for n, v in chain if qualifier in n), None)
+                if owner is not None:
+                    orig_cols = owner.get(qualifier)
+                    if orig_cols is None or _col_found(orig_cols):
+                        continue
             else:
-                if any(_col_found(orig_cols) for orig_cols in visible.values()):
+                if any(_col_found(orig_cols) for _, v in chain for orig_cols in v.values()):
                     continue
                 # Unqualified reference matches a SELECT alias, valid in
                 # GROUP BY / ORDER BY (PostgreSQL, MySQL).

@@ -152,6 +152,27 @@ class TestR002UnknownColumn:
                     schema_dict=SCHEMA_MIXED_CASE, default_schema=DEFAULT_SCHEMA)
         assert not any("createdAt" in d["message"] for d in _diags(r, "unknown-column"))
 
+    # A subquery column is resolved against the subquery's tables, then the
+    # enclosing query's, so neither a local nor a correlated one is unknown.
+    def test_subquery_column_no_trigger(self):
+        sql = "SELECT id FROM users WHERE id IN (SELECT user_id FROM orders)"
+        assert _diags(_r(sql), "unknown-column") == []
+
+    def test_correlated_column_no_trigger(self):
+        for sql in (
+            "SELECT id FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE user_id = name)",
+            "SELECT id FROM users WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id = users.id)",
+        ):
+            assert _diags(_r(sql), "unknown-column") == [], sql
+
+    def test_unknown_column_in_subquery_triggers(self):
+        for sql in (
+            "SELECT id FROM users WHERE id IN (SELECT typo FROM orders)",
+            "SELECT id FROM users WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id = users.typo)",
+        ):
+            diags = _diags(_r(sql), "unknown-column")
+            assert len(diags) == 1 and "typo" in diags[0]["message"], (sql, diags)
+
 
 # ---------------------------------------------------------------------------
 # R003, Unknown column in UPDATE SET

@@ -91,7 +91,7 @@ def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, di
 
     if for_completion:
         def parse(text):
-            statements, errors, _ = _parse_sql(text, sg_dialect)
+            statements, errors, *_ = _parse_sql(text, sg_dialect)
             return statements, errors
 
         sql, stmts = caret_patch.readable_at(
@@ -99,7 +99,7 @@ def _prepare_sql(req: dict, for_completion: bool = False) -> tuple[str, list, di
         )
         return sql, stmts, schema_dict, default_schema, sg_dialect
 
-    stmts, _, _ = _parse_sql(sql, sg_dialect)
+    stmts, *_ = _parse_sql(sql, sg_dialect)
     return sql, stmts, schema_dict, default_schema, sg_dialect
 
 

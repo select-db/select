@@ -31,3 +31,24 @@ class TestRobustness:
                     schema_dict={}, default_schema="public")
         assert not any(d["rule_id"] == "unknown-table" for d in r["diagnostics"])
         assert not any(d["rule_id"] == "unknown-column" for d in r["diagnostics"])
+
+
+class TestFailedParse:
+    """A statement sqlglot could not parse yields no lint: its tree is a guess."""
+
+    def test_unparsed_statement_no_diagnostics(self):
+        r = analyze("LOAD DATA INFILE 'x.csv' INTO TABLE users", dialect="mysql",
+                    schema_dict=SCHEMA, default_schema="public")
+        assert r["diagnostics"] == []
+        assert r["parse_errors"] != []
+
+    def test_other_statements_still_linted(self):
+        r = analyze("SELECT typo FROM users; LOAD DATA INFILE 'x.csv' INTO TABLE users; "
+                    "SELECT * FROM nosuch", dialect="mysql",
+                    schema_dict=SCHEMA, default_schema="public")
+        assert sorted(d["rule_id"] for d in r["diagnostics"]) == ["unknown-column", "unknown-table"]
+
+    def test_statement_being_typed_no_diagnostics(self):
+        r = analyze("SELECT typo FROM users WHERE id = (", dialect="postgresql",
+                    schema_dict=SCHEMA, default_schema="public")
+        assert [d["rule_id"] for d in r["diagnostics"]] == ["missing-argument"]

@@ -126,7 +126,7 @@ class TestUnwrapExplain:
 def _sqlglot_parse(text):
     """The parser the dispatcher passes in, so these cases read the statement
     the caller would."""
-    statements, errors, _ = _parse_sql(text, "postgres")
+    statements, errors, *_ = _parse_sql(text, "postgres")
     return statements, errors
 
 
