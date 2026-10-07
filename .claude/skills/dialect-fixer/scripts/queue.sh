@@ -10,6 +10,16 @@ set -euo pipefail
 limit=${FIXER_LIMIT:-3}
 max_repairs=3
 
+# A run the runner lost never reaches its Report step, so its fix:running
+# stays and holds a slot for good: release every one no live run is named for.
+live=$(for status in requested queued pending waiting in_progress; do
+	gh api "repos/$GH_REPO/actions/workflows/dialect-fixer.yml/runs?status=$status&per_page=100" --jq '.workflow_runs[].display_title'
+done | sed -n 's/^Dialect fixer #\([0-9]*\).*/\1/p' | jq -sc .)
+for n in $(gh issue list --label fix:running --state open --json number --jq '.[].number'); do
+	jq -e --argjson n "$n" 'index($n)' <<<"$live" >/dev/null ||
+		gh api -X DELETE "repos/$GH_REPO/issues/$n/labels/fix:running" --silent
+done
+
 # held: a run is on it, it waits on a person, or a person runs it by hand.
 issues=$(gh issue list --label agent:finder --state open --limit 1000 --json number,labels --jq '
 	map([.labels[].name] as $l | {number,
