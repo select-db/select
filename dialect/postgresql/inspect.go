@@ -684,14 +684,20 @@ func (i *Inspector) insertedColumns(list pg.IInsert_column_listContext, schema, 
 	if list == nil {
 		return core.TableFields(i.meta, schema, table, i.dialect)
 	}
+	return namedColumns(i.dialect, list.AllInsert_column_item(), schema, table)
+}
+
+// namedColumns are the columns a list of names spells out. INSERT and COPY
+// reach a column name through different grammar nodes.
+func namedColumns[T interface{ Colid() pg.IColidContext }](dialect *Dialect, items []T, schema, table string) []core.InspectField {
 	var fields []core.InspectField
-	for _, item := range list.AllInsert_column_item() {
+	for _, item := range items {
 		colID := item.Colid()
 		if colID == nil {
 			continue
 		}
 		fields = append(fields, core.InspectField{
-			Name:   i.dialect.NormalizeIdentifier(colID.GetText()),
+			Name:   dialect.NormalizeIdentifier(colID.GetText()),
 			Table:  table,
 			Schema: schema,
 		})
@@ -880,13 +886,34 @@ func (i *Inspector) inspectCreateFrom(name pg.IQualified_nameContext, source pg.
 	return result
 }
 
-// inspectCopy analyzes COPY, which moves rows between a table and the server's
-// own filesystem. It stays unclassified, so it needs manage.
+// inspectCopy analyzes COPY, which moves rows over a channel see does not mediate,
+// so it needs manage, and still select or insert on the columns it moves.
 func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement {
-	result := core.UnknownStatement()
 	if source := stmt.Preparablestmt(); source != nil {
-		result.Subqueries = append(result.Subqueries, i.inspectPreparable(source))
+		result := core.NestUnderUnknown(i.inspectPreparable(source))
+		return &result
 	}
+	schema, table := i.resolveQualifiedName(stmt.Qualified_name())
+	if table == "" {
+		result := core.UnknownStatement()
+		return &result
+	}
+	op := core.InspectOpSelect
+	if from := stmt.Copy_from(); from != nil && from.FROM() != nil {
+		op = core.InspectOpInsert
+	}
+	var fields []core.InspectField
+	if list := stmt.Opt_column_list(); list != nil && list.Columnlist() != nil {
+		fields = namedColumns(i.dialect, list.Columnlist().AllColumnElem(), schema, table)
+	} else {
+		// A COPY without a column list moves every column, as an insert without one does.
+		fields = core.TableFields(i.meta, schema, table, i.dialect)
+	}
+	result := core.NestUnderUnknown(core.InspectStatement{
+		Operation: op,
+		Tables:    []core.InspectTable{{Name: table, Schema: schema}},
+		Fields:    fields,
+	})
 	return &result
 }
 
