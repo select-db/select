@@ -1405,6 +1405,9 @@ type PostgreSQLParserVisitor interface {
 	// Visit a parse tree produced by PostgreSQLParser#mergestmt.
 	VisitMergestmt(ctx *MergestmtContext) interface{}
 
+	// Visit a parse tree produced by PostgreSQLParser#merge_when_clause.
+	VisitMerge_when_clause(ctx *Merge_when_clauseContext) interface{}
+
 	// Visit a parse tree produced by PostgreSQLParser#merge_insert_clause.
 	VisitMerge_insert_clause(ctx *Merge_insert_clauseContext) interface{}
 

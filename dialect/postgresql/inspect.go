@@ -1319,15 +1319,13 @@ func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStateme
 		}
 	}
 
-	update, insert, deletes := mergeClauses(stmt)
-
 	// ON chooses the rows, a WHEN guard narrows them, and an assignment stores
 	// what it read. No such column comes back to the caller, so each is a read.
-	for _, clause := range []antlr.ParseTree{
-		core.TreeOrNil(stmt.A_expr()),
-		core.TreeOrNil(update),
-		core.TreeOrNil(insert),
-	} {
+	clauses := []antlr.ParseTree{core.TreeOrNil(stmt.A_expr())}
+	for _, clause := range stmt.AllMerge_when_clause() {
+		clauses = append(clauses, clause)
+	}
+	for _, clause := range clauses {
 		if clause == nil {
 			continue
 		}
@@ -1344,42 +1342,57 @@ func (i *Inspector) inspectMerge(stmt pg.IMergestmtContext) *core.InspectStateme
 		}
 		core.AlsoPerforms(result, op, fields)
 	}
-	if update != nil {
-		perform(core.InspectOpUpdate, i.assignedFields(update.Set_clause_list(), schema, table))
+	writes := i.mergeActions(stmt, schema, table)
+	if writes.updates {
+		perform(core.InspectOpUpdate, writes.updated)
 	}
-	if insert != nil {
-		perform(core.InspectOpInsert, i.insertedColumns(insert.Insert_column_list(), schema, table))
+	if writes.inserts {
+		perform(core.InspectOpInsert, writes.inserted)
 	}
-	if deletes {
+	if writes.deletes {
 		// A row leaves whole, and a grant on one of its columns is no right to
 		// remove it.
 		perform(core.InspectOpDelete, nil)
 	}
+	if result.Operation == core.InspectOpUnknown {
+		// Every clause does nothing, so the statement only reads what ON and the
+		// guards test.
+		result.Operation = core.InspectOpSelect
+	}
+
+	i.addReturningFields(result, stmt.Returning_clause(), schema, table)
 
 	i.resolver.DropCTETables(result.Subqueries[len(cteBodies):], ctes)
 
 	return result
 }
 
-// mergeClauses are the WHEN clauses that carry what they need to act. Error
-// recovery leaves a clause node behind for syntax the grammar rejects, such as
-// WHEN NOT MATCHED THEN DO NOTHING or a second WHEN MATCHED, and reading one of
-// those reports an action the statement does not perform.
-func mergeClauses(stmt pg.IMergestmtContext) (
-	update pg.IMerge_update_clauseContext,
-	insert pg.IMerge_insert_clauseContext,
-	deletes bool,
-) {
-	if node := stmt.Merge_update_clause(); node != nil && node.Set_clause_list() != nil {
-		update = node
+// mergeWrites is what the WHEN clauses of a MERGE do to its target, with the
+// columns of every clause that updates or inserts gathered together.
+type mergeWrites struct {
+	updates, inserts, deletes bool
+	updated, inserted         []core.InspectField
+}
+
+// mergeActions reads the action of every WHEN clause. Error recovery leaves an
+// action node behind for syntax the grammar rejects, and reading one of those
+// reports an action the statement does not perform.
+func (i *Inspector) mergeActions(stmt pg.IMergestmtContext, schema, table string) mergeWrites {
+	var w mergeWrites
+	for _, clause := range stmt.AllMerge_when_clause() {
+		if node := clause.Merge_update_clause(); node != nil && node.Set_clause_list() != nil {
+			w.updates = true
+			w.updated = core.MergeInspectFields(w.updated, i.assignedFields(node.Set_clause_list(), schema, table))
+		}
+		if node := clause.Merge_insert_clause(); node != nil && node.Values_clause() != nil {
+			w.inserts = true
+			w.inserted = core.MergeInspectFields(w.inserted, i.insertedColumns(node.Insert_column_list(), schema, table))
+		}
+		if node := clause.Merge_delete_clause(); node != nil && written(node.DELETE_P()) {
+			w.deletes = true
+		}
 	}
-	if node := stmt.Merge_insert_clause(); node != nil && node.Values_clause() != nil {
-		insert = node
-	}
-	if node := stmt.Merge_delete_clause(); node != nil && written(node.DELETE_P()) {
-		deletes = true
-	}
-	return update, insert, deletes
+	return w
 }
 
 // written reports whether a token is in the statement somebody wrote. Error

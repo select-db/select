@@ -1405,6 +1405,9 @@ type PostgreSQLParserListener interface {
 	// EnterMergestmt is called when entering the mergestmt production.
 	EnterMergestmt(c *MergestmtContext)
 
+	// EnterMerge_when_clause is called when entering the merge_when_clause production.
+	EnterMerge_when_clause(c *Merge_when_clauseContext)
+
 	// EnterMerge_insert_clause is called when entering the merge_insert_clause production.
 	EnterMerge_insert_clause(c *Merge_insert_clauseContext)
 
@@ -3939,6 +3942,9 @@ type PostgreSQLParserListener interface {
 
 	// ExitMergestmt is called when exiting the mergestmt production.
 	ExitMergestmt(c *MergestmtContext)
+
+	// ExitMerge_when_clause is called when exiting the merge_when_clause production.
+	ExitMerge_when_clause(c *Merge_when_clauseContext)
 
 	// ExitMerge_insert_clause is called when exiting the merge_insert_clause production.
 	ExitMerge_insert_clause(c *Merge_insert_clauseContext)
