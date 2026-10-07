@@ -26,11 +26,12 @@ def analyze_unknown_functions(
     results = []
     # An unquoted reserved word is never a user function: a call sqlglot left
     # untyped there is the dialect's own syntax, such as MySQL's ROW(...).
-    seen: set[str] = set(Dialect.get_or_raise(sg_dialect).generator_class.RESERVED_KEYWORDS)
+    reserved = Dialect.get_or_raise(sg_dialect).generator_class.RESERVED_KEYWORDS
+    seen: set[str] = set()
 
     for func in stmt.find_all(exp.Anonymous):
         name = func.name.lower() if func.name else ""
-        if not name or name in user_functions or name in seen:
+        if not name or name in user_functions or name in reserved or name in seen:
             continue
         seen.add(name)
         line, col, end_line, end_col = span(func)
