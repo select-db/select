@@ -187,7 +187,15 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 					goto doneWithTables
 				}
 			}
-			schemasToSearch := map[string]bool{ctx.SchemaFilter: true}
+			// The qualifier is spelled as typed; compare it the way the
+			// dialect does, or an unquoted OTHER misses the schema other.
+			schemasToSearch := map[string]bool{}
+			wanted := cs.dialect.NormalizeIdentifier(ctx.SchemaFilter)
+			for _, s := range meta.Schemas {
+				if cs.dialect.NormalizeIdentifier(s.Name) == wanted {
+					schemasToSearch[s.Name] = true
+				}
+			}
 			tables, views = ListRelations(meta, schemasToSearch, cs.dialect.QuoteIdentifierIfNeeded, caretQuoted, reservedKeywords)
 			goto doneWithTables
 		}
