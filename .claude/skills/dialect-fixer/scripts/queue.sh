@@ -2,8 +2,7 @@
 # The dialect fixer queue, run by dialect-fixer-queue.yml. Requests
 # $FIXER_REVIEWER once on a green fixer pull request, sends a conflicted or red one
 # back to the fixer, and fills the free slots with the most severe open finder
-# issues. At most $FIXER_LIMIT are in flight and one per area, since fixes in
-# one area edit the same files. Dispatches dialect-fixer.yml for each run it
+# issues, at most $FIXER_LIMIT in flight. Dispatches dialect-fixer.yml for each run it
 # starts and prints them: [{issue, mode}].
 set -euo pipefail
 
@@ -23,7 +22,6 @@ done
 # held: a run is on it, it waits on a person, or a person runs it by hand.
 issues=$(gh issue list --label agent:finder --state open --limit 1000 --json number,labels --jq '
 	map([.labels[].name] as $l | {number,
-		area: ([$l[] | select(startswith("area:"))] | first // "area:none"),
 		running: ($l | any(IN("fix:running", "fix:go"))),
 		held: ($l | any(IN("fix:running", "fix:go", "fix:blocked", "fix:skip"))),
 		# The order of the sev: labels in labels.sh.
@@ -76,16 +74,13 @@ done < <(jq -r --argjson issues "$issues" '.[] | .issue as $n
 	| select($issues | any(.number == $n and (.held | not)))
 	| [.number, .issue, .review, .mergeable, .ci, .repairs, .author] | @tsv' <<<"$prs")
 
-# The areas in flight: an open fixer pull request, or a run still working.
-busy=$(jq -c --argjson prs "$prs" '[.[] | select(.running or (.number | IN($prs[].issue))) | .area]' <<<"$issues")
+# In flight: an open fixer pull request, or a run still working.
+free=$((limit - $(jq --argjson prs "$prs" '[.[] | select(.running or (.number | IN($prs[].issue)))] | length' <<<"$issues")))
 
-while read -r number area; do
-	[ "$(jq length <<<"$busy")" -lt "$limit" ] || break
-	jq -e --arg a "$area" 'index($a)' <<<"$busy" >/dev/null && continue
-	start "$number" fix
-	busy=$(jq -c --arg a "$area" '. + [$a]' <<<"$busy")
-done < <(jq -r --argjson prs "$prs" '
+for number in $(jq -r --argjson prs "$prs" '
 	map(select((.held | not) and (.number | IN($prs[].issue) | not)))
-	| sort_by(.rank, .number)[] | "\(.number) \(.area)"' <<<"$issues")
+	| sort_by(.rank, .number) | .[:'"$((free > 0 ? free : 0))"'][].number' <<<"$issues"); do
+	start "$number" fix
+done
 
 echo "$runs"
