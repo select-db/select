@@ -193,6 +193,15 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			// Every dialect folds an unquoted name before it reaches the catalog.
+			Name: "an unquoted schema in another case names the same schema",
+			SQL:  "SELECT * FROM " + strings.ToUpper(defaultSchema) + ".|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
 			Name: "schema-qualified column completion",
 			SQL:  replaceSchemaInText("SELECT main.t1.| FROM main.t1", defaultSchema),
 			Expected: []CompletionTestExpectation{
