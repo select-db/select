@@ -205,8 +205,8 @@ create_virtual_table_stmt
 ;
 
 with_clause
-    : WITH_ RECURSIVE_? cte_table_name AS_ OPEN_PAR select_stmt CLOSE_PAR (
-        COMMA cte_table_name AS_ OPEN_PAR select_stmt CLOSE_PAR
+    : WITH_ RECURSIVE_? cte_table_name AS_ (NOT_? MATERIALIZED_)? OPEN_PAR select_stmt CLOSE_PAR (
+        COMMA cte_table_name AS_ (NOT_? MATERIALIZED_)? OPEN_PAR select_stmt CLOSE_PAR
     )*
 ;
 
@@ -219,7 +219,7 @@ recursive_cte
 ;
 
 common_table_expression
-    : table_name (OPEN_PAR column_name ( COMMA column_name)* CLOSE_PAR)? AS_ OPEN_PAR select_stmt CLOSE_PAR
+    : table_name (OPEN_PAR column_name ( COMMA column_name)* CLOSE_PAR)? AS_ (NOT_? MATERIALIZED_)? OPEN_PAR select_stmt CLOSE_PAR
 ;
 
 delete_stmt
@@ -780,6 +780,7 @@ keyword
     | FILTER_
     | GROUPS_
     | EXCLUDE_
+    | MATERIALIZED_
 ;
 
 // TODO: check all names below

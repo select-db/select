@@ -217,6 +217,7 @@ TIES_              : 'TIES';
 OTHERS_            : 'OTHERS';
 DO_                : 'DO';
 NOTHING_           : 'NOTHING';
+MATERIALIZED_      : 'MATERIALIZED';
 
 IDENTIFIER:
     '"' (~'"' | '""')* '"'
