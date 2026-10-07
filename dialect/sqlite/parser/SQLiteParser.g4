@@ -880,5 +880,4 @@ any_name
     : IDENTIFIER
     | keyword
     | STRING_LITERAL
-    | OPEN_PAR any_name CLOSE_PAR
 ;
