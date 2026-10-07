@@ -4,7 +4,7 @@ name: Dialect fixer
 # can label an agent:finder issue fix:go to run it now. The agent fixes it in
 # Claude Code's sandbox, with no token and no network; its Stop hook
 # (.claude/skills/dialect-fixer/scripts/publish.sh) pushes claude/fix-N and
-# opens the draft pull request with the Claude App's token, whose pushes run CI.
+# opens the pull request with the Claude App's token, whose pushes run CI.
 # In repair mode it rebases that branch onto dev and fixes its CI instead.
 #
 # Needs the secret CLAUDE_CODE_OAUTH_TOKEN and the Claude GitHub App installed.
@@ -132,8 +132,8 @@ jobs:
           printf '### Final message\n\n%s\n' "${final:-None.}" >> "$GITHUB_STEP_SUMMARY"
           if [ "$FIXER_MODE" = repair ] && [ -n "$pr" ]; then
             # queue.sh counts these to stop a repair loop.
-            gh pr view "$pr" --json body --jq '.body + "\n<!-- fixer-repair -->"' > "$RUNNER_TEMP/body.md"
-            gh pr edit "$pr" --body-file "$RUNNER_TEMP/body.md"
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq '{body: (.body + "\n<!-- fixer-repair -->")}' |
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$pr" --input - --silent
             # A repair that pushed nothing would only be started again.
             [ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$FIXER_BRANCH" --jq .object.sha)" != "$FIXER_HEAD" ] ||
               [ -s .fixer-work/blocked.md ] ||

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The dialect fixer queue, run by dialect-fixer-queue.yml. Marks a green fixer
-# pull request ready and requests $FIXER_REVIEWER, sends a conflicted or red one
+# The dialect fixer queue, run by dialect-fixer-queue.yml. Requests
+# $FIXER_REVIEWER once on a green fixer pull request, sends a conflicted or red one
 # back to the fixer, and fills the free slots with the most severe open finder
 # issues. At most $FIXER_LIMIT are in flight and one per area, since fixes in
 # one area edit the same files. Prints the runs to start: [{issue, mode}].
@@ -21,8 +21,10 @@ issues=$(gh issue list --label agent:finder --state open --limit 1000 --json num
 # A push to dev resets every pull request's mergeability to UNKNOWN while
 # GitHub recomputes it, and the push is what starts this run, so wait it out.
 for attempt in 1 2 3 4 5 6 7 8; do
-	prs=$(gh pr list --state open --limit 100 --json number,headRefName,isDraft,mergeable,body,statusCheckRollup --jq '
-		map(select(.headRefName | test("^claude/fix-[0-9]+$")) | {number, isDraft, mergeable,
+	prs=$(gh pr list --state open --limit 100 --json number,headRefName,labels,mergeable,body,statusCheckRollup --jq '
+		map(select(.headRefName | test("^claude/fix-[0-9]+$")) | {number, mergeable,
+			# fix:review: the review is already requested, until a repair.
+			review: any(.labels[]; .name == "fix:review"),
 			issue: (.headRefName | ltrimstr("claude/fix-") | tonumber),
 			# dialect-fixer.yml appends one per repair run.
 			repairs: (.body | [scan("<!-- fixer-repair -->")] | length),
@@ -37,21 +39,23 @@ start() {
 	runs=$(jq -c --argjson n "$1" --arg m "$2" '. + [{issue: $n, mode: $m}]' <<<"$runs")
 }
 
-while IFS=$'\t' read -r number issue draft mergeable ci repairs; do
+while IFS=$'\t' read -r number issue review mergeable ci repairs; do
 	if [ "$mergeable" = CONFLICTING ] || [ "$ci" = FAILURE ]; then
 		if [ "$repairs" -ge "$max_repairs" ]; then
 			gh pr comment "$number" --body "The fixer stopped after $max_repairs repairs; it needs a person. Remove \`fix:blocked\` from #$issue to give it $max_repairs more." >/dev/null
 			gh issue edit "$issue" --add-label fix:blocked >/dev/null
 		else
 			start "$issue" repair
+			[ "$review" = false ] || gh api -X DELETE "repos/$GH_REPO/issues/$number/labels/fix:review" --silent
 		fi
-	elif [ "$ci" = SUCCESS ] && [ "$mergeable" = MERGEABLE ] && [ "$draft" = true ]; then
-		gh pr ready "$number" >/dev/null
-		gh pr edit "$number" --add-reviewer "$FIXER_REVIEWER" >/dev/null
+	elif [ "$ci" = SUCCESS ] && [ "$mergeable" = MERGEABLE ] && [ "$review" = false ]; then
+		# REST: the workflow token may request a review but not undraft a pull request.
+		gh api -X POST "repos/$GH_REPO/pulls/$number/requested_reviewers" -f "reviewers[]=$FIXER_REVIEWER" --silent
+		gh api -X POST "repos/$GH_REPO/issues/$number/labels" -f 'labels[]=fix:review' --silent
 	fi
 done < <(jq -r --argjson issues "$issues" '.[] | .issue as $n
 	| select($issues | any(.number == $n and (.held | not)))
-	| [.number, .issue, .isDraft, .mergeable, .ci, .repairs] | @tsv' <<<"$prs")
+	| [.number, .issue, .review, .mergeable, .ci, .repairs] | @tsv' <<<"$prs")
 
 # The areas in flight: an open fixer pull request, or a run still working.
 busy=$(jq -c --argjson prs "$prs" '[.[] | select(.running or (.number | IN($prs[].issue))) | .area]' <<<"$issues")

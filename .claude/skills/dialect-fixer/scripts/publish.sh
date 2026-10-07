@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook: pushes claude/fix-$FIXER_ISSUE and opens the draft from .fixer-work/pr.md,
+# Stop hook: pushes claude/fix-$FIXER_ISSUE and opens the pull request from .fixer-work/pr.md,
 # outside the sandbox. Asks the agent back once when something is missing.
 # After a blocked note it still pushes what is committed, so finished work is
 # not lost with the runner, but opens no pull request and asks nothing.
@@ -90,7 +90,7 @@ if $blocked; then
 elif [ -z "$pr" ]; then
 	body=$(mktemp)
 	tail -n +2 .fixer-work/pr.md | sed '/./,$!d' >"$body"
-	gh pr create --draft --base dev --head "$branch" --label agent:fixer \
+	gh pr create --base dev --head "$branch" --label agent:fixer \
 		--title "$(head -n1 .fixer-work/pr.md)" --body-file "$body" >&2 ||
 		ask "the pull request could not be opened; see the log. End the run."
 fi
