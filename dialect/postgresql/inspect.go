@@ -1922,9 +1922,17 @@ func (i *Inspector) readSources(fromList pg.IFrom_listContext, ctes []core.Relat
 	fw := &fromWalker{dialect: i.dialect, meta: i.meta}
 	refs, subqueryColumns := fw.walk(fromList)
 
+	// A relation inside a derived table is charged by the derived table's own
+	// read, with the columns it names; charging it here too asks for all of it.
+	var direct []core.RelationRef
+	for _, ref := range refs {
+		if ref.NestingLevel == 0 {
+			direct = append(direct, ref)
+		}
+	}
 	reads := i.extractSubqueriesFromFromList(fromList)
 	scope := core.Scope{CTEs: ctes, Subqueries: subqueryColumns}
-	if tables := i.resolver.Tables(refs, scope); len(tables) > 0 {
+	if tables := i.resolver.Tables(direct, scope); len(tables) > 0 {
 		reads = append(reads, core.InspectStatement{
 			Operation: core.InspectOpSelect,
 			Tables:    tables,
@@ -2131,7 +2139,11 @@ func (fw *fromWalker) parseSubqueryFromAST(subquery pg.ISelect_with_parensContex
 					var nestedSubqueryColumns map[string][]core.Column
 					if fromClause := simpleSelectPrimary.From_clause(); fromClause != nil {
 						subqueryRelationRefs, nestedSubqueryColumns = body.walk(fromClause.From_list())
-						refs = append(refs, core.DropVirtualRefs(subqueryRelationRefs, body.declared, fw.dialect.NormalizeIdentifier)...)
+						inner := core.DropVirtualRefs(subqueryRelationRefs, body.declared, fw.dialect.NormalizeIdentifier)
+						for idx := range inner {
+							inner[idx].NestingLevel++
+						}
+						refs = append(refs, inner...)
 					}
 
 					// Get SELECT clause from the subquery to extract columns
