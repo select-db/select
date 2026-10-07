@@ -105,6 +105,9 @@ jobs:
           # Any value keeps the action's token out of .git/config, behind a
           # credential helper; it admits nobody else without github_token.
           allowed_non_write_users: ${{ github.repository_owner }}
+          # The queue dispatches the run with the workflow token, so its actor
+          # is this bot; the prompt comes from this file, not from the bot.
+          allowed_bots: github-actions
           prompt: |
             ${{ env.FIXER_MODE == 'repair' && 'Repair the pull request' || 'Fix issue' }} for #${{ env.FIXER_ISSUE }} in ${{ github.repository }}.
             Follow the "Unattended runs" section of .claude/skills/dialect-fixer/SKILL.md.
