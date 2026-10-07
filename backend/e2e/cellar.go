@@ -25,10 +25,10 @@ func ServeCellar(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = cellar.CloseDatabases(context.Background()) })
 	mux := http.NewServeMux()
-	cellar.Register(mux, publicKey, "local")
+	cellar.Register(mux, publicKey)
 	cellarServer := httptest.NewServer(mux)
 	t.Cleanup(cellarServer.Close)
-	cellarclient.URL, cellarclient.CellarID = cellarServer.URL, "local"
-	t.Cleanup(func() { cellarclient.URL, cellarclient.CellarID = "", "" })
+	cellarclient.URL = cellarServer.URL
+	t.Cleanup(func() { cellarclient.URL = "" })
 	return dir
 }

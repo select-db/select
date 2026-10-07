@@ -32,8 +32,8 @@ func newTestCellar(t *testing.T) testCellar {
 	require.NoError(t, OpenDatabases(dir, bucketDir))
 	t.Cleanup(func() { _ = CloseDatabases(context.Background()) })
 	mux := http.NewServeMux()
-	Register(mux, &privateKey.PublicKey, "local")
-	grant, err := Grant{WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20, MaxInFlight: 4}.Encode()
+	Register(mux, &privateKey.PublicKey)
+	grant, err := Grant{WorkspaceID: uuid.NewString(), MaxBytes: 1 << 20, MaxInFlight: 4}.Encode()
 	require.NoError(t, err)
 	token := signWith(t, privateKey)
 	return testCellar{dir: dir, bucketDir: bucketDir, call: func(method, path string, body any) *httptest.ResponseRecorder {

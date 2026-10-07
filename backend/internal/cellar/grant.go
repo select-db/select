@@ -10,7 +10,6 @@ import (
 type Grant struct {
 	DatasourceID string `json:"-"` // the path's id
 	WorkspaceID  string `json:"workspace_id"`
-	CellarID     string `json:"cellar_id"`
 	MaxBytes     int64  `json:"max_bytes"`
 	MaxInFlight  int    `json:"max_in_flight"` // statements the workspace may run at once
 }

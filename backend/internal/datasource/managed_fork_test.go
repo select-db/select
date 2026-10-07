@@ -113,6 +113,6 @@ func TestCreateInParallelStaysUnderTheQuota(t *testing.T) {
 	}
 	require.Equal(t, allowed, created, "the solo plan holds ten managed databases")
 	var rows int
-	require.NoError(t, fixture.Conn.QueryRow(`SELECT count(*) FROM app.datasource WHERE cellar_id IS NOT NULL`).Scan(&rows))
+	require.NoError(t, fixture.Conn.QueryRow(`SELECT count(*) FROM app.datasource WHERE state IS NOT NULL`).Scan(&rows))
 	require.Equal(t, allowed, rows)
 }

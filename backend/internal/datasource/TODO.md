@@ -15,7 +15,7 @@ $0.01 per GB-month.
   and every row in Postgres.
 - **cellar**: the same binary in cellar mode. Owns SQLite files and nothing
   else. Never reads Postgres, never knows a user. The word for the service
-  only: packages `cellar` and `cellarclient`, `CELLAR`, `cellar_id` and the
+  only: packages `cellar` and `cellarclient`, `CELLAR` and the
   `cellar://` driver. A managed database lives on a cellar; a user never sees
   the word.
 - **replicating / resting / cold**: a db used in the last 15 minutes, every
@@ -37,7 +37,7 @@ app, REST, MCP --> backend --(signed token, private network)--> cellar --> bucke
                    plans, quotas, rows                          Litestream
 ```
 
-1. A managed datasource is a DSN, `cellar://<cellar id>/<datasource id>`,
+1. A managed datasource is a DSN, `cellar:///<datasource id>`,
    opened by `connect.GetOrOpen` like any other. The backend checks
    permissions and masks columns as for every datasource.
 2. The `cellar` database/sql driver sends each statement to the cellar with a
@@ -58,7 +58,7 @@ Settled. Reopen with a reason, not a preference.
 
 ### Product
 - A managed db is a datasource row with `db_type: "sqlite"`, no DSN, and a
-  `cellar_id`; `cellar_id` and `state` are set together or not at all. A
+  `state`; a row is managed exactly when it has a state. A
   sqlite datasource with a DSN is still rejected: the server never opens a
   path a user gave it.
 - Access goes through the backend only, which checks every statement. App
@@ -130,12 +130,11 @@ Settled. Reopen with a reason, not a preference.
   `auth.Sign` like user tokens, and reused for 50s because each KMS sign is a
   remote call. The cellar holds only the public key. The token names no db,
   so a leaked one opens any db on the cellar until it expires.
-- The grant `{workspace_id, cellar_id, max_bytes, max_in_flight}` is
+- The grant `{workspace_id, max_bytes, max_in_flight}` is
   base64url JSON in `X-Cellar-Grant`, read from the DSN's query; `pitr_days`
-  joins it with Litestream. The cellar refuses a grant whose `cellar_id` is
-  not itself.
+  joins it with Litestream.
 - Only the backend builds a `cellar://` DSN, when it loads a row with a
-  cellar. A user row with one is refused: it would open another workspace's
+  state. A user row with one is refused: it would open another workspace's
   db.
 - The driver has no transactions or prepared statements: the engine uses
   neither for a datasource.
@@ -199,9 +198,10 @@ errors are the backend's, before the cellar sees the statement.
 
 ### Scaling
 - Any number of backends: wake dedup and limits live on the cellar.
-- More cellars later: each row has a `cellar_id`; a move is mark `moving`,
-  evict on the old cellar, flip `cellar_id`. The grant's `cellar_id` fences a stale
-  route, so two cellars never write one replica.
+- More cellars later: a database has no owner, so any cellar mounts it from the
+  bucket. Two cellars must never write one replica, so a workspace's requests have
+  to reach one node (select-db/select#478). The reconciler judges every database
+  its cellar lists, so it too assumes one cellar for now.
 
 ### Environments
 - Dev: `./dev.sh backend start` as today, with `CELLAR=local`: the cellar
@@ -215,11 +215,8 @@ errors are the backend's, before the cellar sees the statement.
   systemd unit on the backend's box, capped by `CPUQuota` and `MemoryMax` so
   SQLite work never starves the backend. It listens on `CELLAR_LISTEN`
   (default `127.0.0.1:8081`), never opens Postgres, and the backend reaches it
-  with `CELLAR=http://127.0.0.1:8081`. Both set `CELLAR_ID`, the cellar's name in
-  grants and in each row's `cellar_id`: lower case letters, digits and hyphens,
-  as the database's check constraint wants. Without it the id is the host of the
-  address, so an IP address or a dotted name stops the server at start. Its
-  files live on a block volume at `CELLAR_DIR`. Moving it to its own server
+  with `CELLAR=http://127.0.0.1:8081`. Its files live on a block volume at
+  `CELLAR_DIR`. Moving it to its own server
   later is a new `CELLAR` URL: the new cellar starts empty and wakes dbs from
   the bucket.
 
@@ -235,8 +232,8 @@ Numbers are order; items inside a milestone can run in parallel.
 - [x] `CELLAR` setting parsed at startup (`internal/cellar`); a bad value stops
       the server.
 - [x] Migration: `workspace.plan`, and on `app.datasource`:
-      `cellar_id`, `state`, `size_bytes`, `last_used_at`, and a check that a
-      row with a cellar is SQLite with no DSN and a known state.
+      `state`, `size_bytes`, `last_used_at`, and a check that a
+      row with a state is SQLite, has no DSN and a known state.
 
 ### 1. Cellar runs queries (local files, no bucket)
 Needs 0.
@@ -262,7 +259,7 @@ Needs 0.
       `code` metadata, mapped to HTTP in `openFailure` and to MCP's `code`).
 - [x] Tests: hostile SQL suite (`ATTACH`, `VACUUM INTO`, `load_extension`,
       every non-allowlisted PRAGMA); token rejection (expired, unsigned, other
-      key, user token) and a grant for another cellar; no error body contains
+      key, user token); no error body contains
       a path, bucket or address.
 
 ### 2. Create, fork, download, delete
@@ -388,8 +385,7 @@ interactive transactions for app code or batch only; MCP stays batch only.
 - Delete protection or a recovery window as a Teams perk.
 - `delete_datasource` over MCP for dbs whose role the key holds.
 - `managed_enabled` flag so the app can hide the create button.
-- Second cellar: an `app.cellar` table for placement data (with a foreign key
-  from `cellar_id`), `move`, dead-cellar runbook.
+- Second cellar: routing a workspace to one node (select-db/select#478), dead-node runbook.
 - Keep Teams dbs hot; evict small idle dbs first.
 - Per-region backend and cellar pairs.
 - Hrana `/v3/cursor`: stream large results row by row instead of the 10 MB

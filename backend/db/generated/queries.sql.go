@@ -214,14 +214,14 @@ const deleteDatasource = `-- name: DeleteDatasource :exec
 WITH marked AS (
   UPDATE app.datasource managed
   SET state = 'deleting', updated_at = now()
-  WHERE managed.id = $1 AND managed.workspace_id = $2 AND managed.cellar_id IS NOT NULL
+  WHERE managed.id = $1 AND managed.workspace_id = $2 AND managed.state IS NOT NULL
   RETURNING managed.id
 )
 DELETE FROM app.datasource unmanaged
 WHERE
   unmanaged.id = $1
   AND unmanaged.workspace_id = $2
-  AND unmanaged.cellar_id IS NULL
+  AND unmanaged.state IS NULL
 `
 
 type DeleteDatasourceParams struct {
@@ -312,17 +312,12 @@ func (q *Queries) DeleteExpiredUserRefreshTokens(ctx context.Context, userID uui
 }
 
 const deleteManagedDatasourceRow = `-- name: DeleteManagedDatasourceRow :exec
-DELETE FROM app.datasource WHERE id = $1 AND cellar_id = $2
+DELETE FROM app.datasource WHERE id = $1 AND state IS NOT NULL
 `
 
-type DeleteManagedDatasourceRowParams struct {
-	ID       uuid.UUID
-	CellarID db_types.JSONNullString
-}
-
 // The row of a database the reconciler purged, or that the cellar never held.
-func (q *Queries) DeleteManagedDatasourceRow(ctx context.Context, arg DeleteManagedDatasourceRowParams) error {
-	_, err := q.db.ExecContext(ctx, deleteManagedDatasourceRow, arg.ID, arg.CellarID)
+func (q *Queries) DeleteManagedDatasourceRow(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteManagedDatasourceRow, id)
 	return err
 }
 
@@ -524,7 +519,6 @@ SELECT
   d.max_idle_conns,
   d.conn_max_lifetime,
   d.conn_max_idle_time,
-  d.cellar_id,
   d.state,
   d.size_bytes
 FROM
@@ -550,7 +544,6 @@ type GetDatasourceRow struct {
 	MaxIdleConns    int32
 	ConnMaxLifetime int32
 	ConnMaxIdleTime int32
-	CellarID        db_types.JSONNullString
 	State           db_types.JSONNullString
 	SizeBytes       db_types.JSONNullInt64
 }
@@ -567,7 +560,6 @@ func (q *Queries) GetDatasource(ctx context.Context, arg GetDatasourceParams) (G
 		&i.MaxIdleConns,
 		&i.ConnMaxLifetime,
 		&i.ConnMaxIdleTime,
-		&i.CellarID,
 		&i.State,
 		&i.SizeBytes,
 	)
@@ -712,7 +704,6 @@ func (q *Queries) GetGroupsForUserSince(ctx context.Context, arg GetGroupsForUse
 
 const getManagedDatasourceToReconcile = `-- name: GetManagedDatasourceToReconcile :one
 SELECT
-  d.cellar_id,
   d.state,
   (w.deleted_at IS NOT NULL)::boolean AS workspace_deleted
 FROM
@@ -720,11 +711,10 @@ FROM
   JOIN app.workspace w ON w.id = d.workspace_id
 WHERE
   d.id = $1
-  AND d.cellar_id IS NOT NULL
+  AND d.state IS NOT NULL
 `
 
 type GetManagedDatasourceToReconcileRow struct {
-	CellarID         db_types.JSONNullString
 	State            db_types.JSONNullString
 	WorkspaceDeleted bool
 }
@@ -733,7 +723,7 @@ type GetManagedDatasourceToReconcileRow struct {
 func (q *Queries) GetManagedDatasourceToReconcile(ctx context.Context, id uuid.UUID) (GetManagedDatasourceToReconcileRow, error) {
 	row := q.db.QueryRowContext(ctx, getManagedDatasourceToReconcile, id)
 	var i GetManagedDatasourceToReconcileRow
-	err := row.Scan(&i.CellarID, &i.State, &i.WorkspaceDeleted)
+	err := row.Scan(&i.State, &i.WorkspaceDeleted)
 	return i, err
 }
 
@@ -1583,16 +1573,15 @@ func (q *Queries) InsertDefaultWorkspace(ctx context.Context, arg InsertDefaultW
 
 const insertManagedDatasource = `-- name: InsertManagedDatasource :exec
 INSERT INTO
-  app.datasource (id, workspace_id, db_type, name, cellar_id, state, size_bytes, updated_at)
+  app.datasource (id, workspace_id, db_type, name, state, size_bytes, updated_at)
 VALUES
-  ($1, $2, 'sqlite', $3, $4, 'hot', $5, now())
+  ($1, $2, 'sqlite', $3, 'hot', $4, now())
 `
 
 type InsertManagedDatasourceParams struct {
 	ID          uuid.UUID
 	WorkspaceID uuid.UUID
 	Name        string
-	CellarID    db_types.JSONNullString
 	SizeBytes   db_types.JSONNullInt64
 }
 
@@ -1601,7 +1590,6 @@ func (q *Queries) InsertManagedDatasource(ctx context.Context, arg InsertManaged
 		arg.ID,
 		arg.WorkspaceID,
 		arg.Name,
-		arg.CellarID,
 		arg.SizeBytes,
 	)
 	return err
@@ -1814,11 +1802,11 @@ func (q *Queries) ListDatasourcesByWorkspace(ctx context.Context, workspaceID uu
 }
 
 const listDeletingManagedDatasources = `-- name: ListDeletingManagedDatasources :many
-SELECT d.id FROM app.datasource d WHERE d.cellar_id = $1 AND d.state = 'deleting'
+SELECT d.id FROM app.datasource d WHERE d.state = 'deleting'
 `
 
-func (q *Queries) ListDeletingManagedDatasources(ctx context.Context, cellarID db_types.JSONNullString) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, listDeletingManagedDatasources, cellarID)
+func (q *Queries) ListDeletingManagedDatasources(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, listDeletingManagedDatasources)
 	if err != nil {
 		return nil, err
 	}
@@ -1869,7 +1857,7 @@ FROM
   app.datasource d
 WHERE
   d.workspace_id = $1
-  AND d.cellar_id IS NOT NULL
+  AND d.state IS NOT NULL
   AND d.state IS DISTINCT FROM 'deleting'
 `
 
@@ -1986,7 +1974,7 @@ const setManagedDatasourceSize = `-- name: SetManagedDatasourceSize :exec
 UPDATE app.datasource
 SET size_bytes = $1
 WHERE id = $2
-  AND cellar_id = $3
+  AND state IS NOT NULL
   AND state IS DISTINCT FROM 'deleting'
   AND size_bytes IS DISTINCT FROM $1
 `
@@ -1994,12 +1982,11 @@ WHERE id = $2
 type SetManagedDatasourceSizeParams struct {
 	SizeBytes db_types.JSONNullInt64
 	ID        uuid.UUID
-	CellarID  db_types.JSONNullString
 }
 
 // The size the cellar reports now, which the workspace quota sums.
 func (q *Queries) SetManagedDatasourceSize(ctx context.Context, arg SetManagedDatasourceSizeParams) error {
-	_, err := q.db.ExecContext(ctx, setManagedDatasourceSize, arg.SizeBytes, arg.ID, arg.CellarID)
+	_, err := q.db.ExecContext(ctx, setManagedDatasourceSize, arg.SizeBytes, arg.ID)
 	return err
 }
 

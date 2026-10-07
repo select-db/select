@@ -25,7 +25,6 @@ type AppDatasource struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	Name            string
-	CellarID        db_types.JSONNullString
 	State           db_types.JSONNullString
 	SizeBytes       db_types.JSONNullInt64
 	LastUsedAt      db_types.JSONNullTime

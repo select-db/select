@@ -19,5 +19,5 @@ FROM
   app.datasource d
 WHERE
   d.workspace_id = $1
-  AND d.cellar_id IS NOT NULL
+  AND d.state IS NOT NULL
   AND d.state IS DISTINCT FROM 'deleting';

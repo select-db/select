@@ -31,8 +31,8 @@ func TestCreateManagedQuota(t *testing.T) {
 	fixture := newManagedFixture(t)
 	// The solo plan allows 10 managed databases.
 	for range 10 {
-		_, err := fixture.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, cellar_id, state)
-			VALUES ($1::uuid, $2::uuid, 'other', 'sqlite', 'local', 'hot')`, uuid.NewString(), fixture.Actor.WorkspaceID)
+		_, err := fixture.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, state)
+			VALUES ($1::uuid, $2::uuid, 'other', 'sqlite', 'hot')`, uuid.NewString(), fixture.Actor.WorkspaceID)
 		require.NoError(t, err)
 	}
 

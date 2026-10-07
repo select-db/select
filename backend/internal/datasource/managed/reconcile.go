@@ -114,7 +114,7 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 		if judgement == live && !database.Cold && database.SizeBytes > 0 {
 			// A cold database has no size to report: its row keeps the last one.
 			if err := db.Queries.SetManagedDatasourceSize(ctx, generated.SetManagedDatasourceSizeParams{
-				ID: id, CellarID: db_types.NewJSONNullString(cellarclient.CellarID), SizeBytes: db_types.NewJSONNullInt64(database.SizeBytes),
+				ID: id, SizeBytes: db_types.NewJSONNullInt64(database.SizeBytes),
 			}); err != nil {
 				return result, fmt.Errorf("recording the size of %s: %w", id, err)
 			}
@@ -139,9 +139,7 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 		failedInARow = 0
 		result.Purged++
 		log.Printf("reconciler: purged %s (%s)", id, reason)
-		if err := db.Queries.DeleteManagedDatasourceRow(ctx, generated.DeleteManagedDatasourceRowParams{
-			ID: id, CellarID: db_types.NewJSONNullString(cellarclient.CellarID),
-		}); err != nil {
+		if err := db.Queries.DeleteManagedDatasourceRow(ctx, id); err != nil {
 			return result, fmt.Errorf("dropping the row of %s: %w", id, err)
 		}
 	}
@@ -150,7 +148,7 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 	}
 
 	// A deleting row the cellar does not hold has nothing left to purge.
-	deleting, err := db.Queries.ListDeletingManagedDatasources(ctx, db_types.NewJSONNullString(cellarclient.CellarID))
+	deleting, err := db.Queries.ListDeletingManagedDatasources(ctx)
 	if err != nil {
 		return result, err
 	}
@@ -158,9 +156,7 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 		if held[id] {
 			continue
 		}
-		if err := db.Queries.DeleteManagedDatasourceRow(ctx, generated.DeleteManagedDatasourceRowParams{
-			ID: id, CellarID: db_types.NewJSONNullString(cellarclient.CellarID),
-		}); err != nil {
+		if err := db.Queries.DeleteManagedDatasourceRow(ctx, id); err != nil {
 			return result, fmt.Errorf("dropping the row of %s: %w", id, err)
 		}
 		result.RowsDropped++
@@ -168,16 +164,16 @@ func Reconcile(ctx context.Context, now time.Time) (ReconcileResult, error) {
 	return result, nil
 }
 
-// verdict is what the reconciler does with a database of this cellar.
+// verdict is what the reconciler does with a database the cellar holds.
 type verdict int
 
 const (
-	leave verdict = iota // not this cellar's to judge, or too young to judge
+	leave verdict = iota // too young to judge
 	live                 // served: kept, and its size recorded
 	purge
 )
 
-// decide judges one database of this cellar, and says why when it purges.
+// decide judges one database the cellar holds, and says why when it purges.
 func decide(ctx context.Context, id uuid.UUID, database cellar.StoredDatabase, now time.Time) (reason string, v verdict, err error) {
 	row, err := db.Queries.GetManagedDatasourceToReconcile(ctx, id)
 	switch {
@@ -189,9 +185,6 @@ func decide(ctx context.Context, id uuid.UUID, database cellar.StoredDatabase, n
 		return "", leave, nil
 	case err != nil:
 		return "", leave, err
-	case row.CellarID.ValueOrEmpty() != cellarclient.CellarID:
-		// Another cellar's database; its own cellar decides.
-		return "", leave, nil
 	case row.State.ValueOrEmpty() == stateDeleting:
 		return "deleting", purge, nil
 	case row.WorkspaceDeleted:
