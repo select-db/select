@@ -31,7 +31,10 @@ def analyze_unknown_functions(
 
     for func in stmt.find_all(exp.Anonymous):
         name = func.name.lower() if func.name else ""
-        if not name or name in user_functions or name in reserved or name in seen:
+        if not name or name in user_functions or name in seen:
+            continue
+        quoted = isinstance(func.this, exp.Identifier) and func.this.quoted
+        if name in reserved and not quoted:
             continue
         seen.add(name)
         line, col, end_line, end_col = span(func)

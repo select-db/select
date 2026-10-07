@@ -47,3 +47,8 @@ class TestFailedParse:
                     "SELECT * FROM nosuch", dialect="mysql",
                     schema_dict=SCHEMA, default_schema="public")
         assert sorted(d["rule_id"] for d in r["diagnostics"]) == ["unknown-column", "unknown-table"]
+
+    def test_statement_being_typed_no_diagnostics(self):
+        r = analyze("SELECT typo FROM users WHERE id = (", dialect="postgresql",
+                    schema_dict=SCHEMA, default_schema="public")
+        assert [d["rule_id"] for d in r["diagnostics"]] == ["missing-argument"]

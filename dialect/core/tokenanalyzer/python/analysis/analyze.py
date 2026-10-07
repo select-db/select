@@ -67,8 +67,8 @@ def _parse_sql(sql: str, sg_dialect: str) -> tuple[list, list[dict], list[dict],
         parse_errors.append({"message": f"Unexpected parse error: {e}", "line": 1, "col": 0})
         return [], parse_errors, arity_diags, unparsed
 
-    # The parser makes one statement per chunk of tokens between semicolons;
-    # a token's col, like an error's, is where it ends.
+    # sqlglot (pinned below 31) makes one statement per chunk of tokens
+    # between semicolons; a token's col, like an error's, is where it ends.
     chunk_ends = [(c[-1].line, c[-1].col) if c else (0, 0) for c in p._chunks]
 
     for exc in p.errors:
@@ -200,7 +200,8 @@ def analyze(
         if stmt is None:
             continue
         # A tree the parser gave up on describes its guess, not the user's
-        # SQL: a word it skipped becomes a table or a function name.
+        # SQL: a word it skipped becomes a table or a function name. Its
+        # CREATE or DROP still counts, or later reads of that table are flagged.
         if index in unparsed:
             buffer_names.update(names_changed(stmt, default_schema))
             continue

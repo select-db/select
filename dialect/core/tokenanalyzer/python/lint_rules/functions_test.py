@@ -56,5 +56,6 @@ class TestR009UnknownFunction:
             assert _diags(r) == [], sql
 
     def test_mysql_unknown_function_triggers(self):
-        r = analyze("SELECT row_fn(1)", dialect="mysql", schema_dict={}, default_schema="public")
-        assert len(_diags(r)) == 1
+        for sql in ("SELECT row_fn(1)", "SELECT `ROW`(1)"):
+            r = analyze(sql, dialect="mysql", schema_dict={}, default_schema="public")
+            assert len(_diags(r)) == 1, sql

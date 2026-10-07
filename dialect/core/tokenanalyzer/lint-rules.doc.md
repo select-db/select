@@ -13,7 +13,9 @@ against the database to produce them.
 > Rules that resolve names and types need the schema. If SELECT has not
 > introspected the database yet, or the connection is closed, those rules stay
 > quiet rather than guessing. You will still get the ones that read the
-> statement alone.
+> statement alone. A statement the analyzer cannot parse gets no lint at all,
+> because its reading of the statement is a guess; the editor's own syntax
+> check reports it instead.
 
 ## Severities
 
