@@ -26,6 +26,9 @@ on:
         options: [fix, repair]
         default: fix
 
+# queue.sh finds the runs still working by this name.
+run-name: "Dialect fixer #${{ inputs.issue || github.event.issue.number }} (${{ inputs.mode || 'fix' }})"
+
 permissions: {}
 
 jobs:
