@@ -38,13 +38,12 @@ func TestAuthenticated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	good := Grant{WorkspaceID: "ws-1", CellarID: "local", MaxBytes: 1 << 20}
+	good := Grant{WorkspaceID: "ws-1", MaxBytes: 1 << 20}
 	goodHeader, _ := good.Encode()
-	elsewhere, _ := Grant{WorkspaceID: "ws-1", CellarID: "cellar-2"}.Encode()
 
 	var seen Grant
 	mux := http.NewServeMux()
-	mux.Handle("POST /dbs/{id}/execute", Authenticated(&priv.PublicKey, "local")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("POST /dbs/{id}/execute", Authenticated(&priv.PublicKey)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = GetGrant(r)
 	})))
 
@@ -55,7 +54,6 @@ func TestAuthenticated(t *testing.T) {
 		{"valid", signWith(t, priv), goodHeader, true},
 		{"no token", "", goodHeader, false},
 		{"other key", signWith(t, other), goodHeader, false},
-		{"other cellar", signWith(t, priv), elsewhere, false},
 		{"no grant", signWith(t, priv), "", false},
 		{"malformed grant", signWith(t, priv), "not base64!", false},
 	}

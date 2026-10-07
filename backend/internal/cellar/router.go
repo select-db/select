@@ -14,8 +14,8 @@ const statementTimeout = 60 * time.Second
 
 // Register adds the cellar's routes to mux. The backend's driver sends every
 // statement here, and checks permissions before it does.
-func Register(mux *http.ServeMux, pub *rsa.PublicKey, cellarID string) {
-	authenticated := Authenticated(pub, cellarID)
+func Register(mux *http.ServeMux, pub *rsa.PublicKey) {
+	authenticated := Authenticated(pub)
 	timeout := middlewares.Timeout(statementTimeout)
 	inFlight := middlewares.InFlight(func(r *http.Request) (string, int) {
 		grant := GetGrant(r)

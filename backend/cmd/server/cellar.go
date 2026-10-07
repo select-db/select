@@ -24,8 +24,7 @@ import (
 	"github.com/selectDb/toolkit"
 )
 
-// localCellar is the CELLAR setting, and the cellar id, of a cellar run in the
-// backend's own process.
+// localCellar is the CELLAR setting of a cellar run in the backend's own process.
 const localCellar = "local"
 
 // startCellar stops the server on a CELLAR it cannot parse, and sends managed
@@ -45,37 +44,17 @@ func startCellar() {
 		if err != nil {
 			log.Fatalf("cellar: %v", err)
 		}
-		cellarclient.CellarID, cellarclient.URL = localCellar, address
+		cellarclient.URL = address
 	default:
-		// parseCellar has already refused a setting that is not a URL.
-		cellarURL, _ := url.Parse(setting)
-		id, err := cellarID(cellarURL.Hostname())
-		if err != nil {
-			log.Fatalf("cellar: %v", err)
-		}
-		cellarclient.CellarID, cellarclient.URL = id, setting
+		cellarclient.URL = setting
 	}
 	managed.StartReconciler(context.Background())
-	log.Printf("cellar: %s (id %s)", setting, cellarclient.CellarID)
-}
-
-// cellarID is the cellar's name in grants and in each row's cellar_id: CELLAR_ID,
-// else the address host. It must pass the database's check, so a bad one fails at start.
-func cellarID(host string) (string, error) {
-	id := strings.ToLower(strings.TrimSpace(os.Getenv("CELLAR_ID")))
-	source := "CELLAR_ID"
-	if id == "" {
-		id, source = strings.ToLower(host), "the host of its address"
-	}
-	if !cellar.ValidID(id) {
-		return "", fmt.Errorf("the cellar id %q (%s) is not valid: lower case letters, digits and hyphens only; set CELLAR_ID", id, source)
-	}
-	return id, nil
+	log.Printf("cellar: %s", setting)
 }
 
 // serveLocalCellar starts a cellar in this process and returns its address.
 func serveLocalCellar() (string, error) {
-	handler, err := cellarHandler(localCellar)
+	handler, err := cellarHandler()
 	if err != nil {
 		return "", err
 	}
@@ -94,8 +73,7 @@ func serveLocalCellar() (string, error) {
 }
 
 // serveCellar runs this process as a cellar only, on CELLAR_LISTEN, until it
-// is told to stop. It never opens Postgres. Its id is CELLAR_ID, the same value
-// the backend has, or else the listen host.
+// is told to stop. It never opens Postgres.
 func serveCellar() {
 	toolkit.RegisterStats("cellar", cellar.Stats)
 	toolkit.StartPprofServer()
@@ -103,18 +81,13 @@ func serveCellar() {
 	if address == "" {
 		address = "127.0.0.1:8081"
 	}
-	host, _, err := net.SplitHostPort(address)
-	if err != nil || host == "" {
+	if host, _, err := net.SplitHostPort(address); err != nil || host == "" {
 		log.Fatalf("cellar: CELLAR_LISTEN: want host:port, got %q", address)
-	}
-	id, err := cellarID(host)
-	if err != nil {
-		log.Fatalf("cellar: %v", err)
 	}
 	if limit := membudget.LimitHeap(); limit > 0 {
 		log.Printf("cellar: Go memory limit %d MiB", limit>>20)
 	}
-	handler, err := cellarHandler(id)
+	handler, err := cellarHandler()
 	if err != nil {
 		log.Fatalf("cellar: %v", err)
 	}
@@ -144,9 +117,9 @@ func serveCellar() {
 }
 
 // cellarHandler opens the databases in CELLAR_DIR, copied to CELLAR_BUCKET,
-// and returns the cellar's routes for cellarID. The keys of an s3:// bucket
+// and returns the cellar's routes. The keys of an s3:// bucket
 // are the secrets CELLAR_S3_ACCESS_KEY_ID and CELLAR_S3_SECRET_ACCESS_KEY.
-func cellarHandler(cellarID string) (http.Handler, error) {
+func cellarHandler() (http.Handler, error) {
 	dir := os.Getenv("CELLAR_DIR")
 	if dir == "" {
 		dir = ".dev/cellar"
@@ -177,7 +150,7 @@ func cellarHandler(cellarID string) (http.Handler, error) {
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	cellar.Register(mux, publicKey, cellarID)
+	cellar.Register(mux, publicKey)
 	return mux, nil
 }
 

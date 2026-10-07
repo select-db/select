@@ -34,7 +34,7 @@ func getRow(ctx context.Context, id, workspaceID string) (generated.GetDatasourc
 		return generated.GetDatasourceRow{}, ErrNotFound
 	}
 	row, err := db.Queries.GetDatasource(ctx, generated.GetDatasourceParams{ID: parsedID, WorkspaceID: uuid.MustParse(workspaceID)})
-	if err != nil || row.CellarID.ValueOrEmpty() == "" {
+	if err != nil || row.State.ValueOrEmpty() == "" {
 		return generated.GetDatasourceRow{}, ErrNotFound
 	}
 	return row, CheckAvailable(row)
@@ -50,5 +50,5 @@ func DSN(ctx context.Context, row generated.GetDatasourceRow, id, workspaceID st
 	if err != nil {
 		return "", err
 	}
-	return cellarclient.DSN(row.CellarID.ValueOrEmpty(), id, workspaceID, plans[workspace.Plan].DatabaseMaxBytes, int(workspace.Members)), nil
+	return cellarclient.DSN(id, workspaceID, plans[workspace.Plan].DatabaseMaxBytes, int(workspace.Members)), nil
 }

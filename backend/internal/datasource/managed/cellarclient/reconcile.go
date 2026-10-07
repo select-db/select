@@ -8,13 +8,16 @@ import (
 	"backend/internal/cellar"
 )
 
+// emptyGrant is the grant of a request that acts for no workspace: the inventory and
+// the purge.
+var emptyGrant = func() string {
+	grant, _ := cellar.Grant{}.Encode()
+	return grant
+}()
+
 // Inventory lists every database of the cellar, on its disk or only in its bucket.
 func Inventory(ctx context.Context) ([]cellar.StoredDatabase, error) {
-	grant, err := cellar.Grant{CellarID: CellarID}.Encode()
-	if err != nil {
-		return nil, err
-	}
-	resp, err := callCellar(ctx, http.MethodGet, "/datasources", grant, nil)
+	resp, err := callCellar(ctx, http.MethodGet, "/datasources", emptyGrant, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -26,11 +29,7 @@ func Inventory(ctx context.Context) ([]cellar.StoredDatabase, error) {
 
 // Purge removes database id from the cellar's disk and from its bucket.
 func Purge(ctx context.Context, id string) error {
-	grant, err := cellar.Grant{CellarID: CellarID}.Encode()
-	if err != nil {
-		return err
-	}
-	resp, err := callCellar(ctx, http.MethodDelete, "/datasources/"+id, grant, nil)
+	resp, err := callCellar(ctx, http.MethodDelete, "/datasources/"+id, emptyGrant, nil)
 	if err != nil {
 		return err
 	}

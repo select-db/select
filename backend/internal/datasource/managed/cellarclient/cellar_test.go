@@ -31,8 +31,8 @@ func newManagedDB(t *testing.T) managedDB {
 	t.Helper()
 	fixture := e2e.Setup(t)
 	id := uuid.NewString()
-	_, err := fixture.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, cellar_id, state)
-		VALUES ($1::uuid, $2::uuid, 'notes', 'sqlite', 'local', 'hot')`, id, fixture.Actor.WorkspaceID)
+	_, err := fixture.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, state)
+		VALUES ($1::uuid, $2::uuid, 'notes', 'sqlite', 'hot')`, id, fixture.Actor.WorkspaceID)
 	require.NoError(t, err)
 	for _, action := range []string{"see", "select", "insert", "manage"} {
 		_, err := fixture.Conn.Exec(`INSERT INTO app.permission (role_id, workspace_id, datasource_id, action, effect)
@@ -41,7 +41,7 @@ func newManagedDB(t *testing.T) managedDB {
 	}
 
 	dir := e2e.ServeCellar(t)
-	_, err = cellarclient.Create(context.Background(), cellarclient.DSN(cellarclient.CellarID, id, fixture.Actor.WorkspaceID, 1<<20, 0), "", "")
+	_, err = cellarclient.Create(context.Background(), cellarclient.DSN(id, fixture.Actor.WorkspaceID, 1<<20, 0), "", "")
 	require.NoError(t, err)
 	seedConn, err := sql.Open("sqlite", filepath.Join(dir, id+".db"))
 	require.NoError(t, err)

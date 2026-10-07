@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"backend/e2e"
-	"backend/internal/cellar"
 	"backend/internal/datasource/managed"
 	"backend/internal/datasource/managed/cellarclient"
 
@@ -55,7 +54,7 @@ func (f reconcileFixture) rowState(t *testing.T, id string) (state string, exist
 func (f reconcileFixture) orphan(t *testing.T, age time.Duration) string {
 	t.Helper()
 	id := uuid.NewString()
-	dsn := cellarclient.DSN(cellarclient.CellarID, id, f.Actor.WorkspaceID, 1<<20, 0)
+	dsn := cellarclient.DSN(id, f.Actor.WorkspaceID, 1<<20, 0)
 	_, err := cellarclient.Create(context.Background(), dsn, "", "")
 	require.NoError(t, err)
 	old := time.Now().Add(-age)
@@ -115,21 +114,6 @@ func TestReconcilePurgesTheDatabasesOfADeletedWorkspace(t *testing.T) {
 	require.False(t, exists)
 }
 
-func TestReconcileLeavesAnotherCellarsDatabaseAlone(t *testing.T) {
-	f := newReconcileFixture(t)
-	id := createNotes(t, f.Fixture)
-	_, err := f.Conn.Exec(`UPDATE app.datasource SET cellar_id = 'elsewhere', state = 'deleting' WHERE id = $1`, id)
-	require.NoError(t, err)
-
-	result, err := managed.Reconcile(context.Background(), time.Now())
-
-	require.NoError(t, err)
-	require.Zero(t, result.Purged, "its own cellar decides")
-	require.True(t, f.onCellar(id))
-	_, exists := f.rowState(t, id)
-	require.True(t, exists)
-}
-
 func TestReconcileDropsADeletingRowTheCellarDoesNotHold(t *testing.T) {
 	f := newReconcileFixture(t)
 	id := createNotes(t, f.Fixture)
@@ -139,8 +123,8 @@ func TestReconcileDropsADeletingRowTheCellarDoesNotHold(t *testing.T) {
 	require.NoError(t, err)
 
 	missing := uuid.NewString()
-	_, err = f.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, cellar_id, state)
-		VALUES ($1::uuid, $2::uuid, 'gone', 'sqlite', $3, 'deleting')`, missing, f.Actor.WorkspaceID, cellarclient.CellarID)
+	_, err = f.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, state)
+		VALUES ($1::uuid, $2::uuid, 'gone', 'sqlite', 'deleting')`, missing, f.Actor.WorkspaceID)
 	require.NoError(t, err)
 
 	result, err := managed.Reconcile(context.Background(), time.Now())
@@ -244,21 +228,6 @@ func TestReconcileRecordsTheSizeOfALiveDatabase(t *testing.T) {
 	var after int64
 	require.NoError(t, f.Conn.QueryRow(`SELECT size_bytes FROM app.datasource WHERE id = $1`, id).Scan(&after))
 	require.GreaterOrEqual(t, after, int64(5_000_000))
-}
-
-// The cellar id is checked twice: by the database, when a managed row is
-// written, and by cellar.ValidID, at start. They must agree, or a bad id gets
-// past the start check and fails at the first create.
-func TestValidIDAgreesWithTheDatabaseConstraint(t *testing.T) {
-	fixture := e2e.Setup(t)
-	for _, id := range []string{
-		"staging", "prod", "a", "0", "cellar-1", "a-b-c", "9lives",
-		"", "-a", "A", "Staging", "a.b", "127.0.0.1", "a_b", "a b", "a/b", "é", "a\n",
-	} {
-		_, err := fixture.Conn.Exec(`INSERT INTO app.datasource (id, workspace_id, name, db_type, cellar_id, state)
-			VALUES ($1::uuid, $2::uuid, 'x', 'sqlite', $3, 'hot')`, uuid.NewString(), fixture.Actor.WorkspaceID, id)
-		require.Equalf(t, cellar.ValidID(id), err == nil, "cellar id %q: the database says %v", id, err)
-	}
 }
 
 func TestReconcileStopsWhenPurgesKeepFailing(t *testing.T) {

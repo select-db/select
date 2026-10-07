@@ -105,7 +105,7 @@ func provision(ctx context.Context, actor authz.Actor, database newDatabase) err
 		return workspaceFull
 	}
 
-	dsn := cellarclient.DSN(cellarclient.CellarID, database.ID, actor.WorkspaceID, limits.DatabaseMaxBytes, 0)
+	dsn := cellarclient.DSN(database.ID, actor.WorkspaceID, limits.DatabaseMaxBytes, 0)
 	createdBytes, err := cellarclient.Create(ctx, dsn, database.SourceID, database.PointInTime)
 	if err != nil {
 		return err
@@ -119,7 +119,6 @@ func provision(ctx context.Context, actor authz.Actor, database newDatabase) err
 		ID:          uuid.MustParse(database.ID),
 		WorkspaceID: workspaceID,
 		Name:        database.Name,
-		CellarID:    db_types.NewJSONNullString(cellarclient.CellarID),
 		SizeBytes:   db_types.NewJSONNullInt64(createdBytes),
 	}); err != nil {
 		return err

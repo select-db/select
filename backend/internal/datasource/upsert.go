@@ -82,7 +82,7 @@ func saveDatasource(w http.ResponseWriter, r *http.Request, req upsertRequest) b
 		return false
 	}
 
-	if exists && existing.CellarID.ValueOrEmpty() != "" {
+	if exists && existing.State.ValueOrEmpty() != "" {
 		rename := generated.RenameDatasourceParams{ID: id, WorkspaceID: parsedWorkspaceID, Name: req.Name}
 		if err := managed.CheckAvailable(existing); err != nil {
 			OpenError(w, err, "managed rename", workspaceID, req.ID)

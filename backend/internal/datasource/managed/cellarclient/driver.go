@@ -60,7 +60,6 @@ func parseDSN(dsn string) (id string, grant string, err error) {
 	maxInFlight, _ := strconv.Atoi(params.Get("max_in_flight"))
 	grant, err = cellar.Grant{
 		WorkspaceID: params.Get("workspace_id"),
-		CellarID:    parsed.Host,
 		MaxBytes:    maxBytes,
 		MaxInFlight: maxInFlight,
 	}.Encode()

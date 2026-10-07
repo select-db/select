@@ -69,7 +69,7 @@ func serve(t testing.TB, id, statement string, w http.ResponseWriter) {
 	body, err := json.Marshal(Query{SQL: statement})
 	require.NoError(t, err)
 	r := httptest.NewRequest(http.MethodPost, "/datasources/"+id+"/query", bytes.NewReader(body))
-	r = r.WithContext(context.WithValue(r.Context(), grantKey{}, Grant{DatasourceID: id, WorkspaceID: uuid.NewString(), CellarID: "local", MaxBytes: 1 << 20}))
+	r = r.WithContext(context.WithValue(r.Context(), grantKey{}, Grant{DatasourceID: id, WorkspaceID: uuid.NewString(), MaxBytes: 1 << 20}))
 	QueryHandler().ServeHTTP(w, r)
 }
 
