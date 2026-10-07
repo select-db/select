@@ -917,8 +917,8 @@ func (i *Inspector) inspectCopy(stmt pg.ICopystmtContext) *core.InspectStatement
 	return &result
 }
 
-// inspectPreparable inspects a statement nested inside another one: a CTE body
-// or a COPY source. A nested write is still a write.
+// inspectPreparable inspects a statement nested inside another one: a CTE body,
+// a COPY source or a PREPARE body. A nested write is still a write.
 func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.InspectStatement {
 	if stmt == nil {
 		return core.UnknownStatement()
@@ -932,6 +932,8 @@ func (i *Inspector) inspectPreparable(stmt pg.IPreparablestmtContext) core.Inspe
 		return core.OrUnknown(i.inspectUpdate(stmt.Updatestmt()))
 	case stmt.Deletestmt() != nil:
 		return core.OrUnknown(i.inspectDelete(stmt.Deletestmt()))
+	case stmt.Mergestmt() != nil:
+		return core.OrUnknown(i.inspectMerge(stmt.Mergestmt()))
 	}
 	return core.UnknownStatement()
 }

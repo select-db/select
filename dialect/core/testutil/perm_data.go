@@ -911,6 +911,14 @@ func permCases() []PermCase {
 			Why:   "s is the CTE body, which reads t2, and no relation of its own",
 		},
 		{
+			On:     []string{"postgresql"},
+			Name:   "a merge carried by a CTE body",
+			SQL:    "WITH m AS (MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN DELETE RETURNING t1.c1) SELECT c1 FROM m",
+			Needs:  []Right{mainT1(core.ActionDelete), mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c1")},
+			Denied: []Right{Manage},
+			Why:    "a CTE body is any preparable statement, and the merge deletes rows of t1 whatever the outer select does",
+		},
+		{
 			On:   []string{"postgresql"},
 			Name: "the columns a merge writes and the columns it reads",
 			SQL:  "MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN UPDATE SET c2 = t2.c3",
@@ -3224,6 +3232,22 @@ func permCases() []PermCase {
 			Needs:  []Right{Manage, mainT1(core.ActionUpdate).Only("c1")},
 			Denied: rowRights,
 			Why:    "a nested write is still a write, and update on c1 is what running it takes",
+		},
+		{
+			On:     []string{"postgresql"},
+			Name:   "a prepared statement carrying a merge that updates",
+			SQL:    "PREPARE s AS MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN MATCHED THEN UPDATE SET c2 = 'x'; EXECUTE s",
+			Needs:  []Right{Manage, mainT1(core.ActionUpdate).Only("c2"), mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "MERGE is a preparable statement like UPDATE, and running it rewrites t1 after reading t1 and t2",
+		},
+		{
+			On:     []string{"postgresql"},
+			Name:   "a prepared statement carrying a merge that inserts",
+			SQL:    "PREPARE s AS MERGE INTO t1 USING t2 ON t1.c1 = t2.c1 WHEN NOT MATCHED THEN INSERT (c1) VALUES (t2.c1); EXECUTE s",
+			Needs:  []Right{Manage, mainT1(core.ActionInsert).Only("c1"), mainT1(core.ActionSelect).Only("c1"), mainT2(core.ActionSelect).Only("c1")},
+			Denied: rowRights,
+			Why:    "running it adds rows to t1, read out of t2",
 		},
 		{
 			On:     []string{"mysql"},
