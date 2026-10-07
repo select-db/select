@@ -3,7 +3,8 @@
 # $FIXER_REVIEWER once on a green fixer pull request, sends a conflicted or red one
 # back to the fixer, and fills the free slots with the most severe open finder
 # issues. At most $FIXER_LIMIT are in flight and one per area, since fixes in
-# one area edit the same files. Prints the runs to start: [{issue, mode}].
+# one area edit the same files. Dispatches dialect-fixer.yml for each run it
+# starts and prints them: [{issue, mode}].
 set -euo pipefail
 
 limit=${FIXER_LIMIT:-3}
@@ -36,6 +37,8 @@ done
 runs='[]'
 start() {
 	gh issue edit "$1" --add-label fix:running >/dev/null
+	gh api -X POST "repos/$GH_REPO/actions/workflows/dialect-fixer.yml/dispatches" \
+		-f ref=dev -f "inputs[issue]=$1" -f "inputs[mode]=$2" --silent
 	runs=$(jq -c --argjson n "$1" --arg m "$2" '. + [{issue: $n, mode: $m}]' <<<"$runs")
 }
 

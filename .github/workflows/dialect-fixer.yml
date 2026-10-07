@@ -1,7 +1,9 @@
 name: Dialect fixer
 
-# dialect-fixer-queue.yml calls this for each issue it starts, and a maintainer
-# can label an agent:finder issue fix:go to run it now. The agent fixes it in
+# dialect-fixer-queue.yml dispatches this for each issue it starts, and a
+# maintainer can label an agent:finder issue fix:go to run it now. Dispatched,
+# not called: a called workflow carries its caller's event, and the Claude Code
+# action refuses a push. The agent fixes it in
 # Claude Code's sandbox, with no token and no network; its Stop hook
 # (.claude/skills/dialect-fixer/scripts/publish.sh) pushes claude/fix-N and
 # opens the pull request with the Claude App's token, whose pushes run CI.
@@ -12,14 +14,16 @@ name: Dialect fixer
 on:
   issues:
     types: [labeled]
-  workflow_call:
+  workflow_dispatch:
     inputs:
       issue:
-        type: number
+        description: The agent:finder issue number
+        type: string
         required: true
       mode:
         description: fix, or repair to rebase and fix CI on the open pull request
-        type: string
+        type: choice
+        options: [fix, repair]
         default: fix
 
 permissions: {}
