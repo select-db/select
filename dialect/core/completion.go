@@ -165,22 +165,28 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 		wantsEveryKind := ctx.Targets&CompletionTargetAll == CompletionTargetAll
 		isAllMode := keywordIsAllMode || (wantsEveryKind && len(inScopeRefs) == 0 && len(inScopeCtes) == 0)
 
+		// Keyed as the candidates spell it: a raw name folds where its quoted
+		// form keeps its case.
+		seen := map[string]bool{}
+		addTable := func(name string, bare bool) {
+			if name == "" {
+				return
+			}
+			text := cs.quote(name, bare, caretQuoted, reservedKeywords)
+			if key := cs.dialect.NormalizeIdentifier(text); !seen[key] {
+				tables = append(tables, Candidate{Type: CandidateTypeTable, Text: text})
+				seen[key] = true
+			}
+		}
+
 		if ctx.SchemaFilter != "" {
 			if !isAllMode && len(inScopeRefs) > 0 {
 				normalize := cs.dialect.NormalizeIdentifier
 				normalizedSchema := normalize(ctx.SchemaFilter)
-				seen := map[string]bool{}
 				for _, r := range inScopeRefs {
 					refSchema := normalize(r.Schema)
 					if refSchema == normalizedSchema || (refSchema == "" && normalizedSchema == normalize(GetDefaultSchema(meta))) {
-						name := r.Alias
-						if name == "" {
-							name = r.Table
-						}
-						if name != "" && !seen[name] {
-							tables = append(tables, Candidate{Type: CandidateTypeTable, Text: cs.dialect.QuoteIdentifierIfNeeded(name, caretQuoted, reservedKeywords)})
-							seen[name] = true
-						}
+						addTable(cs.getTableKey(r), r.Bare)
 					}
 				}
 				if len(tables) > 0 {
@@ -202,27 +208,19 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 
 		// No schema filter
 		{
-			seen := map[string]bool{}
-			addTable := func(name string) {
-				if name != "" && !seen[name] {
-					tables = append(tables, Candidate{Type: CandidateTypeTable, Text: cs.dialect.QuoteIdentifierIfNeeded(name, caretQuoted, reservedKeywords)})
-					seen[name] = true
-				}
-			}
-
 			for _, r := range inScopeRefs {
 				name := r.Alias
 				if name == "" {
 					name = r.Table
 				}
-				addTable(name)
+				addTable(name, r.Bare)
 			}
 			if !isAllMode && len(inScopeRefs) > 0 {
 				goto addCtes
 			}
 
 			for _, vt := range inScopeCtes {
-				addTable(vt.Table)
+				addTable(vt.Table, vt.Bare)
 			}
 			if !isAllMode && len(inScopeCtes) > 0 {
 				goto doneWithTables
@@ -242,17 +240,8 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 			}
 		}
 	addCtes:
-		{
-			seen := map[string]bool{}
-			for _, t := range tables {
-				seen[cs.dialect.NormalizeIdentifier(t.Text)] = true
-			}
-			for _, vt := range inScopeCtes {
-				name := vt.Table
-				if name != "" && !seen[cs.dialect.NormalizeIdentifier(name)] {
-					tables = append(tables, Candidate{Type: CandidateTypeTable, Text: cs.dialect.QuoteIdentifierIfNeeded(name, caretQuoted, reservedKeywords)})
-				}
-			}
+		for _, vt := range inScopeCtes {
+			addTable(vt.Table, vt.Bare)
 		}
 	doneWithTables:
 	}
@@ -288,6 +277,15 @@ func (cs *CompletionStrategy) CompleteFromSQL(
 	all = append(all, functions...)
 	all = append(all, types...)
 	return all
+}
+
+// quote spells a name for insertion. One the statement writes unquoted is
+// offered as written: quoting a mixed-case one names a different identifier.
+func (cs *CompletionStrategy) quote(name string, bare, caretQuoted bool, reserved map[string]bool) string {
+	if bare {
+		return name
+	}
+	return cs.dialect.QuoteIdentifierIfNeeded(name, caretQuoted, reserved)
 }
 
 // completeTypes are the types this database holds: the dialect's own, which
@@ -862,7 +860,7 @@ func (cs *CompletionStrategy) completeColumnsUnqualified(
 		cols := cs.getColumnsForRef(ref, cteMap, meta)
 		schemaForDef := cs.getSchemaForDef(ref, tableKey, tableInfoMap)
 
-		cs.appendColumnCandidates(cols, tableKey, schemaForDef, tableInfoMap, columnOccurrencesByName,
+		cs.appendColumnCandidates(cols, tableKey, ref.Bare, schemaForDef, tableInfoMap, columnOccurrencesByName,
 			shouldCheckAmbiguity, caretQuoted, reservedKeywords, &prefixedColumns, &simpleColumns)
 	}
 
@@ -873,7 +871,7 @@ func (cs *CompletionStrategy) completeColumnsUnqualified(
 	}
 	for _, cte := range filteredCteTables {
 		if !refTableSet[cte.Table] {
-			cs.appendColumnCandidates(cte.Columns, cte.Table, "", tableInfoMap, columnOccurrencesByName,
+			cs.appendColumnCandidates(cte.Columns, cte.Table, cte.Bare, "", tableInfoMap, columnOccurrencesByName,
 				shouldCheckAmbiguity, caretQuoted, reservedKeywords, &prefixedColumns, &simpleColumns)
 		}
 	}
@@ -1001,6 +999,7 @@ func (cs *CompletionStrategy) getSchemaForDef(
 func (cs *CompletionStrategy) appendColumnCandidates(
 	cols []Column,
 	tableKey string,
+	tableBare bool,
 	schemaForDef string,
 	tableInfoMap map[string]TableInfo,
 	columnOccurrencesByName map[string]int,
@@ -1012,7 +1011,7 @@ func (cs *CompletionStrategy) appendColumnCandidates(
 ) {
 	for _, col := range cols {
 		if shouldCheckAmbiguity && columnOccurrencesByName[col.Name] > 1 {
-			*prefixedColumns = append(*prefixedColumns, cs.buildPrefixedColumnCandidate(col, tableKey, caretQuoted, reservedKeywords))
+			*prefixedColumns = append(*prefixedColumns, cs.buildPrefixedColumnCandidate(col, tableKey, tableBare, caretQuoted, reservedKeywords))
 		} else {
 			*simpleColumns = append(*simpleColumns, cs.buildColumnCandidate(col, schemaForDef, tableKey, tableInfoMap, caretQuoted, reservedKeywords))
 		}
@@ -1031,7 +1030,7 @@ func (cs *CompletionStrategy) buildColumnCandidate(
 
 	return Candidate{
 		Type:       CandidateTypeColumn,
-		Text:       cs.dialect.QuoteIdentifierIfNeeded(col.Name, caretQuoted, reservedKeywords),
+		Text:       cs.quote(col.Name, col.Bare, caretQuoted, reservedKeywords),
 		Definition: def,
 	}
 }
@@ -1040,13 +1039,14 @@ func (cs *CompletionStrategy) buildColumnCandidate(
 func (cs *CompletionStrategy) buildPrefixedColumnCandidate(
 	col Column,
 	tableName string,
+	tableBare bool,
 	caretQuoted bool,
 	reservedKeywords map[string]bool,
 ) Candidate {
 	// Create prefixed column name: table.column
 	// Quote each part separately to avoid quoting the dot
-	quotedTableName := cs.dialect.QuoteIdentifierIfNeeded(tableName, caretQuoted, reservedKeywords)
-	quotedColumnName := cs.dialect.QuoteIdentifierIfNeeded(col.Name, caretQuoted, reservedKeywords)
+	quotedTableName := cs.quote(tableName, tableBare, caretQuoted, reservedKeywords)
+	quotedColumnName := cs.quote(col.Name, col.Bare, caretQuoted, reservedKeywords)
 	prefixedName := quotedTableName + "." + quotedColumnName
 
 	// Create definition showing the table prefix

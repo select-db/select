@@ -141,6 +141,14 @@ func TestCompletion(t *testing.T) {
 					}
 
 					filtered := filterCandidates(got)
+					offered := map[string]bool{}
+					for _, c := range filtered {
+						key := fmt.Sprintf("%d:%s", c.Type, c.Text)
+						if offered[key] {
+							t.Errorf("Offered twice: Type=%d, Text=%s", c.Type, c.Text)
+						}
+						offered[key] = true
+					}
 					filtered = core.DeduplicateAndSort(filtered)
 
 					expected := make([]core.Candidate, 0, len(tc.Expected))

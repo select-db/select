@@ -12,6 +12,7 @@ type pyRelation struct {
 	Schema           string `json:"schema"`
 	Database         string `json:"database"`
 	Alias            string `json:"alias"`
+	Bare             bool   `json:"bare"`
 	IsVirtual        bool   `json:"is_virtual"`
 	NestingLevel     int    `json:"nesting_level"`
 	Line             int    `json:"line"`
@@ -26,6 +27,7 @@ type pyVirtualTable struct {
 	Schema           string     `json:"schema"`
 	Database         string     `json:"database"`
 	Alias            string     `json:"alias"`
+	Bare             bool       `json:"bare"`
 	IsVirtual        bool       `json:"is_virtual"`
 	NestingLevel     int        `json:"nesting_level"`
 	Line             int        `json:"line"`
@@ -38,6 +40,7 @@ type pyVirtualTable struct {
 
 type pyColumn struct {
 	Name     string `json:"name"`
+	Bare     bool   `json:"bare"`
 	Type     string `json:"type"`
 	Nullable bool   `json:"nullable"`
 }
@@ -97,6 +100,7 @@ func CollectReferencesFromPython(
 			Schema:        r.Schema,
 			Table:         r.Table,
 			Alias:         r.Alias,
+			Bare:          r.Bare,
 			IsVirtual:     r.IsVirtual,
 			ScopeStartPos: r.ScopeStartOffset,
 			ScopeEndPos:   r.ScopeEndOffset,
@@ -115,6 +119,7 @@ func CollectReferencesFromPython(
 				Name:     c.Name,
 				Type:     c.Type,
 				Nullable: c.Nullable,
+				Bare:     c.Bare,
 			})
 		}
 		vtabs = append(vtabs, RelationRef{
@@ -122,6 +127,7 @@ func CollectReferencesFromPython(
 			Schema:        v.Schema,
 			Table:         v.Table,
 			Alias:         v.Alias,
+			Bare:          v.Bare,
 			IsVirtual:     v.IsVirtual,
 			Columns:       cols,
 			ScopeStartPos: v.ScopeStartOffset,

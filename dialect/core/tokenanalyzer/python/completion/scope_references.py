@@ -252,6 +252,7 @@ def _collect_from_scopes(
                 _add_virtual_usage_ref(
                     alias, "", nesting, relations, seen_rels, stmt_idx,
                     scope_start_offset=body_start, scope_end_offset=body_close,
+                    bare=_alias_bare(scope.expression, alias),
                 )
                 if source_name not in seen_vtabs:
                     vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs, bounds)
@@ -294,11 +295,14 @@ def _collect_from_scopes(
                     cte_usage_refs.append((
                         cte_table, effective_alias, nesting, stmt_idx,
                         root_start, root_end,
+                        _alias_bare(scope.expression, effective_alias)
+                        if effective_alias else cte_defs[source_name]["bare"],
                     ))
                 else:
                     _add_virtual_usage_ref(
                         alias, "", nesting, relations, seen_rels, stmt_idx,
                         scope_start_offset=root_start, scope_end_offset=root_end,
+                        bare=_alias_bare(scope.expression, alias),
                     )
                     if source_name not in seen_vtabs:
                         vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs, bounds)
@@ -333,11 +337,14 @@ def _collect_from_scopes(
                     _add_virtual_usage_ref(
                         cte_table, effective_alias, nesting, relations, seen_rels, stmt_idx,
                         scope_start_offset=scope_start, scope_end_offset=scope_end,
+                        bare=_alias_bare(scope.expression, effective_alias)
+                        if effective_alias else cte_defs[source_name]["bare"],
                     )
                 else:
                     _add_virtual_usage_ref(
                         alias, "", nesting, relations, seen_rels, stmt_idx,
                         scope_start_offset=scope_start, scope_end_offset=scope_end,
+                        bare=_alias_bare(scope.expression, alias),
                     )
                     if source_name not in seen_vtabs:
                         vtab = _build_virtual_table(alias, source, schema_dict, default_schema, cte_defs, bounds)
@@ -355,10 +362,10 @@ def _collect_from_scopes(
                 )
 
     # Sub-pass 4: CTE usage refs (deferred to appear after nested refs)
-    for table, alias, nesting, sidx, sstart, send in cte_usage_refs:
+    for table, alias, nesting, sidx, sstart, send, bare in cte_usage_refs:
         _add_virtual_usage_ref(
             table, alias, nesting, relations, seen_rels, sidx,
-            scope_start_offset=sstart, scope_end_offset=send,
+            scope_start_offset=sstart, scope_end_offset=send, bare=bare,
         )
 
     return root_refs_start
@@ -458,7 +465,10 @@ def _add_derived_source(
     virtual_tables.append(
         _build_virtual_table(name, subquery.this, schema_dict, default_schema, {})
     )
-    _add_virtual_usage_ref(name, "", 0, relations, seen, stmt_idx)
+    _add_virtual_usage_ref(
+        name, "", 0, relations, seen, stmt_idx,
+        bare=_bare(subquery.args.get("alias")),
+    )
 
 
 def _collect_dml_target(
@@ -555,6 +565,7 @@ def _collect_dml_target(
             "schema":             schema_name,
             "database":           tbl.catalog or "",
             "alias":              alias_str,
+            "bare":               _bare(tbl.args.get("alias") if alias_str else tbl.this),
             "is_virtual":         False,
             "nesting_level":      0,
             "line":               line,
@@ -564,6 +575,31 @@ def _collect_dml_target(
             "scope_end_offset":   dml_end,
         })
         insert_at += 1
+
+
+def _bare(node) -> bool:
+    """Whether a name was written unquoted. Completion offers such a name back
+    as written, since quoting it can name a different identifier."""
+    if isinstance(node, exp.TableAlias):
+        node = node.this
+    return isinstance(node, exp.Identifier) and not node.quoted
+
+
+def _alias_of(expr):
+    """The alias naming a virtual table: on a LATERAL or VALUES itself, on the
+    subquery or CTE around any other body."""
+    alias = expr.args.get("alias")
+    if alias is None and expr.parent is not None:
+        alias = expr.parent.args.get("alias")
+    return alias
+
+
+def _alias_bare(expression, alias: str) -> bool:
+    """Whether the alias a FROM entry of this statement gives was written bare."""
+    for node in expression.find_all(exp.TableAlias):
+        if node.name == alias:
+            return _bare(node)
+    return False
 
 
 def _first_token_meta(expr: exp.Expression) -> dict | None:
@@ -602,6 +638,7 @@ def _add_table_ref(
     db_name = source.catalog or ""
     effective_alias = alias if alias.lower() != table_name.lower() else ""
     line, col, _, end_col = span(source)
+    bare = _bare(source.args.get("alias") if effective_alias else source.this)
 
     key = (schema_name.lower(), table_name.lower(), effective_alias.lower(), nesting, stmt_idx)
     if key in seen:
@@ -613,6 +650,7 @@ def _add_table_ref(
         "schema":             schema_name,
         "database":           db_name,
         "alias":              effective_alias,
+        "bare":               bare,
         "is_virtual":         False,
         "nesting_level":      nesting,
         "line":               line,
@@ -632,6 +670,7 @@ def _add_virtual_usage_ref(
     stmt_idx: int = 0,
     scope_start_offset: int = -1,
     scope_end_offset: int = -1,
+    bare: bool = False,
 ) -> None:
     """Add a relation ref for CTE/subquery usage (schema is always empty)."""
     key = ("", table.lower(), alias.lower(), nesting, stmt_idx)
@@ -644,6 +683,7 @@ def _add_virtual_usage_ref(
         "schema":             "",
         "database":           "",
         "alias":              alias,
+        "bare":               bare,
         "is_virtual":         False,
         "nesting_level":      nesting,
         "line":               1,
@@ -662,7 +702,7 @@ def _usable_nesting(scope, bounds) -> int:
 
 
 def _explicit_columns(projected, wrapper) -> list[str]:
-    """The names a relation's own column list gives it, as in "(SELECT 1) s(x)".
+    """The identifiers a relation's own column list gives it, as in "(SELECT 1) s(x)".
 
     The list sits on whichever wrapper carries the alias: a subquery's own, or
     the LATERAL holding it.
@@ -672,7 +712,7 @@ def _explicit_columns(projected, wrapper) -> list[str]:
             continue
         alias = node.args.get("alias")
         if isinstance(alias, exp.TableAlias) and alias.columns:
-            return [c.name for c in alias.columns]
+            return list(alias.columns)
     return []
 
 
@@ -699,12 +739,12 @@ def _build_virtual_table(
 
     columns = _infer_columns(projected, scope, schema_dict, default_schema, cte_defs)
 
-    explicit_names = _explicit_columns(projected, expr)
-    for i, ename in enumerate(explicit_names):
+    for i, ident in enumerate(_explicit_columns(projected, expr)):
+        renamed = {"name": ident.name, "bare": _bare(ident)}
         if i < len(columns):
-            columns[i] = {**columns[i], "name": ename}
+            columns[i] = {**columns[i], **renamed}
         else:
-            columns.append({"name": ename, "type": "unknown", "nullable": True})
+            columns.append({**renamed, "type": "unknown", "nullable": True})
 
     # Try to get position from CTE alias node
     line, col = 1, 0
@@ -718,6 +758,7 @@ def _build_virtual_table(
         "schema":             "",
         "database":           "",
         "alias":              name,
+        "bare":               _bare(_alias_of(expr)),
         "is_virtual":         True,
         # A virtual table is named one level out from the body that defines
         # it, which is the level a caret can reach it at.
@@ -771,7 +812,7 @@ def _infer_single_column(
         name = sel.alias
         inner = sel.this
         col_type = _resolve_expr_type(inner, source_tables, schema_dict, default_schema, cte_defs)
-        return {"name": name, "type": col_type, "nullable": True}
+        return {"name": name, "bare": _bare(sel.args.get("alias")), "type": col_type, "nullable": True}
 
     if isinstance(sel, exp.Column):
         name = sel.name
@@ -779,7 +820,7 @@ def _infer_single_column(
         col_type = _resolve_column_type(
             name, qualifier, source_tables, schema_dict, default_schema, cte_defs,
         )
-        return {"name": name, "type": col_type, "nullable": True}
+        return {"name": name, "bare": _bare(sel.this), "type": col_type, "nullable": True}
 
     # Expression without alias (e.g., length('x'))
     # Use the original SQL text via sql() but lowercase to match Go's token-based output
