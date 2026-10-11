@@ -10,6 +10,7 @@ Request fields:
   schema      , { schema: { table: { col: type } } }
   default_schema, optional, defaults to "public"
   functions   , optional list of user-defined function names
+  builtins    , optional list of the dialect's built-in function names
 
 Response: JSON object whose shape depends on the action. "error" is reserved:
 a response carrying it is a failure, with "traceback" set when an exception
@@ -51,6 +52,7 @@ def _handle(req: dict) -> dict:
             schema_dict=req.get("schema", {}),
             default_schema=req.get("default_schema", "public"),
             functions=req.get("functions", []),
+            builtins=req.get("builtins", []),
             enum_dict=req.get("enums", {}),
         )
 

@@ -194,6 +194,7 @@ func (c *Analyzer) Analyze(sql string, d core.SQLDialect, meta core.Metadata) []
 		"enums":          core.MetaToEnumDict(meta),
 		"default_schema": EffectiveDefaultSchema(meta),
 		"functions":      MetaToFunctionNames(meta),
+		"builtins":       d.GetBuiltinFunctions(),
 	}
 
 	raw, err := c.Call(req)

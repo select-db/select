@@ -147,6 +147,7 @@ def analyze(
     default_schema: str = "public",
     functions: list[str] | None = None,
     enum_dict: dict | None = None,
+    builtins: list[str] | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "diagnostics": [],
@@ -159,6 +160,9 @@ def analyze(
 
     if not sql or not sql.strip():
         return result
+
+    # Builtins only answer R009: A001 and A003 read user_functions as aggregates.
+    known_functions = user_functions | {f.lower() for f in (builtins or [])}
 
     # Replace $varname placeholders with NULL so sqlglot's PostgreSQL tokenizer
     # doesn't misparse them as dollar-quoted string delimiters ($tag$...$tag$),
@@ -231,7 +235,7 @@ def analyze(
         _add(analyze_merge_columns(stmt, schema_dict, default_schema))
         _add(analyze_ambiguous_columns(scopes, schema_dict, default_schema))
         _add(analyze_dead_ctes(stmt))
-        _add(analyze_unknown_functions(stmt, sg_dialect, user_functions))
+        _add(analyze_unknown_functions(stmt, sg_dialect, known_functions))
         _add(analyze_ordinal_violations(stmt))
         _add(analyze_window_in_where(stmt))
         _add(analyze_duplicate_columns(stmt))
