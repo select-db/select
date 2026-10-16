@@ -17,7 +17,7 @@ require (
 	github.com/ovh/okms-sdk-go v0.5.4
 	github.com/peterldowns/pgtestdb v0.1.1
 	github.com/peterldowns/pgtestdb/migrators/goosemigrator v0.1.1
-	github.com/pressly/goose/v3 v3.28.0
+	github.com/pressly/goose/v3 v3.29.0
 	github.com/selectDb/dialect v0.0.0-00010101000000-000000000000
 	github.com/selectDb/toolkit v0.0.0-00010101000000-000000000000
 	github.com/sqlc-dev/pqtype v0.3.0
@@ -48,7 +48,7 @@ require (
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.23.0 // indirect
 	github.com/hablullah/go-hijri v1.0.2 // indirect
 	github.com/hablullah/go-juliandays v1.0.0 // indirect
@@ -61,7 +61,7 @@ require (
 	github.com/markusmobius/go-dateparser v1.2.4 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
-	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/oapi-codegen/runtime v1.6.0 // indirect
 	github.com/prometheus/client_golang v1.17.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
@@ -75,11 +75,11 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/api v0.287.1 // indirect
 	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	modernc.org/libc v1.77.1 // indirect
+	modernc.org/libc v1.78.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
@@ -93,15 +93,15 @@ require (
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
-	github.com/pierrec/lz4/v4 v4.1.29 // indirect
-	github.com/sethvargo/go-retry v0.4.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.33 // indirect
+	github.com/sethvargo/go-retry v0.5.0 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.57.0
-	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa // indirect
+	golang.org/x/crypto v0.58.0
+	golang.org/x/exp v0.0.0-20261011100332-faecfb24eb49 // indirect
 	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 )
 
 replace github.com/selectDb/toolkit => ../toolkit
