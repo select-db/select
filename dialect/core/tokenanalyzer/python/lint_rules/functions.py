@@ -13,15 +13,15 @@ from analysis.schema import span
 def analyze_unknown_functions(
     stmt: exp.Expression,
     sg_dialect: str,
-    user_functions: set[str],
+    known_functions: set[str],
 ) -> list[dict]:
     """
     R009, function calls not in the dialect's built-in registry and not in
     the user-provided catalog.
 
-    sqlglot parses known functions as typed nodes (exp.Count, exp.Sum, …) and
+    sqlglot parses known functions as typed nodes (exp.Count, exp.Sum, ...) and
     unknown/anonymous ones as exp.Anonymous. We flag Anonymous nodes whose name
-    is not in the user-provided catalog.
+    is not in known_functions, the catalog's names plus the dialect's builtins.
     """
     results = []
     # An unquoted reserved word is never a user function: a call sqlglot left
@@ -31,7 +31,7 @@ def analyze_unknown_functions(
 
     for func in stmt.find_all(exp.Anonymous):
         name = func.name.lower() if func.name else ""
-        if not name or name in user_functions or name in seen:
+        if not name or name in known_functions or name in seen:
             continue
         quoted = isinstance(func.this, exp.Identifier) and func.this.quoted
         if name in reserved and not quoted:

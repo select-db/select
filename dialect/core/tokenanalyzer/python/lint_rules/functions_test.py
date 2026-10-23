@@ -59,3 +59,15 @@ class TestR009UnknownFunction:
         for sql in ("SELECT row_fn(1)", "SELECT `ROW`(1)"):
             r = analyze(sql, dialect="mysql", schema_dict={}, default_schema="public")
             assert len(_diags(r)) == 1, sql
+
+    def test_dialect_builtin_no_trigger(self):
+        r = analyze("SELECT pg_typeof(id) FROM users WHERE pg_typeof(id) IS NOT NULL",
+                    dialect="postgresql", schema_dict=SCHEMA, default_schema="public",
+                    builtins=["pg_typeof"])
+        # A builtin is no aggregate, so it is no agg-in-where either.
+        assert [d["rule_id"] for d in r["diagnostics"]] == []
+
+    def test_dialect_builtin_misspelt_triggers(self):
+        r = analyze("SELECT pg_typeoff(id) FROM users", dialect="postgresql",
+                    schema_dict=SCHEMA, default_schema="public", builtins=["pg_typeof"])
+        assert len(_diags(r)) == 1
