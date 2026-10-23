@@ -397,6 +397,57 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 			},
 		},
 		{
+			Name: "a relation after an aliased one",
+			SQL:  "SELECT * FROM t2 AS d, |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "d"},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
+			Name: "a relation after an aliased one, before WHERE",
+			SQL:  "SELECT * FROM t2 AS d, | WHERE d.c1 = 1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "d"},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
+			Name: "a relation after two aliased ones",
+			SQL:  "SELECT * FROM t2 AS d, t1 AS e, |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "d"},
+				{Type: CandidateTypeTable, Text: "e"},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
+			Name: "a relation after an aliased derived table",
+			SQL:  "SELECT * FROM (SELECT c1 FROM t2) AS d, |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "d"},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
+			Name: "a select item after an aliased one",
+			SQL:  "SELECT c1 AS x, | FROM t1",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
 			// A branch is anchored at the word it opens with: its first token
 			// can be a parenthesis, and the branch would clamp to that.
 			Name: "a union branch opening on a parenthesised projection",
@@ -952,6 +1003,9 @@ func GetCompletionClauseCases() []CompletionClauseCase {
 		{"a second statement opens one", "SELECT 1; SELECT |", "select_start"},
 		{"an empty FROM takes no keyword", "SELECT * FROM |", ""},
 		{"a relation after a comma takes no keyword", "SELECT * FROM t1, |", ""},
+		{"an aliased relation after a comma too", "SELECT * FROM t1 AS a, |", ""},
+		{"an aliased select item after a comma opens one", "SELECT c1 AS x, |", "expression_start"},
+		{"a comma after a CTE waits for the next one's name", "WITH x AS (SELECT 1), |", ""},
 		{"a follower being typed is still one", "SELECT * FROM t1 W|", "relation"},
 		{"a predicate follower being typed too", "SELECT * FROM t1 WHERE c1 = 1 AN|", "predicate"},
 		{"a name being typed is not a follower", "SELECT * FROM t|", ""},

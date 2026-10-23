@@ -14,6 +14,7 @@ from completion.completion_context import (
     _detect_setting_context,
     _detect_value_position,
     _tokenize_up_to,
+    _walk_to_clause,
 )
 
 
@@ -196,6 +197,22 @@ class TestContextualWords:
     def test_a_later_cte_body_is_still_one(self):
         tokens, _, _ = _at_caret("WITH w AS (SELECT 1), v AS (|")
         assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL
+
+    def test_a_comma_ends_the_item_an_alias_renames(self):
+        for sql in ("SELECT * FROM (VALUES (1)) AS v(x), |",
+                    "UPDATE t1 SET c1 = 1 FROM (SELECT c1 FROM t2) AS d, |"):
+            tokens, _, _ = _at_caret(sql)
+            assert _detect_keyword_context(tokens) == TARGET_SCHEMA_AND_TABLE_ALL, sql
+
+    def test_a_comma_inside_an_alias_column_list_keeps_the_alias(self):
+        tokens, _, _ = _at_caret("SELECT * FROM t1 AS a(x, |")
+        assert _walk_to_clause(tokens).word == "AS"
+
+    def test_a_comma_after_a_cte_or_a_window_still_names_the_next(self):
+        for sql in ("WITH w AS (SELECT 1), |",
+                    "SELECT c1 FROM t1 WINDOW w AS (ORDER BY c1), |"):
+            tokens, _, _ = _at_caret(sql)
+            assert _walk_to_clause(tokens).word == "AS", sql
 
     def test_a_mysql_upsert_names_columns(self):
         tokens, _, _ = _at_caret(
