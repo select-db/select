@@ -237,6 +237,50 @@ func GetCompletionTestCases(defaultSchema, identifierQuote string) []CompletionT
 				{Type: CandidateTypeTable, Text: "t2"},
 			},
 		},
+		// A name the query declares unquoted is offered as written: quoting a
+		// mixed-case one makes PostgreSQL read a different identifier.
+		{
+			Name: "a mixed-case CTE declared unquoted",
+			SQL:  "WITH RecentRows AS (SELECT c1 FROM t1) SELECT * FROM |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: "RecentRows"},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
+			},
+		},
+		{
+			Name: "a mixed-case derived column declared unquoted",
+			SQL:  "SELECT * FROM (SELECT c1 AS Xa FROM t1) AS D WHERE D.|",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeColumn, Text: "Xa"},
+			},
+		},
+		{
+			Name: "a mixed-case derived table alias declared unquoted",
+			SQL:  "SELECT * FROM (SELECT c1 AS Xa FROM t1) AS D WHERE |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "D"},
+				{Type: CandidateTypeColumn, Text: "Xa"},
+			},
+		},
+		{
+			Name: "a mixed-case table alias declared unquoted",
+			SQL:  "SELECT * FROM t1 AS Src WHERE |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "Src"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+			},
+		},
+		{
+			Name: "a mixed-case VALUES alias declared unquoted",
+			SQL:  "SELECT * FROM (VALUES (1)) AS V(Xa) WHERE |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "V"},
+				{Type: CandidateTypeColumn, Text: "Xa"},
+			},
+		},
 		{
 			Name: "CTE column completion",
 			SQL:  "WITH cte1 AS (SELECT * FROM t1) SELECT cte1.| FROM cte1",
@@ -834,6 +878,28 @@ func GetCompletionCasesPostgreSQLAndMySQL(defaultSchema, identifierQuote string)
 			Expected: []CompletionTestExpectation{
 				{Type: CandidateTypeColumn, Text: "c1"},
 				{Type: CandidateTypeColumn, Text: "c3"},
+			},
+		},
+		{
+			Name: "a mixed-case LATERAL alias declared unquoted",
+			SQL:  "SELECT * FROM t1, LATERAL (SELECT 1 AS Xa) AS Lx WHERE |",
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "Lx"},
+				{Type: CandidateTypeColumn, Text: "c1"},
+				{Type: CandidateTypeColumn, Text: "c2"},
+				{Type: CandidateTypeColumn, Text: "Xa"},
+			},
+		},
+		// SQLite folds a quoted name's case too, so only these two keep it.
+		{
+			Name: "a mixed-case CTE declared quoted",
+			SQL:  quoteIdentifiersInText("WITH ~RecentRows~ AS (SELECT c1 FROM t1) SELECT * FROM |", identifierQuote),
+			Expected: []CompletionTestExpectation{
+				{Type: CandidateTypeSchema, Text: defaultSchema},
+				{Type: CandidateTypeTable, Text: quoteIdentifiersInText("~RecentRows~", identifierQuote)},
+				{Type: CandidateTypeTable, Text: "t1"},
+				{Type: CandidateTypeTable, Text: "t2"},
 			},
 		},
 	}

@@ -88,6 +88,7 @@ type ForeignKeyRef struct {
 // Column represents a column in a table or CTE
 type Column struct {
 	Name         string
+	Bare         bool   // A column the statement names unquoted, as a derived table's; never set from the catalog
 	Type         string // Native column type e.g. varchar(255), int4, timestamptz
 	Nullable     bool
 	Default      *string // Default value expression, nil if none
